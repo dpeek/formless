@@ -11,12 +11,19 @@ function renderRoute(path: string) {
   );
 }
 
-describe("App", () => {
+describe("App smoke routes", () => {
   it('renders the "/" route', () => {
-    expect(renderRoute("/")).toContain("Home route");
+    const html = renderRoute("/");
+
+    expect(html).toContain("Loaded schema version 1.");
+    expect(html).toContain("Create Note");
+    expect(html).toContain("No records yet.");
   });
 
   it('renders the "/schema" route', () => {
-    expect(renderRoute("/schema")).toContain("Schema route");
+    const html = renderRoute("/schema");
+
+    expect(html).toContain("&quot;version&quot;: 1");
+    expect(html).toContain("&quot;note&quot;");
   });
 });

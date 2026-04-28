@@ -2,7 +2,23 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "formless",
   "compatibility_date": "2026-04-28",
+  "main": "./src/worker/index.ts",
   "assets": {
     "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "FORMLESS_AUTHORITY",
+        "class_name": "FormlessAuthority",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FormlessAuthority"],
+    },
+  ],
 }

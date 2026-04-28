@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "entities": {
+    "note": {
+      "label": "Note",
+      "fields": {
+        "text": {
+          "type": "text",
+          "required": true
+        }
+      }
+    }
+  }
+}
