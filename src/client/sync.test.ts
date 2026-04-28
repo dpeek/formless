@@ -4,14 +4,23 @@ import { publishClientEvent } from "./broadcast.ts";
 import { mergeRecords, readLocalSnapshot, saveBootstrapResponse } from "./db.ts";
 import { appSchema } from "./schema.ts";
 import { connectBroadcastToState, subscribeToClientState, type ClientState } from "./state.ts";
-import { bootstrapClient, submitCreateMutation, syncClient } from "./sync.ts";
+import {
+  bootstrapClient,
+  fetchActiveSchema,
+  saveActiveSchema,
+  submitCreateMutation,
+  syncClient,
+} from "./sync.ts";
 import type {
   BootstrapResponse,
   ChangeRow,
   MutationResponse,
+  SchemaResponse,
+  SchemaUpdateResponse,
   StoredRecord,
   SyncResponse,
 } from "../shared/protocol.ts";
+import type { AppSchema } from "../shared/schema.ts";
 
 beforeEach(async () => {
   await deleteClientDb();
@@ -22,6 +31,7 @@ describe("client sync", () => {
     await bootstrapClient(
       jsonFetcher("/api/bootstrap", {
         schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
         records: [record("record-1", "First")],
         cursor: 1,
       } satisfies BootstrapResponse),
@@ -30,6 +40,7 @@ describe("client sync", () => {
     const snapshot = await readLocalSnapshot();
 
     expect(snapshot.schema).toEqual(appSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
     expect(snapshot.records).toEqual([record("record-1", "First")]);
     expect(snapshot.cursor).toBe(1);
   });
@@ -37,12 +48,13 @@ describe("client sync", () => {
   it("merges incremental sync records and advances the cursor", async () => {
     await saveBootstrapResponse({
       schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-1", "First")],
       cursor: 1,
     });
 
     await syncClient(
-      jsonFetcher("/api/sync?after=1", {
+      jsonFetcher("/api/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
         changes: [change(2, "record-2", "Second")],
         cursor: 2,
       } satisfies SyncResponse),
@@ -55,6 +67,47 @@ describe("client sync", () => {
       "record-2",
     ]);
     expect(snapshot.cursor).toBe(2);
+  });
+
+  it("requests sync without schema metadata when no schema is cached", async () => {
+    await syncClient(
+      jsonFetcher("/api/sync?after=0", {
+        changes: [],
+        cursor: 0,
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      } satisfies SyncResponse),
+    );
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(snapshot.schema).toEqual(appSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
+  });
+
+  it("merges schema returned by polling sync", async () => {
+    const nextSchema = schemaWithSummary();
+
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 0,
+    });
+
+    await syncClient(
+      jsonFetcher("/api/sync?after=0&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+        changes: [],
+        cursor: 0,
+        schema: nextSchema,
+        schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+      } satisfies SyncResponse),
+    );
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(snapshot.schema).toEqual(nextSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
   });
 
   it("merges accepted create mutations into local state", async () => {
@@ -83,6 +136,68 @@ describe("client sync", () => {
     expect(response.record).toEqual(acceptedRecord);
     expect(snapshot.records).toEqual([acceptedRecord]);
     expect(snapshot.cursor).toBe(1);
+  });
+
+  it("fetches and caches the active schema", async () => {
+    const nextSchema = schemaWithSummary();
+
+    await fetchActiveSchema(
+      jsonFetcher("/api/schema", {
+        schema: nextSchema,
+        updatedAt: "2026-04-28T00:00:00.000Z",
+      } satisfies SchemaResponse),
+    );
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(snapshot.schema).toEqual(nextSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
+  });
+
+  it("saves accepted schema updates into local state", async () => {
+    const nextSchema = schemaWithSummary();
+
+    const response = await saveActiveSchema(nextSchema, async (input, init) => {
+      expect(input).toBe("/api/schema");
+      expect(init?.method).toBe("POST");
+      expect(parsePlainRequestBody(init?.body)).toEqual({ schema: nextSchema });
+
+      return Response.json({
+        schema: nextSchema,
+        updatedAt: "2026-04-28T00:00:00.000Z",
+      } satisfies SchemaUpdateResponse);
+    });
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(response.schema).toEqual(nextSchema);
+    expect(snapshot.schema).toEqual(nextSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
+  });
+
+  it("refreshes schema state from broadcast events", async () => {
+    const states: ClientState[] = [];
+    const unsubscribe = subscribeToClientState((state) => states.push(state));
+    const stopBroadcast = connectBroadcastToState();
+    const nextSchema = schemaWithSummary();
+
+    try {
+      await saveActiveSchema(
+        nextSchema,
+        jsonFetcher("/api/schema", {
+          schema: nextSchema,
+          updatedAt: "2026-04-28T00:00:00.000Z",
+        } satisfies SchemaUpdateResponse),
+      );
+
+      await waitFor(() =>
+        states.some((state) => state.schema?.entities.note.label === "Journal entry"),
+      );
+      expect(states.at(-1)?.schema).toEqual(nextSchema);
+    } finally {
+      stopBroadcast();
+      unsubscribe();
+    }
   });
 
   it("refreshes state from broadcast events without remounting routes", async () => {
@@ -125,6 +240,29 @@ function parseRequestBody(body: BodyInit | null | undefined) {
   );
 
   return parsed as { mutationId: string };
+}
+
+function parsePlainRequestBody(body: BodyInit | null | undefined) {
+  if (typeof body !== "string") {
+    throw new Error("Expected a string request body.");
+  }
+
+  return JSON.parse(body) as unknown;
+}
+
+function schemaWithSummary() {
+  return {
+    version: 1,
+    entities: {
+      note: {
+        label: "Journal entry",
+        fields: {
+          text: { type: "text", required: true },
+          summary: { type: "text", required: false },
+        },
+      },
+    },
+  } satisfies AppSchema;
 }
 
 function record(id: string, text: string): StoredRecord {

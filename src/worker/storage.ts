@@ -5,6 +5,7 @@ import type {
   MutationResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
+import { parseAppSchema, stringifySchema, type AppSchema } from "../shared/schema.ts";
 import { nowIsoString } from "../shared/clock.ts";
 
 type RecordRow = {
@@ -28,6 +29,16 @@ type CursorRow = {
   cursor: number | null;
 };
 
+type SchemaRow = {
+  schema_json: string;
+  updated_at: string;
+};
+
+export type StoredSchema = {
+  schema: AppSchema;
+  updatedAt: string;
+};
+
 export function ensureStorageTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS records (
@@ -46,7 +57,46 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       payload_json TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS app_schema (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      schema_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+}
+
+export function getActiveSchema(
+  storage: DurableObjectStorage,
+  seedSchema: AppSchema,
+): StoredSchema {
+  return storage.transactionSync(() => {
+    const existing = readStoredSchema(storage);
+
+    if (existing) {
+      return existing;
+    }
+
+    return writeActiveSchema(storage, seedSchema);
+  });
+}
+
+export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSchema): StoredSchema {
+  const updatedAt = nowIsoString();
+
+  storage.sql.exec(
+    `
+      INSERT INTO app_schema (id, schema_json, updated_at)
+      VALUES (1, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        schema_json = excluded.schema_json,
+        updated_at = excluded.updated_at
+    `,
+    stringifySchema(schema),
+    updatedAt,
+  );
+
+  return { schema, updatedAt };
 }
 
 export function getBootstrapRecords(storage: DurableObjectStorage): StoredRecord[] {
@@ -152,6 +202,21 @@ function findChangeByMutationId(
   return row.done ? undefined : changeFromRow(row.value);
 }
 
+function readStoredSchema(storage: DurableObjectStorage): StoredSchema | undefined {
+  const row = storage.sql
+    .exec<SchemaRow>("SELECT schema_json, updated_at FROM app_schema WHERE id = 1")
+    .next();
+
+  if (row.done) {
+    return undefined;
+  }
+
+  return {
+    schema: parseStoredSchema(row.value.schema_json),
+    updatedAt: row.value.updated_at,
+  };
+}
+
 function recordFromRow(row: RecordRow): StoredRecord {
   return {
     id: row.id,
@@ -196,6 +261,10 @@ function parseStoredRecord(value: string): StoredRecord {
   }
 
   return parsed;
+}
+
+function parseStoredSchema(value: string): AppSchema {
+  return parseAppSchema(JSON.parse(value) as unknown);
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

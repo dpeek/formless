@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   saveBootstrapResponse,
+  saveSchema,
   mergeChanges,
   mergeRecords,
   readCursor,
@@ -9,6 +10,7 @@ import {
 } from "./db.ts";
 import { appSchema } from "./schema.ts";
 import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
+import type { AppSchema } from "../shared/schema.ts";
 
 beforeEach(async () => {
   await deleteClientDb();
@@ -18,6 +20,7 @@ describe("client db", () => {
   it("stores bootstrap schema, records, cursor, and last-sync metadata", async () => {
     await saveBootstrapResponse({
       schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-1", "First")],
       cursor: 7,
     } satisfies BootstrapResponse);
@@ -25,6 +28,7 @@ describe("client db", () => {
     const snapshot = await readLocalSnapshot();
 
     expect(snapshot.schema).toEqual(appSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
     expect(snapshot.records).toEqual([record("record-1", "First")]);
     expect(snapshot.cursor).toBe(7);
     expect(snapshot.lastSyncedAt).toEqual(expect.any(String));
@@ -42,6 +46,36 @@ describe("client db", () => {
     ]);
     expect(snapshot.cursor).toBe(2);
     expect(await readCursor()).toBe(2);
+  });
+
+  it("updates the cached schema without replacing records", async () => {
+    const nextSchema = {
+      version: 1,
+      entities: {
+        note: {
+          label: "Journal entry",
+          fields: {
+            text: { type: "text", required: true },
+            summary: { type: "text", required: false },
+          },
+        },
+      },
+    } satisfies AppSchema;
+
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+    await saveSchema(nextSchema, "2026-04-28T00:01:00.000Z");
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(snapshot.schema).toEqual(nextSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
+    expect(snapshot.records).toEqual([record("record-1", "First")]);
+    expect(snapshot.cursor).toBe(1);
   });
 });
 

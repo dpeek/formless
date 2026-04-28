@@ -1,5 +1,12 @@
 import { listenForClientEvents, publishClientEvent } from "./broadcast.ts";
-import { mergeChanges, mergeRecords, readCursor, saveBootstrapResponse } from "./db.ts";
+import {
+  mergeChanges,
+  mergeRecords,
+  readCursor,
+  readSchemaUpdatedAt,
+  saveBootstrapResponse,
+  saveSchema,
+} from "./db.ts";
 import { refreshClientStateFromDb } from "./state.ts";
 import { createMutationId } from "../shared/ids.ts";
 import type {
@@ -8,8 +15,11 @@ import type {
   EntityName,
   MutationResponse,
   RecordValues,
+  SchemaResponse,
+  SchemaUpdateResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
+import type { AppSchema } from "../shared/schema.ts";
 
 const DEFAULT_POLL_INTERVAL_MS = 1500;
 
@@ -17,19 +27,48 @@ export async function bootstrapClient(fetcher: typeof fetch = fetch) {
   const response = await fetchJson<BootstrapResponse>(fetcher, "/api/bootstrap");
 
   await saveBootstrapResponse(response);
-  notifyLocalDataChanged();
+  await notifyLocalDataChanged({ schemaChanged: true });
 
   return response;
 }
 
 export async function syncClient(fetcher: typeof fetch = fetch) {
   const cursor = await readCursor();
-  const response = await fetchJson<SyncResponse>(fetcher, `/api/sync?after=${cursor}`);
+  const schemaUpdatedAt = await readSchemaUpdatedAt();
+  const url = syncUrl(cursor, schemaUpdatedAt);
+  const response = await fetchJson<SyncResponse>(fetcher, url);
+
+  const schemaChanged = Boolean(response.schema && response.schemaUpdatedAt);
+
+  if (response.schema && response.schemaUpdatedAt) {
+    await saveSchema(response.schema, response.schemaUpdatedAt);
+  }
 
   if (response.changes.length > 0 || response.cursor !== cursor) {
     await mergeChanges(response.changes, response.cursor);
-    notifyLocalDataChanged();
   }
+
+  if (response.changes.length > 0 || response.cursor !== cursor || schemaChanged) {
+    await notifyLocalDataChanged({ schemaChanged });
+  }
+
+  return response;
+}
+
+export async function fetchActiveSchema(fetcher: typeof fetch = fetch) {
+  const response = await fetchJson<SchemaResponse>(fetcher, "/api/schema");
+
+  await saveSchema(response.schema, response.updatedAt);
+  await notifySchemaChanged();
+
+  return response;
+}
+
+export async function saveActiveSchema(schema: AppSchema, fetcher: typeof fetch = fetch) {
+  const response = await postJson<SchemaUpdateResponse>(fetcher, "/api/schema", { schema });
+
+  await saveSchema(response.schema, response.updatedAt);
+  await notifySchemaChanged();
 
   return response;
 }
@@ -49,7 +88,7 @@ export async function submitCreateMutation(
   const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
 
   await mergeRecords([response.record], response.cursor);
-  notifyLocalDataChanged();
+  await notifyLocalDataChanged();
 
   return response;
 }
@@ -115,10 +154,18 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-function notifyLocalDataChanged() {
-  void refreshClientStateFromDb();
+async function notifyLocalDataChanged(options: { schemaChanged?: boolean } = {}) {
+  await refreshClientStateFromDb();
   publishClientEvent("records-updated");
   publishClientEvent("cursor-updated");
+  if (options.schemaChanged) {
+    publishClientEvent("schema-updated");
+  }
+}
+
+async function notifySchemaChanged() {
+  await refreshClientStateFromDb();
+  publishClientEvent("schema-updated");
 }
 
 function isErrorResponse(value: unknown): value is { error: string } {
@@ -129,4 +176,14 @@ function isErrorResponse(value: unknown): value is { error: string } {
     "error" in value &&
     typeof value.error === "string"
   );
+}
+
+function syncUrl(cursor: number, schemaUpdatedAt: string | null) {
+  const params = new URLSearchParams({ after: String(cursor) });
+
+  if (schemaUpdatedAt) {
+    params.set("schemaUpdatedAt", schemaUpdatedAt);
+  }
+
+  return `/api/sync?${params.toString()}`;
 }

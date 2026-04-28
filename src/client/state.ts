@@ -11,6 +11,7 @@ const listeners = new Set<ClientStateListener>();
 
 let state: ClientState = {
   schema: null,
+  schemaUpdatedAt: null,
   records: [],
   cursor: 0,
   lastSyncedAt: null,
@@ -45,7 +46,11 @@ export async function refreshClientStateFromDb() {
 
 export function connectBroadcastToState() {
   return listenForClientEvents((event) => {
-    if (event.type === "records-updated" || event.type === "cursor-updated") {
+    if (
+      event.type === "records-updated" ||
+      event.type === "cursor-updated" ||
+      event.type === "schema-updated"
+    ) {
       void refreshClientStateFromDb();
     }
   });

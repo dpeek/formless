@@ -15,15 +15,15 @@ describe("App smoke routes", () => {
   it('renders the "/" route', () => {
     const html = renderRoute("/");
 
-    expect(html).toContain("Loaded schema version 1.");
-    expect(html).toContain("Create Note");
-    expect(html).toContain("No records yet.");
+    expect(html).toContain("Loading active schema...");
+    expect(html).not.toContain("Create Note");
   });
 
   it('renders the "/schema" route', () => {
     const html = renderRoute("/schema");
 
-    expect(html).toContain("&quot;version&quot;: 1");
-    expect(html).toContain("&quot;note&quot;");
+    expect(html).toContain("Loading active schema.");
+    expect(html).not.toContain("&quot;note&quot;");
+    expect(html).toContain("Save schema");
   });
 });

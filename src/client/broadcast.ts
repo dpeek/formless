@@ -1,4 +1,8 @@
-export type BroadcastEventType = "records-updated" | "cursor-updated" | "sync-requested";
+export type BroadcastEventType =
+  | "records-updated"
+  | "cursor-updated"
+  | "schema-updated"
+  | "sync-requested";
 
 export type BroadcastEvent = {
   type: BroadcastEventType;
@@ -51,6 +55,7 @@ function isBroadcastEvent(value: unknown): value is BroadcastEvent {
     "type" in value &&
     (value.type === "records-updated" ||
       value.type === "cursor-updated" ||
+      value.type === "schema-updated" ||
       value.type === "sync-requested")
   );
 }

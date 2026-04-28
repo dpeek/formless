@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Route, Switch } from "wouter";
-import { appSchema, appSchemaJson } from "./client/schema.ts";
 import {
   connectBroadcastToState,
   getClientState,
@@ -8,8 +7,14 @@ import {
   subscribeToClientState,
   type ClientState,
 } from "./client/state.ts";
-import { bootstrapClient, startPollingSync, submitCreateMutation } from "./client/sync.ts";
-import type { EntitySchema } from "./shared/schema.ts";
+import {
+  bootstrapClient,
+  fetchActiveSchema,
+  saveActiveSchema,
+  startPollingSync,
+  submitCreateMutation,
+} from "./client/sync.ts";
+import { parseAppSchema, stringifySchema, type EntitySchema } from "./shared/schema.ts";
 import type { StoredRecord } from "./shared/protocol.ts";
 
 type SyncStatus = {
@@ -23,8 +28,11 @@ function HomeRoute() {
     state: "idle",
     message: "Local cache ready.",
   });
-  const schema = clientState.schema ?? appSchema;
-  const entityEntry = useMemo(() => Object.entries(schema.entities)[0], [schema]);
+  const schema = clientState.schema;
+  const entityEntry = useMemo(
+    () => (schema ? Object.entries(schema.entities)[0] : undefined),
+    [schema],
+  );
 
   useEffect(() => subscribeToClientState(setClientState), []);
 
@@ -67,11 +75,26 @@ function HomeRoute() {
     };
   }, []);
 
+  if (!schema) {
+    return (
+      <section className="mx-auto max-w-3xl space-y-4">
+        <h1 className="text-2xl font-semibold">Formless</h1>
+        <p className="text-sm text-slate-600">
+          {syncStatus.state === "error"
+            ? "Could not load the active schema."
+            : "Loading active schema..."}
+        </p>
+        <SyncStatusLine status={syncStatus} lastSyncedAt={clientState.lastSyncedAt} />
+      </section>
+    );
+  }
+
   if (!entityEntry) {
     return (
-      <section className="space-y-2">
+      <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p>No entities are defined in the active schema.</p>
+        <SyncStatusLine status={syncStatus} lastSyncedAt={clientState.lastSyncedAt} />
       </section>
     );
   }
@@ -182,7 +205,7 @@ function RecordList({ entity, records }: { entity: EntitySchema; records: Stored
           {records.map((record) => (
             <li className="space-y-1 p-3" key={record.id}>
               {Object.entries(entity.fields).map(([fieldName]) => (
-                <p key={fieldName}>{record.values[fieldName]}</p>
+                <p key={fieldName}>{record.values[fieldName] ?? ""}</p>
               ))}
               <p className="text-xs text-slate-500">{record.createdAt}</p>
             </li>
@@ -209,12 +232,105 @@ function SyncStatusLine({
 }
 
 function SchemaRoute() {
+  const [clientState, setClientState] = useState<ClientState>(() => getClientState());
+  const [editorText, setEditorText] = useState(() =>
+    clientState.schema ? stringifySchema(clientState.schema) : "",
+  );
+  const [status, setStatus] = useState<SyncStatus>({
+    state: "idle",
+    message: "Schema editor ready.",
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => subscribeToClientState(setClientState), []);
+
+  useEffect(() => {
+    const stopBroadcast = connectBroadcastToState();
+    let cancelled = false;
+
+    async function loadSchema() {
+      try {
+        await hydrateClientState();
+        await fetchActiveSchema();
+
+        if (!cancelled) {
+          setStatus({ state: "idle", message: "Loaded active schema." });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStatus({
+            state: "error",
+            message: error instanceof Error ? error.message : "Could not load schema.",
+          });
+        }
+      }
+    }
+
+    void loadSchema();
+
+    return () => {
+      cancelled = true;
+      stopBroadcast();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (clientState.schema) {
+      setEditorText(stringifySchema(clientState.schema));
+    }
+  }, [clientState.schema]);
+
+  async function submitSchema(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSaving(true);
+    setStatus({ state: "syncing", message: "Saving schema..." });
+
+    try {
+      const parsed = parseAppSchema(JSON.parse(editorText) as unknown);
+      const response = await saveActiveSchema(parsed);
+
+      setEditorText(stringifySchema(response.schema));
+      setStatus({ state: "idle", message: `Saved schema at ${response.updatedAt}.` });
+    } catch (error) {
+      setStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Schema save failed.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
-    <section className="space-y-2">
-      <h1 className="text-2xl font-semibold">Schema</h1>
-      <pre className="overflow-auto rounded border border-slate-200 bg-slate-50 p-4 text-sm">
-        {appSchemaJson}
-      </pre>
+    <section className="mx-auto max-w-3xl space-y-4">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold">Schema</h1>
+        <p className="text-sm text-slate-600">
+          {clientState.schema
+            ? `Editing schema version ${clientState.schema.version}.`
+            : "Loading active schema."}
+        </p>
+      </header>
+
+      <form className="space-y-4" onSubmit={submitSchema}>
+        <textarea
+          className="min-h-96 w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm"
+          onChange={(event) => setEditorText(event.currentTarget.value)}
+          placeholder="Loading active schema..."
+          spellCheck={false}
+          value={editorText}
+        />
+
+        <button
+          className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          disabled={isSaving}
+          type="submit"
+        >
+          {isSaving ? "Saving..." : "Save schema"}
+        </button>
+      </form>
+
+      <SyncStatusLine status={status} lastSyncedAt={clientState.lastSyncedAt} />
     </section>
   );
 }

@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { MutationResponse } from "../shared/protocol.ts";
+import type { AppSchema } from "../shared/schema.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -25,6 +26,34 @@ afterEach(async () => {
 });
 
 describe("storage", () => {
+  it("seeds the active schema when storage is empty", async () => {
+    const stored = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
+
+    expect(stored.schema.entities.note.label).toBe("Note");
+    expect(stored.updatedAt).toEqual(expect.any(String));
+  });
+
+  it("persists schema updates", async () => {
+    const nextSchema = {
+      version: 1,
+      entities: {
+        note: {
+          label: "Journal entry",
+          fields: {
+            text: { type: "text", required: true },
+            summary: { type: "text", required: false },
+          },
+        },
+      },
+    } satisfies AppSchema;
+
+    await postJson("/schema", nextSchema);
+
+    const stored = await getJson<{ schema: AppSchema }>("/schema");
+
+    expect(stored.schema).toEqual(nextSchema);
+  });
+
   it("creates records, records changes, and advances the cursor", async () => {
     expect(await getJson<number>("/cursor")).toBe(0);
 
@@ -110,13 +139,19 @@ async function writeStorageHarness() {
     harnessPath,
     `
       import { DurableObject } from "cloudflare:workers";
+      import rawSeedSchema from "${process.cwd()}/schema/app-schema.json";
+      import { parseAppSchema } from "${process.cwd()}/src/shared/schema.ts";
       import {
         createStoredRecord,
         ensureStorageTables,
+        getActiveSchema,
         getBootstrapRecords,
         getChangesAfter,
         getCurrentCursor,
+        writeActiveSchema,
       } from "${process.cwd()}/src/worker/storage.ts";
+
+      const seedSchema = parseAppSchema(rawSeedSchema);
 
       export class StorageHarness extends DurableObject {
         constructor(ctx, env) {
@@ -135,12 +170,20 @@ async function writeStorageHarness() {
             return Response.json(getBootstrapRecords(this.ctx.storage));
           }
 
+          if (request.method === "GET" && url.pathname === "/schema") {
+            return Response.json(getActiveSchema(this.ctx.storage, seedSchema));
+          }
+
           if (request.method === "GET" && url.pathname === "/changes") {
             return Response.json(getChangesAfter(this.ctx.storage, Number(url.searchParams.get("after") ?? 0)));
           }
 
           if (request.method === "POST" && url.pathname === "/create") {
             return Response.json(createStoredRecord(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/schema") {
+            return Response.json(writeActiveSchema(this.ctx.storage, await request.json()));
           }
 
           return Response.json({ error: "Not found." }, { status: 404 });

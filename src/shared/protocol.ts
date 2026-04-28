@@ -29,6 +29,7 @@ export type ChangeRow = {
 
 export type BootstrapResponse = {
   schema: AppSchema;
+  schemaUpdatedAt: string;
   records: StoredRecord[];
   cursor: number;
 };
@@ -36,10 +37,22 @@ export type BootstrapResponse = {
 export type SyncResponse = {
   changes: ChangeRow[];
   cursor: number;
+  schema?: AppSchema;
+  schemaUpdatedAt?: string;
 };
 
 export type MutationResponse = {
   record: StoredRecord;
   cursor: number;
   mutationId: string;
+};
+
+export type SchemaResponse = {
+  schema: AppSchema;
+  updatedAt: string;
+};
+
+export type SchemaUpdateResponse = {
+  schema: AppSchema;
+  updatedAt: string;
 };

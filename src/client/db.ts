@@ -9,11 +9,13 @@ const META_STORE = "meta";
 const RECORDS_STORE = "records";
 
 const SCHEMA_KEY = "schema";
+const SCHEMA_UPDATED_AT_KEY = "schemaUpdatedAt";
 const CURSOR_KEY = "cursor";
 const LAST_SYNCED_AT_KEY = "lastSyncedAt";
 
 export type LocalSnapshot = {
   schema: AppSchema | null;
+  schemaUpdatedAt: string | null;
   records: StoredRecord[];
   cursor: number;
   lastSyncedAt: string | null;
@@ -27,8 +29,9 @@ export async function readLocalSnapshot(): Promise<LocalSnapshot> {
     const meta = transaction.objectStore(META_STORE);
     const records = transaction.objectStore(RECORDS_STORE);
 
-    const [schema, cursor, lastSyncedAt, storedRecords] = await Promise.all([
+    const [schema, schemaUpdatedAt, cursor, lastSyncedAt, storedRecords] = await Promise.all([
       requestToPromise<AppSchema | undefined>(meta.get(SCHEMA_KEY)),
+      requestToPromise<string | undefined>(meta.get(SCHEMA_UPDATED_AT_KEY)),
       requestToPromise<number | undefined>(meta.get(CURSOR_KEY)),
       requestToPromise<string | undefined>(meta.get(LAST_SYNCED_AT_KEY)),
       requestToPromise<StoredRecord[]>(records.getAll()),
@@ -37,6 +40,7 @@ export async function readLocalSnapshot(): Promise<LocalSnapshot> {
 
     return {
       schema: schema ?? null,
+      schemaUpdatedAt: schemaUpdatedAt ?? null,
       records: sortRecords(storedRecords),
       cursor: cursor ?? 0,
       lastSyncedAt: lastSyncedAt ?? null,
@@ -60,7 +64,25 @@ export async function saveBootstrapResponse(response: BootstrapResponse) {
     }
 
     meta.put(response.schema, SCHEMA_KEY);
+    meta.put(response.schemaUpdatedAt, SCHEMA_UPDATED_AT_KEY);
     meta.put(response.cursor, CURSOR_KEY);
+    meta.put(nowIsoString(), LAST_SYNCED_AT_KEY);
+
+    await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
+}
+
+export async function saveSchema(schema: AppSchema, updatedAt: string) {
+  const db = await openClientDb();
+
+  try {
+    const transaction = db.transaction(META_STORE, "readwrite");
+    const meta = transaction.objectStore(META_STORE);
+
+    meta.put(schema, SCHEMA_KEY);
+    meta.put(updatedAt, SCHEMA_UPDATED_AT_KEY);
     meta.put(nowIsoString(), LAST_SYNCED_AT_KEY);
 
     await transactionDone(transaction);
@@ -94,6 +116,22 @@ export async function mergeRecords(recordsToMerge: StoredRecord[], cursor?: numb
     meta.put(nowIsoString(), LAST_SYNCED_AT_KEY);
 
     await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
+}
+
+export async function readSchemaUpdatedAt() {
+  const db = await openClientDb();
+
+  try {
+    const transaction = db.transaction(META_STORE, "readonly");
+    const schemaUpdatedAt = await requestToPromise<string | undefined>(
+      transaction.objectStore(META_STORE).get(SCHEMA_UPDATED_AT_KEY),
+    );
+    await transactionDone(transaction);
+
+    return schemaUpdatedAt ?? null;
   } finally {
     db.close();
   }
