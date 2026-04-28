@@ -1,0 +1,8 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "formless",
+  "compatibility_date": "2026-04-28",
+  "assets": {
+    "not_found_handling": "single-page-application",
+  },
+}
