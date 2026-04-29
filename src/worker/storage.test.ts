@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import type { MutationResponse } from "../shared/protocol.ts";
+import type { ActionResponse, MutationResponse } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -177,14 +177,56 @@ describe("storage", () => {
     expect(replay).toEqual(first);
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
   });
+
+  it("tombstones requested records for action replay", async () => {
+    const completed = await createRecord("mutation-1", "Done", true);
+    const active = await createRecord("mutation-2", "Open");
+
+    const action = await postJson<ActionResponse>("/tombstone-records", {
+      actionId: "action-1",
+      recordIds: [completed.record.id],
+    });
+    const records = await getJson<unknown[]>("/records");
+
+    expect(action.changes).toHaveLength(1);
+    expect(action.changes[0]).toMatchObject({
+      mutationId: "action-1",
+      op: "action",
+      recordId: completed.record.id,
+      payload: {
+        id: completed.record.id,
+        deletedAt: expect.any(String),
+      },
+    });
+    expect(records).toEqual([
+      expect.objectContaining({ id: completed.record.id, deletedAt: expect.any(String) }),
+      active.record,
+    ]);
+  });
+
+  it("replays tombstone actions by actionId", async () => {
+    const completed = await createRecord("mutation-1", "Done", true);
+
+    const first = await postJson<ActionResponse>("/tombstone-records", {
+      actionId: "action-1",
+      recordIds: [completed.record.id],
+    });
+    const replay = await postJson<ActionResponse>("/tombstone-records", {
+      actionId: "action-1",
+      recordIds: [],
+    });
+
+    expect(replay).toEqual(first);
+    expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
+  });
 });
 
-async function createRecord(mutationId: string, text: string) {
+async function createRecord(mutationId: string, text: string, done = false) {
   return postJson<MutationResponse>("/create", {
     mutationId,
     entity: "task",
     op: "create",
-    values: { title: text, done: false },
+    values: { title: text, done },
   });
 }
 
@@ -255,8 +297,10 @@ async function writeStorageHarness() {
         getBootstrapRecords,
         getChangesAfter,
         getCurrentCursor,
+        getStoredRecord,
         patchStoredRecord,
         resetStorage,
+        tombstoneRecordsForAction,
         writeActiveSchema,
       } from "${process.cwd()}/src/worker/storage.ts";
 
@@ -293,6 +337,12 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/patch") {
             return Response.json(patchStoredRecord(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/tombstone-records") {
+            const body = await request.json();
+            const records = body.recordIds.map((recordId) => getStoredRecord(this.ctx.storage, recordId)).filter(Boolean);
+            return Response.json(tombstoneRecordsForAction(this.ctx.storage, body.actionId, "task", "clearCompletedTasks", records));
           }
 
           if (request.method === "POST" && url.pathname === "/schema") {

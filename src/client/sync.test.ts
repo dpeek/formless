@@ -16,11 +16,13 @@ import {
   fetchActiveSchema,
   resetRemoteData,
   saveActiveSchema,
+  submitAction,
   submitCreateMutation,
   submitPatchMutation,
   syncClient,
 } from "./sync.ts";
 import type {
+  ActionResponse,
   BootstrapResponse,
   ChangeRow,
   MutationResponse,
@@ -207,6 +209,76 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(2);
   });
 
+  it("submits actions and merges tombstones into local state", async () => {
+    const tombstone = {
+      ...record("record-1", "Done", true),
+      deletedAt: "2026-04-28T00:01:00.000Z",
+    };
+
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "Done", true)],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb();
+
+    const response = await submitAction("task", "clearCompletedTasks", async (input, init) => {
+      const action = parseActionRequestBody(init?.body);
+
+      expect(input).toBe("/api/actions");
+      expect(init?.method).toBe("POST");
+      expect(action).toMatchObject({
+        entity: "task",
+        action: "clearCompletedTasks",
+      });
+
+      return Response.json({
+        actionId: action.actionId,
+        changes: [actionChange(2, tombstone, action.actionId)],
+        cursor: 2,
+      } satisfies ActionResponse);
+    });
+
+    const snapshot = await readLocalSnapshot();
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(response.changes[0]?.payload).toEqual(tombstone);
+    expect(snapshot.records).toEqual([tombstone]);
+    expect(storeSnapshot.recordsById["record-1"]).toEqual(tombstone);
+    expect(storeSnapshot.recordIdsByEntity.task ?? []).toEqual([]);
+    expect(storeSnapshot.cursor).toBe(2);
+  });
+
+  it("keeps tombstoned records in IndexedDB while hiding them from active selectors", async () => {
+    const tombstone = {
+      ...record("record-1", "Done", true),
+      deletedAt: "2026-04-28T00:01:00.000Z",
+    };
+
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "Done", true), record("record-2", "Open")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb();
+
+    await syncClient(
+      jsonFetcher("/api/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+        changes: [actionChange(2, tombstone, "action-1")],
+        cursor: 2,
+      } satisfies SyncResponse),
+    );
+
+    const snapshot = await readLocalSnapshot();
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(snapshot.records).toContainEqual(tombstone);
+    expect(storeSnapshot.recordsById["record-1"]).toEqual(tombstone);
+    expect(storeSnapshot.recordIdsByEntity.task).toEqual(["record-2"]);
+  });
+
   it("fetches and caches the active schema", async () => {
     const nextSchema = schemaWithSummary();
 
@@ -381,6 +453,22 @@ function parseRequestBody(body: BodyInit | null | undefined) {
   return parsed as { mutationId: string };
 }
 
+function parseActionRequestBody(body: BodyInit | null | undefined) {
+  if (typeof body !== "string") {
+    throw new Error("Expected a string request body.");
+  }
+
+  const parsed = JSON.parse(body) as unknown;
+
+  expect(parsed).toEqual(
+    expect.objectContaining({
+      actionId: expect.any(String),
+    }),
+  );
+
+  return parsed as { actionId: string; entity: string; action: string };
+}
+
 function parsePlainRequestBody(body: BodyInit | null | undefined) {
   if (typeof body !== "string") {
     throw new Error("Expected a string request body.");
@@ -439,6 +527,18 @@ function change(
     entity: "task",
     recordId,
     payload: record(recordId, title, done),
+    createdAt: `2026-04-28T00:00:0${seq}.000Z`,
+  };
+}
+
+function actionChange(seq: number, payload: StoredRecord, actionId: string): ChangeRow {
+  return {
+    seq,
+    mutationId: actionId,
+    op: "action",
+    entity: payload.entity,
+    recordId: payload.id,
+    payload,
     createdAt: `2026-04-28T00:00:0${seq}.000Z`,
   };
 }

@@ -60,10 +60,18 @@ export type EntityMutationPolicy = {
   delete: DeleteMutationPolicy;
 };
 
+export type EntityActionKind = "clear-completed";
+
+export type EntityActionSchema = {
+  label: string;
+  kind: EntityActionKind;
+};
+
 export type EntitySchema = {
   label: string;
   fields: Record<string, FieldSchema>;
   mutations: EntityMutationPolicy;
+  actions?: Record<string, EntityActionSchema>;
 };
 
 export type AppSchema = {
@@ -385,8 +393,76 @@ function parseEntity(entityName: string, value: unknown): EntitySchema {
   }
 
   const mutations = parseEntityMutations(entityName, value.mutations);
+  const actions = parseEntityActions(entityName, value.actions, fields);
 
-  return { label, fields, mutations };
+  return actions ? { label, fields, mutations, actions } : { label, fields, mutations };
+}
+
+function parseEntityActions(
+  entityName: string,
+  value: unknown,
+  fields: Record<string, FieldSchema>,
+): Record<string, EntityActionSchema> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Entity "${entityName}" actions must be an object.`);
+  }
+
+  const actions = Object.fromEntries(
+    Object.entries(value).map(([actionName, action]) => {
+      if (actionName.trim() === "") {
+        throw new Error(`Entity "${entityName}" action names must be non-empty.`);
+      }
+
+      return [actionName, parseEntityAction(entityName, actionName, action, fields)];
+    }),
+  );
+
+  return Object.keys(actions).length > 0 ? actions : undefined;
+}
+
+function parseEntityAction(
+  entityName: string,
+  actionName: string,
+  value: unknown,
+  fields: Record<string, FieldSchema>,
+): EntityActionSchema {
+  if (!isRecord(value)) {
+    throw new Error(`Entity action "${entityName}.${actionName}" must be an object.`);
+  }
+
+  const allowedKeys = new Set(["label", "kind"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Entity action "${entityName}.${actionName}" has unsupported key "${key}".`);
+    }
+  }
+
+  if (typeof value.label !== "string" || value.label.trim() === "") {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" label must be a non-empty string.`,
+    );
+  }
+
+  if (value.kind !== "clear-completed") {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" has unsupported kind "${String(value.kind)}".`,
+    );
+  }
+
+  if (fields.done?.type !== "boolean") {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" kind "clear-completed" requires a boolean "done" field.`,
+    );
+  }
+
+  return {
+    label: value.label,
+    kind: value.kind,
+  };
 }
 
 function parseEntityMutations(entityName: string, value: unknown): EntityMutationPolicy {

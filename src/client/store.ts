@@ -125,7 +125,6 @@ export function applyChanges(changes: ChangeRow[], cursor: number) {
 export function applyRecordMerge(recordsToMerge: StoredRecord[], cursor?: number) {
   updateState((current) => {
     let recordsByIdChanged = false;
-    let recordIdsByEntity = current.recordIdsByEntity;
     const nextRecordsById = { ...current.recordsById };
 
     for (const record of recordsToMerge) {
@@ -135,22 +134,14 @@ export function applyRecordMerge(recordsToMerge: StoredRecord[], cursor?: number
         recordsByIdChanged = true;
         nextRecordsById[record.id] = record;
       }
-
-      if (!existing) {
-        recordIdsByEntity = appendRecordId(recordIdsByEntity, record.entity, record.id);
-        continue;
-      }
-
-      if (existing.entity !== record.entity) {
-        recordIdsByEntity = moveRecordId(
-          recordIdsByEntity,
-          existing.entity,
-          record.entity,
-          record.id,
-        );
-      }
     }
 
+    const recordIdsByEntity = recordsByIdChanged
+      ? reconcileRecordIdsByEntity(
+          current.recordIdsByEntity,
+          sortRecords(Object.values(nextRecordsById)),
+        )
+      : current.recordIdsByEntity;
     const cursorChanged = cursor !== undefined && cursor !== current.cursor;
     const hasLastSyncedAtUpdate = recordsToMerge.length > 0 || cursor !== undefined;
 
@@ -311,6 +302,10 @@ function recordIdsByEntity(records: StoredRecord[]) {
   const idsByEntity: Record<string, string[]> = {};
 
   for (const record of records) {
+    if (record.deletedAt) {
+      continue;
+    }
+
     idsByEntity[record.entity] = [...(idsByEntity[record.entity] ?? []), record.id];
   }
 
@@ -337,39 +332,6 @@ function reconcileRecordIdsByEntity(
   }
 
   return changed ? reconciledIdsByEntity : existingIdsByEntity;
-}
-
-function appendRecordId(
-  idsByEntity: Record<string, string[]>,
-  entityName: string,
-  recordId: string,
-) {
-  const existingIds = idsByEntity[entityName] ?? EMPTY_RECORD_IDS;
-
-  if (existingIds.includes(recordId)) {
-    return idsByEntity;
-  }
-
-  return {
-    ...idsByEntity,
-    [entityName]: [...existingIds, recordId],
-  };
-}
-
-function moveRecordId(
-  idsByEntity: Record<string, string[]>,
-  previousEntity: string,
-  nextEntity: string,
-  recordId: string,
-) {
-  const previousIds = idsByEntity[previousEntity] ?? EMPTY_RECORD_IDS;
-  const nextIds = idsByEntity[nextEntity] ?? EMPTY_RECORD_IDS;
-
-  return {
-    ...idsByEntity,
-    [previousEntity]: previousIds.filter((id) => id !== recordId),
-    [nextEntity]: nextIds.includes(recordId) ? nextIds : [...nextIds, recordId],
-  };
 }
 
 function normalizedStatesEqual(left: ClientStoreState, right: ClientStoreState) {
@@ -423,6 +385,7 @@ function storedRecordsEqual(left: StoredRecord | undefined, right: StoredRecord)
     left.id === right.id &&
     left.entity === right.entity &&
     left.createdAt === right.createdAt &&
+    left.deletedAt === right.deletedAt &&
     recordValuesEqual(left.values, right.values)
   );
 }

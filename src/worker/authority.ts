@@ -1,7 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import rawSeedSchema from "../../schema/app-schema.json";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
-import type { CreateMutation, Mutation, PatchMutation, RecordValues } from "../shared/protocol.ts";
+import type {
+  ActionRequest,
+  CreateMutation,
+  Mutation,
+  PatchMutation,
+  RecordValues,
+} from "../shared/protocol.ts";
 import {
   createStoredRecord,
   ensureStorageTables,
@@ -15,6 +21,7 @@ import {
   resetStorage,
   writeActiveSchema,
 } from "./storage.ts";
+import { executeEntityAction } from "./actions.ts";
 import type { Env } from "./index.ts";
 
 const seedSchema = parseAppSchema(rawSeedSchema);
@@ -91,6 +98,13 @@ export class FormlessAuthority extends DurableObject<Env> {
         );
       }
 
+      if (request.method === "POST" && url.pathname === "/api/actions") {
+        const { schema } = getActiveSchema(this.ctx.storage, seedSchema);
+        const action = validateActionRequest(await readJson(request), schema);
+
+        return jsonResponse(executeEntityAction(this.ctx.storage, action, schema));
+      }
+
       if (request.method === "POST" && url.pathname === "/api/dev/reset") {
         const { schema, updatedAt } = resetStorage(this.ctx.storage, seedSchema);
 
@@ -111,6 +125,46 @@ export class FormlessAuthority extends DurableObject<Env> {
       throw error;
     }
   }
+}
+
+function validateActionRequest(value: unknown, schema: AppSchema): ActionRequest {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Action request must be an object.");
+  }
+
+  if (typeof value.actionId !== "string" || value.actionId.trim() === "") {
+    throw new BadRequestError("Action request must include a non-empty actionId.");
+  }
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new BadRequestError("Action request must include an entity.");
+  }
+
+  const entity = schema.entities[value.entity];
+  if (!entity) {
+    throw new BadRequestError(`Unknown entity "${value.entity}".`);
+  }
+
+  if (typeof value.action !== "string" || value.action.trim() === "") {
+    throw new BadRequestError("Action request must include an action.");
+  }
+
+  const action = entity.actions?.[value.action];
+  if (!action) {
+    throw new BadRequestError(`Unknown action "${value.action}" for entity "${value.entity}".`);
+  }
+
+  if (entity.fields.done?.type !== "boolean") {
+    throw new BadRequestError(
+      `Action "${value.action}" requires entity "${value.entity}" to have a boolean done field.`,
+    );
+  }
+
+  return {
+    actionId: value.actionId,
+    entity: value.entity,
+    action: value.action,
+  };
 }
 
 async function readJson(request: Request): Promise<unknown> {

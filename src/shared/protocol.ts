@@ -9,6 +9,7 @@ export type StoredRecord = {
   entity: EntityName;
   values: RecordValues;
   createdAt: string;
+  deletedAt?: string;
 };
 
 export type CreateMutation = {
@@ -28,10 +29,16 @@ export type PatchMutation = {
 
 export type Mutation = CreateMutation | PatchMutation;
 
+export type ActionRequest = {
+  actionId: string;
+  entity: EntityName;
+  action: string;
+};
+
 export type ChangeRow = {
   seq: number;
   mutationId: string;
-  op: "create" | "patch";
+  op: "create" | "patch" | "action";
   entity: EntityName;
   recordId: string;
   payload: StoredRecord;
@@ -56,6 +63,12 @@ export type MutationResponse = {
   record: StoredRecord;
   cursor: number;
   mutationId: string;
+};
+
+export type ActionResponse = {
+  actionId: string;
+  changes: ChangeRow[];
+  cursor: number;
 };
 
 export type SchemaResponse = {

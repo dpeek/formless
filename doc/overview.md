@@ -18,19 +18,19 @@ The interesting part is the full combination:
 - the browser keeps a local replica
 - the server is still authoritative
 - updates flow through a small generic mutation layer by default, with named actions where the domain actually needs them
-- known types carry their own editors and renderers
+- built-in field types carry their own editors and validation rules
 - React only rerenders the exact pieces of UI that depend on the changed data
 
 The current prototype already has the beginnings of this shape:
 
 - the schema starts in [schema/app-schema.json](/Users/dpeek/code/formless/schema/app-schema.json)
-- entities declare which generic mutations are enabled for generated editing surfaces
+- entities declare which generic mutations and named actions are enabled for generated editing surfaces
 - the browser caches records and schema metadata in IndexedDB through [src/client/db.ts](/Users/dpeek/code/formless/src/client/db.ts)
 - the authority lives in a Durable Object backed by SQLite in [src/worker/storage.ts](/Users/dpeek/code/formless/src/worker/storage.ts)
-- bootstrap, sync, and mutation routes live in [src/worker/authority.ts](/Users/dpeek/code/formless/src/worker/authority.ts)
+- bootstrap, schema, sync, mutation, and action routes live in [src/worker/authority.ts](/Users/dpeek/code/formless/src/worker/authority.ts)
 - the browser sync loop lives in [src/client/sync.ts](/Users/dpeek/code/formless/src/client/sync.ts)
 
-That is already more interesting than a CRUD generator. The next job is to make the product thesis explicit.
+That is already more interesting than a CRUD generator. The next job is to make the generated home surface feel like a coherent app instead of separate generated form and list fragments.
 
 ## Why this approach is interesting
 
@@ -72,7 +72,7 @@ The product should revolve around five things:
 
 A type defines more than a storage codec.
 
-For example, a date type should eventually define:
+The current schema embeds type names directly on fields. Later, types can become explicit behavior bundles. For example, a date type should eventually define:
 
 - value format
 - validation rules
@@ -92,6 +92,7 @@ For the current prototype, an entity is still small:
 - a label
 - a set of fields
 - a generic mutation policy for create, patch, and disabled delete
+- optional named actions such as `clearCompletedTasks`
 
 That is enough for a first slice. It is not enough for the whole system.
 
@@ -123,9 +124,16 @@ The generic generated CRUD UI should stay in the system, but as the fallback lay
 
 The main runtime goal is not "forms for tables." It is "the schema defines enough behavior that a user or agent can build a real application surface from it."
 
-That means views should eventually be schema-driven too:
+Views are already schema-driven in a narrow way:
+
+- create views choose which fields participate in generated create forms
+- list views choose which fields render inline
+- list view fields choose an editor and commit policy
+
+That should eventually expand into:
 
 - list views
+- create views
 - detail views
 - compact inline editors
 - specialized renderers for known types
@@ -154,6 +162,8 @@ The system needs:
 
 The current prototype already has the backbone of this through `bootstrap`, `sync`, and `mutations`.
 
+Named actions now use the same change-log and local-merge path, so commands such as `clearCompletedTasks` can update the local replica without a bespoke client-side state model.
+
 ## Running example: personal task planner
 
 The best working example for this system is not a generic todo list. It is a personal task planner.
@@ -173,11 +183,6 @@ A useful example schema looks like this:
 ```json
 {
   "version": 1,
-  "types": {
-    "text": {},
-    "boolean": {},
-    "date": {}
-  },
   "entities": {
     "task": {
       "label": "Task",
@@ -196,11 +201,18 @@ A useful example schema looks like this:
         "delete": {
           "enabled": false
         }
+      },
+      "actions": {
+        "clearCompletedTasks": {
+          "label": "Clear completed",
+          "kind": "clear-completed"
+        }
       }
     }
   },
   "views": {
     "taskListItem": {
+      "type": "list",
       "entity": "task",
       "fields": {
         "title": {
@@ -210,19 +222,22 @@ A useful example schema looks like this:
         "done": {
           "editor": "boolean",
           "commit": "immediate"
-        }
-      }
-    },
-    "taskEditor": {
-      "entity": "task",
-      "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "form-save"
         },
         "dueDate": {
           "editor": "date",
-          "commit": "form-save"
+          "commit": "field-commit"
+        }
+      }
+    },
+    "taskCreate": {
+      "type": "create",
+      "entity": "task",
+      "fields": {
+        "title": {
+          "editor": "text"
+        },
+        "dueDate": {
+          "editor": "date"
         }
       }
     }
@@ -238,7 +253,7 @@ A notes app mostly proves rich text and storage. A task planner proves mutation 
 
 The authoring flow should look like this:
 
-1. Define the types you want to use.
+1. Use the built-in field types the runtime supports.
 2. Define the entities and fields.
 3. Decide what generic mutations the entity supports.
 4. Add named actions only where the domain needs more than an ordinary edit.
@@ -247,7 +262,7 @@ The authoring flow should look like this:
 
 That sequence is important.
 
-If the system starts from tables and CRUD, we will end up with a CRUD framework that happens to have a sync layer. If it starts from types, entities, mutation policy, and local replica semantics, we have a chance of building something narrower and more opinionated in a useful way.
+If the system starts from tables and CRUD, we will end up with a CRUD framework that happens to have a sync layer. If it starts from field types, entities, mutation policy, actions, views, and local replica semantics, we have a chance of building something narrower and more opinionated in a useful way.
 
 ## Generic mutations and named actions
 
@@ -313,8 +328,8 @@ The first three built-in types are enough to prove this:
 That already gives us:
 
 - text inputs and inline text rendering
-- checkboxes, toggles, and boolean badges
-- date pickers, date formatting, and date filters
+- checkboxes and boolean editing
+- date inputs and date validation
 
 Once that foundation is in place, richer types start to make more sense because they plug into an established runtime model instead of arriving as one-off widget code.
 
@@ -372,19 +387,21 @@ It currently proves:
 
 - one checked-in schema file used as the authority seed
 - one task planner seed schema with `text`, `boolean`, and `date` fields
+- authority-owned runtime schema editing through `/schema`
 - one generated type-aware create form
 - one generated editable list
+- one schema-declared named action, `clearCompletedTasks`
 - one authority-backed record store
+- soft-deleted tombstones for action-produced removals
 - bootstrap and incremental sync
 - local IndexedDB hydration
-- authority-owned runtime schema editing
 - schema metadata flowing through local replica sync
 - generic `create` and `patch` mutations flowing through the same change log and local merge path
+- action-produced changes flowing through that same change log and local merge path
 
-The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema`
-edits the authority-owned schema, polling sync can refresh stale browser replicas, and ordinary
-field edits submit validated patches back to the authority. Named actions, delete mutations,
-filters, and optimistic rollback remain later work.
+The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, and `clearCompletedTasks` proves the named-action path.
+
+The next slice is about generated application composition rather than deeper authority semantics: show `Create Task` beside `Clear completed`, open create in a generated dialog, and render task rows more compactly. The rough priority list after that lives in [doc/roadmap.md](/Users/dpeek/code/formless/doc/roadmap.md).
 
 ## What success looks like
 

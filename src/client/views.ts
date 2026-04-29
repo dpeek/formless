@@ -1,5 +1,6 @@
 import type {
   AppSchema,
+  EntityActionSchema,
   EntitySchema,
   FieldCommitPolicy,
   FieldEditor,
@@ -24,9 +25,33 @@ export type CreateFieldConfig = {
 export type HomeViewModel = {
   entityName: string;
   entity: EntitySchema;
+  actions: EntityActionConfig[];
   createFields: CreateFieldConfig[];
+  homeActions: HomeActionConfig[];
   recordFields: RecordFieldConfig[];
 };
+
+export type EntityActionConfig = {
+  actionName: string;
+  action: EntityActionSchema;
+};
+
+export type HomeActionConfig =
+  | {
+      type: "create";
+      label: string;
+      entityName: string;
+      entity: EntitySchema;
+      fields: CreateFieldConfig[];
+      enabled: boolean;
+    }
+  | {
+      type: "entity-action";
+      label: string;
+      entityName: string;
+      actionName: string;
+      action: EntityActionSchema;
+    };
 
 export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
   const viewEntries = Object.entries(schema.views);
@@ -42,12 +67,56 @@ export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
     return undefined;
   }
 
+  const actions = selectActions(entity);
+  const createFields = selectCreateFields(viewEntries, listView.entity, entity);
+
   return {
     entityName: listView.entity,
     entity,
-    createFields: selectCreateFields(viewEntries, listView.entity, entity),
+    actions,
+    createFields,
+    homeActions: selectHomeActions(listView.entity, entity, createFields, actions),
     recordFields: selectRecordFields(listView, entity),
   };
+}
+
+function selectHomeActions(
+  entityName: string,
+  entity: EntitySchema,
+  createFields: CreateFieldConfig[],
+  actions: EntityActionConfig[],
+): HomeActionConfig[] {
+  const homeActions: HomeActionConfig[] = [];
+
+  if (createFields.length > 0) {
+    homeActions.push({
+      type: "create",
+      label: `Create ${entity.label}`,
+      entityName,
+      entity,
+      fields: createFields,
+      enabled: entity.mutations.create.enabled,
+    });
+  }
+
+  homeActions.push(
+    ...actions.map(({ action, actionName }) => ({
+      type: "entity-action" as const,
+      label: action.label,
+      entityName,
+      actionName,
+      action,
+    })),
+  );
+
+  return homeActions;
+}
+
+function selectActions(entity: EntitySchema): EntityActionConfig[] {
+  return Object.entries(entity.actions ?? {}).map(([actionName, action]) => ({
+    actionName,
+    action,
+  }));
 }
 
 function selectCreateFields(

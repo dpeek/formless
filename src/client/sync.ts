@@ -15,8 +15,10 @@ import {
   applySchemaSave,
   resetClientStore,
 } from "./store.ts";
-import { createMutationId } from "../shared/ids.ts";
+import { createActionId, createMutationId } from "../shared/ids.ts";
 import type {
+  ActionRequest,
+  ActionResponse,
   BootstrapResponse,
   CreateMutation,
   EntityName,
@@ -125,6 +127,26 @@ export async function submitPatchMutation(
 
   await mergeRecords([response.record], response.cursor);
   applyRecordMerge([response.record], response.cursor);
+  await notifyLocalDataChanged();
+
+  return response;
+}
+
+export async function submitAction(
+  entity: EntityName,
+  actionName: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const action: ActionRequest = {
+    actionId: createActionId(),
+    entity,
+    action: actionName,
+  };
+
+  const response = await postJson<ActionResponse>(fetcher, "/api/actions", action);
+
+  await mergeChanges(response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor);
   await notifyLocalDataChanged();
 
   return response;

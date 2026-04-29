@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { appSchema } from "../client/schema.ts";
 import type {
+  ActionResponse,
   BootstrapResponse,
   MutationResponse,
   SchemaResponse,
@@ -397,6 +398,83 @@ describe("authority", () => {
 
     expect(replay).toEqual(first);
     expect(sync.changes).toHaveLength(2);
+  });
+
+  it("rejects undeclared or unknown actions", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithViews() });
+
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-1",
+        entity: "task",
+        action: "clearCompletedTasks",
+      },
+      'Unknown action "clearCompletedTasks" for entity "task".',
+    );
+
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: appSchema });
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-2",
+        entity: "task",
+        action: "missing",
+      },
+      'Unknown action "missing" for entity "task".',
+    );
+  });
+
+  it("tombstones completed records through clearCompletedTasks", async () => {
+    const completed = await postMutation("mutation-1", { title: "Done", done: true });
+    const active = await postMutation("mutation-2", { title: "Open", done: false });
+
+    const action = await postAction("action-1", "clearCompletedTasks");
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const sync = await getJson<SyncResponse>("/api/sync?after=2");
+
+    expect(action.actionId).toBe("action-1");
+    expect(action.cursor).toBe(3);
+    expect(action.changes).toHaveLength(1);
+    expect(action.changes[0]).toMatchObject({
+      mutationId: "action-1",
+      op: "action",
+      recordId: completed.record.id,
+      payload: {
+        id: completed.record.id,
+        deletedAt: expect.any(String),
+      },
+    });
+    expect(bootstrap.records).toEqual([
+      expect.objectContaining({ id: completed.record.id, deletedAt: expect.any(String) }),
+      active.record,
+    ]);
+    expect(sync.changes).toEqual(action.changes);
+  });
+
+  it("replays clearCompletedTasks action IDs without duplicating changes", async () => {
+    await postMutation("mutation-1", { title: "Done", done: true });
+
+    const first = await postAction("action-1", "clearCompletedTasks");
+    const replay = await postAction("action-1", "clearCompletedTasks");
+    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+
+    expect(replay).toEqual(first);
+    expect(sync.changes.filter((change) => change.op === "action")).toHaveLength(1);
+  });
+
+  it("records no-op action executions for idempotent replay", async () => {
+    await postMutation("mutation-1", { title: "Open", done: false });
+
+    const first = await postAction("action-1", "clearCompletedTasks");
+    const replay = await postAction("action-1", "clearCompletedTasks");
+
+    expect(first).toEqual({
+      actionId: "action-1",
+      changes: [],
+      cursor: 1,
+    });
+    expect(replay).toEqual(first);
   });
 
   it("parses field labels and explicit mutation policy", () => {
@@ -851,6 +929,14 @@ async function postMutation(mutationId: string, values: Record<string, unknown>)
   expect(response.status).toBe(200);
 
   return (await response.json()) as MutationResponse;
+}
+
+async function postAction(actionId: string, action: string) {
+  return postJson<ActionResponse>("/api/actions", {
+    actionId,
+    entity: "task",
+    action,
+  });
 }
 
 async function getJson<T>(path: string) {

@@ -31,6 +31,12 @@
         "delete": {
           "enabled": false
         }
+      },
+      "actions": {
+        "clearCompletedTasks": {
+          "label": "Clear completed",
+          "kind": "clear-completed"
+        }
       }
     }
   },

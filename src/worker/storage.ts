@@ -1,5 +1,6 @@
 import { createRecordId } from "../shared/ids.ts";
 import type {
+  ActionResponse,
   ChangeRow,
   CreateMutation,
   PatchMutation,
@@ -15,12 +16,13 @@ type RecordRow = {
   entity: string;
   values_json: string;
   created_at: string;
+  deleted_at: string | null;
 };
 
 type ChangeSqlRow = {
   seq: number;
   mutation_id: string;
-  op: "create" | "patch";
+  op: "create" | "patch" | "action";
   entity: string;
   record_id: string;
   payload_json: string;
@@ -36,6 +38,11 @@ type SchemaRow = {
   updated_at: string;
 };
 
+type ActionExecutionRow = {
+  action_id: string;
+  cursor: number;
+};
+
 export type StoredSchema = {
   schema: AppSchema;
   updatedAt: string;
@@ -47,12 +54,13 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       id TEXT PRIMARY KEY,
       entity TEXT NOT NULL,
       values_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      deleted_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS changes (
       seq INTEGER PRIMARY KEY AUTOINCREMENT,
-      mutation_id TEXT NOT NULL UNIQUE,
+      mutation_id TEXT NOT NULL,
       op TEXT NOT NULL,
       entity TEXT NOT NULL,
       record_id TEXT NOT NULL,
@@ -65,7 +73,18 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       schema_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS action_executions (
+      action_id TEXT PRIMARY KEY,
+      entity TEXT NOT NULL,
+      action TEXT NOT NULL,
+      cursor INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
+
+  migrateRecordsDeletedAt(storage);
+  migrateChangesAllowActionRows(storage);
 }
 
 export function getActiveSchema(
@@ -105,6 +124,7 @@ export function resetStorage(storage: DurableObjectStorage, seedSchema: AppSchem
   return storage.transactionSync(() => {
     storage.sql.exec("DELETE FROM changes");
     storage.sql.exec("DELETE FROM records");
+    storage.sql.exec("DELETE FROM action_executions");
     storage.sql.exec("DELETE FROM app_schema");
 
     return writeActiveSchema(storage, seedSchema);
@@ -114,7 +134,26 @@ export function resetStorage(storage: DurableObjectStorage, seedSchema: AppSchem
 export function getBootstrapRecords(storage: DurableObjectStorage): StoredRecord[] {
   const rows = storage.sql
     .exec<RecordRow>(
-      "SELECT id, entity, values_json, created_at FROM records ORDER BY created_at ASC",
+      "SELECT id, entity, values_json, created_at, deleted_at FROM records ORDER BY created_at ASC",
+    )
+    .toArray();
+
+  return rows.map(recordFromRow);
+}
+
+export function getActiveRecordsByEntity(
+  storage: DurableObjectStorage,
+  entity: string,
+): StoredRecord[] {
+  const rows = storage.sql
+    .exec<RecordRow>(
+      `
+        SELECT id, entity, values_json, created_at, deleted_at
+        FROM records
+        WHERE entity = ? AND deleted_at IS NULL
+        ORDER BY created_at ASC
+      `,
+      entity,
     )
     .toArray();
 
@@ -255,6 +294,84 @@ export function patchStoredRecord(
   });
 }
 
+export function tombstoneRecordsForAction(
+  storage: DurableObjectStorage,
+  actionId: string,
+  entity: string,
+  action: string,
+  recordsToTombstone: StoredRecord[],
+): ActionResponse {
+  return storage.transactionSync(() => {
+    const existingExecution = findActionExecution(storage, actionId);
+
+    if (existingExecution) {
+      return {
+        actionId,
+        changes: findChangesByMutationId(storage, actionId),
+        cursor: existingExecution.cursor,
+      };
+    }
+
+    const deletedAt = nowIsoString();
+    const changes: ChangeRow[] = [];
+
+    for (const existingRecord of recordsToTombstone) {
+      const record: StoredRecord = {
+        ...existingRecord,
+        deletedAt,
+      };
+
+      storage.sql.exec(
+        `
+          UPDATE records
+          SET deleted_at = ?
+          WHERE id = ?
+        `,
+        deletedAt,
+        record.id,
+      );
+
+      storage.sql.exec(
+        `
+          INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        actionId,
+        "action",
+        entity,
+        record.id,
+        JSON.stringify(record),
+        deletedAt,
+      );
+
+      const change = findLatestChangeForRecord(storage, actionId, record.id);
+      if (change) {
+        changes.push(change);
+      }
+    }
+
+    const cursor = getCurrentCursor(storage);
+
+    storage.sql.exec(
+      `
+        INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+      actionId,
+      entity,
+      action,
+      cursor,
+      deletedAt,
+    );
+
+    return {
+      actionId,
+      changes,
+      cursor,
+    };
+  });
+}
+
 function mergeRecordValues(values: RecordValues, patch: Partial<RecordValues>): RecordValues {
   const merged: RecordValues = { ...values };
 
@@ -273,7 +390,7 @@ export function getStoredRecord(
 ): StoredRecord | undefined {
   const row = storage.sql
     .exec<RecordRow>(
-      "SELECT id, entity, values_json, created_at FROM records WHERE id = ?",
+      "SELECT id, entity, values_json, created_at, deleted_at FROM records WHERE id = ?",
       recordId,
     )
     .next();
@@ -316,6 +433,58 @@ function findChangeByMutationId(
   return row.done ? undefined : changeFromRow(row.value);
 }
 
+function findChangesByMutationId(storage: DurableObjectStorage, mutationId: string): ChangeRow[] {
+  const rows = storage.sql
+    .exec<ChangeSqlRow>(
+      `
+        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
+        FROM changes
+        WHERE mutation_id = ?
+        ORDER BY seq ASC
+      `,
+      mutationId,
+    )
+    .toArray();
+
+  return rows.map(changeFromRow);
+}
+
+function findLatestChangeForRecord(
+  storage: DurableObjectStorage,
+  mutationId: string,
+  recordId: string,
+): ChangeRow | undefined {
+  const row = storage.sql
+    .exec<ChangeSqlRow>(
+      `
+        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
+        FROM changes
+        WHERE mutation_id = ? AND record_id = ?
+        ORDER BY seq DESC
+        LIMIT 1
+      `,
+      mutationId,
+      recordId,
+    )
+    .next();
+
+  return row.done ? undefined : changeFromRow(row.value);
+}
+
+function findActionExecution(
+  storage: DurableObjectStorage,
+  actionId: string,
+): ActionExecutionRow | undefined {
+  const row = storage.sql
+    .exec<ActionExecutionRow>(
+      "SELECT action_id, cursor FROM action_executions WHERE action_id = ?",
+      actionId,
+    )
+    .next();
+
+  return row.done ? undefined : row.value;
+}
+
 function readStoredSchema(storage: DurableObjectStorage): StoredSchema | undefined {
   const row = storage.sql
     .exec<SchemaRow>("SELECT schema_json, updated_at FROM app_schema WHERE id = 1")
@@ -332,12 +501,18 @@ function readStoredSchema(storage: DurableObjectStorage): StoredSchema | undefin
 }
 
 function recordFromRow(row: RecordRow): StoredRecord {
-  return {
+  const record: StoredRecord = {
     id: row.id,
     entity: row.entity,
     values: parseJsonRecord(row.values_json),
     createdAt: row.created_at,
   };
+
+  if (row.deleted_at !== null) {
+    record.deletedAt = row.deleted_at;
+  }
+
+  return record;
 }
 
 function changeFromRow(row: ChangeSqlRow): ChangeRow {
@@ -369,12 +544,54 @@ function parseStoredRecord(value: string): StoredRecord {
     typeof parsed.id !== "string" ||
     typeof parsed.entity !== "string" ||
     !isRecordValues(parsed.values) ||
-    typeof parsed.createdAt !== "string"
+    typeof parsed.createdAt !== "string" ||
+    ("deletedAt" in parsed && typeof parsed.deletedAt !== "string")
   ) {
     throw new Error("Stored change payload is invalid.");
   }
 
   return parsed;
+}
+
+function migrateRecordsDeletedAt(storage: DurableObjectStorage) {
+  const columns = storage.sql
+    .exec<{ name: string }>("PRAGMA table_info(records)")
+    .toArray()
+    .map((column) => column.name);
+
+  if (!columns.includes("deleted_at")) {
+    storage.sql.exec("ALTER TABLE records ADD COLUMN deleted_at TEXT");
+  }
+}
+
+function migrateChangesAllowActionRows(storage: DurableObjectStorage) {
+  const row = storage.sql
+    .exec<{ sql: string | null }>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'changes'",
+    )
+    .one();
+
+  if (!row.sql?.includes("mutation_id TEXT NOT NULL UNIQUE")) {
+    return;
+  }
+
+  storage.sql.exec(`
+    CREATE TABLE changes_next (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      mutation_id TEXT NOT NULL,
+      op TEXT NOT NULL,
+      entity TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    INSERT INTO changes_next (seq, mutation_id, op, entity, record_id, payload_json, created_at)
+    SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at FROM changes;
+
+    DROP TABLE changes;
+    ALTER TABLE changes_next RENAME TO changes;
+  `);
 }
 
 function parseStoredSchema(value: string): AppSchema {

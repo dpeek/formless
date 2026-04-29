@@ -1,0 +1,255 @@
+.graph-markdown {
+  --tw-prose-body: color-mix(in oklch, var(--foreground) 88%, var(--muted-foreground));
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+  --tw-prose-invert-body: color-mix(in oklch, var(--foreground) 88%, var(--muted-foreground));
+  --tw-prose-invert-headings: var(--foreground);
+  --tw-prose-invert-lead: var(--muted-foreground);
+  --tw-prose-invert-links: var(--primary);
+  --tw-prose-invert-bold: var(--foreground);
+  --tw-prose-invert-counters: var(--muted-foreground);
+  --tw-prose-invert-bullets: var(--muted-foreground);
+  --tw-prose-invert-hr: var(--border);
+  --tw-prose-invert-quotes: var(--foreground);
+  --tw-prose-invert-quote-borders: var(--border);
+  --tw-prose-invert-captions: var(--muted-foreground);
+  --tw-prose-invert-kbd: var(--foreground);
+  --tw-prose-invert-code: var(--foreground);
+  --tw-prose-invert-pre-code: var(--foreground);
+  --tw-prose-invert-pre-bg: var(--muted);
+  --tw-prose-invert-th-borders: var(--border);
+  --tw-prose-invert-td-borders: var(--border);
+  --graph-code-token-attribute: oklch(0.48 0.15 250);
+  --graph-code-token-comment: color-mix(in oklch, var(--muted-foreground) 78%, var(--foreground));
+  --graph-code-token-deletion: oklch(0.52 0.19 27);
+  --graph-code-token-keyword: oklch(0.51 0.2 20);
+  --graph-code-token-literal: oklch(0.45 0.15 264);
+  --graph-code-token-name: oklch(0.46 0.13 145);
+  --graph-code-token-string: oklch(0.43 0.13 222);
+  --graph-code-token-title: oklch(0.48 0.17 303);
+}
+
+.dark .graph-markdown {
+  --graph-code-token-attribute: oklch(0.74 0.1 247);
+  --graph-code-token-comment: color-mix(in oklch, var(--muted-foreground) 82%, var(--foreground));
+  --graph-code-token-deletion: oklch(0.75 0.14 20);
+  --graph-code-token-keyword: oklch(0.72 0.16 28);
+  --graph-code-token-literal: oklch(0.76 0.11 264);
+  --graph-code-token-name: oklch(0.73 0.13 151);
+  --graph-code-token-string: oklch(0.74 0.12 222);
+  --graph-code-token-title: oklch(0.76 0.13 303);
+}
+
+.graph-markdown .graph-markdown-code-block {
+  margin-block: 1.25rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--background) 96%, var(--muted));
+  color: var(--foreground);
+}
+
+.graph-markdown.graph-markdown-editor {
+  min-height: 8rem;
+  border-radius: var(--radius-sm);
+  outline: 1px solid transparent;
+  outline-offset: 0.5rem;
+  transition:
+    outline-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.graph-markdown.graph-markdown-editor:focus-visible,
+.graph-markdown.graph-markdown-editor:focus-within {
+  outline-color: color-mix(in oklch, var(--ring) 72%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 20%, transparent);
+}
+
+.graph-markdown.graph-markdown-editor[aria-invalid="true"] {
+  outline-color: var(--destructive);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive) 18%, transparent);
+}
+
+.graph-markdown.graph-markdown-editor [data-slate-placeholder="true"] {
+  color: var(--muted-foreground);
+  opacity: 0.78;
+}
+
+.graph-markdown .graph-markdown-list,
+.graph-markdown .graph-markdown-task-list {
+  margin-block: 1.25em;
+}
+
+.graph-markdown .graph-markdown-list {
+  padding-inline-start: 1.625em;
+}
+
+.graph-markdown .graph-markdown-task-list {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.graph-markdown .graph-markdown-list-item,
+.graph-markdown .graph-markdown-task-list-item {
+  margin-block: 0.5em;
+}
+
+.graph-markdown .graph-markdown-task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.graph-markdown .graph-markdown-task-list-item > input[type="checkbox"] {
+  margin-top: 0.35em;
+}
+
+.graph-markdown td > p,
+.graph-markdown th > p {
+  margin-block: 0;
+}
+
+.graph-markdown .graph-markdown-code-block-header {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+  padding: 0.25rem 0.375rem 0.25rem 0.75rem;
+}
+
+.graph-markdown .graph-markdown-code-block-label {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-markdown .graph-markdown-code-block-copy-button {
+  color: var(--muted-foreground);
+}
+
+.graph-markdown .graph-markdown-code-block-copy-button:hover {
+  color: var(--foreground);
+}
+
+.graph-markdown .graph-markdown-code-block-body {
+  overflow: auto;
+}
+
+.graph-markdown .graph-markdown-code-block-pre {
+  margin: 0;
+  min-width: max-content;
+  overflow: visible;
+  background: transparent;
+  padding: 0.875rem 1rem;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.graph-markdown .graph-markdown-code-block-pre code {
+  font: inherit;
+}
+
+.graph-markdown .graph-markdown-code-line {
+  display: block;
+  min-height: 1.55em;
+  white-space: pre;
+}
+
+.graph-markdown .graph-markdown-code-syntax {
+  font: inherit;
+}
+
+.graph-markdown .hljs-comment,
+.graph-markdown .hljs-code,
+.graph-markdown .hljs-formula {
+  color: var(--graph-code-token-comment);
+}
+
+.graph-markdown .hljs-keyword,
+.graph-markdown .hljs-doctag,
+.graph-markdown .hljs-template-tag,
+.graph-markdown .hljs-template-variable,
+.graph-markdown .hljs-type,
+.graph-markdown .hljs-variable.language_ {
+  color: var(--graph-code-token-keyword);
+}
+
+.graph-markdown .hljs-attr,
+.graph-markdown .hljs-attribute,
+.graph-markdown .hljs-meta,
+.graph-markdown .hljs-operator,
+.graph-markdown .hljs-selector-attr,
+.graph-markdown .hljs-selector-class,
+.graph-markdown .hljs-selector-id,
+.graph-markdown .hljs-variable {
+  color: var(--graph-code-token-attribute);
+}
+
+.graph-markdown .hljs-literal,
+.graph-markdown .hljs-number {
+  color: var(--graph-code-token-literal);
+}
+
+.graph-markdown .hljs-name,
+.graph-markdown .hljs-quote,
+.graph-markdown .hljs-selector-tag,
+.graph-markdown .hljs-selector-pseudo {
+  color: var(--graph-code-token-name);
+}
+
+.graph-markdown .hljs-regexp,
+.graph-markdown .hljs-string,
+.graph-markdown .hljs-meta .hljs-string {
+  color: var(--graph-code-token-string);
+}
+
+.graph-markdown .hljs-built_in,
+.graph-markdown .hljs-bullet,
+.graph-markdown .hljs-symbol,
+.graph-markdown .hljs-title,
+.graph-markdown .hljs-title.class_,
+.graph-markdown .hljs-title.class_.inherited__,
+.graph-markdown .hljs-title.function_ {
+  color: var(--graph-code-token-title);
+}
+
+.graph-markdown .hljs-addition {
+  color: var(--graph-code-token-name);
+}
+
+.graph-markdown .hljs-deletion {
+  color: var(--graph-code-token-deletion);
+}
+
+.graph-markdown .hljs-emphasis {
+  font-style: italic;
+}
+
+.graph-markdown .hljs-section,
+.graph-markdown .hljs-strong {
+  font-weight: 700;
+}
