@@ -9,6 +9,7 @@ import {
   fetchActiveSchema,
   saveActiveSchema,
   submitCreateMutation,
+  submitPatchMutation,
   syncClient,
 } from "./sync.ts";
 import type {
@@ -113,29 +114,88 @@ describe("client sync", () => {
   it("merges accepted create mutations into local state", async () => {
     const acceptedRecord = record("record-1", "First");
 
-    const response = await submitCreateMutation("note", { text: "First" }, async (input, init) => {
-      const mutation = parseRequestBody(init?.body);
+    const response = await submitCreateMutation(
+      "task",
+      { title: "First", done: false },
+      async (input, init) => {
+        const mutation = parseRequestBody(init?.body);
 
-      expect(input).toBe("/api/mutations");
-      expect(init?.method).toBe("POST");
-      expect(mutation).toMatchObject({
-        entity: "note",
-        op: "create",
-        values: { text: "First" },
-      });
+        expect(input).toBe("/api/mutations");
+        expect(init?.method).toBe("POST");
+        expect(mutation).toMatchObject({
+          entity: "task",
+          op: "create",
+          values: { title: "First", done: false },
+        });
 
-      return Response.json({
-        record: acceptedRecord,
-        cursor: 1,
-        mutationId: mutation.mutationId,
-      } satisfies MutationResponse);
-    });
+        return Response.json({
+          record: acceptedRecord,
+          cursor: 1,
+          mutationId: mutation.mutationId,
+        } satisfies MutationResponse);
+      },
+    );
 
     const snapshot = await readLocalSnapshot();
 
     expect(response.record).toEqual(acceptedRecord);
     expect(snapshot.records).toEqual([acceptedRecord]);
     expect(snapshot.cursor).toBe(1);
+  });
+
+  it("posts patch mutations and merges accepted records", async () => {
+    const acceptedRecord = record("record-1", "First", true);
+
+    const response = await submitPatchMutation(
+      "task",
+      "record-1",
+      { done: true },
+      async (input, init) => {
+        const mutation = parseRequestBody(init?.body);
+
+        expect(input).toBe("/api/mutations");
+        expect(init?.method).toBe("POST");
+        expect(mutation).toMatchObject({
+          entity: "task",
+          op: "patch",
+          recordId: "record-1",
+          values: { done: true },
+        });
+
+        return Response.json({
+          record: acceptedRecord,
+          cursor: 2,
+          mutationId: mutation.mutationId,
+        } satisfies MutationResponse);
+      },
+    );
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(response.record).toEqual(acceptedRecord);
+    expect(snapshot.records).toEqual([acceptedRecord]);
+    expect(snapshot.cursor).toBe(2);
+  });
+
+  it("merges remote patched records", async () => {
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First", false)],
+      cursor: 1,
+    });
+
+    await syncClient(
+      jsonFetcher("/api/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+        changes: [change(2, "record-1", "First", true, "patch")],
+        cursor: 2,
+      } satisfies SyncResponse),
+    );
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(snapshot.records).toEqual([record("record-1", "First", true)]);
+    expect(snapshot.cursor).toBe(2);
   });
 
   it("fetches and caches the active schema", async () => {
@@ -191,7 +251,7 @@ describe("client sync", () => {
       );
 
       await waitFor(() =>
-        states.some((state) => state.schema?.entities.note.label === "Journal entry"),
+        states.some((state) => state.schema?.entities.task.label === "Planner task"),
       );
       expect(states.at(-1)?.schema).toEqual(nextSchema);
     } finally {
@@ -254,34 +314,42 @@ function schemaWithSummary() {
   return {
     version: 1,
     entities: {
-      note: {
-        label: "Journal entry",
+      task: {
+        label: "Planner task",
         fields: {
-          text: { type: "text", required: true },
-          summary: { type: "text", required: false },
+          title: { type: "text", required: true },
+          done: { type: "boolean", required: true, default: false },
+          dueDate: { type: "date", required: false },
+          notes: { type: "text", required: false },
         },
       },
     },
   } satisfies AppSchema;
 }
 
-function record(id: string, text: string): StoredRecord {
+function record(id: string, title: string, done = false): StoredRecord {
   return {
     id,
-    entity: "note",
-    values: { text },
+    entity: "task",
+    values: { title, done },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
   };
 }
 
-function change(seq: number, recordId: string, text: string): ChangeRow {
+function change(
+  seq: number,
+  recordId: string,
+  title: string,
+  done = false,
+  op: "create" | "patch" = "create",
+): ChangeRow {
   return {
     seq,
     mutationId: `mutation-${seq}`,
-    op: "create",
-    entity: "note",
+    op,
+    entity: "task",
     recordId,
-    payload: record(recordId, text),
+    payload: record(recordId, title, done),
     createdAt: `2026-04-28T00:00:0${seq}.000Z`,
   };
 }

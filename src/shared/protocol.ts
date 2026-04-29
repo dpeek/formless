@@ -1,7 +1,8 @@
 import type { AppSchema } from "./schema.ts";
 
 export type EntityName = string;
-export type RecordValues = Record<string, string>;
+export type FieldValue = string | boolean;
+export type RecordValues = Record<string, FieldValue>;
 
 export type StoredRecord = {
   id: string;
@@ -17,10 +18,20 @@ export type CreateMutation = {
   values: RecordValues;
 };
 
+export type PatchMutation = {
+  mutationId: string;
+  entity: EntityName;
+  op: "patch";
+  recordId: string;
+  values: Partial<RecordValues>;
+};
+
+export type Mutation = CreateMutation | PatchMutation;
+
 export type ChangeRow = {
   seq: number;
   mutationId: string;
-  op: "create";
+  op: "create" | "patch";
   entity: EntityName;
   recordId: string;
   payload: StoredRecord;

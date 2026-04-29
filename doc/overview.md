@@ -1,7 +1,7 @@
 ---
 name: Formless overview
 description: "Big-picture product and runtime overview for the new Formless prototype."
-last_updated: 2026-04-28
+last_updated: 2026-04-29
 ---
 
 # Formless overview
@@ -378,21 +378,20 @@ The current prototype is still small on purpose.
 It currently proves:
 
 - one checked-in schema file used as the authority seed
-- one generated create form
-- one generated list
+- one task planner seed schema with `text`, `boolean`, and `date` fields
+- one generated type-aware create form
+- one generated editable list
 - one authority-backed record store
 - bootstrap and incremental sync
 - local IndexedDB hydration
 - authority-owned runtime schema editing
 - schema metadata flowing through local replica sync
+- generic `create` and `patch` mutations flowing through the same change log and local merge path
 
-The schema authority slice is now implemented: the checked-in schema seeds storage, `/schema`
-edits the authority-owned schema, and polling sync can refresh a stale browser replica when the
-schema changes elsewhere.
-
-The next useful product proof is probably not more generic CRUD. It is one better domain example
-with a real patch policy, commit policy, and a few named actions, likely the task planner described
-above.
+The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema`
+edits the authority-owned schema, polling sync can refresh stale browser replicas, and ordinary
+field edits submit validated patches back to the authority. Named actions, delete mutations,
+filters, and optimistic rollback remain later work.
 
 ## What success looks like
 

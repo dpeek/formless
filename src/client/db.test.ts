@@ -36,7 +36,7 @@ describe("client db", () => {
 
   it("merges records and advances the cursor", async () => {
     await mergeRecords([record("record-1", "First")], 1);
-    await mergeChanges([change(2, "record-2", "Second")], 2);
+    await mergeChanges([change(2, "record-2", "Second", true)], 2);
 
     const snapshot = await readLocalSnapshot();
 
@@ -52,11 +52,13 @@ describe("client db", () => {
     const nextSchema = {
       version: 1,
       entities: {
-        note: {
-          label: "Journal entry",
+        task: {
+          label: "Planner task",
           fields: {
-            text: { type: "text", required: true },
-            summary: { type: "text", required: false },
+            title: { type: "text", required: true },
+            done: { type: "boolean", required: true, default: false },
+            dueDate: { type: "date", required: false },
+            notes: { type: "text", required: false },
           },
         },
       },
@@ -77,25 +79,40 @@ describe("client db", () => {
     expect(snapshot.records).toEqual([record("record-1", "First")]);
     expect(snapshot.cursor).toBe(1);
   });
+
+  it("stores and merges boolean record values", async () => {
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First", false)],
+      cursor: 1,
+    });
+    await mergeChanges([change(2, "record-1", "First", true)], 2);
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(snapshot.records).toEqual([record("record-1", "First", true)]);
+    expect(typeof snapshot.records[0]?.values.done).toBe("boolean");
+  });
 });
 
-function record(id: string, text: string): StoredRecord {
+function record(id: string, title: string, done = false): StoredRecord {
   return {
     id,
-    entity: "note",
-    values: { text },
+    entity: "task",
+    values: { title, done },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
   };
 }
 
-function change(seq: number, recordId: string, text: string): ChangeRow {
+function change(seq: number, recordId: string, title: string, done = false): ChangeRow {
   return {
     seq,
     mutationId: `mutation-${seq}`,
-    op: "create",
-    entity: "note",
+    op: seq === 2 && recordId === "record-1" ? "patch" : "create",
+    entity: "task",
     recordId,
-    payload: record(recordId, text),
+    payload: record(recordId, title, done),
     createdAt: `2026-04-28T00:00:0${seq}.000Z`,
   };
 }

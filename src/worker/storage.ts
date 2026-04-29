@@ -2,7 +2,9 @@ import { createRecordId } from "../shared/ids.ts";
 import type {
   ChangeRow,
   CreateMutation,
+  PatchMutation,
   MutationResponse,
+  RecordValues,
   StoredRecord,
 } from "../shared/protocol.ts";
 import { parseAppSchema, stringifySchema, type AppSchema } from "../shared/schema.ts";
@@ -18,7 +20,7 @@ type RecordRow = {
 type ChangeSqlRow = {
   seq: number;
   mutation_id: string;
-  op: "create";
+  op: "create" | "patch";
   entity: string;
   record_id: string;
   payload_json: string;
@@ -184,6 +186,108 @@ export function createStoredRecord(
   });
 }
 
+export function patchStoredRecord(
+  storage: DurableObjectStorage,
+  mutation: PatchMutation,
+  values?: RecordValues,
+): MutationResponse {
+  return storage.transactionSync(() => {
+    const existingChange = findChangeByMutationId(storage, mutation.mutationId);
+
+    if (existingChange) {
+      return {
+        record: existingChange.payload,
+        cursor: getCurrentCursor(storage),
+        mutationId: mutation.mutationId,
+      };
+    }
+
+    const existingRecord = getStoredRecord(storage, mutation.recordId);
+
+    if (!existingRecord) {
+      throw new Error(`Record "${mutation.recordId}" does not exist.`);
+    }
+
+    const changedAt = nowIsoString();
+    const record: StoredRecord = {
+      ...existingRecord,
+      values: values ?? mergeRecordValues(existingRecord.values, mutation.values),
+    };
+
+    storage.sql.exec(
+      `
+        UPDATE records
+        SET values_json = ?
+        WHERE id = ?
+      `,
+      JSON.stringify(record.values),
+      record.id,
+    );
+
+    storage.sql.exec(
+      `
+        INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      mutation.mutationId,
+      mutation.op,
+      mutation.entity,
+      record.id,
+      JSON.stringify(record),
+      changedAt,
+    );
+
+    return {
+      record,
+      cursor: getCurrentCursor(storage),
+      mutationId: mutation.mutationId,
+    };
+  });
+}
+
+function mergeRecordValues(values: RecordValues, patch: Partial<RecordValues>): RecordValues {
+  const merged: RecordValues = { ...values };
+
+  for (const [fieldName, fieldValue] of Object.entries(patch)) {
+    if (fieldValue !== undefined) {
+      merged[fieldName] = fieldValue;
+    }
+  }
+
+  return merged;
+}
+
+export function getStoredRecord(
+  storage: DurableObjectStorage,
+  recordId: string,
+): StoredRecord | undefined {
+  const row = storage.sql
+    .exec<RecordRow>(
+      "SELECT id, entity, values_json, created_at FROM records WHERE id = ?",
+      recordId,
+    )
+    .next();
+
+  return row.done ? undefined : recordFromRow(row.value);
+}
+
+export function getMutationResponseById(
+  storage: DurableObjectStorage,
+  mutationId: string,
+): MutationResponse | undefined {
+  const change = findChangeByMutationId(storage, mutationId);
+
+  if (!change) {
+    return undefined;
+  }
+
+  return {
+    record: change.payload,
+    cursor: getCurrentCursor(storage),
+    mutationId,
+  };
+}
+
 function findChangeByMutationId(
   storage: DurableObjectStorage,
   mutationId: string,
@@ -238,10 +342,10 @@ function changeFromRow(row: ChangeSqlRow): ChangeRow {
   };
 }
 
-function parseJsonRecord(value: string): Record<string, string> {
+function parseJsonRecord(value: string): RecordValues {
   const parsed = JSON.parse(value) as unknown;
 
-  if (!isStringRecord(parsed)) {
+  if (!isRecordValues(parsed)) {
     throw new Error("Stored record values are invalid.");
   }
 
@@ -254,7 +358,7 @@ function parseStoredRecord(value: string): StoredRecord {
   if (
     typeof parsed.id !== "string" ||
     typeof parsed.entity !== "string" ||
-    !isStringRecord(parsed.values) ||
+    !isRecordValues(parsed.values) ||
     typeof parsed.createdAt !== "string"
   ) {
     throw new Error("Stored change payload is invalid.");
@@ -267,11 +371,13 @@ function parseStoredSchema(value: string): AppSchema {
   return parseAppSchema(JSON.parse(value) as unknown);
 }
 
-function isStringRecord(value: unknown): value is Record<string, string> {
+function isRecordValues(value: unknown): value is RecordValues {
   return (
     typeof value === "object" &&
     value !== null &&
     !Array.isArray(value) &&
-    Object.values(value).every((fieldValue) => typeof fieldValue === "string")
+    Object.values(value).every(
+      (fieldValue) => typeof fieldValue === "string" || typeof fieldValue === "boolean",
+    )
   );
 }

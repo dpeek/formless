@@ -1,12 +1,21 @@
 {
   "version": 1,
   "entities": {
-    "note": {
-      "label": "Note",
+    "task": {
+      "label": "Task",
       "fields": {
-        "text": {
+        "title": {
           "type": "text",
           "required": true
+        },
+        "done": {
+          "type": "boolean",
+          "required": true,
+          "default": false
+        },
+        "dueDate": {
+          "type": "date",
+          "required": false
         }
       }
     }

@@ -29,7 +29,7 @@ describe("storage", () => {
   it("seeds the active schema when storage is empty", async () => {
     const stored = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
 
-    expect(stored.schema.entities.note.label).toBe("Note");
+    expect(stored.schema.entities.task.label).toBe("Task");
     expect(stored.updatedAt).toEqual(expect.any(String));
   });
 
@@ -37,11 +37,13 @@ describe("storage", () => {
     const nextSchema = {
       version: 1,
       entities: {
-        note: {
-          label: "Journal entry",
+        task: {
+          label: "Planner task",
           fields: {
-            text: { type: "text", required: true },
-            summary: { type: "text", required: false },
+            title: { type: "text", required: true },
+            done: { type: "boolean", required: true, default: false },
+            dueDate: { type: "date", required: false },
+            notes: { type: "text", required: false },
           },
         },
       },
@@ -61,8 +63,8 @@ describe("storage", () => {
 
     expect(response.cursor).toBe(1);
     expect(response.record).toMatchObject({
-      entity: "note",
-      values: { text: "First" },
+      entity: "task",
+      values: { title: "First", done: false },
     });
     expect(await getJson<number>("/cursor")).toBe(1);
 
@@ -100,14 +102,57 @@ describe("storage", () => {
       recordId: second.record.id,
     });
   });
+
+  it("patches records, writes a patch change, and preserves typed values", async () => {
+    const created = await createRecord("mutation-1", "First");
+    const patched = await postJson<MutationResponse>("/patch", {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { title: "Second", done: true },
+    });
+    const records = await getJson<unknown[]>("/records");
+    const changes = await getJson<unknown[]>("/changes?after=1");
+
+    expect(patched.cursor).toBe(2);
+    expect(patched.record).toMatchObject({
+      id: created.record.id,
+      values: { title: "Second", done: true },
+    });
+    expect(records).toEqual([patched.record]);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      mutationId: "mutation-2",
+      op: "patch",
+      payload: patched.record,
+    });
+  });
+
+  it("replays patch mutationIds without inserting duplicate changes", async () => {
+    const created = await createRecord("mutation-1", "First");
+    const body = {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { done: true },
+    };
+
+    const first = await postJson<MutationResponse>("/patch", body);
+    const replay = await postJson<MutationResponse>("/patch", body);
+
+    expect(replay).toEqual(first);
+    expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
+  });
 });
 
 async function createRecord(mutationId: string, text: string) {
   return postJson<MutationResponse>("/create", {
     mutationId,
-    entity: "note",
+    entity: "task",
     op: "create",
-    values: { text },
+    values: { title: text, done: false },
   });
 }
 
@@ -148,6 +193,7 @@ async function writeStorageHarness() {
         getBootstrapRecords,
         getChangesAfter,
         getCurrentCursor,
+        patchStoredRecord,
         writeActiveSchema,
       } from "${process.cwd()}/src/worker/storage.ts";
 
@@ -180,6 +226,10 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/create") {
             return Response.json(createStoredRecord(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/patch") {
+            return Response.json(patchStoredRecord(this.ctx.storage, await request.json()));
           }
 
           if (request.method === "POST" && url.pathname === "/schema") {

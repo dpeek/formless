@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import rawSeedSchema from "../../schema/app-schema.json";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
-import type { CreateMutation } from "../shared/protocol.ts";
+import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
+import type { CreateMutation, Mutation, PatchMutation, RecordValues } from "../shared/protocol.ts";
 import {
   createStoredRecord,
   ensureStorageTables,
@@ -9,6 +9,9 @@ import {
   getBootstrapRecords,
   getChangesAfter,
   getCurrentCursor,
+  getMutationResponseById,
+  getStoredRecord,
+  patchStoredRecord,
   writeActiveSchema,
 } from "./storage.ts";
 import type { Env } from "./index.ts";
@@ -74,9 +77,17 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       if (request.method === "POST" && url.pathname === "/api/mutations") {
         const { schema } = getActiveSchema(this.ctx.storage, seedSchema);
-        const mutation = validateCreateMutation(await readJson(request), schema);
+        const mutation = validateMutation(await readJson(request), schema, this.ctx.storage);
 
-        return jsonResponse(createStoredRecord(this.ctx.storage, mutation));
+        return jsonResponse(
+          mutation.op === "create"
+            ? createStoredRecord(this.ctx.storage, mutation)
+            : patchStoredRecord(
+                this.ctx.storage,
+                mutation,
+                "recordValues" in mutation ? mutation.recordValues : undefined,
+              ),
+        );
       }
 
       return jsonResponse({ error: "Not found." }, 404);
@@ -111,7 +122,11 @@ function parseCursor(value: string | null) {
   return cursor;
 }
 
-function validateCreateMutation(value: unknown, schema: AppSchema): CreateMutation {
+function validateMutation(
+  value: unknown,
+  schema: AppSchema,
+  storage: DurableObjectStorage,
+): Mutation | (PatchMutation & { recordValues: RecordValues }) {
   if (!isRecord(value)) {
     throw new BadRequestError("Mutation must be an object.");
   }
@@ -120,8 +135,8 @@ function validateCreateMutation(value: unknown, schema: AppSchema): CreateMutati
     throw new BadRequestError("Mutation must include a non-empty mutationId.");
   }
 
-  if (value.op !== "create") {
-    throw new BadRequestError('Only "create" mutations are supported.');
+  if (value.op !== "create" && value.op !== "patch") {
+    throw new BadRequestError('Only "create" and "patch" mutations are supported.');
   }
 
   if (typeof value.entity !== "string") {
@@ -133,13 +148,103 @@ function validateCreateMutation(value: unknown, schema: AppSchema): CreateMutati
     throw new BadRequestError(`Unknown entity "${value.entity}".`);
   }
 
+  const replay = getMutationResponseById(storage, value.mutationId);
+  if (replay) {
+    return {
+      mutationId: value.mutationId,
+      entity: replay.record.entity,
+      op: value.op,
+      ...(value.op === "patch" ? { recordId: replay.record.id } : {}),
+      values: replay.record.values,
+    } as Mutation;
+  }
+
   if (!isRecord(value.values)) {
     throw new BadRequestError("Mutation values must be an object.");
   }
 
-  const values: Record<string, string> = {};
+  if (value.op === "patch") {
+    if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
+      throw new BadRequestError("Patch mutation must include a recordId.");
+    }
+
+    const existingRecord = getStoredRecord(storage, value.recordId);
+    if (!existingRecord) {
+      throw new BadRequestError(`Unknown record "${value.recordId}".`);
+    }
+
+    if (existingRecord.entity !== value.entity) {
+      throw new BadRequestError("Patch entity must match the stored record entity.");
+    }
+
+    const patchValues = validatePatchValues(value.values, entity);
+    const recordValues = validateRecordValues({ ...existingRecord.values, ...patchValues }, entity);
+
+    return {
+      mutationId: value.mutationId,
+      entity: value.entity,
+      op: "patch",
+      recordId: value.recordId,
+      values: patchValues,
+      recordValues,
+    };
+  }
+
+  return {
+    mutationId: value.mutationId,
+    entity: value.entity,
+    op: "create",
+    values: validateRecordValues(value.values, entity),
+  } satisfies CreateMutation;
+}
+
+function validatePatchValues(values: Record<string, unknown>, entity: EntitySchema) {
+  const patchValues: Partial<RecordValues> = {};
+
+  for (const [fieldName, fieldValue] of Object.entries(values)) {
+    if (!entity.fields[fieldName]) {
+      throw new BadRequestError(`Unknown field "${fieldName}".`);
+    }
+
+    patchValues[fieldName] = fieldValue as RecordValues[string];
+  }
+
+  return patchValues;
+}
+
+function validateRecordValues(values: Record<string, unknown>, entity: EntitySchema): RecordValues {
+  for (const fieldName of Object.keys(values)) {
+    if (!entity.fields[fieldName]) {
+      throw new BadRequestError(`Unknown field "${fieldName}".`);
+    }
+  }
+
+  const validated: RecordValues = {};
+
   for (const [fieldName, field] of Object.entries(entity.fields)) {
-    const fieldValue = value.values[fieldName];
+    const fieldValue = values[fieldName];
+
+    if (field.type === "boolean") {
+      if (typeof fieldValue === "boolean") {
+        validated[fieldName] = fieldValue;
+        continue;
+      }
+
+      if (fieldName in values) {
+        throw new BadRequestError(`Field "${fieldName}" must be a boolean.`);
+      }
+
+      if (typeof field.default === "boolean") {
+        validated[fieldName] = field.default;
+        continue;
+      }
+
+      if (field.required) {
+        throw new BadRequestError(`Field "${fieldName}" is required.`);
+      }
+
+      continue;
+    }
 
     if (typeof fieldValue !== "string") {
       if (field.required) {
@@ -153,21 +258,22 @@ function validateCreateMutation(value: unknown, schema: AppSchema): CreateMutati
       throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
     }
 
-    values[fieldName] = fieldValue;
+    if (field.type === "date" && fieldValue !== "" && !isDateString(fieldValue)) {
+      throw new BadRequestError(`Field "${fieldName}" must be a YYYY-MM-DD date.`);
+    }
+
+    if (fieldValue !== "" || field.required) {
+      validated[fieldName] = fieldValue;
+    }
   }
 
-  return {
-    mutationId: value.mutationId,
-    entity: value.entity,
-    op: "create",
-    values,
-  };
+  return validated;
 }
 
 function validateSchemaUpdate(
   value: unknown,
   currentSchema: AppSchema,
-  records: Array<{ entity: string; values: Record<string, string> }>,
+  records: Array<{ entity: string; values: RecordValues }>,
 ): AppSchema {
   if (!isRecord(value)) {
     throw new BadRequestError("Schema update must be an object.");
@@ -188,7 +294,7 @@ function validateSchemaUpdate(
 function validateCompatibleSchemaChange(
   currentSchema: AppSchema,
   nextSchema: AppSchema,
-  records: Array<{ entity: string; values: Record<string, string> }>,
+  records: Array<{ entity: string; values: RecordValues }>,
 ) {
   for (const [entityName, currentEntity] of Object.entries(currentSchema.entities)) {
     const nextEntity = nextSchema.entities[entityName];
@@ -214,9 +320,7 @@ function validateCompatibleSchemaChange(
       if (
         nextField.required &&
         entityRecords.some((record) => {
-          const value = record.values[fieldName];
-
-          return typeof value !== "string" || value.trim() === "";
+          return !isValidStoredFieldValue(record.values[fieldName], nextField);
         })
       ) {
         throw new BadRequestError(
@@ -225,6 +329,31 @@ function validateCompatibleSchemaChange(
       }
     }
   }
+}
+
+function isValidStoredFieldValue(
+  value: RecordValues[string] | undefined,
+  field: EntitySchema["fields"][string],
+) {
+  if (field.type === "boolean") {
+    return typeof value === "boolean" || typeof field.default === "boolean";
+  }
+
+  return (
+    typeof value === "string" &&
+    (!field.required || value.trim() !== "") &&
+    (field.type !== "date" || isDateString(value))
+  );
+}
+
+function isDateString(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
 function jsonResponse(body: unknown, status = 200) {

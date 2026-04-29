@@ -47,11 +47,13 @@ describe("authority", () => {
     const nextSchema = {
       version: 1,
       entities: {
-        note: {
-          label: "Journal entry",
+        task: {
+          label: "Planner task",
           fields: {
-            text: { type: "text", required: true },
-            summary: { type: "text", required: false },
+            title: { type: "text", required: true },
+            done: { type: "boolean", required: true, default: false },
+            dueDate: { type: "date", required: false },
+            notes: { type: "text", required: false },
           },
         },
       },
@@ -73,11 +75,12 @@ describe("authority", () => {
     const nextSchema = {
       version: 1,
       entities: {
-        note: {
-          label: "Journal entry",
+        task: {
+          label: "Planner task",
           fields: {
-            text: { type: "text", required: true },
-            summary: { type: "text", required: true },
+            title: { type: "text", required: true },
+            done: { type: "boolean", required: true, default: false },
+            dueDate: { type: "date", required: true },
           },
         },
       },
@@ -89,24 +92,44 @@ describe("authority", () => {
       "/api/mutations",
       {
         mutationId: "mutation-1",
-        entity: "note",
+        entity: "task",
         op: "create",
-        values: { text: "First" },
+        values: { title: "First" },
       },
-      'Field "summary" is required.',
+      'Field "dueDate" is required.',
+    );
+  });
+
+  it("rejects unsupported field types in schema updates", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: {
+          version: 1,
+          entities: {
+            task: {
+              label: "Task",
+              fields: {
+                title: { type: "number", required: true },
+              },
+            },
+          },
+        },
+      },
+      'Field "task.title" has unsupported type "number".',
     );
   });
 
   it("rejects incompatible schema changes", async () => {
-    await postMutation("mutation-1", "First");
+    await postMutation("mutation-1", { title: "First", done: false });
 
     const nextSchema = {
       version: 1,
       entities: {
-        note: {
-          label: "Note",
+        task: {
+          label: "Task",
           fields: {
-            summary: { type: "text", required: false },
+            done: { type: "boolean", required: true, default: false },
           },
         },
       },
@@ -115,13 +138,13 @@ describe("authority", () => {
     await expectError(
       "/api/schema",
       { schema: nextSchema },
-      'Cannot remove or rename field "note.text"',
+      'Cannot remove or rename field "task.title"',
     );
   });
 
   it("returns changes after a known sync cursor", async () => {
-    await postMutation("mutation-1", "First");
-    const second = await postMutation("mutation-2", "Second");
+    await postMutation("mutation-1", { title: "First", done: false });
+    const second = await postMutation("mutation-2", { title: "Second", done: true });
 
     const body = await getJson<SyncResponse>("/api/sync?after=1");
 
@@ -167,7 +190,7 @@ describe("authority", () => {
         mutationId: "mutation-1",
         entity: "missing",
         op: "create",
-        values: { text: "First" },
+        values: { title: "First" },
       },
       'Unknown entity "missing".',
     );
@@ -178,12 +201,146 @@ describe("authority", () => {
       "/api/mutations",
       {
         mutationId: "mutation-1",
-        entity: "note",
+        entity: "task",
         op: "create",
-        values: { text: "   " },
+        values: { title: "   ", done: false },
       },
-      'Field "text" cannot be empty.',
+      'Field "title" cannot be empty.',
     );
+  });
+
+  it("accepts task values and applies the boolean default", async () => {
+    const response = await postMutation("mutation-1", {
+      title: "Plan week",
+      dueDate: "2026-05-01",
+    });
+
+    expect(response.record).toMatchObject({
+      entity: "task",
+      values: {
+        title: "Plan week",
+        done: false,
+        dueDate: "2026-05-01",
+      },
+    });
+  });
+
+  it("rejects invalid boolean and date values", async () => {
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-1",
+        entity: "task",
+        op: "create",
+        values: { title: "First", done: "false" },
+      },
+      'Field "done" must be a boolean.',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-2",
+        entity: "task",
+        op: "create",
+        values: { title: "First", done: false, dueDate: "05/01/2026" },
+      },
+      'Field "dueDate" must be a YYYY-MM-DD date.',
+    );
+  });
+
+  it("patches an existing record and returns patch changes from sync", async () => {
+    const created = await postMutation("mutation-1", { title: "First", done: false });
+    const patched = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { done: true, dueDate: "2026-05-01" },
+    });
+    const sync = await getJson<SyncResponse>("/api/sync?after=1");
+
+    expect(patched.record.values).toEqual({
+      title: "First",
+      done: true,
+      dueDate: "2026-05-01",
+    });
+    expect(sync.changes).toHaveLength(1);
+    expect(sync.changes[0]).toMatchObject({
+      mutationId: "mutation-2",
+      op: "patch",
+      recordId: created.record.id,
+      payload: patched.record,
+    });
+  });
+
+  it("rejects invalid patch mutations", async () => {
+    const created = await postMutation("mutation-1", { title: "First", done: false });
+    const schemaWithProject = {
+      version: 1,
+      entities: {
+        task: appSchema.entities.task,
+        project: {
+          label: "Project",
+          fields: {
+            name: { type: "text", required: true },
+          },
+        },
+      },
+    } satisfies AppSchema;
+
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithProject });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-2",
+        entity: "task",
+        op: "patch",
+        recordId: "missing",
+        values: { title: "Second" },
+      },
+      'Unknown record "missing".',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-3",
+        entity: "task",
+        op: "patch",
+        recordId: created.record.id,
+        values: { missing: "Second" },
+      },
+      'Unknown field "missing".',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-4",
+        entity: "project",
+        op: "patch",
+        recordId: created.record.id,
+        values: { name: "Second" },
+      },
+      "Patch entity must match the stored record entity.",
+    );
+  });
+
+  it("replays patch mutation IDs without duplicating changes", async () => {
+    const created = await postMutation("mutation-1", { title: "First", done: false });
+    const body = {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { title: "Second" },
+    };
+
+    const first = await postJson<MutationResponse>("/api/mutations", body);
+    const replay = await postJson<MutationResponse>("/api/mutations", body);
+    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+
+    expect(replay).toEqual(first);
+    expect(sync.changes).toHaveLength(2);
   });
 
   it("rejects bad JSON request bodies", async () => {
@@ -198,13 +355,13 @@ describe("authority", () => {
   });
 });
 
-async function postMutation(mutationId: string, text: string) {
+async function postMutation(mutationId: string, values: Record<string, unknown>) {
   const response = await harness.fetch("/api/mutations", {
     body: JSON.stringify({
       mutationId,
-      entity: "note",
+      entity: "task",
       op: "create",
-      values: { text },
+      values,
     }),
     headers: { "Content-Type": "application/json" },
     method: "POST",

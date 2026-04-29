@@ -13,9 +13,15 @@ import {
   saveActiveSchema,
   startPollingSync,
   submitCreateMutation,
+  submitPatchMutation,
 } from "./client/sync.ts";
-import { parseAppSchema, stringifySchema, type EntitySchema } from "./shared/schema.ts";
-import type { StoredRecord } from "./shared/protocol.ts";
+import {
+  parseAppSchema,
+  stringifySchema,
+  type EntitySchema,
+  type FieldSchema,
+} from "./shared/schema.ts";
+import type { FieldValue, RecordValues, StoredRecord } from "./shared/protocol.ts";
 
 type SyncStatus = {
   state: "idle" | "syncing" | "error";
@@ -113,14 +119,19 @@ function HomeRoute() {
 
       <GeneratedCreateForm entity={entity} entityName={entityName} onStatusChange={setSyncStatus} />
 
-      <RecordList entity={entity} records={records} />
+      <RecordList
+        entity={entity}
+        entityName={entityName}
+        onStatusChange={setSyncStatus}
+        records={records}
+      />
 
       <SyncStatusLine status={syncStatus} lastSyncedAt={clientState.lastSyncedAt} />
     </section>
   );
 }
 
-function GeneratedCreateForm({
+export function GeneratedCreateForm({
   entity,
   entityName,
   onStatusChange,
@@ -136,12 +147,7 @@ function GeneratedCreateForm({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = Object.fromEntries(
-      Object.keys(entity.fields).map((fieldName) => [
-        fieldName,
-        getTextFormValue(formData, fieldName),
-      ]),
-    );
+    const values = getFormValues(formData, entity);
 
     setIsSubmitting(true);
     onStatusChange({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
@@ -167,12 +173,7 @@ function GeneratedCreateForm({
       {Object.entries(entity.fields).map(([fieldName, field]) => (
         <label className="block space-y-1" key={fieldName}>
           <span className="text-sm font-medium capitalize">{fieldName}</span>
-          <input
-            className="w-full rounded border border-slate-300 px-3 py-2"
-            name={fieldName}
-            required={field.required}
-            type={field.type === "text" ? "text" : undefined}
-          />
+          <CreateFieldInput field={field} fieldName={fieldName} />
         </label>
       ))}
 
@@ -187,13 +188,55 @@ function GeneratedCreateForm({
   );
 }
 
-function getTextFormValue(formData: FormData, fieldName: string) {
-  const value = formData.get(fieldName);
+function CreateFieldInput({ field, fieldName }: { field: FieldSchema; fieldName: string }) {
+  if (field.type === "boolean") {
+    return (
+      <input
+        className="size-4 rounded border-slate-300"
+        defaultChecked={field.default ?? false}
+        name={fieldName}
+        type="checkbox"
+      />
+    );
+  }
 
-  return typeof value === "string" ? value : "";
+  return (
+    <input
+      className="w-full rounded border border-slate-300 px-3 py-2"
+      name={fieldName}
+      required={field.required}
+      type={field.type === "date" ? "date" : "text"}
+    />
+  );
 }
 
-function RecordList({ entity, records }: { entity: EntitySchema; records: StoredRecord[] }) {
+function getFormValues(formData: FormData, entity: EntitySchema): RecordValues {
+  const values: RecordValues = {};
+
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    if (field.type === "boolean") {
+      values[fieldName] = formData.has(fieldName);
+      continue;
+    }
+
+    const value = formData.get(fieldName);
+    values[fieldName] = typeof value === "string" ? value : "";
+  }
+
+  return values;
+}
+
+export function RecordList({
+  entity,
+  entityName,
+  onStatusChange,
+  records,
+}: {
+  entity: EntitySchema;
+  entityName: string;
+  onStatusChange: (status: SyncStatus) => void;
+  records: StoredRecord[];
+}) {
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-medium">{entity.label}s</h2>
@@ -203,9 +246,16 @@ function RecordList({ entity, records }: { entity: EntitySchema; records: Stored
       ) : (
         <ul className="divide-y divide-slate-200 rounded border border-slate-200">
           {records.map((record) => (
-            <li className="space-y-1 p-3" key={record.id}>
-              {Object.entries(entity.fields).map(([fieldName]) => (
-                <p key={fieldName}>{record.values[fieldName] ?? ""}</p>
+            <li className="space-y-3 p-3" key={record.id}>
+              {Object.entries(entity.fields).map(([fieldName, field]) => (
+                <RecordFieldEditor
+                  entityName={entityName}
+                  field={field}
+                  fieldName={fieldName}
+                  key={fieldName}
+                  onStatusChange={onStatusChange}
+                  record={record}
+                />
               ))}
               <p className="text-xs text-slate-500">{record.createdAt}</p>
             </li>
@@ -214,6 +264,78 @@ function RecordList({ entity, records }: { entity: EntitySchema; records: Stored
       )}
     </section>
   );
+}
+
+function RecordFieldEditor({
+  entityName,
+  field,
+  fieldName,
+  onStatusChange,
+  record,
+}: {
+  entityName: string;
+  field: FieldSchema;
+  fieldName: string;
+  onStatusChange: (status: SyncStatus) => void;
+  record: StoredRecord;
+}) {
+  const recordValue = record.values[fieldName];
+  const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
+
+  useEffect(() => {
+    setDraft(fieldValueToInputValue(recordValue));
+  }, [recordValue]);
+
+  async function commit(value: FieldValue) {
+    if (recordValue === value || (recordValue === undefined && value === "")) {
+      return;
+    }
+
+    onStatusChange({ state: "syncing", message: `Updating ${fieldName}...` });
+
+    try {
+      await submitPatchMutation(entityName, record.id, { [fieldName]: value });
+      onStatusChange({ state: "idle", message: "Updated and synced." });
+    } catch (error) {
+      setDraft(fieldValueToInputValue(recordValue));
+      onStatusChange({
+        state: "error",
+        message: error instanceof Error ? error.message : "Update failed.",
+      });
+    }
+  }
+
+  if (field.type === "boolean") {
+    return (
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          checked={recordValue === true}
+          className="size-4 rounded border-slate-300"
+          onChange={(event) => void commit(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span className="font-medium capitalize">{fieldName}</span>
+      </label>
+    );
+  }
+
+  return (
+    <label className="block space-y-1">
+      <span className="text-sm font-medium capitalize">{fieldName}</span>
+      <input
+        className="w-full rounded border border-slate-300 px-3 py-2"
+        onBlur={(event) => void commit(event.currentTarget.value)}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        required={field.required}
+        type={field.type === "date" ? "date" : "text"}
+        value={draft}
+      />
+    </label>
+  );
+}
+
+function fieldValueToInputValue(value: FieldValue | undefined) {
+  return typeof value === "string" ? value : "";
 }
 
 function SyncStatusLine({

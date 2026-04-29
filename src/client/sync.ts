@@ -14,6 +14,7 @@ import type {
   CreateMutation,
   EntityName,
   MutationResponse,
+  PatchMutation,
   RecordValues,
   SchemaResponse,
   SchemaUpdateResponse,
@@ -82,6 +83,28 @@ export async function submitCreateMutation(
     mutationId: createMutationId(),
     entity,
     op: "create",
+    values,
+  };
+
+  const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
+
+  await mergeRecords([response.record], response.cursor);
+  await notifyLocalDataChanged();
+
+  return response;
+}
+
+export async function submitPatchMutation(
+  entity: EntityName,
+  recordId: string,
+  values: Partial<RecordValues>,
+  fetcher: typeof fetch = fetch,
+) {
+  const mutation: PatchMutation = {
+    mutationId: createMutationId(),
+    entity,
+    op: "patch",
+    recordId,
     values,
   };
 

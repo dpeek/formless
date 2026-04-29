@@ -3,7 +3,18 @@ export type TextFieldSchema = {
   required: boolean;
 };
 
-export type FieldSchema = TextFieldSchema;
+export type BooleanFieldSchema = {
+  type: "boolean";
+  required: boolean;
+  default?: boolean;
+};
+
+export type DateFieldSchema = {
+  type: "date";
+  required: boolean;
+};
+
+export type FieldSchema = TextFieldSchema | BooleanFieldSchema | DateFieldSchema;
 
 export type EntitySchema = {
   label: string;
@@ -86,18 +97,44 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
     throw new Error(`Field "${entityName}.${fieldName}" must be an object.`);
   }
 
-  if (value.type !== "text") {
-    throw new Error(`Field "${entityName}.${fieldName}" must use type "text".`);
-  }
-
   if (typeof value.required !== "boolean") {
     throw new Error(`Field "${entityName}.${fieldName}" must declare whether it is required.`);
   }
 
-  return {
-    type: "text",
-    required: value.required,
-  };
+  if (value.type === "text") {
+    return {
+      type: "text",
+      required: value.required,
+    };
+  }
+
+  if (value.type === "boolean") {
+    if ("default" in value && typeof value.default !== "boolean") {
+      throw new Error(`Field "${entityName}.${fieldName}" boolean default must be a boolean.`);
+    }
+
+    const field: BooleanFieldSchema = {
+      type: "boolean",
+      required: value.required,
+    };
+
+    if ("default" in value) {
+      field.default = value.default as boolean;
+    }
+
+    return field;
+  }
+
+  if (value.type === "date") {
+    return {
+      type: "date",
+      required: value.required,
+    };
+  }
+
+  throw new Error(
+    `Field "${entityName}.${fieldName}" has unsupported type "${String(value.type)}".`,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
