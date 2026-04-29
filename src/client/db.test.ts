@@ -60,6 +60,7 @@ describe("client db", () => {
             dueDate: { type: "date", required: false },
             notes: { type: "text", required: false },
           },
+          mutations: defaultMutations(),
         },
       },
     } satisfies AppSchema;
@@ -102,6 +103,14 @@ function record(id: string, title: string, done = false): StoredRecord {
     entity: "task",
     values: { title, done },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function defaultMutations(): AppSchema["entities"][string]["mutations"] {
+  return {
+    create: { enabled: true },
+    patch: { enabled: true },
+    delete: { enabled: false },
   };
 }
 

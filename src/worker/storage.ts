@@ -141,7 +141,7 @@ export function createStoredRecord(
     if (existingChange) {
       return {
         record: existingChange.payload,
-        cursor: getCurrentCursor(storage),
+        cursor: existingChange.seq,
         mutationId: mutation.mutationId,
       };
     }
@@ -197,7 +197,7 @@ export function patchStoredRecord(
     if (existingChange) {
       return {
         record: existingChange.payload,
-        cursor: getCurrentCursor(storage),
+        cursor: existingChange.seq,
         mutationId: mutation.mutationId,
       };
     }
@@ -283,7 +283,7 @@ export function getMutationResponseById(
 
   return {
     record: change.payload,
-    cursor: getCurrentCursor(storage),
+    cursor: change.seq,
     mutationId,
   };
 }

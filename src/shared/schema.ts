@@ -16,9 +16,24 @@ export type DateFieldSchema = {
 
 export type FieldSchema = TextFieldSchema | BooleanFieldSchema | DateFieldSchema;
 
+export type GenericMutationPolicy = {
+  enabled: boolean;
+};
+
+export type DeleteMutationPolicy = {
+  enabled: false;
+};
+
+export type EntityMutationPolicy = {
+  create: GenericMutationPolicy;
+  patch: GenericMutationPolicy;
+  delete: DeleteMutationPolicy;
+};
+
 export type EntitySchema = {
   label: string;
   fields: Record<string, FieldSchema>;
+  mutations: EntityMutationPolicy;
 };
 
 export type AppSchema = {
@@ -76,7 +91,98 @@ function parseEntity(entityName: string, value: unknown): EntitySchema {
     throw new Error(`Entity "${entityName}" must define at least one field.`);
   }
 
-  return { label, fields };
+  const mutations = parseEntityMutations(entityName, value.mutations);
+
+  return { label, fields, mutations };
+}
+
+function parseEntityMutations(entityName: string, value: unknown): EntityMutationPolicy {
+  if (value === undefined) {
+    return defaultMutationPolicy();
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Entity "${entityName}" mutations must be an object.`);
+  }
+
+  const allowedKeys = new Set(["create", "patch", "delete"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Entity "${entityName}" mutations has unsupported key "${key}".`);
+    }
+  }
+
+  for (const key of allowedKeys) {
+    if (!(key in value)) {
+      throw new Error(`Entity "${entityName}" mutations must include "${key}".`);
+    }
+  }
+
+  return {
+    create: parseGenericMutationPolicy(entityName, "create", value.create),
+    patch: parseGenericMutationPolicy(entityName, "patch", value.patch),
+    delete: parseDeleteMutationPolicy(entityName, value.delete),
+  };
+}
+
+function parseGenericMutationPolicy(
+  entityName: string,
+  mutationName: "create" | "patch",
+  value: unknown,
+): GenericMutationPolicy {
+  if (!isRecord(value)) {
+    throw new Error(`Entity "${entityName}" ${mutationName} mutation policy must be an object.`);
+  }
+
+  assertExactPolicyKeys(entityName, mutationName, value);
+
+  if (typeof value.enabled !== "boolean") {
+    throw new Error(`Entity "${entityName}" ${mutationName}.enabled must be a boolean.`);
+  }
+
+  return { enabled: value.enabled };
+}
+
+function parseDeleteMutationPolicy(entityName: string, value: unknown): DeleteMutationPolicy {
+  if (!isRecord(value)) {
+    throw new Error(`Entity "${entityName}" delete mutation policy must be an object.`);
+  }
+
+  assertExactPolicyKeys(entityName, "delete", value);
+
+  if (value.enabled !== false) {
+    throw new Error(
+      `Entity "${entityName}" delete.enabled must be false until delete mutations are implemented.`,
+    );
+  }
+
+  return { enabled: false };
+}
+
+function assertExactPolicyKeys(
+  entityName: string,
+  mutationName: "create" | "patch" | "delete",
+  value: Record<string, unknown>,
+) {
+  for (const key of Object.keys(value)) {
+    if (key !== "enabled") {
+      throw new Error(
+        `Entity "${entityName}" ${mutationName} mutation policy has unsupported key "${key}".`,
+      );
+    }
+  }
+
+  if (!("enabled" in value)) {
+    throw new Error(`Entity "${entityName}" ${mutationName} mutation policy must include enabled.`);
+  }
+}
+
+function defaultMutationPolicy(): EntityMutationPolicy {
+  return {
+    create: { enabled: true },
+    patch: { enabled: true },
+    delete: { enabled: false },
+  };
 }
 
 function parseFields(entityName: string, value: unknown): Record<string, FieldSchema> {

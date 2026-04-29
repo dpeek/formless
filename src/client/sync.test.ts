@@ -322,9 +322,18 @@ function schemaWithSummary() {
           dueDate: { type: "date", required: false },
           notes: { type: "text", required: false },
         },
+        mutations: defaultMutations(),
       },
     },
   } satisfies AppSchema;
+}
+
+function defaultMutations(): AppSchema["entities"][string]["mutations"] {
+  return {
+    create: { enabled: true },
+    patch: { enabled: true },
+    delete: { enabled: false },
+  };
 }
 
 function record(id: string, title: string, done = false): StoredRecord {

@@ -159,6 +159,14 @@ function validateMutation(
     } as Mutation;
   }
 
+  if (value.op === "create" && !entity.mutations.create.enabled) {
+    throw new BadRequestError(`Create mutations are disabled for entity "${value.entity}".`);
+  }
+
+  if (value.op === "patch" && !entity.mutations.patch.enabled) {
+    throw new BadRequestError(`Patch mutations are disabled for entity "${value.entity}".`);
+  }
+
   if (!isRecord(value.values)) {
     throw new BadRequestError("Mutation values must be an object.");
   }

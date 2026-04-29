@@ -45,6 +45,7 @@ describe("storage", () => {
             dueDate: { type: "date", required: false },
             notes: { type: "text", required: false },
           },
+          mutations: defaultMutations(),
         },
       },
     } satisfies AppSchema;
@@ -154,6 +155,14 @@ async function createRecord(mutationId: string, text: string) {
     op: "create",
     values: { title: text, done: false },
   });
+}
+
+function defaultMutations(): AppSchema["entities"][string]["mutations"] {
+  return {
+    create: { enabled: true },
+    patch: { enabled: true },
+    delete: { enabled: false },
+  };
 }
 
 async function getJson<T>(path: string) {

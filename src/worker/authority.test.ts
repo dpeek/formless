@@ -7,7 +7,7 @@ import type {
   SchemaUpdateResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -55,6 +55,7 @@ describe("authority", () => {
             dueDate: { type: "date", required: false },
             notes: { type: "text", required: false },
           },
+          mutations: defaultMutations(),
         },
       },
     } satisfies AppSchema;
@@ -82,6 +83,7 @@ describe("authority", () => {
             done: { type: "boolean", required: true, default: false },
             dueDate: { type: "date", required: true },
           },
+          mutations: defaultMutations(),
         },
       },
     } satisfies AppSchema;
@@ -131,6 +133,7 @@ describe("authority", () => {
           fields: {
             done: { type: "boolean", required: true, default: false },
           },
+          mutations: defaultMutations(),
         },
       },
     } satisfies AppSchema;
@@ -284,6 +287,7 @@ describe("authority", () => {
           fields: {
             name: { type: "text", required: true },
           },
+          mutations: defaultMutations(),
         },
       },
     } satisfies AppSchema;
@@ -343,6 +347,153 @@ describe("authority", () => {
     expect(sync.changes).toHaveLength(2);
   });
 
+  it("parses explicit mutation policy and normalizes omitted legacy policy", () => {
+    const explicit = parseAppSchema({
+      version: 1,
+      entities: {
+        task: {
+          label: "Task",
+          fields: {
+            title: { type: "text", required: true },
+          },
+          mutations: defaultMutations(),
+        },
+      },
+    });
+    const legacy = parseAppSchema({
+      version: 1,
+      entities: {
+        task: {
+          label: "Task",
+          fields: {
+            title: { type: "text", required: true },
+          },
+        },
+      },
+    });
+
+    expect(explicit.entities.task?.mutations).toEqual(defaultMutations());
+    expect(legacy.entities.task?.mutations).toEqual(defaultMutations());
+  });
+
+  it("rejects malformed mutation policy in schema updates", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithMutations({ create: { enabled: true }, delete: { enabled: false } }),
+      },
+      'mutations must include "patch"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithMutations({
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+          archive: { enabled: true },
+        }),
+      },
+      'mutations has unsupported key "archive"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithMutations({
+          create: { enabled: true },
+          patch: { enabled: true, handler: "taskPatch" },
+          delete: { enabled: false },
+        }),
+      },
+      'patch mutation policy has unsupported key "handler"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithMutations({
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: true },
+        }),
+      },
+      "delete.enabled must be false",
+    );
+  });
+
+  it("rejects disabled create and patch mutations", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations({
+        create: { enabled: false },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      }),
+    });
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-1",
+        entity: "task",
+        op: "create",
+        values: { title: "First", done: false },
+      },
+      'Create mutations are disabled for entity "task".',
+    );
+
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: appSchema });
+    const created = await postMutation("mutation-2", { title: "First", done: false });
+
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations({
+        create: { enabled: true },
+        patch: { enabled: false },
+        delete: { enabled: false },
+      }),
+    });
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-3",
+        entity: "task",
+        op: "patch",
+        recordId: created.record.id,
+        values: { title: "Second" },
+      },
+      'Patch mutations are disabled for entity "task".',
+    );
+  });
+
+  it("replays accepted mutations after policy is disabled", async () => {
+    const created = await postMutation("mutation-1", { title: "First", done: false });
+    const patched = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { title: "Second" },
+    });
+
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations({
+        create: { enabled: false },
+        patch: { enabled: false },
+        delete: { enabled: false },
+      }),
+    });
+
+    await expect(postMutation("mutation-1", { title: "First", done: false })).resolves.toEqual(
+      created,
+    );
+    await expect(
+      postJson<MutationResponse>("/api/mutations", {
+        mutationId: "mutation-2",
+        entity: "task",
+        op: "patch",
+        recordId: created.record.id,
+        values: { title: "Second" },
+      }),
+    ).resolves.toEqual(patched);
+  });
+
   it("rejects bad JSON request bodies", async () => {
     const response = await harness.fetch("/api/mutations", {
       body: "{",
@@ -354,6 +505,31 @@ describe("authority", () => {
     expect(await response.json()).toEqual({ error: "Request body must be valid JSON." });
   });
 });
+
+function defaultMutations(): AppSchema["entities"][string]["mutations"] {
+  return {
+    create: { enabled: true },
+    patch: { enabled: true },
+    delete: { enabled: false },
+  };
+}
+
+function schemaWithMutations(mutations: unknown) {
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+          done: { type: "boolean", required: true, default: false },
+          dueDate: { type: "date", required: false },
+        },
+        mutations,
+      },
+    },
+  };
+}
 
 async function postMutation(mutationId: string, values: Record<string, unknown>) {
   const response = await harness.fetch("/api/mutations", {

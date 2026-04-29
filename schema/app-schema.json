@@ -17,6 +17,17 @@
           "type": "date",
           "required": false
         }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
       }
     }
   }

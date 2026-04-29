@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { App, GeneratedCreateForm, RecordList } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
 import type { StoredRecord } from "./shared/protocol.ts";
+import type { EntitySchema } from "./shared/schema.ts";
 
 function renderRoute(path: string) {
   return renderToStaticMarkup(
@@ -44,6 +45,17 @@ describe("App smoke routes", () => {
     expect(html).toContain('type="date"');
   });
 
+  it("renders a disabled create state when create policy is disabled", () => {
+    const task = withMutationPolicy(appSchema.entities.task, { create: false });
+    const html = renderToStaticMarkup(
+      <GeneratedCreateForm entity={task} entityName="task" onStatusChange={() => {}} />,
+    );
+
+    expect(html).toContain("Create is disabled for Task.");
+    expect(html).toContain("Create disabled");
+    expect(html).toContain("disabled");
+  });
+
   it("renders task rows with editable type-aware controls", () => {
     const task = appSchema.entities.task;
     const record: StoredRecord = {
@@ -63,4 +75,34 @@ describe("App smoke routes", () => {
     expect(html).toContain('type="date"');
     expect(html).toContain("2026-05-01");
   });
+
+  it("renders task rows as read-only when patch policy is disabled", () => {
+    const task = withMutationPolicy(appSchema.entities.task, { patch: false });
+    const record: StoredRecord = {
+      id: "record-1",
+      entity: "task",
+      values: { title: "First", done: true, dueDate: "2026-05-01" },
+      createdAt: "2026-04-29T00:00:00.000Z",
+    };
+    const html = renderToStaticMarkup(
+      <RecordList entity={task} entityName="task" onStatusChange={() => {}} records={[record]} />,
+    );
+
+    expect(html).toContain("Editing is disabled for Task.");
+    expect(html).toContain("disabled");
+  });
 });
+
+function withMutationPolicy(
+  entity: EntitySchema,
+  options: { create?: boolean; patch?: boolean },
+): EntitySchema {
+  return {
+    ...entity,
+    mutations: {
+      create: { enabled: options.create ?? entity.mutations.create.enabled },
+      patch: { enabled: options.patch ?? entity.mutations.patch.enabled },
+      delete: { enabled: false },
+    },
+  };
+}

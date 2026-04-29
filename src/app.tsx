@@ -141,9 +141,14 @@ export function GeneratedCreateForm({
   onStatusChange: (status: SyncStatus) => void;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canCreate = entity.mutations.create.enabled;
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!canCreate) {
+      return;
+    }
 
     const form = event.currentTarget;
     const formData = new FormData(form);
@@ -170,19 +175,22 @@ export function GeneratedCreateForm({
     <form className="space-y-4" onSubmit={submitForm}>
       <h2 className="text-lg font-medium">Create {entity.label}</h2>
 
-      {Object.entries(entity.fields).map(([fieldName, field]) => (
-        <label className="block space-y-1" key={fieldName}>
-          <span className="text-sm font-medium capitalize">{fieldName}</span>
-          <CreateFieldInput field={field} fieldName={fieldName} />
-        </label>
-      ))}
+      {!canCreate ? (
+        <p className="text-sm text-slate-600">Create is disabled for {entity.label}.</p>
+      ) : null}
+
+      <fieldset className="space-y-4" disabled={!canCreate || isSubmitting}>
+        {Object.entries(entity.fields).map(([fieldName, field]) => (
+          <CreateFieldInput field={field} fieldName={fieldName} key={fieldName} />
+        ))}
+      </fieldset>
 
       <button
         className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-        disabled={isSubmitting}
+        disabled={!canCreate || isSubmitting}
         type="submit"
       >
-        {isSubmitting ? "Saving..." : `Create ${entity.label}`}
+        {isSubmitting ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
       </button>
     </form>
   );
@@ -191,22 +199,28 @@ export function GeneratedCreateForm({
 function CreateFieldInput({ field, fieldName }: { field: FieldSchema; fieldName: string }) {
   if (field.type === "boolean") {
     return (
-      <input
-        className="size-4 rounded border-slate-300"
-        defaultChecked={field.default ?? false}
-        name={fieldName}
-        type="checkbox"
-      />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          className="size-4 rounded border-slate-300"
+          defaultChecked={field.default ?? false}
+          name={fieldName}
+          type="checkbox"
+        />
+        <span className="font-medium capitalize">{fieldName}</span>
+      </label>
     );
   }
 
   return (
-    <input
-      className="w-full rounded border border-slate-300 px-3 py-2"
-      name={fieldName}
-      required={field.required}
-      type={field.type === "date" ? "date" : "text"}
-    />
+    <label className="block space-y-1">
+      <span className="text-sm font-medium capitalize">{fieldName}</span>
+      <input
+        className="w-full rounded border border-slate-300 px-3 py-2"
+        name={fieldName}
+        required={field.required}
+        type={field.type === "date" ? "date" : "text"}
+      />
+    </label>
   );
 }
 
@@ -237,9 +251,14 @@ export function RecordList({
   onStatusChange: (status: SyncStatus) => void;
   records: StoredRecord[];
 }) {
+  const canPatch = entity.mutations.patch.enabled;
+
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-medium">{entity.label}s</h2>
+      {!canPatch && records.length > 0 ? (
+        <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
+      ) : null}
 
       {records.length === 0 ? (
         <p className="text-sm text-slate-600">No records yet.</p>
@@ -249,6 +268,7 @@ export function RecordList({
             <li className="space-y-3 p-3" key={record.id}>
               {Object.entries(entity.fields).map(([fieldName, field]) => (
                 <RecordFieldEditor
+                  canPatch={canPatch}
                   entityName={entityName}
                   field={field}
                   fieldName={fieldName}
@@ -267,12 +287,14 @@ export function RecordList({
 }
 
 function RecordFieldEditor({
+  canPatch,
   entityName,
   field,
   fieldName,
   onStatusChange,
   record,
 }: {
+  canPatch: boolean;
   entityName: string;
   field: FieldSchema;
   fieldName: string;
@@ -281,56 +303,91 @@ function RecordFieldEditor({
 }) {
   const recordValue = record.values[fieldName];
   const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(fieldValueToInputValue(recordValue));
   }, [recordValue]);
 
   async function commit(value: FieldValue) {
+    if (!canPatch || isPending) {
+      return;
+    }
+
     if (recordValue === value || (recordValue === undefined && value === "")) {
       return;
     }
 
+    setIsPending(true);
     onStatusChange({ state: "syncing", message: `Updating ${fieldName}...` });
 
     try {
       await submitPatchMutation(entityName, record.id, { [fieldName]: value });
+      setError(null);
       onStatusChange({ state: "idle", message: "Updated and synced." });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Update failed.";
+
       setDraft(fieldValueToInputValue(recordValue));
+      setError(message);
       onStatusChange({
         state: "error",
-        message: error instanceof Error ? error.message : "Update failed.",
+        message,
       });
+    } finally {
+      setIsPending(false);
     }
   }
 
   if (field.type === "boolean") {
     return (
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          checked={recordValue === true}
-          className="size-4 rounded border-slate-300"
-          onChange={(event) => void commit(event.currentTarget.checked)}
-          type="checkbox"
-        />
-        <span className="font-medium capitalize">{fieldName}</span>
-      </label>
+      <div className="space-y-1">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            checked={recordValue === true}
+            className="size-4 rounded border-slate-300"
+            disabled={!canPatch || isPending}
+            onChange={(event) => void commit(event.currentTarget.checked)}
+            type="checkbox"
+          />
+          <span className="font-medium capitalize">{fieldName}</span>
+        </label>
+        {error ? <p className="text-xs text-red-700">{error}</p> : null}
+      </div>
     );
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void commit(event.currentTarget.value);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setDraft(fieldValueToInputValue(recordValue));
+    }
+  }
+
   return (
-    <label className="block space-y-1">
-      <span className="text-sm font-medium capitalize">{fieldName}</span>
-      <input
-        className="w-full rounded border border-slate-300 px-3 py-2"
-        onBlur={(event) => void commit(event.currentTarget.value)}
-        onChange={(event) => setDraft(event.currentTarget.value)}
-        required={field.required}
-        type={field.type === "date" ? "date" : "text"}
-        value={draft}
-      />
-    </label>
+    <div className="space-y-1">
+      <label className="block space-y-1">
+        <span className="text-sm font-medium capitalize">{fieldName}</span>
+        <input
+          className="w-full rounded border border-slate-300 px-3 py-2"
+          disabled={!canPatch || isPending}
+          onBlur={(event) => void commit(event.currentTarget.value)}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onKeyDown={handleKeyDown}
+          required={field.required}
+          type={field.type === "date" ? "date" : "text"}
+          value={draft}
+        />
+      </label>
+      {error ? <p className="text-xs text-red-700">{error}</p> : null}
+    </div>
   );
 }
 

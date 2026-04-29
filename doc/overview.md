@@ -24,6 +24,7 @@ The interesting part is the full combination:
 The current prototype already has the beginnings of this shape:
 
 - the schema starts in [schema/app-schema.json](/Users/dpeek/code/formless/schema/app-schema.json)
+- entities declare which generic mutations are enabled for generated editing surfaces
 - the browser caches records and schema metadata in IndexedDB through [src/client/db.ts](/Users/dpeek/code/formless/src/client/db.ts)
 - the authority lives in a Durable Object backed by SQLite in [src/worker/storage.ts](/Users/dpeek/code/formless/src/worker/storage.ts)
 - bootstrap, sync, and mutation routes live in [src/worker/authority.ts](/Users/dpeek/code/formless/src/worker/authority.ts)
@@ -90,6 +91,7 @@ For the current prototype, an entity is still small:
 - a name
 - a label
 - a set of fields
+- a generic mutation policy for create, patch, and disabled delete
 
 That is enough for a first slice. It is not enough for the whole system.
 
@@ -105,7 +107,9 @@ The default mutation layer should stay small:
 
 That gives the runtime a generic way to support most editing surfaces. A title input can commit a patch. A checkbox can commit a patch. A form save can commit one patch that spans several fields.
 
-But generic patching is not enough on its own. The server still needs a place for business logic. The cleanest model is:
+The current prototype makes this mutation surface explicit in the schema. Each entity declares whether generic `create` and `patch` are enabled, and `delete` is explicitly disabled until delete execution exists. The authority enforces that policy for new writes, while accepted mutation IDs still replay idempotently.
+
+Generic patching is not enough for the full product. The server will still need a place for business logic. The cleanest eventual model is:
 
 - generic mutations are the default transport
 - entities can override the default implementation on the authority
@@ -187,21 +191,10 @@ A useful example schema looks like this:
           "enabled": true
         },
         "patch": {
-          "enabled": true,
-          "handler": "taskPatch"
+          "enabled": true
         },
         "delete": {
           "enabled": false
-        }
-      },
-      "actions": {
-        "archiveTask": {
-          "label": "Archive",
-          "handler": "archiveTask"
-        },
-        "clearCompleted": {
-          "label": "Clear completed",
-          "handler": "clearCompletedTasks"
         }
       }
     }
@@ -247,7 +240,7 @@ The authoring flow should look like this:
 
 1. Define the types you want to use.
 2. Define the entities and fields.
-3. Decide what generic mutations the entity supports and whether any of them need server-side handlers.
+3. Decide what generic mutations the entity supports.
 4. Add named actions only where the domain needs more than an ordinary edit.
 5. Let the runtime provide a default list, detail, and editing surface.
 6. Replace or refine the generated views where the domain needs more shape.
