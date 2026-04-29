@@ -101,6 +101,16 @@ export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSche
   return { schema, updatedAt };
 }
 
+export function resetStorage(storage: DurableObjectStorage, seedSchema: AppSchema): StoredSchema {
+  return storage.transactionSync(() => {
+    storage.sql.exec("DELETE FROM changes");
+    storage.sql.exec("DELETE FROM records");
+    storage.sql.exec("DELETE FROM app_schema");
+
+    return writeActiveSchema(storage, seedSchema);
+  });
+}
+
 export function getBootstrapRecords(storage: DurableObjectStorage): StoredRecord[] {
   const rows = storage.sql
     .exec<RecordRow>(

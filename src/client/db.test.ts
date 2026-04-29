@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
+  deleteClientDb,
   saveBootstrapResponse,
   saveSchema,
   mergeChanges,
@@ -125,14 +126,4 @@ function change(seq: number, recordId: string, title: string, done = false): Cha
     payload: record(recordId, title, done),
     createdAt: `2026-04-28T00:00:0${seq}.000Z`,
   };
-}
-
-function deleteClientDb() {
-  return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase("formless");
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error("Could not delete IndexedDB."));
-    request.onblocked = () => reject(new Error("IndexedDB delete was blocked."));
-  });
 }

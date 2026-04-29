@@ -3,7 +3,7 @@ import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { App, GeneratedCreateForm, RecordList } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
-import { applyBootstrapResponse, resetClientStoreForTests } from "./client/store.ts";
+import { applyBootstrapResponse, resetClientStore } from "./client/store.ts";
 import { selectHomeModel, type CreateFieldConfig, type RecordFieldConfig } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { EntitySchema } from "./shared/schema.ts";
@@ -17,7 +17,7 @@ function renderRoute(path: string) {
 }
 
 beforeEach(() => {
-  resetClientStoreForTests();
+  resetClientStore();
 });
 
 describe("App smoke routes", () => {
@@ -36,6 +36,12 @@ describe("App smoke routes", () => {
     expect(html).toContain("Save schema");
   });
 
+  it("renders a dev reset action", () => {
+    const html = renderRoute("/");
+
+    expect(html).toContain("Reset data");
+  });
+
   it("renders the task create form with type-aware controls", () => {
     const task = appSchema.entities.task;
     const html = renderToStaticMarkup(
@@ -43,7 +49,6 @@ describe("App smoke routes", () => {
         createFields={createFields(task, ["title", "done", "dueDate"])}
         entity={task}
         entityName="task"
-        onStatusChange={() => {}}
       />,
     );
 
@@ -75,7 +80,6 @@ describe("App smoke routes", () => {
         ]}
         entity={task}
         entityName="task"
-        onStatusChange={() => {}}
       />,
     );
 
@@ -96,7 +100,6 @@ describe("App smoke routes", () => {
         createFields={createFields(task, ["title", "done", "dueDate"])}
         entity={task}
         entityName="task"
-        onStatusChange={() => {}}
       />,
     );
 
@@ -118,7 +121,6 @@ describe("App smoke routes", () => {
       <RecordList
         entity={task}
         entityName="task"
-        onStatusChange={() => {}}
         recordFields={recordFields(task, ["title", "done", "dueDate"])}
       />,
     );
@@ -145,7 +147,6 @@ describe("App smoke routes", () => {
       <RecordList
         entity={task}
         entityName="task"
-        onStatusChange={() => {}}
         recordFields={[
           {
             fieldName: "title",
@@ -182,7 +183,6 @@ describe("App smoke routes", () => {
       <RecordList
         entity={task}
         entityName="task"
-        onStatusChange={() => {}}
         recordFields={recordFields(task, ["title", "done", "dueDate"])}
       />,
     );
@@ -204,7 +204,6 @@ it("humanizes field names when labels are omitted", () => {
       createFields={createFields(task, ["dueDate"])}
       entity={task}
       entityName="task"
-      onStatusChange={() => {}}
     />,
   );
 

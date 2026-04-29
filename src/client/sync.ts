@@ -1,5 +1,6 @@
 import { listenForClientEvents, publishClientEvent } from "./broadcast.ts";
 import {
+  deleteClientDb,
   mergeChanges,
   mergeRecords,
   readCursor,
@@ -12,6 +13,7 @@ import {
   applyChanges,
   applyRecordMerge,
   applySchemaSave,
+  resetClientStore,
 } from "./store.ts";
 import { createMutationId } from "../shared/ids.ts";
 import type {
@@ -124,6 +126,18 @@ export async function submitPatchMutation(
   await mergeRecords([response.record], response.cursor);
   applyRecordMerge([response.record], response.cursor);
   await notifyLocalDataChanged();
+
+  return response;
+}
+
+export async function resetRemoteData(fetcher: typeof fetch = fetch) {
+  const response = await postJson<BootstrapResponse>(fetcher, "/api/dev/reset", {});
+
+  resetClientStore();
+  await deleteClientDb();
+  await saveBootstrapResponse(response);
+  applyBootstrapResponse(response);
+  await notifyLocalDataChanged({ schemaChanged: true });
 
   return response;
 }

@@ -153,6 +153,16 @@ export async function readCursor() {
   }
 }
 
+export function deleteClientDb() {
+  return new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error("Could not delete IndexedDB."));
+    request.onblocked = () => reject(new Error("IndexedDB delete was blocked."));
+  });
+}
+
 function openClientDb() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);

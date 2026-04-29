@@ -1,17 +1,20 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { publishClientEvent } from "./broadcast.ts";
-import { mergeRecords, readLocalSnapshot, saveBootstrapResponse } from "./db.ts";
+import { deleteClientDb, mergeRecords, readLocalSnapshot, saveBootstrapResponse } from "./db.ts";
 import { appSchema } from "./schema.ts";
 import {
   connectBroadcastToClientStore,
   getClientStoreSnapshot,
-  resetClientStoreForTests,
+  refreshClientStoreFromDb,
+  resetClientStore,
   subscribeToClientStore,
+  subscribeToClientStoreSelector,
 } from "./store.ts";
 import {
   bootstrapClient,
   fetchActiveSchema,
+  resetRemoteData,
   saveActiveSchema,
   submitCreateMutation,
   submitPatchMutation,
@@ -30,7 +33,7 @@ import type { AppSchema } from "../shared/schema.ts";
 
 beforeEach(async () => {
   await deleteClientDb();
-  resetClientStoreForTests();
+  resetClientStore();
 });
 
 describe("client sync", () => {
@@ -241,6 +244,35 @@ describe("client sync", () => {
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
   });
 
+  it("resets remote data and reseeds the local replica from the reset response", async () => {
+    const acceptedRecord = record("record-2", "Second");
+
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+
+    const response = await resetRemoteData(
+      jsonFetcher("/api/dev/reset", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+        records: [acceptedRecord],
+        cursor: 2,
+      } satisfies BootstrapResponse),
+    );
+    const snapshot = await readLocalSnapshot();
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(response.records).toEqual([acceptedRecord]);
+    expect(snapshot.records).toEqual([acceptedRecord]);
+    expect(snapshot.cursor).toBe(2);
+    expect(storeSnapshot.recordsById["record-1"]).toBeUndefined();
+    expect(storeSnapshot.recordsById["record-2"]).toEqual(acceptedRecord);
+    expect(storeSnapshot.cursor).toBe(2);
+  });
+
   it("refreshes schema state from broadcast events", async () => {
     const states = [getClientStoreSnapshot()];
     const unsubscribe = subscribeToClientStore(() => states.push(getClientStoreSnapshot()));
@@ -280,6 +312,47 @@ describe("client sync", () => {
     } finally {
       stopBroadcast();
       unsubscribe();
+    }
+  });
+
+  it("preserves selector identities when refreshing unchanged data from IndexedDB", async () => {
+    const notifications: unknown[] = [];
+
+    await bootstrapClient(
+      jsonFetcher("/api/bootstrap", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+        records: [record("record-1", "First")],
+        cursor: 1,
+      } satisfies BootstrapResponse),
+    );
+    const before = getClientStoreSnapshot();
+    const unsubscribeSchema = subscribeToClientStoreSelector(
+      (snapshot) => snapshot.schema,
+      (value) => notifications.push(value),
+    );
+    const unsubscribeRecord = subscribeToClientStoreSelector(
+      (snapshot) => snapshot.recordsById["record-1"],
+      (value) => notifications.push(value),
+    );
+    const unsubscribeIds = subscribeToClientStoreSelector(
+      (snapshot) => snapshot.recordIdsByEntity.task,
+      (value) => notifications.push(value),
+    );
+
+    try {
+      await refreshClientStoreFromDb();
+
+      const after = getClientStoreSnapshot();
+
+      expect(notifications).toEqual([]);
+      expect(after.schema).toBe(before.schema);
+      expect(after.recordsById["record-1"]).toBe(before.recordsById["record-1"]);
+      expect(after.recordIdsByEntity.task).toBe(before.recordIdsByEntity.task);
+    } finally {
+      unsubscribeSchema();
+      unsubscribeRecord();
+      unsubscribeIds();
     }
   });
 });
@@ -380,14 +453,4 @@ async function waitFor(predicate: () => boolean) {
 
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-}
-
-function deleteClientDb() {
-  return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase("formless");
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error("Could not delete IndexedDB."));
-    request.onblocked = () => reject(new Error("IndexedDB delete was blocked."));
-  });
 }

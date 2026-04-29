@@ -12,6 +12,7 @@ import {
   getMutationResponseById,
   getStoredRecord,
   patchStoredRecord,
+  resetStorage,
   writeActiveSchema,
 } from "./storage.ts";
 import type { Env } from "./index.ts";
@@ -88,6 +89,17 @@ export class FormlessAuthority extends DurableObject<Env> {
                 "recordValues" in mutation ? mutation.recordValues : undefined,
               ),
         );
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/dev/reset") {
+        const { schema, updatedAt } = resetStorage(this.ctx.storage, seedSchema);
+
+        return jsonResponse({
+          schema,
+          schemaUpdatedAt: updatedAt,
+          records: getBootstrapRecords(this.ctx.storage),
+          cursor: getCurrentCursor(this.ctx.storage),
+        });
       }
 
       return jsonResponse({ error: "Not found." }, 404);

@@ -7,13 +7,15 @@ import {
   useEntityRecordIds,
   useHomeViewModel,
   useLastSyncedAt,
-  useRecord,
+  useRecordCreatedAt,
   useRecordField,
   useSchema,
 } from "./client/store.ts";
+import { setSyncStatus, useSyncStatus, type SyncStatus } from "./client/sync-status.ts";
 import {
   bootstrapClient,
   fetchActiveSchema,
+  resetRemoteData,
   saveActiveSchema,
   startPollingSync,
   submitCreateMutation,
@@ -28,20 +30,9 @@ import {
 } from "./shared/schema.ts";
 import type { FieldValue, RecordValues } from "./shared/protocol.ts";
 
-type SyncStatus = {
-  state: "idle" | "syncing" | "error";
-  message: string;
-};
-
 function HomeRoute() {
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>({
-    state: "idle",
-    message: "Local cache ready.",
-  });
   const schema = useSchema();
   const homeModel = useHomeViewModel();
-  const cursor = useCursor();
-  const lastSyncedAt = useLastSyncedAt();
 
   useEffect(() => {
     const stopBroadcast = connectBroadcastToClientStore();
@@ -87,11 +78,9 @@ function HomeRoute() {
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p className="text-sm text-slate-600">
-          {syncStatus.state === "error"
-            ? "Could not load the active schema."
-            : "Loading active schema..."}
+          <SchemaLoadingMessage />
         </p>
-        <SyncStatusLine status={syncStatus} lastSyncedAt={lastSyncedAt} />
+        <DeveloperStatusLine />
       </section>
     );
   }
@@ -101,7 +90,7 @@ function HomeRoute() {
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p>No entities are defined in the active schema.</p>
-        <SyncStatusLine status={syncStatus} lastSyncedAt={lastSyncedAt} />
+        <DeveloperStatusLine schemaVersion={schema.version} />
       </section>
     );
   }
@@ -112,40 +101,32 @@ function HomeRoute() {
     <section className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Formless</h1>
-        <p className="text-sm text-slate-600">
-          Loaded schema version {schema.version}. Cursor {cursor}.
-        </p>
+        <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
 
-      <GeneratedCreateForm
-        createFields={createFields}
-        entity={entity}
-        entityName={entityName}
-        onStatusChange={setSyncStatus}
-      />
+      <GeneratedCreateForm createFields={createFields} entity={entity} entityName={entityName} />
 
-      <RecordList
-        entity={entity}
-        entityName={entityName}
-        onStatusChange={setSyncStatus}
-        recordFields={recordFields}
-      />
-
-      <SyncStatusLine status={syncStatus} lastSyncedAt={lastSyncedAt} />
+      <RecordList entity={entity} entityName={entityName} recordFields={recordFields} />
     </section>
   );
+}
+
+function SchemaLoadingMessage() {
+  const syncStatus = useSyncStatus();
+
+  return syncStatus.state === "error"
+    ? "Could not load the active schema."
+    : "Loading active schema...";
 }
 
 export function GeneratedCreateForm({
   createFields,
   entity,
   entityName,
-  onStatusChange,
 }: {
   createFields: CreateFieldConfig[];
   entity: EntitySchema;
   entityName: string;
-  onStatusChange: (status: SyncStatus) => void;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canCreate = entity.mutations.create.enabled;
@@ -162,14 +143,14 @@ export function GeneratedCreateForm({
     const values = getFormValues(formData, createFields);
 
     setIsSubmitting(true);
-    onStatusChange({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
+    setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
 
     try {
       await submitCreateMutation(entityName, values);
       form.reset();
-      onStatusChange({ state: "idle", message: "Saved and synced." });
+      setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
-      onStatusChange({
+      setSyncStatus({
         state: "error",
         message: error instanceof Error ? error.message : "Save failed.",
       });
@@ -253,12 +234,10 @@ function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordV
 export function RecordList({
   entity,
   entityName,
-  onStatusChange,
   recordFields,
 }: {
   entity: EntitySchema;
   entityName: string;
-  onStatusChange: (status: SyncStatus) => void;
   recordFields: RecordFieldConfig[];
 }) {
   const canPatch = entity.mutations.patch.enabled;
@@ -280,7 +259,6 @@ export function RecordList({
               canPatch={canPatch}
               entityName={entityName}
               key={recordId}
-              onStatusChange={onStatusChange}
               recordFields={recordFields}
               recordId={recordId}
             />
@@ -294,19 +272,17 @@ export function RecordList({
 function RecordRow({
   canPatch,
   entityName,
-  onStatusChange,
   recordFields,
   recordId,
 }: {
   canPatch: boolean;
   entityName: string;
-  onStatusChange: (status: SyncStatus) => void;
   recordFields: RecordFieldConfig[];
   recordId: string;
 }) {
-  const record = useRecord(recordId);
+  const createdAt = useRecordCreatedAt(recordId);
 
-  if (!record) {
+  if (!createdAt) {
     return null;
   }
 
@@ -318,11 +294,10 @@ function RecordRow({
           entityName={entityName}
           fieldConfig={fieldConfig}
           key={fieldConfig.fieldName}
-          onStatusChange={onStatusChange}
           recordId={recordId}
         />
       ))}
-      <p className="text-xs text-slate-500">{record.createdAt}</p>
+      <p className="text-xs text-slate-500">{createdAt}</p>
     </li>
   );
 }
@@ -331,13 +306,11 @@ function RecordFieldEditor({
   canPatch,
   entityName,
   fieldConfig,
-  onStatusChange,
   recordId,
 }: {
   canPatch: boolean;
   entityName: string;
   fieldConfig: RecordFieldConfig;
-  onStatusChange: (status: SyncStatus) => void;
   recordId: string;
 }) {
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
@@ -360,18 +333,18 @@ function RecordFieldEditor({
     }
 
     setIsPending(true);
-    onStatusChange({ state: "syncing", message: `Updating ${fieldName}...` });
+    setSyncStatus({ state: "syncing", message: `Updating ${fieldName}...` });
 
     try {
       await submitPatchMutation(entityName, recordId, { [fieldName]: value });
       setError(null);
-      onStatusChange({ state: "idle", message: "Updated and synced." });
+      setSyncStatus({ state: "idle", message: "Updated and synced." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Update failed.";
 
       setDraft(fieldValueToInputValue(recordValue));
       setError(message);
-      onStatusChange({
+      setSyncStatus({
         state: "error",
         message,
       });
@@ -462,24 +435,52 @@ function humanizeFieldName(fieldName: string) {
   return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1).toLowerCase();
 }
 
-function SyncStatusLine({
+function DeveloperStatusLine({
+  schemaVersion,
   status,
-  lastSyncedAt,
 }: {
-  status: SyncStatus;
-  lastSyncedAt: string | null;
+  schemaVersion?: number;
+  status?: SyncStatus;
 }) {
+  const globalStatus = useSyncStatus();
+  const lastSyncedAt = useLastSyncedAt();
+  const cursor = useCursor();
+  const syncStatus = status ?? globalStatus;
+
   return (
     <p className="text-sm text-slate-600" role="status">
-      {status.message}
-      {lastSyncedAt ? ` Last synced ${lastSyncedAt}.` : ""}
+      <span>{schemaVersion ? `Schema v${schemaVersion}` : "Schema loading"}</span>
+      <span aria-hidden="true"> · </span>
+      <span>Cursor {cursor}</span>
+      <span aria-hidden="true"> · </span>
+      <span>{syncStatus.message}</span>
+      {lastSyncedAt ? (
+        <>
+          <span aria-hidden="true"> · </span>
+          <time dateTime={lastSyncedAt} title={lastSyncedAt}>
+            Last sync {formatTimestamp(lastSyncedAt)}
+          </time>
+        </>
+      ) : null}
     </p>
   );
 }
 
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(date);
+}
+
 function SchemaRoute() {
   const schema = useSchema();
-  const lastSyncedAt = useLastSyncedAt();
   const [editorText, setEditorText] = useState(() => (schema ? stringifySchema(schema) : ""));
   const [status, setStatus] = useState<SyncStatus>({
     state: "idle",
@@ -548,9 +549,7 @@ function SchemaRoute() {
     <section className="mx-auto max-w-3xl space-y-4">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Schema</h1>
-        <p className="text-sm text-slate-600">
-          {schema ? `Editing schema version ${schema.version}.` : "Loading active schema."}
-        </p>
+        <DeveloperStatusLine schemaVersion={schema?.version} status={status} />
       </header>
 
       <form className="space-y-4" onSubmit={submitSchema}>
@@ -570,8 +569,6 @@ function SchemaRoute() {
           {isSaving ? "Saving..." : "Save schema"}
         </button>
       </form>
-
-      <SyncStatusLine status={status} lastSyncedAt={lastSyncedAt} />
     </section>
   );
 }
@@ -583,9 +580,12 @@ function NotFoundRoute() {
 export function App() {
   return (
     <main className="min-h-dvh p-6">
-      <nav className="mb-6 flex gap-4">
-        <Link href="/">Home</Link>
-        <Link href="/schema">Schema</Link>
+      <nav className="mb-6 flex flex-wrap items-center gap-4">
+        <div className="flex gap-4">
+          <Link href="/">Home</Link>
+          <Link href="/schema">Schema</Link>
+        </div>
+        <DevActions />
       </nav>
 
       <Switch>
@@ -600,5 +600,41 @@ export function App() {
         </Route>
       </Switch>
     </main>
+  );
+}
+
+function DevActions() {
+  const [isResetting, setIsResetting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function resetLocalData() {
+    if (isResetting) {
+      return;
+    }
+
+    setIsResetting(true);
+    setError(null);
+
+    try {
+      await resetRemoteData();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Reset failed.");
+    } finally {
+      setIsResetting(false);
+    }
+  }
+
+  return (
+    <div className="ml-auto flex items-center gap-3">
+      <button
+        className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-60"
+        disabled={isResetting}
+        onClick={() => void resetLocalData()}
+        type="button"
+      >
+        {isResetting ? "Resetting..." : "Reset data"}
+      </button>
+      {error ? <span className="text-sm text-red-700">{error}</span> : null}
+    </div>
   );
 }

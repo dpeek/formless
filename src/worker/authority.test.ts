@@ -73,6 +73,39 @@ describe("authority", () => {
     expect(bootstrap.schemaUpdatedAt).toBe(update.updatedAt);
   });
 
+  it("resets remote data to the seed schema and clears records", async () => {
+    const nextSchema = {
+      version: 1,
+      entities: {
+        task: {
+          label: "Planner task",
+          fields: {
+            title: { type: "text", required: true },
+            done: { type: "boolean", required: true, default: false },
+            dueDate: { type: "date", required: false },
+            notes: { type: "text", required: false },
+          },
+          mutations: defaultMutations(),
+        },
+      },
+      views: defaultViews(),
+    } satisfies AppSchema;
+
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
+    await postMutation("mutation-1", { title: "First", done: false });
+
+    const reset = await postJson<BootstrapResponse>("/api/dev/reset", {});
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(reset).toEqual({
+      schema: appSchema,
+      schemaUpdatedAt: expect.any(String),
+      records: [],
+      cursor: 0,
+    });
+    expect(bootstrap).toEqual(reset);
+  });
+
   it("uses the stored schema when validating mutations", async () => {
     const nextSchema = {
       version: 1,

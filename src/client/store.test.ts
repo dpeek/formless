@@ -5,7 +5,7 @@ import {
   applyRecordMerge,
   applySchemaSave,
   getClientStoreSnapshot,
-  resetClientStoreForTests,
+  resetClientStore,
   subscribeToClientStoreSelector,
 } from "./store.ts";
 import { appSchema } from "./schema.ts";
@@ -13,7 +13,7 @@ import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 beforeEach(() => {
-  resetClientStoreForTests();
+  resetClientStore();
 });
 
 describe("client store", () => {
@@ -122,6 +122,24 @@ describe("client store selectors", () => {
     applyBootstrapResponse(bootstrap([record("record-1", "First"), record("record-2", "Second")]));
     const unsubscribe = subscribeToClientStoreSelector(
       (snapshot) => snapshot.recordsById["record-2"],
+      (value) => values.push(value),
+    );
+
+    try {
+      applyRecordMerge([record("record-1", "Updated")], 2);
+
+      expect(values).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("does not notify a record created-at subscriber when only field values change", () => {
+    const values: unknown[] = [];
+
+    applyBootstrapResponse(bootstrap([record("record-1", "First")]));
+    const unsubscribe = subscribeToClientStoreSelector(
+      (snapshot) => snapshot.recordsById["record-1"]?.createdAt,
       (value) => values.push(value),
     );
 

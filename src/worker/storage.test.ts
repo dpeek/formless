@@ -58,6 +58,36 @@ describe("storage", () => {
     expect(stored.schema).toEqual(nextSchema);
   });
 
+  it("resets schema, records, and changes", async () => {
+    const nextSchema = {
+      version: 1,
+      entities: {
+        task: {
+          label: "Planner task",
+          fields: {
+            title: { type: "text", required: true },
+            done: { type: "boolean", required: true, default: false },
+            dueDate: { type: "date", required: false },
+            notes: { type: "text", required: false },
+          },
+          mutations: defaultMutations(),
+        },
+      },
+      views: defaultViews(),
+    } satisfies AppSchema;
+
+    await postJson("/schema", nextSchema);
+    await createRecord("mutation-1", "First");
+
+    const reset = await postJson<{ schema: AppSchema; updatedAt: string }>("/reset", {});
+
+    expect(reset.schema.entities.task.label).toBe("Task");
+    expect(reset.updatedAt).toEqual(expect.any(String));
+    expect(await getJson<unknown[]>("/records")).toEqual([]);
+    expect(await getJson<unknown[]>("/changes?after=0")).toEqual([]);
+    expect(await getJson<number>("/cursor")).toBe(0);
+  });
+
   it("creates records, records changes, and advances the cursor", async () => {
     expect(await getJson<number>("/cursor")).toBe(0);
 
@@ -226,6 +256,7 @@ async function writeStorageHarness() {
         getChangesAfter,
         getCurrentCursor,
         patchStoredRecord,
+        resetStorage,
         writeActiveSchema,
       } from "${process.cwd()}/src/worker/storage.ts";
 
@@ -266,6 +297,10 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/schema") {
             return Response.json(writeActiveSchema(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/reset") {
+            return Response.json(resetStorage(this.ctx.storage, seedSchema));
           }
 
           return Response.json({ error: "Not found." }, { status: 404 });

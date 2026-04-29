@@ -65,7 +65,7 @@ export function subscribeToClientStoreSelector<T>(
   });
 }
 
-export function resetClientStoreForTests() {
+export function resetClientStore() {
   setState(
     withDerivedState({
       hydrated: false,
@@ -193,6 +193,10 @@ export function useRecord(recordId: string) {
   return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]);
 }
 
+export function useRecordCreatedAt(recordId: string) {
+  return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]?.createdAt);
+}
+
 export function useRecordField(recordId: string, fieldName: string) {
   return useClientStoreSelector((snapshot) => {
     return snapshot.recordsById[recordId]?.values[fieldName];
@@ -228,16 +232,19 @@ function useClientStoreSelector<T>(selector: (snapshot: ClientStoreState) => T) 
 }
 
 function applyLocalSnapshot(snapshot: LocalSnapshot) {
-  setState(
-    withDerivedState({
-      hydrated: true,
-      schema: snapshot.schema,
-      schemaUpdatedAt: snapshot.schemaUpdatedAt,
-      recordsById: recordsById(snapshot.records),
-      recordIdsByEntity: recordIdsByEntity(snapshot.records),
-      cursor: snapshot.cursor,
-      lastSyncedAt: snapshot.lastSyncedAt,
-    }),
+  updateState((current) =>
+    withDerivedState(
+      {
+        hydrated: true,
+        schema: reuseSchema(current.schema, snapshot.schema),
+        schemaUpdatedAt: snapshot.schemaUpdatedAt,
+        recordsById: reconcileRecordsById(current.recordsById, snapshot.records),
+        recordIdsByEntity: reconcileRecordIdsByEntity(current.recordIdsByEntity, snapshot.records),
+        cursor: snapshot.cursor,
+        lastSyncedAt: snapshot.lastSyncedAt,
+      },
+      current,
+    ),
   );
 }
 
@@ -279,6 +286,27 @@ function recordsById(records: StoredRecord[]) {
   return Object.fromEntries(records.map((record) => [record.id, record]));
 }
 
+function reconcileRecordsById(
+  existingRecordsById: Record<string, StoredRecord>,
+  records: StoredRecord[],
+) {
+  let changed = Object.keys(existingRecordsById).length !== records.length;
+  const nextRecordsById: Record<string, StoredRecord> = {};
+
+  for (const record of records) {
+    const existing = existingRecordsById[record.id];
+    const nextRecord = storedRecordsEqual(existing, record) ? existing : record;
+
+    nextRecordsById[record.id] = nextRecord;
+
+    if (nextRecord !== existing) {
+      changed = true;
+    }
+  }
+
+  return changed ? nextRecordsById : existingRecordsById;
+}
+
 function recordIdsByEntity(records: StoredRecord[]) {
   const idsByEntity: Record<string, string[]> = {};
 
@@ -287,6 +315,28 @@ function recordIdsByEntity(records: StoredRecord[]) {
   }
 
   return idsByEntity;
+}
+
+function reconcileRecordIdsByEntity(
+  existingIdsByEntity: Record<string, string[]>,
+  records: StoredRecord[],
+) {
+  const nextIdsByEntity = recordIdsByEntity(records);
+  let changed = !sameKeys(existingIdsByEntity, nextIdsByEntity);
+  const reconciledIdsByEntity: Record<string, string[]> = {};
+
+  for (const [entityName, nextIds] of Object.entries(nextIdsByEntity)) {
+    const existingIds = existingIdsByEntity[entityName];
+    const reconciledIds = arraysEqual(existingIds, nextIds) ? existingIds : nextIds;
+
+    reconciledIdsByEntity[entityName] = reconciledIds;
+
+    if (reconciledIds !== existingIds) {
+      changed = true;
+    }
+  }
+
+  return changed ? reconciledIdsByEntity : existingIdsByEntity;
 }
 
 function appendRecordId(
@@ -332,6 +382,35 @@ function normalizedStatesEqual(left: ClientStoreState, right: ClientStoreState) 
     left.cursor === right.cursor &&
     left.lastSyncedAt === right.lastSyncedAt &&
     left.homeViewModel === right.homeViewModel
+  );
+}
+
+function reuseSchema(existingSchema: AppSchema | null, nextSchema: AppSchema | null) {
+  if (existingSchema === nextSchema) {
+    return existingSchema;
+  }
+
+  if (!existingSchema || !nextSchema) {
+    return nextSchema;
+  }
+
+  return JSON.stringify(existingSchema) === JSON.stringify(nextSchema)
+    ? existingSchema
+    : nextSchema;
+}
+
+function sameKeys(left: Record<string, unknown>, right: Record<string, unknown>) {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => key in right);
+}
+
+function arraysEqual<T>(left: T[] | undefined, right: T[]) {
+  return (
+    left !== undefined &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
   );
 }
 
