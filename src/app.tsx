@@ -197,6 +197,8 @@ export function GeneratedCreateForm({
 }
 
 function CreateFieldInput({ field, fieldName }: { field: FieldSchema; fieldName: string }) {
+  const label = fieldLabel(fieldName, field);
+
   if (field.type === "boolean") {
     return (
       <label className="flex items-center gap-2 text-sm">
@@ -206,14 +208,14 @@ function CreateFieldInput({ field, fieldName }: { field: FieldSchema; fieldName:
           name={fieldName}
           type="checkbox"
         />
-        <span className="font-medium capitalize">{fieldName}</span>
+        <span className="font-medium">{label}</span>
       </label>
     );
   }
 
   return (
     <label className="block space-y-1">
-      <span className="text-sm font-medium capitalize">{fieldName}</span>
+      <span className="text-sm font-medium">{label}</span>
       <input
         className="w-full rounded border border-slate-300 px-3 py-2"
         name={fieldName}
@@ -341,6 +343,8 @@ function RecordFieldEditor({
   }
 
   if (field.type === "boolean") {
+    const label = fieldLabel(fieldName, field);
+
     return (
       <div className="space-y-1">
         <label className="flex items-center gap-2 text-sm">
@@ -351,7 +355,7 @@ function RecordFieldEditor({
             onChange={(event) => void commit(event.currentTarget.checked)}
             type="checkbox"
           />
-          <span className="font-medium capitalize">{fieldName}</span>
+          <span className="font-medium">{label}</span>
         </label>
         {error ? <p className="text-xs text-red-700">{error}</p> : null}
       </div>
@@ -374,7 +378,7 @@ function RecordFieldEditor({
   return (
     <div className="space-y-1">
       <label className="block space-y-1">
-        <span className="text-sm font-medium capitalize">{fieldName}</span>
+        <span className="text-sm font-medium">{fieldLabel(fieldName, field)}</span>
         <input
           className="w-full rounded border border-slate-300 px-3 py-2"
           disabled={!canPatch || isPending}
@@ -393,6 +397,23 @@ function RecordFieldEditor({
 
 function fieldValueToInputValue(value: FieldValue | undefined) {
   return typeof value === "string" ? value : "";
+}
+
+function fieldLabel(fieldName: string, field: FieldSchema) {
+  return field.label ?? humanizeFieldName(fieldName);
+}
+
+function humanizeFieldName(fieldName: string) {
+  const withSpaces = fieldName
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+
+  if (withSpaces === "") {
+    return fieldName;
+  }
+
+  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1).toLowerCase();
 }
 
 function SyncStatusLine({

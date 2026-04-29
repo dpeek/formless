@@ -6,16 +6,19 @@
       "fields": {
         "title": {
           "type": "text",
-          "required": true
+          "required": true,
+          "label": "Title"
         },
         "done": {
           "type": "boolean",
           "required": true,
+          "label": "Done",
           "default": false
         },
         "dueDate": {
           "type": "date",
-          "required": false
+          "required": false,
+          "label": "Due date"
         }
       },
       "mutations": {

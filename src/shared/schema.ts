@@ -1,17 +1,20 @@
 export type TextFieldSchema = {
   type: "text";
   required: boolean;
+  label?: string;
 };
 
 export type BooleanFieldSchema = {
   type: "boolean";
   required: boolean;
+  label?: string;
   default?: boolean;
 };
 
 export type DateFieldSchema = {
   type: "date";
   required: boolean;
+  label?: string;
 };
 
 export type FieldSchema = TextFieldSchema | BooleanFieldSchema | DateFieldSchema;
@@ -207,11 +210,19 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
     throw new Error(`Field "${entityName}.${fieldName}" must declare whether it is required.`);
   }
 
+  const label = parseFieldLabel(entityName, fieldName, value.label);
+
   if (value.type === "text") {
-    return {
+    const field: TextFieldSchema = {
       type: "text",
       required: value.required,
     };
+
+    if (label !== undefined) {
+      field.label = label;
+    }
+
+    return field;
   }
 
   if (value.type === "boolean") {
@@ -224,6 +235,10 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
       required: value.required,
     };
 
+    if (label !== undefined) {
+      field.label = label;
+    }
+
     if ("default" in value) {
       field.default = value.default as boolean;
     }
@@ -232,15 +247,37 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
   }
 
   if (value.type === "date") {
-    return {
+    const field: DateFieldSchema = {
       type: "date",
       required: value.required,
     };
+
+    if (label !== undefined) {
+      field.label = label;
+    }
+
+    return field;
   }
 
   throw new Error(
     `Field "${entityName}.${fieldName}" has unsupported type "${String(value.type)}".`,
   );
+}
+
+function parseFieldLabel(
+  entityName: string,
+  fieldName: string,
+  value: unknown,
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`Field "${entityName}.${fieldName}" label must be a non-empty string.`);
+  }
+
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

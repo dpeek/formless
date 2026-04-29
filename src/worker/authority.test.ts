@@ -347,14 +347,14 @@ describe("authority", () => {
     expect(sync.changes).toHaveLength(2);
   });
 
-  it("parses explicit mutation policy and normalizes omitted legacy policy", () => {
+  it("parses field labels, explicit mutation policy, and omitted legacy policy", () => {
     const explicit = parseAppSchema({
       version: 1,
       entities: {
         task: {
           label: "Task",
           fields: {
-            title: { type: "text", required: true },
+            title: { type: "text", required: true, label: "Task title" },
           },
           mutations: defaultMutations(),
         },
@@ -372,8 +372,29 @@ describe("authority", () => {
       },
     });
 
+    expect(explicit.entities.task?.fields.title?.label).toBe("Task title");
     expect(explicit.entities.task?.mutations).toEqual(defaultMutations());
     expect(legacy.entities.task?.mutations).toEqual(defaultMutations());
+  });
+
+  it("rejects malformed field labels in schema updates", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: {
+          version: 1,
+          entities: {
+            task: {
+              label: "Task",
+              fields: {
+                title: { type: "text", required: true, label: "" },
+              },
+            },
+          },
+        },
+      },
+      'Field "task.title" label must be a non-empty string.',
+    );
   });
 
   it("rejects malformed mutation policy in schema updates", async () => {

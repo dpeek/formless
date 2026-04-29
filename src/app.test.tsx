@@ -43,6 +43,7 @@ describe("App smoke routes", () => {
     expect(html).toContain('type="checkbox"');
     expect(html).toContain('name="dueDate"');
     expect(html).toContain('type="date"');
+    expect(html).toContain("Due date");
   });
 
   it("renders a disabled create state when create policy is disabled", () => {
@@ -74,6 +75,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("checked");
     expect(html).toContain('type="date"');
     expect(html).toContain("2026-05-01");
+    expect(html).toContain("Due date");
   });
 
   it("renders task rows as read-only when patch policy is disabled", () => {
@@ -91,6 +93,21 @@ describe("App smoke routes", () => {
     expect(html).toContain("Editing is disabled for Task.");
     expect(html).toContain("disabled");
   });
+});
+
+it("humanizes field names when labels are omitted", () => {
+  const task: EntitySchema = {
+    ...appSchema.entities.task,
+    fields: {
+      dueDate: { type: "date", required: false },
+    },
+  };
+  const html = renderToStaticMarkup(
+    <GeneratedCreateForm entity={task} entityName="task" onStatusChange={() => {}} />,
+  );
+
+  expect(html).toContain("Due date");
+  expect(html).not.toContain("DueDate");
 });
 
 function withMutationPolicy(
