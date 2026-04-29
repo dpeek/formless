@@ -33,5 +33,37 @@
         }
       }
     }
+  },
+  "views": {
+    "taskListItem": {
+      "type": "list",
+      "entity": "task",
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "done": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "dueDate": {
+          "editor": "date",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "taskCreate": {
+      "type": "create",
+      "entity": "task",
+      "fields": {
+        "title": {
+          "editor": "text"
+        },
+        "dueDate": {
+          "editor": "date"
+        }
+      }
+    }
   }
 }

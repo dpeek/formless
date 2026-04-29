@@ -58,6 +58,7 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
+      views: defaultViews(),
     } satisfies AppSchema;
 
     const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -86,6 +87,7 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
+      views: defaultViews(),
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -134,6 +136,22 @@ describe("authority", () => {
             done: { type: "boolean", required: true, default: false },
           },
           mutations: defaultMutations(),
+        },
+      },
+      views: {
+        taskListItem: {
+          type: "list",
+          entity: "task",
+          fields: {
+            done: { editor: "boolean", commit: "immediate" },
+          },
+        },
+        taskCreate: {
+          type: "create",
+          entity: "task",
+          fields: {
+            done: { editor: "boolean" },
+          },
         },
       },
     } satisfies AppSchema;
@@ -290,6 +308,7 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
+      views: defaultViews(),
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithProject });
@@ -347,7 +366,7 @@ describe("authority", () => {
     expect(sync.changes).toHaveLength(2);
   });
 
-  it("parses field labels, explicit mutation policy, and omitted legacy policy", () => {
+  it("parses field labels and explicit mutation policy", () => {
     const explicit = parseAppSchema({
       version: 1,
       entities: {
@@ -359,14 +378,19 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
-    });
-    const legacy = parseAppSchema({
-      version: 1,
-      entities: {
-        task: {
-          label: "Task",
+      views: {
+        taskListItem: {
+          type: "list",
+          entity: "task",
           fields: {
-            title: { type: "text", required: true },
+            title: { editor: "text", commit: "field-commit" },
+          },
+        },
+        taskCreate: {
+          type: "create",
+          entity: "task",
+          fields: {
+            title: { editor: "text" },
           },
         },
       },
@@ -374,7 +398,193 @@ describe("authority", () => {
 
     expect(explicit.entities.task?.fields.title?.label).toBe("Task title");
     expect(explicit.entities.task?.mutations).toEqual(defaultMutations());
-    expect(legacy.entities.task?.mutations).toEqual(defaultMutations());
+  });
+
+  it("parses list and create views", () => {
+    const withViews = parseAppSchema(schemaWithViews());
+
+    expect(withViews.views?.taskListItem).toEqual({
+      type: "list",
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+        done: { editor: "boolean", commit: "immediate" },
+        dueDate: { editor: "date", commit: "field-commit" },
+      },
+    });
+    expect(withViews.views?.taskCreate).toEqual({
+      type: "create",
+      entity: "task",
+      fields: {
+        title: { editor: "text" },
+        dueDate: { editor: "date" },
+      },
+    });
+  });
+
+  it("rejects schemas without explicit mutation policy or views", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: {
+          version: 1,
+          entities: {
+            task: {
+              label: "Task",
+              fields: {
+                title: { type: "text", required: true },
+              },
+            },
+          },
+          views: {
+            taskListItem: {
+              type: "list",
+              entity: "task",
+              fields: {
+                title: { editor: "text", commit: "field-commit" },
+              },
+            },
+          },
+        },
+      },
+      'Entity "task" mutations must be an object.',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: {
+          version: 1,
+          entities: {
+            task: {
+              label: "Task",
+              fields: {
+                title: { type: "text", required: true },
+              },
+              mutations: defaultMutations(),
+            },
+          },
+        },
+      },
+      "Schema views must be an object.",
+    );
+  });
+
+  it("allows compatible schema updates that only change views", async () => {
+    await postMutation("mutation-1", { title: "First", done: false });
+
+    const nextSchema = schemaWithViews({
+      taskListItem: {
+        type: "list",
+        entity: "task",
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+        },
+      },
+      taskCreate: {
+        type: "create",
+        entity: "task",
+        fields: {
+          title: { editor: "text" },
+        },
+      },
+    });
+
+    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
+
+    expect(update.schema).toEqual(nextSchema);
+  });
+
+  it("rejects malformed list views in schema updates", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithViews({
+          taskListItem: {
+            type: "list",
+            entity: "task",
+            fields: {
+              missing: { editor: "text", commit: "field-commit" },
+            },
+          },
+        }),
+      },
+      'references unknown field "task.missing"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithViews({
+          taskListItem: {
+            type: "list",
+            entity: "task",
+            fields: {
+              done: { editor: "text", commit: "field-commit" },
+            },
+          },
+        }),
+      },
+      'editor must match field type "boolean"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithViews({
+          taskListItem: {
+            type: "list",
+            entity: "task",
+            fields: {
+              title: { editor: "text", commit: "immediate" },
+            },
+          },
+        }),
+      },
+      "text fields must use field-commit",
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithViews({
+          taskListItem: {
+            type: "list",
+            entity: "task",
+            fields: {
+              title: { editor: "text", commit: "field-commit", width: "wide" },
+            },
+          },
+        }),
+      },
+      'has unsupported key "width"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithViews({
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              dueDate: { editor: "date" },
+            },
+          },
+        }),
+      },
+      'must include required field "title"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithViews({
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+            },
+          },
+        }),
+      },
+      'has unsupported key "commit"',
+    );
   });
 
   it("rejects malformed field labels in schema updates", async () => {
@@ -547,6 +757,47 @@ function schemaWithMutations(mutations: unknown) {
           dueDate: { type: "date", required: false },
         },
         mutations,
+      },
+    },
+    views: defaultViews(),
+  };
+}
+
+function schemaWithViews(views: unknown = defaultViews()) {
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+          done: { type: "boolean", required: true, default: false },
+          dueDate: { type: "date", required: false },
+        },
+        mutations: defaultMutations(),
+      },
+    },
+    views,
+  };
+}
+
+function defaultViews(): AppSchema["views"] {
+  return {
+    taskListItem: {
+      type: "list",
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+        done: { editor: "boolean", commit: "immediate" },
+        dueDate: { editor: "date", commit: "field-commit" },
+      },
+    },
+    taskCreate: {
+      type: "create",
+      entity: "task",
+      fields: {
+        title: { editor: "text" },
+        dueDate: { editor: "date" },
       },
     },
   };

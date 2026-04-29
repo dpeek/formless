@@ -325,6 +325,7 @@ function schemaWithSummary() {
         mutations: defaultMutations(),
       },
     },
+    views: appSchema.views,
   } satisfies AppSchema;
 }
 

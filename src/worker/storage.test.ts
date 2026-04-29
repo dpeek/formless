@@ -48,6 +48,7 @@ describe("storage", () => {
           mutations: defaultMutations(),
         },
       },
+      views: defaultViews(),
     } satisfies AppSchema;
 
     await postJson("/schema", nextSchema);
@@ -162,6 +163,28 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
     create: { enabled: true },
     patch: { enabled: true },
     delete: { enabled: false },
+  };
+}
+
+function defaultViews(): AppSchema["views"] {
+  return {
+    taskListItem: {
+      type: "list",
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+        done: { editor: "boolean", commit: "immediate" },
+        dueDate: { editor: "date", commit: "field-commit" },
+      },
+    },
+    taskCreate: {
+      type: "create",
+      entity: "task",
+      fields: {
+        title: { editor: "text" },
+        dueDate: { editor: "date" },
+      },
+    },
   };
 }
 

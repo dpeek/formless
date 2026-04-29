@@ -15,6 +15,7 @@ import {
   submitCreateMutation,
   submitPatchMutation,
 } from "./client/sync.ts";
+import { selectHomeModel, type CreateFieldConfig, type RecordFieldConfig } from "./client/views.ts";
 import {
   parseAppSchema,
   stringifySchema,
@@ -35,10 +36,7 @@ function HomeRoute() {
     message: "Local cache ready.",
   });
   const schema = clientState.schema;
-  const entityEntry = useMemo(
-    () => (schema ? Object.entries(schema.entities)[0] : undefined),
-    [schema],
-  );
+  const homeModel = useMemo(() => (schema ? selectHomeModel(schema) : undefined), [schema]);
 
   useEffect(() => subscribeToClientState(setClientState), []);
 
@@ -95,7 +93,7 @@ function HomeRoute() {
     );
   }
 
-  if (!entityEntry) {
+  if (!homeModel) {
     return (
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
@@ -105,7 +103,7 @@ function HomeRoute() {
     );
   }
 
-  const [entityName, entity] = entityEntry;
+  const { createFields, entityName, entity, recordFields } = homeModel;
   const records = clientState.records.filter((record) => record.entity === entityName);
 
   return (
@@ -117,12 +115,18 @@ function HomeRoute() {
         </p>
       </header>
 
-      <GeneratedCreateForm entity={entity} entityName={entityName} onStatusChange={setSyncStatus} />
+      <GeneratedCreateForm
+        createFields={createFields}
+        entity={entity}
+        entityName={entityName}
+        onStatusChange={setSyncStatus}
+      />
 
       <RecordList
         entity={entity}
         entityName={entityName}
         onStatusChange={setSyncStatus}
+        recordFields={recordFields}
         records={records}
       />
 
@@ -132,10 +136,12 @@ function HomeRoute() {
 }
 
 export function GeneratedCreateForm({
+  createFields,
   entity,
   entityName,
   onStatusChange,
 }: {
+  createFields: CreateFieldConfig[];
   entity: EntitySchema;
   entityName: string;
   onStatusChange: (status: SyncStatus) => void;
@@ -152,7 +158,7 @@ export function GeneratedCreateForm({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = getFormValues(formData, entity);
+    const values = getFormValues(formData, createFields);
 
     setIsSubmitting(true);
     onStatusChange({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
@@ -180,8 +186,8 @@ export function GeneratedCreateForm({
       ) : null}
 
       <fieldset className="space-y-4" disabled={!canCreate || isSubmitting}>
-        {Object.entries(entity.fields).map(([fieldName, field]) => (
-          <CreateFieldInput field={field} fieldName={fieldName} key={fieldName} />
+        {createFields.map((fieldConfig) => (
+          <CreateFieldInput fieldConfig={fieldConfig} key={fieldConfig.fieldName} />
         ))}
       </fieldset>
 
@@ -196,7 +202,8 @@ export function GeneratedCreateForm({
   );
 }
 
-function CreateFieldInput({ field, fieldName }: { field: FieldSchema; fieldName: string }) {
+function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
+  const { editor, field, fieldName } = fieldConfig;
   const label = fieldLabel(fieldName, field);
 
   if (field.type === "boolean") {
@@ -220,16 +227,16 @@ function CreateFieldInput({ field, fieldName }: { field: FieldSchema; fieldName:
         className="w-full rounded border border-slate-300 px-3 py-2"
         name={fieldName}
         required={field.required}
-        type={field.type === "date" ? "date" : "text"}
+        type={editor === "date" ? "date" : "text"}
       />
     </label>
   );
 }
 
-function getFormValues(formData: FormData, entity: EntitySchema): RecordValues {
+function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordValues {
   const values: RecordValues = {};
 
-  for (const [fieldName, field] of Object.entries(entity.fields)) {
+  for (const { field, fieldName } of fields) {
     if (field.type === "boolean") {
       values[fieldName] = formData.has(fieldName);
       continue;
@@ -246,11 +253,13 @@ export function RecordList({
   entity,
   entityName,
   onStatusChange,
+  recordFields,
   records,
 }: {
   entity: EntitySchema;
   entityName: string;
   onStatusChange: (status: SyncStatus) => void;
+  recordFields: RecordFieldConfig[];
   records: StoredRecord[];
 }) {
   const canPatch = entity.mutations.patch.enabled;
@@ -268,13 +277,12 @@ export function RecordList({
         <ul className="divide-y divide-slate-200 rounded border border-slate-200">
           {records.map((record) => (
             <li className="space-y-3 p-3" key={record.id}>
-              {Object.entries(entity.fields).map(([fieldName, field]) => (
+              {recordFields.map((fieldConfig) => (
                 <RecordFieldEditor
                   canPatch={canPatch}
                   entityName={entityName}
-                  field={field}
-                  fieldName={fieldName}
-                  key={fieldName}
+                  fieldConfig={fieldConfig}
+                  key={fieldConfig.fieldName}
                   onStatusChange={onStatusChange}
                   record={record}
                 />
@@ -291,18 +299,17 @@ export function RecordList({
 function RecordFieldEditor({
   canPatch,
   entityName,
-  field,
-  fieldName,
+  fieldConfig,
   onStatusChange,
   record,
 }: {
   canPatch: boolean;
   entityName: string;
-  field: FieldSchema;
-  fieldName: string;
+  fieldConfig: RecordFieldConfig;
   onStatusChange: (status: SyncStatus) => void;
   record: StoredRecord;
 }) {
+  const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
   const recordValue = record.values[fieldName];
   const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
   const [isPending, setIsPending] = useState(false);
@@ -342,7 +349,7 @@ function RecordFieldEditor({
     }
   }
 
-  if (field.type === "boolean") {
+  if (editor === "boolean") {
     const label = fieldLabel(fieldName, field);
 
     return (
@@ -352,7 +359,11 @@ function RecordFieldEditor({
             checked={recordValue === true}
             className="size-4 rounded border-slate-300"
             disabled={!canPatch || isPending}
-            onChange={(event) => void commit(event.currentTarget.checked)}
+            onChange={(event) => {
+              if (commitPolicy === "immediate") {
+                void commit(event.currentTarget.checked);
+              }
+            }}
             type="checkbox"
           />
           <span className="font-medium">{label}</span>
@@ -382,11 +393,15 @@ function RecordFieldEditor({
         <input
           className="w-full rounded border border-slate-300 px-3 py-2"
           disabled={!canPatch || isPending}
-          onBlur={(event) => void commit(event.currentTarget.value)}
+          onBlur={(event) => {
+            if (commitPolicy === "field-commit") {
+              void commit(event.currentTarget.value);
+            }
+          }}
           onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={handleKeyDown}
           required={field.required}
-          type={field.type === "date" ? "date" : "text"}
+          type={editor === "date" ? "date" : "text"}
           value={draft}
         />
       </label>

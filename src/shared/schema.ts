@@ -19,6 +19,33 @@ export type DateFieldSchema = {
 
 export type FieldSchema = TextFieldSchema | BooleanFieldSchema | DateFieldSchema;
 
+export type FieldCommitPolicy = "immediate" | "field-commit";
+
+export type FieldEditor = "text" | "boolean" | "date";
+
+export type ViewFieldSchema = {
+  editor: FieldEditor;
+  commit: FieldCommitPolicy;
+};
+
+export type CreateViewFieldSchema = {
+  editor: FieldEditor;
+};
+
+export type ListViewSchema = {
+  type: "list";
+  entity: string;
+  fields: Record<string, ViewFieldSchema>;
+};
+
+export type CreateViewSchema = {
+  type: "create";
+  entity: string;
+  fields: Record<string, CreateViewFieldSchema>;
+};
+
+export type ViewSchema = ListViewSchema | CreateViewSchema;
+
 export type GenericMutationPolicy = {
   enabled: boolean;
 };
@@ -42,11 +69,19 @@ export type EntitySchema = {
 export type AppSchema = {
   version: number;
   entities: Record<string, EntitySchema>;
+  views: Record<string, ViewSchema>;
 };
 
 export function parseAppSchema(value: unknown): AppSchema {
   if (!isRecord(value)) {
     throw new Error("Schema must be an object.");
+  }
+
+  const allowedKeys = new Set(["version", "entities", "views"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Schema has unsupported key "${key}".`);
+    }
   }
 
   const version = value.version;
@@ -59,7 +94,9 @@ export function parseAppSchema(value: unknown): AppSchema {
     throw new Error("Schema must define at least one entity.");
   }
 
-  return { version, entities };
+  const views = parseViews(value.views, entities);
+
+  return { version, entities, views };
 }
 
 export function stringifySchema(schema: AppSchema) {
@@ -77,6 +114,259 @@ function parseEntities(value: unknown): Record<string, EntitySchema> {
       parseEntity(entityName, entity),
     ]),
   );
+}
+
+function parseViews(
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): Record<string, ViewSchema> {
+  if (!isRecord(value)) {
+    throw new Error("Schema views must be an object.");
+  }
+
+  const views = Object.fromEntries(
+    Object.entries(value).map(([viewName, view]) => [
+      viewName,
+      parseView(viewName, view, entities),
+    ]),
+  );
+
+  if (Object.keys(views).length === 0) {
+    throw new Error("Schema must define at least one view.");
+  }
+
+  assertHomeViews(views);
+
+  return views;
+}
+
+function assertHomeViews(views: Record<string, ViewSchema>) {
+  const listViews = Object.values(views).filter((view) => view.type === "list");
+
+  if (listViews.length === 0) {
+    throw new Error('Schema must define at least one "list" view.');
+  }
+
+  for (const listView of listViews) {
+    const hasCreateView = Object.values(views).some((view) => {
+      return view.type === "create" && view.entity === listView.entity;
+    });
+
+    if (!hasCreateView) {
+      throw new Error(`Schema must define a "create" view for entity "${listView.entity}".`);
+    }
+  }
+}
+
+function parseView(
+  viewName: string,
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): ViewSchema {
+  if (!isRecord(value)) {
+    throw new Error(`View "${viewName}" must be an object.`);
+  }
+
+  const allowedKeys = new Set(["type", "entity", "fields"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`View "${viewName}" has unsupported key "${key}".`);
+    }
+  }
+
+  if (value.type !== "list" && value.type !== "create") {
+    throw new Error(`View "${viewName}" type must be "list" or "create".`);
+  }
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new Error(`View "${viewName}" must include an entity.`);
+  }
+
+  const entity = entities[value.entity];
+  if (!entity) {
+    throw new Error(`View "${viewName}" references unknown entity "${value.entity}".`);
+  }
+
+  if (value.type === "list") {
+    const fields = parseListViewFields(viewName, value.entity, value.fields, entity);
+    assertViewHasFields(viewName, fields);
+
+    return {
+      type: "list",
+      entity: value.entity,
+      fields,
+    };
+  }
+
+  const fields = parseCreateViewFields(viewName, value.entity, value.fields, entity);
+  assertViewHasFields(viewName, fields);
+  assertCreateViewIncludesRequiredFields(viewName, fields, entity);
+
+  return {
+    type: "create",
+    entity: value.entity,
+    fields,
+  };
+}
+
+function parseListViewFields(
+  viewName: string,
+  entityName: string,
+  value: unknown,
+  entity: EntitySchema,
+): Record<string, ViewFieldSchema> {
+  if (!isRecord(value)) {
+    throw new Error(`View "${viewName}" fields must be an object.`);
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([fieldName, field]) => [
+      fieldName,
+      parseListViewField(viewName, entityName, fieldName, field, entity),
+    ]),
+  );
+}
+
+function parseListViewField(
+  viewName: string,
+  entityName: string,
+  fieldName: string,
+  value: unknown,
+  entity: EntitySchema,
+): ViewFieldSchema {
+  if (!isRecord(value)) {
+    throw new Error(`View field "${viewName}.${fieldName}" must be an object.`);
+  }
+
+  const allowedKeys = new Set(["editor", "commit"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`View field "${viewName}.${fieldName}" has unsupported key "${key}".`);
+    }
+  }
+
+  const field = entity.fields[fieldName];
+  if (!field) {
+    throw new Error(`View "${viewName}" references unknown field "${entityName}.${fieldName}".`);
+  }
+
+  const editor = parseViewFieldEditor(viewName, fieldName, value.editor, field);
+
+  if (value.commit !== "immediate" && value.commit !== "field-commit") {
+    throw new Error(
+      `View field "${viewName}.${fieldName}" has unsupported commit policy "${String(
+        value.commit,
+      )}".`,
+    );
+  }
+
+  if (field.type === "boolean" && value.commit !== "immediate") {
+    throw new Error(
+      `View field "${viewName}.${fieldName}" boolean fields must commit immediately.`,
+    );
+  }
+
+  if ((field.type === "text" || field.type === "date") && value.commit !== "field-commit") {
+    throw new Error(
+      `View field "${viewName}.${fieldName}" ${field.type} fields must use field-commit.`,
+    );
+  }
+
+  return {
+    editor,
+    commit: value.commit,
+  };
+}
+
+function parseCreateViewFields(
+  viewName: string,
+  entityName: string,
+  value: unknown,
+  entity: EntitySchema,
+): Record<string, CreateViewFieldSchema> {
+  if (!isRecord(value)) {
+    throw new Error(`View "${viewName}" fields must be an object.`);
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([fieldName, field]) => [
+      fieldName,
+      parseCreateViewField(viewName, entityName, fieldName, field, entity),
+    ]),
+  );
+}
+
+function parseCreateViewField(
+  viewName: string,
+  entityName: string,
+  fieldName: string,
+  value: unknown,
+  entity: EntitySchema,
+): CreateViewFieldSchema {
+  if (!isRecord(value)) {
+    throw new Error(`View field "${viewName}.${fieldName}" must be an object.`);
+  }
+
+  const allowedKeys = new Set(["editor"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`View field "${viewName}.${fieldName}" has unsupported key "${key}".`);
+    }
+  }
+
+  const field = entity.fields[fieldName];
+  if (!field) {
+    throw new Error(`View "${viewName}" references unknown field "${entityName}.${fieldName}".`);
+  }
+
+  const editor = parseViewFieldEditor(viewName, fieldName, value.editor, field);
+
+  return {
+    editor,
+  };
+}
+
+function parseViewFieldEditor(
+  viewName: string,
+  fieldName: string,
+  value: unknown,
+  field: FieldSchema,
+): FieldEditor {
+  if (value !== "text" && value !== "boolean" && value !== "date") {
+    throw new Error(
+      `View field "${viewName}.${fieldName}" has unsupported editor "${String(value)}".`,
+    );
+  }
+
+  if (value !== field.type) {
+    throw new Error(
+      `View field "${viewName}.${fieldName}" editor must match field type "${field.type}".`,
+    );
+  }
+
+  return value;
+}
+
+function assertViewHasFields(viewName: string, fields: Record<string, unknown>) {
+  if (Object.keys(fields).length === 0) {
+    throw new Error(`View "${viewName}" must define at least one field.`);
+  }
+}
+
+function assertCreateViewIncludesRequiredFields(
+  viewName: string,
+  fields: Record<string, CreateViewFieldSchema>,
+  entity: EntitySchema,
+) {
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    if (field.required && !(fieldName in fields) && !hasCreateDefault(field)) {
+      throw new Error(`Create view "${viewName}" must include required field "${fieldName}".`);
+    }
+  }
+}
+
+function hasCreateDefault(field: FieldSchema) {
+  return field.type === "boolean" && typeof field.default === "boolean";
 }
 
 function parseEntity(entityName: string, value: unknown): EntitySchema {
@@ -100,10 +390,6 @@ function parseEntity(entityName: string, value: unknown): EntitySchema {
 }
 
 function parseEntityMutations(entityName: string, value: unknown): EntityMutationPolicy {
-  if (value === undefined) {
-    return defaultMutationPolicy();
-  }
-
   if (!isRecord(value)) {
     throw new Error(`Entity "${entityName}" mutations must be an object.`);
   }
@@ -178,14 +464,6 @@ function assertExactPolicyKeys(
   if (!("enabled" in value)) {
     throw new Error(`Entity "${entityName}" ${mutationName} mutation policy must include enabled.`);
   }
-}
-
-function defaultMutationPolicy(): EntityMutationPolicy {
-  return {
-    create: { enabled: true },
-    patch: { enabled: true },
-    delete: { enabled: false },
-  };
 }
 
 function parseFields(entityName: string, value: unknown): Record<string, FieldSchema> {

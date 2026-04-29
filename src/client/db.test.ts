@@ -63,6 +63,7 @@ describe("client db", () => {
           mutations: defaultMutations(),
         },
       },
+      views: appSchema.views,
     } satisfies AppSchema;
 
     await saveBootstrapResponse({
