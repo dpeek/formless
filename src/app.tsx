@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Route, Switch } from "wouter";
 import {
-  connectBroadcastToState,
-  getClientState,
-  hydrateClientState,
-  subscribeToClientState,
-  type ClientState,
-} from "./client/state.ts";
+  connectBroadcastToClientStore,
+  hydrateClientStore,
+  useCursor,
+  useEntityRecordIds,
+  useHomeViewModel,
+  useLastSyncedAt,
+  useRecord,
+  useRecordField,
+  useSchema,
+} from "./client/store.ts";
 import {
   bootstrapClient,
   fetchActiveSchema,
@@ -15,14 +19,14 @@ import {
   submitCreateMutation,
   submitPatchMutation,
 } from "./client/sync.ts";
-import { selectHomeModel, type CreateFieldConfig, type RecordFieldConfig } from "./client/views.ts";
+import type { CreateFieldConfig, RecordFieldConfig } from "./client/views.ts";
 import {
   parseAppSchema,
   stringifySchema,
   type EntitySchema,
   type FieldSchema,
 } from "./shared/schema.ts";
-import type { FieldValue, RecordValues, StoredRecord } from "./shared/protocol.ts";
+import type { FieldValue, RecordValues } from "./shared/protocol.ts";
 
 type SyncStatus = {
   state: "idle" | "syncing" | "error";
@@ -30,18 +34,17 @@ type SyncStatus = {
 };
 
 function HomeRoute() {
-  const [clientState, setClientState] = useState<ClientState>(() => getClientState());
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     state: "idle",
     message: "Local cache ready.",
   });
-  const schema = clientState.schema;
-  const homeModel = useMemo(() => (schema ? selectHomeModel(schema) : undefined), [schema]);
-
-  useEffect(() => subscribeToClientState(setClientState), []);
+  const schema = useSchema();
+  const homeModel = useHomeViewModel();
+  const cursor = useCursor();
+  const lastSyncedAt = useLastSyncedAt();
 
   useEffect(() => {
-    const stopBroadcast = connectBroadcastToState();
+    const stopBroadcast = connectBroadcastToClientStore();
     let stopPolling = () => {};
     let cancelled = false;
 
@@ -49,7 +52,7 @@ function HomeRoute() {
       setSyncStatus({ state: "syncing", message: "Syncing with authority..." });
 
       try {
-        await hydrateClientState();
+        await hydrateClientStore();
         await bootstrapClient();
 
         if (cancelled) {
@@ -88,7 +91,7 @@ function HomeRoute() {
             ? "Could not load the active schema."
             : "Loading active schema..."}
         </p>
-        <SyncStatusLine status={syncStatus} lastSyncedAt={clientState.lastSyncedAt} />
+        <SyncStatusLine status={syncStatus} lastSyncedAt={lastSyncedAt} />
       </section>
     );
   }
@@ -98,20 +101,19 @@ function HomeRoute() {
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p>No entities are defined in the active schema.</p>
-        <SyncStatusLine status={syncStatus} lastSyncedAt={clientState.lastSyncedAt} />
+        <SyncStatusLine status={syncStatus} lastSyncedAt={lastSyncedAt} />
       </section>
     );
   }
 
   const { createFields, entityName, entity, recordFields } = homeModel;
-  const records = clientState.records.filter((record) => record.entity === entityName);
 
   return (
     <section className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p className="text-sm text-slate-600">
-          Loaded schema version {schema.version}. Cursor {clientState.cursor}.
+          Loaded schema version {schema.version}. Cursor {cursor}.
         </p>
       </header>
 
@@ -127,10 +129,9 @@ function HomeRoute() {
         entityName={entityName}
         onStatusChange={setSyncStatus}
         recordFields={recordFields}
-        records={records}
       />
 
-      <SyncStatusLine status={syncStatus} lastSyncedAt={clientState.lastSyncedAt} />
+      <SyncStatusLine status={syncStatus} lastSyncedAt={lastSyncedAt} />
     </section>
   );
 }
@@ -254,45 +255,75 @@ export function RecordList({
   entityName,
   onStatusChange,
   recordFields,
-  records,
 }: {
   entity: EntitySchema;
   entityName: string;
   onStatusChange: (status: SyncStatus) => void;
   recordFields: RecordFieldConfig[];
-  records: StoredRecord[];
 }) {
   const canPatch = entity.mutations.patch.enabled;
+  const recordIds = useEntityRecordIds(entityName);
 
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-medium">{entity.label}s</h2>
-      {!canPatch && records.length > 0 ? (
+      {!canPatch && recordIds.length > 0 ? (
         <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
       ) : null}
 
-      {records.length === 0 ? (
+      {recordIds.length === 0 ? (
         <p className="text-sm text-slate-600">No records yet.</p>
       ) : (
         <ul className="divide-y divide-slate-200 rounded border border-slate-200">
-          {records.map((record) => (
-            <li className="space-y-3 p-3" key={record.id}>
-              {recordFields.map((fieldConfig) => (
-                <RecordFieldEditor
-                  canPatch={canPatch}
-                  entityName={entityName}
-                  fieldConfig={fieldConfig}
-                  key={fieldConfig.fieldName}
-                  onStatusChange={onStatusChange}
-                  record={record}
-                />
-              ))}
-              <p className="text-xs text-slate-500">{record.createdAt}</p>
-            </li>
+          {recordIds.map((recordId) => (
+            <RecordRow
+              canPatch={canPatch}
+              entityName={entityName}
+              key={recordId}
+              onStatusChange={onStatusChange}
+              recordFields={recordFields}
+              recordId={recordId}
+            />
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function RecordRow({
+  canPatch,
+  entityName,
+  onStatusChange,
+  recordFields,
+  recordId,
+}: {
+  canPatch: boolean;
+  entityName: string;
+  onStatusChange: (status: SyncStatus) => void;
+  recordFields: RecordFieldConfig[];
+  recordId: string;
+}) {
+  const record = useRecord(recordId);
+
+  if (!record) {
+    return null;
+  }
+
+  return (
+    <li className="space-y-3 p-3">
+      {recordFields.map((fieldConfig) => (
+        <RecordFieldEditor
+          canPatch={canPatch}
+          entityName={entityName}
+          fieldConfig={fieldConfig}
+          key={fieldConfig.fieldName}
+          onStatusChange={onStatusChange}
+          recordId={recordId}
+        />
+      ))}
+      <p className="text-xs text-slate-500">{record.createdAt}</p>
+    </li>
   );
 }
 
@@ -301,16 +332,16 @@ function RecordFieldEditor({
   entityName,
   fieldConfig,
   onStatusChange,
-  record,
+  recordId,
 }: {
   canPatch: boolean;
   entityName: string;
   fieldConfig: RecordFieldConfig;
   onStatusChange: (status: SyncStatus) => void;
-  record: StoredRecord;
+  recordId: string;
 }) {
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
-  const recordValue = record.values[fieldName];
+  const recordValue = useRecordField(recordId, fieldName);
   const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,7 +363,7 @@ function RecordFieldEditor({
     onStatusChange({ state: "syncing", message: `Updating ${fieldName}...` });
 
     try {
-      await submitPatchMutation(entityName, record.id, { [fieldName]: value });
+      await submitPatchMutation(entityName, recordId, { [fieldName]: value });
       setError(null);
       onStatusChange({ state: "idle", message: "Updated and synced." });
     } catch (error) {
@@ -447,25 +478,22 @@ function SyncStatusLine({
 }
 
 function SchemaRoute() {
-  const [clientState, setClientState] = useState<ClientState>(() => getClientState());
-  const [editorText, setEditorText] = useState(() =>
-    clientState.schema ? stringifySchema(clientState.schema) : "",
-  );
+  const schema = useSchema();
+  const lastSyncedAt = useLastSyncedAt();
+  const [editorText, setEditorText] = useState(() => (schema ? stringifySchema(schema) : ""));
   const [status, setStatus] = useState<SyncStatus>({
     state: "idle",
     message: "Schema editor ready.",
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => subscribeToClientState(setClientState), []);
-
   useEffect(() => {
-    const stopBroadcast = connectBroadcastToState();
+    const stopBroadcast = connectBroadcastToClientStore();
     let cancelled = false;
 
     async function loadSchema() {
       try {
-        await hydrateClientState();
+        await hydrateClientStore();
         await fetchActiveSchema();
 
         if (!cancelled) {
@@ -490,10 +518,10 @@ function SchemaRoute() {
   }, []);
 
   useEffect(() => {
-    if (clientState.schema) {
-      setEditorText(stringifySchema(clientState.schema));
+    if (schema) {
+      setEditorText(stringifySchema(schema));
     }
-  }, [clientState.schema]);
+  }, [schema]);
 
   async function submitSchema(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -521,9 +549,7 @@ function SchemaRoute() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Schema</h1>
         <p className="text-sm text-slate-600">
-          {clientState.schema
-            ? `Editing schema version ${clientState.schema.version}.`
-            : "Loading active schema."}
+          {schema ? `Editing schema version ${schema.version}.` : "Loading active schema."}
         </p>
       </header>
 
@@ -545,7 +571,7 @@ function SchemaRoute() {
         </button>
       </form>
 
-      <SyncStatusLine status={status} lastSyncedAt={clientState.lastSyncedAt} />
+      <SyncStatusLine status={status} lastSyncedAt={lastSyncedAt} />
     </section>
   );
 }

@@ -7,7 +7,12 @@ import {
   saveBootstrapResponse,
   saveSchema,
 } from "./db.ts";
-import { refreshClientStateFromDb } from "./state.ts";
+import {
+  applyBootstrapResponse,
+  applyChanges,
+  applyRecordMerge,
+  applySchemaSave,
+} from "./store.ts";
 import { createMutationId } from "../shared/ids.ts";
 import type {
   BootstrapResponse,
@@ -28,6 +33,7 @@ export async function bootstrapClient(fetcher: typeof fetch = fetch) {
   const response = await fetchJson<BootstrapResponse>(fetcher, "/api/bootstrap");
 
   await saveBootstrapResponse(response);
+  applyBootstrapResponse(response);
   await notifyLocalDataChanged({ schemaChanged: true });
 
   return response;
@@ -43,10 +49,12 @@ export async function syncClient(fetcher: typeof fetch = fetch) {
 
   if (response.schema && response.schemaUpdatedAt) {
     await saveSchema(response.schema, response.schemaUpdatedAt);
+    applySchemaSave(response.schema, response.schemaUpdatedAt);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor) {
     await mergeChanges(response.changes, response.cursor);
+    applyChanges(response.changes, response.cursor);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor || schemaChanged) {
@@ -60,6 +68,7 @@ export async function fetchActiveSchema(fetcher: typeof fetch = fetch) {
   const response = await fetchJson<SchemaResponse>(fetcher, "/api/schema");
 
   await saveSchema(response.schema, response.updatedAt);
+  applySchemaSave(response.schema, response.updatedAt);
   await notifySchemaChanged();
 
   return response;
@@ -69,6 +78,7 @@ export async function saveActiveSchema(schema: AppSchema, fetcher: typeof fetch 
   const response = await postJson<SchemaUpdateResponse>(fetcher, "/api/schema", { schema });
 
   await saveSchema(response.schema, response.updatedAt);
+  applySchemaSave(response.schema, response.updatedAt);
   await notifySchemaChanged();
 
   return response;
@@ -89,6 +99,7 @@ export async function submitCreateMutation(
   const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
 
   await mergeRecords([response.record], response.cursor);
+  applyRecordMerge([response.record], response.cursor);
   await notifyLocalDataChanged();
 
   return response;
@@ -111,6 +122,7 @@ export async function submitPatchMutation(
   const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
 
   await mergeRecords([response.record], response.cursor);
+  applyRecordMerge([response.record], response.cursor);
   await notifyLocalDataChanged();
 
   return response;
@@ -178,7 +190,6 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 }
 
 async function notifyLocalDataChanged(options: { schemaChanged?: boolean } = {}) {
-  await refreshClientStateFromDb();
   publishClientEvent("records-updated");
   publishClientEvent("cursor-updated");
   if (options.schemaChanged) {
@@ -187,7 +198,6 @@ async function notifyLocalDataChanged(options: { schemaChanged?: boolean } = {})
 }
 
 async function notifySchemaChanged() {
-  await refreshClientStateFromDb();
   publishClientEvent("schema-updated");
 }
 

@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { publishClientEvent } from "./broadcast.ts";
 import { mergeRecords, readLocalSnapshot, saveBootstrapResponse } from "./db.ts";
 import { appSchema } from "./schema.ts";
-import { connectBroadcastToState, subscribeToClientState, type ClientState } from "./state.ts";
+import {
+  connectBroadcastToClientStore,
+  getClientStoreSnapshot,
+  resetClientStoreForTests,
+  subscribeToClientStore,
+} from "./store.ts";
 import {
   bootstrapClient,
   fetchActiveSchema,
@@ -25,6 +30,7 @@ import type { AppSchema } from "../shared/schema.ts";
 
 beforeEach(async () => {
   await deleteClientDb();
+  resetClientStoreForTests();
 });
 
 describe("client sync", () => {
@@ -236,9 +242,9 @@ describe("client sync", () => {
   });
 
   it("refreshes schema state from broadcast events", async () => {
-    const states: ClientState[] = [];
-    const unsubscribe = subscribeToClientState((state) => states.push(state));
-    const stopBroadcast = connectBroadcastToState();
+    const states = [getClientStoreSnapshot()];
+    const unsubscribe = subscribeToClientStore(() => states.push(getClientStoreSnapshot()));
+    const stopBroadcast = connectBroadcastToClientStore();
     const nextSchema = schemaWithSummary();
 
     try {
@@ -261,16 +267,16 @@ describe("client sync", () => {
   });
 
   it("refreshes state from broadcast events without remounting routes", async () => {
-    const states: ClientState[] = [];
-    const unsubscribe = subscribeToClientState((state) => states.push(state));
-    const stopBroadcast = connectBroadcastToState();
+    const states = [getClientStoreSnapshot()];
+    const unsubscribe = subscribeToClientStore(() => states.push(getClientStoreSnapshot()));
+    const stopBroadcast = connectBroadcastToClientStore();
 
     try {
       await mergeRecords([record("record-1", "First")], 1);
       publishClientEvent("records-updated");
 
-      await waitFor(() => states.some((state) => state.records.length === 1));
-      expect(states.at(-1)?.records).toEqual([record("record-1", "First")]);
+      await waitFor(() => states.some((state) => state.recordIdsByEntity.task?.length === 1));
+      expect(states.at(-1)?.recordsById["record-1"]).toEqual(record("record-1", "First"));
     } finally {
       stopBroadcast();
       unsubscribe();

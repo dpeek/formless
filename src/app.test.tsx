@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
-import { describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { App, GeneratedCreateForm, RecordList } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
+import { applyBootstrapResponse, resetClientStoreForTests } from "./client/store.ts";
 import { selectHomeModel, type CreateFieldConfig, type RecordFieldConfig } from "./client/views.ts";
-import type { StoredRecord } from "./shared/protocol.ts";
+import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { EntitySchema } from "./shared/schema.ts";
 
 function renderRoute(path: string) {
@@ -14,6 +15,10 @@ function renderRoute(path: string) {
     </Router>,
   );
 }
+
+beforeEach(() => {
+  resetClientStoreForTests();
+});
 
 describe("App smoke routes", () => {
   it('renders the "/" route', () => {
@@ -108,13 +113,13 @@ describe("App smoke routes", () => {
       values: { title: "First", done: true, dueDate: "2026-05-01" },
       createdAt: "2026-04-29T00:00:00.000Z",
     };
+    applyBootstrapResponse(bootstrap([record]));
     const html = renderToStaticMarkup(
       <RecordList
         entity={task}
         entityName="task"
         onStatusChange={() => {}}
         recordFields={recordFields(task, ["title", "done", "dueDate"])}
-        records={[record]}
       />,
     );
 
@@ -135,6 +140,7 @@ describe("App smoke routes", () => {
       values: { title: "First", done: true, dueDate: "2026-05-01" },
       createdAt: "2026-04-29T00:00:00.000Z",
     };
+    applyBootstrapResponse(bootstrap([record]));
     const html = renderToStaticMarkup(
       <RecordList
         entity={task}
@@ -154,7 +160,6 @@ describe("App smoke routes", () => {
             commit: "immediate",
           },
         ]}
-        records={[record]}
       />,
     );
 
@@ -172,13 +177,13 @@ describe("App smoke routes", () => {
       values: { title: "First", done: true, dueDate: "2026-05-01" },
       createdAt: "2026-04-29T00:00:00.000Z",
     };
+    applyBootstrapResponse(bootstrap([record]));
     const html = renderToStaticMarkup(
       <RecordList
         entity={task}
         entityName="task"
         onStatusChange={() => {}}
         recordFields={recordFields(task, ["title", "done", "dueDate"])}
-        records={[record]}
       />,
     );
 
@@ -247,5 +252,14 @@ function withMutationPolicy(
       patch: { enabled: options.patch ?? entity.mutations.patch.enabled },
       delete: { enabled: false },
     },
+  };
+}
+
+function bootstrap(records: StoredRecord[]): BootstrapResponse {
+  return {
+    schema: appSchema,
+    schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+    records,
+    cursor: 1,
   };
 }
