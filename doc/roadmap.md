@@ -36,10 +36,10 @@ Move defaults, required checks, relationship existence checks, timestamps, and d
 
 Implement generic delete with tombstones, then add relationship behavior such as restrict, nullify, or cascade where the schema allows it.
 
-## Compact views and collection summaries
+## Compact generated rows
 
-Make generated rows denser and add local counts or summaries once queries can express the scopes real schemas need.
+Make generated rows denser now that list tab counts and collection aggregates have landed. Focus this slice on scan-friendly row layout, field display policy, and compact inline editors.
 
 ## Schema evolution and inspection
 
-Add compatibility reports, safe schema-change rules, and generated inspector views for records, schema versions, changes, and sync state.
+Add compatibility reports, richer safe schema-change rules, and generated inspector views for records, schema versions, aggregate declarations, changes, and sync state.

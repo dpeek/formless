@@ -30,7 +30,7 @@ The current prototype already has the beginnings of this shape:
 - bootstrap, schema, sync, mutation, and action routes live in [src/worker/authority.ts](/Users/dpeek/code/formless/src/worker/authority.ts)
 - the browser sync loop lives in [src/client/sync.ts](/Users/dpeek/code/formless/src/client/sync.ts)
 
-That is already more interesting than a CRUD generator. The generated home surface now has schema-backed list tabs and schema-declared actions, so the next job is to make the rows and app-level feedback feel more like a compact working product.
+That is already more interesting than a CRUD generator. The generated home surface has schema-backed list tabs, schema-declared actions, tab counts, and schema-owned collection aggregates. The next job is to make the rows themselves feel denser and more useful.
 
 ## Why this approach is interesting
 
@@ -60,13 +60,14 @@ The authority still matters. The point is not to make the browser authoritative.
 
 ## The core model
 
-The product should revolve around five things:
+The product should revolve around six things:
 
 1. Types
 2. Entities
 3. Mutations
 4. Views
-5. Sync
+5. Aggregates
+6. Sync
 
 ### Types
 
@@ -158,7 +159,9 @@ or:
 }
 ```
 
-The home model exposes every list view for the selected entity in schema order. The seed task schema uses that to render `All`, `Active`, and `Completed` tabs. Local rendering filters the browser replica with the shared evaluator, while authority actions use the same expression shape against authoritative state.
+Date fields also support `before`, and query expressions can combine child expressions with `and`. The overdue task summary uses that to count active tasks whose due date is before the user's local calendar day.
+
+The home model exposes every list view for the selected entity in schema order. The seed task schema uses that to render `All`, `Active`, and `Completed` tabs. Local rendering filters the browser replica with the shared evaluator, while authority actions use the same expression shape against authoritative state. The list tabs also show local counts derived from each list view's query.
 
 That should eventually expand into:
 
@@ -178,6 +181,45 @@ That means a view decides whether an editor:
 - uses optimistic local echo or waits for authority confirmation
 
 This keeps types focused on value behavior and keeps edit semantics attached to the actual UI context.
+
+### Aggregates
+
+Collection aggregates are schema-owned derived values. They are defined at the top level of the app schema, parsed in [src/shared/aggregates.ts](/Users/dpeek/code/formless/src/shared/aggregates.ts), and exposed to the generated home model through [src/client/views.ts](/Users/dpeek/code/formless/src/client/views.ts).
+
+The current aggregate surface supports `count` over one entity collection. Each aggregate has a label, an entity, and a shared query expression. The generated task planner defines:
+
+- `taskTotal`
+- `taskActive`
+- `taskCompleted`
+- `taskOverdue`
+
+Aggregate values are computed from the browser replica in [src/client/store.ts](/Users/dpeek/code/formless/src/client/store.ts). They are not entity fields. They are not stored under `StoredRecord.values`, written to IndexedDB as values, persisted in SQLite, or emitted as change rows. They are feedback for the local UI, not authority state.
+
+That boundary matters for actions. The local completed count can say zero while the authority still has completed tasks the browser has not synced yet. `clearCompletedTasks` must stay enabled based on schema action availability, not on a local aggregate count. The authority reads the active schema, evaluates the action target query against authoritative records, and writes the resulting tombstones.
+
+The overdue aggregate uses the shared query model instead of UI-specific code:
+
+```json
+{
+  "kind": "and",
+  "expressions": [
+    {
+      "kind": "where",
+      "ref": { "kind": "value", "name": "done" },
+      "op": "eq",
+      "value": false
+    },
+    {
+      "kind": "where",
+      "ref": { "kind": "value", "name": "dueDate" },
+      "op": "before",
+      "value": { "kind": "today" }
+    }
+  ]
+}
+```
+
+`{ "kind": "today" }` is resolved at evaluation time. In the browser, [src/app.tsx](/Users/dpeek/code/formless/src/app.tsx) uses the local calendar date and schedules a refresh at the next local midnight.
 
 ### Sync
 
@@ -249,6 +291,58 @@ A useful example schema looks like this:
             }
           }
         }
+      }
+    }
+  },
+  "aggregates": {
+    "taskTotal": {
+      "type": "count",
+      "label": "Total",
+      "entity": "task",
+      "query": { "kind": "all" }
+    },
+    "taskActive": {
+      "type": "count",
+      "label": "Active",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": { "kind": "value", "name": "done" },
+        "op": "eq",
+        "value": false
+      }
+    },
+    "taskCompleted": {
+      "type": "count",
+      "label": "Completed",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": { "kind": "value", "name": "done" },
+        "op": "eq",
+        "value": true
+      }
+    },
+    "taskOverdue": {
+      "type": "count",
+      "label": "Overdue",
+      "entity": "task",
+      "query": {
+        "kind": "and",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": { "kind": "value", "name": "done" },
+            "op": "eq",
+            "value": false
+          },
+          {
+            "kind": "where",
+            "ref": { "kind": "value", "name": "dueDate" },
+            "op": "before",
+            "value": { "kind": "today" }
+          }
+        ]
       }
     }
   },
@@ -351,8 +445,9 @@ The authoring flow should look like this:
 2. Define the entities and fields.
 3. Decide what generic mutations the entity supports.
 4. Add named actions only where the domain needs more than an ordinary edit.
-5. Let the runtime provide a default list, detail, and editing surface.
-6. Replace or refine the generated views where the domain needs more shape.
+5. Add collection aggregates where the generated surface needs local summary counts.
+6. Let the runtime provide a default list, detail, and editing surface.
+7. Replace or refine the generated views where the domain needs more shape.
 
 That sequence is important.
 
@@ -484,6 +579,8 @@ It currently proves:
 - authority-owned runtime schema editing through `/schema`
 - one generated type-aware create form
 - generated editable list tabs for all, active, and completed tasks
+- generated tab counts derived from each list view query
+- schema-owned collection aggregates for total, active, completed, and overdue tasks
 - one query-targeted named action, `clearCompletedTasks`
 - one authority-backed record store
 - soft-deleted tombstones for action-produced removals
@@ -493,9 +590,9 @@ It currently proves:
 - generic `create` and `patch` mutations flowing through the same change log and local merge path
 - action-produced changes flowing through that same change log and local merge path
 
-The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, list tabs use schema-owned queries, and `clearCompletedTasks` proves the query-targeted named-action path.
+The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, list tabs and counts use schema-owned queries, collection aggregates are evaluated over the local replica, and `clearCompletedTasks` proves the query-targeted named-action path.
 
-The next slice is about making the generated application surface denser and more useful: compact rows, collection aggregates, and better view display policy. The rough priority list lives in [doc/roadmap.md](/Users/dpeek/code/formless/doc/roadmap.md).
+The next slice is about making generated rows denser and giving views better display policy. The rough priority list lives in [doc/roadmap.md](/Users/dpeek/code/formless/doc/roadmap.md).
 
 ## What success looks like
 
@@ -512,6 +609,7 @@ and get back:
 - a local-first application shell
 - an authoritative sync model
 - type-aware editors and renderers
+- schema-owned collection aggregates
 - a default UI that is good enough to use
 - a runtime that can be refined rather than rewritten
 

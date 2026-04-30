@@ -493,6 +493,7 @@ function schemaWithSummary() {
       },
     },
     views: appSchema.views,
+    aggregates: {},
   } satisfies AppSchema;
 }
 

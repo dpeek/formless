@@ -37,6 +37,18 @@ describe("authority", () => {
     });
   });
 
+  it("returns aggregate definitions from bootstrap", async () => {
+    const body = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(Object.keys(body.schema.aggregates)).toEqual([
+      "taskTotal",
+      "taskActive",
+      "taskCompleted",
+      "taskOverdue",
+    ]);
+    expect(body.schema.aggregates.taskOverdue).toEqual(appSchema.aggregates.taskOverdue);
+  });
+
   it("returns the active schema and metadata from the schema route", async () => {
     const body = await getJson<SchemaResponse>("/api/schema");
 
@@ -60,6 +72,7 @@ describe("authority", () => {
         },
       },
       views: defaultViews(),
+      aggregates: {},
     } satisfies AppSchema;
 
     const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -72,6 +85,88 @@ describe("authority", () => {
     expect(schemaResponse.updatedAt).toBe(update.updatedAt);
     expect(bootstrap.schema).toEqual(nextSchema);
     expect(bootstrap.schemaUpdatedAt).toBe(update.updatedAt);
+  });
+
+  it("accepts compatible schema updates that add aggregates", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithAggregates({}) });
+    const created = await postMutation("mutation-1", { title: "First", done: false });
+    const nextSchema = schemaWithAggregates({
+      taskOpen: {
+        type: "count",
+        label: "Open",
+        entity: "task",
+        query: {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: false,
+        },
+      },
+    });
+    const parsedNextSchema = parseAppSchema(nextSchema);
+
+    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(update.schema).toEqual(parsedNextSchema);
+    expect(bootstrap.schema).toEqual(parsedNextSchema);
+    expect(bootstrap.records).toEqual([created.record]);
+  });
+
+  it("accepts compatible schema updates that change aggregate label and query", async () => {
+    const initialSchema = schemaWithAggregates({
+      taskDone: {
+        type: "count",
+        label: "Done",
+        entity: "task",
+        query: {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        },
+      },
+    });
+    const nextSchema = schemaWithAggregates({
+      taskDone: {
+        type: "count",
+        label: "Open",
+        entity: "task",
+        query: {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: false,
+        },
+      },
+    });
+
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: initialSchema });
+    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
+
+    expect(update.schema).toEqual(parseAppSchema(nextSchema));
+  });
+
+  it("rejects aggregate queries that reference missing fields through the schema route", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithAggregates({
+          taskMissing: {
+            type: "count",
+            label: "Missing",
+            entity: "task",
+            query: {
+              kind: "where",
+              ref: { kind: "value", name: "missing" },
+              op: "eq",
+              value: "yes",
+            },
+          },
+        }),
+      },
+      'references unknown field "value.missing"',
+    );
   });
 
   it("resets remote data to the seed schema and clears records", async () => {
@@ -90,6 +185,7 @@ describe("authority", () => {
         },
       },
       views: defaultViews(),
+      aggregates: {},
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -122,6 +218,7 @@ describe("authority", () => {
         },
       },
       views: defaultViews(),
+      aggregates: {},
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -190,6 +287,7 @@ describe("authority", () => {
           },
         },
       },
+      aggregates: {},
     } satisfies AppSchema;
 
     await expectError(
@@ -345,6 +443,7 @@ describe("authority", () => {
         },
       },
       views: defaultViews(),
+      aggregates: {},
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithProject });
@@ -941,6 +1040,7 @@ function schemaWithMutations(mutations: unknown) {
       },
     },
     views: defaultViews(),
+    aggregates: {},
   };
 }
 
@@ -959,6 +1059,14 @@ function schemaWithViews(views: unknown = defaultViews()) {
       },
     },
     views,
+    aggregates: {},
+  };
+}
+
+function schemaWithAggregates(aggregates: unknown) {
+  return {
+    ...schemaWithViews(),
+    aggregates,
   };
 }
 
@@ -978,6 +1086,7 @@ function schemaWithActions(actions: unknown) {
       },
     },
     views: defaultViews(),
+    aggregates: {},
   };
 }
 

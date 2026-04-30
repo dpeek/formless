@@ -65,6 +65,7 @@ describe("client db", () => {
         },
       },
       views: appSchema.views,
+      aggregates: {},
     } satisfies AppSchema;
 
     await saveBootstrapResponse({

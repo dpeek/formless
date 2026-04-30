@@ -4,6 +4,7 @@ import {
   applyChanges,
   applyRecordMerge,
   applySchemaSave,
+  createEntityRecordCountMatchingQuerySelector,
   getClientStoreSnapshot,
   resetClientStore,
   subscribeToClientStoreSelector,
@@ -190,7 +191,111 @@ describe("client store selectors", () => {
       unsubscribe();
     }
   });
+
+  it("count selectors update after create", () => {
+    const counts: number[] = [];
+
+    applyBootstrapResponse(bootstrap([record("record-1", "First", false)]));
+    const unsubscribe = subscribeToClientStoreSelector(
+      createEntityRecordCountMatchingQuerySelector("task", activeQuery),
+      (value) => counts.push(value),
+    );
+
+    try {
+      applyRecordMerge([record("record-2", "Second", false)], 2);
+
+      expect(counts).toEqual([2]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("count selectors update after patching done", () => {
+    const counts: number[] = [];
+
+    applyBootstrapResponse(
+      bootstrap([record("record-1", "First", false), record("record-2", "Second", false)]),
+    );
+    const unsubscribe = subscribeToClientStoreSelector(
+      createEntityRecordCountMatchingQuerySelector("task", activeQuery),
+      (value) => counts.push(value),
+    );
+
+    try {
+      applyRecordMerge([record("record-1", "First", true)], 2);
+
+      expect(counts).toEqual([1]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("count selectors update after tombstoning records through action changes", () => {
+    const counts: number[] = [];
+
+    applyBootstrapResponse(bootstrap([record("record-1", "First", true)]));
+    const unsubscribe = subscribeToClientStoreSelector(
+      createEntityRecordCountMatchingQuerySelector("task", completedQuery),
+      (value) => counts.push(value),
+    );
+
+    try {
+      applyChanges(
+        [
+          {
+            seq: 2,
+            mutationId: "action-1",
+            op: "action",
+            entity: "task",
+            recordId: "record-1",
+            payload: {
+              ...record("record-1", "First", true),
+              deletedAt: "2026-04-28T00:02:00.000Z",
+            },
+            createdAt: "2026-04-28T00:02:00.000Z",
+          },
+        ],
+        2,
+      );
+
+      expect(counts).toEqual([0]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("count selectors do not notify when unrelated record fields change", () => {
+    const counts: number[] = [];
+
+    applyBootstrapResponse(bootstrap([record("record-1", "First", false)]));
+    const unsubscribe = subscribeToClientStoreSelector(
+      createEntityRecordCountMatchingQuerySelector("task", activeQuery),
+      (value) => counts.push(value),
+    );
+
+    try {
+      applyRecordMerge([record("record-1", "Updated", false)], 2);
+
+      expect(counts).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
+  });
 });
+
+const activeQuery = {
+  kind: "where",
+  ref: { kind: "value", name: "done" },
+  op: "eq",
+  value: false,
+} as const;
+
+const completedQuery = {
+  kind: "where",
+  ref: { kind: "value", name: "done" },
+  op: "eq",
+  value: true,
+} as const;
 
 function bootstrap(records: StoredRecord[]): BootstrapResponse {
   return {
@@ -230,5 +335,6 @@ function schemaWithSummary() {
       },
     },
     views: appSchema.views,
+    aggregates: {},
   } satisfies AppSchema;
 }

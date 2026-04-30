@@ -51,6 +51,74 @@
       }
     }
   },
+  "aggregates": {
+    "taskTotal": {
+      "type": "count",
+      "label": "Total",
+      "entity": "task",
+      "query": {
+        "kind": "all"
+      }
+    },
+    "taskActive": {
+      "type": "count",
+      "label": "Active",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "done"
+        },
+        "op": "eq",
+        "value": false
+      }
+    },
+    "taskCompleted": {
+      "type": "count",
+      "label": "Completed",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "done"
+        },
+        "op": "eq",
+        "value": true
+      }
+    },
+    "taskOverdue": {
+      "type": "count",
+      "label": "Overdue",
+      "entity": "task",
+      "query": {
+        "kind": "and",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "done"
+            },
+            "op": "eq",
+            "value": false
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "dueDate"
+            },
+            "op": "before",
+            "value": {
+              "kind": "today"
+            }
+          }
+        ]
+      }
+    }
+  },
   "views": {
     "taskAll": {
       "type": "list",

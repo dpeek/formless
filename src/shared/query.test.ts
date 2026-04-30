@@ -29,7 +29,7 @@ describe("field catalog", () => {
         type: "date",
         label: "Due date",
         writable: true,
-        filterOps: ["eq"],
+        filterOps: ["eq", "before"],
       },
       {
         ref: { kind: "system", name: "id" },
@@ -98,6 +98,115 @@ describe("query parsing", () => {
     });
   });
 
+  it("parses valid and queries", () => {
+    expect(
+      parseQueryExpression(
+        {
+          kind: "and",
+          expressions: [
+            {
+              kind: "where",
+              ref: { kind: "value", name: "done" },
+              op: "eq",
+              value: false,
+            },
+            {
+              kind: "where",
+              ref: { kind: "value", name: "dueDate" },
+              op: "before",
+              value: "2026-05-02",
+            },
+          ],
+        },
+        catalog,
+        "overdue tasks",
+      ),
+    ).toEqual({
+      kind: "and",
+      expressions: [
+        {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: false,
+        },
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: "2026-05-02",
+        },
+      ],
+    });
+  });
+
+  it("rejects empty and queries", () => {
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "and",
+          expressions: [],
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("expressions must be a non-empty array");
+  });
+
+  it("rejects extra keys inside and queries", () => {
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "and",
+          expressions: [{ kind: "all" }],
+          extra: true,
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow('unsupported key "extra"');
+  });
+
+  it("parses date before queries with literal dates", () => {
+    expect(
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: "2026-05-02",
+        },
+        catalog,
+        "overdue tasks",
+      ),
+    ).toEqual({
+      kind: "where",
+      ref: { kind: "value", name: "dueDate" },
+      op: "before",
+      value: "2026-05-02",
+    });
+  });
+
+  it("parses date before queries with today", () => {
+    expect(
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: { kind: "today" },
+        },
+        catalog,
+        "overdue tasks",
+      ),
+    ).toEqual({
+      kind: "where",
+      ref: { kind: "value", name: "dueDate" },
+      op: "before",
+      value: { kind: "today" },
+    });
+  });
+
   it("rejects unknown refs", () => {
     expect(() =>
       parseQueryExpression(
@@ -126,6 +235,28 @@ describe("query parsing", () => {
         "bad query",
       ),
     ).toThrow('does not support operator "ne"');
+  });
+
+  it("rejects before on non-date fields", () => {
+    for (const ref of [
+      { kind: "value" as const, name: "title" },
+      { kind: "value" as const, name: "done" },
+      { kind: "system" as const, name: "id" as const },
+      { kind: "system" as const, name: "createdAt" as const },
+    ]) {
+      expect(() =>
+        parseQueryExpression(
+          {
+            kind: "where",
+            ref,
+            op: "before",
+            value: "2026-05-02",
+          },
+          catalog,
+          "bad query",
+        ),
+      ).toThrow('does not support operator "before"');
+    }
   });
 
   it("rejects type mismatches", () => {
@@ -157,6 +288,43 @@ describe("query parsing", () => {
       ),
     ).toThrow("must be a YYYY-MM-DD date");
   });
+
+  it("rejects malformed date before values", () => {
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: "05/01/2026",
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("must be a YYYY-MM-DD date");
+  });
+
+  it("rejects today for non-date predicates", () => {
+    for (const ref of [
+      { kind: "value" as const, name: "title" },
+      { kind: "value" as const, name: "done" },
+      { kind: "system" as const, name: "id" as const },
+      { kind: "system" as const, name: "createdAt" as const },
+    ]) {
+      expect(() =>
+        parseQueryExpression(
+          {
+            kind: "where",
+            ref,
+            op: "eq",
+            value: { kind: "today" },
+          },
+          catalog,
+          "bad query",
+        ),
+      ).toThrow();
+    }
+  });
 });
 
 describe("query evaluation", () => {
@@ -186,6 +354,83 @@ describe("query evaluation", () => {
     ).toBe(true);
   });
 
+  it("matches date values before a literal date", () => {
+    expect(
+      matchesQuery(record, {
+        kind: "where",
+        ref: { kind: "value", name: "dueDate" },
+        op: "before",
+        value: "2026-05-02",
+      }),
+    ).toBe(true);
+
+    expect(
+      matchesQuery(record, {
+        kind: "where",
+        ref: { kind: "value", name: "dueDate" },
+        op: "before",
+        value: "2026-05-01",
+      }),
+    ).toBe(false);
+  });
+
+  it("matches date values before an injected today", () => {
+    expect(
+      matchesQuery(
+        record,
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: { kind: "today" },
+        },
+        { today: "2026-05-02" },
+      ),
+    ).toBe(true);
+  });
+
+  it("does not match records with missing optional dates", () => {
+    expect(
+      matchesQuery(
+        {
+          ...record,
+          values: {
+            title: "Plan week",
+            done: false,
+          },
+        },
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: "2026-05-02",
+        },
+      ),
+    ).toBe(false);
+  });
+
+  it("matches and queries", () => {
+    expect(
+      matchesQuery(record, {
+        kind: "and",
+        expressions: [
+          {
+            kind: "where",
+            ref: { kind: "value", name: "done" },
+            op: "eq",
+            value: false,
+          },
+          {
+            kind: "where",
+            ref: { kind: "value", name: "dueDate" },
+            op: "before",
+            value: "2026-05-02",
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
   it("does not match tombstoned records", () => {
     expect(
       matchesQuery(
@@ -194,6 +439,29 @@ describe("query evaluation", () => {
           deletedAt: "2026-04-29T00:00:00.000Z",
         },
         { kind: "all" },
+      ),
+    ).toBe(false);
+  });
+
+  it("does not match tombstoned records through and queries", () => {
+    expect(
+      matchesQuery(
+        {
+          ...record,
+          deletedAt: "2026-04-29T00:00:00.000Z",
+        },
+        {
+          kind: "and",
+          expressions: [
+            { kind: "all" },
+            {
+              kind: "where",
+              ref: { kind: "value", name: "done" },
+              op: "eq",
+              value: false,
+            },
+          ],
+        },
       ),
     ).toBe(false);
   });
@@ -224,6 +492,28 @@ describe("query capabilities", () => {
         portableCapabilities,
       ),
     ).not.toThrow();
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "and",
+          expressions: [
+            {
+              kind: "where",
+              ref: { kind: "value", name: "done" },
+              op: "eq",
+              value: true,
+            },
+            {
+              kind: "where",
+              ref: { kind: "value", name: "dueDate" },
+              op: "before",
+              value: { kind: "today" },
+            },
+          ],
+        },
+        portableCapabilities,
+      ),
+    ).not.toThrow();
   });
 
   it("rejects operators not listed in capabilities", () => {
@@ -235,7 +525,12 @@ describe("query capabilities", () => {
           op: "eq",
           value: true,
         },
-        { operators: [], fieldKinds: ["value"] },
+        {
+          operators: [],
+          fieldKinds: ["value"],
+          expressionKinds: ["where"],
+          dynamicValues: ["today"],
+        },
         "limited backend",
       ),
     ).toThrow('unsupported operator "eq"');
@@ -250,7 +545,75 @@ describe("query capabilities", () => {
           op: "eq",
           value: true,
         },
-        { operators: ["eq"], fieldKinds: ["system"] },
+        {
+          operators: ["eq"],
+          fieldKinds: ["system"],
+          expressionKinds: ["where"],
+          dynamicValues: ["today"],
+        },
+        "limited backend",
+      ),
+    ).toThrow('unsupported field kind "value"');
+  });
+
+  it("rejects expression kinds not listed in capabilities", () => {
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "and",
+          expressions: [{ kind: "all" }],
+        },
+        {
+          operators: ["eq"],
+          fieldKinds: ["value"],
+          expressionKinds: ["all", "where"],
+          dynamicValues: ["today"],
+        },
+        "limited backend",
+      ),
+    ).toThrow('unsupported expression kind "and"');
+  });
+
+  it("rejects dynamic values not listed in capabilities", () => {
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: { kind: "today" },
+        },
+        {
+          operators: ["before"],
+          fieldKinds: ["value"],
+          expressionKinds: ["where"],
+          dynamicValues: [],
+        },
+        "limited backend",
+      ),
+    ).toThrow('unsupported dynamic value "today"');
+  });
+
+  it("checks nested expressions against capabilities", () => {
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "and",
+          expressions: [
+            {
+              kind: "where",
+              ref: { kind: "value", name: "done" },
+              op: "eq",
+              value: true,
+            },
+          ],
+        },
+        {
+          operators: ["eq"],
+          fieldKinds: ["system"],
+          expressionKinds: ["and", "where"],
+          dynamicValues: ["today"],
+        },
         "limited backend",
       ),
     ).toThrow('unsupported field kind "value"');
@@ -274,8 +637,10 @@ const taskEntity = {
 const catalog = getEntityFieldCatalog(taskEntity);
 
 const portableCapabilities = {
-  operators: ["eq"],
+  operators: ["eq", "before"],
   fieldKinds: ["value", "system"],
+  expressionKinds: ["all", "where", "and"],
+  dynamicValues: ["today"],
 } satisfies QueryCapabilities;
 
 const record: StoredRecord = {

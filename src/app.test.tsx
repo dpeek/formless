@@ -1,9 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { App, GeneratedCreateDialogForm, GeneratedCreateForm, RecordList } from "./app.tsx";
+import {
+  App,
+  GeneratedCreateDialogForm,
+  GeneratedCreateForm,
+  HomeAggregateStrip,
+  RecordList,
+} from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
-import { applyBootstrapResponse, resetClientStore } from "./client/store.ts";
+import { applyBootstrapResponse, applyRecordMerge, resetClientStore } from "./client/store.ts";
 import {
   selectHomeModel,
   type CreateFieldConfig,
@@ -139,6 +145,76 @@ describe("App smoke routes", () => {
     expect(html).toContain("Completed");
     expect(html).not.toContain('name="title"');
     expect(html).not.toContain("Due date");
+  });
+
+  it("renders aggregate labels on the generated home", () => {
+    applyBootstrapResponse(bootstrap([]));
+    const html = renderRoute("/");
+
+    expect(html).toContain('aria-label="Collection summary"');
+    expect(html).toContain("Total");
+    expect(html).toContain("Active");
+    expect(html).toContain("Completed");
+    expect(html).toContain("Overdue");
+  });
+
+  it("renders aggregate counts from bootstrap records with a fixed today", () => {
+    applyBootstrapResponse(
+      bootstrap([
+        aggregateRecord("record-1", "Open overdue", false, "2026-05-01"),
+        aggregateRecord("record-2", "Open later", false, "2026-05-03"),
+        aggregateRecord("record-3", "Completed", true, "2026-05-01"),
+      ]),
+    );
+    const model = selectHomeModel(appSchema);
+    const html = renderToStaticMarkup(
+      <HomeAggregateStrip aggregates={model?.aggregates ?? []} today="2026-05-02" />,
+    );
+
+    expect(html).toContain('aria-label="Total: 3"');
+    expect(html).toContain('aria-label="Active: 2"');
+    expect(html).toContain('aria-label="Completed: 1"');
+    expect(html).toContain('aria-label="Overdue: 1"');
+  });
+
+  it("renders list tab counts from each list query", () => {
+    applyBootstrapResponse(
+      bootstrap([
+        aggregateRecord("record-1", "Open", false),
+        aggregateRecord("record-2", "Finished", true),
+        aggregateRecord("record-3", "Also open", false),
+      ]),
+    );
+    const html = renderRoute("/");
+
+    expect(html).toMatch(/aria-label="All count"[^>]*>3</);
+    expect(html).toMatch(/aria-label="Active count"[^>]*>2</);
+    expect(html).toMatch(/aria-label="Completed count"[^>]*>1</);
+  });
+
+  it("updates aggregate counts after local record merges", () => {
+    applyBootstrapResponse(bootstrap([aggregateRecord("record-1", "Open", false)]));
+    const model = selectHomeModel(appSchema);
+    const before = renderToStaticMarkup(
+      <HomeAggregateStrip aggregates={model?.aggregates ?? []} today="2026-05-02" />,
+    );
+
+    applyRecordMerge([aggregateRecord("record-2", "Finished", true)], 2);
+    const after = renderToStaticMarkup(
+      <HomeAggregateStrip aggregates={model?.aggregates ?? []} today="2026-05-02" />,
+    );
+
+    expect(before).toContain('aria-label="Total: 1"');
+    expect(before).toContain('aria-label="Completed: 0"');
+    expect(after).toContain('aria-label="Total: 2"');
+    expect(after).toContain('aria-label="Completed: 1"');
+  });
+
+  it("does not render an aggregate strip for schemas without aggregates", () => {
+    applyBootstrapResponse(bootstrap([], { ...appSchema, aggregates: {} }));
+    const html = renderRoute("/");
+
+    expect(html).not.toContain('aria-label="Collection summary"');
   });
 
   it("renders the shared home action row once", () => {
@@ -317,8 +393,31 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap([], singleListSchema()));
     const html = renderRoute("/");
 
+    expect(html).toContain('aria-label="Collection summary"');
     expect(html).not.toContain('role="tablist"');
     expect(html).not.toContain("All");
+  });
+
+  it("excludes tombstoned records from aggregate counts", () => {
+    applyBootstrapResponse(
+      bootstrap([
+        aggregateRecord("record-1", "Open", false),
+        aggregateRecord(
+          "record-2",
+          "Deleted completed",
+          true,
+          "2026-05-01",
+          "2026-05-02T00:00:00.000Z",
+        ),
+      ]),
+    );
+    const model = selectHomeModel(appSchema);
+    const html = renderToStaticMarkup(
+      <HomeAggregateStrip aggregates={model?.aggregates ?? []} today="2026-05-02" />,
+    );
+
+    expect(html).toContain('aria-label="Total: 1"');
+    expect(html).toContain('aria-label="Completed: 0"');
   });
 });
 
@@ -489,6 +588,22 @@ function recordFields(entity: EntitySchema, fieldNames: string[]): RecordFieldCo
       commit: field?.type === "boolean" ? "immediate" : "field-commit",
     };
   }) as RecordFieldConfig[];
+}
+
+function aggregateRecord(
+  id: string,
+  title: string,
+  done: boolean,
+  dueDate = "2026-05-01",
+  deletedAt?: string,
+): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: { title, done, dueDate },
+    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+    ...(deletedAt ? { deletedAt } : {}),
+  };
 }
 
 function withMutationPolicy(

@@ -3,7 +3,9 @@ import { Link, Route, Switch } from "wouter";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
+  useCollectionAggregateValue,
   useCursor,
+  useEntityRecordCountMatchingQuery,
   useEntityRecordIdsMatchingQuery,
   useHomeViewModel,
   useLastSyncedAt,
@@ -24,10 +26,12 @@ import {
 } from "./client/sync.ts";
 import type {
   CreateFieldConfig,
+  HomeAggregateConfig,
   HomeActionConfig,
   HomeListViewConfig,
   RecordFieldConfig,
 } from "./client/views.ts";
+import { todayDateString } from "./shared/date.ts";
 import {
   parseAppSchema,
   stringifySchema,
@@ -50,6 +54,7 @@ import {
 } from "@formless/ui/dialog";
 import { Field, FieldError, FieldSet } from "@formless/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@formless/ui/tabs";
+import { Badge } from "@formless/ui/badge";
 
 type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
@@ -57,6 +62,7 @@ function HomeRoute() {
   const schema = useSchema();
   const homeModel = useHomeViewModel();
   const listViews = homeModel?.listViews ?? [];
+  const today = useTodayDateString();
   const [selectedListViewName, setSelectedListViewName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -129,7 +135,7 @@ function HomeRoute() {
     );
   }
 
-  const { entityName, entity, homeActions } = homeModel;
+  const { aggregates, entityName, entity, homeActions } = homeModel;
   const selectedListView =
     listViews.find((view) => view.viewName === selectedListViewName) ?? listViews[0];
 
@@ -153,12 +159,15 @@ function HomeRoute() {
         <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
 
+      {aggregates.length > 0 ? <HomeAggregateStrip aggregates={aggregates} today={today} /> : null}
+
       <HomeListViews
         entity={entity}
         entityName={entityName}
         listViews={listViews}
         onSelectListView={setSelectedListViewName}
         selectedListView={selectedListView}
+        today={today}
       />
     </section>
   );
@@ -377,15 +386,24 @@ function HomeListViews({
   listViews,
   onSelectListView,
   selectedListView,
+  today,
 }: {
   entity: EntitySchema;
   entityName: string;
   listViews: HomeListViewConfig[];
   onSelectListView: (viewName: string) => void;
   selectedListView: HomeListViewConfig;
+  today: string;
 }) {
   if (listViews.length <= 1) {
-    return <RecordList entity={entity} entityName={entityName} listView={selectedListView} />;
+    return (
+      <RecordList
+        entity={entity}
+        entityName={entityName}
+        listView={selectedListView}
+        today={today}
+      />
+    );
   }
 
   return (
@@ -399,16 +417,89 @@ function HomeListViews({
     >
       <TabsList aria-label={`${entity.label} views`} variant="line">
         {listViews.map((listView) => (
-          <TabsTrigger key={listView.viewName} value={listView.viewName}>
-            {listView.label}
-          </TabsTrigger>
+          <HomeListTabTrigger
+            entityName={entityName}
+            key={listView.viewName}
+            listView={listView}
+            today={today}
+          />
         ))}
       </TabsList>
 
       <TabsContent value={selectedListView.viewName}>
-        <RecordList entity={entity} entityName={entityName} listView={selectedListView} />
+        <RecordList
+          entity={entity}
+          entityName={entityName}
+          listView={selectedListView}
+          today={today}
+        />
       </TabsContent>
     </Tabs>
+  );
+}
+
+function HomeListTabTrigger({
+  entityName,
+  listView,
+  today,
+}: {
+  entityName: string;
+  listView: HomeListViewConfig;
+  today: string;
+}) {
+  const count = useEntityRecordCountMatchingQuery(entityName, listView.query, { today });
+
+  return (
+    <TabsTrigger value={listView.viewName}>
+      <span>{listView.label}</span>
+      <Badge aria-label={`${listView.label} count`} className="h-4 px-1.5" variant="outline">
+        {count}
+      </Badge>
+    </TabsTrigger>
+  );
+}
+
+export function HomeAggregateStrip({
+  aggregates,
+  today,
+}: {
+  aggregates: HomeAggregateConfig[];
+  today: string;
+}) {
+  if (aggregates.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Collection summary"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-slate-200 py-2 text-sm"
+    >
+      {aggregates.map((aggregateConfig) => (
+        <HomeAggregateItem
+          aggregateConfig={aggregateConfig}
+          key={aggregateConfig.aggregateName}
+          today={today}
+        />
+      ))}
+    </section>
+  );
+}
+
+function HomeAggregateItem({
+  aggregateConfig,
+  today,
+}: {
+  aggregateConfig: HomeAggregateConfig;
+  today: string;
+}) {
+  const value = useCollectionAggregateValue(aggregateConfig, { today });
+
+  return (
+    <div aria-label={`${aggregateConfig.label}: ${value}`} className="flex items-baseline gap-1.5">
+      <span className="text-slate-500">{aggregateConfig.label}</span>
+      <span className="font-semibold tabular-nums text-slate-950">{value}</span>
+    </div>
   );
 }
 
@@ -416,13 +507,19 @@ export function RecordList({
   entity,
   entityName,
   listView,
+  today,
 }: {
   entity: EntitySchema;
   entityName: string;
   listView: HomeListViewConfig;
+  today?: string;
 }) {
   const canPatch = entity.mutations.patch.enabled;
-  const recordIds = useEntityRecordIdsMatchingQuery(entityName, listView.query);
+  const recordIds = useEntityRecordIdsMatchingQuery(
+    entityName,
+    listView.query,
+    today ? { today } : undefined,
+  );
 
   return (
     <section className="space-y-3">
@@ -728,6 +825,38 @@ function formatTimestamp(value: string) {
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(date);
+}
+
+function useTodayDateString() {
+  const [today, setToday] = useState(() => todayDateString());
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+
+    function scheduleNextMidnight() {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 0, 0);
+
+      timeoutId = window.setTimeout(
+        () => {
+          setToday(todayDateString());
+          scheduleNextMidnight();
+        },
+        nextMidnight.getTime() - now.getTime() + 1,
+      );
+    }
+
+    scheduleNextMidnight();
+
+    return () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
+
+  return today;
 }
 
 function SchemaRoute() {

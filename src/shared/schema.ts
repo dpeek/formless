@@ -1,3 +1,4 @@
+import { parseCollectionAggregates, type CollectionAggregateSchema } from "./aggregates.ts";
 import { fieldRefsEqual, getEntityFieldCatalog } from "./fields.ts";
 import { parseQueryExpression, type QueryExpression } from "./query.ts";
 
@@ -88,6 +89,7 @@ export type AppSchema = {
   version: number;
   entities: Record<string, EntitySchema>;
   views: Record<string, ViewSchema>;
+  aggregates: Record<string, CollectionAggregateSchema>;
 };
 
 export function parseAppSchema(value: unknown): AppSchema {
@@ -95,7 +97,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     throw new Error("Schema must be an object.");
   }
 
-  const allowedKeys = new Set(["version", "entities", "views"]);
+  const allowedKeys = new Set(["version", "entities", "views", "aggregates"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`Schema has unsupported key "${key}".`);
@@ -113,8 +115,9 @@ export function parseAppSchema(value: unknown): AppSchema {
   }
 
   const views = parseViews(value.views, entities);
+  const aggregates = parseCollectionAggregates(value.aggregates, entities);
 
-  return { version, entities, views };
+  return { version, entities, views, aggregates };
 }
 
 export function stringifySchema(schema: AppSchema) {

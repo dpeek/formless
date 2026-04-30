@@ -49,6 +49,7 @@ describe("storage", () => {
         },
       },
       views: defaultViews(),
+      aggregates: {},
     } satisfies AppSchema;
 
     await postJson("/schema", nextSchema);
@@ -74,6 +75,7 @@ describe("storage", () => {
         },
       },
       views: defaultViews(),
+      aggregates: {},
     } satisfies AppSchema;
 
     await postJson("/schema", nextSchema);

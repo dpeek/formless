@@ -1,10 +1,14 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { listenForClientEvents } from "./broadcast.ts";
 import { readLocalSnapshot, type LocalSnapshot } from "./db.ts";
-import { selectHomeModel, type HomeViewModel } from "./views.ts";
+import { selectHomeModel, type HomeAggregateConfig, type HomeViewModel } from "./views.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { BootstrapResponse, ChangeRow, FieldValue, StoredRecord } from "../shared/protocol.ts";
-import { matchesQuery, type QueryExpression } from "../shared/query.ts";
+import {
+  matchesQuery,
+  type QueryEvaluationContext,
+  type QueryExpression,
+} from "../shared/query.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 export type NormalizedClientState = {
@@ -181,13 +185,43 @@ export function useEntityRecordIds(entityName: string) {
   });
 }
 
-export function useEntityRecordIdsMatchingQuery(entityName: string, query: QueryExpression) {
+export function useEntityRecordIdsMatchingQuery(
+  entityName: string,
+  query: QueryExpression,
+  context?: QueryEvaluationContext,
+) {
+  const today = context?.today;
   const selector = useMemo(
-    () => createEntityRecordIdsMatchingQuerySelector(entityName, query),
-    [entityName, query],
+    () => createEntityRecordIdsMatchingQuerySelector(entityName, query, context),
+    [entityName, query, today],
   );
 
   return useClientStoreSelector(selector);
+}
+
+export function useEntityRecordCountMatchingQuery(
+  entityName: string,
+  query: QueryExpression,
+  context?: QueryEvaluationContext,
+) {
+  const today = context?.today;
+  const selector = useMemo(
+    () => createEntityRecordCountMatchingQuerySelector(entityName, query, context),
+    [entityName, query, today],
+  );
+
+  return useClientStoreSelector(selector);
+}
+
+export function useCollectionAggregateValue(
+  aggregateConfig: HomeAggregateConfig,
+  context?: QueryEvaluationContext,
+) {
+  return useEntityRecordCountMatchingQuery(
+    aggregateConfig.entityName,
+    aggregateConfig.aggregate.query,
+    context,
+  );
 }
 
 export function useRecord(recordId: string) {
@@ -283,7 +317,11 @@ function withDerivedState(
   };
 }
 
-function createEntityRecordIdsMatchingQuerySelector(entityName: string, query: QueryExpression) {
+function createEntityRecordIdsMatchingQuerySelector(
+  entityName: string,
+  query: QueryExpression,
+  context?: QueryEvaluationContext,
+) {
   let previousRecordIds: string[] | undefined;
   let previousRecordsById: Record<string, StoredRecord> | undefined;
   let previousResult = EMPTY_RECORD_IDS;
@@ -302,7 +340,7 @@ function createEntityRecordIdsMatchingQuerySelector(entityName: string, query: Q
     const matchingRecordIds = recordIds.filter((recordId) => {
       const record = snapshot.recordsById[recordId];
 
-      return record ? matchesQuery(record, query) : false;
+      return record ? matchesQuery(record, query, context) : false;
     });
 
     previousRecordIds = recordIds;
@@ -310,6 +348,32 @@ function createEntityRecordIdsMatchingQuerySelector(entityName: string, query: Q
     previousResult = reuseStringArray(previousResult, matchingRecordIds);
 
     return previousResult;
+  };
+}
+
+export function createEntityRecordCountMatchingQuerySelector(
+  entityName: string,
+  query: QueryExpression,
+  context?: QueryEvaluationContext,
+) {
+  return (snapshot: ClientStoreState) => {
+    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+
+    if (query.kind === "all") {
+      return recordIds.length;
+    }
+
+    let count = 0;
+
+    for (const recordId of recordIds) {
+      const record = snapshot.recordsById[recordId];
+
+      if (record && matchesQuery(record, query, context)) {
+        count += 1;
+      }
+    }
+
+    return count;
   };
 }
 

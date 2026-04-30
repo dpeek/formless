@@ -93,7 +93,7 @@ function valueFieldCatalogEntry(fieldName: string, field: FieldSchema): Addressa
     type: field.type,
     label: field.label ?? humanizeFieldName(fieldName),
     writable: true,
-    filterOps: ["eq"],
+    filterOps: field.type === "date" ? ["eq", "before"] : ["eq"],
   };
 }
 

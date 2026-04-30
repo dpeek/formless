@@ -8,6 +8,7 @@ import type {
   ListViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
+import type { CollectionAggregateSchema } from "../shared/aggregates.ts";
 import type { QueryExpression } from "../shared/query.ts";
 
 export type RecordFieldConfig = {
@@ -30,10 +31,18 @@ export type HomeListViewConfig = {
   recordFields: RecordFieldConfig[];
 };
 
+export type HomeAggregateConfig = {
+  aggregateName: string;
+  label: string;
+  entityName: string;
+  aggregate: CollectionAggregateSchema;
+};
+
 export type HomeViewModel = {
   entityName: string;
   entity: EntitySchema;
   listViews: HomeListViewConfig[];
+  aggregates: HomeAggregateConfig[];
   actions: EntityActionConfig[];
   createFields: CreateFieldConfig[];
   homeActions: HomeActionConfig[];
@@ -84,15 +93,28 @@ export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
   const actions = selectActions(entity);
   const createFields = selectCreateFields(viewEntries, listView.entity, entity);
   const listViews = selectListViews(viewEntries, listView.entity, entity);
+  const aggregates = selectAggregates(schema, listView.entity);
 
   return {
     entityName: listView.entity,
     entity,
     listViews,
+    aggregates,
     actions,
     createFields,
     homeActions: selectHomeActions(listView.entity, entity, createFields, actions),
   };
+}
+
+function selectAggregates(schema: AppSchema, entityName: string): HomeAggregateConfig[] {
+  return Object.entries(schema.aggregates)
+    .filter(([, aggregate]) => aggregate.entity === entityName)
+    .map(([aggregateName, aggregate]) => ({
+      aggregateName,
+      label: aggregate.label,
+      entityName,
+      aggregate,
+    }));
 }
 
 function selectHomeActions(

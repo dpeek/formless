@@ -7,27 +7,41 @@ import {
   type AddressableFieldType,
   type FieldRef,
 } from "./fields.ts";
-import { isDateString } from "./date.ts";
+import { isDateBefore, isDateString, todayDateString } from "./date.ts";
 import type { StoredRecord } from "./protocol.ts";
 
-export type QueryOperator = "eq";
-export type QueryValue = string | boolean;
+export type QueryOperator = "eq" | "before";
+export type QueryDynamicValue = { kind: "today" };
+export type QueryValue = string | boolean | QueryDynamicValue;
 
 export type QueryExpression =
   | { kind: "all" }
-  | { kind: "where"; ref: FieldRef; op: "eq"; value: QueryValue };
+  | { kind: "where"; ref: FieldRef; op: QueryOperator; value: QueryValue }
+  | { kind: "and"; expressions: QueryExpression[] };
+
+export type QueryEvaluationContext = {
+  today: string;
+};
 
 export type QueryCapabilities = {
   operators: QueryOperator[];
   fieldKinds: FieldRef["kind"][];
+  expressionKinds: QueryExpression["kind"][];
+  dynamicValues: QueryDynamicValue["kind"][];
 };
 
 // Schema parsing verifies query shape and field validity. Capability checks are
 // a separate adapter boundary for valid queries that a backend may not support.
 export const portableQueryCapabilities = {
-  operators: ["eq"],
+  operators: ["eq", "before"],
   fieldKinds: ["value", "system"],
+  expressionKinds: ["all", "where", "and"],
+  dynamicValues: ["today"],
 } satisfies QueryCapabilities;
+
+export function defaultQueryEvaluationContext(): QueryEvaluationContext {
+  return { today: todayDateString() };
+}
 
 export function parseQueryExpression(
   value: unknown,
@@ -44,6 +58,21 @@ export function parseQueryExpression(
     return { kind: "all" };
   }
 
+  if (value.kind === "and") {
+    assertExactKeys(value, ["kind", "expressions"], contextLabel);
+
+    if (!Array.isArray(value.expressions) || value.expressions.length === 0) {
+      throw new Error(`Query "${contextLabel}" expressions must be a non-empty array.`);
+    }
+
+    return {
+      kind: "and",
+      expressions: value.expressions.map((expression, index) =>
+        parseQueryExpression(expression, catalog, `${contextLabel}.expressions[${index}]`),
+      ),
+    };
+  }
+
   if (value.kind === "where") {
     assertExactKeys(value, ["kind", "ref", "op", "value"], contextLabel);
 
@@ -55,7 +84,7 @@ export function parseQueryExpression(
     }
 
     const op = parseQueryOperator(value.op, field, contextLabel, ref);
-    const queryValue = parseQueryValue(value.value, field.type, contextLabel, ref);
+    const queryValue = parseQueryValue(value.value, field.type, op, contextLabel, ref);
 
     return {
       kind: "where",
@@ -73,7 +102,19 @@ export function assertQuerySupported(
   capabilities: QueryCapabilities,
   contextLabel = "query",
 ) {
+  if (!capabilities.expressionKinds.includes(query.kind)) {
+    throw new Error(`Query "${contextLabel}" uses unsupported expression kind "${query.kind}".`);
+  }
+
   if (query.kind === "all") {
+    return;
+  }
+
+  if (query.kind === "and") {
+    for (const expression of query.expressions) {
+      assertQuerySupported(expression, capabilities, contextLabel);
+    }
+
     return;
   }
 
@@ -88,9 +129,19 @@ export function assertQuerySupported(
       `Query "${contextLabel}" field "${formatFieldRef(query.ref)}" uses unsupported operator "${query.op}".`,
     );
   }
+
+  if (isQueryDynamicValue(query.value) && !capabilities.dynamicValues.includes(query.value.kind)) {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(query.ref)}" uses unsupported dynamic value "${query.value.kind}".`,
+    );
+  }
 }
 
-export function matchesQuery(record: StoredRecord, query: QueryExpression) {
+export function matchesQuery(
+  record: StoredRecord,
+  query: QueryExpression,
+  context?: QueryEvaluationContext,
+): boolean {
   assertQuerySupported(query, portableQueryCapabilities, "local evaluation");
 
   if (record.deletedAt) {
@@ -101,7 +152,24 @@ export function matchesQuery(record: StoredRecord, query: QueryExpression) {
     return true;
   }
 
-  return resolveRecordFieldValue(record, query.ref) === query.value;
+  if (query.kind === "and") {
+    return query.expressions.every((expression) => matchesQuery(record, expression, context));
+  }
+
+  const fieldValue = resolveRecordFieldValue(record, query.ref);
+
+  if (query.op === "eq") {
+    return fieldValue === query.value;
+  }
+
+  if (typeof fieldValue !== "string" || !isDateString(fieldValue)) {
+    return false;
+  }
+
+  return isDateBefore(
+    fieldValue,
+    resolveDateQueryValue(query.value, context ?? defaultQueryEvaluationContext()),
+  );
 }
 
 function parseFieldRef(value: unknown, contextLabel: string): FieldRef {
@@ -152,9 +220,20 @@ function parseQueryOperator(
 function parseQueryValue(
   value: unknown,
   fieldType: AddressableFieldType,
+  op: QueryOperator,
   contextLabel: string,
   ref: FieldRef,
 ): QueryValue {
+  if (op === "before") {
+    if (fieldType !== "date") {
+      throw new Error(
+        `Query "${contextLabel}" field "${formatFieldRef(ref)}" does not support operator "before".`,
+      );
+    }
+
+    return parseDateBeforeQueryValue(value, contextLabel, ref);
+  }
+
   if (fieldType === "boolean") {
     if (typeof value !== "boolean") {
       throw new Error(
@@ -178,6 +257,60 @@ function parseQueryValue(
   }
 
   return value;
+}
+
+function parseDateBeforeQueryValue(
+  value: unknown,
+  contextLabel: string,
+  ref: FieldRef,
+): string | QueryDynamicValue {
+  if (typeof value === "string") {
+    if (!isDateString(value)) {
+      throw new Error(
+        `Query "${contextLabel}" field "${formatFieldRef(ref)}" must be a YYYY-MM-DD date.`,
+      );
+    }
+
+    return value;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(ref)}" requires a YYYY-MM-DD date or { kind: "today" }.`,
+    );
+  }
+
+  assertExactQueryDynamicValueKeys(value, contextLabel, ref);
+
+  if (value.kind !== "today") {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(ref)}" has unsupported dynamic value "${String(
+        value.kind,
+      )}".`,
+    );
+  }
+
+  return { kind: "today" };
+}
+
+function resolveDateQueryValue(value: QueryValue, context: QueryEvaluationContext) {
+  if (isQueryDynamicValue(value)) {
+    if (!isDateString(context.today)) {
+      throw new Error("Query evaluation context today must be a YYYY-MM-DD date.");
+    }
+
+    return context.today;
+  }
+
+  if (typeof value !== "string" || !isDateString(value)) {
+    throw new Error("Date before query value must be a YYYY-MM-DD date.");
+  }
+
+  return value;
+}
+
+function isQueryDynamicValue(value: QueryValue): value is QueryDynamicValue {
+  return typeof value === "object" && value.kind === "today";
 }
 
 function assertExactKeys(
@@ -211,6 +344,28 @@ function assertExactRefKeys(value: Record<string, unknown>, contextLabel: string
     if (!(key in value)) {
       throw new Error(`Query "${contextLabel}" ref must include "${key}".`);
     }
+  }
+}
+
+function assertExactQueryDynamicValueKeys(
+  value: Record<string, unknown>,
+  contextLabel: string,
+  ref: FieldRef,
+) {
+  const allowedKeys = ["kind"];
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.includes(key)) {
+      throw new Error(
+        `Query "${contextLabel}" field "${formatFieldRef(ref)}" dynamic value has unsupported key "${key}".`,
+      );
+    }
+  }
+
+  if (!("kind" in value)) {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(ref)}" dynamic value must include "kind".`,
+    );
   }
 }
 
