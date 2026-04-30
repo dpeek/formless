@@ -176,6 +176,7 @@ describe("authority", () => {
         taskListItem: {
           type: "list",
           entity: "task",
+          query: { kind: "all" },
           fields: {
             done: { editor: "boolean", commit: "immediate" },
           },
@@ -517,6 +518,7 @@ describe("authority", () => {
     expect(withViews.views?.taskListItem).toEqual({
       type: "list",
       entity: "task",
+      query: { kind: "all" },
       fields: {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },
@@ -587,6 +589,7 @@ describe("authority", () => {
       taskListItem: {
         type: "list",
         entity: "task",
+        query: { kind: "all" },
         fields: {
           title: { editor: "text", commit: "field-commit" },
         },
@@ -897,6 +900,7 @@ function defaultViews(): AppSchema["views"] {
     taskListItem: {
       type: "list",
       entity: "task",
+      query: { kind: "all" },
       fields: {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },

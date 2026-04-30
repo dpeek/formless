@@ -1,3 +1,6 @@
+import { fieldRefsEqual, getEntityFieldCatalog } from "./fields.ts";
+import { parseQueryExpression, type QueryExpression } from "./query.ts";
+
 export type TextFieldSchema = {
   type: "text";
   required: boolean;
@@ -34,7 +37,9 @@ export type CreateViewFieldSchema = {
 
 export type ListViewSchema = {
   type: "list";
+  label?: string;
   entity: string;
+  query: QueryExpression;
   fields: Record<string, ViewFieldSchema>;
 };
 
@@ -62,9 +67,14 @@ export type EntityMutationPolicy = {
 
 export type EntityActionKind = "clear-completed";
 
+export type EntityActionTargetSchema = {
+  query: QueryExpression;
+};
+
 export type EntityActionSchema = {
   label: string;
   kind: EntityActionKind;
+  target?: EntityActionTargetSchema;
 };
 
 export type EntitySchema = {
@@ -175,15 +185,18 @@ function parseView(
     throw new Error(`View "${viewName}" must be an object.`);
   }
 
-  const allowedKeys = new Set(["type", "entity", "fields"]);
+  if (value.type !== "list" && value.type !== "create") {
+    throw new Error(`View "${viewName}" type must be "list" or "create".`);
+  }
+
+  const allowedKeys =
+    value.type === "list"
+      ? new Set(["type", "label", "entity", "query", "fields"])
+      : new Set(["type", "entity", "fields"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`View "${viewName}" has unsupported key "${key}".`);
     }
-  }
-
-  if (value.type !== "list" && value.type !== "create") {
-    throw new Error(`View "${viewName}" type must be "list" or "create".`);
   }
 
   if (typeof value.entity !== "string" || value.entity.trim() === "") {
@@ -198,12 +211,24 @@ function parseView(
   if (value.type === "list") {
     const fields = parseListViewFields(viewName, value.entity, value.fields, entity);
     assertViewHasFields(viewName, fields);
+    const label = parseListViewLabel(viewName, value.label);
+    const query: QueryExpression =
+      value.query === undefined
+        ? { kind: "all" }
+        : parseQueryExpression(value.query, getEntityFieldCatalog(entity), `view ${viewName}`);
 
-    return {
+    const listView: ListViewSchema = {
       type: "list",
       entity: value.entity,
+      query,
       fields,
     };
+
+    if (label !== undefined) {
+      listView.label = label;
+    }
+
+    return listView;
   }
 
   const fields = parseCreateViewFields(viewName, value.entity, value.fields, entity);
@@ -215,6 +240,18 @@ function parseView(
     entity: value.entity,
     fields,
   };
+}
+
+function parseListViewLabel(viewName: string, value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`View "${viewName}" label must be a non-empty string.`);
+  }
+
+  return value;
 }
 
 function parseListViewFields(
@@ -393,15 +430,16 @@ function parseEntity(entityName: string, value: unknown): EntitySchema {
   }
 
   const mutations = parseEntityMutations(entityName, value.mutations);
-  const actions = parseEntityActions(entityName, value.actions, fields);
+  const entity: EntitySchema = { label, fields, mutations };
+  const actions = parseEntityActions(entityName, value.actions, entity);
 
-  return actions ? { label, fields, mutations, actions } : { label, fields, mutations };
+  return actions ? { ...entity, actions } : entity;
 }
 
 function parseEntityActions(
   entityName: string,
   value: unknown,
-  fields: Record<string, FieldSchema>,
+  entity: EntitySchema,
 ): Record<string, EntityActionSchema> | undefined {
   if (value === undefined) {
     return undefined;
@@ -417,7 +455,7 @@ function parseEntityActions(
         throw new Error(`Entity "${entityName}" action names must be non-empty.`);
       }
 
-      return [actionName, parseEntityAction(entityName, actionName, action, fields)];
+      return [actionName, parseEntityAction(entityName, actionName, action, entity)];
     }),
   );
 
@@ -428,13 +466,13 @@ function parseEntityAction(
   entityName: string,
   actionName: string,
   value: unknown,
-  fields: Record<string, FieldSchema>,
+  entity: EntitySchema,
 ): EntityActionSchema {
   if (!isRecord(value)) {
     throw new Error(`Entity action "${entityName}.${actionName}" must be an object.`);
   }
 
-  const allowedKeys = new Set(["label", "kind"]);
+  const allowedKeys = new Set(["label", "kind", "target"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`Entity action "${entityName}.${actionName}" has unsupported key "${key}".`);
@@ -453,16 +491,75 @@ function parseEntityAction(
     );
   }
 
-  if (fields.done?.type !== "boolean") {
+  if (entity.fields.done?.type !== "boolean") {
     throw new Error(
       `Entity action "${entityName}.${actionName}" kind "clear-completed" requires a boolean "done" field.`,
     );
   }
 
-  return {
+  const target = parseEntityActionTarget(entityName, actionName, value.target, entity);
+
+  if (target && !isClearCompletedTargetQuery(target.query)) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" kind "clear-completed" target must be value.done eq true.`,
+    );
+  }
+
+  const action: EntityActionSchema = {
     label: value.label,
     kind: value.kind,
   };
+
+  if (target) {
+    action.target = target;
+  }
+
+  return action;
+}
+
+function parseEntityActionTarget(
+  entityName: string,
+  actionName: string,
+  value: unknown,
+  entity: EntitySchema,
+): EntityActionTargetSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Entity action "${entityName}.${actionName}" target must be an object.`);
+  }
+
+  const allowedKeys = new Set(["query"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(
+        `Entity action "${entityName}.${actionName}" target has unsupported key "${key}".`,
+      );
+    }
+  }
+
+  if (!("query" in value)) {
+    throw new Error(`Entity action "${entityName}.${actionName}" target must include query.`);
+  }
+
+  return {
+    query: parseQueryExpression(
+      value.query,
+      getEntityFieldCatalog(entity),
+      `action ${entityName}.${actionName}`,
+    ),
+  };
+}
+
+function isClearCompletedTargetQuery(query: QueryExpression) {
+  return (
+    query.kind === "where" &&
+    query.op === "eq" &&
+    query.value === true &&
+    fieldRefsEqual(query.ref, { kind: "value", name: "done" })
+  );
 }
 
 function parseEntityMutations(entityName: string, value: unknown): EntityMutationPolicy {

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import rawSeedSchema from "../../schema/app-schema.json";
+import { isDateString } from "../shared/date.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
 import type {
   ActionRequest,
@@ -418,16 +419,6 @@ function isValidStoredFieldValue(
     (!field.required || value.trim() !== "") &&
     (field.type !== "date" || isDateString(value))
   );
-}
-
-function isDateString(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-
-  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
 function jsonResponse(body: unknown, status = 200) {

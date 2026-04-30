@@ -35,15 +35,86 @@
       "actions": {
         "clearCompletedTasks": {
           "label": "Clear completed",
-          "kind": "clear-completed"
+          "kind": "clear-completed",
+          "target": {
+            "query": {
+              "kind": "where",
+              "ref": {
+                "kind": "value",
+                "name": "done"
+              },
+              "op": "eq",
+              "value": true
+            }
+          }
         }
       }
     }
   },
   "views": {
-    "taskListItem": {
+    "taskAll": {
       "type": "list",
+      "label": "All",
       "entity": "task",
+      "query": {
+        "kind": "all"
+      },
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "done": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "dueDate": {
+          "editor": "date",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "taskActive": {
+      "type": "list",
+      "label": "Active",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "done"
+        },
+        "op": "eq",
+        "value": false
+      },
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "done": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "dueDate": {
+          "editor": "date",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "taskCompleted": {
+      "type": "list",
+      "label": "Completed",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "done"
+        },
+        "op": "eq",
+        "value": true
+      },
       "fields": {
         "title": {
           "editor": "text",

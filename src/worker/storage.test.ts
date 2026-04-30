@@ -243,6 +243,7 @@ function defaultViews(): AppSchema["views"] {
     taskListItem: {
       type: "list",
       entity: "task",
+      query: { kind: "all" },
       fields: {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },
