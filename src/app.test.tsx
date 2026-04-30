@@ -8,10 +8,11 @@ import {
   selectHomeModel,
   type CreateFieldConfig,
   type HomeActionConfig,
+  type HomeListViewConfig,
   type RecordFieldConfig,
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
-import type { EntitySchema } from "./shared/schema.ts";
+import type { AppSchema, EntitySchema } from "./shared/schema.ts";
 
 function renderRoute(path: string) {
   return renderToStaticMarkup(
@@ -105,7 +106,7 @@ describe("App smoke routes", () => {
       <RecordList
         entity={task}
         entityName="task"
-        recordFields={recordFields(task, ["title", "done", "dueDate"])}
+        listView={listView(task, ["title", "done", "dueDate"])}
       />,
     );
 
@@ -121,23 +122,8 @@ describe("App smoke routes", () => {
   });
 
   it("renders schema-declared action buttons", () => {
-    const task = appSchema.entities.task;
-    const html = renderToStaticMarkup(
-      <RecordList
-        entity={task}
-        entityName="task"
-        homeActions={[
-          {
-            type: "entity-action",
-            label: "Clear completed",
-            entityName: "task",
-            actionName: "clearCompletedTasks",
-            action: task.actions!.clearCompletedTasks,
-          },
-        ]}
-        recordFields={recordFields(task, ["title", "done"])}
-      />,
-    );
+    applyBootstrapResponse(bootstrap([]));
+    const html = renderRoute("/");
 
     expect(html).toContain("Clear completed");
   });
@@ -148,8 +134,84 @@ describe("App smoke routes", () => {
 
     expect(html).toContain("Create Task");
     expect(html).toContain("Clear completed");
+    expect(html).toContain("All");
+    expect(html).toContain("Active");
+    expect(html).toContain("Completed");
     expect(html).not.toContain('name="title"');
     expect(html).not.toContain("Due date");
+  });
+
+  it("renders the shared home action row once", () => {
+    applyBootstrapResponse(bootstrap([]));
+    const html = renderRoute("/");
+
+    expect(countOccurrences(html, "Clear completed")).toBe(1);
+  });
+
+  it("filters active records through the selected list query", () => {
+    const task = appSchema.entities.task;
+    const active: StoredRecord = {
+      id: "record-1",
+      entity: "task",
+      values: { title: "Open", done: false },
+      createdAt: "2026-04-29T00:00:00.000Z",
+    };
+    const completed: StoredRecord = {
+      id: "record-2",
+      entity: "task",
+      values: { title: "Finished", done: true },
+      createdAt: "2026-04-29T00:01:00.000Z",
+    };
+
+    applyBootstrapResponse(bootstrap([active, completed]));
+    const html = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        listView={listView(task, ["title", "done"], {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: false,
+        })}
+      />,
+    );
+
+    expect(html).toContain("Open");
+    expect(html).not.toContain("Finished");
+  });
+
+  it("filters completed records through the selected list query", () => {
+    const task = appSchema.entities.task;
+    const active: StoredRecord = {
+      id: "record-1",
+      entity: "task",
+      values: { title: "Open", done: false },
+      createdAt: "2026-04-29T00:00:00.000Z",
+    };
+    const completed: StoredRecord = {
+      id: "record-2",
+      entity: "task",
+      values: { title: "Finished", done: true },
+      createdAt: "2026-04-29T00:01:00.000Z",
+    };
+
+    applyBootstrapResponse(bootstrap([active, completed]));
+    const html = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        listView={listView(task, ["title", "done"], {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        })}
+      />,
+    );
+
+    expect(html).toContain("Finished");
+    expect(html).not.toContain("Open");
   });
 
   it("hides tombstoned records from generated lists", () => {
@@ -170,14 +232,44 @@ describe("App smoke routes", () => {
 
     applyBootstrapResponse(bootstrap([active, deleted]));
     const html = renderToStaticMarkup(
-      <RecordList
-        entity={task}
-        entityName="task"
-        recordFields={recordFields(task, ["title", "done"])}
-      />,
+      <RecordList entity={task} entityName="task" listView={listView(task, ["title", "done"])} />,
     );
 
     expect(html).toContain("Open");
+    expect(html).not.toContain("Finished");
+  });
+
+  it("does not render tombstoned completed records in the completed list", () => {
+    const task = appSchema.entities.task;
+    const active: StoredRecord = {
+      id: "record-1",
+      entity: "task",
+      values: { title: "Open", done: false },
+      createdAt: "2026-04-29T00:00:00.000Z",
+    };
+    const deletedCompleted: StoredRecord = {
+      id: "record-2",
+      entity: "task",
+      values: { title: "Finished", done: true },
+      createdAt: "2026-04-29T00:01:00.000Z",
+      deletedAt: "2026-04-29T00:02:00.000Z",
+    };
+
+    applyBootstrapResponse(bootstrap([active, deletedCompleted]));
+    const html = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        listView={listView(task, ["title", "done"], {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        })}
+      />,
+    );
+
+    expect(html).toContain("No records yet.");
     expect(html).not.toContain("Finished");
   });
 
@@ -191,24 +283,7 @@ describe("App smoke routes", () => {
     };
     applyBootstrapResponse(bootstrap([record]));
     const html = renderToStaticMarkup(
-      <RecordList
-        entity={task}
-        entityName="task"
-        recordFields={[
-          {
-            fieldName: "title",
-            field: task.fields.title,
-            editor: "text",
-            commit: "field-commit",
-          },
-          {
-            fieldName: "done",
-            field: task.fields.done,
-            editor: "boolean",
-            commit: "immediate",
-          },
-        ]}
-      />,
+      <RecordList entity={task} entityName="task" listView={listView(task, ["title", "done"])} />,
     );
 
     expect(html).toContain("First");
@@ -230,12 +305,20 @@ describe("App smoke routes", () => {
       <RecordList
         entity={task}
         entityName="task"
-        recordFields={recordFields(task, ["title", "done", "dueDate"])}
+        listView={listView(task, ["title", "done", "dueDate"])}
       />,
     );
 
     expect(html).toContain("Editing is disabled for Task.");
     expect(html).toContain("disabled");
+  });
+
+  it("does not render list tabs for a single-list schema", () => {
+    applyBootstrapResponse(bootstrap([], singleListSchema()));
+    const html = renderRoute("/");
+
+    expect(html).not.toContain('role="tablist"');
+    expect(html).not.toContain("All");
   });
 });
 
@@ -264,11 +347,82 @@ it("resolves the home model from schema-owned views", () => {
   expect(model?.entityName).toBe("task");
   expect(model?.actions.map((action) => action.actionName)).toEqual(["clearCompletedTasks"]);
   expect(model?.createFields.map((field) => field.fieldName)).toEqual(["title", "dueDate"]);
+  expect(model?.listViews.map((view) => view.label)).toEqual(["All", "Active", "Completed"]);
   expect(model?.homeActions.map((action) => action.label)).toEqual([
     "Create Task",
     "Clear completed",
   ]);
-  expect(model?.recordFields.map((field) => field.fieldName)).toEqual(["title", "done", "dueDate"]);
+  expect(model?.homeActions).toHaveLength(2);
+});
+
+it("carries query and field config for every home list view", () => {
+  const model = selectHomeModel(appSchema);
+
+  expect(model?.listViews.map((view) => view.viewName)).toEqual([
+    "taskAll",
+    "taskActive",
+    "taskCompleted",
+  ]);
+  expect(model?.listViews.map((view) => view.query)).toEqual([
+    { kind: "all" },
+    {
+      kind: "where",
+      ref: { kind: "value", name: "done" },
+      op: "eq",
+      value: false,
+    },
+    {
+      kind: "where",
+      ref: { kind: "value", name: "done" },
+      op: "eq",
+      value: true,
+    },
+  ]);
+  expect(model?.listViews.map((view) => view.recordFields.map((field) => field.fieldName))).toEqual(
+    [
+      ["title", "done", "dueDate"],
+      ["title", "done", "dueDate"],
+      ["title", "done", "dueDate"],
+    ],
+  );
+});
+
+it("keeps existing single-list schemas as one home list view", () => {
+  const schema: AppSchema = {
+    ...appSchema,
+    views: {
+      taskList: {
+        type: "list",
+        label: "All",
+        entity: "task",
+        query: { kind: "all" },
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          done: { editor: "boolean", commit: "immediate" },
+        },
+      },
+      taskCreate: {
+        type: "create",
+        entity: "task",
+        fields: {
+          title: { editor: "text" },
+          dueDate: { editor: "date" },
+        },
+      },
+    },
+  };
+  const model = selectHomeModel(schema);
+
+  expect(model?.listViews).toHaveLength(1);
+  expect(model?.listViews[0]).toMatchObject({
+    viewName: "taskList",
+    label: "All",
+    query: { kind: "all" },
+  });
+  expect(model?.listViews[0]?.recordFields.map((field) => field.fieldName)).toEqual([
+    "title",
+    "done",
+  ]);
 });
 
 it("keeps disabled create policy visible in the home model", () => {
@@ -311,6 +465,19 @@ function createAction(
   };
 }
 
+function listView(
+  entity: EntitySchema,
+  fieldNames: string[],
+  query: HomeListViewConfig["query"] = { kind: "all" },
+): HomeListViewConfig {
+  return {
+    viewName: "testList",
+    label: "Test list",
+    query,
+    recordFields: recordFields(entity, fieldNames),
+  };
+}
+
 function recordFields(entity: EntitySchema, fieldNames: string[]): RecordFieldConfig[] {
   return fieldNames.map((fieldName) => {
     const field = entity.fields[fieldName];
@@ -338,11 +505,42 @@ function withMutationPolicy(
   };
 }
 
-function bootstrap(records: StoredRecord[]): BootstrapResponse {
+function singleListSchema(): AppSchema {
   return {
-    schema: appSchema,
+    ...appSchema,
+    views: {
+      taskList: {
+        type: "list",
+        label: "All",
+        entity: "task",
+        query: { kind: "all" },
+        fields: {
+          title: { editor: "text", commit: "field-commit" },
+          done: { editor: "boolean", commit: "immediate" },
+          dueDate: { editor: "date", commit: "field-commit" },
+        },
+      },
+      taskCreate: {
+        type: "create",
+        entity: "task",
+        fields: {
+          title: { editor: "text" },
+          dueDate: { editor: "date" },
+        },
+      },
+    },
+  };
+}
+
+function bootstrap(records: StoredRecord[], schema: AppSchema = appSchema): BootstrapResponse {
+  return {
+    schema,
     schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
     records,
     cursor: 1,
   };
+}
+
+function countOccurrences(value: string, search: string) {
+  return value.split(search).length - 1;
 }

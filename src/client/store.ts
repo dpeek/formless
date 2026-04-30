@@ -1,9 +1,10 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { listenForClientEvents } from "./broadcast.ts";
 import { readLocalSnapshot, type LocalSnapshot } from "./db.ts";
 import { selectHomeModel, type HomeViewModel } from "./views.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { BootstrapResponse, ChangeRow, FieldValue, StoredRecord } from "../shared/protocol.ts";
+import { matchesQuery, type QueryExpression } from "../shared/query.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 export type NormalizedClientState = {
@@ -180,6 +181,15 @@ export function useEntityRecordIds(entityName: string) {
   });
 }
 
+export function useEntityRecordIdsMatchingQuery(entityName: string, query: QueryExpression) {
+  const selector = useMemo(
+    () => createEntityRecordIdsMatchingQuerySelector(entityName, query),
+    [entityName, query],
+  );
+
+  return useClientStoreSelector(selector);
+}
+
 export function useRecord(recordId: string) {
   return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]);
 }
@@ -271,6 +281,44 @@ function withDerivedState(
           ? selectHomeModel(state.schema)
           : undefined,
   };
+}
+
+function createEntityRecordIdsMatchingQuerySelector(entityName: string, query: QueryExpression) {
+  let previousRecordIds: string[] | undefined;
+  let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousResult = EMPTY_RECORD_IDS;
+
+  return (snapshot: ClientStoreState) => {
+    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+
+    if (query.kind === "all") {
+      return recordIds;
+    }
+
+    if (recordIds === previousRecordIds && snapshot.recordsById === previousRecordsById) {
+      return previousResult;
+    }
+
+    const matchingRecordIds = recordIds.filter((recordId) => {
+      const record = snapshot.recordsById[recordId];
+
+      return record ? matchesQuery(record, query) : false;
+    });
+
+    previousRecordIds = recordIds;
+    previousRecordsById = snapshot.recordsById;
+    previousResult = reuseStringArray(previousResult, matchingRecordIds);
+
+    return previousResult;
+  };
+}
+
+function reuseStringArray(existing: string[], next: string[]) {
+  if (arraysEqual(existing, next)) {
+    return existing;
+  }
+
+  return next.length === 0 ? EMPTY_RECORD_IDS : next;
 }
 
 function recordsById(records: StoredRecord[]) {

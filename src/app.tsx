@@ -4,7 +4,7 @@ import {
   connectBroadcastToClientStore,
   hydrateClientStore,
   useCursor,
-  useEntityRecordIds,
+  useEntityRecordIdsMatchingQuery,
   useHomeViewModel,
   useLastSyncedAt,
   useRecordCreatedAt,
@@ -22,7 +22,12 @@ import {
   submitCreateMutation,
   submitPatchMutation,
 } from "./client/sync.ts";
-import type { CreateFieldConfig, HomeActionConfig, RecordFieldConfig } from "./client/views.ts";
+import type {
+  CreateFieldConfig,
+  HomeActionConfig,
+  HomeListViewConfig,
+  RecordFieldConfig,
+} from "./client/views.ts";
 import {
   parseAppSchema,
   stringifySchema,
@@ -44,12 +49,15 @@ import {
   DialogTitle,
 } from "@formless/ui/dialog";
 import { Field, FieldError, FieldSet } from "@formless/ui/field";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@formless/ui/tabs";
 
 type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
 function HomeRoute() {
   const schema = useSchema();
   const homeModel = useHomeViewModel();
+  const listViews = homeModel?.listViews ?? [];
+  const [selectedListViewName, setSelectedListViewName] = useState<string | null>(null);
 
   useEffect(() => {
     const stopBroadcast = connectBroadcastToClientStore();
@@ -90,6 +98,15 @@ function HomeRoute() {
     };
   }, []);
 
+  useEffect(() => {
+    const selectedListViewExists = listViews.some((view) => view.viewName === selectedListViewName);
+    const firstListViewName = listViews[0]?.viewName ?? null;
+
+    if (!selectedListViewExists && selectedListViewName !== firstListViewName) {
+      setSelectedListViewName(firstListViewName);
+    }
+  }, [listViews, selectedListViewName]);
+
   if (!schema) {
     return (
       <section className="mx-auto max-w-3xl space-y-4">
@@ -112,20 +129,36 @@ function HomeRoute() {
     );
   }
 
-  const { entityName, entity, homeActions, recordFields } = homeModel;
+  const { entityName, entity, homeActions } = homeModel;
+  const selectedListView =
+    listViews.find((view) => view.viewName === selectedListViewName) ?? listViews[0];
+
+  if (!selectedListView) {
+    return (
+      <section className="mx-auto max-w-3xl space-y-4">
+        <h1 className="text-2xl font-semibold">Formless</h1>
+        <p>No list views are defined for {entity.label}.</p>
+        <DeveloperStatusLine schemaVersion={schema.version} />
+      </section>
+    );
+  }
 
   return (
     <section className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Formless</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Formless</h1>
+          {homeActions.length > 0 ? <HomeActionRow actions={homeActions} /> : null}
+        </div>
         <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
 
-      <RecordList
+      <HomeListViews
         entity={entity}
         entityName={entityName}
-        homeActions={homeActions}
-        recordFields={recordFields}
+        listViews={listViews}
+        onSelectListView={setSelectedListViewName}
+        selectedListView={selectedListView}
       />
     </section>
   );
@@ -338,25 +371,63 @@ function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordV
   return values;
 }
 
-export function RecordList({
+function HomeListViews({
   entity,
   entityName,
-  homeActions = [],
-  recordFields,
+  listViews,
+  onSelectListView,
+  selectedListView,
 }: {
   entity: EntitySchema;
   entityName: string;
-  homeActions?: HomeActionConfig[];
-  recordFields: RecordFieldConfig[];
+  listViews: HomeListViewConfig[];
+  onSelectListView: (viewName: string) => void;
+  selectedListView: HomeListViewConfig;
+}) {
+  if (listViews.length <= 1) {
+    return <RecordList entity={entity} entityName={entityName} listView={selectedListView} />;
+  }
+
+  return (
+    <Tabs
+      onValueChange={(value) => {
+        if (typeof value === "string") {
+          onSelectListView(value);
+        }
+      }}
+      value={selectedListView.viewName}
+    >
+      <TabsList aria-label={`${entity.label} views`} variant="line">
+        {listViews.map((listView) => (
+          <TabsTrigger key={listView.viewName} value={listView.viewName}>
+            {listView.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      <TabsContent value={selectedListView.viewName}>
+        <RecordList entity={entity} entityName={entityName} listView={selectedListView} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+export function RecordList({
+  entity,
+  entityName,
+  listView,
+}: {
+  entity: EntitySchema;
+  entityName: string;
+  listView: HomeListViewConfig;
 }) {
   const canPatch = entity.mutations.patch.enabled;
-  const recordIds = useEntityRecordIds(entityName);
+  const recordIds = useEntityRecordIdsMatchingQuery(entityName, listView.query);
 
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-medium">{entity.label}s</h2>
-        {homeActions.length > 0 ? <HomeActionRow actions={homeActions} /> : null}
       </div>
       {!canPatch && recordIds.length > 0 ? (
         <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
@@ -371,7 +442,7 @@ export function RecordList({
               canPatch={canPatch}
               entityName={entityName}
               key={recordId}
-              recordFields={recordFields}
+              recordFields={listView.recordFields}
               recordId={recordId}
             />
           ))}

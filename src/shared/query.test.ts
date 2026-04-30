@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { fieldRefsEqual, getEntityFieldCatalog, resolveRecordFieldValue } from "./fields.ts";
-import { matchesQuery, parseQueryExpression } from "./query.ts";
+import { assertQuerySupported, matchesQuery, parseQueryExpression } from "./query.ts";
 import type { StoredRecord } from "./protocol.ts";
+import type { QueryCapabilities } from "./query.ts";
 import type { EntitySchema } from "./schema.ts";
 
 describe("field catalog", () => {
@@ -198,6 +199,64 @@ describe("query evaluation", () => {
   });
 });
 
+describe("query capabilities", () => {
+  it("accepts the portable query core", () => {
+    expect(() => assertQuerySupported({ kind: "all" }, portableCapabilities)).not.toThrow();
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        },
+        portableCapabilities,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "where",
+          ref: { kind: "system", name: "id" },
+          op: "eq",
+          value: "record-1",
+        },
+        portableCapabilities,
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects operators not listed in capabilities", () => {
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        },
+        { operators: [], fieldKinds: ["value"] },
+        "limited backend",
+      ),
+    ).toThrow('unsupported operator "eq"');
+  });
+
+  it("rejects field kinds not listed in capabilities", () => {
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "done" },
+          op: "eq",
+          value: true,
+        },
+        { operators: ["eq"], fieldKinds: ["system"] },
+        "limited backend",
+      ),
+    ).toThrow('unsupported field kind "value"');
+  });
+});
+
 const taskEntity = {
   label: "Task",
   fields: {
@@ -213,6 +272,11 @@ const taskEntity = {
 } satisfies EntitySchema;
 
 const catalog = getEntityFieldCatalog(taskEntity);
+
+const portableCapabilities = {
+  operators: ["eq"],
+  fieldKinds: ["value", "system"],
+} satisfies QueryCapabilities;
 
 const record: StoredRecord = {
   id: "record-1",

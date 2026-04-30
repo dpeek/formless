@@ -37,7 +37,7 @@ export type CreateViewFieldSchema = {
 
 export type ListViewSchema = {
   type: "list";
-  label?: string;
+  label: string;
   entity: string;
   query: QueryExpression;
   fields: Record<string, ViewFieldSchema>;
@@ -74,7 +74,7 @@ export type EntityActionTargetSchema = {
 export type EntityActionSchema = {
   label: string;
   kind: EntityActionKind;
-  target?: EntityActionTargetSchema;
+  target: EntityActionTargetSchema;
 };
 
 export type EntitySchema = {
@@ -212,23 +212,19 @@ function parseView(
     const fields = parseListViewFields(viewName, value.entity, value.fields, entity);
     assertViewHasFields(viewName, fields);
     const label = parseListViewLabel(viewName, value.label);
-    const query: QueryExpression =
-      value.query === undefined
-        ? { kind: "all" }
-        : parseQueryExpression(value.query, getEntityFieldCatalog(entity), `view ${viewName}`);
+    const query = parseQueryExpression(
+      value.query,
+      getEntityFieldCatalog(entity),
+      `view ${viewName}`,
+    );
 
-    const listView: ListViewSchema = {
+    return {
       type: "list",
+      label,
       entity: value.entity,
       query,
       fields,
     };
-
-    if (label !== undefined) {
-      listView.label = label;
-    }
-
-    return listView;
   }
 
   const fields = parseCreateViewFields(viewName, value.entity, value.fields, entity);
@@ -242,11 +238,7 @@ function parseView(
   };
 }
 
-function parseListViewLabel(viewName: string, value: unknown): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
+function parseListViewLabel(viewName: string, value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`View "${viewName}" label must be a non-empty string.`);
   }
@@ -499,22 +491,17 @@ function parseEntityAction(
 
   const target = parseEntityActionTarget(entityName, actionName, value.target, entity);
 
-  if (target && !isClearCompletedTargetQuery(target.query)) {
+  if (!isClearCompletedTargetQuery(target.query)) {
     throw new Error(
       `Entity action "${entityName}.${actionName}" kind "clear-completed" target must be value.done eq true.`,
     );
   }
 
-  const action: EntityActionSchema = {
+  return {
     label: value.label,
     kind: value.kind,
+    target,
   };
-
-  if (target) {
-    action.target = target;
-  }
-
-  return action;
 }
 
 function parseEntityActionTarget(
@@ -522,11 +509,7 @@ function parseEntityActionTarget(
   actionName: string,
   value: unknown,
   entity: EntitySchema,
-): EntityActionTargetSchema | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
+): EntityActionTargetSchema {
   if (!isRecord(value)) {
     throw new Error(`Entity action "${entityName}.${actionName}" target must be an object.`);
   }

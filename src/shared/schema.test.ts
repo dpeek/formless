@@ -19,20 +19,17 @@ describe("schema actions", () => {
     });
   });
 
-  it("continues to accept legacy clear-completed actions without targets", () => {
-    const schema = parseAppSchema(
-      schemaWithActions({
-        clearCompletedTasks: {
-          label: "Clear completed",
-          kind: "clear-completed",
-        },
-      }),
-    );
-
-    expect(schema.entities.task?.actions?.clearCompletedTasks).toEqual({
-      label: "Clear completed",
-      kind: "clear-completed",
-    });
+  it("rejects clear-completed actions without target queries", () => {
+    expect(() =>
+      parseAppSchema(
+        schemaWithActions({
+          clearCompletedTasks: {
+            label: "Clear completed",
+            kind: "clear-completed",
+          },
+        }),
+      ),
+    ).toThrow("target must be an object");
   });
 
   it("parses action target queries", () => {
@@ -151,30 +148,52 @@ describe("schema list view queries", () => {
     });
   });
 
-  it("normalizes missing list queries to all", () => {
-    const schema = parseAppSchema(
-      schemaWithActions(defaultActions(), {
-        taskListItem: {
-          type: "list",
-          entity: "task",
-          fields: {
-            title: { editor: "text", commit: "field-commit" },
-            done: { editor: "boolean", commit: "immediate" },
+  it("rejects list views without labels or queries", () => {
+    expect(() =>
+      parseAppSchema(
+        schemaWithActions(defaultActions(), {
+          taskListItem: {
+            type: "list",
+            entity: "task",
+            query: { kind: "all" },
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+              done: { editor: "boolean", commit: "immediate" },
+            },
           },
-        },
-        taskCreate: {
-          type: "create",
-          entity: "task",
-          fields: {
-            title: { editor: "text" },
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text" },
+            },
           },
-        },
-      }),
-    );
+        }),
+      ),
+    ).toThrow("label must be a non-empty string");
 
-    expect(schema.views.taskListItem).toMatchObject({
-      query: { kind: "all" },
-    });
+    expect(() =>
+      parseAppSchema(
+        schemaWithActions(defaultActions(), {
+          taskListItem: {
+            type: "list",
+            label: "All",
+            entity: "task",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+              done: { editor: "boolean", commit: "immediate" },
+            },
+          },
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text" },
+            },
+          },
+        }),
+      ),
+    ).toThrow("must be an object");
   });
 
   it("rejects malformed list view query objects", () => {
@@ -183,6 +202,7 @@ describe("schema list view queries", () => {
         schemaWithActions(defaultActions(), {
           taskListItem: {
             type: "list",
+            label: "All",
             entity: "task",
             query: { kind: "all", extra: true },
             fields: {
@@ -208,6 +228,7 @@ describe("schema list view queries", () => {
         schemaWithActions(defaultActions(), {
           taskListItem: {
             type: "list",
+            label: "All",
             entity: "task",
             query: {
               kind: "where",

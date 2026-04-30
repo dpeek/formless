@@ -82,9 +82,6 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       created_at TEXT NOT NULL
     );
   `);
-
-  migrateRecordsDeletedAt(storage);
-  migrateChangesAllowActionRows(storage);
 }
 
 export function getActiveSchema(
@@ -372,6 +369,23 @@ export function tombstoneRecordsForAction(
   });
 }
 
+export function getActionResponseById(
+  storage: DurableObjectStorage,
+  actionId: string,
+): ActionResponse | undefined {
+  const existingExecution = findActionExecution(storage, actionId);
+
+  if (!existingExecution) {
+    return undefined;
+  }
+
+  return {
+    actionId,
+    changes: findChangesByMutationId(storage, actionId),
+    cursor: existingExecution.cursor,
+  };
+}
+
 function mergeRecordValues(values: RecordValues, patch: Partial<RecordValues>): RecordValues {
   const merged: RecordValues = { ...values };
 
@@ -551,47 +565,6 @@ function parseStoredRecord(value: string): StoredRecord {
   }
 
   return parsed;
-}
-
-function migrateRecordsDeletedAt(storage: DurableObjectStorage) {
-  const columns = storage.sql
-    .exec<{ name: string }>("PRAGMA table_info(records)")
-    .toArray()
-    .map((column) => column.name);
-
-  if (!columns.includes("deleted_at")) {
-    storage.sql.exec("ALTER TABLE records ADD COLUMN deleted_at TEXT");
-  }
-}
-
-function migrateChangesAllowActionRows(storage: DurableObjectStorage) {
-  const row = storage.sql
-    .exec<{ sql: string | null }>(
-      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'changes'",
-    )
-    .one();
-
-  if (!row.sql?.includes("mutation_id TEXT NOT NULL UNIQUE")) {
-    return;
-  }
-
-  storage.sql.exec(`
-    CREATE TABLE changes_next (
-      seq INTEGER PRIMARY KEY AUTOINCREMENT,
-      mutation_id TEXT NOT NULL,
-      op TEXT NOT NULL,
-      entity TEXT NOT NULL,
-      record_id TEXT NOT NULL,
-      payload_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-
-    INSERT INTO changes_next (seq, mutation_id, op, entity, record_id, payload_json, created_at)
-    SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at FROM changes;
-
-    DROP TABLE changes;
-    ALTER TABLE changes_next RENAME TO changes;
-  `);
 }
 
 function parseStoredSchema(value: string): AppSchema {

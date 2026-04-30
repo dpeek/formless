@@ -175,6 +175,7 @@ describe("authority", () => {
       views: {
         taskListItem: {
           type: "list",
+          label: "All",
           entity: "task",
           query: { kind: "all" },
           fields: {
@@ -464,6 +465,22 @@ describe("authority", () => {
     expect(sync.changes.filter((change) => change.op === "action")).toHaveLength(1);
   });
 
+  it("replays action IDs without selecting newly matching records", async () => {
+    const firstCompleted = await postMutation("mutation-1", { title: "Done", done: true });
+
+    const first = await postAction("action-1", "clearCompletedTasks");
+    const secondCompleted = await postMutation("mutation-2", { title: "Done later", done: true });
+    const replay = await postAction("action-1", "clearCompletedTasks");
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(replay).toEqual(first);
+    expect(first.changes.map((change) => change.recordId)).toEqual([firstCompleted.record.id]);
+    expect(bootstrap.records).toEqual([
+      expect.objectContaining({ id: firstCompleted.record.id, deletedAt: expect.any(String) }),
+      secondCompleted.record,
+    ]);
+  });
+
   it("records no-op action executions for idempotent replay", async () => {
     await postMutation("mutation-1", { title: "Open", done: false });
 
@@ -476,6 +493,42 @@ describe("authority", () => {
       cursor: 1,
     });
     expect(replay).toEqual(first);
+  });
+
+  it("rejects action schemas with invalid target queries through the schema route", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithActions({
+          clearCompletedTasks: {
+            label: "Clear completed",
+            kind: "clear-completed",
+          },
+        }),
+      },
+      "target must be an object",
+    );
+
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithActions({
+          clearCompletedTasks: {
+            label: "Clear completed",
+            kind: "clear-completed",
+            target: {
+              query: {
+                kind: "where",
+                ref: { kind: "value", name: "done" },
+                op: "eq",
+                value: false,
+              },
+            },
+          },
+        }),
+      },
+      "target must be value.done eq true",
+    );
   });
 
   it("parses field labels and explicit mutation policy", () => {
@@ -493,7 +546,9 @@ describe("authority", () => {
       views: {
         taskListItem: {
           type: "list",
+          label: "All",
           entity: "task",
+          query: { kind: "all" },
           fields: {
             title: { editor: "text", commit: "field-commit" },
           },
@@ -517,6 +572,7 @@ describe("authority", () => {
 
     expect(withViews.views?.taskListItem).toEqual({
       type: "list",
+      label: "All",
       entity: "task",
       query: { kind: "all" },
       fields: {
@@ -552,7 +608,9 @@ describe("authority", () => {
           views: {
             taskListItem: {
               type: "list",
+              label: "All",
               entity: "task",
+              query: { kind: "all" },
               fields: {
                 title: { editor: "text", commit: "field-commit" },
               },
@@ -588,6 +646,7 @@ describe("authority", () => {
     const nextSchema = schemaWithViews({
       taskListItem: {
         type: "list",
+        label: "All",
         entity: "task",
         query: { kind: "all" },
         fields: {
@@ -615,7 +674,9 @@ describe("authority", () => {
         schema: schemaWithViews({
           taskListItem: {
             type: "list",
+            label: "All",
             entity: "task",
+            query: { kind: "all" },
             fields: {
               missing: { editor: "text", commit: "field-commit" },
             },
@@ -630,7 +691,9 @@ describe("authority", () => {
         schema: schemaWithViews({
           taskListItem: {
             type: "list",
+            label: "All",
             entity: "task",
+            query: { kind: "all" },
             fields: {
               done: { editor: "text", commit: "field-commit" },
             },
@@ -645,7 +708,9 @@ describe("authority", () => {
         schema: schemaWithViews({
           taskListItem: {
             type: "list",
+            label: "All",
             entity: "task",
+            query: { kind: "all" },
             fields: {
               title: { editor: "text", commit: "immediate" },
             },
@@ -660,7 +725,9 @@ describe("authority", () => {
         schema: schemaWithViews({
           taskListItem: {
             type: "list",
+            label: "All",
             entity: "task",
+            query: { kind: "all" },
             fields: {
               title: { editor: "text", commit: "field-commit", width: "wide" },
             },
@@ -895,10 +962,30 @@ function schemaWithViews(views: unknown = defaultViews()) {
   };
 }
 
+function schemaWithActions(actions: unknown) {
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+          done: { type: "boolean", required: true, default: false },
+          dueDate: { type: "date", required: false },
+        },
+        mutations: defaultMutations(),
+        actions,
+      },
+    },
+    views: defaultViews(),
+  };
+}
+
 function defaultViews(): AppSchema["views"] {
   return {
     taskListItem: {
       type: "list",
+      label: "All",
       entity: "task",
       query: { kind: "all" },
       fields: {

@@ -1,7 +1,7 @@
 ---
 name: Formless overview
 description: "Big-picture product and runtime overview for the new Formless prototype."
-last_updated: 2026-04-29
+last_updated: 2026-04-30
 ---
 
 # Formless overview
@@ -30,7 +30,7 @@ The current prototype already has the beginnings of this shape:
 - bootstrap, schema, sync, mutation, and action routes live in [src/worker/authority.ts](/Users/dpeek/code/formless/src/worker/authority.ts)
 - the browser sync loop lives in [src/client/sync.ts](/Users/dpeek/code/formless/src/client/sync.ts)
 
-That is already more interesting than a CRUD generator. The next job is to make the generated home surface feel like a coherent app instead of separate generated form and list fragments.
+That is already more interesting than a CRUD generator. The generated home surface now has schema-backed list tabs and schema-declared actions, so the next job is to make the rows and app-level feedback feel more like a compact working product.
 
 ## Why this approach is interesting
 
@@ -96,6 +96,16 @@ For the current prototype, an entity is still small:
 
 That is enough for a first slice. It is not enough for the whole system.
 
+Entity fields are app-owned values. They live under `StoredRecord.values`, can be edited by generic mutations when the entity allows it, and are the only fields list/edit views can currently render as editable controls.
+
+Runtime-owned fields are separate. Values such as `id`, `createdAt`, and `deletedAt` belong to the record envelope, not to `entity.fields`. They are still addressable in queries through system field refs:
+
+```json
+{ "kind": "system", "name": "createdAt" }
+```
+
+The shared field catalog keeps these two ownership domains visible. A value ref points at `record.values`; a system ref points at record metadata. That keeps system fields queryable without pretending they are user-patchable app fields.
+
 ### Mutations
 
 The runtime should not force an app author to name every ordinary edit as an action.
@@ -127,8 +137,28 @@ The main runtime goal is not "forms for tables." It is "the schema defines enoug
 Views are already schema-driven in a narrow way:
 
 - create views choose which fields participate in generated create forms
+- list views choose which records they include through a query
 - list views choose which fields render inline
 - list view fields choose an editor and commit policy
+
+List view queries use the same shared query model as action targets. The current portable query core is intentionally small:
+
+```json
+{ "kind": "all" }
+```
+
+or:
+
+```json
+{
+  "kind": "where",
+  "ref": { "kind": "value", "name": "done" },
+  "op": "eq",
+  "value": true
+}
+```
+
+The home model exposes every list view for the selected entity in schema order. The seed task schema uses that to render `All`, `Active`, and `Completed` tabs. Local rendering filters the browser replica with the shared evaluator, while authority actions use the same expression shape against authoritative state.
 
 That should eventually expand into:
 
@@ -163,6 +193,10 @@ The system needs:
 The current prototype already has the backbone of this through `bootstrap`, `sync`, and `mutations`.
 
 Named actions now use the same change-log and local-merge path, so commands such as `clearCompletedTasks` can update the local replica without a bespoke client-side state model.
+
+Named actions can also declare a target query. The client submits only `{ actionId, entity, action }`; it does not send target IDs or a query. The authority reads the active schema, evaluates the target query against its own active records, and then runs the action effect.
+
+For example, `clearCompletedTasks` is a named action whose target is `value.done eq true`. If a record no longer matches on the authority, it is not affected. If a matching record exists on the authority but the client has not seen it yet, it is still affected. Replay by `actionId` returns the recorded execution instead of selecting targets again.
 
 ## Running example: personal task planner
 
@@ -205,15 +239,75 @@ A useful example schema looks like this:
       "actions": {
         "clearCompletedTasks": {
           "label": "Clear completed",
-          "kind": "clear-completed"
+          "kind": "clear-completed",
+          "target": {
+            "query": {
+              "kind": "where",
+              "ref": { "kind": "value", "name": "done" },
+              "op": "eq",
+              "value": true
+            }
+          }
         }
       }
     }
   },
   "views": {
-    "taskListItem": {
+    "taskAll": {
       "type": "list",
+      "label": "All",
       "entity": "task",
+      "query": { "kind": "all" },
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "done": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "dueDate": {
+          "editor": "date",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "taskActive": {
+      "type": "list",
+      "label": "Active",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": { "kind": "value", "name": "done" },
+        "op": "eq",
+        "value": false
+      },
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "done": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "dueDate": {
+          "editor": "date",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "taskCompleted": {
+      "type": "list",
+      "label": "Completed",
+      "entity": "task",
+      "query": {
+        "kind": "where",
+        "ref": { "kind": "value", "name": "done" },
+        "op": "eq",
+        "value": true
+      },
       "fields": {
         "title": {
           "editor": "text",
@@ -389,8 +483,8 @@ It currently proves:
 - one task planner seed schema with `text`, `boolean`, and `date` fields
 - authority-owned runtime schema editing through `/schema`
 - one generated type-aware create form
-- one generated editable list
-- one schema-declared named action, `clearCompletedTasks`
+- generated editable list tabs for all, active, and completed tasks
+- one query-targeted named action, `clearCompletedTasks`
 - one authority-backed record store
 - soft-deleted tombstones for action-produced removals
 - bootstrap and incremental sync
@@ -399,9 +493,9 @@ It currently proves:
 - generic `create` and `patch` mutations flowing through the same change log and local merge path
 - action-produced changes flowing through that same change log and local merge path
 
-The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, and `clearCompletedTasks` proves the named-action path.
+The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, list tabs use schema-owned queries, and `clearCompletedTasks` proves the query-targeted named-action path.
 
-The next slice is about generated application composition rather than deeper authority semantics: show `Create Task` beside `Clear completed`, open create in a generated dialog, and render task rows more compactly. The rough priority list after that lives in [doc/roadmap.md](/Users/dpeek/code/formless/doc/roadmap.md).
+The next slice is about making the generated application surface denser and more useful: compact rows, collection aggregates, and better view display policy. The rough priority list lives in [doc/roadmap.md](/Users/dpeek/code/formless/doc/roadmap.md).
 
 ## What success looks like
 

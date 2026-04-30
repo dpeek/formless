@@ -242,6 +242,7 @@ function defaultViews(): AppSchema["views"] {
   return {
     taskListItem: {
       type: "list",
+      label: "All",
       entity: "task",
       query: { kind: "all" },
       fields: {

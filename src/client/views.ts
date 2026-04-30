@@ -8,6 +8,7 @@ import type {
   ListViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
+import type { QueryExpression } from "../shared/query.ts";
 
 export type RecordFieldConfig = {
   fieldName: string;
@@ -22,13 +23,20 @@ export type CreateFieldConfig = {
   editor: FieldEditor;
 };
 
+export type HomeListViewConfig = {
+  viewName: string;
+  label: string;
+  query: QueryExpression;
+  recordFields: RecordFieldConfig[];
+};
+
 export type HomeViewModel = {
   entityName: string;
   entity: EntitySchema;
+  listViews: HomeListViewConfig[];
   actions: EntityActionConfig[];
   createFields: CreateFieldConfig[];
   homeActions: HomeActionConfig[];
-  recordFields: RecordFieldConfig[];
 };
 
 export type EntityActionConfig = {
@@ -55,9 +63,15 @@ export type HomeActionConfig =
 
 export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
   const viewEntries = Object.entries(schema.views);
-  const listView = viewEntries.find(([, view]) => view.type === "list")?.[1];
+  const listViewEntry = viewEntries.find(([, view]) => view.type === "list");
 
-  if (!listView || listView.type !== "list") {
+  if (!listViewEntry) {
+    return undefined;
+  }
+
+  const [, listView] = listViewEntry;
+
+  if (listView.type !== "list") {
     return undefined;
   }
 
@@ -69,14 +83,15 @@ export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
 
   const actions = selectActions(entity);
   const createFields = selectCreateFields(viewEntries, listView.entity, entity);
+  const listViews = selectListViews(viewEntries, listView.entity, entity);
 
   return {
     entityName: listView.entity,
     entity,
+    listViews,
     actions,
     createFields,
     homeActions: selectHomeActions(listView.entity, entity, createFields, actions),
-    recordFields: selectRecordFields(listView, entity),
   };
 }
 
@@ -137,6 +152,29 @@ function selectCreateFields(
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
   }));
+}
+
+function selectListViews(
+  viewEntries: Array<[string, ViewSchema]>,
+  entityName: string,
+  entity: EntitySchema,
+): HomeListViewConfig[] {
+  const listViews: HomeListViewConfig[] = [];
+
+  for (const [viewName, view] of viewEntries) {
+    if (view.type !== "list" || view.entity !== entityName) {
+      continue;
+    }
+
+    listViews.push({
+      viewName,
+      label: view.label,
+      query: view.query,
+      recordFields: selectRecordFields(view, entity),
+    });
+  }
+
+  return listViews;
 }
 
 function selectRecordFields(view: ListViewSchema, entity: EntitySchema): RecordFieldConfig[] {

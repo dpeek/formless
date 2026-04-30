@@ -17,6 +17,18 @@ export type QueryExpression =
   | { kind: "all" }
   | { kind: "where"; ref: FieldRef; op: "eq"; value: QueryValue };
 
+export type QueryCapabilities = {
+  operators: QueryOperator[];
+  fieldKinds: FieldRef["kind"][];
+};
+
+// Schema parsing verifies query shape and field validity. Capability checks are
+// a separate adapter boundary for valid queries that a backend may not support.
+export const portableQueryCapabilities = {
+  operators: ["eq"],
+  fieldKinds: ["value", "system"],
+} satisfies QueryCapabilities;
+
 export function parseQueryExpression(
   value: unknown,
   catalog: AddressableField[],
@@ -56,7 +68,31 @@ export function parseQueryExpression(
   throw new Error(`Query "${contextLabel}" has unsupported kind "${String(value.kind)}".`);
 }
 
+export function assertQuerySupported(
+  query: QueryExpression,
+  capabilities: QueryCapabilities,
+  contextLabel = "query",
+) {
+  if (query.kind === "all") {
+    return;
+  }
+
+  if (!capabilities.fieldKinds.includes(query.ref.kind)) {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(query.ref)}" uses unsupported field kind "${query.ref.kind}".`,
+    );
+  }
+
+  if (!capabilities.operators.includes(query.op)) {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(query.ref)}" uses unsupported operator "${query.op}".`,
+    );
+  }
+}
+
 export function matchesQuery(record: StoredRecord, query: QueryExpression) {
+  assertQuerySupported(query, portableQueryCapabilities, "local evaluation");
+
   if (record.deletedAt) {
     return false;
   }
