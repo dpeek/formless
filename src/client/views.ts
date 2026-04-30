@@ -1,14 +1,16 @@
 import type {
   AppSchema,
+  CollectionViewSchema,
+  CountDisplaySchema,
+  CreateViewSchema,
   EntityActionSchema,
   EntitySchema,
   FieldCommitPolicy,
   FieldEditor,
   FieldSchema,
-  ListViewSchema,
+  ItemViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
-import type { CollectionAggregateSchema } from "../shared/aggregates.ts";
 import type { QueryExpression } from "../shared/query.ts";
 
 export type RecordFieldConfig = {
@@ -24,33 +26,28 @@ export type CreateFieldConfig = {
   editor: FieldEditor;
 };
 
-export type HomeListViewConfig = {
-  viewName: string;
+export type HomeQueryTabConfig = {
+  queryName: string;
   label: string;
   query: QueryExpression;
+  count?: CountDisplaySchema;
+};
+
+export type HomeResultConfig = {
+  type: "list";
+  itemViewName: string;
   recordFields: RecordFieldConfig[];
 };
 
-export type HomeAggregateConfig = {
-  aggregateName: string;
+export type HomeViewModel = {
+  viewName: string;
   label: string;
   entityName: string;
-  aggregate: CollectionAggregateSchema;
-};
-
-export type HomeViewModel = {
-  entityName: string;
   entity: EntitySchema;
-  listViews: HomeListViewConfig[];
-  aggregates: HomeAggregateConfig[];
-  actions: EntityActionConfig[];
-  createFields: CreateFieldConfig[];
-  homeActions: HomeActionConfig[];
-};
-
-export type EntityActionConfig = {
-  actionName: string;
-  action: EntityActionSchema;
+  queryTabs: HomeQueryTabConfig[];
+  defaultQueryName: string;
+  result: HomeResultConfig;
+  actions: HomeActionConfig[];
 };
 
 export type HomeActionConfig =
@@ -68,138 +65,137 @@ export type HomeActionConfig =
       entityName: string;
       actionName: string;
       action: EntityActionSchema;
+      targetQuery: QueryExpression;
+      count?: CountDisplaySchema;
     };
 
 export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
   const viewEntries = Object.entries(schema.views);
-  const listViewEntry = viewEntries.find(([, view]) => view.type === "list");
+  const collectionViewEntry = viewEntries.find(([, view]) => view.type === "collection");
 
-  if (!listViewEntry) {
+  if (!collectionViewEntry) {
     return undefined;
   }
 
-  const [, listView] = listViewEntry;
+  const [viewName, collectionView] = collectionViewEntry;
 
-  if (listView.type !== "list") {
+  if (collectionView.type !== "collection") {
     return undefined;
   }
 
-  const entity = schema.entities[listView.entity];
+  const entity = schema.entities[collectionView.entity];
 
   if (!entity) {
     return undefined;
   }
 
-  const actions = selectActions(entity);
-  const createFields = selectCreateFields(viewEntries, listView.entity, entity);
-  const listViews = selectListViews(viewEntries, listView.entity, entity);
-  const aggregates = selectAggregates(schema, listView.entity);
-
   return {
-    entityName: listView.entity,
+    viewName,
+    label: collectionView.label,
+    entityName: collectionView.entity,
     entity,
-    listViews,
-    aggregates,
-    actions,
-    createFields,
-    homeActions: selectHomeActions(listView.entity, entity, createFields, actions),
+    queryTabs: selectQueryTabs(schema, collectionView),
+    defaultQueryName: collectionView.defaultQuery,
+    result: selectResult(schema, collectionView, entity),
+    actions: selectHomeActions(schema, viewEntries, collectionView, entity),
   };
 }
 
-function selectAggregates(schema: AppSchema, entityName: string): HomeAggregateConfig[] {
-  return Object.entries(schema.aggregates)
-    .filter(([, aggregate]) => aggregate.entity === entityName)
-    .map(([aggregateName, aggregate]) => ({
-      aggregateName,
-      label: aggregate.label,
-      entityName,
-      aggregate,
-    }));
+function selectQueryTabs(
+  schema: AppSchema,
+  collectionView: CollectionViewSchema,
+): HomeQueryTabConfig[] {
+  return collectionView.queries.map((slot) => {
+    const query = schema.queries[slot.query];
+
+    if (!query) {
+      throw new Error(`Missing query "${slot.query}".`);
+    }
+
+    return {
+      queryName: slot.query,
+      label: slot.label ?? query.label,
+      query: query.expression,
+      ...(slot.count === undefined ? {} : { count: slot.count }),
+    };
+  });
+}
+
+function selectResult(
+  schema: AppSchema,
+  collectionView: CollectionViewSchema,
+  entity: EntitySchema,
+): HomeResultConfig {
+  const itemView = schema.itemViews[collectionView.result.itemView];
+
+  if (!itemView) {
+    throw new Error(`Missing item view "${collectionView.result.itemView}".`);
+  }
+
+  return {
+    type: "list",
+    itemViewName: collectionView.result.itemView,
+    recordFields: selectRecordFields(itemView, entity),
+  };
 }
 
 function selectHomeActions(
-  entityName: string,
-  entity: EntitySchema,
-  createFields: CreateFieldConfig[],
-  actions: EntityActionConfig[],
-): HomeActionConfig[] {
-  const homeActions: HomeActionConfig[] = [];
-
-  if (createFields.length > 0) {
-    homeActions.push({
-      type: "create",
-      label: `Create ${entity.label}`,
-      entityName,
-      entity,
-      fields: createFields,
-      enabled: entity.mutations.create.enabled,
-    });
-  }
-
-  homeActions.push(
-    ...actions.map(({ action, actionName }) => ({
-      type: "entity-action" as const,
-      label: action.label,
-      entityName,
-      actionName,
-      action,
-    })),
-  );
-
-  return homeActions;
-}
-
-function selectActions(entity: EntitySchema): EntityActionConfig[] {
-  return Object.entries(entity.actions ?? {}).map(([actionName, action]) => ({
-    actionName,
-    action,
-  }));
-}
-
-function selectCreateFields(
+  schema: AppSchema,
   viewEntries: Array<[string, ViewSchema]>,
-  entityName: string,
+  collectionView: CollectionViewSchema,
   entity: EntitySchema,
-): CreateFieldConfig[] {
-  const createView = viewEntries.find(([, view]) => {
-    return view.type === "create" && view.entity === entityName;
-  })?.[1];
+): HomeActionConfig[] {
+  return (collectionView.actions ?? []).map((slot) => {
+    if (slot.type === "create") {
+      const createView = viewEntries.find(([viewName]) => viewName === slot.createView)?.[1];
 
-  if (!createView || createView.type !== "create") {
-    return [];
-  }
+      if (!createView || createView.type !== "create") {
+        throw new Error(`Missing create view "${slot.createView}".`);
+      }
 
-  return Object.entries(createView.fields).map(([fieldName, viewField]) => ({
+      return {
+        type: "create",
+        label: slot.label ?? `Create ${entity.label}`,
+        entityName: collectionView.entity,
+        entity,
+        fields: selectCreateFields(createView, entity),
+        enabled: entity.mutations.create.enabled,
+      };
+    }
+
+    const action = entity.actions?.[slot.action];
+
+    if (!action) {
+      throw new Error(`Missing entity action "${slot.action}".`);
+    }
+
+    const targetQuery = schema.queries[action.target.query];
+
+    if (!targetQuery) {
+      throw new Error(`Missing action target query "${action.target.query}".`);
+    }
+
+    return {
+      type: "entity-action",
+      label: slot.label ?? action.label,
+      entityName: collectionView.entity,
+      actionName: slot.action,
+      action,
+      targetQuery: targetQuery.expression,
+      ...(slot.count === undefined ? {} : { count: slot.count }),
+    };
+  });
+}
+
+function selectCreateFields(view: CreateViewSchema, entity: EntitySchema): CreateFieldConfig[] {
+  return Object.entries(view.fields).map(([fieldName, viewField]) => ({
     fieldName,
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
   }));
 }
 
-function selectListViews(
-  viewEntries: Array<[string, ViewSchema]>,
-  entityName: string,
-  entity: EntitySchema,
-): HomeListViewConfig[] {
-  const listViews: HomeListViewConfig[] = [];
-
-  for (const [viewName, view] of viewEntries) {
-    if (view.type !== "list" || view.entity !== entityName) {
-      continue;
-    }
-
-    listViews.push({
-      viewName,
-      label: view.label,
-      query: view.query,
-      recordFields: selectRecordFields(view, entity),
-    });
-  }
-
-  return listViews;
-}
-
-function selectRecordFields(view: ListViewSchema, entity: EntitySchema): RecordFieldConfig[] {
+function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordFieldConfig[] {
   return Object.entries(view.fields).map(([fieldName, viewField]) => ({
     fieldName,
     field: entity.fields[fieldName] as FieldSchema,

@@ -1,112 +1,316 @@
 import { describe, expect, it } from "vite-plus/test";
 import { parseAppSchema } from "./schema.ts";
 
-describe("schema actions", () => {
-  it("accepts valid clear-completed actions", () => {
-    const schema = parseAppSchema(schemaWithActions());
+describe("schema query catalog", () => {
+  it("parses top-level queries in declaration order", () => {
+    const schema = parseAppSchema(baseSchema());
 
-    expect(schema.entities.task?.actions?.clearCompletedTasks).toEqual({
-      label: "Clear completed",
-      kind: "clear-completed",
-      target: {
-        query: {
-          kind: "where",
-          ref: { kind: "value", name: "done" },
-          op: "eq",
-          value: true,
-        },
+    expect(Object.keys(schema.queries)).toEqual(["taskAll", "taskActive", "taskCompleted"]);
+    expect(schema.queries.taskActive).toEqual({
+      label: "Active",
+      entity: "task",
+      expression: {
+        kind: "where",
+        ref: { kind: "value", name: "done" },
+        op: "eq",
+        value: false,
       },
     });
   });
 
-  it("rejects clear-completed actions without target queries", () => {
+  it("rejects unknown query entities", () => {
     expect(() =>
       parseAppSchema(
-        schemaWithActions({
-          clearCompletedTasks: {
-            label: "Clear completed",
-            kind: "clear-completed",
+        baseSchema({
+          queries: {
+            taskAll: { label: "All", entity: "missing", expression: { kind: "all" } },
           },
         }),
       ),
-    ).toThrow("target must be an object");
+    ).toThrow('references unknown entity "missing"');
   });
 
-  it("parses action target queries", () => {
-    const schema = parseAppSchema(schemaWithActions());
-
-    expect(schema.entities.task?.actions?.clearCompletedTasks.target?.query).toEqual({
-      kind: "where",
-      ref: { kind: "value", name: "done" },
-      op: "eq",
-      value: true,
-    });
-  });
-
-  it("rejects unsupported action kinds", () => {
+  it("rejects unknown query fields and malformed expressions", () => {
     expect(() =>
       parseAppSchema(
-        schemaWithActions({
-          clearCompletedTasks: {
-            label: "Clear completed",
-            kind: "archive",
-          },
-        }),
-      ),
-    ).toThrow('unsupported kind "archive"');
-  });
-
-  it("rejects clear-completed actions without a boolean done field", () => {
-    expect(() =>
-      parseAppSchema({
-        ...schemaWithActions(),
-        entities: {
-          task: {
-            ...schemaWithActions().entities.task,
-            fields: {
-              title: { type: "text", required: true },
-              done: { type: "text", required: false },
-            },
-          },
-        },
-      }),
-    ).toThrow('requires a boolean "done" field');
-  });
-
-  it("rejects unknown query fields in actions", () => {
-    expect(() =>
-      parseAppSchema(
-        schemaWithActions({
-          clearCompletedTasks: {
-            label: "Clear completed",
-            kind: "clear-completed",
-            target: {
-              query: {
+        baseSchema({
+          queries: {
+            taskAll: {
+              label: "All",
+              entity: "task",
+              expression: {
                 kind: "where",
                 ref: { kind: "value", name: "missing" },
                 op: "eq",
-                value: true,
+                value: "yes",
               },
             },
           },
         }),
       ),
     ).toThrow('references unknown field "value.missing"');
-  });
 
-  it("rejects clear-completed targets that are not done eq true", () => {
     expect(() =>
       parseAppSchema(
-        schemaWithActions({
-          clearCompletedTasks: {
-            label: "Clear completed",
-            kind: "clear-completed",
-            target: {
-              query: {
-                kind: "where",
-                ref: { kind: "value", name: "done" },
-                op: "eq",
-                value: false,
+        baseSchema({
+          queries: {
+            taskAll: {
+              label: "All",
+              entity: "task",
+              expression: { kind: "and", expressions: [] },
+            },
+          },
+        }),
+      ),
+    ).toThrow("expressions must be a non-empty array");
+  });
+});
+
+describe("schema item views", () => {
+  it("parses item view field config", () => {
+    const schema = parseAppSchema(baseSchema());
+
+    expect(schema.itemViews.taskListItem).toEqual({
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+        done: { editor: "boolean", commit: "immediate" },
+        dueDate: { editor: "date", commit: "field-commit" },
+      },
+    });
+  });
+
+  it("validates item view field names, editors, and commit policies", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                missing: { editor: "text", commit: "field-commit" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "task.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                done: { editor: "boolean", commit: "field-commit" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("boolean fields must commit immediately");
+  });
+});
+
+describe("schema collection views", () => {
+  it("parses query slots, defaults, results, and action slots", () => {
+    const schema = parseAppSchema(baseSchema());
+
+    expect(schema.views.taskHome).toEqual({
+      type: "collection",
+      label: "Tasks",
+      entity: "task",
+      queries: [
+        { query: "taskAll", count: { type: "count" } },
+        { query: "taskActive", count: { type: "count" } },
+        { query: "taskCompleted", label: "Done", count: { type: "count" } },
+      ],
+      defaultQuery: "taskAll",
+      result: { type: "list", itemView: "taskListItem" },
+      actions: [
+        { type: "create", createView: "taskCreate" },
+        { type: "entityAction", action: "clearCompletedTasks", count: { type: "count" } },
+      ],
+    });
+  });
+
+  it("rejects collection query and result entity mismatches", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          queries: {
+            ...defaultQueries(),
+            noteAll: { label: "Notes", entity: "note", expression: { kind: "all" } },
+          },
+          entities: {
+            ...defaultEntities(),
+            note: noteEntity(),
+          },
+          views: {
+            ...defaultViews(),
+            taskHome: {
+              ...defaultCollectionView(),
+              queries: [{ query: "noteAll" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('query "noteAll" must use entity "task"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            note: noteEntity(),
+          },
+          itemViews: {
+            ...defaultItemViews(),
+            noteListItem: {
+              entity: "note",
+              fields: {
+                title: { editor: "text", commit: "field-commit" },
+              },
+            },
+          },
+          views: {
+            ...defaultViews(),
+            taskHome: {
+              ...defaultCollectionView(),
+              result: { type: "list", itemView: "noteListItem" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('item view "noteListItem" must use entity "task"');
+  });
+
+  it("validates collection action slots", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            note: noteEntity(),
+          },
+          views: {
+            ...defaultViews(),
+            noteCreate: {
+              type: "create",
+              entity: "note",
+              fields: {
+                title: { editor: "text" },
+              },
+            },
+            taskHome: {
+              ...defaultCollectionView(),
+              actions: [{ type: "create", createView: "noteCreate" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('create action view "noteCreate" must use entity "task"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          views: {
+            ...defaultViews(),
+            taskHome: {
+              ...defaultCollectionView(),
+              actions: [{ type: "entityAction", action: "missing" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown action "missing"');
+  });
+});
+
+describe("schema entity actions", () => {
+  it("accepts valid clear-completed actions that target named queries", () => {
+    const schema = parseAppSchema(baseSchema());
+
+    expect(schema.entities.task?.actions?.clearCompletedTasks).toEqual({
+      label: "Clear completed",
+      kind: "clear-completed",
+      target: { query: "taskCompleted" },
+    });
+  });
+
+  it("rejects missing, unknown, and cross-entity target queries", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("target must be an object");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                  target: { query: "missing" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('target references unknown query "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            note: {
+              ...noteEntity(),
+              actions: {
+                clearCompletedTasks: {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                  target: { query: "taskCompleted" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('target query "taskCompleted" must use entity "note"');
+  });
+
+  it("rejects clear-completed targets that do not resolve to done eq true", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                  target: { query: "taskActive" },
+                },
               },
             },
           },
@@ -114,180 +318,97 @@ describe("schema actions", () => {
       ),
     ).toThrow("target must be value.done eq true");
   });
-
-  it("continues to accept schemas without actions", () => {
-    const { actions, ...task } = schemaWithActions().entities.task;
-    const schema = parseAppSchema({
-      ...schemaWithActions(),
-      entities: { task },
-    });
-
-    expect(actions).toBeDefined();
-    expect(schema.entities.task?.actions).toBeUndefined();
-  });
 });
 
-describe("schema list view queries", () => {
-  it("parses list view labels and queries", () => {
-    const schema = parseAppSchema(schemaWithActions());
+function baseSchema(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    entities: defaultEntities(),
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
+    views: defaultViews(),
+    ...overrides,
+  };
+}
 
-    expect(schema.views.taskListItem).toEqual({
-      type: "list",
+function defaultEntities() {
+  return {
+    task: {
+      label: "Task",
+      fields: {
+        title: { type: "text", required: true },
+        done: { type: "boolean", required: true, default: false },
+        dueDate: { type: "date", required: false },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+      actions: {
+        clearCompletedTasks: {
+          label: "Clear completed",
+          kind: "clear-completed",
+          target: { query: "taskCompleted" },
+        },
+      },
+    },
+  };
+}
+
+function noteEntity() {
+  return {
+    label: "Note",
+    fields: {
+      title: { type: "text", required: true },
+      done: { type: "boolean", required: true, default: false },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
+  };
+}
+
+function defaultQueries() {
+  return {
+    taskAll: {
+      label: "All",
+      entity: "task",
+      expression: { kind: "all" },
+    },
+    taskActive: {
+      label: "Active",
+      entity: "task",
+      expression: {
+        kind: "where",
+        ref: { kind: "value", name: "done" },
+        op: "eq",
+        value: false,
+      },
+    },
+    taskCompleted: {
       label: "Completed",
       entity: "task",
-      query: {
+      expression: {
         kind: "where",
         ref: { kind: "value", name: "done" },
         op: "eq",
         value: true,
       },
-      fields: {
-        title: { editor: "text", commit: "field-commit" },
-        done: { editor: "boolean", commit: "immediate" },
-      },
-    });
-  });
-
-  it("rejects list views without labels or queries", () => {
-    expect(() =>
-      parseAppSchema(
-        schemaWithActions(defaultActions(), {
-          taskListItem: {
-            type: "list",
-            entity: "task",
-            query: { kind: "all" },
-            fields: {
-              title: { editor: "text", commit: "field-commit" },
-              done: { editor: "boolean", commit: "immediate" },
-            },
-          },
-          taskCreate: {
-            type: "create",
-            entity: "task",
-            fields: {
-              title: { editor: "text" },
-            },
-          },
-        }),
-      ),
-    ).toThrow("label must be a non-empty string");
-
-    expect(() =>
-      parseAppSchema(
-        schemaWithActions(defaultActions(), {
-          taskListItem: {
-            type: "list",
-            label: "All",
-            entity: "task",
-            fields: {
-              title: { editor: "text", commit: "field-commit" },
-              done: { editor: "boolean", commit: "immediate" },
-            },
-          },
-          taskCreate: {
-            type: "create",
-            entity: "task",
-            fields: {
-              title: { editor: "text" },
-            },
-          },
-        }),
-      ),
-    ).toThrow("must be an object");
-  });
-
-  it("rejects malformed list view query objects", () => {
-    expect(() =>
-      parseAppSchema(
-        schemaWithActions(defaultActions(), {
-          taskListItem: {
-            type: "list",
-            label: "All",
-            entity: "task",
-            query: { kind: "all", extra: true },
-            fields: {
-              title: { editor: "text", commit: "field-commit" },
-              done: { editor: "boolean", commit: "immediate" },
-            },
-          },
-          taskCreate: {
-            type: "create",
-            entity: "task",
-            fields: {
-              title: { editor: "text" },
-            },
-          },
-        }),
-      ),
-    ).toThrow('unsupported key "extra"');
-  });
-
-  it("rejects unknown query fields in views", () => {
-    expect(() =>
-      parseAppSchema(
-        schemaWithActions(defaultActions(), {
-          taskListItem: {
-            type: "list",
-            label: "All",
-            entity: "task",
-            query: {
-              kind: "where",
-              ref: { kind: "value", name: "missing" },
-              op: "eq",
-              value: "x",
-            },
-            fields: {
-              title: { editor: "text", commit: "field-commit" },
-              done: { editor: "boolean", commit: "immediate" },
-            },
-          },
-          taskCreate: {
-            type: "create",
-            entity: "task",
-            fields: {
-              title: { editor: "text" },
-            },
-          },
-        }),
-      ),
-    ).toThrow('references unknown field "value.missing"');
-  });
-});
-
-function schemaWithActions(actions: unknown = defaultActions(), views: unknown = defaultViews()) {
-  return {
-    version: 1,
-    entities: {
-      task: {
-        label: "Task",
-        fields: {
-          title: { type: "text", required: true },
-          done: { type: "boolean", required: true, default: false },
-        },
-        mutations: {
-          create: { enabled: true },
-          patch: { enabled: true },
-          delete: { enabled: false },
-        },
-        actions,
-      },
     },
-    views,
   };
 }
 
-function defaultActions() {
+function defaultItemViews() {
   return {
-    clearCompletedTasks: {
-      label: "Clear completed",
-      kind: "clear-completed",
-      target: {
-        query: {
-          kind: "where",
-          ref: { kind: "value", name: "done" },
-          op: "eq",
-          value: true,
-        },
+    taskListItem: {
+      entity: "task",
+      fields: {
+        title: { editor: "text", commit: "field-commit" },
+        done: { editor: "boolean", commit: "immediate" },
+        dueDate: { editor: "date", commit: "field-commit" },
       },
     },
   };
@@ -295,27 +416,33 @@ function defaultActions() {
 
 function defaultViews() {
   return {
-    taskListItem: {
-      type: "list",
-      label: "Completed",
-      entity: "task",
-      query: {
-        kind: "where",
-        ref: { kind: "value", name: "done" },
-        op: "eq",
-        value: true,
-      },
-      fields: {
-        title: { editor: "text", commit: "field-commit" },
-        done: { editor: "boolean", commit: "immediate" },
-      },
-    },
+    taskHome: defaultCollectionView(),
     taskCreate: {
       type: "create",
       entity: "task",
       fields: {
         title: { editor: "text" },
+        dueDate: { editor: "date" },
       },
     },
+  };
+}
+
+function defaultCollectionView() {
+  return {
+    type: "collection",
+    label: "Tasks",
+    entity: "task",
+    queries: [
+      { query: "taskAll", count: { type: "count" } },
+      { query: "taskActive", count: { type: "count" } },
+      { query: "taskCompleted", label: "Done", count: { type: "count" } },
+    ],
+    defaultQuery: "taskAll",
+    result: { type: "list", itemView: "taskListItem" },
+    actions: [
+      { type: "create", createView: "taskCreate" },
+      { type: "entityAction", action: "clearCompletedTasks", count: { type: "count" } },
+    ],
   };
 }

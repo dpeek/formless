@@ -332,9 +332,11 @@ function schemaWithSummary() {
           patch: { enabled: true },
           delete: { enabled: false },
         },
+        actions: appSchema.entities.task.actions,
       },
     },
+    queries: appSchema.queries,
+    itemViews: appSchema.itemViews,
     views: appSchema.views,
-    aggregates: {},
   } satisfies AppSchema;
 }

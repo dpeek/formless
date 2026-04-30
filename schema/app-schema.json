@@ -37,34 +37,24 @@
           "label": "Clear completed",
           "kind": "clear-completed",
           "target": {
-            "query": {
-              "kind": "where",
-              "ref": {
-                "kind": "value",
-                "name": "done"
-              },
-              "op": "eq",
-              "value": true
-            }
+            "query": "taskCompleted"
           }
         }
       }
     }
   },
-  "aggregates": {
-    "taskTotal": {
-      "type": "count",
-      "label": "Total",
+  "queries": {
+    "taskAll": {
+      "label": "All",
       "entity": "task",
-      "query": {
+      "expression": {
         "kind": "all"
       }
     },
     "taskActive": {
-      "type": "count",
       "label": "Active",
       "entity": "task",
-      "query": {
+      "expression": {
         "kind": "where",
         "ref": {
           "kind": "value",
@@ -75,10 +65,9 @@
       }
     },
     "taskCompleted": {
-      "type": "count",
       "label": "Completed",
       "entity": "task",
-      "query": {
+      "expression": {
         "kind": "where",
         "ref": {
           "kind": "value",
@@ -89,10 +78,9 @@
       }
     },
     "taskOverdue": {
-      "type": "count",
       "label": "Overdue",
       "entity": "task",
-      "query": {
+      "expression": {
         "kind": "and",
         "expressions": [
           {
@@ -119,84 +107,74 @@
       }
     }
   },
+  "itemViews": {
+    "taskListItem": {
+      "entity": "task",
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "done": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "dueDate": {
+          "editor": "date",
+          "commit": "field-commit"
+        }
+      }
+    }
+  },
   "views": {
-    "taskAll": {
-      "type": "list",
-      "label": "All",
+    "taskHome": {
+      "type": "collection",
+      "label": "Tasks",
       "entity": "task",
-      "query": {
-        "kind": "all"
-      },
-      "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
+      "queries": [
+        {
+          "query": "taskAll",
+          "count": {
+            "type": "count"
+          }
         },
-        "done": {
-          "editor": "boolean",
-          "commit": "immediate"
+        {
+          "query": "taskActive",
+          "count": {
+            "type": "count"
+          }
         },
-        "dueDate": {
-          "editor": "date",
-          "commit": "field-commit"
+        {
+          "query": "taskCompleted",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "taskOverdue",
+          "count": {
+            "type": "count"
+          }
         }
-      }
-    },
-    "taskActive": {
-      "type": "list",
-      "label": "Active",
-      "entity": "task",
-      "query": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "done"
-        },
-        "op": "eq",
-        "value": false
+      ],
+      "defaultQuery": "taskAll",
+      "result": {
+        "type": "list",
+        "itemView": "taskListItem"
       },
-      "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
+      "actions": [
+        {
+          "type": "create",
+          "createView": "taskCreate"
         },
-        "done": {
-          "editor": "boolean",
-          "commit": "immediate"
-        },
-        "dueDate": {
-          "editor": "date",
-          "commit": "field-commit"
+        {
+          "type": "entityAction",
+          "action": "clearCompletedTasks",
+          "count": {
+            "type": "count"
+          }
         }
-      }
-    },
-    "taskCompleted": {
-      "type": "list",
-      "label": "Completed",
-      "entity": "task",
-      "query": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "done"
-        },
-        "op": "eq",
-        "value": true
-      },
-      "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
-        },
-        "done": {
-          "editor": "boolean",
-          "commit": "immediate"
-        },
-        "dueDate": {
-          "editor": "date",
-          "commit": "field-commit"
-        }
-      }
+      ]
     },
     "taskCreate": {
       "type": "create",

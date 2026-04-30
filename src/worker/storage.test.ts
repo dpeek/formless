@@ -48,8 +48,9 @@ describe("storage", () => {
           mutations: defaultMutations(),
         },
       },
+      queries: defaultQueries(),
+      itemViews: defaultItemViews(),
       views: defaultViews(),
-      aggregates: {},
     } satisfies AppSchema;
 
     await postJson("/schema", nextSchema);
@@ -74,8 +75,9 @@ describe("storage", () => {
           mutations: defaultMutations(),
         },
       },
+      queries: defaultQueries(),
+      itemViews: defaultItemViews(),
       views: defaultViews(),
-      aggregates: {},
     } satisfies AppSchema;
 
     await postJson("/schema", nextSchema);
@@ -240,18 +242,48 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
   };
 }
 
-function defaultViews(): AppSchema["views"] {
+function defaultQueries(): AppSchema["queries"] {
   return {
-    taskListItem: {
-      type: "list",
+    taskAll: {
       label: "All",
       entity: "task",
-      query: { kind: "all" },
+      expression: { kind: "all" },
+    },
+    taskCompleted: {
+      label: "Completed",
+      entity: "task",
+      expression: {
+        kind: "where",
+        ref: { kind: "value", name: "done" },
+        op: "eq",
+        value: true,
+      },
+    },
+  };
+}
+
+function defaultItemViews(): AppSchema["itemViews"] {
+  return {
+    taskListItem: {
+      entity: "task",
       fields: {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },
         dueDate: { editor: "date", commit: "field-commit" },
       },
+    },
+  };
+}
+
+function defaultViews(): AppSchema["views"] {
+  return {
+    taskHome: {
+      type: "collection",
+      label: "All",
+      entity: "task",
+      queries: [{ query: "taskAll" }],
+      defaultQuery: "taskAll",
+      result: { type: "list", itemView: "taskListItem" },
     },
     taskCreate: {
       type: "create",

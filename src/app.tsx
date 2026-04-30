@@ -3,7 +3,6 @@ import { Link, Route, Switch } from "wouter";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
-  useCollectionAggregateValue,
   useCursor,
   useEntityRecordCountMatchingQuery,
   useEntityRecordIdsMatchingQuery,
@@ -26,9 +25,9 @@ import {
 } from "./client/sync.ts";
 import type {
   CreateFieldConfig,
-  HomeAggregateConfig,
   HomeActionConfig,
-  HomeListViewConfig,
+  HomeQueryTabConfig,
+  HomeResultConfig,
   RecordFieldConfig,
 } from "./client/views.ts";
 import { todayDateString } from "./shared/date.ts";
@@ -53,7 +52,7 @@ import {
   DialogTitle,
 } from "@formless/ui/dialog";
 import { Field, FieldError, FieldSet } from "@formless/ui/field";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@formless/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
 import { Badge } from "@formless/ui/badge";
 
 type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
@@ -61,9 +60,9 @@ type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 function HomeRoute() {
   const schema = useSchema();
   const homeModel = useHomeViewModel();
-  const listViews = homeModel?.listViews ?? [];
+  const queryTabs = homeModel?.queryTabs ?? [];
   const today = useTodayDateString();
-  const [selectedListViewName, setSelectedListViewName] = useState<string | null>(null);
+  const [selectedQueryName, setSelectedQueryName] = useState<string | null>(null);
 
   useEffect(() => {
     const stopBroadcast = connectBroadcastToClientStore();
@@ -105,13 +104,13 @@ function HomeRoute() {
   }, []);
 
   useEffect(() => {
-    const selectedListViewExists = listViews.some((view) => view.viewName === selectedListViewName);
-    const firstListViewName = listViews[0]?.viewName ?? null;
+    const selectedQueryExists = queryTabs.some((tab) => tab.queryName === selectedQueryName);
+    const defaultQueryName = homeModel?.defaultQueryName ?? queryTabs[0]?.queryName ?? null;
 
-    if (!selectedListViewExists && selectedListViewName !== firstListViewName) {
-      setSelectedListViewName(firstListViewName);
+    if (!selectedQueryExists && selectedQueryName !== defaultQueryName) {
+      setSelectedQueryName(defaultQueryName);
     }
-  }, [listViews, selectedListViewName]);
+  }, [homeModel?.defaultQueryName, queryTabs, selectedQueryName]);
 
   if (!schema) {
     return (
@@ -135,15 +134,15 @@ function HomeRoute() {
     );
   }
 
-  const { aggregates, entityName, entity, homeActions } = homeModel;
-  const selectedListView =
-    listViews.find((view) => view.viewName === selectedListViewName) ?? listViews[0];
+  const { actions, entityName, entity, result } = homeModel;
+  const selectedQuery =
+    queryTabs.find((tab) => tab.queryName === selectedQueryName) ?? queryTabs[0];
 
-  if (!selectedListView) {
+  if (!selectedQuery) {
     return (
       <section className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-semibold">Formless</h1>
-        <p>No list views are defined for {entity.label}.</p>
+        <h1 className="text-2xl font-semibold">{homeModel.label}</h1>
+        <p>No queries are defined for {entity.label}.</p>
         <DeveloperStatusLine schemaVersion={schema.version} />
       </section>
     );
@@ -152,21 +151,18 @@ function HomeRoute() {
   return (
     <section className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Formless</h1>
-          {homeActions.length > 0 ? <HomeActionRow actions={homeActions} /> : null}
-        </div>
+        <h1 className="text-2xl font-semibold">{homeModel.label}</h1>
         <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
 
-      {aggregates.length > 0 ? <HomeAggregateStrip aggregates={aggregates} today={today} /> : null}
-
-      <HomeListViews
+      <HomeCollection
+        actions={actions}
         entity={entity}
         entityName={entityName}
-        listViews={listViews}
-        onSelectListView={setSelectedListViewName}
-        selectedListView={selectedListView}
+        onSelectQuery={setSelectedQueryName}
+        queryTabs={queryTabs}
+        result={result}
+        selectedQuery={selectedQuery}
         today={today}
       />
     </section>
@@ -380,152 +376,107 @@ function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordV
   return values;
 }
 
-function HomeListViews({
+function HomeCollection({
+  actions,
   entity,
   entityName,
-  listViews,
-  onSelectListView,
-  selectedListView,
+  onSelectQuery,
+  queryTabs,
+  result,
+  selectedQuery,
   today,
 }: {
+  actions: HomeActionConfig[];
   entity: EntitySchema;
   entityName: string;
-  listViews: HomeListViewConfig[];
-  onSelectListView: (viewName: string) => void;
-  selectedListView: HomeListViewConfig;
+  onSelectQuery: (queryName: string) => void;
+  queryTabs: HomeQueryTabConfig[];
+  result: HomeResultConfig;
+  selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
-  if (listViews.length <= 1) {
-    return (
+  return (
+    <div className="space-y-6">
+      {queryTabs.length <= 1 ? null : (
+        <Tabs
+          onValueChange={(value) => {
+            if (typeof value === "string") {
+              onSelectQuery(value);
+            }
+          }}
+          value={selectedQuery.queryName}
+        >
+          <TabsList aria-label={`${entity.label} queries`} variant="line">
+            {queryTabs.map((queryTab) => (
+              <HomeQueryTabTrigger
+                entityName={entityName}
+                key={queryTab.queryName}
+                queryTab={queryTab}
+                today={today}
+              />
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+
       <RecordList
         entity={entity}
         entityName={entityName}
-        listView={selectedListView}
+        query={selectedQuery.query}
+        recordFields={result.recordFields}
         today={today}
       />
-    );
-  }
 
-  return (
-    <Tabs
-      onValueChange={(value) => {
-        if (typeof value === "string") {
-          onSelectListView(value);
-        }
-      }}
-      value={selectedListView.viewName}
-    >
-      <TabsList aria-label={`${entity.label} views`} variant="line">
-        {listViews.map((listView) => (
-          <HomeListTabTrigger
-            entityName={entityName}
-            key={listView.viewName}
-            listView={listView}
-            today={today}
-          />
-        ))}
-      </TabsList>
-
-      <TabsContent value={selectedListView.viewName}>
-        <RecordList
-          entity={entity}
-          entityName={entityName}
-          listView={selectedListView}
-          today={today}
-        />
-      </TabsContent>
-    </Tabs>
+      {actions.length > 0 ? <HomeActionRow actions={actions} today={today} /> : null}
+    </div>
   );
 }
 
-function HomeListTabTrigger({
+function HomeQueryTabTrigger({
   entityName,
-  listView,
+  queryTab,
   today,
 }: {
   entityName: string;
-  listView: HomeListViewConfig;
+  queryTab: HomeQueryTabConfig;
   today: string;
 }) {
-  const count = useEntityRecordCountMatchingQuery(entityName, listView.query, { today });
+  const count = useEntityRecordCountMatchingQuery(entityName, queryTab.query, { today });
 
   return (
-    <TabsTrigger value={listView.viewName}>
-      <span>{listView.label}</span>
-      <Badge aria-label={`${listView.label} count`} className="h-4 px-1.5" variant="outline">
-        {count}
-      </Badge>
+    <TabsTrigger value={queryTab.queryName}>
+      <span>{queryTab.label}</span>
+      {queryTab.count?.type === "count" ? (
+        <Badge aria-label={`${queryTab.label} count`} className="h-4 px-1.5" variant="outline">
+          {count}
+        </Badge>
+      ) : null}
     </TabsTrigger>
-  );
-}
-
-export function HomeAggregateStrip({
-  aggregates,
-  today,
-}: {
-  aggregates: HomeAggregateConfig[];
-  today: string;
-}) {
-  if (aggregates.length === 0) {
-    return null;
-  }
-
-  return (
-    <section
-      aria-label="Collection summary"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-slate-200 py-2 text-sm"
-    >
-      {aggregates.map((aggregateConfig) => (
-        <HomeAggregateItem
-          aggregateConfig={aggregateConfig}
-          key={aggregateConfig.aggregateName}
-          today={today}
-        />
-      ))}
-    </section>
-  );
-}
-
-function HomeAggregateItem({
-  aggregateConfig,
-  today,
-}: {
-  aggregateConfig: HomeAggregateConfig;
-  today: string;
-}) {
-  const value = useCollectionAggregateValue(aggregateConfig, { today });
-
-  return (
-    <div aria-label={`${aggregateConfig.label}: ${value}`} className="flex items-baseline gap-1.5">
-      <span className="text-slate-500">{aggregateConfig.label}</span>
-      <span className="font-semibold tabular-nums text-slate-950">{value}</span>
-    </div>
   );
 }
 
 export function RecordList({
   entity,
   entityName,
-  listView,
+  query,
+  recordFields,
   today,
 }: {
   entity: EntitySchema;
   entityName: string;
-  listView: HomeListViewConfig;
+  query: HomeQueryTabConfig["query"];
+  recordFields: RecordFieldConfig[];
   today?: string;
 }) {
   const canPatch = entity.mutations.patch.enabled;
   const recordIds = useEntityRecordIdsMatchingQuery(
     entityName,
-    listView.query,
+    query,
     today ? { today } : undefined,
   );
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-medium">{entity.label}s</h2>
-      </div>
       {!canPatch && recordIds.length > 0 ? (
         <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
       ) : null}
@@ -539,7 +490,7 @@ export function RecordList({
               canPatch={canPatch}
               entityName={entityName}
               key={recordId}
-              recordFields={listView.recordFields}
+              recordFields={recordFields}
               recordId={recordId}
             />
           ))}
@@ -549,7 +500,7 @@ export function RecordList({
   );
 }
 
-function HomeActionRow({ actions }: { actions: HomeActionConfig[] }) {
+function HomeActionRow({ actions, today }: { actions: HomeActionConfig[]; today: string }) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [createDialogAction, setCreateDialogAction] = useState<CreateHomeActionConfig | null>(null);
 
@@ -562,8 +513,14 @@ function HomeActionRow({ actions }: { actions: HomeActionConfig[] }) {
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      await submitAction(action.entityName, action.actionName);
-      setSyncStatus({ state: "idle", message: `${action.label} synced.` });
+      const response = await submitAction(action.entityName, action.actionName);
+      const affected = response.changes.length;
+      const message =
+        action.count?.type === "count"
+          ? `${action.label} synced. ${affected} affected.`
+          : `${action.label} synced.`;
+
+      setSyncStatus({ state: "idle", message });
     } catch (error) {
       setSyncStatus({
         state: "error",
@@ -575,7 +532,7 @@ function HomeActionRow({ actions }: { actions: HomeActionConfig[] }) {
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <section aria-label="Task actions" className="flex flex-wrap gap-2">
       {actions.map((action) =>
         action.type === "create" ? (
           <Button
@@ -587,15 +544,14 @@ function HomeActionRow({ actions }: { actions: HomeActionConfig[] }) {
             {action.enabled ? action.label : "Create disabled"}
           </Button>
         ) : (
-          <Button
+          <HomeEntityActionButton
+            action={action}
             disabled={pendingAction !== null}
             key={`${action.type}:${action.actionName}`}
-            onClick={() => void runAction(action)}
-            type="button"
-            variant="outline"
-          >
-            {pendingAction === action.actionName ? `${action.label}...` : action.label}
-          </Button>
+            onRun={runAction}
+            pending={pendingAction === action.actionName}
+            today={today}
+          />
         ),
       )}
       {createDialogAction ? (
@@ -609,7 +565,38 @@ function HomeActionRow({ actions }: { actions: HomeActionConfig[] }) {
           open={true}
         />
       ) : null}
-    </div>
+    </section>
+  );
+}
+
+function HomeEntityActionButton({
+  action,
+  disabled,
+  onRun,
+  pending,
+  today,
+}: {
+  action: Extract<HomeActionConfig, { type: "entity-action" }>;
+  disabled: boolean;
+  onRun: (action: Extract<HomeActionConfig, { type: "entity-action" }>) => Promise<void>;
+  pending: boolean;
+  today: string;
+}) {
+  const count = useEntityRecordCountMatchingQuery(action.entityName, action.targetQuery, { today });
+
+  return (
+    <Button disabled={disabled} onClick={() => void onRun(action)} type="button" variant="outline">
+      <span>{pending ? `${action.label}...` : action.label}</span>
+      {action.count?.type === "count" ? (
+        <Badge
+          aria-label={`${action.label} target count`}
+          className="ml-2 h-4 px-1.5"
+          variant="outline"
+        >
+          {count}
+        </Badge>
+      ) : null}
+    </Button>
   );
 }
 

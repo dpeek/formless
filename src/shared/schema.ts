@@ -1,4 +1,3 @@
-import { parseCollectionAggregates, type CollectionAggregateSchema } from "./aggregates.ts";
 import { fieldRefsEqual, getEntityFieldCatalog } from "./fields.ts";
 import { parseQueryExpression, type QueryExpression } from "./query.ts";
 
@@ -36,12 +35,54 @@ export type CreateViewFieldSchema = {
   editor: FieldEditor;
 };
 
-export type ListViewSchema = {
-  type: "list";
+export type CollectionQuerySchema = {
   label: string;
   entity: string;
-  query: QueryExpression;
+  expression: QueryExpression;
+};
+
+export type ItemViewSchema = {
+  entity: string;
   fields: Record<string, ViewFieldSchema>;
+};
+
+export type CountDisplaySchema = {
+  type: "count";
+  label?: string;
+};
+
+export type CollectionViewQuerySlotSchema = {
+  query: string;
+  label?: string;
+  count?: CountDisplaySchema;
+};
+
+export type CollectionResultSchema = {
+  type: "list";
+  itemView: string;
+};
+
+export type CollectionActionSlotSchema =
+  | {
+      type: "create";
+      createView: string;
+      label?: string;
+    }
+  | {
+      type: "entityAction";
+      action: string;
+      label?: string;
+      count?: CountDisplaySchema;
+    };
+
+export type CollectionViewSchema = {
+  type: "collection";
+  label: string;
+  entity: string;
+  queries: CollectionViewQuerySlotSchema[];
+  defaultQuery: string;
+  result: CollectionResultSchema;
+  actions?: CollectionActionSlotSchema[];
 };
 
 export type CreateViewSchema = {
@@ -50,7 +91,7 @@ export type CreateViewSchema = {
   fields: Record<string, CreateViewFieldSchema>;
 };
 
-export type ViewSchema = ListViewSchema | CreateViewSchema;
+export type ViewSchema = CollectionViewSchema | CreateViewSchema;
 
 export type GenericMutationPolicy = {
   enabled: boolean;
@@ -69,7 +110,7 @@ export type EntityMutationPolicy = {
 export type EntityActionKind = "clear-completed";
 
 export type EntityActionTargetSchema = {
-  query: QueryExpression;
+  query: string;
 };
 
 export type EntityActionSchema = {
@@ -88,8 +129,14 @@ export type EntitySchema = {
 export type AppSchema = {
   version: number;
   entities: Record<string, EntitySchema>;
+  queries: Record<string, CollectionQuerySchema>;
+  itemViews: Record<string, ItemViewSchema>;
   views: Record<string, ViewSchema>;
-  aggregates: Record<string, CollectionAggregateSchema>;
+};
+
+type ParsedEntityCatalog = {
+  entities: Record<string, EntitySchema>;
+  actionInputsByEntity: Record<string, unknown>;
 };
 
 export function parseAppSchema(value: unknown): AppSchema {
@@ -97,49 +144,184 @@ export function parseAppSchema(value: unknown): AppSchema {
     throw new Error("Schema must be an object.");
   }
 
-  const allowedKeys = new Set(["version", "entities", "views", "aggregates"]);
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`Schema has unsupported key "${key}".`);
-    }
-  }
+  assertExactKeys("Schema", value, ["version", "entities", "queries", "itemViews", "views"]);
 
   const version = value.version;
   if (version !== 1) {
     throw new Error("Schema version must be 1.");
   }
 
-  const entities = parseEntities(value.entities);
-  if (Object.keys(entities).length === 0) {
+  const parsedEntities = parseEntities(value.entities);
+  if (Object.keys(parsedEntities.entities).length === 0) {
     throw new Error("Schema must define at least one entity.");
   }
 
-  const views = parseViews(value.views, entities);
-  const aggregates = parseCollectionAggregates(value.aggregates, entities);
+  const queries = parseCollectionQueries(value.queries, parsedEntities.entities);
+  const entities = parseEntityActionsForEntities(
+    parsedEntities.entities,
+    parsedEntities.actionInputsByEntity,
+    queries,
+  );
+  const itemViews = parseItemViews(value.itemViews, entities);
+  const views = parseViews(value.views, entities, queries, itemViews);
 
-  return { version, entities, views, aggregates };
+  return { version, entities, queries, itemViews, views };
 }
 
 export function stringifySchema(schema: AppSchema) {
   return JSON.stringify(schema, null, 2);
 }
 
-function parseEntities(value: unknown): Record<string, EntitySchema> {
+function parseEntities(value: unknown): ParsedEntityCatalog {
   if (!isRecord(value)) {
     throw new Error("Schema entities must be an object.");
   }
 
+  const entities: Record<string, EntitySchema> = {};
+  const actionInputsByEntity: Record<string, unknown> = {};
+
+  for (const [entityName, entityValue] of Object.entries(value)) {
+    if (entityName.trim() === "") {
+      throw new Error("Entity names must be non-empty.");
+    }
+
+    const { actionsInput, entity } = parseEntityBase(entityName, entityValue);
+    entities[entityName] = entity;
+
+    if (actionsInput !== undefined) {
+      actionInputsByEntity[entityName] = actionsInput;
+    }
+  }
+
+  return { entities, actionInputsByEntity };
+}
+
+function parseCollectionQueries(
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): Record<string, CollectionQuerySchema> {
+  if (!isRecord(value)) {
+    throw new Error("Schema queries must be an object.");
+  }
+
   return Object.fromEntries(
-    Object.entries(value).map(([entityName, entity]) => [
-      entityName,
-      parseEntity(entityName, entity),
-    ]),
+    Object.entries(value).map(([queryName, query]) => {
+      if (queryName.trim() === "") {
+        throw new Error("Query names must be non-empty.");
+      }
+
+      return [queryName, parseCollectionQuery(queryName, query, entities)];
+    }),
   );
+}
+
+function parseCollectionQuery(
+  queryName: string,
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): CollectionQuerySchema {
+  if (!isRecord(value)) {
+    throw new Error(`Query "${queryName}" must be an object.`);
+  }
+
+  assertExactKeys(`Query "${queryName}"`, value, ["label", "entity", "expression"]);
+
+  if (typeof value.label !== "string" || value.label.trim() === "") {
+    throw new Error(`Query "${queryName}" label must be a non-empty string.`);
+  }
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new Error(`Query "${queryName}" must include an entity.`);
+  }
+
+  const entity = entities[value.entity];
+  if (!entity) {
+    throw new Error(`Query "${queryName}" references unknown entity "${value.entity}".`);
+  }
+
+  return {
+    label: value.label,
+    entity: value.entity,
+    expression: parseQueryExpression(
+      value.expression,
+      getEntityFieldCatalog(entity),
+      `query ${queryName}`,
+    ),
+  };
+}
+
+function parseEntityActionsForEntities(
+  entities: Record<string, EntitySchema>,
+  actionInputsByEntity: Record<string, unknown>,
+  queries: Record<string, CollectionQuerySchema>,
+): Record<string, EntitySchema> {
+  return Object.fromEntries(
+    Object.entries(entities).map(([entityName, entity]) => {
+      const actions = parseEntityActions(
+        entityName,
+        actionInputsByEntity[entityName],
+        entity,
+        queries,
+      );
+
+      return [entityName, actions ? { ...entity, actions } : entity];
+    }),
+  );
+}
+
+function parseItemViews(
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): Record<string, ItemViewSchema> {
+  if (!isRecord(value)) {
+    throw new Error("Schema itemViews must be an object.");
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([itemViewName, itemView]) => {
+      if (itemViewName.trim() === "") {
+        throw new Error("Item view names must be non-empty.");
+      }
+
+      return [itemViewName, parseItemView(itemViewName, itemView, entities)];
+    }),
+  );
+}
+
+function parseItemView(
+  itemViewName: string,
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): ItemViewSchema {
+  if (!isRecord(value)) {
+    throw new Error(`Item view "${itemViewName}" must be an object.`);
+  }
+
+  assertExactKeys(`Item view "${itemViewName}"`, value, ["entity", "fields"]);
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new Error(`Item view "${itemViewName}" must include an entity.`);
+  }
+
+  const entity = entities[value.entity];
+  if (!entity) {
+    throw new Error(`Item view "${itemViewName}" references unknown entity "${value.entity}".`);
+  }
+
+  const fields = parseListViewFields(itemViewName, value.entity, value.fields, entity);
+  assertViewHasFields(itemViewName, fields);
+
+  return {
+    entity: value.entity,
+    fields,
+  };
 }
 
 function parseViews(
   value: unknown,
   entities: Record<string, EntitySchema>,
+  queries: Record<string, CollectionQuerySchema>,
+  itemViews: Record<string, ItemViewSchema>,
 ): Record<string, ViewSchema> {
   if (!isRecord(value)) {
     throw new Error("Schema views must be an object.");
@@ -148,7 +330,7 @@ function parseViews(
   const views = Object.fromEntries(
     Object.entries(value).map(([viewName, view]) => [
       viewName,
-      parseView(viewName, view, entities),
+      parseView(viewName, view, entities, queries, itemViews),
     ]),
   );
 
@@ -156,25 +338,46 @@ function parseViews(
     throw new Error("Schema must define at least one view.");
   }
 
-  assertHomeViews(views);
+  assertCollectionViews(views);
 
   return views;
 }
 
-function assertHomeViews(views: Record<string, ViewSchema>) {
-  const listViews = Object.values(views).filter((view) => view.type === "list");
+function assertCollectionViews(views: Record<string, ViewSchema>) {
+  const collectionEntries = Object.entries(views).filter(([, view]) => view.type === "collection");
 
-  if (listViews.length === 0) {
-    throw new Error('Schema must define at least one "list" view.');
+  if (collectionEntries.length === 0) {
+    throw new Error('Schema must define at least one "collection" view.');
   }
 
-  for (const listView of listViews) {
-    const hasCreateView = Object.values(views).some((view) => {
-      return view.type === "create" && view.entity === listView.entity;
-    });
+  for (const [viewName, view] of collectionEntries) {
+    if (view.type !== "collection") {
+      continue;
+    }
 
-    if (!hasCreateView) {
-      throw new Error(`Schema must define a "create" view for entity "${listView.entity}".`);
+    for (const actionSlot of view.actions ?? []) {
+      if (actionSlot.type !== "create") {
+        continue;
+      }
+
+      const createView = views[actionSlot.createView];
+      if (!createView) {
+        throw new Error(
+          `Collection view "${viewName}" create action references unknown view "${actionSlot.createView}".`,
+        );
+      }
+
+      if (createView.type !== "create") {
+        throw new Error(
+          `Collection view "${viewName}" create action must reference a create view.`,
+        );
+      }
+
+      if (createView.entity !== view.entity) {
+        throw new Error(
+          `Collection view "${viewName}" create action view "${actionSlot.createView}" must use entity "${view.entity}".`,
+        );
+      }
     }
   }
 }
@@ -183,24 +386,26 @@ function parseView(
   viewName: string,
   value: unknown,
   entities: Record<string, EntitySchema>,
+  queries: Record<string, CollectionQuerySchema>,
+  itemViews: Record<string, ItemViewSchema>,
 ): ViewSchema {
+  if (viewName.trim() === "") {
+    throw new Error("View names must be non-empty.");
+  }
+
   if (!isRecord(value)) {
     throw new Error(`View "${viewName}" must be an object.`);
   }
 
-  if (value.type !== "list" && value.type !== "create") {
-    throw new Error(`View "${viewName}" type must be "list" or "create".`);
+  if (value.type !== "collection" && value.type !== "create") {
+    throw new Error(`View "${viewName}" type must be "collection" or "create".`);
   }
 
-  const allowedKeys =
-    value.type === "list"
-      ? new Set(["type", "label", "entity", "query", "fields"])
-      : new Set(["type", "entity", "fields"]);
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`View "${viewName}" has unsupported key "${key}".`);
-    }
+  if (value.type === "collection") {
+    return parseCollectionView(viewName, value, entities, queries, itemViews);
   }
+
+  assertExactKeys(`View "${viewName}"`, value, ["type", "entity", "fields"]);
 
   if (typeof value.entity !== "string" || value.entity.trim() === "") {
     throw new Error(`View "${viewName}" must include an entity.`);
@@ -209,25 +414,6 @@ function parseView(
   const entity = entities[value.entity];
   if (!entity) {
     throw new Error(`View "${viewName}" references unknown entity "${value.entity}".`);
-  }
-
-  if (value.type === "list") {
-    const fields = parseListViewFields(viewName, value.entity, value.fields, entity);
-    assertViewHasFields(viewName, fields);
-    const label = parseListViewLabel(viewName, value.label);
-    const query = parseQueryExpression(
-      value.query,
-      getEntityFieldCatalog(entity),
-      `view ${viewName}`,
-    );
-
-    return {
-      type: "list",
-      label,
-      entity: value.entity,
-      query,
-      fields,
-    };
   }
 
   const fields = parseCreateViewFields(viewName, value.entity, value.fields, entity);
@@ -241,9 +427,256 @@ function parseView(
   };
 }
 
-function parseListViewLabel(viewName: string, value: unknown): string {
+function parseCollectionView(
+  viewName: string,
+  value: Record<string, unknown>,
+  entities: Record<string, EntitySchema>,
+  queries: Record<string, CollectionQuerySchema>,
+  itemViews: Record<string, ItemViewSchema>,
+): CollectionViewSchema {
+  assertExactKeys(
+    `Collection view "${viewName}"`,
+    value,
+    ["type", "label", "entity", "queries", "defaultQuery", "result"],
+    ["actions"],
+  );
+
+  if (typeof value.label !== "string" || value.label.trim() === "") {
+    throw new Error(`Collection view "${viewName}" label must be a non-empty string.`);
+  }
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new Error(`Collection view "${viewName}" must include an entity.`);
+  }
+
+  const entity = entities[value.entity];
+  if (!entity) {
+    throw new Error(`Collection view "${viewName}" references unknown entity "${value.entity}".`);
+  }
+
+  const querySlots = parseCollectionViewQuerySlots(viewName, value.entity, value.queries, queries);
+
+  if (typeof value.defaultQuery !== "string" || value.defaultQuery.trim() === "") {
+    throw new Error(`Collection view "${viewName}" defaultQuery must be a non-empty string.`);
+  }
+
+  if (!querySlots.some((slot) => slot.query === value.defaultQuery)) {
+    throw new Error(
+      `Collection view "${viewName}" defaultQuery must reference one of its query slots.`,
+    );
+  }
+
+  const result = parseCollectionResult(viewName, value.entity, value.result, itemViews);
+  const actions = parseCollectionActionSlots(viewName, value.entity, entity, value.actions);
+
+  return {
+    type: "collection",
+    label: value.label,
+    entity: value.entity,
+    queries: querySlots,
+    defaultQuery: value.defaultQuery,
+    result,
+    ...(actions ? { actions } : {}),
+  };
+}
+
+function parseCollectionViewQuerySlots(
+  viewName: string,
+  entityName: string,
+  value: unknown,
+  queries: Record<string, CollectionQuerySchema>,
+): CollectionViewQuerySlotSchema[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Collection view "${viewName}" queries must be a non-empty array.`);
+  }
+
+  return value.map((slot, index) =>
+    parseCollectionViewQuerySlot(viewName, entityName, index, slot, queries),
+  );
+}
+
+function parseCollectionViewQuerySlot(
+  viewName: string,
+  entityName: string,
+  index: number,
+  value: unknown,
+  queries: Record<string, CollectionQuerySchema>,
+): CollectionViewQuerySlotSchema {
+  const context = `Collection view "${viewName}" query slot ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["query"], ["label", "count"]);
+
+  if (typeof value.query !== "string" || value.query.trim() === "") {
+    throw new Error(`${context} query must be a non-empty string.`);
+  }
+
+  const query = queries[value.query];
+  if (!query) {
+    throw new Error(`${context} references unknown query "${value.query}".`);
+  }
+
+  if (query.entity !== entityName) {
+    throw new Error(`${context} query "${value.query}" must use entity "${entityName}".`);
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const count =
+    value.count === undefined ? undefined : parseCountDisplay(`${context} count`, value.count);
+
+  return {
+    query: value.query,
+    ...(label === undefined ? {} : { label }),
+    ...(count === undefined ? {} : { count }),
+  };
+}
+
+function parseCollectionResult(
+  viewName: string,
+  entityName: string,
+  value: unknown,
+  itemViews: Record<string, ItemViewSchema>,
+): CollectionResultSchema {
+  if (!isRecord(value)) {
+    throw new Error(`Collection view "${viewName}" result must be an object.`);
+  }
+
+  assertExactKeys(`Collection view "${viewName}" result`, value, ["type", "itemView"]);
+
+  if (value.type !== "list") {
+    throw new Error(`Collection view "${viewName}" result type must be "list".`);
+  }
+
+  if (typeof value.itemView !== "string" || value.itemView.trim() === "") {
+    throw new Error(`Collection view "${viewName}" result itemView must be a non-empty string.`);
+  }
+
+  const itemView = itemViews[value.itemView];
+  if (!itemView) {
+    throw new Error(
+      `Collection view "${viewName}" result references unknown item view "${value.itemView}".`,
+    );
+  }
+
+  if (itemView.entity !== entityName) {
+    throw new Error(
+      `Collection view "${viewName}" result item view "${value.itemView}" must use entity "${entityName}".`,
+    );
+  }
+
+  return {
+    type: "list",
+    itemView: value.itemView,
+  };
+}
+
+function parseCollectionActionSlots(
+  viewName: string,
+  entityName: string,
+  entity: EntitySchema,
+  value: unknown,
+): CollectionActionSlotSchema[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Collection view "${viewName}" actions must be an array.`);
+  }
+
+  const actions = value.map((slot, index) =>
+    parseCollectionActionSlot(viewName, entityName, entity, index, slot),
+  );
+
+  return actions.length > 0 ? actions : undefined;
+}
+
+function parseCollectionActionSlot(
+  viewName: string,
+  entityName: string,
+  entity: EntitySchema,
+  index: number,
+  value: unknown,
+): CollectionActionSlotSchema {
+  const context = `Collection view "${viewName}" action slot ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  if (value.type === "create") {
+    assertExactKeys(context, value, ["type", "createView"], ["label"]);
+
+    if (typeof value.createView !== "string" || value.createView.trim() === "") {
+      throw new Error(`${context} createView must be a non-empty string.`);
+    }
+
+    const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+
+    return {
+      type: "create",
+      createView: value.createView,
+      ...(label === undefined ? {} : { label }),
+    };
+  }
+
+  if (value.type === "entityAction") {
+    assertExactKeys(context, value, ["type", "action"], ["label", "count"]);
+
+    if (typeof value.action !== "string" || value.action.trim() === "") {
+      throw new Error(`${context} action must be a non-empty string.`);
+    }
+
+    if (!entity.actions?.[value.action]) {
+      throw new Error(
+        `${context} references unknown action "${value.action}" for entity "${entityName}".`,
+      );
+    }
+
+    const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+    const count =
+      value.count === undefined ? undefined : parseCountDisplay(`${context} count`, value.count);
+
+    return {
+      type: "entityAction",
+      action: value.action,
+      ...(label === undefined ? {} : { label }),
+      ...(count === undefined ? {} : { count }),
+    };
+  }
+
+  throw new Error(`${context} type must be "create" or "entityAction".`);
+}
+
+function parseCountDisplay(context: string, value: unknown): CountDisplaySchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["type"], ["label"]);
+
+  if (value.type !== "count") {
+    throw new Error(`${context} type must be "count".`);
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+
+  return {
+    type: "count",
+    ...(label === undefined ? {} : { label }),
+  };
+}
+
+function parseOptionalNonEmptyString(context: string, value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
   if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`View "${viewName}" label must be a non-empty string.`);
+    throw new Error(`${context} must be a non-empty string.`);
   }
 
   return value;
@@ -409,7 +842,10 @@ function hasCreateDefault(field: FieldSchema) {
   return field.type === "boolean" && typeof field.default === "boolean";
 }
 
-function parseEntity(entityName: string, value: unknown): EntitySchema {
+function parseEntityBase(
+  entityName: string,
+  value: unknown,
+): { entity: EntitySchema; actionsInput: unknown } {
   if (!isRecord(value)) {
     throw new Error(`Entity "${entityName}" must be an object.`);
   }
@@ -425,16 +861,18 @@ function parseEntity(entityName: string, value: unknown): EntitySchema {
   }
 
   const mutations = parseEntityMutations(entityName, value.mutations);
-  const entity: EntitySchema = { label, fields, mutations };
-  const actions = parseEntityActions(entityName, value.actions, entity);
 
-  return actions ? { ...entity, actions } : entity;
+  return {
+    entity: { label, fields, mutations },
+    actionsInput: value.actions,
+  };
 }
 
 function parseEntityActions(
   entityName: string,
   value: unknown,
   entity: EntitySchema,
+  queries: Record<string, CollectionQuerySchema>,
 ): Record<string, EntityActionSchema> | undefined {
   if (value === undefined) {
     return undefined;
@@ -450,7 +888,7 @@ function parseEntityActions(
         throw new Error(`Entity "${entityName}" action names must be non-empty.`);
       }
 
-      return [actionName, parseEntityAction(entityName, actionName, action, entity)];
+      return [actionName, parseEntityAction(entityName, actionName, action, entity, queries)];
     }),
   );
 
@@ -462,6 +900,7 @@ function parseEntityAction(
   actionName: string,
   value: unknown,
   entity: EntitySchema,
+  queries: Record<string, CollectionQuerySchema>,
 ): EntityActionSchema {
   if (!isRecord(value)) {
     throw new Error(`Entity action "${entityName}.${actionName}" must be an object.`);
@@ -492,9 +931,16 @@ function parseEntityAction(
     );
   }
 
-  const target = parseEntityActionTarget(entityName, actionName, value.target, entity);
+  const target = parseEntityActionTarget(entityName, actionName, value.target, queries);
+  const targetQuery = queries[target.query];
 
-  if (!isClearCompletedTargetQuery(target.query)) {
+  if (!targetQuery) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" target references unknown query "${target.query}".`,
+    );
+  }
+
+  if (!isClearCompletedTargetQuery(targetQuery.expression)) {
     throw new Error(
       `Entity action "${entityName}.${actionName}" kind "clear-completed" target must be value.done eq true.`,
     );
@@ -511,31 +957,33 @@ function parseEntityActionTarget(
   entityName: string,
   actionName: string,
   value: unknown,
-  entity: EntitySchema,
+  queries: Record<string, CollectionQuerySchema>,
 ): EntityActionTargetSchema {
   if (!isRecord(value)) {
     throw new Error(`Entity action "${entityName}.${actionName}" target must be an object.`);
   }
 
-  const allowedKeys = new Set(["query"]);
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(
-        `Entity action "${entityName}.${actionName}" target has unsupported key "${key}".`,
-      );
-    }
+  assertExactKeys(`Entity action "${entityName}.${actionName}" target`, value, ["query"]);
+
+  if (typeof value.query !== "string" || value.query.trim() === "") {
+    throw new Error(`Entity action "${entityName}.${actionName}" target query must be a string.`);
   }
 
-  if (!("query" in value)) {
-    throw new Error(`Entity action "${entityName}.${actionName}" target must include query.`);
+  const query = queries[value.query];
+  if (!query) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" target references unknown query "${value.query}".`,
+    );
+  }
+
+  if (query.entity !== entityName) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" target query "${value.query}" must use entity "${entityName}".`,
+    );
   }
 
   return {
-    query: parseQueryExpression(
-      value.query,
-      getEntityFieldCatalog(entity),
-      `action ${entityName}.${actionName}`,
-    ),
+    query: value.query,
   };
 }
 
@@ -715,6 +1163,27 @@ function parseFieldLabel(
   }
 
   return value;
+}
+
+function assertExactKeys(
+  context: string,
+  value: Record<string, unknown>,
+  requiredKeys: string[],
+  optionalKeys: string[] = [],
+) {
+  const allowedKeys = new Set([...requiredKeys, ...optionalKeys]);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`${context} has unsupported key "${key}".`);
+    }
+  }
+
+  for (const key of requiredKeys) {
+    if (!(key in value)) {
+      throw new Error(`${context} must include "${key}".`);
+    }
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

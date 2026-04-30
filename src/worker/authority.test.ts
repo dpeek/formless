@@ -37,16 +37,18 @@ describe("authority", () => {
     });
   });
 
-  it("returns aggregate definitions from bootstrap", async () => {
+  it("returns query, item view, and collection definitions from bootstrap", async () => {
     const body = await getJson<BootstrapResponse>("/api/bootstrap");
 
-    expect(Object.keys(body.schema.aggregates)).toEqual([
-      "taskTotal",
+    expect(Object.keys(body.schema.queries)).toEqual([
+      "taskAll",
       "taskActive",
       "taskCompleted",
       "taskOverdue",
     ]);
-    expect(body.schema.aggregates.taskOverdue).toEqual(appSchema.aggregates.taskOverdue);
+    expect(body.schema.queries.taskOverdue).toEqual(appSchema.queries.taskOverdue);
+    expect(body.schema.itemViews.taskListItem).toEqual(appSchema.itemViews.taskListItem);
+    expect(body.schema.views.taskHome).toEqual(appSchema.views.taskHome);
   });
 
   it("returns the active schema and metadata from the schema route", async () => {
@@ -71,8 +73,9 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
+      queries: defaultQueries(),
+      itemViews: defaultItemViews(),
       views: defaultViews(),
-      aggregates: {},
     } satisfies AppSchema;
 
     const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -87,15 +90,17 @@ describe("authority", () => {
     expect(bootstrap.schemaUpdatedAt).toBe(update.updatedAt);
   });
 
-  it("accepts compatible schema updates that add aggregates", async () => {
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithAggregates({}) });
+  it("accepts compatible schema updates that change query labels and expressions", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithQueries(defaultQueries()),
+    });
     const created = await postMutation("mutation-1", { title: "First", done: false });
-    const nextSchema = schemaWithAggregates({
-      taskOpen: {
-        type: "count",
+    const nextSchema = schemaWithQueries({
+      ...defaultQueries(),
+      taskActive: {
         label: "Open",
         entity: "task",
-        query: {
+        expression: {
           kind: "where",
           ref: { kind: "value", name: "done" },
           op: "eq",
@@ -113,13 +118,51 @@ describe("authority", () => {
     expect(bootstrap.records).toEqual([created.record]);
   });
 
-  it("accepts compatible schema updates that change aggregate label and query", async () => {
-    const initialSchema = schemaWithAggregates({
-      taskDone: {
-        type: "count",
+  it("rejects query references that point at missing fields through the schema route", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithQueries({
+          ...defaultQueries(),
+          taskMissing: {
+            label: "Missing",
+            entity: "task",
+            expression: {
+              kind: "where",
+              ref: { kind: "value", name: "missing" },
+              op: "eq",
+              value: "yes",
+            },
+          },
+        }),
+      },
+      'references unknown field "value.missing"',
+    );
+  });
+
+  it("rejects invalid collection action references through the schema route", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithViews({
+          ...defaultViews(),
+          taskHome: {
+            ...defaultCollectionView(),
+            actions: [{ type: "entityAction", action: "missing" }],
+          },
+        }),
+      },
+      'references unknown action "missing"',
+    );
+  });
+
+  it("accepts compatible schema updates that change query labels and selected scope", async () => {
+    const initialSchema = schemaWithQueries({
+      ...defaultQueries(),
+      taskCompleted: {
         label: "Done",
         entity: "task",
-        query: {
+        expression: {
           kind: "where",
           ref: { kind: "value", name: "done" },
           op: "eq",
@@ -127,12 +170,12 @@ describe("authority", () => {
         },
       },
     });
-    const nextSchema = schemaWithAggregates({
-      taskDone: {
-        type: "count",
+    const nextSchema = schemaWithQueries({
+      ...defaultQueries(),
+      taskCompleted: {
         label: "Open",
         entity: "task",
-        query: {
+        expression: {
           kind: "where",
           ref: { kind: "value", name: "done" },
           op: "eq",
@@ -145,28 +188,6 @@ describe("authority", () => {
     const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
 
     expect(update.schema).toEqual(parseAppSchema(nextSchema));
-  });
-
-  it("rejects aggregate queries that reference missing fields through the schema route", async () => {
-    await expectError(
-      "/api/schema",
-      {
-        schema: schemaWithAggregates({
-          taskMissing: {
-            type: "count",
-            label: "Missing",
-            entity: "task",
-            query: {
-              kind: "where",
-              ref: { kind: "value", name: "missing" },
-              op: "eq",
-              value: "yes",
-            },
-          },
-        }),
-      },
-      'references unknown field "value.missing"',
-    );
   });
 
   it("resets remote data to the seed schema and clears records", async () => {
@@ -184,8 +205,9 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
+      queries: defaultQueries(),
+      itemViews: defaultItemViews(),
       views: defaultViews(),
-      aggregates: {},
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -217,8 +239,9 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
+      queries: defaultQueries(),
+      itemViews: defaultItemViews(),
       views: defaultViews(),
-      aggregates: {},
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -249,6 +272,9 @@ describe("authority", () => {
               },
             },
           },
+          queries: {},
+          itemViews: {},
+          views: {},
         },
       },
       'Field "task.title" has unsupported type "number".',
@@ -269,15 +295,29 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
-      views: {
-        taskListItem: {
-          type: "list",
+      queries: {
+        taskAll: {
           label: "All",
           entity: "task",
-          query: { kind: "all" },
+          expression: { kind: "all" },
+        },
+      },
+      itemViews: {
+        taskListItem: {
+          entity: "task",
           fields: {
             done: { editor: "boolean", commit: "immediate" },
           },
+        },
+      },
+      views: {
+        taskHome: {
+          type: "collection",
+          label: "Tasks",
+          entity: "task",
+          queries: [{ query: "taskAll" }],
+          defaultQuery: "taskAll",
+          result: { type: "list", itemView: "taskListItem" },
         },
         taskCreate: {
           type: "create",
@@ -287,7 +327,6 @@ describe("authority", () => {
           },
         },
       },
-      aggregates: {},
     } satisfies AppSchema;
 
     await expectError(
@@ -442,8 +481,9 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
+      queries: defaultQueries(),
+      itemViews: defaultItemViews(),
       views: defaultViews(),
-      aggregates: {},
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithProject });
@@ -616,12 +656,7 @@ describe("authority", () => {
             label: "Clear completed",
             kind: "clear-completed",
             target: {
-              query: {
-                kind: "where",
-                ref: { kind: "value", name: "done" },
-                op: "eq",
-                value: false,
-              },
+              query: "taskActive",
             },
           },
         }),
@@ -642,15 +677,29 @@ describe("authority", () => {
           mutations: defaultMutations(),
         },
       },
-      views: {
-        taskListItem: {
-          type: "list",
+      queries: {
+        taskAll: {
           label: "All",
           entity: "task",
-          query: { kind: "all" },
+          expression: { kind: "all" },
+        },
+      },
+      itemViews: {
+        taskListItem: {
+          entity: "task",
           fields: {
             title: { editor: "text", commit: "field-commit" },
           },
+        },
+      },
+      views: {
+        taskHome: {
+          type: "collection",
+          label: "Tasks",
+          entity: "task",
+          queries: [{ query: "taskAll" }],
+          defaultQuery: "taskAll",
+          result: { type: "list", itemView: "taskListItem" },
         },
         taskCreate: {
           type: "create",
@@ -666,19 +715,24 @@ describe("authority", () => {
     expect(explicit.entities.task?.mutations).toEqual(defaultMutations());
   });
 
-  it("parses list and create views", () => {
+  it("parses collection, item, and create views", () => {
     const withViews = parseAppSchema(schemaWithViews());
 
-    expect(withViews.views?.taskListItem).toEqual({
-      type: "list",
-      label: "All",
+    expect(withViews.itemViews.taskListItem).toEqual({
       entity: "task",
-      query: { kind: "all" },
       fields: {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },
         dueDate: { editor: "date", commit: "field-commit" },
       },
+    });
+    expect(withViews.views?.taskHome).toMatchObject({
+      type: "collection",
+      label: "All",
+      entity: "task",
+      queries: [{ query: "taskAll" }],
+      defaultQuery: "taskAll",
+      result: { type: "list", itemView: "taskListItem" },
     });
     expect(withViews.views?.taskCreate).toEqual({
       type: "create",
@@ -704,17 +758,22 @@ describe("authority", () => {
               },
             },
           },
-          views: {
-            taskListItem: {
-              type: "list",
+          queries: {
+            taskAll: {
               label: "All",
               entity: "task",
-              query: { kind: "all" },
+              expression: { kind: "all" },
+            },
+          },
+          itemViews: {
+            taskListItem: {
+              entity: "task",
               fields: {
                 title: { editor: "text", commit: "field-commit" },
               },
             },
           },
+          views: {},
         },
       },
       'Entity "task" mutations must be an object.',
@@ -733,9 +792,25 @@ describe("authority", () => {
               mutations: defaultMutations(),
             },
           },
+          queries: {
+            taskAll: {
+              label: "All",
+              entity: "task",
+              expression: { kind: "all" },
+            },
+          },
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                title: { editor: "text", commit: "field-commit" },
+              },
+            },
+          },
+          views: {},
         },
       },
-      "Schema views must be an object.",
+      "Schema must define at least one view.",
     );
   });
 
@@ -743,14 +818,13 @@ describe("authority", () => {
     await postMutation("mutation-1", { title: "First", done: false });
 
     const nextSchema = schemaWithViews({
-      taskListItem: {
-        type: "list",
-        label: "All",
+      taskHome: {
+        type: "collection",
+        label: "Task planner",
         entity: "task",
-        query: { kind: "all" },
-        fields: {
-          title: { editor: "text", commit: "field-commit" },
-        },
+        queries: [{ query: "taskAll", label: "Everything" }],
+        defaultQuery: "taskAll",
+        result: { type: "list", itemView: "taskListItem" },
       },
       taskCreate: {
         type: "create",
@@ -766,16 +840,13 @@ describe("authority", () => {
     expect(update.schema).toEqual(nextSchema);
   });
 
-  it("rejects malformed list views in schema updates", async () => {
+  it("rejects malformed item and create views in schema updates", async () => {
     await expectError(
       "/api/schema",
       {
-        schema: schemaWithViews({
+        schema: schemaWithItemViews({
           taskListItem: {
-            type: "list",
-            label: "All",
             entity: "task",
-            query: { kind: "all" },
             fields: {
               missing: { editor: "text", commit: "field-commit" },
             },
@@ -787,12 +858,9 @@ describe("authority", () => {
     await expectError(
       "/api/schema",
       {
-        schema: schemaWithViews({
+        schema: schemaWithItemViews({
           taskListItem: {
-            type: "list",
-            label: "All",
             entity: "task",
-            query: { kind: "all" },
             fields: {
               done: { editor: "text", commit: "field-commit" },
             },
@@ -804,12 +872,9 @@ describe("authority", () => {
     await expectError(
       "/api/schema",
       {
-        schema: schemaWithViews({
+        schema: schemaWithItemViews({
           taskListItem: {
-            type: "list",
-            label: "All",
             entity: "task",
-            query: { kind: "all" },
             fields: {
               title: { editor: "text", commit: "immediate" },
             },
@@ -821,12 +886,9 @@ describe("authority", () => {
     await expectError(
       "/api/schema",
       {
-        schema: schemaWithViews({
+        schema: schemaWithItemViews({
           taskListItem: {
-            type: "list",
-            label: "All",
             entity: "task",
-            query: { kind: "all" },
             fields: {
               title: { editor: "text", commit: "field-commit", width: "wide" },
             },
@@ -881,6 +943,9 @@ describe("authority", () => {
               },
             },
           },
+          queries: {},
+          itemViews: {},
+          views: {},
         },
       },
       'Field "task.title" label must be a non-empty string.',
@@ -1039,8 +1104,9 @@ function schemaWithMutations(mutations: unknown) {
         mutations,
       },
     },
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
     views: defaultViews(),
-    aggregates: {},
   };
 }
 
@@ -1058,15 +1124,23 @@ function schemaWithViews(views: unknown = defaultViews()) {
         mutations: defaultMutations(),
       },
     },
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
     views,
-    aggregates: {},
   };
 }
 
-function schemaWithAggregates(aggregates: unknown) {
+function schemaWithQueries(queries: unknown) {
   return {
     ...schemaWithViews(),
-    aggregates,
+    queries,
+  };
+}
+
+function schemaWithItemViews(itemViews: unknown) {
+  return {
+    ...schemaWithViews(),
+    itemViews,
   };
 }
 
@@ -1085,24 +1159,58 @@ function schemaWithActions(actions: unknown) {
         actions,
       },
     },
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
     views: defaultViews(),
-    aggregates: {},
   };
 }
 
-function defaultViews(): AppSchema["views"] {
+function defaultQueries(): AppSchema["queries"] {
   return {
-    taskListItem: {
-      type: "list",
+    taskAll: {
       label: "All",
       entity: "task",
-      query: { kind: "all" },
+      expression: { kind: "all" },
+    },
+    taskActive: {
+      label: "Active",
+      entity: "task",
+      expression: {
+        kind: "where",
+        ref: { kind: "value", name: "done" },
+        op: "eq",
+        value: false,
+      },
+    },
+    taskCompleted: {
+      label: "Completed",
+      entity: "task",
+      expression: {
+        kind: "where",
+        ref: { kind: "value", name: "done" },
+        op: "eq",
+        value: true,
+      },
+    },
+  };
+}
+
+function defaultItemViews(): AppSchema["itemViews"] {
+  return {
+    taskListItem: {
+      entity: "task",
       fields: {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },
         dueDate: { editor: "date", commit: "field-commit" },
       },
     },
+  };
+}
+
+function defaultViews(): AppSchema["views"] {
+  return {
+    taskHome: defaultCollectionView(),
     taskCreate: {
       type: "create",
       entity: "task",
@@ -1111,6 +1219,17 @@ function defaultViews(): AppSchema["views"] {
         dueDate: { editor: "date" },
       },
     },
+  };
+}
+
+function defaultCollectionView(): Extract<AppSchema["views"][string], { type: "collection" }> {
+  return {
+    type: "collection",
+    label: "All",
+    entity: "task",
+    queries: [{ query: "taskAll" }],
+    defaultQuery: "taskAll",
+    result: { type: "list", itemView: "taskListItem" },
   };
 }
 

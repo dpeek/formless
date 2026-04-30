@@ -20,7 +20,7 @@ export function executeEntityAction(
   const action = schema.entities[request.entity]?.actions?.[request.action];
 
   if (action?.kind === "clear-completed") {
-    const records = selectActionTargetRecords(storage, request, action);
+    const records = selectActionTargetRecords(storage, request, schema, action);
 
     return executeActionEffect(storage, request, action, records);
   }
@@ -31,10 +31,19 @@ export function executeEntityAction(
 function selectActionTargetRecords(
   storage: DurableObjectStorage,
   request: ActionRequest,
+  schema: AppSchema,
   action: EntityActionSchema,
 ): StoredRecord[] {
+  const targetQuery = schema.queries[action.target.query];
+
+  if (!targetQuery) {
+    throw new Error(
+      `Action "${request.action}" references unknown query "${action.target.query}".`,
+    );
+  }
+
   return getActiveRecordsByEntity(storage, request.entity).filter((record) =>
-    matchesQuery(record, action.target.query),
+    matchesQuery(record, targetQuery.expression),
   );
 }
 

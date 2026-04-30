@@ -62,10 +62,12 @@ describe("client db", () => {
             notes: { type: "text", required: false },
           },
           mutations: defaultMutations(),
+          actions: appSchema.entities.task.actions,
         },
       },
+      queries: appSchema.queries,
+      itemViews: appSchema.itemViews,
       views: appSchema.views,
-      aggregates: {},
     } satisfies AppSchema;
 
     await saveBootstrapResponse({

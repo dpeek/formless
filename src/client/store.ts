@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { listenForClientEvents } from "./broadcast.ts";
 import { readLocalSnapshot, type LocalSnapshot } from "./db.ts";
-import { selectHomeModel, type HomeAggregateConfig, type HomeViewModel } from "./views.ts";
+import { selectHomeModel, type HomeViewModel } from "./views.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { BootstrapResponse, ChangeRow, FieldValue, StoredRecord } from "../shared/protocol.ts";
 import {
@@ -211,17 +211,6 @@ export function useEntityRecordCountMatchingQuery(
   );
 
   return useClientStoreSelector(selector);
-}
-
-export function useCollectionAggregateValue(
-  aggregateConfig: HomeAggregateConfig,
-  context?: QueryEvaluationContext,
-) {
-  return useEntityRecordCountMatchingQuery(
-    aggregateConfig.entityName,
-    aggregateConfig.aggregate.query,
-    context,
-  );
 }
 
 export function useRecord(recordId: string) {

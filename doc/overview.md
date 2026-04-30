@@ -30,7 +30,7 @@ The current prototype already has the beginnings of this shape:
 - bootstrap, schema, sync, mutation, and action routes live in [src/worker/authority.ts](/Users/dpeek/code/formless/src/worker/authority.ts)
 - the browser sync loop lives in [src/client/sync.ts](/Users/dpeek/code/formless/src/client/sync.ts)
 
-That is already more interesting than a CRUD generator. The generated home surface has schema-backed list tabs, schema-declared actions, tab counts, and schema-owned collection aggregates. The next job is to make the rows themselves feel denser and more useful.
+That is already more interesting than a CRUD generator. The generated home surface has a schema-backed collection workspace, reusable query scopes, shared item views, tab counts, and schema-declared actions. The next job is to make the rows themselves feel denser and more useful.
 
 ## Why this approach is interesting
 
@@ -65,8 +65,8 @@ The product should revolve around six things:
 1. Types
 2. Entities
 3. Mutations
-4. Views
-5. Aggregates
+4. Queries
+5. Views
 6. Sync
 
 ### Types
@@ -129,44 +129,53 @@ Generic patching is not enough for the full product. The server will still need 
 
 So a task title change does not need to become `renameTask` by default. It can be a patch handled by the task entity's patch logic. An action like `archiveTask` still deserves a name because it is a command, not a field edit.
 
+### Queries
+
+Collection queries are named reusable record scopes. A query belongs to one entity and carries a portable expression:
+
+```json
+{
+  "taskCompleted": {
+    "label": "Completed",
+    "entity": "task",
+    "expression": {
+      "kind": "where",
+      "ref": { "kind": "value", "name": "done" },
+      "op": "eq",
+      "value": true
+    }
+  }
+}
+```
+
+The same query can drive a collection tab, an action target, or a future summary slot. The expression model is intentionally small:
+
+- `{ "kind": "all" }`
+- `where` with `eq` or `before`
+- `and` over child expressions
+- `{ "kind": "today" }` for date cutoffs
+
+Local rendering filters the browser replica with the shared evaluator, while authority actions resolve the named target query against authoritative records.
+
 ### Views
 
 The generic generated CRUD UI should stay in the system, but as the fallback layer.
 
 The main runtime goal is not "forms for tables." It is "the schema defines enough behavior that a user or agent can build a real application surface from it."
 
-Views are already schema-driven in a narrow way:
+Views now separate the reusable pieces:
 
 - create views choose which fields participate in generated create forms
-- list views choose which records they include through a query
-- list views choose which fields render inline
-- list view fields choose an editor and commit policy
-
-List view queries use the same shared query model as action targets. The current portable query core is intentionally small:
-
-```json
-{ "kind": "all" }
-```
-
-or:
-
-```json
-{
-  "kind": "where",
-  "ref": { "kind": "value", "name": "done" },
-  "op": "eq",
-  "value": true
-}
-```
-
-Date fields also support `before`, and query expressions can combine child expressions with `and`. The overdue task summary uses that to count active tasks whose due date is before the user's local calendar day.
-
-The home model exposes every list view for the selected entity in schema order. The seed task schema uses that to render `All`, `Active`, and `Completed` tabs. Local rendering filters the browser replica with the shared evaluator, while authority actions use the same expression shape against authoritative state. The list tabs also show local counts derived from each list view's query.
+- item views choose which fields render inline and how they commit edits
+- collection views define a user-facing workspace around one entity
+- collection query slots choose which named queries appear as tabs
+- collection action slots choose which create views and entity actions appear in that workspace
 
 That should eventually expand into:
 
-- list views
 - create views
+- item views
+- collection views
 - detail views
 - compact inline editors
 - specialized renderers for known types
@@ -182,22 +191,15 @@ That means a view decides whether an editor:
 
 This keeps types focused on value behavior and keeps edit semantics attached to the actual UI context.
 
-### Aggregates
+### Counts
 
-Collection aggregates are schema-owned derived values. They are defined at the top level of the app schema, parsed in [src/shared/aggregates.ts](/Users/dpeek/code/formless/src/shared/aggregates.ts), and exposed to the generated home model through [src/client/views.ts](/Users/dpeek/code/formless/src/client/views.ts).
+Counts are host-level displays over queries, not top-level schema objects. A collection query tab can ask for a count badge, and an entity-action slot can ask for a count badge over that action's target query.
 
-The current aggregate surface supports `count` over one entity collection. Each aggregate has a label, an entity, and a shared query expression. The generated task planner defines:
+Those counts are computed from the browser replica in [src/client/store.ts](/Users/dpeek/code/formless/src/client/store.ts). They are not entity fields. They are not stored under `StoredRecord.values`, written to IndexedDB as values, persisted in SQLite, or emitted as change rows. They are local feedback for the UI, not authority state.
 
-- `taskTotal`
-- `taskActive`
-- `taskCompleted`
-- `taskOverdue`
+That boundary matters for actions. The local completed count can say zero while the authority still has completed tasks the browser has not synced yet. `clearCompletedTasks` must stay enabled based on schema action availability, not on a local count. The authority reads the active schema, evaluates the action target query against authoritative records, and writes the resulting tombstones. After the authority responds, `ActionResponse.changes.length` is the canonical affected count for status copy.
 
-Aggregate values are computed from the browser replica in [src/client/store.ts](/Users/dpeek/code/formless/src/client/store.ts). They are not entity fields. They are not stored under `StoredRecord.values`, written to IndexedDB as values, persisted in SQLite, or emitted as change rows. They are feedback for the local UI, not authority state.
-
-That boundary matters for actions. The local completed count can say zero while the authority still has completed tasks the browser has not synced yet. `clearCompletedTasks` must stay enabled based on schema action availability, not on a local aggregate count. The authority reads the active schema, evaluates the action target query against authoritative records, and writes the resulting tombstones.
-
-The overdue aggregate uses the shared query model instead of UI-specific code:
+The overdue query uses the shared query model instead of UI-specific code:
 
 ```json
 {
@@ -283,29 +285,22 @@ A useful example schema looks like this:
           "label": "Clear completed",
           "kind": "clear-completed",
           "target": {
-            "query": {
-              "kind": "where",
-              "ref": { "kind": "value", "name": "done" },
-              "op": "eq",
-              "value": true
-            }
+            "query": "taskCompleted"
           }
         }
       }
     }
   },
-  "aggregates": {
-    "taskTotal": {
-      "type": "count",
-      "label": "Total",
+  "queries": {
+    "taskAll": {
+      "label": "All",
       "entity": "task",
-      "query": { "kind": "all" }
+      "expression": { "kind": "all" }
     },
     "taskActive": {
-      "type": "count",
       "label": "Active",
       "entity": "task",
-      "query": {
+      "expression": {
         "kind": "where",
         "ref": { "kind": "value", "name": "done" },
         "op": "eq",
@@ -313,10 +308,9 @@ A useful example schema looks like this:
       }
     },
     "taskCompleted": {
-      "type": "count",
       "label": "Completed",
       "entity": "task",
-      "query": {
+      "expression": {
         "kind": "where",
         "ref": { "kind": "value", "name": "done" },
         "op": "eq",
@@ -324,10 +318,9 @@ A useful example schema looks like this:
       }
     },
     "taskOverdue": {
-      "type": "count",
       "label": "Overdue",
       "entity": "task",
-      "query": {
+      "expression": {
         "kind": "and",
         "expressions": [
           {
@@ -346,76 +339,37 @@ A useful example schema looks like this:
       }
     }
   },
+  "itemViews": {
+    "taskListItem": {
+      "entity": "task",
+      "fields": {
+        "title": { "editor": "text", "commit": "field-commit" },
+        "done": { "editor": "boolean", "commit": "immediate" },
+        "dueDate": { "editor": "date", "commit": "field-commit" }
+      }
+    }
+  },
   "views": {
-    "taskAll": {
-      "type": "list",
-      "label": "All",
+    "taskHome": {
+      "type": "collection",
+      "label": "Tasks",
       "entity": "task",
-      "query": { "kind": "all" },
-      "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
-        },
-        "done": {
-          "editor": "boolean",
-          "commit": "immediate"
-        },
-        "dueDate": {
-          "editor": "date",
-          "commit": "field-commit"
+      "queries": [
+        { "query": "taskAll", "count": { "type": "count" } },
+        { "query": "taskActive", "count": { "type": "count" } },
+        { "query": "taskCompleted", "count": { "type": "count" } },
+        { "query": "taskOverdue", "count": { "type": "count" } }
+      ],
+      "defaultQuery": "taskAll",
+      "result": { "type": "list", "itemView": "taskListItem" },
+      "actions": [
+        { "type": "create", "createView": "taskCreate" },
+        {
+          "type": "entityAction",
+          "action": "clearCompletedTasks",
+          "count": { "type": "count" }
         }
-      }
-    },
-    "taskActive": {
-      "type": "list",
-      "label": "Active",
-      "entity": "task",
-      "query": {
-        "kind": "where",
-        "ref": { "kind": "value", "name": "done" },
-        "op": "eq",
-        "value": false
-      },
-      "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
-        },
-        "done": {
-          "editor": "boolean",
-          "commit": "immediate"
-        },
-        "dueDate": {
-          "editor": "date",
-          "commit": "field-commit"
-        }
-      }
-    },
-    "taskCompleted": {
-      "type": "list",
-      "label": "Completed",
-      "entity": "task",
-      "query": {
-        "kind": "where",
-        "ref": { "kind": "value", "name": "done" },
-        "op": "eq",
-        "value": true
-      },
-      "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
-        },
-        "done": {
-          "editor": "boolean",
-          "commit": "immediate"
-        },
-        "dueDate": {
-          "editor": "date",
-          "commit": "field-commit"
-        }
-      }
+      ]
     },
     "taskCreate": {
       "type": "create",
@@ -445,9 +399,10 @@ The authoring flow should look like this:
 2. Define the entities and fields.
 3. Decide what generic mutations the entity supports.
 4. Add named actions only where the domain needs more than an ordinary edit.
-5. Add collection aggregates where the generated surface needs local summary counts.
-6. Let the runtime provide a default list, detail, and editing surface.
-7. Replace or refine the generated views where the domain needs more shape.
+5. Add reusable collection queries for the record scopes the UI and actions need.
+6. Add item views and collection views that assemble those scopes into workspaces.
+7. Use count badges where a host surface needs local query feedback.
+8. Replace or refine the generated views where the domain needs more shape.
 
 That sequence is important.
 
@@ -578,10 +533,12 @@ It currently proves:
 - one task planner seed schema with `text`, `boolean`, and `date` fields
 - authority-owned runtime schema editing through `/schema`
 - one generated type-aware create form
-- generated editable list tabs for all, active, and completed tasks
-- generated tab counts derived from each list view query
-- schema-owned collection aggregates for total, active, completed, and overdue tasks
+- one generated task collection workspace
+- reusable query scopes for all, active, completed, and overdue tasks
+- generated tab counts derived from collection query slots
+- a shared task item view for row field config
 - one query-targeted named action, `clearCompletedTasks`
+- local target-count feedback for the clear-completed action
 - one authority-backed record store
 - soft-deleted tombstones for action-produced removals
 - bootstrap and incremental sync
@@ -590,7 +547,7 @@ It currently proves:
 - generic `create` and `patch` mutations flowing through the same change log and local merge path
 - action-produced changes flowing through that same change log and local merge path
 
-The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, list tabs and counts use schema-owned queries, collection aggregates are evaluated over the local replica, and `clearCompletedTasks` proves the query-targeted named-action path.
+The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, collection tabs and count badges use schema-owned queries, and `clearCompletedTasks` proves the query-targeted named-action path with authority-reported affected counts.
 
 The next slice is about making generated rows denser and giving views better display policy. The rough priority list lives in [doc/roadmap.md](/Users/dpeek/code/formless/doc/roadmap.md).
 
@@ -609,7 +566,8 @@ and get back:
 - a local-first application shell
 - an authoritative sync model
 - type-aware editors and renderers
-- schema-owned collection aggregates
+- reusable collection queries and collection workspaces
+- derived count badges that are not persisted as data
 - a default UI that is good enough to use
 - a runtime that can be refined rather than rewritten
 
