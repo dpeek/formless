@@ -1,7 +1,7 @@
 import type { AppSchema } from "./schema.ts";
 
 export type EntityName = string;
-export type FieldValue = string | boolean;
+export type FieldValue = string | boolean | number;
 export type RecordValues = Record<string, FieldValue>;
 
 export type StoredRecord = {

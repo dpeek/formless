@@ -36,6 +36,7 @@ describe("home view model collections", () => {
       "title",
       "done",
       "dueDate",
+      "estimate",
       "priority",
     ]);
   });
@@ -58,6 +59,7 @@ describe("home view model collections", () => {
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "title",
       "dueDate",
+      "estimate",
       "priority",
     ]);
     expect(clearCompleted).toMatchObject({

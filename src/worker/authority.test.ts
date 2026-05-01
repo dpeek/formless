@@ -263,7 +263,7 @@ describe("authority", () => {
             task: {
               label: "Task",
               fields: {
-                title: { type: "number", required: true },
+                title: { type: "money", required: true },
               },
             },
           },
@@ -272,7 +272,7 @@ describe("authority", () => {
           views: {},
         },
       },
-      'Field "task.title" has unsupported type "number".',
+      'Field "task.title" has unsupported type "money".',
     );
   });
 
@@ -462,6 +462,97 @@ describe("authority", () => {
       },
       'Field "priority" must be a known enum value.',
     );
+  });
+
+  it("accepts finite number values and rejects invalid numeric input", async () => {
+    const zero = await postMutation("mutation-1", { title: "Zero", estimate: 0 });
+    const estimated = await postMutation("mutation-2", { title: "Estimated", estimate: 3 });
+
+    expect(zero.record.values.estimate).toBe(0);
+    expect(estimated.record.values.estimate).toBe(3);
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-3",
+        entity: "task",
+        op: "create",
+        values: { title: "String estimate", estimate: "3" },
+      },
+      'Field "estimate" must be a finite number.',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-4",
+        entity: "task",
+        op: "create",
+        values: { title: "Decimal estimate", estimate: 1.5 },
+      },
+      'Field "estimate" must be an integer.',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-5",
+        entity: "task",
+        op: "create",
+        values: { title: "Negative estimate", estimate: -1 },
+      },
+      'Field "estimate" must be greater than or equal to 0.',
+    );
+  });
+
+  it("clears optional number fields when patched to an empty value", async () => {
+    const created = await postMutation("mutation-1", { title: "First", estimate: 4 });
+    const cleared = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { estimate: "" },
+    });
+    const zero = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-3",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { estimate: 0 },
+    });
+
+    expect(cleared.record.values.estimate).toBeUndefined();
+    expect(zero.record.values.estimate).toBe(0);
+  });
+
+  it("checks number constraints when applying schema updates", async () => {
+    const created = await postMutation("mutation-1", { title: "Estimated", estimate: 3 });
+
+    const relaxed = await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithEstimateNumber({ max: 5 }),
+    });
+
+    expect(relaxed.schema.entities.task?.fields.estimate).toMatchObject({
+      type: "number",
+      max: 5,
+    });
+
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithEstimateNumber({ max: 2 }),
+      },
+      'Cannot change number constraints for "task.estimate"',
+    );
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithRequiredScore(),
+      },
+      'Cannot require field "task.score"',
+    );
+
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    expect(bootstrap.records).toEqual([created.record]);
   });
 
   it("clears optional enum fields when patched to an empty value", async () => {
@@ -1200,6 +1291,75 @@ function schemaWithMutations(mutations: unknown) {
     queries: defaultQueries(),
     itemViews: defaultItemViews(),
     views: defaultViews(),
+  };
+}
+
+function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {}) {
+  const currentEstimateField = appSchema.entities.task.fields.estimate;
+
+  if (currentEstimateField?.type !== "number") {
+    throw new Error("Seed task estimate field must be a number.");
+  }
+
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          ...appSchema.entities.task.fields,
+          estimate: {
+            ...currentEstimateField,
+            ...numberOverrides,
+          },
+        },
+        mutations: defaultMutations(),
+        actions: appSchema.entities.task.actions,
+      },
+    },
+    queries: appSchema.queries,
+    itemViews: appSchema.itemViews,
+    views: appSchema.views,
+  };
+}
+
+function schemaWithRequiredScore() {
+  const views = defaultViews();
+  const taskCreate = views.taskCreate;
+
+  if (taskCreate.type !== "create") {
+    throw new Error("Expected taskCreate to be a create view.");
+  }
+
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          ...appSchema.entities.task.fields,
+          score: {
+            type: "number",
+            required: true,
+            label: "Score",
+          },
+        },
+        mutations: defaultMutations(),
+        actions: appSchema.entities.task.actions,
+      },
+    },
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
+    views: {
+      ...views,
+      taskCreate: {
+        ...taskCreate,
+        fields: {
+          ...taskCreate.fields,
+          score: { editor: "number" },
+        },
+      },
+    },
   };
 }
 

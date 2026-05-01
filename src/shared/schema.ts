@@ -20,6 +20,16 @@ export type DateFieldSchema = {
   label?: string;
 };
 
+export type NumberFieldSchema = {
+  type: "number";
+  required: boolean;
+  label?: string;
+  default?: number;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+};
+
 export type EnumValueSchema = {
   label: string;
 };
@@ -32,11 +42,16 @@ export type EnumFieldSchema = {
   default?: string;
 };
 
-export type FieldSchema = TextFieldSchema | BooleanFieldSchema | DateFieldSchema | EnumFieldSchema;
+export type FieldSchema =
+  | TextFieldSchema
+  | BooleanFieldSchema
+  | DateFieldSchema
+  | NumberFieldSchema
+  | EnumFieldSchema;
 
 export type FieldCommitPolicy = "immediate" | "field-commit";
 
-export type FieldEditor = "text" | "boolean" | "date" | "enum";
+export type FieldEditor = "text" | "boolean" | "date" | "number" | "enum";
 
 export type ViewFieldSchema = {
   editor: FieldEditor;
@@ -755,7 +770,10 @@ function parseListViewField(
     throw new Error(`View field "${viewName}.${fieldName}" enum fields must commit immediately.`);
   }
 
-  if ((field.type === "text" || field.type === "date") && value.commit !== "field-commit") {
+  if (
+    (field.type === "text" || field.type === "date" || field.type === "number") &&
+    value.commit !== "field-commit"
+  ) {
     throw new Error(
       `View field "${viewName}.${fieldName}" ${field.type} fields must use field-commit.`,
     );
@@ -821,7 +839,13 @@ function parseViewFieldEditor(
   value: unknown,
   field: FieldSchema,
 ): FieldEditor {
-  if (value !== "text" && value !== "boolean" && value !== "date" && value !== "enum") {
+  if (
+    value !== "text" &&
+    value !== "boolean" &&
+    value !== "date" &&
+    value !== "number" &&
+    value !== "enum"
+  ) {
     throw new Error(
       `View field "${viewName}.${fieldName}" has unsupported editor "${String(value)}".`,
     );
@@ -857,6 +881,7 @@ function assertCreateViewIncludesRequiredFields(
 function hasCreateDefault(field: FieldSchema) {
   return (
     (field.type === "boolean" && typeof field.default === "boolean") ||
+    (field.type === "number" && typeof field.default === "number") ||
     (field.type === "enum" && typeof field.default === "string")
   );
 }
@@ -1163,6 +1188,65 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
     return field;
   }
 
+  if (value.type === "number") {
+    assertExactKeys(
+      `Field "${entityName}.${fieldName}"`,
+      value,
+      ["type", "required"],
+      ["label", "default", "min", "max", "integer"],
+    );
+
+    const field: NumberFieldSchema = {
+      type: "number",
+      required: value.required,
+    };
+
+    if (label !== undefined) {
+      field.label = label;
+    }
+
+    if ("min" in value) {
+      if (!isFiniteNumber(value.min)) {
+        throw new Error(`Field "${entityName}.${fieldName}" number min must be finite.`);
+      }
+
+      field.min = value.min;
+    }
+
+    if ("max" in value) {
+      if (!isFiniteNumber(value.max)) {
+        throw new Error(`Field "${entityName}.${fieldName}" number max must be finite.`);
+      }
+
+      field.max = value.max;
+    }
+
+    if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+      throw new Error(
+        `Field "${entityName}.${fieldName}" number min must be less than or equal to max.`,
+      );
+    }
+
+    if ("integer" in value) {
+      if (typeof value.integer !== "boolean") {
+        throw new Error(`Field "${entityName}.${fieldName}" number integer must be a boolean.`);
+      }
+
+      field.integer = value.integer;
+    }
+
+    if ("default" in value) {
+      if (!isFiniteNumber(value.default)) {
+        throw new Error(`Field "${entityName}.${fieldName}" number default must be finite.`);
+      }
+
+      assertNumberFieldValue(entityName, fieldName, value.default, field, "default");
+      field.default = value.default;
+    }
+
+    return field;
+  }
+
   if (value.type === "enum") {
     assertExactKeys(
       `Field "${entityName}.${fieldName}"`,
@@ -1198,6 +1282,26 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
   throw new Error(
     `Field "${entityName}.${fieldName}" has unsupported type "${String(value.type)}".`,
   );
+}
+
+function assertNumberFieldValue(
+  entityName: string,
+  fieldName: string,
+  value: number,
+  field: NumberFieldSchema,
+  valueLabel: string,
+) {
+  if (field.min !== undefined && value < field.min) {
+    throw new Error(`Field "${entityName}.${fieldName}" number ${valueLabel} must be >= min.`);
+  }
+
+  if (field.max !== undefined && value > field.max) {
+    throw new Error(`Field "${entityName}.${fieldName}" number ${valueLabel} must be <= max.`);
+  }
+
+  if (field.integer && !Number.isInteger(value)) {
+    throw new Error(`Field "${entityName}.${fieldName}" number ${valueLabel} must be an integer.`);
+  }
 }
 
 function parseEnumValues(
@@ -1286,6 +1390,10 @@ function assertExactKeys(
       throw new Error(`${context} must include "${key}".`);
     }
   }
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

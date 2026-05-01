@@ -156,6 +156,152 @@ describe("schema enum fields", () => {
   });
 });
 
+describe("schema number fields", () => {
+  it("parses number fields, query values, and generated editors", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: taskEntityWithEstimateNumber(),
+        },
+        queries: {
+          ...defaultQueries(),
+          taskEstimateTwo: {
+            label: "Estimate 2",
+            entity: "task",
+            expression: {
+              kind: "where",
+              ref: { kind: "value", name: "estimate" },
+              op: "eq",
+              value: 2,
+            },
+          },
+        },
+        itemViews: {
+          taskListItem: {
+            entity: "task",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+              estimate: { editor: "number", commit: "field-commit" },
+            },
+          },
+        },
+        views: {
+          taskHome: defaultCollectionView(),
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text" },
+              estimate: { editor: "number" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.task?.fields.estimate).toEqual({
+      type: "number",
+      required: false,
+      label: "Estimate",
+      default: 1,
+      min: 0,
+      max: 10,
+      integer: true,
+    });
+    expect(schema.queries.taskEstimateTwo?.expression).toMatchObject({
+      ref: { kind: "value", name: "estimate" },
+      op: "eq",
+      value: 2,
+    });
+    expect(schema.itemViews.taskListItem?.fields.estimate).toEqual({
+      editor: "number",
+      commit: "field-commit",
+    });
+  });
+
+  it("allows required number fields with defaults to be omitted from create views", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber({ required: true }),
+          },
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects malformed number definitions and editors", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber({ scale: 2 }),
+          },
+        }),
+      ),
+    ).toThrow('Field "task.estimate" has unsupported key "scale"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber({ default: Infinity }),
+          },
+        }),
+      ),
+    ).toThrow("number default must be finite");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber({ min: 10, max: 1 }),
+          },
+        }),
+      ),
+    ).toThrow("number min must be less than or equal to max");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber({ integer: "yes" }),
+          },
+        }),
+      ),
+    ).toThrow("number integer must be a boolean");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber({ default: 1.5 }),
+          },
+        }),
+      ),
+    ).toThrow("number default must be an integer");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber(),
+          },
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                estimate: { editor: "number", commit: "immediate" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("number fields must use field-commit");
+  });
+});
+
 describe("schema query catalog", () => {
   it("parses top-level queries in declaration order", () => {
     const schema = parseAppSchema(baseSchema());
@@ -525,6 +671,25 @@ function taskEntityWithKindEnum() {
           role: { label: "Role" },
           stream: { label: "Stream" },
         },
+      },
+    },
+  };
+}
+
+function taskEntityWithEstimateNumber(overrides: Record<string, unknown> = {}) {
+  return {
+    ...defaultEntities().task,
+    fields: {
+      ...defaultEntities().task.fields,
+      estimate: {
+        type: "number",
+        required: false,
+        label: "Estimate",
+        default: 1,
+        min: 0,
+        max: 10,
+        integer: true,
+        ...overrides,
       },
     },
   };

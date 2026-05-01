@@ -116,6 +116,27 @@ describe("storage", () => {
     });
   });
 
+  it("preserves number values through records and change rows", async () => {
+    const response = await postJson<MutationResponse>("/create", {
+      mutationId: "mutation-1",
+      entity: "task",
+      op: "create",
+      values: { title: "Estimated", done: false, estimate: 5 },
+    });
+    const records = await getJson<MutationResponse["record"][]>("/records");
+    const changes = await getJson<unknown[]>("/changes?after=0");
+
+    expect(response.record.values.estimate).toBe(5);
+    expect(records[0]?.values.estimate).toBe(5);
+    expect(changes[0]).toMatchObject({
+      payload: {
+        values: {
+          estimate: 5,
+        },
+      },
+    });
+  });
+
   it("replays the same mutationId without inserting a duplicate record", async () => {
     const first = await createRecord("mutation-1", "First");
     const replay = await createRecord("mutation-1", "First");

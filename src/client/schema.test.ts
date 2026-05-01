@@ -47,6 +47,7 @@ describe("seed app schema", () => {
       title: { editor: "text", commit: "field-commit" },
       done: { editor: "boolean", commit: "immediate" },
       dueDate: { editor: "date", commit: "field-commit" },
+      estimate: { editor: "number", commit: "field-commit" },
       priority: { editor: "enum", commit: "immediate" },
     });
     expect(appSchema.views.taskHome).toMatchObject({

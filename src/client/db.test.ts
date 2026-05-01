@@ -98,6 +98,21 @@ describe("client db", () => {
     expect(snapshot.records).toEqual([record("record-1", "First", true)]);
     expect(typeof snapshot.records[0]?.values.done).toBe("boolean");
   });
+
+  it("stores and merges number record values", async () => {
+    await saveBootstrapResponse({
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [recordWithEstimate("record-1", "First", 2)],
+      cursor: 1,
+    });
+    await mergeChanges([changeWithEstimate(2, "record-1", "First", 3)], 2);
+
+    const snapshot = await readLocalSnapshot();
+
+    expect(snapshot.records).toEqual([recordWithEstimate("record-1", "First", 3)]);
+    expect(typeof snapshot.records[0]?.values.estimate).toBe("number");
+  });
 });
 
 function record(id: string, title: string, done = false): StoredRecord {
@@ -106,6 +121,13 @@ function record(id: string, title: string, done = false): StoredRecord {
     entity: "task",
     values: { title, done },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function recordWithEstimate(id: string, title: string, estimate: number): StoredRecord {
+  return {
+    ...record(id, title),
+    values: { title, done: false, estimate },
   };
 }
 
@@ -126,5 +148,17 @@ function change(seq: number, recordId: string, title: string, done = false): Cha
     recordId,
     payload: record(recordId, title, done),
     createdAt: `2026-04-28T00:00:0${seq}.000Z`,
+  };
+}
+
+function changeWithEstimate(
+  seq: number,
+  recordId: string,
+  title: string,
+  estimate: number,
+): ChangeRow {
+  return {
+    ...change(seq, recordId, title, false),
+    payload: recordWithEstimate(recordId, title, estimate),
   };
 }

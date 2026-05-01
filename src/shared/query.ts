@@ -11,7 +11,7 @@ import type { StoredRecord } from "./protocol.ts";
 
 export type QueryOperator = "eq" | "before";
 export type QueryDynamicValue = { kind: "today" };
-export type QueryValue = string | boolean | QueryDynamicValue;
+export type QueryValue = string | boolean | number | QueryDynamicValue;
 
 export type QueryExpression =
   | { kind: "all" }
@@ -237,6 +237,16 @@ function parseQueryValue(
     if (typeof value !== "boolean") {
       throw new Error(
         `Query "${contextLabel}" field "${formatFieldRef(ref)}" requires a boolean value.`,
+      );
+    }
+
+    return value;
+  }
+
+  if (field.type === "number") {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(
+        `Query "${contextLabel}" field "${formatFieldRef(ref)}" requires a finite number value.`,
       );
     }
 

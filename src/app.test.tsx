@@ -102,6 +102,8 @@ describe("generated collection home", () => {
     expect(html).toContain('type="date"');
     expect(html).toContain("2026-05-01");
     expect(html).toContain('aria-label="Due date"');
+    expect(html).toContain('type="number"');
+    expect(html).toContain('aria-label="Estimate"');
   });
 
   it("renders clear-completed target count and keeps the button enabled at zero", () => {
@@ -179,6 +181,41 @@ describe("generated forms and records", () => {
     expect(html).toContain("legacy");
     expect(html).toContain("Role");
     expect(html).toContain("Stream");
+  });
+
+  it("renders number create controls and inline editors with numeric constraints", () => {
+    const task = taskEntityWithEstimateNumber();
+    const action = createAction(task, ["estimate"]);
+    const createHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+    const recordFields: RecordFieldConfig[] = [
+      {
+        fieldName: "estimate",
+        field: task.fields.estimate,
+        editor: "number",
+        commit: "field-commit",
+      },
+    ];
+
+    applyBootstrapResponse(bootstrap([numberRecord(3)]));
+    const rowHtml = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={recordFields}
+      />,
+    );
+
+    expect(createHtml).toContain('name="estimate"');
+    expect(createHtml).toContain('type="number"');
+    expect(createHtml).toContain('min="0"');
+    expect(createHtml).toContain('max="10"');
+    expect(createHtml).toContain('step="1"');
+    expect(rowHtml).toContain('aria-label="Estimate"');
+    expect(rowHtml).toContain('type="number"');
+    expect(rowHtml).toContain('value="3"');
   });
 
   it("renders only the fields declared by a create view in the dialog", () => {
@@ -298,6 +335,15 @@ function enumRecord(kind: string): StoredRecord {
   };
 }
 
+function numberRecord(estimate: number): StoredRecord {
+  return {
+    id: "record-1",
+    entity: "task",
+    values: { estimate },
+    createdAt: "2026-04-29T00:00:01.000Z",
+  };
+}
+
 function taskEntityWithKindEnum(): EntitySchema {
   return {
     label: "Task",
@@ -311,6 +357,27 @@ function taskEntityWithKindEnum(): EntitySchema {
           role: { label: "Role" },
           stream: { label: "Stream" },
         },
+      },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
+  };
+}
+
+function taskEntityWithEstimateNumber(): EntitySchema {
+  return {
+    label: "Task",
+    fields: {
+      estimate: {
+        type: "number",
+        required: false,
+        label: "Estimate",
+        min: 0,
+        max: 10,
+        integer: true,
       },
     },
     mutations: {

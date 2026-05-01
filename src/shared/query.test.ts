@@ -32,6 +32,13 @@ describe("field catalog", () => {
         filterOps: ["eq", "before"],
       },
       {
+        ref: { kind: "value", name: "estimate" },
+        type: "number",
+        label: "Estimate",
+        writable: true,
+        filterOps: ["eq"],
+      },
+      {
         ref: { kind: "value", name: "kind" },
         type: "enum",
         label: "Kind",
@@ -124,6 +131,24 @@ describe("query parsing", () => {
       ref: { kind: "value", name: "kind" },
       op: "eq",
       value: "role",
+    });
+
+    expect(
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "estimate" },
+          op: "eq",
+          value: 2,
+        },
+        catalog,
+        "estimated tasks",
+      ),
+    ).toEqual({
+      kind: "where",
+      ref: { kind: "value", name: "estimate" },
+      op: "eq",
+      value: 2,
     });
   });
 
@@ -270,6 +295,7 @@ describe("query parsing", () => {
     for (const ref of [
       { kind: "value" as const, name: "title" },
       { kind: "value" as const, name: "done" },
+      { kind: "value" as const, name: "estimate" },
       { kind: "value" as const, name: "kind" },
       { kind: "system" as const, name: "id" as const },
       { kind: "system" as const, name: "createdAt" as const },
@@ -315,6 +341,32 @@ describe("query parsing", () => {
         "bad query",
       ),
     ).toThrow("must be a known enum value");
+
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "estimate" },
+          op: "eq",
+          value: "2",
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("requires a finite number value");
+
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "estimate" },
+          op: "eq",
+          value: Infinity,
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("requires a finite number value");
   });
 
   it("rejects malformed date values", () => {
@@ -351,6 +403,7 @@ describe("query parsing", () => {
     for (const ref of [
       { kind: "value" as const, name: "title" },
       { kind: "value" as const, name: "done" },
+      { kind: "value" as const, name: "estimate" },
       { kind: "value" as const, name: "kind" },
       { kind: "system" as const, name: "id" as const },
       { kind: "system" as const, name: "createdAt" as const },
@@ -383,6 +436,15 @@ describe("query evaluation", () => {
         ref: { kind: "value", name: "done" },
         op: "eq",
         value: false,
+      }),
+    ).toBe(true);
+
+    expect(
+      matchesQuery(record, {
+        kind: "where",
+        ref: { kind: "value", name: "estimate" },
+        op: "eq",
+        value: 2,
       }),
     ).toBe(true);
   });
@@ -670,6 +732,7 @@ const taskEntity = {
     title: { type: "text", required: true, label: "Title" },
     done: { type: "boolean", required: true, label: "Done", default: false },
     dueDate: { type: "date", required: false, label: "Due date" },
+    estimate: { type: "number", required: false, label: "Estimate", min: 0, integer: true },
     kind: {
       type: "enum",
       required: true,
@@ -705,6 +768,7 @@ const record: StoredRecord = {
     title: "Plan week",
     done: false,
     dueDate: "2026-05-01",
+    estimate: 2,
     kind: "role",
   },
   createdAt: "2026-04-28T00:00:00.000Z",

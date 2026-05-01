@@ -577,7 +577,10 @@ function isRecordValues(value: unknown): value is RecordValues {
     value !== null &&
     !Array.isArray(value) &&
     Object.values(value).every(
-      (fieldValue) => typeof fieldValue === "string" || typeof fieldValue === "boolean",
+      (fieldValue) =>
+        typeof fieldValue === "string" ||
+        typeof fieldValue === "boolean" ||
+        (typeof fieldValue === "number" && Number.isFinite(fieldValue)),
     )
   );
 }

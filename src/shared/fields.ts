@@ -6,7 +6,14 @@ export type SystemFieldName = "id" | "createdAt" | "deletedAt";
 
 export type FieldRef = { kind: "value"; name: string } | { kind: "system"; name: SystemFieldName };
 
-export type AddressableFieldType = "text" | "boolean" | "date" | "enum" | "id" | "datetime";
+export type AddressableFieldType =
+  | "text"
+  | "boolean"
+  | "date"
+  | "number"
+  | "enum"
+  | "id"
+  | "datetime";
 
 export type AddressableField = {
   ref: FieldRef;

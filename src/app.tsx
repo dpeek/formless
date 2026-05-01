@@ -353,6 +353,23 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
     );
   }
 
+  if (field.type === "number") {
+    return (
+      <Field>
+        <Label>{label}</Label>
+        <Input
+          defaultValue={field.default}
+          max={field.max}
+          min={field.min}
+          name={fieldName}
+          required={field.required}
+          step={field.integer ? "1" : "any"}
+          type="number"
+        />
+      </Field>
+    );
+  }
+
   if (field.type === "enum") {
     return (
       <Field>
@@ -388,6 +405,12 @@ function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordV
   for (const { field, fieldName } of fields) {
     if (field.type === "boolean") {
       values[fieldName] = formData.has(fieldName);
+      continue;
+    }
+
+    if (field.type === "number") {
+      const value = formData.get(fieldName);
+      values[fieldName] = typeof value === "string" ? numberInputValueToFieldValue(value) : "";
       continue;
     }
 
@@ -771,7 +794,7 @@ function RecordFieldEditor({
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      void commit(event.currentTarget.value);
+      void commit(inputValueToFieldValue(field, event.currentTarget.value));
       return;
     }
 
@@ -783,7 +806,11 @@ function RecordFieldEditor({
 
   return (
     <div
-      className={editor === "date" ? "min-w-36 flex-none space-y-1" : "min-w-52 flex-1 space-y-1"}
+      className={
+        editor === "date" || editor === "number"
+          ? "min-w-36 flex-none space-y-1"
+          : "min-w-52 flex-1 space-y-1"
+      }
     >
       <Field>
         <Label className="sr-only">{fieldLabel(fieldName, field)}</Label>
@@ -793,13 +820,14 @@ function RecordFieldEditor({
           disabled={!canPatch || isPending}
           onBlur={(event) => {
             if (commitPolicy === "field-commit") {
-              void commit(event.currentTarget.value);
+              void commit(inputValueToFieldValue(field, event.currentTarget.value));
             }
           }}
           onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={handleKeyDown}
           required={field.required}
-          type={editor === "date" ? "date" : "text"}
+          {...numberInputAttributes(field)}
+          type={editor === "date" ? "date" : editor === "number" ? "number" : "text"}
           value={draft}
         />
       </Field>
@@ -809,7 +837,35 @@ function RecordFieldEditor({
 }
 
 function fieldValueToInputValue(value: FieldValue | undefined) {
-  return typeof value === "string" ? value : "";
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  return "";
+}
+
+function inputValueToFieldValue(field: FieldSchema, value: string): FieldValue {
+  return field.type === "number" ? numberInputValueToFieldValue(value) : value;
+}
+
+function numberInputValueToFieldValue(value: string): FieldValue {
+  return value === "" ? "" : Number(value);
+}
+
+function numberInputAttributes(field: FieldSchema) {
+  if (field.type !== "number") {
+    return {};
+  }
+
+  return {
+    max: field.max,
+    min: field.min,
+    step: field.integer ? "1" : "any",
+  };
 }
 
 function fieldLabel(fieldName: string, field: FieldSchema) {

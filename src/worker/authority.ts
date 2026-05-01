@@ -1,7 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import rawSeedSchema from "../../schema/app-schema.json";
 import { isDateString } from "../shared/date.ts";
-import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
+import {
+  parseAppSchema,
+  type AppSchema,
+  type EntitySchema,
+  type NumberFieldSchema,
+} from "../shared/schema.ts";
 import type {
   ActionRequest,
   CreateMutation,
@@ -356,6 +361,33 @@ function validateRecordValues(values: Record<string, unknown>, entity: EntitySch
       continue;
     }
 
+    if (field.type === "number") {
+      if (fieldWasProvided) {
+        if (fieldValue === "") {
+          if (field.required) {
+            throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
+          }
+
+          continue;
+        }
+
+        validateNumberFieldValue(fieldName, fieldValue, field);
+        validated[fieldName] = fieldValue;
+        continue;
+      }
+
+      if (field.default !== undefined) {
+        validated[fieldName] = field.default;
+        continue;
+      }
+
+      if (field.required) {
+        throw new BadRequestError(`Field "${fieldName}" is required.`);
+      }
+
+      continue;
+    }
+
     if (typeof fieldValue !== "string") {
       if (field.required) {
         throw new BadRequestError(`Field "${fieldName}" is required.`);
@@ -378,6 +410,30 @@ function validateRecordValues(values: Record<string, unknown>, entity: EntitySch
   }
 
   return validated;
+}
+
+function validateNumberFieldValue(
+  fieldName: string,
+  value: unknown,
+  field: NumberFieldSchema,
+): asserts value is number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new BadRequestError(`Field "${fieldName}" must be a finite number.`);
+  }
+
+  if (field.min !== undefined && value < field.min) {
+    throw new BadRequestError(
+      `Field "${fieldName}" must be greater than or equal to ${field.min}.`,
+    );
+  }
+
+  if (field.max !== undefined && value > field.max) {
+    throw new BadRequestError(`Field "${fieldName}" must be less than or equal to ${field.max}.`);
+  }
+
+  if (field.integer && !Number.isInteger(value)) {
+    throw new BadRequestError(`Field "${fieldName}" must be an integer.`);
+  }
 }
 
 function validateSchemaUpdate(
@@ -427,16 +483,28 @@ function validateCompatibleSchemaChange(
     }
 
     for (const [fieldName, nextField] of Object.entries(nextEntity.fields)) {
-      if (
-        nextField.required &&
-        entityRecords.some((record) => {
-          return !isValidStoredFieldValue(record.values[fieldName], nextField);
-        })
-      ) {
+      if (!nextField.required && nextField.type !== "number") {
+        continue;
+      }
+
+      const currentField = currentEntity.fields[fieldName];
+      const hasInvalidStoredValue = entityRecords.some((record) => {
+        return !isValidStoredFieldValue(record.values[fieldName], nextField);
+      });
+
+      if (!hasInvalidStoredValue) {
+        continue;
+      }
+
+      if (nextField.type === "number" && currentField) {
         throw new BadRequestError(
-          `Cannot require field "${entityName}.${fieldName}" because existing records are missing it.`,
+          `Cannot change number constraints for "${entityName}.${fieldName}" because existing records contain invalid values.`,
         );
       }
+
+      throw new BadRequestError(
+        `Cannot require field "${entityName}.${fieldName}" because existing records are missing it.`,
+      );
     }
   }
 }
@@ -445,22 +513,48 @@ function isValidStoredFieldValue(
   value: RecordValues[string] | undefined,
   field: EntitySchema["fields"][string],
 ) {
-  if (field.type === "boolean") {
-    return typeof value === "boolean" || typeof field.default === "boolean";
-  }
+  if (value === undefined) {
+    if (field.type === "boolean") {
+      return !field.required || typeof field.default === "boolean";
+    }
 
-  if (field.type === "enum") {
-    if (value === undefined) {
+    if (field.type === "number") {
       return !field.required || field.default !== undefined;
     }
 
+    if (field.type === "enum") {
+      return !field.required || field.default !== undefined;
+    }
+
+    return !field.required;
+  }
+
+  if (field.type === "boolean") {
+    return typeof value === "boolean";
+  }
+
+  if (field.type === "enum") {
     return typeof value === "string" && value !== "";
+  }
+
+  if (field.type === "number") {
+    return isValidNumberFieldValue(value, field);
   }
 
   return (
     typeof value === "string" &&
     (!field.required || value.trim() !== "") &&
     (field.type !== "date" || isDateString(value))
+  );
+}
+
+function isValidNumberFieldValue(value: RecordValues[string], field: NumberFieldSchema) {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    (field.min === undefined || value >= field.min) &&
+    (field.max === undefined || value <= field.max) &&
+    (!field.integer || Number.isInteger(value))
   );
 }
 
