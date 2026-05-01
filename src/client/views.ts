@@ -2,6 +2,7 @@ import type {
   AppSchema,
   CollectionViewSchema,
   CountDisplaySchema,
+  CreateDefaultValueSchema,
   CreateViewSchema,
   EntityActionSchema,
   EntitySchema,
@@ -24,6 +25,12 @@ export type CreateFieldConfig = {
   fieldName: string;
   field: FieldSchema;
   editor: FieldEditor;
+};
+
+export type CreateDefaultConfig = {
+  fieldName: string;
+  field: FieldSchema;
+  value: CreateDefaultValueSchema;
 };
 
 export type HomeQueryTabConfig = {
@@ -68,6 +75,7 @@ export type HomeActionConfig =
       entityName: string;
       entity: EntitySchema;
       fields: CreateFieldConfig[];
+      defaults: CreateDefaultConfig[];
       enabled: boolean;
     }
   | {
@@ -251,6 +259,7 @@ function selectCreateAction(
     entityName,
     entity,
     fields: selectCreateFields(createView, entity),
+    defaults: selectCreateDefaults(createView, entity),
     enabled: entity.mutations.create.enabled,
   };
 }
@@ -260,6 +269,14 @@ function selectCreateFields(view: CreateViewSchema, entity: EntitySchema): Creat
     fieldName,
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
+  }));
+}
+
+function selectCreateDefaults(view: CreateViewSchema, entity: EntitySchema): CreateDefaultConfig[] {
+  return Object.entries(view.defaults ?? {}).map(([fieldName, defaultValue]) => ({
+    fieldName,
+    field: entity.fields[fieldName] as FieldSchema,
+    value: defaultValue,
   }));
 }
 

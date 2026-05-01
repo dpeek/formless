@@ -71,6 +71,11 @@ export type CreateViewFieldSchema = {
   editor: FieldEditor;
 };
 
+export type CreateDefaultValueSchema = {
+  kind: "context";
+  name: string;
+};
+
 export type CollectionQuerySchema = {
   label: string;
   entity: string;
@@ -134,6 +139,7 @@ export type CreateViewSchema = {
   type: "create";
   entity: string;
   fields: Record<string, CreateViewFieldSchema>;
+  defaults?: Record<string, CreateDefaultValueSchema>;
 };
 
 export type ViewSchema = CollectionViewSchema | CreateViewSchema;
@@ -419,12 +425,15 @@ function parseViews(
     throw new Error("Schema must define at least one view.");
   }
 
-  assertCollectionViews(views);
+  assertCollectionViews(views, entities);
 
   return views;
 }
 
-function assertCollectionViews(views: Record<string, ViewSchema>) {
+function assertCollectionViews(
+  views: Record<string, ViewSchema>,
+  entities: Record<string, EntitySchema>,
+) {
   const collectionEntries = Object.entries(views).filter(([, view]) => view.type === "collection");
 
   if (collectionEntries.length === 0) {
@@ -459,6 +468,14 @@ function assertCollectionViews(views: Record<string, ViewSchema>) {
           `Collection view "${viewName}" create action view "${actionSlot.createView}" must use entity "${view.entity}".`,
         );
       }
+
+      validateCreateActionContextDefaults(
+        viewName,
+        actionSlot.createView,
+        createView,
+        entities,
+        view.context,
+      );
     }
 
     if (view.context?.createView === undefined) {
@@ -483,7 +500,56 @@ function assertCollectionViews(views: Record<string, ViewSchema>) {
         `Collection view "${viewName}" context createView "${view.context.createView}" must use entity "${view.context.entity}".`,
       );
     }
+
+    if (createViewRequiresContextDefaults(createView)) {
+      throw new Error(
+        `Collection view "${viewName}" context createView "${view.context.createView}" must not require context defaults.`,
+      );
+    }
   }
+}
+
+function validateCreateActionContextDefaults(
+  collectionViewName: string,
+  createViewName: string,
+  createView: CreateViewSchema,
+  entities: Record<string, EntitySchema>,
+  collectionContext: CollectionContextSchema | undefined,
+) {
+  if (!createViewRequiresContextDefaults(createView)) {
+    return;
+  }
+
+  const context = `Collection view "${collectionViewName}" create action view "${createViewName}"`;
+
+  if (!collectionContext) {
+    throw new Error(`${context} requires context defaults but the collection has no context.`);
+  }
+
+  const entity = entities[createView.entity];
+
+  if (!entity) {
+    throw new Error(`${context} references unknown entity "${createView.entity}".`);
+  }
+
+  for (const [fieldName, defaultValue] of Object.entries(createView.defaults ?? {})) {
+    if (defaultValue.name !== collectionContext.name) {
+      throw new Error(
+        `${context} requires context "${defaultValue.name}" but the collection context is "${collectionContext.name}".`,
+      );
+    }
+
+    const field = entity.fields[fieldName];
+    if (field?.type !== "reference" || field.to !== collectionContext.entity) {
+      throw new Error(
+        `${context} default field "${fieldName}" must reference entity "${collectionContext.entity}".`,
+      );
+    }
+  }
+}
+
+function createViewRequiresContextDefaults(createView: CreateViewSchema) {
+  return Object.keys(createView.defaults ?? {}).length > 0;
 }
 
 function parseView(
@@ -509,7 +575,7 @@ function parseView(
     return parseCollectionView(viewName, value, entities, queries, itemViews);
   }
 
-  assertExactKeys(`View "${viewName}"`, value, ["type", "entity", "fields"]);
+  assertExactKeys(`View "${viewName}"`, value, ["type", "entity", "fields"], ["defaults"]);
 
   if (typeof value.entity !== "string" || value.entity.trim() === "") {
     throw new Error(`View "${viewName}" must include an entity.`);
@@ -521,13 +587,15 @@ function parseView(
   }
 
   const fields = parseCreateViewFields(viewName, value.entity, value.fields, entity);
+  const defaults = parseCreateViewDefaults(viewName, value.entity, value.defaults, entity, fields);
   assertViewHasFields(viewName, fields);
-  assertCreateViewIncludesRequiredFields(viewName, fields, entity);
+  assertCreateViewIncludesRequiredFields(viewName, fields, defaults ?? {}, entity);
 
   return {
     type: "create",
     entity: value.entity,
     fields,
+    ...(defaults === undefined ? {} : { defaults }),
   };
 }
 
@@ -1060,6 +1128,78 @@ function parseCreateViewField(
   };
 }
 
+function parseCreateViewDefaults(
+  viewName: string,
+  entityName: string,
+  value: unknown,
+  entity: EntitySchema,
+  fields: Record<string, CreateViewFieldSchema>,
+): Record<string, CreateDefaultValueSchema> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Create view "${viewName}" defaults must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error(`Create view "${viewName}" defaults must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([fieldName, defaultValue]) => [
+      fieldName,
+      parseCreateViewDefault(viewName, entityName, fieldName, defaultValue, entity, fields),
+    ]),
+  );
+}
+
+function parseCreateViewDefault(
+  viewName: string,
+  entityName: string,
+  fieldName: string,
+  value: unknown,
+  entity: EntitySchema,
+  fields: Record<string, CreateViewFieldSchema>,
+): CreateDefaultValueSchema {
+  const context = `Create view "${viewName}" default "${fieldName}"`;
+
+  if (fieldName.trim() === "") {
+    throw new Error(`Create view "${viewName}" default field names must be non-empty.`);
+  }
+
+  const field = entity.fields[fieldName];
+  if (!field) {
+    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
+  }
+
+  if (fieldName in fields) {
+    throw new Error(`${context} must not also appear in fields.`);
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["kind", "name"]);
+
+  if (value.kind !== "context") {
+    throw new Error(`${context} has unsupported kind "${String(value.kind)}".`);
+  }
+
+  if (typeof value.name !== "string" || value.name.trim() === "") {
+    throw new Error(`${context} name must be a non-empty string.`);
+  }
+
+  if (field.type !== "reference") {
+    throw new Error(`${context} requires a reference field.`);
+  }
+
+  return { kind: "context", name: value.name };
+}
+
 function parseViewFieldEditor(
   viewName: string,
   fieldName: string,
@@ -1097,10 +1237,16 @@ function assertViewHasFields(viewName: string, fields: Record<string, unknown>) 
 function assertCreateViewIncludesRequiredFields(
   viewName: string,
   fields: Record<string, CreateViewFieldSchema>,
+  defaults: Record<string, CreateDefaultValueSchema>,
   entity: EntitySchema,
 ) {
   for (const [fieldName, field] of Object.entries(entity.fields)) {
-    if (field.required && !(fieldName in fields) && !hasCreateDefault(field)) {
+    if (
+      field.required &&
+      !(fieldName in fields) &&
+      !(fieldName in defaults) &&
+      !hasCreateDefault(field)
+    ) {
       throw new Error(`Create view "${viewName}" must include required field "${fieldName}".`);
     }
   }

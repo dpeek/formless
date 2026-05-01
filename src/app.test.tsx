@@ -8,6 +8,7 @@ import {
   GeneratedCreateForm,
   HomeCollection,
   RecordList,
+  resolveCreateValues,
 } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
 import { applyBootstrapResponse, applyRecordMerge, resetClientStore } from "./client/store.ts";
@@ -197,8 +198,46 @@ describe("generated collection home", () => {
     expect(html).toContain("Default");
     expect(html).toContain("Backup");
     expect(html).toContain("Create Rate card");
+    expect(html).toMatch(/<button[^>]*>Create Rate<\/button>/);
     expect(html).toContain('value="475"');
     expect(html).not.toContain('value="900"');
+  });
+
+  it("disables scoped create actions until context is selected", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")], rateCardSchema));
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId={null}
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-01"
+      />,
+    );
+
+    expect(html).toContain("No rate card records yet.");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
   });
 });
 
@@ -309,6 +348,81 @@ describe("generated forms and records", () => {
     expect(html).toContain('value="resource-1"');
     expect(html).toContain("Designer");
     expect(html).toContain("Lead");
+  });
+
+  it("renders scoped rate create dialogs without the defaulted card field", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const action = rateModel?.actions.find((candidate) => candidate.type === "create");
+
+    if (!action || action.type !== "create") {
+      throw new Error("Missing scoped rate create action.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [cardRecord("card-1", "Default"), resourceRecord("resource-1", "Designer")],
+        rateCardSchema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm
+        action={action}
+        queryContext={{ today: "2026-05-01", values: { card: "card-1" } }}
+        renderDialogCancel={false}
+      />,
+    );
+
+    expect(html).toContain('name="resource"');
+    expect(html).toContain('name="price"');
+    expect(html).not.toContain('name="card"');
+    expect(html).not.toContain("Rate card</label>");
+  });
+
+  it("resolves create values from visible fields and context defaults", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const action = rateModel?.actions.find((candidate) => candidate.type === "create");
+
+    if (!action || action.type !== "create") {
+      throw new Error("Missing scoped rate create action.");
+    }
+
+    const formData = new FormData();
+    formData.set("resource", "resource-1");
+    formData.set("price", "475");
+
+    expect(
+      resolveCreateValues(formData, action, {
+        today: "2026-05-01",
+        values: { card: "card-1" },
+      }),
+    ).toEqual({
+      resource: "resource-1",
+      price: 475,
+      card: "card-1",
+    });
+  });
+
+  it("throws when create context defaults are unresolved", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const action = rateModel?.actions.find((candidate) => candidate.type === "create");
+
+    if (!action || action.type !== "create") {
+      throw new Error("Missing scoped rate create action.");
+    }
+
+    const formData = new FormData();
+    formData.set("resource", "resource-1");
+    formData.set("price", "475");
+
+    expect(() => resolveCreateValues(formData, action, { today: "2026-05-01" })).toThrow(
+      'requires selected context "card"',
+    );
   });
 
   it("renders reference inline editors with target labels and raw missing values", () => {
@@ -434,6 +548,7 @@ function createAction(
     entityName,
     entity,
     fields: createFields(entity, fieldNames),
+    defaults: [],
     enabled: entity.mutations.create.enabled,
   };
 }

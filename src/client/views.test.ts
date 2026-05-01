@@ -65,6 +65,7 @@ describe("home view model collections", () => {
       "estimate",
       "priority",
     ]);
+    expect(create?.type === "create" ? create.defaults : []).toEqual([]);
     expect(clearCompleted).toMatchObject({
       type: "entity-action",
       actionName: "clearCompletedTasks",
@@ -120,12 +121,32 @@ describe("home view model collections", () => {
         label: "Create Rate card",
         entityName: "card",
         fields: [{ fieldName: "name" }],
+        defaults: [],
         enabled: true,
       },
     });
     expect(rateModel?.queryTabs[0]).toMatchObject({
       queryName: "ratesForSelectedCard",
       query: rateCardSchema.queries.ratesForSelectedCard?.expression,
+    });
+  });
+
+  it("resolves scoped rate create defaults from the create view", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const create = rateModel?.actions.find((action) => action.type === "create");
+
+    expect(create).toMatchObject({
+      type: "create",
+      entityName: "rate",
+      fields: [{ fieldName: "resource" }, { fieldName: "price" }],
+      defaults: [
+        {
+          fieldName: "card",
+          value: { kind: "context", name: "card" },
+        },
+      ],
     });
   });
 });

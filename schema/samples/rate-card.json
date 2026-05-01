@@ -243,7 +243,7 @@
       "actions": [
         {
           "type": "create",
-          "createView": "rateCreate"
+          "createView": "rateCreateForCard"
         }
       ]
     },
@@ -277,6 +277,24 @@
         },
         "price": {
           "editor": "number"
+        }
+      }
+    },
+    "rateCreateForCard": {
+      "type": "create",
+      "entity": "rate",
+      "fields": {
+        "resource": {
+          "editor": "reference"
+        },
+        "price": {
+          "editor": "number"
+        }
+      },
+      "defaults": {
+        "card": {
+          "kind": "context",
+          "name": "card"
         }
       }
     }

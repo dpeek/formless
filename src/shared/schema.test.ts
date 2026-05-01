@@ -437,6 +437,117 @@ describe("schema reference fields", () => {
   });
 });
 
+describe("schema create view defaults", () => {
+  it("accepts context defaults for omitted required reference fields", () => {
+    const schema = parseAppSchema(scopedRateSchema());
+
+    expect(schema.views.rateCreateForCard).toEqual({
+      type: "create",
+      entity: "rate",
+      fields: {
+        resource: { editor: "reference" },
+        price: { editor: "number" },
+      },
+      defaults: {
+        card: { kind: "context", name: "card" },
+      },
+    });
+  });
+
+  it("rejects unknown, duplicated, and empty create defaults", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: {
+            ...scopedRateViews(),
+            rateCreateForCard: {
+              ...scopedRateViews().rateCreateForCard,
+              defaults: {
+                missing: { kind: "context", name: "card" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default "missing" references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: {
+            ...scopedRateViews(),
+            rateCreateForCard: {
+              ...scopedRateViews().rateCreateForCard,
+              defaults: {
+                resource: { kind: "context", name: "card" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default "resource" must not also appear in fields');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: {
+            ...scopedRateViews(),
+            rateCreateForCard: {
+              ...scopedRateViews().rateCreateForCard,
+              defaults: {},
+            },
+          },
+        }),
+      ),
+    ).toThrow("defaults must not be empty");
+  });
+
+  it("rejects malformed context create defaults", () => {
+    expect(() => parseAppSchema(schemaWithRateCreateDefault("not-context"))).toThrow(
+      'default "card" must be an object',
+    );
+
+    expect(() => parseAppSchema(schemaWithRateCreateDefault({ kind: "context" }))).toThrow(
+      'default "card" must include "name"',
+    );
+
+    expect(() =>
+      parseAppSchema(schemaWithRateCreateDefault({ kind: "context", name: "" })),
+    ).toThrow('default "card" name must be a non-empty string');
+
+    expect(() =>
+      parseAppSchema(schemaWithRateCreateDefault({ kind: "context", name: "card", extra: true })),
+    ).toThrow('default "card" has unsupported key "extra"');
+
+    expect(() =>
+      parseAppSchema(schemaWithRateCreateDefault({ kind: "literal", name: "card" })),
+    ).toThrow('default "card" has unsupported kind "literal"');
+  });
+
+  it("rejects context defaults on non-reference fields", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: {
+            ...scopedRateViews(),
+            rateCreateForCard: {
+              type: "create",
+              entity: "rate",
+              fields: {
+                resource: { editor: "reference" },
+                card: { editor: "reference" },
+              },
+              defaults: {
+                price: { kind: "context", name: "card" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default "price" requires a reference field');
+  });
+});
+
 describe("schema query catalog", () => {
   it("parses top-level queries in declaration order", () => {
     const schema = parseAppSchema(baseSchema());
@@ -790,6 +901,51 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow('context createView "rateCreate" must use entity "card"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...scopedRateEntities(),
+            card: {
+              ...scopedRateEntities().card,
+              fields: {
+                ...scopedRateEntities().card.fields,
+                parentCard: {
+                  type: "reference",
+                  required: false,
+                  label: "Parent card",
+                  to: "card",
+                },
+              },
+            },
+          },
+          views: {
+            ...scopedRateViews({
+              context: {
+                name: "card",
+                entity: "card",
+                query: "cardAll",
+                labelField: "name",
+                createView: "cardCreateWithContextDefault",
+              },
+            }),
+            cardCreateWithContextDefault: {
+              type: "create",
+              entity: "card",
+              fields: {
+                name: { editor: "text" },
+              },
+              defaults: {
+                parentCard: { kind: "context", name: "card" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow(
+      'context createView "cardCreateWithContextDefault" must not require context defaults',
+    );
   });
 
   it("rejects collection queries with invalid context requirements", () => {
@@ -901,6 +1057,75 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow('target query "ratesForSelectedCard" must not require context');
+  });
+
+  it("rejects context-default create actions without a matching collection context", () => {
+    const rateAllQuery = {
+      label: "All rates",
+      entity: "rate",
+      expression: { kind: "all" },
+    };
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          queries: {
+            ...scopedRateQueries(),
+            rateAll: rateAllQuery,
+          },
+          views: scopedRateViews({
+            context: undefined,
+            queries: [{ query: "rateAll" }],
+            defaultQuery: "rateAll",
+          }),
+        }),
+      ),
+    ).toThrow('create action view "rateCreateForCard" requires context defaults');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          queries: {
+            ...scopedRateQueries(),
+            rateAll: rateAllQuery,
+          },
+          views: scopedRateViews({
+            context: {
+              name: "selectedCard",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              createView: "cardCreate",
+            },
+            queries: [{ query: "rateAll" }],
+            defaultQuery: "rateAll",
+          }),
+        }),
+      ),
+    ).toThrow('requires context "card" but the collection context is "selectedCard"');
+  });
+
+  it("rejects context-default fields that do not reference the collection context entity", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: {
+            ...scopedRateViews(),
+            rateCreateForCard: {
+              type: "create",
+              entity: "rate",
+              fields: {
+                card: { editor: "reference" },
+                price: { editor: "number" },
+              },
+              defaults: {
+                resource: { kind: "context", name: "card" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default field "resource" must reference entity "card"');
   });
 });
 
@@ -1295,7 +1520,7 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
       queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
       defaultQuery: "ratesForSelectedCard",
       result: { type: "list", itemView: "rateListItem" },
-      actions: [{ type: "create", createView: "rateCreate" }],
+      actions: [{ type: "create", createView: "rateCreateForCard" }],
       ...rateHomeOverrides,
     },
     rateCreate: {
@@ -1307,6 +1532,17 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
         price: { editor: "number" },
       },
     },
+    rateCreateForCard: {
+      type: "create",
+      entity: "rate",
+      fields: {
+        resource: { editor: "reference" },
+        price: { editor: "number" },
+      },
+      defaults: {
+        card: { kind: "context", name: "card" },
+      },
+    },
     cardCreate: {
       type: "create",
       entity: "card",
@@ -1315,6 +1551,20 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
       },
     },
   };
+}
+
+function schemaWithRateCreateDefault(defaultValue: unknown) {
+  return scopedRateSchema({
+    views: {
+      ...scopedRateViews(),
+      rateCreateForCard: {
+        ...scopedRateViews().rateCreateForCard,
+        defaults: {
+          card: defaultValue,
+        },
+      },
+    },
+  });
 }
 
 function defaultQueries() {

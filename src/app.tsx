@@ -249,7 +249,7 @@ export function GeneratedCreateForm({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = getFormValues(formData, createFields);
+    const values = getVisibleCreateValues(formData, createFields);
 
     setIsSubmitting(true);
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
@@ -294,11 +294,13 @@ export function GeneratedCreateDialog({
   onOpenChange,
   onSuccess,
   open,
+  queryContext,
 }: {
   action: CreateHomeActionConfig;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (recordId: string) => void;
   open: boolean;
+  queryContext?: QueryEvaluationContext;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -312,6 +314,7 @@ export function GeneratedCreateDialog({
             onSuccess?.(recordId);
             onOpenChange(false);
           }}
+          queryContext={queryContext}
         />
       </DialogContent>
     </Dialog>
@@ -321,24 +324,27 @@ export function GeneratedCreateDialog({
 export function GeneratedCreateDialogForm({
   action,
   onSuccess,
+  queryContext,
   renderDialogCancel = true,
 }: {
   action: CreateHomeActionConfig;
   onSuccess?: (recordId: string) => void;
+  queryContext?: QueryEvaluationContext;
   renderDialogCancel?: boolean;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canSubmit = action.enabled && createDefaultsAreResolved(action, queryContext);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!action.enabled) {
+    if (!canSubmit) {
       return;
     }
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = getFormValues(formData, action.fields);
+    const values = resolveCreateValues(formData, action, queryContext);
 
     setIsSubmitting(true);
     setSyncStatus({
@@ -367,7 +373,7 @@ export function GeneratedCreateDialogForm({
         <p className="text-sm text-slate-600">Create is disabled for {action.entity.label}.</p>
       ) : null}
 
-      <FieldSet className="space-y-4" disabled={!action.enabled || isSubmitting}>
+      <FieldSet className="space-y-4" disabled={!canSubmit || isSubmitting}>
         {action.fields.map((fieldConfig) => (
           <CreateFieldInput fieldConfig={fieldConfig} key={fieldConfig.fieldName} />
         ))}
@@ -381,7 +387,7 @@ export function GeneratedCreateDialogForm({
             Cancel
           </Button>
         )}
-        <Button disabled={!action.enabled || isSubmitting} type="submit">
+        <Button disabled={!canSubmit || isSubmitting} type="submit">
           {isSubmitting ? "Saving..." : action.enabled ? action.label : "Create disabled"}
         </Button>
       </DialogFooter>
@@ -492,7 +498,31 @@ function ReferenceCreateField({
   );
 }
 
-function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordValues {
+export function resolveCreateValues(
+  formData: FormData,
+  action: CreateHomeActionConfig,
+  queryContext?: QueryEvaluationContext,
+): RecordValues {
+  const values = getVisibleCreateValues(formData, action.fields);
+
+  for (const defaultConfig of action.defaults) {
+    if (Object.hasOwn(values, defaultConfig.fieldName)) {
+      continue;
+    }
+
+    if (defaultConfig.value.kind === "context") {
+      values[defaultConfig.fieldName] = resolveContextDefaultValue(
+        defaultConfig.fieldName,
+        defaultConfig.value.name,
+        queryContext,
+      );
+    }
+  }
+
+  return values;
+}
+
+function getVisibleCreateValues(formData: FormData, fields: CreateFieldConfig[]): RecordValues {
   const values: RecordValues = {};
 
   for (const { field, fieldName } of fields) {
@@ -512,6 +542,39 @@ function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordV
   }
 
   return values;
+}
+
+function createDefaultsAreResolved(
+  action: CreateHomeActionConfig,
+  queryContext?: QueryEvaluationContext,
+) {
+  try {
+    for (const defaultConfig of action.defaults) {
+      if (defaultConfig.value.kind === "context") {
+        resolveContextDefaultValue(defaultConfig.fieldName, defaultConfig.value.name, queryContext);
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveContextDefaultValue(
+  fieldName: string,
+  contextName: string,
+  queryContext?: QueryEvaluationContext,
+): string {
+  const value = queryContext?.values?.[contextName];
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(
+      `Create default for "${fieldName}" requires selected context "${contextName}".`,
+    );
+  }
+
+  return value;
 }
 
 export function HomeCollection({
@@ -871,17 +934,27 @@ function HomeActionRow({
 
   return (
     <section aria-label="Task actions" className="flex flex-wrap gap-2">
-      {actions.map((action) =>
-        action.type === "create" ? (
-          <Button
-            disabled={!action.enabled}
-            key={`${action.type}:${action.entityName}`}
-            onClick={() => setCreateDialogAction(action)}
-            type="button"
-          >
-            {action.enabled ? action.label : "Create disabled"}
-          </Button>
-        ) : (
+      {actions.map((action) => {
+        if (action.type === "create") {
+          const canOpen = action.enabled && createDefaultsAreResolved(action, queryContext);
+
+          return (
+            <Button
+              disabled={!canOpen}
+              key={`${action.type}:${action.entityName}`}
+              onClick={() => {
+                if (canOpen) {
+                  setCreateDialogAction(action);
+                }
+              }}
+              type="button"
+            >
+              {action.enabled ? action.label : "Create disabled"}
+            </Button>
+          );
+        }
+
+        return (
           <HomeEntityActionButton
             action={action}
             disabled={pendingAction !== null}
@@ -890,8 +963,8 @@ function HomeActionRow({
             pending={pendingAction === action.actionName}
             queryContext={queryContext}
           />
-        ),
-      )}
+        );
+      })}
       {createDialogAction ? (
         <GeneratedCreateDialog
           action={createDialogAction}
@@ -901,6 +974,7 @@ function HomeActionRow({
             }
           }}
           open={true}
+          queryContext={queryContext}
         />
       ) : null}
     </section>
