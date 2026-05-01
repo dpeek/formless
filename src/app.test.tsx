@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
+import rawRateCardSchema from "../schema/samples/rate-card.json";
 import { App, GeneratedCreateDialogForm, GeneratedCreateForm, RecordList } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
 import { applyBootstrapResponse, applyRecordMerge, resetClientStore } from "./client/store.ts";
@@ -11,7 +12,9 @@ import {
   type RecordFieldConfig,
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
-import type { EntitySchema } from "./shared/schema.ts";
+import { parseAppSchema, type EntitySchema } from "./shared/schema.ts";
+
+const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
 function renderRoute(path: string) {
   return renderToStaticMarkup(
@@ -43,7 +46,8 @@ describe("App smoke routes", () => {
   it("renders a dev reset action", () => {
     const html = renderRoute("/");
 
-    expect(html).toContain("Reset data");
+    expect(html).toContain("Reset task schema");
+    expect(html).toContain("Reset rate-card schema");
   });
 });
 
@@ -104,6 +108,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Due date"');
     expect(html).toContain('type="number"');
     expect(html).toContain('aria-label="Estimate"');
+    expect(html).not.toContain(record.createdAt);
   });
 
   it("renders clear-completed target count and keeps the button enabled at zero", () => {
@@ -124,6 +129,17 @@ describe("generated collection home", () => {
 
     expect(before).toMatch(/aria-label="Clear completed target count"[^>]*>0</);
     expect(after).toMatch(/aria-label="Clear completed target count"[^>]*>1</);
+  });
+
+  it("renders collection switching for a multi-collection schema", () => {
+    applyBootstrapResponse(bootstrap([], rateCardSchema));
+    const html = renderRoute("/");
+
+    expect(html).toContain('aria-label="Collections"');
+    expect(html).toContain("Resources");
+    expect(html).toContain("Rate cards");
+    expect(html).toContain("Rates");
+    expect(html).toContain("Create Resource");
   });
 });
 
@@ -218,6 +234,56 @@ describe("generated forms and records", () => {
     expect(rowHtml).toContain('value="3"');
   });
 
+  it("renders reference create controls with target display labels", () => {
+    const rate = rateEntity();
+    const action = createAction(rate, ["resource"], "rate");
+
+    applyBootstrapResponse(
+      bootstrap([resourceRecord("resource-1", "Designer"), resourceRecord("resource-2", "Lead")]),
+    );
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+
+    expect(html).toContain('name="resource"');
+    expect(html).toContain("<select");
+    expect(html).toContain('value="resource-1"');
+    expect(html).toContain("Designer");
+    expect(html).toContain("Lead");
+  });
+
+  it("renders reference inline editors with target labels and raw missing values", () => {
+    const rate = rateEntity();
+    const recordFields: RecordFieldConfig[] = [
+      {
+        fieldName: "resource",
+        field: rate.fields.resource,
+        editor: "reference",
+        commit: "immediate",
+      },
+    ];
+
+    applyBootstrapResponse(
+      bootstrap([
+        resourceRecord("resource-1", "Designer"),
+        rateRecord("rate-1", "resource-1"),
+        rateRecord("rate-2", "missing-resource"),
+      ]),
+    );
+    const html = renderToStaticMarkup(
+      <RecordList
+        entity={rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+        recordFields={recordFields}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Resource"');
+    expect(html).toContain("Designer");
+    expect(html).toContain("missing-resource");
+  });
+
   it("renders only the fields declared by a create view in the dialog", () => {
     const task = appSchema.entities.task;
     const action = createAction(task, ["title", "dueDate"]);
@@ -301,11 +367,12 @@ function createFields(entity: EntitySchema, fieldNames: string[]): CreateFieldCo
 function createAction(
   entity: EntitySchema,
   fieldNames: string[],
+  entityName = "task",
 ): Extract<HomeActionConfig, { type: "create" }> {
   return {
     type: "create",
     label: `Create ${entity.label}`,
-    entityName: "task",
+    entityName,
     entity,
     fields: createFields(entity, fieldNames),
     enabled: entity.mutations.create.enabled,
@@ -344,6 +411,24 @@ function numberRecord(estimate: number): StoredRecord {
   };
 }
 
+function resourceRecord(id: string, name: string): StoredRecord {
+  return {
+    id,
+    entity: "resource",
+    values: { name },
+    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function rateRecord(id: string, resource: string): StoredRecord {
+  return {
+    id,
+    entity: "rate",
+    values: { resource },
+    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
 function taskEntityWithKindEnum(): EntitySchema {
   return {
     label: "Task",
@@ -357,6 +442,26 @@ function taskEntityWithKindEnum(): EntitySchema {
           role: { label: "Role" },
           stream: { label: "Stream" },
         },
+      },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
+  };
+}
+
+function rateEntity(): EntitySchema {
+  return {
+    label: "Rate",
+    fields: {
+      resource: {
+        type: "reference",
+        required: true,
+        label: "Resource",
+        to: "resource",
+        displayField: "name",
       },
     },
     mutations: {

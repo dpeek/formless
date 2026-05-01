@@ -50,6 +50,15 @@ describe("field catalog", () => {
         },
       },
       {
+        ref: { kind: "value", name: "resource" },
+        type: "reference",
+        label: "Resource",
+        writable: true,
+        filterOps: ["eq"],
+        to: "resource",
+        displayField: "name",
+      },
+      {
         ref: { kind: "system", name: "id" },
         type: "id",
         label: "ID",
@@ -149,6 +158,24 @@ describe("query parsing", () => {
       ref: { kind: "value", name: "estimate" },
       op: "eq",
       value: 2,
+    });
+
+    expect(
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "resource" },
+          op: "eq",
+          value: "record-resource-1",
+        },
+        catalog,
+        "resource tasks",
+      ),
+    ).toEqual({
+      kind: "where",
+      ref: { kind: "value", name: "resource" },
+      op: "eq",
+      value: "record-resource-1",
     });
   });
 
@@ -297,6 +324,7 @@ describe("query parsing", () => {
       { kind: "value" as const, name: "done" },
       { kind: "value" as const, name: "estimate" },
       { kind: "value" as const, name: "kind" },
+      { kind: "value" as const, name: "resource" },
       { kind: "system" as const, name: "id" as const },
       { kind: "system" as const, name: "createdAt" as const },
     ]) {
@@ -367,6 +395,32 @@ describe("query parsing", () => {
         "bad query",
       ),
     ).toThrow("requires a finite number value");
+
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "resource" },
+          op: "eq",
+          value: 2,
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("requires a string value");
+
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "resource" },
+          op: "eq",
+          value: "",
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("requires a non-empty string value");
   });
 
   it("rejects malformed date values", () => {
@@ -405,6 +459,7 @@ describe("query parsing", () => {
       { kind: "value" as const, name: "done" },
       { kind: "value" as const, name: "estimate" },
       { kind: "value" as const, name: "kind" },
+      { kind: "value" as const, name: "resource" },
       { kind: "system" as const, name: "id" as const },
       { kind: "system" as const, name: "createdAt" as const },
     ]) {
@@ -445,6 +500,15 @@ describe("query evaluation", () => {
         ref: { kind: "value", name: "estimate" },
         op: "eq",
         value: 2,
+      }),
+    ).toBe(true);
+
+    expect(
+      matchesQuery(record, {
+        kind: "where",
+        ref: { kind: "value", name: "resource" },
+        op: "eq",
+        value: "record-resource-1",
       }),
     ).toBe(true);
   });
@@ -743,6 +807,13 @@ const taskEntity = {
         stream: { label: "Stream" },
       },
     },
+    resource: {
+      type: "reference",
+      required: true,
+      label: "Resource",
+      to: "resource",
+      displayField: "name",
+    },
   },
   mutations: {
     create: { enabled: true },
@@ -770,6 +841,7 @@ const record: StoredRecord = {
     dueDate: "2026-05-01",
     estimate: 2,
     kind: "role",
+    resource: "record-resource-1",
   },
   createdAt: "2026-04-28T00:00:00.000Z",
 };

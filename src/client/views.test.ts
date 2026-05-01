@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawRateCardSchema from "../../schema/samples/rate-card.json";
 import { appSchema } from "./schema.ts";
-import { selectHomeModel } from "./views.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import { selectCollectionModels, selectHomeModel } from "./views.ts";
+import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
+
+const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
 describe("home view model collections", () => {
   it("selects the task collection and resolves query tabs in schema order", () => {
@@ -87,5 +90,17 @@ describe("home view model collections", () => {
     const model = selectHomeModel(schema);
 
     expect(model?.queryTabs.map((tab) => tab.label)).toEqual(["Everything"]);
+  });
+
+  it("selects every collection model in schema order", () => {
+    const models = selectCollectionModels(rateCardSchema);
+
+    expect(models.map((model) => model.viewName)).toEqual(["resourceHome", "cardHome", "rateHome"]);
+    expect(models.map((model) => model.label)).toEqual(["Resources", "Rate cards", "Rates"]);
+    expect(models.map((model) => model.actions[0]?.label)).toEqual([
+      "Create Resource",
+      "Create Rate card",
+      "Create Rate",
+    ]);
   });
 });

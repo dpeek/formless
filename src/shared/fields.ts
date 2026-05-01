@@ -12,6 +12,7 @@ export type AddressableFieldType =
   | "date"
   | "number"
   | "enum"
+  | "reference"
   | "id"
   | "datetime";
 
@@ -22,6 +23,8 @@ export type AddressableField = {
   writable: boolean;
   filterOps: QueryOperator[];
   values?: Record<string, EnumValueSchema>;
+  to?: string;
+  displayField?: string;
 };
 
 const SYSTEM_FIELDS: AddressableField[] = [
@@ -103,6 +106,12 @@ function valueFieldCatalogEntry(fieldName: string, field: FieldSchema): Addressa
     writable: true,
     filterOps: field.type === "date" ? ["eq", "before"] : ["eq"],
     ...(field.type === "enum" ? { values: field.values } : {}),
+    ...(field.type === "reference"
+      ? {
+          to: field.to,
+          ...(field.displayField === undefined ? {} : { displayField: field.displayField }),
+        }
+      : {}),
   };
 }
 

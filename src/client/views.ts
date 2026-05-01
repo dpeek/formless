@@ -70,35 +70,33 @@ export type HomeActionConfig =
     };
 
 export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
+  return selectCollectionModels(schema)[0];
+}
+
+export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
   const viewEntries = Object.entries(schema.views);
-  const collectionViewEntry = viewEntries.find(([, view]) => view.type === "collection");
+  const collectionViewEntries = viewEntries.filter(
+    (entry): entry is [string, CollectionViewSchema] => entry[1].type === "collection",
+  );
 
-  if (!collectionViewEntry) {
-    return undefined;
-  }
+  return collectionViewEntries.map(([viewName, collectionView]) => {
+    const entity = schema.entities[collectionView.entity];
 
-  const [viewName, collectionView] = collectionViewEntry;
+    if (!entity) {
+      throw new Error(`Missing entity "${collectionView.entity}".`);
+    }
 
-  if (collectionView.type !== "collection") {
-    return undefined;
-  }
-
-  const entity = schema.entities[collectionView.entity];
-
-  if (!entity) {
-    return undefined;
-  }
-
-  return {
-    viewName,
-    label: collectionView.label,
-    entityName: collectionView.entity,
-    entity,
-    queryTabs: selectQueryTabs(schema, collectionView),
-    defaultQueryName: collectionView.defaultQuery,
-    result: selectResult(schema, collectionView, entity),
-    actions: selectHomeActions(schema, viewEntries, collectionView, entity),
-  };
+    return {
+      viewName,
+      label: collectionView.label,
+      entityName: collectionView.entity,
+      entity,
+      queryTabs: selectQueryTabs(schema, collectionView),
+      defaultQueryName: collectionView.defaultQuery,
+      result: selectResult(schema, collectionView, entity),
+      actions: selectHomeActions(schema, viewEntries, collectionView, entity),
+    };
+  });
 }
 
 function selectQueryTabs(

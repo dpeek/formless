@@ -345,6 +345,21 @@ describe("client sync", () => {
     expect(storeSnapshot.cursor).toBe(2);
   });
 
+  it("can request the rate-card reset schema", async () => {
+    await resetRemoteData("rate-card", async (input, init) => {
+      expect(input).toBe("/api/dev/reset");
+      expect(init?.method).toBe("POST");
+      expect(parsePlainRequestBody(init?.body)).toEqual({ schema: "rate-card" });
+
+      return Response.json({
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+        records: [],
+        cursor: 0,
+      } satisfies BootstrapResponse);
+    });
+  });
+
   it("refreshes schema state from broadcast events", async () => {
     const states = [getClientStoreSnapshot()];
     const unsubscribe = subscribeToClientStore(() => states.push(getClientStoreSnapshot()));

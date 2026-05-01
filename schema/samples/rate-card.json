@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "entities": {
+    "resource": {
+      "label": "Resource",
+      "fields": {
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "card": {
+      "label": "Rate card",
+      "fields": {
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "margin": {
+          "type": "number",
+          "required": true,
+          "label": "Margin",
+          "default": 0.5,
+          "min": 0
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "rate": {
+      "label": "Rate",
+      "fields": {
+        "resource": {
+          "type": "reference",
+          "required": true,
+          "label": "Resource",
+          "to": "resource",
+          "displayField": "name"
+        },
+        "card": {
+          "type": "reference",
+          "required": true,
+          "label": "Rate card",
+          "to": "card",
+          "displayField": "name"
+        },
+        "price": {
+          "type": "number",
+          "required": false,
+          "label": "Price",
+          "min": 0
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "queries": {
+    "resourceAll": {
+      "label": "All",
+      "entity": "resource",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "cardAll": {
+      "label": "All",
+      "entity": "card",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "rateAll": {
+      "label": "All",
+      "entity": "rate",
+      "expression": {
+        "kind": "all"
+      }
+    }
+  },
+  "itemViews": {
+    "resourceListItem": {
+      "entity": "resource",
+      "fields": {
+        "name": {
+          "editor": "text",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "cardListItem": {
+      "entity": "card",
+      "fields": {
+        "name": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "margin": {
+          "editor": "number",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "rateListItem": {
+      "entity": "rate",
+      "fields": {
+        "resource": {
+          "editor": "reference",
+          "commit": "immediate"
+        },
+        "card": {
+          "editor": "reference",
+          "commit": "immediate"
+        },
+        "price": {
+          "editor": "number",
+          "commit": "field-commit"
+        }
+      }
+    }
+  },
+  "views": {
+    "resourceHome": {
+      "type": "collection",
+      "label": "Resources",
+      "entity": "resource",
+      "queries": [
+        {
+          "query": "resourceAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "resourceAll",
+      "result": {
+        "type": "list",
+        "itemView": "resourceListItem"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "resourceCreate"
+        }
+      ]
+    },
+    "cardHome": {
+      "type": "collection",
+      "label": "Rate cards",
+      "entity": "card",
+      "queries": [
+        {
+          "query": "cardAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "cardAll",
+      "result": {
+        "type": "list",
+        "itemView": "cardListItem"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "cardCreate"
+        }
+      ]
+    },
+    "rateHome": {
+      "type": "collection",
+      "label": "Rates",
+      "entity": "rate",
+      "queries": [
+        {
+          "query": "rateAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "rateAll",
+      "result": {
+        "type": "list",
+        "itemView": "rateListItem"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "rateCreate"
+        }
+      ]
+    },
+    "resourceCreate": {
+      "type": "create",
+      "entity": "resource",
+      "fields": {
+        "name": {
+          "editor": "text"
+        }
+      }
+    },
+    "cardCreate": {
+      "type": "create",
+      "entity": "card",
+      "fields": {
+        "name": {
+          "editor": "text"
+        }
+      }
+    },
+    "rateCreate": {
+      "type": "create",
+      "entity": "rate",
+      "fields": {
+        "resource": {
+          "editor": "reference"
+        },
+        "card": {
+          "editor": "reference"
+        },
+        "price": {
+          "editor": "number"
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import rawSeedSchema from "../../schema/app-schema.json";
+import rawRateCardSchema from "../../schema/samples/rate-card.json";
 import { isDateString } from "../shared/date.ts";
 import {
   parseAppSchema,
@@ -13,6 +14,7 @@ import type {
   Mutation,
   PatchMutation,
   RecordValues,
+  StoredRecord,
 } from "../shared/protocol.ts";
 import {
   createStoredRecord,
@@ -31,6 +33,7 @@ import { executeEntityAction } from "./actions.ts";
 import type { Env } from "./index.ts";
 
 const seedSchema = parseAppSchema(rawSeedSchema);
+const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
 export class BadRequestError extends Error {
   constructor(message: string) {
@@ -112,7 +115,10 @@ export class FormlessAuthority extends DurableObject<Env> {
       }
 
       if (request.method === "POST" && url.pathname === "/api/dev/reset") {
-        const { schema, updatedAt } = resetStorage(this.ctx.storage, seedSchema);
+        const { schema, updatedAt } = resetStorage(
+          this.ctx.storage,
+          validateDevResetRequest(await readJson(request)),
+        );
 
         return jsonResponse({
           schema,
@@ -131,6 +137,26 @@ export class FormlessAuthority extends DurableObject<Env> {
       throw error;
     }
   }
+}
+
+function validateDevResetRequest(value: unknown): AppSchema {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Reset request must be an object.");
+  }
+
+  if (value.schema === undefined || value.schema === "default") {
+    return seedSchema;
+  }
+
+  if (value.schema === "rate-card") {
+    return rateCardSchema;
+  }
+
+  throw new BadRequestError(`Unknown reset schema "${formatResetSchemaValue(value.schema)}".`);
+}
+
+function formatResetSchemaValue(value: unknown) {
+  return typeof value === "string" ? value : "non-string";
 }
 
 function validateActionRequest(value: unknown, schema: AppSchema): ActionRequest {
@@ -258,7 +284,11 @@ function validateMutation(
     }
 
     const patchValues = validatePatchValues(value.values, entity);
-    const recordValues = validateRecordValues({ ...existingRecord.values, ...patchValues }, entity);
+    const recordValues = validateRecordValues(
+      { ...existingRecord.values, ...patchValues },
+      entity,
+      storage,
+    );
 
     return {
       mutationId: value.mutationId,
@@ -274,7 +304,7 @@ function validateMutation(
     mutationId: value.mutationId,
     entity: value.entity,
     op: "create",
-    values: validateRecordValues(value.values, entity),
+    values: validateRecordValues(value.values, entity, storage),
   } satisfies CreateMutation;
 }
 
@@ -292,7 +322,11 @@ function validatePatchValues(values: Record<string, unknown>, entity: EntitySche
   return patchValues;
 }
 
-function validateRecordValues(values: Record<string, unknown>, entity: EntitySchema): RecordValues {
+function validateRecordValues(
+  values: Record<string, unknown>,
+  entity: EntitySchema,
+  storage: DurableObjectStorage,
+): RecordValues {
   for (const fieldName of Object.keys(values)) {
     if (!entity.fields[fieldName]) {
       throw new BadRequestError(`Unknown field "${fieldName}".`);
@@ -388,6 +422,48 @@ function validateRecordValues(values: Record<string, unknown>, entity: EntitySch
       continue;
     }
 
+    if (field.type === "reference") {
+      if (!fieldWasProvided) {
+        if (field.required) {
+          throw new BadRequestError(`Field "${fieldName}" is required.`);
+        }
+
+        continue;
+      }
+
+      if (typeof fieldValue !== "string") {
+        throw new BadRequestError(`Field "${fieldName}" must be a reference ID.`);
+      }
+
+      if (fieldValue.trim() === "") {
+        if (field.required) {
+          throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
+        }
+
+        continue;
+      }
+
+      const targetRecord = getStoredRecord(storage, fieldValue);
+      if (!targetRecord) {
+        throw new BadRequestError(
+          `Field "${fieldName}" references unknown ${field.to} record "${fieldValue}".`,
+        );
+      }
+
+      if (targetRecord.entity !== field.to) {
+        throw new BadRequestError(`Field "${fieldName}" must reference a ${field.to} record.`);
+      }
+
+      if (targetRecord.deletedAt) {
+        throw new BadRequestError(
+          `Field "${fieldName}" cannot reference tombstoned record "${fieldValue}".`,
+        );
+      }
+
+      validated[fieldName] = fieldValue;
+      continue;
+    }
+
     if (typeof fieldValue !== "string") {
       if (field.required) {
         throw new BadRequestError(`Field "${fieldName}" is required.`);
@@ -439,7 +515,7 @@ function validateNumberFieldValue(
 function validateSchemaUpdate(
   value: unknown,
   currentSchema: AppSchema,
-  records: Array<{ entity: string; values: RecordValues }>,
+  records: StoredRecord[],
 ): AppSchema {
   if (!isRecord(value)) {
     throw new BadRequestError("Schema update must be an object.");
@@ -460,8 +536,10 @@ function validateSchemaUpdate(
 function validateCompatibleSchemaChange(
   currentSchema: AppSchema,
   nextSchema: AppSchema,
-  records: Array<{ entity: string; values: RecordValues }>,
+  records: StoredRecord[],
 ) {
+  const recordsById = new Map(records.map((record) => [record.id, record]));
+
   for (const [entityName, currentEntity] of Object.entries(currentSchema.entities)) {
     const nextEntity = nextSchema.entities[entityName];
     const entityRecords = records.filter((record) => record.entity === entityName);
@@ -480,16 +558,26 @@ function validateCompatibleSchemaChange(
       if (nextField.type !== currentField.type) {
         throw new BadRequestError(`Cannot change field type for "${entityName}.${fieldName}".`);
       }
+
+      if (
+        currentField.type === "reference" &&
+        nextField.type === "reference" &&
+        currentField.to !== nextField.to
+      ) {
+        throw new BadRequestError(
+          `Cannot change reference target for "${entityName}.${fieldName}".`,
+        );
+      }
     }
 
     for (const [fieldName, nextField] of Object.entries(nextEntity.fields)) {
-      if (!nextField.required && nextField.type !== "number") {
+      if (!shouldValidateExistingValues(nextField)) {
         continue;
       }
 
       const currentField = currentEntity.fields[fieldName];
       const hasInvalidStoredValue = entityRecords.some((record) => {
-        return !isValidStoredFieldValue(record.values[fieldName], nextField);
+        return !isValidStoredFieldValue(record.values[fieldName], nextField, recordsById);
       });
 
       if (!hasInvalidStoredValue) {
@@ -502,6 +590,12 @@ function validateCompatibleSchemaChange(
         );
       }
 
+      if (nextField.type === "reference" && currentField) {
+        throw new BadRequestError(
+          `Cannot change reference constraints for "${entityName}.${fieldName}" because existing records contain invalid values.`,
+        );
+      }
+
       throw new BadRequestError(
         `Cannot require field "${entityName}.${fieldName}" because existing records are missing it.`,
       );
@@ -509,9 +603,14 @@ function validateCompatibleSchemaChange(
   }
 }
 
+function shouldValidateExistingValues(field: EntitySchema["fields"][string]) {
+  return field.required || field.type === "number" || field.type === "reference";
+}
+
 function isValidStoredFieldValue(
   value: RecordValues[string] | undefined,
   field: EntitySchema["fields"][string],
+  recordsById: Map<string, StoredRecord>,
 ) {
   if (value === undefined) {
     if (field.type === "boolean") {
@@ -539,6 +638,16 @@ function isValidStoredFieldValue(
 
   if (field.type === "number") {
     return isValidNumberFieldValue(value, field);
+  }
+
+  if (field.type === "reference") {
+    if (typeof value !== "string" || value.trim() === "") {
+      return false;
+    }
+
+    const targetRecord = recordsById.get(value);
+
+    return !!targetRecord && targetRecord.entity === field.to && !targetRecord.deletedAt;
   }
 
   return (

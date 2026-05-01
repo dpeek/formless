@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import rawRateCardSchema from "../../schema/samples/rate-card.json";
 import { appSchema } from "../client/schema.ts";
 import type {
   ActionResponse,
@@ -8,12 +9,13 @@ import type {
   SchemaUpdateResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 let harness: Harness;
+const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
 beforeEach(async () => {
   harness = await createWorkerHarness("src/worker/index.ts", {
@@ -219,6 +221,31 @@ describe("authority", () => {
       cursor: 0,
     });
     expect(bootstrap).toEqual(reset);
+  });
+
+  it("resets remote data to the rate-card sample schema without seed records", async () => {
+    await postMutation("mutation-1", { title: "First", done: false });
+
+    const reset = await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(reset).toEqual({
+      schema: rateCardSchema,
+      schemaUpdatedAt: expect.any(String),
+      records: [],
+      cursor: 0,
+    });
+    expect(bootstrap).toEqual(reset);
+  });
+
+  it("rejects unknown dev reset schemas", async () => {
+    await expectError(
+      "/api/dev/reset",
+      {
+        schema: "missing",
+      },
+      'Unknown reset schema "missing".',
+    );
   });
 
   it("uses the stored schema when validating mutations", async () => {
@@ -570,6 +597,149 @@ describe("authority", () => {
     });
 
     expect(patched.record.values.priority).toBeUndefined();
+  });
+
+  it("validates reference create and patch values against active target records", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithRateReferences() });
+
+    const resource = await postMutationForEntity("mutation-resource", "resource", {
+      name: "Designer",
+    });
+    const card = await postMutationForEntity("mutation-card", "card", { name: "Default" });
+    const rate = await postMutationForEntity("mutation-rate", "rate", {
+      resource: resource.record.id,
+      card: card.record.id,
+      backupResource: resource.record.id,
+      price: 125,
+    });
+    const cleared = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-clear-reference",
+      entity: "rate",
+      op: "patch",
+      recordId: rate.record.id,
+      values: { backupResource: "" },
+    });
+
+    expect(rate.record.values).toMatchObject({
+      resource: resource.record.id,
+      card: card.record.id,
+      backupResource: resource.record.id,
+      price: 125,
+    });
+    expect(cleared.record.values.backupResource).toBeUndefined();
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-missing-reference",
+        entity: "rate",
+        op: "create",
+        values: { resource: "missing", card: card.record.id },
+      },
+      'Field "resource" references unknown resource record "missing".',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-wrong-entity-reference",
+        entity: "rate",
+        op: "create",
+        values: { resource: card.record.id, card: card.record.id },
+      },
+      'Field "resource" must reference a resource record.',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-empty-reference",
+        entity: "rate",
+        op: "create",
+        values: { resource: "", card: card.record.id },
+      },
+      'Field "resource" cannot be empty.',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-non-string-reference",
+        entity: "rate",
+        op: "create",
+        values: { resource: 1, card: card.record.id },
+      },
+      'Field "resource" must be a reference ID.',
+    );
+  });
+
+  it("rejects tombstoned reference targets", async () => {
+    const completed = await postMutation("mutation-task", { title: "Done", done: true });
+
+    await postAction("action-clear", "clearCompletedTasks");
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithAssignmentReference(),
+    });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-assignment",
+        entity: "assignment",
+        op: "create",
+        values: { task: completed.record.id },
+      },
+      `Field "task" cannot reference tombstoned record "${completed.record.id}".`,
+    );
+  });
+
+  it("checks reference schema compatibility against existing records", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskProjectReference({ required: false }),
+    });
+    const project = await postMutationForEntity("mutation-project", "project", {
+      name: "Buildout",
+      code: "BLD",
+    });
+    await postMutation("mutation-task", { title: "Scoped", project: project.record.id });
+
+    const required = await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskProjectReference({ required: true }),
+    });
+    const displayChange = await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskProjectReference({ required: true, displayField: "code" }),
+    });
+
+    expect(required.schema.entities.task?.fields.project).toMatchObject({
+      type: "reference",
+      required: true,
+      to: "project",
+    });
+    expect(displayChange.schema.entities.task?.fields.project).toMatchObject({
+      type: "reference",
+      displayField: "code",
+    });
+
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithTaskProjectReference({
+          required: true,
+          to: "milestone",
+          includeMilestone: true,
+        }),
+      },
+      'Cannot change reference target for "task.project".',
+    );
+  });
+
+  it("rejects required reference additions when existing records are missing targets", async () => {
+    await postMutation("mutation-task", { title: "Unscoped" });
+
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithTaskProjectReference({ required: true }),
+      },
+      'Cannot require field "task.project"',
+    );
   });
 
   it("accepts enum option catalog changes without scanning existing records", async () => {
@@ -1363,6 +1533,156 @@ function schemaWithRequiredScore() {
   };
 }
 
+function schemaWithRateReferences() {
+  return {
+    version: 1,
+    entities: {
+      task: appSchema.entities.task,
+      resource: {
+        label: "Resource",
+        fields: {
+          name: { type: "text", required: true, label: "Name" },
+        },
+        mutations: defaultMutations(),
+      },
+      card: {
+        label: "Rate card",
+        fields: {
+          name: { type: "text", required: true, label: "Name" },
+        },
+        mutations: defaultMutations(),
+      },
+      rate: {
+        label: "Rate",
+        fields: {
+          resource: {
+            type: "reference",
+            required: true,
+            label: "Resource",
+            to: "resource",
+            displayField: "name",
+          },
+          card: {
+            type: "reference",
+            required: true,
+            label: "Card",
+            to: "card",
+            displayField: "name",
+          },
+          backupResource: {
+            type: "reference",
+            required: false,
+            label: "Backup resource",
+            to: "resource",
+            displayField: "name",
+          },
+          price: { type: "number", required: false, label: "Price", min: 0 },
+        },
+        mutations: defaultMutations(),
+      },
+    },
+    queries: appSchema.queries,
+    itemViews: appSchema.itemViews,
+    views: appSchema.views,
+  } satisfies AppSchema;
+}
+
+function schemaWithAssignmentReference() {
+  return {
+    version: 1,
+    entities: {
+      task: appSchema.entities.task,
+      assignment: {
+        label: "Assignment",
+        fields: {
+          task: {
+            type: "reference",
+            required: true,
+            label: "Task",
+            to: "task",
+            displayField: "title",
+          },
+        },
+        mutations: defaultMutations(),
+      },
+    },
+    queries: appSchema.queries,
+    itemViews: appSchema.itemViews,
+    views: appSchema.views,
+  } satisfies AppSchema;
+}
+
+function schemaWithTaskProjectReference({
+  displayField = "name",
+  includeMilestone = false,
+  required,
+  to = "project",
+}: {
+  displayField?: string;
+  includeMilestone?: boolean;
+  required: boolean;
+  to?: string;
+}) {
+  const taskCreate = appSchema.views.taskCreate;
+
+  if (taskCreate.type !== "create") {
+    throw new Error("Expected taskCreate to be a create view.");
+  }
+
+  const entities: Record<string, EntitySchema> = {
+    task: {
+      label: "Task",
+      fields: {
+        ...appSchema.entities.task.fields,
+        project: {
+          type: "reference",
+          required,
+          label: "Project",
+          to,
+          displayField,
+        },
+      },
+      mutations: defaultMutations(),
+      actions: appSchema.entities.task.actions,
+    },
+    project: {
+      label: "Project",
+      fields: {
+        name: { type: "text", required: true, label: "Name" },
+        code: { type: "text", required: true, label: "Code" },
+      },
+      mutations: defaultMutations(),
+    },
+  };
+
+  if (includeMilestone) {
+    entities.milestone = {
+      label: "Milestone",
+      fields: {
+        name: { type: "text", required: true, label: "Name" },
+      },
+      mutations: defaultMutations(),
+    };
+  }
+
+  return {
+    version: 1,
+    entities,
+    queries: appSchema.queries,
+    itemViews: appSchema.itemViews,
+    views: {
+      ...appSchema.views,
+      taskCreate: {
+        ...taskCreate,
+        fields: {
+          ...taskCreate.fields,
+          project: { editor: "reference" },
+        },
+      },
+    },
+  } satisfies AppSchema;
+}
+
 function schemaWithViews(views: unknown = defaultViews()) {
   return {
     version: 1,
@@ -1481,10 +1801,18 @@ function defaultCollectionView(): Extract<AppSchema["views"][string], { type: "c
 }
 
 async function postMutation(mutationId: string, values: Record<string, unknown>) {
+  return postMutationForEntity(mutationId, "task", values);
+}
+
+async function postMutationForEntity(
+  mutationId: string,
+  entity: string,
+  values: Record<string, unknown>,
+) {
   const response = await harness.fetch("/api/mutations", {
     body: JSON.stringify({
       mutationId,
-      entity: "task",
+      entity,
       op: "create",
       values,
     }),

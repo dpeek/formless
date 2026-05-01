@@ -5,6 +5,7 @@ import {
   applyRecordMerge,
   applySchemaSave,
   createEntityRecordCountMatchingQuerySelector,
+  createReferenceOptionsSelector,
   getClientStoreSnapshot,
   resetClientStore,
   subscribeToClientStoreSelector,
@@ -280,6 +281,31 @@ describe("client store selectors", () => {
     } finally {
       unsubscribe();
     }
+  });
+
+  it("returns stable reference options from active target records", () => {
+    const selector = createReferenceOptionsSelector("resource", "title");
+    const activeResource = record("resource-1", "Designer", false, "resource");
+    const deletedResource = {
+      ...record("resource-2", "Archived", false, "resource"),
+      deletedAt: "2026-04-28T00:02:00.000Z",
+    };
+
+    applyBootstrapResponse(
+      bootstrap([activeResource, deletedResource, record("record-1", "Task")]),
+    );
+    const first = selector(getClientStoreSnapshot());
+
+    applyRecordMerge([record("record-1", "Updated task")], 2);
+    const afterUnrelatedPatch = selector(getClientStoreSnapshot());
+
+    applyRecordMerge([record("resource-1", "Engineer", false, "resource")], 3);
+    const afterLabelPatch = selector(getClientStoreSnapshot());
+
+    expect(first).toEqual([{ id: "resource-1", label: "Designer" }]);
+    expect(afterUnrelatedPatch).toBe(first);
+    expect(afterLabelPatch).toEqual([{ id: "resource-1", label: "Engineer" }]);
+    expect(afterLabelPatch).not.toBe(first);
   });
 });
 

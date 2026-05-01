@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Route, Switch } from "wouter";
 import {
   connectBroadcastToClientStore,
@@ -6,10 +6,9 @@ import {
   useCursor,
   useEntityRecordCountMatchingQuery,
   useEntityRecordIdsMatchingQuery,
-  useHomeViewModel,
   useLastSyncedAt,
-  useRecordCreatedAt,
   useRecordField,
+  useReferenceOptions,
   useSchema,
 } from "./client/store.ts";
 import { setSyncStatus, useSyncStatus, type SyncStatus } from "./client/sync-status.ts";
@@ -23,6 +22,7 @@ import {
   submitCreateMutation,
   submitPatchMutation,
 } from "./client/sync.ts";
+import type { DevResetSchema } from "./client/sync.ts";
 import type {
   CreateFieldConfig,
   HomeActionConfig,
@@ -30,6 +30,7 @@ import type {
   HomeResultConfig,
   RecordFieldConfig,
 } from "./client/views.ts";
+import { selectCollectionModels } from "./client/views.ts";
 import { todayDateString } from "./shared/date.ts";
 import {
   parseAppSchema,
@@ -60,7 +61,10 @@ type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
 function HomeRoute() {
   const schema = useSchema();
-  const homeModel = useHomeViewModel();
+  const collectionModels = useMemo(() => (schema ? selectCollectionModels(schema) : []), [schema]);
+  const [selectedViewName, setSelectedViewName] = useState<string | null>(null);
+  const homeModel =
+    collectionModels.find((model) => model.viewName === selectedViewName) ?? collectionModels[0];
   const queryTabs = homeModel?.queryTabs ?? [];
   const today = useTodayDateString();
   const [selectedQueryName, setSelectedQueryName] = useState<string | null>(null);
@@ -103,6 +107,17 @@ function HomeRoute() {
       stopPolling();
     };
   }, []);
+
+  useEffect(() => {
+    const selectedViewExists = collectionModels.some(
+      (model) => model.viewName === selectedViewName,
+    );
+    const defaultViewName = collectionModels[0]?.viewName ?? null;
+
+    if (!selectedViewExists && selectedViewName !== defaultViewName) {
+      setSelectedViewName(defaultViewName);
+    }
+  }, [collectionModels, selectedViewName]);
 
   useEffect(() => {
     const selectedQueryExists = queryTabs.some((tab) => tab.queryName === selectedQueryName);
@@ -155,6 +170,25 @@ function HomeRoute() {
         <h1 className="text-2xl font-semibold">{homeModel.label}</h1>
         <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
+
+      {collectionModels.length <= 1 ? null : (
+        <Tabs
+          onValueChange={(value) => {
+            if (typeof value === "string") {
+              setSelectedViewName(value);
+            }
+          }}
+          value={homeModel.viewName}
+        >
+          <TabsList aria-label="Collections" variant="line">
+            {collectionModels.map((model) => (
+              <TabsTrigger key={model.viewName} value={model.viewName}>
+                {model.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
 
       <HomeCollection
         actions={actions}
@@ -391,10 +425,45 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
     );
   }
 
+  if (field.type === "reference") {
+    return <ReferenceCreateField field={field} fieldName={fieldName} label={label} />;
+  }
+
   return (
     <Field>
       <Label>{label}</Label>
       <Input name={fieldName} required={field.required} />
+    </Field>
+  );
+}
+
+function ReferenceCreateField({
+  field,
+  fieldName,
+  label,
+}: {
+  field: Extract<FieldSchema, { type: "reference" }>;
+  fieldName: string;
+  label: string;
+}) {
+  const options = useReferenceOptions(field.to, field.displayField);
+
+  return (
+    <Field>
+      <Label>{label}</Label>
+      <NativeSelect
+        className="w-full"
+        defaultValue={field.required ? undefined : ""}
+        name={fieldName}
+        required={field.required}
+      >
+        {field.required ? null : <NativeSelectOption value="" />}
+        {options.map((option) => (
+          <NativeSelectOption key={option.id} value={option.id}>
+            {option.label}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
     </Field>
   );
 }
@@ -656,14 +725,8 @@ function RecordRow({
   recordFields: RecordFieldConfig[];
   recordId: string;
 }) {
-  const createdAt = useRecordCreatedAt(recordId);
-
-  if (!createdAt) {
-    return null;
-  }
-
   return (
-    <li className="space-y-2 p-3">
+    <li className="p-3">
       <div className="flex flex-wrap items-start gap-2">
         {recordFields.map((fieldConfig) => (
           <RecordFieldEditor
@@ -675,7 +738,6 @@ function RecordRow({
           />
         ))}
       </div>
-      <p className="text-xs text-slate-500">{createdAt}</p>
     </li>
   );
 }
@@ -791,6 +853,21 @@ function RecordFieldEditor({
     );
   }
 
+  if (editor === "reference" && field.type === "reference") {
+    return (
+      <RecordReferenceEditor
+        canPatch={canPatch}
+        draft={draft}
+        error={error}
+        field={field}
+        fieldName={fieldName}
+        isPending={isPending}
+        onCommit={commit}
+        onDraftChange={setDraft}
+      />
+    );
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -830,6 +907,63 @@ function RecordFieldEditor({
           type={editor === "date" ? "date" : editor === "number" ? "number" : "text"}
           value={draft}
         />
+      </Field>
+      {error ? <FieldError>{error}</FieldError> : null}
+    </div>
+  );
+}
+
+function RecordReferenceEditor({
+  canPatch,
+  draft,
+  error,
+  field,
+  fieldName,
+  isPending,
+  onCommit,
+  onDraftChange,
+}: {
+  canPatch: boolean;
+  draft: string;
+  error: string | null;
+  field: Extract<FieldSchema, { type: "reference" }>;
+  fieldName: string;
+  isPending: boolean;
+  onCommit: (value: FieldValue) => Promise<void>;
+  onDraftChange: (value: string) => void;
+}) {
+  const label = fieldLabel(fieldName, field);
+  const options = useReferenceOptions(field.to, field.displayField);
+  const unknownValue =
+    draft !== "" && !options.some((option) => option.id === draft) ? draft : null;
+
+  return (
+    <div className="min-w-48 flex-none space-y-1">
+      <Field>
+        <Label className="sr-only">{label}</Label>
+        <NativeSelect
+          aria-label={label}
+          className="w-full"
+          disabled={!canPatch || isPending}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+
+            onDraftChange(value);
+            void onCommit(value);
+          }}
+          required={field.required}
+          value={draft}
+        >
+          {!field.required || draft === "" ? <NativeSelectOption value="" /> : null}
+          {unknownValue ? (
+            <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
+          ) : null}
+          {options.map((option) => (
+            <NativeSelectOption key={option.id} value={option.id}>
+              {option.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
       </Field>
       {error ? <FieldError>{error}</FieldError> : null}
     </div>
@@ -1082,30 +1216,37 @@ export function App() {
 }
 
 function DevActions() {
-  const [isResetting, setIsResetting] = useState(false);
+  const [resettingSchema, setResettingSchema] = useState<DevResetSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function resetLocalData() {
-    if (isResetting) {
+  async function resetLocalData(schema: DevResetSchema) {
+    if (resettingSchema) {
       return;
     }
 
-    setIsResetting(true);
+    setResettingSchema(schema);
     setError(null);
 
     try {
-      await resetRemoteData();
+      await resetRemoteData(schema);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Reset failed.");
     } finally {
-      setIsResetting(false);
+      setResettingSchema(null);
     }
   }
 
   return (
     <div className="ml-auto flex items-center gap-3">
-      <Button disabled={isResetting} onClick={() => void resetLocalData()}>
-        {isResetting ? "Resetting..." : "Reset data"}
+      <Button disabled={resettingSchema !== null} onClick={() => void resetLocalData("default")}>
+        {resettingSchema === "default" ? "Resetting..." : "Reset task schema"}
+      </Button>
+      <Button
+        disabled={resettingSchema !== null}
+        onClick={() => void resetLocalData("rate-card")}
+        variant="outline"
+      >
+        {resettingSchema === "rate-card" ? "Resetting..." : "Reset rate-card schema"}
       </Button>
       {error ? <span className="text-sm text-red-700">{error}</span> : null}
     </div>

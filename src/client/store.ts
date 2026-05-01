@@ -25,9 +25,16 @@ export type ClientStoreState = NormalizedClientState & {
   homeViewModel: HomeViewModel | undefined;
 };
 
+export type ReferenceOption = {
+  id: string;
+  label: string;
+};
+
 type StoreListener = () => void;
+type ReferenceOptionsSnapshot = Pick<NormalizedClientState, "recordsById" | "recordIdsByEntity">;
 
 const EMPTY_RECORD_IDS: string[] = [];
+const EMPTY_REFERENCE_OPTIONS: ReferenceOption[] = [];
 const listeners = new Set<StoreListener>();
 
 let state: ClientStoreState = withDerivedState({
@@ -183,6 +190,15 @@ export function useEntityRecordIds(entityName: string) {
   return useClientStoreSelector((snapshot) => {
     return snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
   });
+}
+
+export function useReferenceOptions(entityName: string, displayField?: string) {
+  const selector = useMemo(
+    () => createReferenceOptionsSelector(entityName, displayField),
+    [entityName, displayField],
+  );
+
+  return useClientStoreSelector(selector);
 }
 
 export function useEntityRecordIdsMatchingQuery(
@@ -366,12 +382,59 @@ export function createEntityRecordCountMatchingQuerySelector(
   };
 }
 
+export function createReferenceOptionsSelector(entityName: string, displayField?: string) {
+  let previousRecordIds: string[] | undefined;
+  let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousResult = EMPTY_REFERENCE_OPTIONS;
+
+  return (snapshot: ReferenceOptionsSnapshot) => {
+    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+
+    if (recordIds === previousRecordIds && snapshot.recordsById === previousRecordsById) {
+      return previousResult;
+    }
+
+    const options = recordIds.map((recordId) => {
+      const record = snapshot.recordsById[recordId];
+
+      return {
+        id: recordId,
+        label: record ? referenceOptionLabel(record, displayField) : recordId,
+      };
+    });
+
+    previousRecordIds = recordIds;
+    previousRecordsById = snapshot.recordsById;
+    previousResult = reuseReferenceOptions(previousResult, options);
+
+    return previousResult;
+  };
+}
+
+function referenceOptionLabel(record: StoredRecord, displayField?: string) {
+  if (!displayField) {
+    return record.id;
+  }
+
+  const value = record.values[displayField];
+
+  return typeof value === "string" && value.trim() !== "" ? value : record.id;
+}
+
 function reuseStringArray(existing: string[], next: string[]) {
   if (arraysEqual(existing, next)) {
     return existing;
   }
 
   return next.length === 0 ? EMPTY_RECORD_IDS : next;
+}
+
+function reuseReferenceOptions(existing: ReferenceOption[], next: ReferenceOption[]) {
+  if (referenceOptionsEqual(existing, next)) {
+    return existing;
+  }
+
+  return next.length === 0 ? EMPTY_REFERENCE_OPTIONS : next;
 }
 
 function recordsById(records: StoredRecord[]) {
@@ -474,6 +537,16 @@ function arraysEqual<T>(left: T[] | undefined, right: T[]) {
     left !== undefined &&
     left.length === right.length &&
     left.every((value, index) => value === right[index])
+  );
+}
+
+function referenceOptionsEqual(left: ReferenceOption[] | undefined, right: ReferenceOption[]) {
+  return (
+    left !== undefined &&
+    left.length === right.length &&
+    left.every(
+      (value, index) => value.id === right[index]?.id && value.label === right[index].label,
+    )
   );
 }
 

@@ -42,16 +42,25 @@ export type EnumFieldSchema = {
   default?: string;
 };
 
+export type ReferenceFieldSchema = {
+  type: "reference";
+  required: boolean;
+  label?: string;
+  to: string;
+  displayField?: string;
+};
+
 export type FieldSchema =
   | TextFieldSchema
   | BooleanFieldSchema
   | DateFieldSchema
   | NumberFieldSchema
-  | EnumFieldSchema;
+  | EnumFieldSchema
+  | ReferenceFieldSchema;
 
 export type FieldCommitPolicy = "immediate" | "field-commit";
 
-export type FieldEditor = "text" | "boolean" | "date" | "number" | "enum";
+export type FieldEditor = "text" | "boolean" | "date" | "number" | "enum" | "reference";
 
 export type ViewFieldSchema = {
   editor: FieldEditor;
@@ -220,7 +229,43 @@ function parseEntities(value: unknown): ParsedEntityCatalog {
     }
   }
 
+  validateReferenceFields(entities);
+
   return { entities, actionInputsByEntity };
+}
+
+function validateReferenceFields(entities: Record<string, EntitySchema>) {
+  for (const [entityName, entity] of Object.entries(entities)) {
+    for (const [fieldName, field] of Object.entries(entity.fields)) {
+      if (field.type !== "reference") {
+        continue;
+      }
+
+      const targetEntity = entities[field.to];
+      if (!targetEntity) {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" references unknown entity "${field.to}".`,
+        );
+      }
+
+      if (field.displayField === undefined) {
+        continue;
+      }
+
+      const displayField = targetEntity.fields[field.displayField];
+      if (!displayField) {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" displayField references unknown field "${field.to}.${field.displayField}".`,
+        );
+      }
+
+      if (displayField.type !== "text") {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" displayField must reference a text field.`,
+        );
+      }
+    }
+  }
 }
 
 function parseCollectionQueries(
@@ -770,6 +815,12 @@ function parseListViewField(
     throw new Error(`View field "${viewName}.${fieldName}" enum fields must commit immediately.`);
   }
 
+  if (field.type === "reference" && value.commit !== "immediate") {
+    throw new Error(
+      `View field "${viewName}.${fieldName}" reference fields must commit immediately.`,
+    );
+  }
+
   if (
     (field.type === "text" || field.type === "date" || field.type === "number") &&
     value.commit !== "field-commit"
@@ -844,7 +895,8 @@ function parseViewFieldEditor(
     value !== "boolean" &&
     value !== "date" &&
     value !== "number" &&
-    value !== "enum"
+    value !== "enum" &&
+    value !== "reference"
   ) {
     throw new Error(
       `View field "${viewName}.${fieldName}" has unsupported editor "${String(value)}".`,
@@ -1274,6 +1326,41 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
       }
 
       field.default = value.default;
+    }
+
+    return field;
+  }
+
+  if (value.type === "reference") {
+    assertExactKeys(
+      `Field "${entityName}.${fieldName}"`,
+      value,
+      ["type", "required", "to"],
+      ["label", "displayField"],
+    );
+
+    if (typeof value.to !== "string" || value.to.trim() === "") {
+      throw new Error(
+        `Field "${entityName}.${fieldName}" reference target must be a non-empty entity name.`,
+      );
+    }
+
+    const displayField = parseOptionalNonEmptyString(
+      `Field "${entityName}.${fieldName}" displayField`,
+      value.displayField,
+    );
+    const field: ReferenceFieldSchema = {
+      type: "reference",
+      required: value.required,
+      to: value.to,
+    };
+
+    if (label !== undefined) {
+      field.label = label;
+    }
+
+    if (displayField !== undefined) {
+      field.displayField = displayField;
     }
 
     return field;

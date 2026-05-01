@@ -265,6 +265,12 @@ function parseQueryValue(
     );
   }
 
+  if (field.type === "reference" && value === "") {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(ref)}" requires a non-empty string value.`,
+    );
+  }
+
   if (field.type === "enum" && !Object.hasOwn(field.values ?? {}, value)) {
     throw new Error(
       `Query "${contextLabel}" field "${formatFieldRef(ref)}" must be a known enum value.`,

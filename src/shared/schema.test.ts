@@ -302,6 +302,141 @@ describe("schema number fields", () => {
   });
 });
 
+describe("schema reference fields", () => {
+  it("parses required and optional reference fields with forward entity references", () => {
+    const schema = parseAppSchema(
+      referenceSchema({
+        queries: {
+          rateAll: {
+            label: "All rates",
+            entity: "rate",
+            expression: { kind: "all" },
+          },
+          defaultRates: {
+            label: "Default",
+            entity: "rate",
+            expression: {
+              kind: "where",
+              ref: { kind: "value", name: "resource" },
+              op: "eq",
+              value: "rec_resource_designer",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.rate?.fields.resource).toEqual({
+      type: "reference",
+      required: true,
+      label: "Resource",
+      to: "resource",
+      displayField: "name",
+    });
+    expect(schema.entities.rate?.fields.optionalResource).toEqual({
+      type: "reference",
+      required: false,
+      label: "Backup resource",
+      to: "resource",
+      displayField: "name",
+    });
+    expect(schema.queries.defaultRates?.expression).toMatchObject({
+      ref: { kind: "value", name: "resource" },
+      op: "eq",
+      value: "rec_resource_designer",
+    });
+  });
+
+  it("rejects unknown targets, invalid display fields, and unsupported keys", () => {
+    expect(() =>
+      parseAppSchema(
+        referenceSchema({
+          entities: rateCardEntities({
+            ...resourceReferenceField(),
+            to: "missing",
+          }),
+        }),
+      ),
+    ).toThrow('references unknown entity "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        referenceSchema({
+          entities: rateCardEntities({
+            ...resourceReferenceField(),
+            displayField: "missing",
+          }),
+        }),
+      ),
+    ).toThrow('displayField references unknown field "resource.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        referenceSchema({
+          entities: {
+            ...rateCardEntities({
+              ...resourceReferenceField(),
+              displayField: "active",
+            }),
+            resource: {
+              ...rateCardEntities().resource,
+              fields: {
+                name: { type: "text", required: true, label: "Name" },
+                active: { type: "boolean", required: true, default: true },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("displayField must reference a text field");
+
+    expect(() =>
+      parseAppSchema(
+        referenceSchema({
+          entities: rateCardEntities({
+            ...resourceReferenceField(),
+            default: "rec_resource_designer",
+          }),
+        }),
+      ),
+    ).toThrow('Field "rate.resource" has unsupported key "default"');
+  });
+
+  it("requires reference editors and immediate item-view commits", () => {
+    expect(() =>
+      parseAppSchema(
+        referenceSchema({
+          views: {
+            ...referenceViews(),
+            rateCreate: {
+              type: "create",
+              entity: "rate",
+              fields: {
+                resource: { editor: "text" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('editor must match field type "reference"');
+
+    expect(() =>
+      parseAppSchema(
+        referenceSchema({
+          itemViews: {
+            rateListItem: {
+              entity: "rate",
+              fields: {
+                resource: { editor: "reference", commit: "field-commit" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("reference fields must commit immediately");
+  });
+});
+
 describe("schema query catalog", () => {
   it("parses top-level queries in declaration order", () => {
     const schema = parseAppSchema(baseSchema());
@@ -706,6 +841,98 @@ function noteEntity() {
       create: { enabled: true },
       patch: { enabled: true },
       delete: { enabled: false },
+    },
+  };
+}
+
+function referenceSchema(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    entities: rateCardEntities(),
+    queries: {
+      rateAll: {
+        label: "All rates",
+        entity: "rate",
+        expression: { kind: "all" },
+      },
+    },
+    itemViews: {
+      rateListItem: {
+        entity: "rate",
+        fields: {
+          resource: { editor: "reference", commit: "immediate" },
+          price: { editor: "number", commit: "field-commit" },
+        },
+      },
+    },
+    views: referenceViews(),
+    ...overrides,
+  };
+}
+
+function rateCardEntities(resourceField: Record<string, unknown> = resourceReferenceField()) {
+  return {
+    rate: {
+      label: "Rate",
+      fields: {
+        resource: resourceField,
+        optionalResource: {
+          type: "reference",
+          required: false,
+          label: "Backup resource",
+          to: "resource",
+          displayField: "name",
+        },
+        price: { type: "number", required: false, label: "Price", min: 0 },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    },
+    resource: {
+      label: "Resource",
+      fields: {
+        name: { type: "text", required: true, label: "Name" },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    },
+  };
+}
+
+function resourceReferenceField() {
+  return {
+    type: "reference",
+    required: true,
+    label: "Resource",
+    to: "resource",
+    displayField: "name",
+  };
+}
+
+function referenceViews() {
+  return {
+    rateHome: {
+      type: "collection",
+      label: "Rates",
+      entity: "rate",
+      queries: [{ query: "rateAll" }],
+      defaultQuery: "rateAll",
+      result: { type: "list", itemView: "rateListItem" },
+      actions: [{ type: "create", createView: "rateCreate" }],
+    },
+    rateCreate: {
+      type: "create",
+      entity: "rate",
+      fields: {
+        resource: { editor: "reference" },
+        price: { editor: "number" },
+      },
     },
   };
 }

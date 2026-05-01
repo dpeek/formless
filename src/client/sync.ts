@@ -152,8 +152,17 @@ export async function submitAction(
   return response;
 }
 
-export async function resetRemoteData(fetcher: typeof fetch = fetch) {
-  const response = await postJson<BootstrapResponse>(fetcher, "/api/dev/reset", {});
+export type DevResetSchema = "default" | "rate-card";
+
+export async function resetRemoteData(
+  schemaOrFetcher: DevResetSchema | typeof fetch = "default",
+  fetcher: typeof fetch = fetch,
+) {
+  const schema = typeof schemaOrFetcher === "function" ? "default" : schemaOrFetcher;
+  const resolvedFetcher = typeof schemaOrFetcher === "function" ? schemaOrFetcher : fetcher;
+  const response = await postJson<BootstrapResponse>(resolvedFetcher, "/api/dev/reset", {
+    schema,
+  });
 
   resetClientStore();
   await deleteClientDb();
