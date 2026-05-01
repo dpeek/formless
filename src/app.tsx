@@ -4,6 +4,7 @@ import {
   connectBroadcastToClientStore,
   hydrateClientStore,
   useCursor,
+  useEntityRecordOptionsMatchingQuery,
   useEntityRecordCountMatchingQuery,
   useEntityRecordIdsMatchingQuery,
   useLastSyncedAt,
@@ -26,6 +27,7 @@ import type { DevResetSchema } from "./client/sync.ts";
 import type {
   CreateFieldConfig,
   HomeActionConfig,
+  HomeContextConfig,
   HomeQueryTabConfig,
   HomeResultConfig,
   RecordFieldConfig,
@@ -39,6 +41,7 @@ import {
   type FieldSchema,
 } from "./shared/schema.ts";
 import type { FieldValue, RecordValues } from "./shared/protocol.ts";
+import type { QueryEvaluationContext } from "./shared/query.ts";
 import { Checkbox } from "@formless/ui/checkbox";
 import { Button } from "@formless/ui/button";
 import { Label } from "@formless/ui/label";
@@ -68,6 +71,9 @@ function HomeRoute() {
   const queryTabs = homeModel?.queryTabs ?? [];
   const today = useTodayDateString();
   const [selectedQueryName, setSelectedQueryName] = useState<string | null>(null);
+  const [selectedContextIdsByView, setSelectedContextIdsByView] = useState<
+    Record<string, string | null>
+  >({});
 
   useEffect(() => {
     const stopBroadcast = connectBroadcastToClientStore();
@@ -153,6 +159,7 @@ function HomeRoute() {
   const { actions, entityName, entity, result } = homeModel;
   const selectedQuery =
     queryTabs.find((tab) => tab.queryName === selectedQueryName) ?? queryTabs[0];
+  const selectedContextRecordId = selectedContextIdsByView[homeModel.viewName] ?? null;
 
   if (!selectedQuery) {
     return (
@@ -192,11 +199,20 @@ function HomeRoute() {
 
       <HomeCollection
         actions={actions}
+        context={homeModel.context}
         entity={entity}
         entityName={entityName}
+        onSelectContext={(recordId) =>
+          setSelectedContextIdsByView((current) =>
+            current[homeModel.viewName] === recordId
+              ? current
+              : { ...current, [homeModel.viewName]: recordId },
+          )
+        }
         onSelectQuery={setSelectedQueryName}
         queryTabs={queryTabs}
         result={result}
+        selectedContextRecordId={selectedContextRecordId}
         selectedQuery={selectedQuery}
         today={today}
       />
@@ -276,10 +292,12 @@ export function GeneratedCreateForm({
 export function GeneratedCreateDialog({
   action,
   onOpenChange,
+  onSuccess,
   open,
 }: {
   action: CreateHomeActionConfig;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: (recordId: string) => void;
   open: boolean;
 }) {
   return (
@@ -288,7 +306,13 @@ export function GeneratedCreateDialog({
         <DialogHeader>
           <DialogTitle>{action.label}</DialogTitle>
         </DialogHeader>
-        <GeneratedCreateDialogForm action={action} onSuccess={() => onOpenChange(false)} />
+        <GeneratedCreateDialogForm
+          action={action}
+          onSuccess={(recordId) => {
+            onSuccess?.(recordId);
+            onOpenChange(false);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -300,7 +324,7 @@ export function GeneratedCreateDialogForm({
   renderDialogCancel = true,
 }: {
   action: CreateHomeActionConfig;
-  onSuccess?: () => void;
+  onSuccess?: (recordId: string) => void;
   renderDialogCancel?: boolean;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -323,9 +347,9 @@ export function GeneratedCreateDialogForm({
     });
 
     try {
-      await submitCreateMutation(action.entityName, values);
+      const response = await submitCreateMutation(action.entityName, values);
       form.reset();
-      onSuccess?.();
+      onSuccess?.(response.record.id);
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -490,25 +514,51 @@ function getFormValues(formData: FormData, fields: CreateFieldConfig[]): RecordV
   return values;
 }
 
-function HomeCollection({
+export function HomeCollection({
   actions,
+  context,
   entity,
   entityName,
+  onSelectContext,
   onSelectQuery,
   queryTabs,
   result,
+  selectedContextRecordId,
   selectedQuery,
   today,
 }: {
   actions: HomeActionConfig[];
+  context?: HomeContextConfig;
   entity: EntitySchema;
   entityName: string;
+  onSelectContext?: (recordId: string | null) => void;
   onSelectQuery: (queryName: string) => void;
   queryTabs: HomeQueryTabConfig[];
   result: HomeResultConfig;
+  selectedContextRecordId?: string | null;
   selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
+  if (context) {
+    return (
+      <ScopedHomeCollection
+        actions={actions}
+        context={context}
+        entity={entity}
+        entityName={entityName}
+        onSelectContext={onSelectContext}
+        onSelectQuery={onSelectQuery}
+        queryTabs={queryTabs}
+        result={result}
+        selectedContextRecordId={selectedContextRecordId ?? null}
+        selectedQuery={selectedQuery}
+        today={today}
+      />
+    );
+  }
+
+  const queryContext = { today };
+
   return (
     <div className="space-y-6">
       {queryTabs.length <= 1 ? null : (
@@ -525,8 +575,8 @@ function HomeCollection({
               <HomeQueryTabTrigger
                 entityName={entityName}
                 key={queryTab.queryName}
+                queryContext={queryContext}
                 queryTab={queryTab}
-                today={today}
               />
             ))}
           </TabsList>
@@ -537,35 +587,207 @@ function HomeCollection({
         entity={entity}
         entityName={entityName}
         query={selectedQuery.query}
+        queryContext={queryContext}
         recordFields={result.recordFields}
-        today={today}
       />
 
-      {actions.length > 0 ? <HomeActionRow actions={actions} today={today} /> : null}
+      {actions.length > 0 ? <HomeActionRow actions={actions} queryContext={queryContext} /> : null}
     </div>
+  );
+}
+
+function ScopedHomeCollection({
+  actions,
+  context,
+  entity,
+  entityName,
+  onSelectContext,
+  onSelectQuery,
+  queryTabs,
+  result,
+  selectedContextRecordId,
+  selectedQuery,
+  today,
+}: {
+  actions: HomeActionConfig[];
+  context: HomeContextConfig;
+  entity: EntitySchema;
+  entityName: string;
+  onSelectContext?: (recordId: string | null) => void;
+  onSelectQuery: (queryName: string) => void;
+  queryTabs: HomeQueryTabConfig[];
+  result: HomeResultConfig;
+  selectedContextRecordId: string | null;
+  selectedQuery: HomeQueryTabConfig;
+  today: string;
+}) {
+  const contextOptions = useEntityRecordOptionsMatchingQuery(
+    context.entityName,
+    context.query,
+    context.labelField,
+    { today },
+  );
+  const activeContextRecordId = contextOptions.some(
+    (option) => option.id === selectedContextRecordId,
+  )
+    ? selectedContextRecordId
+    : (contextOptions[0]?.id ?? null);
+  const queryContext = activeContextRecordId
+    ? { today, values: { [context.name]: activeContextRecordId } }
+    : undefined;
+
+  useEffect(() => {
+    if (selectedContextRecordId !== activeContextRecordId) {
+      onSelectContext?.(activeContextRecordId);
+    }
+  }, [activeContextRecordId, onSelectContext, selectedContextRecordId]);
+
+  return (
+    <div className="space-y-6">
+      <ContextSelector
+        context={context}
+        onSelectContext={onSelectContext}
+        options={contextOptions}
+        selectedContextRecordId={activeContextRecordId}
+      />
+
+      {queryTabs.length <= 1 ? null : (
+        <Tabs
+          onValueChange={(value) => {
+            if (typeof value === "string") {
+              onSelectQuery(value);
+            }
+          }}
+          value={selectedQuery.queryName}
+        >
+          <TabsList aria-label={`${entity.label} queries`} variant="line">
+            {queryTabs.map((queryTab) => (
+              <HomeQueryTabTrigger
+                entityName={entityName}
+                key={queryTab.queryName}
+                queryContext={queryContext}
+                queryTab={queryTab}
+              />
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+
+      {queryContext ? (
+        <RecordList
+          entity={entity}
+          entityName={entityName}
+          query={selectedQuery.query}
+          queryContext={queryContext}
+          recordFields={result.recordFields}
+        />
+      ) : null}
+
+      {actions.length > 0 ? (
+        <HomeActionRow actions={actions} queryContext={queryContext ?? { today }} />
+      ) : null}
+    </div>
+  );
+}
+
+function ContextSelector({
+  context,
+  onSelectContext,
+  options,
+  selectedContextRecordId,
+}: {
+  context: HomeContextConfig;
+  onSelectContext?: (recordId: string | null) => void;
+  options: Array<{ id: string; label: string }>;
+  selectedContextRecordId: string | null;
+}) {
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
+  return (
+    <section className="flex flex-wrap items-end gap-3 border-b border-slate-200 pb-4">
+      <Field className="min-w-60 flex-1">
+        <Label>{context.entity.label}</Label>
+        <NativeSelect
+          className="w-full"
+          disabled={options.length === 0}
+          onChange={(event) => onSelectContext?.(event.currentTarget.value || null)}
+          value={selectedContextRecordId ?? ""}
+        >
+          {options.length === 0 ? <NativeSelectOption value="" /> : null}
+          {options.map((option) => (
+            <NativeSelectOption key={option.id} value={option.id}>
+              {option.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+
+      {context.createAction ? (
+        <Button
+          disabled={!context.createAction.enabled}
+          onClick={() => setCreateDialogOpen(true)}
+          type="button"
+          variant="outline"
+        >
+          {context.createAction.enabled ? context.createAction.label : "Create disabled"}
+        </Button>
+      ) : null}
+
+      {options.length === 0 ? (
+        <p className="basis-full text-sm text-slate-600">
+          No {context.entity.label.toLowerCase()} records yet.
+        </p>
+      ) : null}
+
+      {context.createAction && createDialogOpen ? (
+        <GeneratedCreateDialog
+          action={context.createAction}
+          onOpenChange={(open) => setCreateDialogOpen(open)}
+          onSuccess={(recordId) => {
+            onSelectContext?.(recordId);
+            setCreateDialogOpen(false);
+          }}
+          open={true}
+        />
+      ) : null}
+    </section>
   );
 }
 
 function HomeQueryTabTrigger({
   entityName,
+  queryContext,
   queryTab,
-  today,
 }: {
   entityName: string;
+  queryContext?: QueryEvaluationContext;
   queryTab: HomeQueryTabConfig;
-  today: string;
 }) {
-  const count = useEntityRecordCountMatchingQuery(entityName, queryTab.query, { today });
-
   return (
     <TabsTrigger value={queryTab.queryName}>
       <span>{queryTab.label}</span>
-      {queryTab.count?.type === "count" ? (
-        <Badge aria-label={`${queryTab.label} count`} className="h-4 px-1.5" variant="outline">
-          {count}
-        </Badge>
+      {queryTab.count?.type === "count" && queryContext ? (
+        <QueryCountBadge entityName={entityName} queryContext={queryContext} queryTab={queryTab} />
       ) : null}
     </TabsTrigger>
+  );
+}
+
+function QueryCountBadge({
+  entityName,
+  queryContext,
+  queryTab,
+}: {
+  entityName: string;
+  queryContext: QueryEvaluationContext;
+  queryTab: HomeQueryTabConfig;
+}) {
+  const count = useEntityRecordCountMatchingQuery(entityName, queryTab.query, queryContext);
+
+  return (
+    <Badge aria-label={`${queryTab.label} count`} className="h-4 px-1.5" variant="outline">
+      {count}
+    </Badge>
   );
 }
 
@@ -573,21 +795,17 @@ export function RecordList({
   entity,
   entityName,
   query,
+  queryContext,
   recordFields,
-  today,
 }: {
   entity: EntitySchema;
   entityName: string;
   query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
   recordFields: RecordFieldConfig[];
-  today?: string;
 }) {
   const canPatch = entity.mutations.patch.enabled;
-  const recordIds = useEntityRecordIdsMatchingQuery(
-    entityName,
-    query,
-    today ? { today } : undefined,
-  );
+  const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
 
   return (
     <section className="space-y-3">
@@ -614,7 +832,13 @@ export function RecordList({
   );
 }
 
-function HomeActionRow({ actions, today }: { actions: HomeActionConfig[]; today: string }) {
+function HomeActionRow({
+  actions,
+  queryContext,
+}: {
+  actions: HomeActionConfig[];
+  queryContext: QueryEvaluationContext;
+}) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [createDialogAction, setCreateDialogAction] = useState<CreateHomeActionConfig | null>(null);
 
@@ -664,7 +888,7 @@ function HomeActionRow({ actions, today }: { actions: HomeActionConfig[]; today:
             key={`${action.type}:${action.actionName}`}
             onRun={runAction}
             pending={pendingAction === action.actionName}
-            today={today}
+            queryContext={queryContext}
           />
         ),
       )}
@@ -688,15 +912,19 @@ function HomeEntityActionButton({
   disabled,
   onRun,
   pending,
-  today,
+  queryContext,
 }: {
   action: Extract<HomeActionConfig, { type: "entity-action" }>;
   disabled: boolean;
   onRun: (action: Extract<HomeActionConfig, { type: "entity-action" }>) => Promise<void>;
   pending: boolean;
-  today: string;
+  queryContext: QueryEvaluationContext;
 }) {
-  const count = useEntityRecordCountMatchingQuery(action.entityName, action.targetQuery, { today });
+  const count = useEntityRecordCountMatchingQuery(
+    action.entityName,
+    action.targetQuery,
+    queryContext,
+  );
 
   return (
     <Button disabled={disabled} onClick={() => void onRun(action)} type="button" variant="outline">

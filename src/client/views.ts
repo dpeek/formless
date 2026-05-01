@@ -39,11 +39,22 @@ export type HomeResultConfig = {
   recordFields: RecordFieldConfig[];
 };
 
+export type HomeContextConfig = {
+  name: string;
+  entityName: string;
+  entity: EntitySchema;
+  queryName: string;
+  query: QueryExpression;
+  labelField: string;
+  createAction?: Extract<HomeActionConfig, { type: "create" }>;
+};
+
 export type HomeViewModel = {
   viewName: string;
   label: string;
   entityName: string;
   entity: EntitySchema;
+  context?: HomeContextConfig;
   queryTabs: HomeQueryTabConfig[];
   defaultQueryName: string;
   result: HomeResultConfig;
@@ -91,12 +102,55 @@ export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
       label: collectionView.label,
       entityName: collectionView.entity,
       entity,
+      context: selectContext(schema, viewEntries, collectionView),
       queryTabs: selectQueryTabs(schema, collectionView),
       defaultQueryName: collectionView.defaultQuery,
       result: selectResult(schema, collectionView, entity),
       actions: selectHomeActions(schema, viewEntries, collectionView, entity),
     };
   });
+}
+
+function selectContext(
+  schema: AppSchema,
+  viewEntries: Array<[string, ViewSchema]>,
+  collectionView: CollectionViewSchema,
+): HomeContextConfig | undefined {
+  if (!collectionView.context) {
+    return undefined;
+  }
+
+  const contextEntity = schema.entities[collectionView.context.entity];
+  const contextQuery = schema.queries[collectionView.context.query];
+
+  if (!contextEntity) {
+    throw new Error(`Missing context entity "${collectionView.context.entity}".`);
+  }
+
+  if (!contextQuery) {
+    throw new Error(`Missing context query "${collectionView.context.query}".`);
+  }
+
+  const createAction =
+    collectionView.context.createView === undefined
+      ? undefined
+      : selectCreateAction(
+          viewEntries,
+          collectionView.context.createView,
+          collectionView.context.entity,
+          contextEntity,
+          `Create ${contextEntity.label}`,
+        );
+
+  return {
+    name: collectionView.context.name,
+    entityName: collectionView.context.entity,
+    entity: contextEntity,
+    queryName: collectionView.context.query,
+    query: contextQuery.expression,
+    labelField: collectionView.context.labelField,
+    ...(createAction === undefined ? {} : { createAction }),
+  };
 }
 
 function selectQueryTabs(
@@ -145,20 +199,13 @@ function selectHomeActions(
 ): HomeActionConfig[] {
   return (collectionView.actions ?? []).map((slot) => {
     if (slot.type === "create") {
-      const createView = viewEntries.find(([viewName]) => viewName === slot.createView)?.[1];
-
-      if (!createView || createView.type !== "create") {
-        throw new Error(`Missing create view "${slot.createView}".`);
-      }
-
-      return {
-        type: "create",
-        label: slot.label ?? `Create ${entity.label}`,
-        entityName: collectionView.entity,
+      return selectCreateAction(
+        viewEntries,
+        slot.createView,
+        collectionView.entity,
         entity,
-        fields: selectCreateFields(createView, entity),
-        enabled: entity.mutations.create.enabled,
-      };
+        slot.label ?? `Create ${entity.label}`,
+      );
     }
 
     const action = entity.actions?.[slot.action];
@@ -183,6 +230,29 @@ function selectHomeActions(
       ...(slot.count === undefined ? {} : { count: slot.count }),
     };
   });
+}
+
+function selectCreateAction(
+  viewEntries: Array<[string, ViewSchema]>,
+  createViewName: string,
+  entityName: string,
+  entity: EntitySchema,
+  label: string,
+): Extract<HomeActionConfig, { type: "create" }> {
+  const createView = viewEntries.find(([viewName]) => viewName === createViewName)?.[1];
+
+  if (!createView || createView.type !== "create") {
+    throw new Error(`Missing create view "${createViewName}".`);
+  }
+
+  return {
+    type: "create",
+    label,
+    entityName,
+    entity,
+    fields: selectCreateFields(createView, entity),
+    enabled: entity.mutations.create.enabled,
+  };
 }
 
 function selectCreateFields(view: CreateViewSchema, entity: EntitySchema): CreateFieldConfig[] {

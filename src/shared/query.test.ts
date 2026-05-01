@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { fieldRefsEqual, getEntityFieldCatalog, resolveRecordFieldValue } from "./fields.ts";
-import { assertQuerySupported, matchesQuery, parseQueryExpression } from "./query.ts";
+import {
+  assertQuerySupported,
+  collectQueryContextNames,
+  matchesQuery,
+  parseQueryExpression,
+} from "./query.ts";
 import type { StoredRecord } from "./protocol.ts";
 import type { QueryCapabilities } from "./query.ts";
 import type { EntitySchema } from "./schema.ts";
@@ -176,6 +181,24 @@ describe("query parsing", () => {
       ref: { kind: "value", name: "resource" },
       op: "eq",
       value: "record-resource-1",
+    });
+
+    expect(
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "resource" },
+          op: "eq",
+          value: { kind: "context", name: "resource" },
+        },
+        catalog,
+        "resource tasks",
+      ),
+    ).toEqual({
+      kind: "where",
+      ref: { kind: "value", name: "resource" },
+      op: "eq",
+      value: { kind: "context", name: "resource" },
     });
   });
 
@@ -477,6 +500,94 @@ describe("query parsing", () => {
       ).toThrow();
     }
   });
+
+  it("rejects context values outside reference equality predicates", () => {
+    for (const ref of [
+      { kind: "value" as const, name: "title" },
+      { kind: "value" as const, name: "done" },
+      { kind: "value" as const, name: "dueDate" },
+      { kind: "value" as const, name: "estimate" },
+      { kind: "value" as const, name: "kind" },
+      { kind: "system" as const, name: "id" as const },
+      { kind: "system" as const, name: "createdAt" as const },
+    ]) {
+      expect(() =>
+        parseQueryExpression(
+          {
+            kind: "where",
+            ref,
+            op: "eq",
+            value: { kind: "context", name: "resource" },
+          },
+          catalog,
+          "bad query",
+        ),
+      ).toThrow("context values require a reference field");
+    }
+
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "dueDate" },
+          op: "before",
+          value: { kind: "context", name: "resource" },
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow();
+  });
+
+  it("rejects malformed context values", () => {
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "resource" },
+          op: "eq",
+          value: { kind: "context", name: "" },
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("context name must be a non-empty string");
+
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "resource" },
+          op: "eq",
+          value: { kind: "context" },
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow('dynamic value must include "name"');
+  });
+
+  it("collects required context names", () => {
+    expect(
+      collectQueryContextNames({
+        kind: "and",
+        expressions: [
+          {
+            kind: "where",
+            ref: { kind: "value", name: "resource" },
+            op: "eq",
+            value: { kind: "context", name: "resource" },
+          },
+          {
+            kind: "where",
+            ref: { kind: "value", name: "resource" },
+            op: "eq",
+            value: { kind: "context", name: "resource" },
+          },
+        ],
+      }),
+    ).toEqual(["resource"]);
+  });
 });
 
 describe("query evaluation", () => {
@@ -522,6 +633,43 @@ describe("query evaluation", () => {
         value: "record-1",
       }),
     ).toBe(true);
+  });
+
+  it("matches reference equality against context values", () => {
+    const query = {
+      kind: "where",
+      ref: { kind: "value", name: "resource" },
+      op: "eq",
+      value: { kind: "context", name: "resource" },
+    } as const;
+
+    expect(
+      matchesQuery(record, query, {
+        today: "2026-05-01",
+        values: { resource: "record-resource-1" },
+      }),
+    ).toBe(true);
+    expect(
+      matchesQuery(record, query, {
+        today: "2026-05-01",
+        values: { resource: "record-resource-2" },
+      }),
+    ).toBe(false);
+  });
+
+  it("throws when context equality is evaluated without the required value", () => {
+    expect(() =>
+      matchesQuery(
+        record,
+        {
+          kind: "where",
+          ref: { kind: "value", name: "resource" },
+          op: "eq",
+          value: { kind: "context", name: "resource" },
+        },
+        { today: "2026-05-01" },
+      ),
+    ).toThrow('missing value "resource"');
   });
 
   it("matches date values before a literal date", () => {
@@ -828,7 +976,7 @@ const portableCapabilities = {
   operators: ["eq", "before"],
   fieldKinds: ["value", "system"],
   expressionKinds: ["all", "where", "and"],
-  dynamicValues: ["today"],
+  dynamicValues: ["today", "context"],
 } satisfies QueryCapabilities;
 
 const record: StoredRecord = {

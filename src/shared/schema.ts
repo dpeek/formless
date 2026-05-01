@@ -1,5 +1,5 @@
-import { fieldRefsEqual, getEntityFieldCatalog } from "./fields.ts";
-import { parseQueryExpression, type QueryExpression } from "./query.ts";
+import { fieldRefsEqual, findAddressableField, getEntityFieldCatalog } from "./fields.ts";
+import { collectQueryContextNames, parseQueryExpression, type QueryExpression } from "./query.ts";
 
 export type TextFieldSchema = {
   type: "text";
@@ -98,6 +98,14 @@ export type CollectionResultSchema = {
   itemView: string;
 };
 
+export type CollectionContextSchema = {
+  name: string;
+  entity: string;
+  query: string;
+  labelField: string;
+  createView?: string;
+};
+
 export type CollectionActionSlotSchema =
   | {
       type: "create";
@@ -115,6 +123,7 @@ export type CollectionViewSchema = {
   type: "collection";
   label: string;
   entity: string;
+  context?: CollectionContextSchema;
   queries: CollectionViewQuerySlotSchema[];
   defaultQuery: string;
   result: CollectionResultSchema;
@@ -451,6 +460,29 @@ function assertCollectionViews(views: Record<string, ViewSchema>) {
         );
       }
     }
+
+    if (view.context?.createView === undefined) {
+      continue;
+    }
+
+    const createView = views[view.context.createView];
+    if (!createView) {
+      throw new Error(
+        `Collection view "${viewName}" context createView references unknown view "${view.context.createView}".`,
+      );
+    }
+
+    if (createView.type !== "create") {
+      throw new Error(
+        `Collection view "${viewName}" context createView must reference a create view.`,
+      );
+    }
+
+    if (createView.entity !== view.context.entity) {
+      throw new Error(
+        `Collection view "${viewName}" context createView "${view.context.createView}" must use entity "${view.context.entity}".`,
+      );
+    }
   }
 }
 
@@ -510,7 +542,7 @@ function parseCollectionView(
     `Collection view "${viewName}"`,
     value,
     ["type", "label", "entity", "queries", "defaultQuery", "result"],
-    ["actions"],
+    ["context", "actions"],
   );
 
   if (typeof value.label !== "string" || value.label.trim() === "") {
@@ -526,7 +558,15 @@ function parseCollectionView(
     throw new Error(`Collection view "${viewName}" references unknown entity "${value.entity}".`);
   }
 
-  const querySlots = parseCollectionViewQuerySlots(viewName, value.entity, value.queries, queries);
+  const context = parseCollectionContext(viewName, value.context, entities, queries);
+  const querySlots = parseCollectionViewQuerySlots(
+    viewName,
+    value.entity,
+    entity,
+    value.queries,
+    queries,
+    context,
+  );
 
   if (typeof value.defaultQuery !== "string" || value.defaultQuery.trim() === "") {
     throw new Error(`Collection view "${viewName}" defaultQuery must be a non-empty string.`);
@@ -545,6 +585,7 @@ function parseCollectionView(
     type: "collection",
     label: value.label,
     entity: value.entity,
+    ...(context === undefined ? {} : { context }),
     queries: querySlots,
     defaultQuery: value.defaultQuery,
     result,
@@ -555,24 +596,28 @@ function parseCollectionView(
 function parseCollectionViewQuerySlots(
   viewName: string,
   entityName: string,
+  entity: EntitySchema,
   value: unknown,
   queries: Record<string, CollectionQuerySchema>,
+  context?: CollectionContextSchema,
 ): CollectionViewQuerySlotSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Collection view "${viewName}" queries must be a non-empty array.`);
   }
 
   return value.map((slot, index) =>
-    parseCollectionViewQuerySlot(viewName, entityName, index, slot, queries),
+    parseCollectionViewQuerySlot(viewName, entityName, entity, index, slot, queries, context),
   );
 }
 
 function parseCollectionViewQuerySlot(
   viewName: string,
   entityName: string,
+  entity: EntitySchema,
   index: number,
   value: unknown,
   queries: Record<string, CollectionQuerySchema>,
+  collectionContext?: CollectionContextSchema,
 ): CollectionViewQuerySlotSchema {
   const context = `Collection view "${viewName}" query slot ${index}`;
 
@@ -595,6 +640,14 @@ function parseCollectionViewQuerySlot(
     throw new Error(`${context} query "${value.query}" must use entity "${entityName}".`);
   }
 
+  validateCollectionQueryContextRequirements(
+    context,
+    value.query,
+    query.expression,
+    entity,
+    collectionContext,
+  );
+
   const label = parseOptionalNonEmptyString(`${context} label`, value.label);
   const count =
     value.count === undefined ? undefined : parseCountDisplay(`${context} count`, value.count);
@@ -604,6 +657,125 @@ function parseCollectionViewQuerySlot(
     ...(label === undefined ? {} : { label }),
     ...(count === undefined ? {} : { count }),
   };
+}
+
+function parseCollectionContext(
+  viewName: string,
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+  queries: Record<string, CollectionQuerySchema>,
+): CollectionContextSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const context = `Collection view "${viewName}" context`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["name", "entity", "query", "labelField"], ["createView"]);
+
+  const name = parseRequiredNonEmptyString(`${context} name`, value.name);
+  const entityName = parseRequiredNonEmptyString(`${context} entity`, value.entity);
+  const queryName = parseRequiredNonEmptyString(`${context} query`, value.query);
+  const labelField = parseRequiredNonEmptyString(`${context} labelField`, value.labelField);
+  const createView = parseOptionalNonEmptyString(`${context} createView`, value.createView);
+  const entity = entities[entityName];
+
+  if (!entity) {
+    throw new Error(`${context} references unknown entity "${entityName}".`);
+  }
+
+  const query = queries[queryName];
+  if (!query) {
+    throw new Error(`${context} references unknown query "${queryName}".`);
+  }
+
+  if (query.entity !== entityName) {
+    throw new Error(`${context} query "${queryName}" must use entity "${entityName}".`);
+  }
+
+  const requiredContextNames = collectQueryContextNames(query.expression);
+  if (requiredContextNames.length > 0) {
+    throw new Error(`${context} query "${queryName}" must not require context.`);
+  }
+
+  const field = entity.fields[labelField];
+  if (!field) {
+    throw new Error(
+      `${context} labelField references unknown field "${entityName}.${labelField}".`,
+    );
+  }
+
+  if (field.type !== "text") {
+    throw new Error(`${context} labelField must reference a text field.`);
+  }
+
+  return {
+    name,
+    entity: entityName,
+    query: queryName,
+    labelField,
+    ...(createView === undefined ? {} : { createView }),
+  };
+}
+
+function validateCollectionQueryContextRequirements(
+  context: string,
+  queryName: string,
+  query: QueryExpression,
+  entity: EntitySchema,
+  collectionContext: CollectionContextSchema | undefined,
+) {
+  const requiredContextNames = collectQueryContextNames(query);
+
+  if (requiredContextNames.length === 0) {
+    return;
+  }
+
+  if (!collectionContext) {
+    throw new Error(
+      `${context} query "${queryName}" requires context but the collection has no context.`,
+    );
+  }
+
+  for (const name of requiredContextNames) {
+    if (name !== collectionContext.name) {
+      throw new Error(
+        `${context} query "${queryName}" requires context "${name}" but the collection context is "${collectionContext.name}".`,
+      );
+    }
+  }
+
+  validateContextPredicateTargets(context, query, entity, collectionContext);
+}
+
+function validateContextPredicateTargets(
+  context: string,
+  query: QueryExpression,
+  entity: EntitySchema,
+  collectionContext: CollectionContextSchema,
+) {
+  if (query.kind === "and") {
+    for (const expression of query.expressions) {
+      validateContextPredicateTargets(context, expression, entity, collectionContext);
+    }
+
+    return;
+  }
+
+  if (query.kind !== "where" || typeof query.value !== "object" || query.value.kind !== "context") {
+    return;
+  }
+
+  const field = findAddressableField(getEntityFieldCatalog(entity), query.ref);
+  if (field?.type !== "reference" || field.to !== collectionContext.entity) {
+    throw new Error(
+      `${context} context query field must reference entity "${collectionContext.entity}".`,
+    );
+  }
 }
 
 function parseCollectionResult(
@@ -747,6 +919,10 @@ function parseOptionalNonEmptyString(context: string, value: unknown): string | 
     return undefined;
   }
 
+  return parseRequiredNonEmptyString(context, value);
+}
+
+function parseRequiredNonEmptyString(context: string, value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${context} must be a non-empty string.`);
   }
@@ -1075,6 +1251,12 @@ function parseEntityActionTarget(
   if (query.entity !== entityName) {
     throw new Error(
       `Entity action "${entityName}.${actionName}" target query "${value.query}" must use entity "${entityName}".`,
+    );
+  }
+
+  if (collectQueryContextNames(query.expression).length > 0) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" target query "${value.query}" must not require context.`,
     );
   }
 

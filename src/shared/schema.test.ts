@@ -662,6 +662,246 @@ describe("schema collection views", () => {
       ),
     ).toThrow('references unknown action "missing"');
   });
+
+  it("accepts collection contexts and context-bound child queries", () => {
+    const schema = parseAppSchema(scopedRateSchema());
+
+    expect(schema.views.rateHome).toMatchObject({
+      type: "collection",
+      entity: "rate",
+      context: {
+        name: "card",
+        entity: "card",
+        query: "cardAll",
+        labelField: "name",
+        createView: "cardCreate",
+      },
+      queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
+      defaultQuery: "ratesForSelectedCard",
+    });
+  });
+
+  it("validates collection context shape", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "missing",
+              query: "cardAll",
+              labelField: "name",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context references unknown entity "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "missing",
+              labelField: "name",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context references unknown query "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "resourceAll",
+              labelField: "name",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context query "resourceAll" must use entity "card"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "missing",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('labelField references unknown field "card.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "margin",
+            },
+          }),
+        }),
+      ),
+    ).toThrow("labelField must reference a text field");
+  });
+
+  it("validates context create views separately from collection create actions", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              createView: "missing",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context createView references unknown view "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              createView: "rateCreate",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context createView "rateCreate" must use entity "card"');
+  });
+
+  it("rejects collection queries with invalid context requirements", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({ context: undefined }),
+        }),
+      ),
+    ).toThrow('query "ratesForSelectedCard" requires context but the collection has no context');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          queries: {
+            ...scopedRateQueries(),
+            ratesForSelectedCard: {
+              label: "For selected card",
+              entity: "rate",
+              expression: {
+                kind: "where",
+                ref: { kind: "value", name: "card" },
+                op: "eq",
+                value: { kind: "context", name: "otherCard" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('requires context "otherCard" but the collection context is "card"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          queries: {
+            ...scopedRateQueries(),
+            ratesForSelectedCard: {
+              label: "For selected card",
+              entity: "rate",
+              expression: {
+                kind: "where",
+                ref: { kind: "value", name: "resource" },
+                op: "eq",
+                value: { kind: "context", name: "card" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('context query field must reference entity "card"');
+  });
+
+  it("rejects context values in context selector and entity action target queries", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          queries: {
+            ...scopedRateQueries(),
+            cardAll: {
+              label: "Cards",
+              entity: "card",
+              expression: {
+                kind: "where",
+                ref: { kind: "value", name: "defaultRate" },
+                op: "eq",
+                value: { kind: "context", name: "rate" },
+              },
+            },
+          },
+          entities: {
+            ...scopedRateEntities(),
+            card: {
+              ...scopedRateEntities().card,
+              fields: {
+                ...scopedRateEntities().card.fields,
+                defaultRate: {
+                  type: "reference",
+                  required: false,
+                  label: "Default rate",
+                  to: "rate",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('context query "cardAll" must not require context');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...scopedRateEntities(),
+            rate: {
+              ...scopedRateEntities().rate,
+              fields: {
+                ...scopedRateEntities().rate.fields,
+                done: { type: "boolean", required: true, default: false },
+              },
+              actions: {
+                clearCompletedRates: {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                  target: { query: "ratesForSelectedCard" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('target query "ratesForSelectedCard" must not require context');
+  });
 });
 
 describe("schema entity actions", () => {
@@ -932,6 +1172,146 @@ function referenceViews() {
       fields: {
         resource: { editor: "reference" },
         price: { editor: "number" },
+      },
+    },
+  };
+}
+
+function scopedRateSchema(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    entities: scopedRateEntities(),
+    queries: scopedRateQueries(),
+    itemViews: scopedRateItemViews(),
+    views: scopedRateViews(),
+    ...overrides,
+  };
+}
+
+function scopedRateEntities() {
+  return {
+    resource: {
+      label: "Resource",
+      fields: {
+        name: { type: "text", required: true, label: "Name" },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    },
+    card: {
+      label: "Rate card",
+      fields: {
+        name: { type: "text", required: true, label: "Name" },
+        margin: { type: "number", required: true, label: "Margin", default: 0.5 },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    },
+    rate: {
+      label: "Rate",
+      fields: {
+        resource: {
+          type: "reference",
+          required: true,
+          label: "Resource",
+          to: "resource",
+          displayField: "name",
+        },
+        card: {
+          type: "reference",
+          required: true,
+          label: "Card",
+          to: "card",
+          displayField: "name",
+        },
+        price: { type: "number", required: false, label: "Price" },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    },
+  };
+}
+
+function scopedRateQueries() {
+  return {
+    resourceAll: {
+      label: "Resources",
+      entity: "resource",
+      expression: { kind: "all" },
+    },
+    cardAll: {
+      label: "Cards",
+      entity: "card",
+      expression: { kind: "all" },
+    },
+    ratesForSelectedCard: {
+      label: "For selected card",
+      entity: "rate",
+      expression: {
+        kind: "where",
+        ref: { kind: "value", name: "card" },
+        op: "eq",
+        value: { kind: "context", name: "card" },
+      },
+    },
+  };
+}
+
+function scopedRateItemViews() {
+  return {
+    rateListItem: {
+      entity: "rate",
+      fields: {
+        resource: { editor: "reference", commit: "immediate" },
+        card: { editor: "reference", commit: "immediate" },
+        price: { editor: "number", commit: "field-commit" },
+      },
+    },
+  };
+}
+
+function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
+  return {
+    rateHome: {
+      type: "collection",
+      label: "Rates",
+      entity: "rate",
+      context: {
+        name: "card",
+        entity: "card",
+        query: "cardAll",
+        labelField: "name",
+        createView: "cardCreate",
+      },
+      queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
+      defaultQuery: "ratesForSelectedCard",
+      result: { type: "list", itemView: "rateListItem" },
+      actions: [{ type: "create", createView: "rateCreate" }],
+      ...rateHomeOverrides,
+    },
+    rateCreate: {
+      type: "create",
+      entity: "rate",
+      fields: {
+        resource: { editor: "reference" },
+        card: { editor: "reference" },
+        price: { editor: "number" },
+      },
+    },
+    cardCreate: {
+      type: "create",
+      entity: "card",
+      fields: {
+        name: { editor: "text" },
       },
     },
   };

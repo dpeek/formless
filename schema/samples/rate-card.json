@@ -108,6 +108,22 @@
       "expression": {
         "kind": "all"
       }
+    },
+    "ratesForSelectedCard": {
+      "label": "Selected card",
+      "entity": "rate",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "card"
+        },
+        "op": "eq",
+        "value": {
+          "kind": "context",
+          "name": "card"
+        }
+      }
     }
   },
   "itemViews": {
@@ -204,15 +220,22 @@
       "type": "collection",
       "label": "Rates",
       "entity": "rate",
+      "context": {
+        "name": "card",
+        "entity": "card",
+        "query": "cardAll",
+        "labelField": "name",
+        "createView": "cardCreate"
+      },
       "queries": [
         {
-          "query": "rateAll",
+          "query": "ratesForSelectedCard",
           "count": {
             "type": "count"
           }
         }
       ],
-      "defaultQuery": "rateAll",
+      "defaultQuery": "ratesForSelectedCard",
       "result": {
         "type": "list",
         "itemView": "rateListItem"

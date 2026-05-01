@@ -5,6 +5,7 @@ import {
   applyRecordMerge,
   applySchemaSave,
   createEntityRecordCountMatchingQuerySelector,
+  createEntityRecordOptionsMatchingQuerySelector,
   createReferenceOptionsSelector,
   getClientStoreSnapshot,
   resetClientStore,
@@ -307,6 +308,91 @@ describe("client store selectors", () => {
     expect(afterLabelPatch).toEqual([{ id: "resource-1", label: "Engineer" }]);
     expect(afterLabelPatch).not.toBe(first);
   });
+
+  it("filters options through context query values", () => {
+    const selector = createEntityRecordOptionsMatchingQuerySelector(
+      "rate",
+      cardScopedRateQuery,
+      "name",
+      { today: "2026-05-01", values: { card: "card-1" } },
+    );
+
+    applyBootstrapResponse(
+      bootstrap([rateRecord("rate-1", "card-1"), rateRecord("rate-2", "card-2")]),
+    );
+
+    expect(selector(getClientStoreSnapshot())).toEqual([{ id: "rate-1", label: "rate-1" }]);
+  });
+
+  it("does not reuse stale IDs after context values change", () => {
+    const context = { today: "2026-05-01", values: { card: "card-1" } };
+    const selector = createEntityRecordOptionsMatchingQuerySelector(
+      "rate",
+      cardScopedRateQuery,
+      "name",
+      context,
+    );
+
+    applyBootstrapResponse(
+      bootstrap([rateRecord("rate-1", "card-1"), rateRecord("rate-2", "card-2")]),
+    );
+    const first = selector(getClientStoreSnapshot());
+
+    context.values.card = "card-2";
+    const second = selector(getClientStoreSnapshot());
+
+    expect(first).toEqual([{ id: "rate-1", label: "rate-1" }]);
+    expect(second).toEqual([{ id: "rate-2", label: "rate-2" }]);
+  });
+
+  it("counts scoped records for the current context value", () => {
+    const context = { today: "2026-05-01", values: { card: "card-1" } };
+    const selector = createEntityRecordCountMatchingQuerySelector(
+      "rate",
+      cardScopedRateQuery,
+      context,
+    );
+
+    applyBootstrapResponse(
+      bootstrap([
+        rateRecord("rate-1", "card-1"),
+        rateRecord("rate-2", "card-1"),
+        rateRecord("rate-3", "card-2"),
+      ]),
+    );
+
+    expect(selector(getClientStoreSnapshot())).toBe(2);
+
+    context.values.card = "card-2";
+
+    expect(selector(getClientStoreSnapshot())).toBe(1);
+  });
+
+  it("keeps tombstoned context and child records out of scoped options", () => {
+    const cardSelector = createEntityRecordOptionsMatchingQuerySelector(
+      "card",
+      { kind: "all" },
+      "name",
+    );
+    const rateSelector = createEntityRecordOptionsMatchingQuerySelector(
+      "rate",
+      cardScopedRateQuery,
+      "name",
+      { today: "2026-05-01", values: { card: "card-1" } },
+    );
+
+    applyBootstrapResponse(
+      bootstrap([
+        cardRecord("card-1", "Default"),
+        { ...cardRecord("card-2", "Archived"), deletedAt: "2026-04-28T00:02:00.000Z" },
+        rateRecord("rate-1", "card-1"),
+        { ...rateRecord("rate-2", "card-1"), deletedAt: "2026-04-28T00:02:00.000Z" },
+      ]),
+    );
+
+    expect(cardSelector(getClientStoreSnapshot())).toEqual([{ id: "card-1", label: "Default" }]);
+    expect(rateSelector(getClientStoreSnapshot())).toEqual([{ id: "rate-1", label: "rate-1" }]);
+  });
 });
 
 const activeQuery = {
@@ -323,6 +409,13 @@ const completedQuery = {
   value: true,
 } as const;
 
+const cardScopedRateQuery = {
+  kind: "where",
+  ref: { kind: "value", name: "card" },
+  op: "eq",
+  value: { kind: "context", name: "card" },
+} as const;
+
 function bootstrap(records: StoredRecord[]): BootstrapResponse {
   return {
     schema: appSchema,
@@ -337,6 +430,24 @@ function record(id: string, title: string, done = false, entity = "task"): Store
     id,
     entity,
     values: { title, done },
+    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function cardRecord(id: string, name: string): StoredRecord {
+  return {
+    id,
+    entity: "card",
+    values: { name },
+    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function rateRecord(id: string, card: string): StoredRecord {
+  return {
+    id,
+    entity: "rate",
+    values: { card },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
   };
 }

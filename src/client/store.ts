@@ -32,6 +32,7 @@ export type ReferenceOption = {
 
 type StoreListener = () => void;
 type ReferenceOptionsSnapshot = Pick<NormalizedClientState, "recordsById" | "recordIdsByEntity">;
+type QuerySelectorSnapshot = Pick<NormalizedClientState, "recordsById" | "recordIdsByEntity">;
 
 const EMPTY_RECORD_IDS: string[] = [];
 const EMPTY_REFERENCE_OPTIONS: ReferenceOption[] = [];
@@ -206,10 +207,25 @@ export function useEntityRecordIdsMatchingQuery(
   query: QueryExpression,
   context?: QueryEvaluationContext,
 ) {
-  const today = context?.today;
+  const contextKey = queryEvaluationContextCacheKey(context);
   const selector = useMemo(
     () => createEntityRecordIdsMatchingQuerySelector(entityName, query, context),
-    [entityName, query, today],
+    [entityName, query, contextKey],
+  );
+
+  return useClientStoreSelector(selector);
+}
+
+export function useEntityRecordOptionsMatchingQuery(
+  entityName: string,
+  query: QueryExpression,
+  labelField: string,
+  context?: QueryEvaluationContext,
+) {
+  const contextKey = queryEvaluationContextCacheKey(context);
+  const selector = useMemo(
+    () => createEntityRecordOptionsMatchingQuerySelector(entityName, query, labelField, context),
+    [entityName, query, labelField, contextKey],
   );
 
   return useClientStoreSelector(selector);
@@ -220,10 +236,10 @@ export function useEntityRecordCountMatchingQuery(
   query: QueryExpression,
   context?: QueryEvaluationContext,
 ) {
-  const today = context?.today;
+  const contextKey = queryEvaluationContextCacheKey(context);
   const selector = useMemo(
     () => createEntityRecordCountMatchingQuerySelector(entityName, query, context),
-    [entityName, query, today],
+    [entityName, query, contextKey],
   );
 
   return useClientStoreSelector(selector);
@@ -329,16 +345,22 @@ function createEntityRecordIdsMatchingQuerySelector(
 ) {
   let previousRecordIds: string[] | undefined;
   let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousContextKey: string | undefined;
   let previousResult = EMPTY_RECORD_IDS;
 
-  return (snapshot: ClientStoreState) => {
+  return (snapshot: QuerySelectorSnapshot) => {
     const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+    const contextKey = queryEvaluationContextCacheKey(context);
 
     if (query.kind === "all") {
       return recordIds;
     }
 
-    if (recordIds === previousRecordIds && snapshot.recordsById === previousRecordsById) {
+    if (
+      recordIds === previousRecordIds &&
+      snapshot.recordsById === previousRecordsById &&
+      contextKey === previousContextKey
+    ) {
       return previousResult;
     }
 
@@ -350,7 +372,50 @@ function createEntityRecordIdsMatchingQuerySelector(
 
     previousRecordIds = recordIds;
     previousRecordsById = snapshot.recordsById;
+    previousContextKey = contextKey;
     previousResult = reuseStringArray(previousResult, matchingRecordIds);
+
+    return previousResult;
+  };
+}
+
+export function createEntityRecordOptionsMatchingQuerySelector(
+  entityName: string,
+  query: QueryExpression,
+  labelField: string,
+  context?: QueryEvaluationContext,
+) {
+  let previousRecordIds: string[] | undefined;
+  let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousContextKey: string | undefined;
+  let previousResult = EMPTY_REFERENCE_OPTIONS;
+
+  return (snapshot: QuerySelectorSnapshot) => {
+    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+    const contextKey = queryEvaluationContextCacheKey(context);
+
+    if (
+      recordIds === previousRecordIds &&
+      snapshot.recordsById === previousRecordsById &&
+      contextKey === previousContextKey
+    ) {
+      return previousResult;
+    }
+
+    const options = recordIds.flatMap((recordId) => {
+      const record = snapshot.recordsById[recordId];
+
+      if (!record || !matchesQuery(record, query, context)) {
+        return [];
+      }
+
+      return [{ id: recordId, label: referenceOptionLabel(record, labelField) }];
+    });
+
+    previousRecordIds = recordIds;
+    previousRecordsById = snapshot.recordsById;
+    previousContextKey = contextKey;
+    previousResult = reuseReferenceOptions(previousResult, options);
 
     return previousResult;
   };
@@ -361,7 +426,7 @@ export function createEntityRecordCountMatchingQuerySelector(
   query: QueryExpression,
   context?: QueryEvaluationContext,
 ) {
-  return (snapshot: ClientStoreState) => {
+  return (snapshot: QuerySelectorSnapshot) => {
     const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
 
     if (query.kind === "all") {
@@ -419,6 +484,19 @@ function referenceOptionLabel(record: StoredRecord, displayField?: string) {
   const value = record.values[displayField];
 
   return typeof value === "string" && value.trim() !== "" ? value : record.id;
+}
+
+function queryEvaluationContextCacheKey(context: QueryEvaluationContext | undefined) {
+  if (!context) {
+    return "";
+  }
+
+  const values = Object.entries(context.values ?? {})
+    .toSorted(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}:${String(value)}`)
+    .join("|");
+
+  return `${context.today};${values}`;
 }
 
 function reuseStringArray(existing: string[], next: string[]) {

@@ -2,11 +2,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../schema/samples/rate-card.json";
-import { App, GeneratedCreateDialogForm, GeneratedCreateForm, RecordList } from "./app.tsx";
+import {
+  App,
+  GeneratedCreateDialogForm,
+  GeneratedCreateForm,
+  HomeCollection,
+  RecordList,
+} from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
 import { applyBootstrapResponse, applyRecordMerge, resetClientStore } from "./client/store.ts";
 import {
   selectHomeModel,
+  selectCollectionModels,
   type CreateFieldConfig,
   type HomeActionConfig,
   type RecordFieldConfig,
@@ -140,6 +147,58 @@ describe("generated collection home", () => {
     expect(html).toContain("Rate cards");
     expect(html).toContain("Rates");
     expect(html).toContain("Create Resource");
+  });
+
+  it("renders the scoped rate-card collection with a card selector", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-1", "card-2", 900),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId={null}
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-01"
+      />,
+    );
+
+    expect(html).toContain("Rate card");
+    expect(html).toContain("Default");
+    expect(html).toContain("Backup");
+    expect(html).toContain("Create Rate card");
+    expect(html).toContain('value="475"');
+    expect(html).not.toContain('value="900"');
   });
 });
 
@@ -420,11 +479,34 @@ function resourceRecord(id: string, name: string): StoredRecord {
   };
 }
 
+function cardRecord(id: string, name: string): StoredRecord {
+  return {
+    id,
+    entity: "card",
+    values: { name },
+    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
 function rateRecord(id: string, resource: string): StoredRecord {
   return {
     id,
     entity: "rate",
     values: { resource },
+    createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function rateCardRateRecord(
+  id: string,
+  resource: string,
+  card: string,
+  price: number,
+): StoredRecord {
+  return {
+    id,
+    entity: "rate",
+    values: { resource, card, price },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
   };
 }

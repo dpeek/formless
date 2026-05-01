@@ -103,4 +103,29 @@ describe("home view model collections", () => {
       "Create Rate",
     ]);
   });
+
+  it("resolves scoped rate-card collection context", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    expect(rateModel?.context).toMatchObject({
+      name: "card",
+      entityName: "card",
+      queryName: "cardAll",
+      query: rateCardSchema.queries.cardAll?.expression,
+      labelField: "name",
+      createAction: {
+        type: "create",
+        label: "Create Rate card",
+        entityName: "card",
+        fields: [{ fieldName: "name" }],
+        enabled: true,
+      },
+    });
+    expect(rateModel?.queryTabs[0]).toMatchObject({
+      queryName: "ratesForSelectedCard",
+      query: rateCardSchema.queries.ratesForSelectedCard?.expression,
+    });
+  });
 });
