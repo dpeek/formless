@@ -43,6 +43,7 @@ import { Button } from "@formless/ui/button";
 import { Label } from "@formless/ui/label";
 import { Input } from "@formless/ui/input";
 import { DateInput } from "@formless/ui/date";
+import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import {
   Dialog,
   DialogClose,
@@ -348,6 +349,27 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
       <Field>
         <Label>{label}</Label>
         <DateInput name={fieldName} required={field.required} />
+      </Field>
+    );
+  }
+
+  if (field.type === "enum") {
+    return (
+      <Field>
+        <Label>{label}</Label>
+        <NativeSelect
+          className="w-full"
+          defaultValue={field.default ?? (field.required ? undefined : "")}
+          name={fieldName}
+          required={field.required}
+        >
+          {field.required ? null : <NativeSelectOption value="" />}
+          {Object.entries(field.values).map(([value, option]) => (
+            <NativeSelectOption key={value} value={value}>
+              {option.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
       </Field>
     );
   }
@@ -705,6 +727,43 @@ function RecordFieldEditor({
           />
           {error ? <FieldError>{error}</FieldError> : null}
         </Field>
+      </div>
+    );
+  }
+
+  if (editor === "enum" && field.type === "enum") {
+    const label = fieldLabel(fieldName, field);
+    const unknownValue = draft !== "" && !Object.hasOwn(field.values, draft) ? draft : null;
+
+    return (
+      <div className="min-w-40 flex-none space-y-1">
+        <Field>
+          <Label className="sr-only">{label}</Label>
+          <NativeSelect
+            aria-label={label}
+            className="w-full"
+            disabled={!canPatch || isPending}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+
+              setDraft(value);
+              void commit(value);
+            }}
+            required={field.required}
+            value={draft}
+          >
+            {!field.required || draft === "" ? <NativeSelectOption value="" /> : null}
+            {unknownValue ? (
+              <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
+            ) : null}
+            {Object.entries(field.values).map(([value, option]) => (
+              <NativeSelectOption key={value} value={value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+        {error ? <FieldError>{error}</FieldError> : null}
       </div>
     );
   }

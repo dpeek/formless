@@ -19,6 +19,23 @@
           "type": "date",
           "required": false,
           "label": "Due date"
+        },
+        "priority": {
+          "type": "enum",
+          "required": true,
+          "label": "Priority",
+          "default": "normal",
+          "values": {
+            "low": {
+              "label": "Low"
+            },
+            "normal": {
+              "label": "Normal"
+            },
+            "high": {
+              "label": "High"
+            }
+          }
         }
       },
       "mutations": {
@@ -122,6 +139,10 @@
         "dueDate": {
           "editor": "date",
           "commit": "field-commit"
+        },
+        "priority": {
+          "editor": "enum",
+          "commit": "immediate"
         }
       }
     }
@@ -185,6 +206,9 @@
         },
         "dueDate": {
           "editor": "date"
+        },
+        "priority": {
+          "editor": "enum"
         }
       }
     }

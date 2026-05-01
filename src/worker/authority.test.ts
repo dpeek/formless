@@ -65,9 +65,7 @@ describe("authority", () => {
         task: {
           label: "Planner task",
           fields: {
-            title: { type: "text", required: true },
-            done: { type: "boolean", required: true, default: false },
-            dueDate: { type: "date", required: false },
+            ...appSchema.entities.task.fields,
             notes: { type: "text", required: false },
           },
           mutations: defaultMutations(),
@@ -197,9 +195,7 @@ describe("authority", () => {
         task: {
           label: "Planner task",
           fields: {
-            title: { type: "text", required: true },
-            done: { type: "boolean", required: true, default: false },
-            dueDate: { type: "date", required: false },
+            ...appSchema.entities.task.fields,
             notes: { type: "text", required: false },
           },
           mutations: defaultMutations(),
@@ -232,8 +228,7 @@ describe("authority", () => {
         task: {
           label: "Planner task",
           fields: {
-            title: { type: "text", required: true },
-            done: { type: "boolean", required: true, default: false },
+            ...appSchema.entities.task.fields,
             dueDate: { type: "date", required: true },
           },
           mutations: defaultMutations(),
@@ -442,6 +437,69 @@ describe("authority", () => {
     );
   });
 
+  it("accepts enum values, applies enum defaults, and rejects unknown options", async () => {
+    const withDefault = await postMutation("mutation-1", { title: "First" });
+    const explicit = await postMutation("mutation-2", { title: "Second", priority: "high" });
+
+    expect(withDefault.record.values).toMatchObject({
+      title: "First",
+      done: false,
+      priority: "normal",
+    });
+    expect(explicit.record.values).toMatchObject({
+      title: "Second",
+      done: false,
+      priority: "high",
+    });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-3",
+        entity: "task",
+        op: "create",
+        values: { title: "Third", priority: "missing" },
+      },
+      'Field "priority" must be a known enum value.',
+    );
+  });
+
+  it("clears optional enum fields when patched to an empty value", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithPriorityEnum({ required: false }),
+    });
+
+    const created = await postMutation("mutation-1", { title: "First", priority: "high" });
+    const patched = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "patch",
+      recordId: created.record.id,
+      values: { priority: "" },
+    });
+
+    expect(patched.record.values.priority).toBeUndefined();
+  });
+
+  it("accepts enum option catalog changes without scanning existing records", async () => {
+    const created = await postMutation("mutation-1", { title: "First", priority: "high" });
+
+    const nextSchema = schemaWithPriorityEnum({
+      default: "normal",
+      values: {
+        low: { label: "Low" },
+        normal: { label: "Standard" },
+      },
+    });
+    const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(update.schema.entities.task?.fields.priority).toEqual(
+      parseAppSchema(nextSchema).entities.task?.fields.priority,
+    );
+    expect(bootstrap.records).toEqual([created.record]);
+  });
+
   it("patches an existing record and returns patch changes from sync", async () => {
     const created = await postMutation("mutation-1", { title: "First", done: false });
     const patched = await postJson<MutationResponse>("/api/mutations", {
@@ -457,6 +515,7 @@ describe("authority", () => {
       title: "First",
       done: true,
       dueDate: "2026-05-01",
+      priority: "normal",
     });
     expect(sync.changes).toHaveLength(1);
     expect(sync.changes[0]).toMatchObject({
@@ -724,6 +783,7 @@ describe("authority", () => {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },
         dueDate: { editor: "date", commit: "field-commit" },
+        priority: { editor: "enum", commit: "immediate" },
       },
     });
     expect(withViews.views?.taskHome).toMatchObject({
@@ -740,6 +800,7 @@ describe("authority", () => {
       fields: {
         title: { editor: "text" },
         dueDate: { editor: "date" },
+        priority: { editor: "enum" },
       },
     });
   });
@@ -1090,17 +1151,49 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
   };
 }
 
-function schemaWithMutations(mutations: unknown) {
+function schemaWithPriorityEnum(
+  enumOverrides: Partial<{
+    required: boolean;
+    default: string;
+    values: Record<string, { label: string }>;
+  }> = {},
+) {
+  const currentPriorityField = appSchema.entities.task.fields.priority;
+
+  if (currentPriorityField?.type !== "enum") {
+    throw new Error("Seed task priority field must be an enum.");
+  }
+
+  const priorityField = {
+    ...currentPriorityField,
+    ...enumOverrides,
+  };
+
   return {
     version: 1,
     entities: {
       task: {
         label: "Task",
         fields: {
-          title: { type: "text", required: true },
-          done: { type: "boolean", required: true, default: false },
-          dueDate: { type: "date", required: false },
+          ...appSchema.entities.task.fields,
+          priority: priorityField,
         },
+        mutations: defaultMutations(),
+      },
+    },
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
+    views: defaultViews(),
+  };
+}
+
+function schemaWithMutations(mutations: unknown) {
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: appSchema.entities.task.fields,
         mutations,
       },
     },
@@ -1116,11 +1209,7 @@ function schemaWithViews(views: unknown = defaultViews()) {
     entities: {
       task: {
         label: "Task",
-        fields: {
-          title: { type: "text", required: true },
-          done: { type: "boolean", required: true, default: false },
-          dueDate: { type: "date", required: false },
-        },
+        fields: appSchema.entities.task.fields,
         mutations: defaultMutations(),
       },
     },
@@ -1150,11 +1239,7 @@ function schemaWithActions(actions: unknown) {
     entities: {
       task: {
         label: "Task",
-        fields: {
-          title: { type: "text", required: true },
-          done: { type: "boolean", required: true, default: false },
-          dueDate: { type: "date", required: false },
-        },
+        fields: appSchema.entities.task.fields,
         mutations: defaultMutations(),
         actions,
       },
@@ -1203,6 +1288,7 @@ function defaultItemViews(): AppSchema["itemViews"] {
         title: { editor: "text", commit: "field-commit" },
         done: { editor: "boolean", commit: "immediate" },
         dueDate: { editor: "date", commit: "field-commit" },
+        priority: { editor: "enum", commit: "immediate" },
       },
     },
   };
@@ -1217,6 +1303,7 @@ function defaultViews(): AppSchema["views"] {
       fields: {
         title: { editor: "text" },
         dueDate: { editor: "date" },
+        priority: { editor: "enum" },
       },
     },
   };

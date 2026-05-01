@@ -20,11 +20,23 @@ export type DateFieldSchema = {
   label?: string;
 };
 
-export type FieldSchema = TextFieldSchema | BooleanFieldSchema | DateFieldSchema;
+export type EnumValueSchema = {
+  label: string;
+};
+
+export type EnumFieldSchema = {
+  type: "enum";
+  required: boolean;
+  label?: string;
+  values: Record<string, EnumValueSchema>;
+  default?: string;
+};
+
+export type FieldSchema = TextFieldSchema | BooleanFieldSchema | DateFieldSchema | EnumFieldSchema;
 
 export type FieldCommitPolicy = "immediate" | "field-commit";
 
-export type FieldEditor = "text" | "boolean" | "date";
+export type FieldEditor = "text" | "boolean" | "date" | "enum";
 
 export type ViewFieldSchema = {
   editor: FieldEditor;
@@ -739,6 +751,10 @@ function parseListViewField(
     );
   }
 
+  if (field.type === "enum" && value.commit !== "immediate") {
+    throw new Error(`View field "${viewName}.${fieldName}" enum fields must commit immediately.`);
+  }
+
   if ((field.type === "text" || field.type === "date") && value.commit !== "field-commit") {
     throw new Error(
       `View field "${viewName}.${fieldName}" ${field.type} fields must use field-commit.`,
@@ -805,7 +821,7 @@ function parseViewFieldEditor(
   value: unknown,
   field: FieldSchema,
 ): FieldEditor {
-  if (value !== "text" && value !== "boolean" && value !== "date") {
+  if (value !== "text" && value !== "boolean" && value !== "date" && value !== "enum") {
     throw new Error(
       `View field "${viewName}.${fieldName}" has unsupported editor "${String(value)}".`,
     );
@@ -839,7 +855,10 @@ function assertCreateViewIncludesRequiredFields(
 }
 
 function hasCreateDefault(field: FieldSchema) {
-  return field.type === "boolean" && typeof field.default === "boolean";
+  return (
+    (field.type === "boolean" && typeof field.default === "boolean") ||
+    (field.type === "enum" && typeof field.default === "string")
+  );
 }
 
 function parseEntityBase(
@@ -1144,9 +1163,92 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
     return field;
   }
 
+  if (value.type === "enum") {
+    assertExactKeys(
+      `Field "${entityName}.${fieldName}"`,
+      value,
+      ["type", "required", "values"],
+      ["label", "default"],
+    );
+
+    const values = parseEnumValues(entityName, fieldName, value.values);
+    const field: EnumFieldSchema = {
+      type: "enum",
+      required: value.required,
+      values,
+    };
+
+    if (label !== undefined) {
+      field.label = label;
+    }
+
+    if ("default" in value) {
+      if (typeof value.default !== "string" || !Object.hasOwn(values, value.default)) {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" enum default must match one of its values.`,
+        );
+      }
+
+      field.default = value.default;
+    }
+
+    return field;
+  }
+
   throw new Error(
     `Field "${entityName}.${fieldName}" has unsupported type "${String(value.type)}".`,
   );
+}
+
+function parseEnumValues(
+  entityName: string,
+  fieldName: string,
+  value: unknown,
+): Record<string, EnumValueSchema> {
+  if (!isRecord(value)) {
+    throw new Error(`Field "${entityName}.${fieldName}" enum values must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+
+  if (entries.length === 0) {
+    throw new Error(`Field "${entityName}.${fieldName}" enum values must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([enumValue, enumValueSchema]) => {
+      if (enumValue.trim() === "") {
+        throw new Error(
+          `Field "${entityName}.${fieldName}" enum value keys must be non-empty strings.`,
+        );
+      }
+
+      return [enumValue, parseEnumValue(entityName, fieldName, enumValue, enumValueSchema)];
+    }),
+  );
+}
+
+function parseEnumValue(
+  entityName: string,
+  fieldName: string,
+  enumValue: string,
+  value: unknown,
+): EnumValueSchema {
+  if (!isRecord(value)) {
+    throw new Error(
+      `Field "${entityName}.${fieldName}" enum value "${enumValue}" must be an object.`,
+    );
+  }
+
+  assertExactKeys(`Field "${entityName}.${fieldName}" enum value "${enumValue}"`, value, ["label"]);
+
+  if (typeof value.label !== "string" || value.label.trim() === "") {
+    throw new Error(
+      `Field "${entityName}.${fieldName}" enum value "${enumValue}" label must be a non-empty string.`,
+    );
+  }
+
+  return { label: value.label };
 }
 
 function parseFieldLabel(

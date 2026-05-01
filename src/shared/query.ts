@@ -4,7 +4,6 @@ import {
   isSystemFieldName,
   resolveRecordFieldValue,
   type AddressableField,
-  type AddressableFieldType,
   type FieldRef,
 } from "./fields.ts";
 import { isDateBefore, isDateString, todayDateString } from "./date.ts";
@@ -84,7 +83,7 @@ export function parseQueryExpression(
     }
 
     const op = parseQueryOperator(value.op, field, contextLabel, ref);
-    const queryValue = parseQueryValue(value.value, field.type, op, contextLabel, ref);
+    const queryValue = parseQueryValue(value.value, field, op, contextLabel, ref);
 
     return {
       kind: "where",
@@ -219,13 +218,13 @@ function parseQueryOperator(
 
 function parseQueryValue(
   value: unknown,
-  fieldType: AddressableFieldType,
+  field: AddressableField,
   op: QueryOperator,
   contextLabel: string,
   ref: FieldRef,
 ): QueryValue {
   if (op === "before") {
-    if (fieldType !== "date") {
+    if (field.type !== "date") {
       throw new Error(
         `Query "${contextLabel}" field "${formatFieldRef(ref)}" does not support operator "before".`,
       );
@@ -234,7 +233,7 @@ function parseQueryValue(
     return parseDateBeforeQueryValue(value, contextLabel, ref);
   }
 
-  if (fieldType === "boolean") {
+  if (field.type === "boolean") {
     if (typeof value !== "boolean") {
       throw new Error(
         `Query "${contextLabel}" field "${formatFieldRef(ref)}" requires a boolean value.`,
@@ -250,9 +249,15 @@ function parseQueryValue(
     );
   }
 
-  if (fieldType === "date" && !isDateString(value)) {
+  if (field.type === "date" && !isDateString(value)) {
     throw new Error(
       `Query "${contextLabel}" field "${formatFieldRef(ref)}" must be a YYYY-MM-DD date.`,
+    );
+  }
+
+  if (field.type === "enum" && !Object.hasOwn(field.values ?? {}, value)) {
+    throw new Error(
+      `Query "${contextLabel}" field "${formatFieldRef(ref)}" must be a known enum value.`,
     );
   }
 

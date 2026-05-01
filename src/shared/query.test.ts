@@ -32,6 +32,17 @@ describe("field catalog", () => {
         filterOps: ["eq", "before"],
       },
       {
+        ref: { kind: "value", name: "kind" },
+        type: "enum",
+        label: "Kind",
+        writable: true,
+        filterOps: ["eq"],
+        values: {
+          role: { label: "Role" },
+          stream: { label: "Stream" },
+        },
+      },
+      {
         ref: { kind: "system", name: "id" },
         type: "id",
         label: "ID",
@@ -95,6 +106,24 @@ describe("query parsing", () => {
       ref: { kind: "value", name: "done" },
       op: "eq",
       value: true,
+    });
+
+    expect(
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "kind" },
+          op: "eq",
+          value: "role",
+        },
+        catalog,
+        "role tasks",
+      ),
+    ).toEqual({
+      kind: "where",
+      ref: { kind: "value", name: "kind" },
+      op: "eq",
+      value: "role",
     });
   });
 
@@ -241,6 +270,7 @@ describe("query parsing", () => {
     for (const ref of [
       { kind: "value" as const, name: "title" },
       { kind: "value" as const, name: "done" },
+      { kind: "value" as const, name: "kind" },
       { kind: "system" as const, name: "id" as const },
       { kind: "system" as const, name: "createdAt" as const },
     ]) {
@@ -272,6 +302,19 @@ describe("query parsing", () => {
         "bad query",
       ),
     ).toThrow("requires a boolean value");
+
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "where",
+          ref: { kind: "value", name: "kind" },
+          op: "eq",
+          value: "missing",
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("must be a known enum value");
   });
 
   it("rejects malformed date values", () => {
@@ -308,6 +351,7 @@ describe("query parsing", () => {
     for (const ref of [
       { kind: "value" as const, name: "title" },
       { kind: "value" as const, name: "done" },
+      { kind: "value" as const, name: "kind" },
       { kind: "system" as const, name: "id" as const },
       { kind: "system" as const, name: "createdAt" as const },
     ]) {
@@ -626,6 +670,16 @@ const taskEntity = {
     title: { type: "text", required: true, label: "Title" },
     done: { type: "boolean", required: true, label: "Done", default: false },
     dueDate: { type: "date", required: false, label: "Due date" },
+    kind: {
+      type: "enum",
+      required: true,
+      label: "Kind",
+      default: "role",
+      values: {
+        role: { label: "Role" },
+        stream: { label: "Stream" },
+      },
+    },
   },
   mutations: {
     create: { enabled: true },
@@ -651,6 +705,7 @@ const record: StoredRecord = {
     title: "Plan week",
     done: false,
     dueDate: "2026-05-01",
+    kind: "role",
   },
   createdAt: "2026-04-28T00:00:00.000Z",
 };

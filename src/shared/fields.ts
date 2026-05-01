@@ -1,12 +1,12 @@
 import type { FieldValue, StoredRecord } from "./protocol.ts";
-import type { EntitySchema, FieldSchema } from "./schema.ts";
+import type { EntitySchema, EnumValueSchema, FieldSchema } from "./schema.ts";
 import type { QueryOperator } from "./query.ts";
 
 export type SystemFieldName = "id" | "createdAt" | "deletedAt";
 
 export type FieldRef = { kind: "value"; name: string } | { kind: "system"; name: SystemFieldName };
 
-export type AddressableFieldType = "text" | "boolean" | "date" | "id" | "datetime";
+export type AddressableFieldType = "text" | "boolean" | "date" | "enum" | "id" | "datetime";
 
 export type AddressableField = {
   ref: FieldRef;
@@ -14,6 +14,7 @@ export type AddressableField = {
   label: string;
   writable: boolean;
   filterOps: QueryOperator[];
+  values?: Record<string, EnumValueSchema>;
 };
 
 const SYSTEM_FIELDS: AddressableField[] = [
@@ -94,6 +95,7 @@ function valueFieldCatalogEntry(fieldName: string, field: FieldSchema): Addressa
     label: field.label ?? humanizeFieldName(fieldName),
     writable: true,
     filterOps: field.type === "date" ? ["eq", "before"] : ["eq"],
+    ...(field.type === "enum" ? { values: field.values } : {}),
   };
 }
 

@@ -1,6 +1,161 @@
 import { describe, expect, it } from "vite-plus/test";
 import { parseAppSchema } from "./schema.ts";
 
+describe("schema enum fields", () => {
+  it("parses enum fields, query values, and generated editors", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: taskEntityWithKindEnum(),
+        },
+        queries: {
+          ...defaultQueries(),
+          taskRoles: {
+            label: "Roles",
+            entity: "task",
+            expression: {
+              kind: "where",
+              ref: { kind: "value", name: "kind" },
+              op: "eq",
+              value: "role",
+            },
+          },
+        },
+        itemViews: {
+          taskListItem: {
+            entity: "task",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+              done: { editor: "boolean", commit: "immediate" },
+              kind: { editor: "enum", commit: "immediate" },
+            },
+          },
+        },
+        views: {
+          taskHome: defaultCollectionView(),
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text" },
+              kind: { editor: "enum" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.task?.fields.kind).toEqual({
+      type: "enum",
+      required: true,
+      label: "Kind",
+      default: "role",
+      values: {
+        role: { label: "Role" },
+        stream: { label: "Stream" },
+      },
+    });
+    expect(schema.queries.taskRoles?.expression).toMatchObject({
+      ref: { kind: "value", name: "kind" },
+      op: "eq",
+      value: "role",
+    });
+    expect(schema.itemViews.taskListItem?.fields.kind).toEqual({
+      editor: "enum",
+      commit: "immediate",
+    });
+  });
+
+  it("allows required enum fields with defaults to be omitted from create views", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects malformed enum definitions and editors", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              fields: {
+                ...defaultEntities().task.fields,
+                kind: { type: "enum", required: true, values: {} },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("enum values must not be empty");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              fields: {
+                ...defaultEntities().task.fields,
+                kind: {
+                  type: "enum",
+                  required: true,
+                  values: { role: { label: "Role", color: "green" } },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('enum value "role" has unsupported key "color"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              fields: {
+                ...defaultEntities().task.fields,
+                kind: {
+                  type: "enum",
+                  required: true,
+                  default: "missing",
+                  values: { role: { label: "Role" } },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("enum default must match one of its values");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                kind: { editor: "enum", commit: "field-commit" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("enum fields must commit immediately");
+  });
+});
+
 describe("schema query catalog", () => {
   it("parses top-level queries in declaration order", () => {
     const schema = parseAppSchema(baseSchema());
@@ -350,6 +505,25 @@ function defaultEntities() {
           label: "Clear completed",
           kind: "clear-completed",
           target: { query: "taskCompleted" },
+        },
+      },
+    },
+  };
+}
+
+function taskEntityWithKindEnum() {
+  return {
+    ...defaultEntities().task,
+    fields: {
+      ...defaultEntities().task.fields,
+      kind: {
+        type: "enum",
+        required: true,
+        label: "Kind",
+        default: "role",
+        values: {
+          role: { label: "Role" },
+          stream: { label: "Stream" },
         },
       },
     },

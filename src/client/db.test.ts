@@ -56,9 +56,7 @@ describe("client db", () => {
         task: {
           label: "Planner task",
           fields: {
-            title: { type: "text", required: true },
-            done: { type: "boolean", required: true, default: false },
-            dueDate: { type: "date", required: false },
+            ...appSchema.entities.task.fields,
             notes: { type: "text", required: false },
           },
           mutations: defaultMutations(),

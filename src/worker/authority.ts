@@ -298,6 +298,7 @@ function validateRecordValues(values: Record<string, unknown>, entity: EntitySch
 
   for (const [fieldName, field] of Object.entries(entity.fields)) {
     const fieldValue = values[fieldName];
+    const fieldWasProvided = fieldName in values;
 
     if (field.type === "boolean") {
       if (typeof fieldValue === "boolean") {
@@ -310,6 +311,40 @@ function validateRecordValues(values: Record<string, unknown>, entity: EntitySch
       }
 
       if (typeof field.default === "boolean") {
+        validated[fieldName] = field.default;
+        continue;
+      }
+
+      if (field.required) {
+        throw new BadRequestError(`Field "${fieldName}" is required.`);
+      }
+
+      continue;
+    }
+
+    if (field.type === "enum") {
+      if (fieldWasProvided) {
+        if (typeof fieldValue !== "string") {
+          throw new BadRequestError(`Field "${fieldName}" must be a known enum value.`);
+        }
+
+        if (fieldValue === "") {
+          if (field.required) {
+            throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
+          }
+
+          continue;
+        }
+
+        if (!Object.hasOwn(field.values, fieldValue)) {
+          throw new BadRequestError(`Field "${fieldName}" must be a known enum value.`);
+        }
+
+        validated[fieldName] = fieldValue;
+        continue;
+      }
+
+      if (field.default !== undefined) {
         validated[fieldName] = field.default;
         continue;
       }
@@ -412,6 +447,14 @@ function isValidStoredFieldValue(
 ) {
   if (field.type === "boolean") {
     return typeof value === "boolean" || typeof field.default === "boolean";
+  }
+
+  if (field.type === "enum") {
+    if (value === undefined) {
+      return !field.required || field.default !== undefined;
+    }
+
+    return typeof value === "string" && value !== "";
   }
 
   return (

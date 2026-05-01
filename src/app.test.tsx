@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { App, GeneratedCreateDialogForm, GeneratedCreateForm, RecordList } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
 import { applyBootstrapResponse, applyRecordMerge, resetClientStore } from "./client/store.ts";
-import { selectHomeModel, type CreateFieldConfig, type HomeActionConfig } from "./client/views.ts";
+import {
+  selectHomeModel,
+  type CreateFieldConfig,
+  type HomeActionConfig,
+  type RecordFieldConfig,
+} from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { EntitySchema } from "./shared/schema.ts";
 
@@ -137,6 +142,45 @@ describe("generated forms and records", () => {
     expect(html).toContain("Cancel");
   });
 
+  it("renders enum create controls with option labels", () => {
+    const task = taskEntityWithKindEnum();
+    const action = createAction(task, ["kind"]);
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+
+    expect(html).toContain('name="kind"');
+    expect(html).toContain("<select");
+    expect(html).toContain("Role");
+    expect(html).toContain("Stream");
+  });
+
+  it("renders enum inline editors with labels and raw unknown values", () => {
+    const task = taskEntityWithKindEnum();
+    const recordFields: RecordFieldConfig[] = [
+      {
+        fieldName: "kind",
+        field: task.fields.kind,
+        editor: "enum",
+        commit: "immediate",
+      },
+    ];
+
+    applyBootstrapResponse(bootstrap([enumRecord("legacy")]));
+    const html = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={recordFields}
+      />,
+    );
+
+    expect(html).toContain("legacy");
+    expect(html).toContain("Role");
+    expect(html).toContain("Stream");
+  });
+
   it("renders only the fields declared by a create view in the dialog", () => {
     const task = appSchema.entities.task;
     const action = createAction(task, ["title", "dueDate"]);
@@ -242,6 +286,38 @@ function taskRecord(
     entity: "task",
     values: { title, done, dueDate },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function enumRecord(kind: string): StoredRecord {
+  return {
+    id: "record-1",
+    entity: "task",
+    values: { kind },
+    createdAt: "2026-04-29T00:00:01.000Z",
+  };
+}
+
+function taskEntityWithKindEnum(): EntitySchema {
+  return {
+    label: "Task",
+    fields: {
+      kind: {
+        type: "enum",
+        required: true,
+        label: "Kind",
+        default: "role",
+        values: {
+          role: { label: "Role" },
+          stream: { label: "Stream" },
+        },
+      },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
   };
 }
 
