@@ -199,6 +199,11 @@ describe("generated collection home", () => {
     expect(html).toContain("Backup");
     expect(html).toContain("Create Rate card");
     expect(html).toMatch(/<button[^>]*>Create Rate<\/button>/);
+    expect(html).toContain('aria-label="Resource"');
+    expect(html).toContain('aria-label="Cost"');
+    expect(html).toContain('aria-label="Cost unit"');
+    expect(html).toContain('aria-label="Currency"');
+    expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
     expect(html).not.toContain('value="900"');
   });
@@ -375,9 +380,47 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toContain('name="resource"');
+    expect(html).toContain('name="cost"');
+    expect(html).toContain('name="costUnit"');
     expect(html).toContain('name="price"');
     expect(html).not.toContain('name="card"');
     expect(html).not.toContain("Rate card</label>");
+  });
+
+  it("renders terse rate-card resource and card create dialogs with schema defaults hidden", () => {
+    const models = selectCollectionModels(rateCardSchema);
+    const resourceCreate = models
+      .find((model) => model.viewName === "resourceHome")
+      ?.actions.find((action) => action.type === "create");
+    const cardCreate = models
+      .find((model) => model.viewName === "cardHome")
+      ?.actions.find((action) => action.type === "create");
+
+    if (!resourceCreate || resourceCreate.type !== "create") {
+      throw new Error("Missing resource create action.");
+    }
+
+    if (!cardCreate || cardCreate.type !== "create") {
+      throw new Error("Missing card create action.");
+    }
+
+    const resourceHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={resourceCreate} renderDialogCancel={false} />,
+    );
+    const cardHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={cardCreate} renderDialogCancel={false} />,
+    );
+
+    expect(resourceHtml).toContain('name="name"');
+    expect(resourceHtml).not.toContain('name="kind"');
+    expect(resourceHtml).not.toContain('name="unit"');
+    expect(resourceHtml).not.toContain('name="period"');
+    expect(resourceHtml).not.toContain('name="quantity"');
+    expect(cardHtml).toContain('name="name"');
+    expect(cardHtml).not.toContain('name="isDefault"');
+    expect(cardHtml).not.toContain('name="marginMin"');
+    expect(cardHtml).not.toContain('name="marginMed"');
+    expect(cardHtml).not.toContain('name="marginMax"');
   });
 
   it("resolves create values from visible fields and context defaults", () => {
@@ -392,6 +435,8 @@ describe("generated forms and records", () => {
 
     const formData = new FormData();
     formData.set("resource", "resource-1");
+    formData.set("cost", "325");
+    formData.set("costUnit", "day");
     formData.set("price", "475");
 
     expect(
@@ -401,6 +446,8 @@ describe("generated forms and records", () => {
       }),
     ).toEqual({
       resource: "resource-1",
+      cost: 325,
+      costUnit: "day",
       price: 475,
       card: "card-1",
     });
@@ -418,6 +465,8 @@ describe("generated forms and records", () => {
 
     const formData = new FormData();
     formData.set("resource", "resource-1");
+    formData.set("cost", "325");
+    formData.set("costUnit", "day");
     formData.set("price", "475");
 
     expect(() => resolveCreateValues(formData, action, { today: "2026-05-01" })).toThrow(
@@ -589,7 +638,7 @@ function resourceRecord(id: string, name: string): StoredRecord {
   return {
     id,
     entity: "resource",
-    values: { name },
+    values: { name, kind: "role", unit: "day" },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
   };
 }
@@ -598,7 +647,7 @@ function cardRecord(id: string, name: string): StoredRecord {
   return {
     id,
     entity: "card",
-    values: { name },
+    values: { name, isDefault: false, marginMin: 0.4, marginMed: 0.5, marginMax: 0.6 },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
   };
 }
@@ -621,7 +670,15 @@ function rateCardRateRecord(
   return {
     id,
     entity: "rate",
-    values: { resource, card, price },
+    values: {
+      resource,
+      card,
+      cost: price - 150,
+      costUnit: "day",
+      price,
+      priceSet: true,
+      currency: "usd",
+    },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
   };
 }

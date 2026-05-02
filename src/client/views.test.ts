@@ -103,6 +103,25 @@ describe("home view model collections", () => {
       "Create Rate card",
       "Create Rate",
     ]);
+    expect(models[0]?.result.recordFields.map((field) => field.fieldName)).toEqual([
+      "name",
+      "kind",
+      "unit",
+    ]);
+    expect(models[1]?.result.recordFields.map((field) => field.fieldName)).toEqual([
+      "name",
+      "isDefault",
+      "marginMin",
+      "marginMed",
+      "marginMax",
+    ]);
+    expect(models[2]?.result.recordFields.map((field) => field.fieldName)).toEqual([
+      "resource",
+      "cost",
+      "costUnit",
+      "price",
+      "currency",
+    ]);
   });
 
   it("resolves scoped rate-card collection context", () => {
@@ -140,7 +159,12 @@ describe("home view model collections", () => {
     expect(create).toMatchObject({
       type: "create",
       entityName: "rate",
-      fields: [{ fieldName: "resource" }, { fieldName: "price" }],
+      fields: [
+        { fieldName: "resource" },
+        { fieldName: "cost" },
+        { fieldName: "costUnit" },
+        { fieldName: "price" },
+      ],
       defaults: [
         {
           fieldName: "card",

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import rawRateCardSchema from "../../schema/samples/rate-card.json";
 import { parseAppSchema } from "./schema.ts";
 
 describe("schema enum fields", () => {
@@ -446,6 +447,8 @@ describe("schema create view defaults", () => {
       entity: "rate",
       fields: {
         resource: { editor: "reference" },
+        cost: { editor: "number" },
+        costUnit: { editor: "enum" },
         price: { editor: "number" },
       },
       defaults: {
@@ -861,7 +864,7 @@ describe("schema collection views", () => {
               name: "card",
               entity: "card",
               query: "cardAll",
-              labelField: "margin",
+              labelField: "marginMed",
             },
           }),
         }),
@@ -1126,6 +1129,48 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow('default field "resource" must reference entity "card"');
+  });
+});
+
+describe("rate-card sample schema", () => {
+  it("parses the expanded flat rate-card sample fields and views", () => {
+    const schema = parseAppSchema(rawRateCardSchema);
+
+    expect(Object.keys(schema.entities.resource?.fields ?? {})).toEqual(["name", "kind", "unit"]);
+    expect(schema.entities.resource?.fields.kind).toEqual({
+      type: "enum",
+      required: true,
+      label: "Kind",
+      default: "role",
+      values: {
+        generic: { label: "Generic" },
+        role: { label: "Role" },
+        stream: { label: "Stream" },
+        product: { label: "Product" },
+      },
+    });
+    expect(schema.entities.card?.fields).toMatchObject({
+      isDefault: { type: "boolean", required: true, default: false },
+      marginMin: { type: "number", required: true, default: 0.4, min: 0 },
+      marginMed: { type: "number", required: true, default: 0.5, min: 0 },
+      marginMax: { type: "number", required: true, default: 0.6, min: 0 },
+    });
+    expect(Object.keys(schema.entities.rate?.fields ?? {})).toEqual([
+      "resource",
+      "card",
+      "cost",
+      "costUnit",
+      "price",
+      "priceSet",
+      "currency",
+    ]);
+    expect(schema.itemViews.rateListItem?.fields).toEqual({
+      resource: { editor: "reference", commit: "immediate" },
+      cost: { editor: "number", commit: "field-commit" },
+      costUnit: { editor: "enum", commit: "immediate" },
+      price: { editor: "number", commit: "field-commit" },
+      currency: { editor: "enum", commit: "immediate" },
+    });
   });
 });
 
@@ -1419,6 +1464,19 @@ function scopedRateEntities() {
       label: "Resource",
       fields: {
         name: { type: "text", required: true, label: "Name" },
+        kind: {
+          type: "enum",
+          required: true,
+          label: "Kind",
+          default: "role",
+          values: {
+            generic: { label: "Generic" },
+            role: { label: "Role" },
+            stream: { label: "Stream" },
+            product: { label: "Product" },
+          },
+        },
+        unit: unitField(),
       },
       mutations: {
         create: { enabled: true },
@@ -1430,7 +1488,33 @@ function scopedRateEntities() {
       label: "Rate card",
       fields: {
         name: { type: "text", required: true, label: "Name" },
-        margin: { type: "number", required: true, label: "Margin", default: 0.5 },
+        isDefault: {
+          type: "boolean",
+          required: true,
+          label: "Default",
+          default: false,
+        },
+        marginMin: {
+          type: "number",
+          required: true,
+          label: "Minimum margin",
+          default: 0.4,
+          min: 0,
+        },
+        marginMed: {
+          type: "number",
+          required: true,
+          label: "Medium margin",
+          default: 0.5,
+          min: 0,
+        },
+        marginMax: {
+          type: "number",
+          required: true,
+          label: "Maximum margin",
+          default: 0.6,
+          min: 0,
+        },
       },
       mutations: {
         create: { enabled: true },
@@ -1451,17 +1535,68 @@ function scopedRateEntities() {
         card: {
           type: "reference",
           required: true,
-          label: "Card",
+          label: "Rate card",
           to: "card",
           displayField: "name",
         },
-        price: { type: "number", required: false, label: "Price" },
+        cost: { type: "number", required: true, label: "Cost", default: 0, min: 0 },
+        costUnit: costUnitField(),
+        price: { type: "number", required: true, label: "Price", default: 0, min: 0 },
+        priceSet: {
+          type: "boolean",
+          required: true,
+          label: "Price set",
+          default: true,
+        },
+        currency: {
+          type: "enum",
+          required: true,
+          label: "Currency",
+          default: "usd",
+          values: {
+            usd: { label: "USD" },
+            aud: { label: "AUD" },
+            eur: { label: "EUR" },
+            gbp: { label: "GBP" },
+          },
+        },
       },
       mutations: {
         create: { enabled: true },
         patch: { enabled: true },
         delete: { enabled: false },
       },
+    },
+  };
+}
+
+function costUnitField() {
+  return {
+    type: "enum",
+    required: true,
+    label: "Cost unit",
+    default: "day",
+    values: {
+      hour: { label: "Hour" },
+      day: { label: "Day" },
+      week: { label: "Week" },
+      month: { label: "Month" },
+      year: { label: "Year" },
+    },
+  };
+}
+
+function unitField() {
+  return {
+    type: "enum",
+    required: true,
+    label: "Unit",
+    default: "day",
+    values: {
+      hour: { label: "Hour" },
+      day: { label: "Day" },
+      week: { label: "Week" },
+      month: { label: "Month" },
     },
   };
 }
@@ -1497,8 +1632,10 @@ function scopedRateItemViews() {
       entity: "rate",
       fields: {
         resource: { editor: "reference", commit: "immediate" },
-        card: { editor: "reference", commit: "immediate" },
+        cost: { editor: "number", commit: "field-commit" },
+        costUnit: { editor: "enum", commit: "immediate" },
         price: { editor: "number", commit: "field-commit" },
+        currency: { editor: "enum", commit: "immediate" },
       },
     },
   };
@@ -1529,6 +1666,8 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
       fields: {
         resource: { editor: "reference" },
         card: { editor: "reference" },
+        cost: { editor: "number" },
+        costUnit: { editor: "enum" },
         price: { editor: "number" },
       },
     },
@@ -1537,6 +1676,8 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
       entity: "rate",
       fields: {
         resource: { editor: "reference" },
+        cost: { editor: "number" },
+        costUnit: { editor: "enum" },
         price: { editor: "number" },
       },
       defaults: {

@@ -238,6 +238,43 @@ describe("authority", () => {
     expect(bootstrap).toEqual(reset);
   });
 
+  it("applies expanded rate-card defaults when creating sample records", async () => {
+    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+
+    const resource = await postMutationForEntity("mutation-resource", "resource", {
+      name: "Designer",
+    });
+    const card = await postMutationForEntity("mutation-card", "card", { name: "Default" });
+    const rate = await postMutationForEntity("mutation-rate", "rate", {
+      resource: resource.record.id,
+      card: card.record.id,
+      cost: 325,
+      price: 475,
+    });
+
+    expect(resource.record.values).toEqual({
+      name: "Designer",
+      kind: "role",
+      unit: "day",
+    });
+    expect(card.record.values).toEqual({
+      name: "Default",
+      isDefault: false,
+      marginMin: 0.4,
+      marginMed: 0.5,
+      marginMax: 0.6,
+    });
+    expect(rate.record.values).toEqual({
+      resource: resource.record.id,
+      card: card.record.id,
+      cost: 325,
+      costUnit: "day",
+      price: 475,
+      priceSet: true,
+      currency: "usd",
+    });
+  });
+
   it("rejects unknown dev reset schemas", async () => {
     await expectError(
       "/api/dev/reset",

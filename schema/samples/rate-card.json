@@ -8,6 +8,46 @@
           "type": "text",
           "required": true,
           "label": "Name"
+        },
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "label": "Kind",
+          "default": "role",
+          "values": {
+            "generic": {
+              "label": "Generic"
+            },
+            "role": {
+              "label": "Role"
+            },
+            "stream": {
+              "label": "Stream"
+            },
+            "product": {
+              "label": "Product"
+            }
+          }
+        },
+        "unit": {
+          "type": "enum",
+          "required": true,
+          "label": "Unit",
+          "default": "day",
+          "values": {
+            "hour": {
+              "label": "Hour"
+            },
+            "day": {
+              "label": "Day"
+            },
+            "week": {
+              "label": "Week"
+            },
+            "month": {
+              "label": "Month"
+            }
+          }
         }
       },
       "mutations": {
@@ -30,11 +70,31 @@
           "required": true,
           "label": "Name"
         },
-        "margin": {
+        "isDefault": {
+          "type": "boolean",
+          "required": true,
+          "label": "Default",
+          "default": false
+        },
+        "marginMin": {
           "type": "number",
           "required": true,
-          "label": "Margin",
+          "label": "Minimum margin",
+          "default": 0.4,
+          "min": 0
+        },
+        "marginMed": {
+          "type": "number",
+          "required": true,
+          "label": "Medium margin",
           "default": 0.5,
+          "min": 0
+        },
+        "marginMax": {
+          "type": "number",
+          "required": true,
+          "label": "Maximum margin",
+          "default": 0.6,
           "min": 0
         }
       },
@@ -67,11 +127,68 @@
           "to": "card",
           "displayField": "name"
         },
+        "cost": {
+          "type": "number",
+          "required": true,
+          "label": "Cost",
+          "default": 0,
+          "min": 0
+        },
+        "costUnit": {
+          "type": "enum",
+          "required": true,
+          "label": "Cost unit",
+          "default": "day",
+          "values": {
+            "hour": {
+              "label": "Hour"
+            },
+            "day": {
+              "label": "Day"
+            },
+            "week": {
+              "label": "Week"
+            },
+            "month": {
+              "label": "Month"
+            },
+            "year": {
+              "label": "Year"
+            }
+          }
+        },
         "price": {
           "type": "number",
-          "required": false,
+          "required": true,
           "label": "Price",
+          "default": 0,
           "min": 0
+        },
+        "priceSet": {
+          "type": "boolean",
+          "required": true,
+          "label": "Price set",
+          "default": true
+        },
+        "currency": {
+          "type": "enum",
+          "required": true,
+          "label": "Currency",
+          "default": "usd",
+          "values": {
+            "usd": {
+              "label": "USD"
+            },
+            "aud": {
+              "label": "AUD"
+            },
+            "eur": {
+              "label": "EUR"
+            },
+            "gbp": {
+              "label": "GBP"
+            }
+          }
         }
       },
       "mutations": {
@@ -133,6 +250,14 @@
         "name": {
           "editor": "text",
           "commit": "field-commit"
+        },
+        "kind": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "unit": {
+          "editor": "enum",
+          "commit": "immediate"
         }
       }
     },
@@ -143,7 +268,19 @@
           "editor": "text",
           "commit": "field-commit"
         },
-        "margin": {
+        "isDefault": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "marginMin": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "marginMed": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "marginMax": {
           "editor": "number",
           "commit": "field-commit"
         }
@@ -156,13 +293,21 @@
           "editor": "reference",
           "commit": "immediate"
         },
-        "card": {
-          "editor": "reference",
+        "cost": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "costUnit": {
+          "editor": "enum",
           "commit": "immediate"
         },
         "price": {
           "editor": "number",
           "commit": "field-commit"
+        },
+        "currency": {
+          "editor": "enum",
+          "commit": "immediate"
         }
       }
     }
@@ -275,6 +420,12 @@
         "card": {
           "editor": "reference"
         },
+        "cost": {
+          "editor": "number"
+        },
+        "costUnit": {
+          "editor": "enum"
+        },
         "price": {
           "editor": "number"
         }
@@ -286,6 +437,12 @@
       "fields": {
         "resource": {
           "editor": "reference"
+        },
+        "cost": {
+          "editor": "number"
+        },
+        "costUnit": {
+          "editor": "enum"
         },
         "price": {
           "editor": "number"
