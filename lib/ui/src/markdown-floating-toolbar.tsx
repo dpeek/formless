@@ -286,7 +286,7 @@ function MarkdownToolbarToggle({
 }: {
   children: ReactNode;
   label: string;
-  onPress(): void;
+  onPress: () => void;
   pressed: boolean;
 }) {
   return (

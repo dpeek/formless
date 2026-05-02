@@ -32,7 +32,7 @@ export function MarkdownEditor({
   "aria-invalid"?: boolean;
   className?: string;
   minHeadingLevel?: MarkdownHeadingLevel;
-  onChange(nextMarkdown: string): void;
+  onChange: (nextMarkdown: string) => void;
   placeholder?: string;
   value: string;
 }) {

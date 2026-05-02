@@ -18,7 +18,7 @@ export function SourceEditor({
   value,
 }: {
   "aria-invalid"?: AriaAttributes["aria-invalid"];
-  onChange?(nextValue: string): void;
+  onChange?: (nextValue: string) => void;
   placeholder?: string;
   readOnly?: boolean;
   sourceKind: string;
