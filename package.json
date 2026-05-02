@@ -7,7 +7,9 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
+    "check": "vp check",
+    "test": "vp test",
+    "dev": "portless run --name formless vp dev",
     "build": "vp build",
     "preview": "vp preview",
     "deploy": "vp build && wrangler deploy"

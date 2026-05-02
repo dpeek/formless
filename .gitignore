@@ -4,3 +4,4 @@ node_modules
 .storage-harness-*
 dist
 .DS_Store
+llm

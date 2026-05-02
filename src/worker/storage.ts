@@ -48,6 +48,12 @@ export type StoredSchema = {
   updatedAt: string;
 };
 
+export type StorageResetSeed = {
+  schema: AppSchema;
+  records?: StoredRecord[];
+  changeMutationPrefix?: string;
+};
+
 export function ensureStorageTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS records (
@@ -117,15 +123,55 @@ export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSche
   return { schema, updatedAt };
 }
 
-export function resetStorage(storage: DurableObjectStorage, seedSchema: AppSchema): StoredSchema {
+export function resetStorage(storage: DurableObjectStorage, seed: StorageResetSeed): StoredSchema {
   return storage.transactionSync(() => {
     storage.sql.exec("DELETE FROM changes");
     storage.sql.exec("DELETE FROM records");
     storage.sql.exec("DELETE FROM action_executions");
     storage.sql.exec("DELETE FROM app_schema");
+    storage.sql.exec("DELETE FROM sqlite_sequence WHERE name = 'changes'");
 
-    return writeActiveSchema(storage, seedSchema);
+    const storedSchema = writeActiveSchema(storage, seed.schema);
+    const records = seed.records ?? [];
+    const changeMutationPrefix = seed.changeMutationPrefix ?? "seed";
+
+    for (const record of records) {
+      insertSeedRecord(storage, record, changeMutationPrefix);
+    }
+
+    return storedSchema;
   });
+}
+
+function insertSeedRecord(
+  storage: DurableObjectStorage,
+  record: StoredRecord,
+  changeMutationPrefix: string,
+) {
+  storage.sql.exec(
+    `
+      INSERT INTO records (id, entity, values_json, created_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    record.id,
+    record.entity,
+    JSON.stringify(record.values),
+    record.createdAt,
+    record.deletedAt ?? null,
+  );
+
+  storage.sql.exec(
+    `
+      INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    `${changeMutationPrefix}:${record.id}`,
+    "create",
+    record.entity,
+    record.id,
+    JSON.stringify(record),
+    record.createdAt,
+  );
 }
 
 export function getBootstrapRecords(storage: DurableObjectStorage): StoredRecord[] {

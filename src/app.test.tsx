@@ -21,6 +21,7 @@ import {
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import { parseAppSchema, type EntitySchema } from "./shared/schema.ts";
+import { rateCardSeedRecords, taskSeedRecords } from "./worker/fixtures.ts";
 
 const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
@@ -139,6 +140,19 @@ describe("generated collection home", () => {
     expect(after).toMatch(/aria-label="Clear completed target count"[^>]*>1</);
   });
 
+  it("renders seeded task records with useful query and action counts", () => {
+    applyBootstrapResponse(bootstrap(taskSeedRecords));
+    const html = renderRoute("/");
+
+    expect(html).toContain("Review overdue proposal");
+    expect(html).toContain("Plan today&#x27;s delivery");
+    expect(html).toMatch(/aria-label="All count"[^>]*>5</);
+    expect(html).toMatch(/aria-label="Active count"[^>]*>4</);
+    expect(html).toMatch(/aria-label="Completed count"[^>]*>1</);
+    expect(html).toMatch(/aria-label="Overdue count"[^>]*>1</);
+    expect(html).toMatch(/aria-label="Clear completed target count"[^>]*>1</);
+  });
+
   it("renders collection switching for a multi-collection schema", () => {
     applyBootstrapResponse(bootstrap([], rateCardSchema));
     const html = renderRoute("/");
@@ -206,6 +220,49 @@ describe("generated collection home", () => {
     expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
     expect(html).not.toContain('value="900"');
+  });
+
+  it("renders seeded rate-card rows under the selected card", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema));
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId={null}
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-02"
+      />,
+    );
+
+    expect(html).toContain("Default");
+    expect(html).toContain("Premium");
+    expect(html).toContain("Designer");
+    expect(html).toContain("Developer");
+    expect(html).toContain('value="825"');
+    expect(html).toContain('value="975"');
+    expect(html).not.toContain('value="990"');
+    expect(html).not.toContain('value="1170"');
   });
 
   it("disables scoped create actions until context is selected", () => {

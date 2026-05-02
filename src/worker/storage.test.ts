@@ -407,7 +407,7 @@ async function writeStorageHarness() {
           }
 
           if (request.method === "POST" && url.pathname === "/reset") {
-            return Response.json(resetStorage(this.ctx.storage, seedSchema));
+            return Response.json(resetStorage(this.ctx.storage, { schema: seedSchema }));
           }
 
           return Response.json({ error: "Not found." }, { status: 404 });

@@ -9,7 +9,9 @@ import type {
   SchemaUpdateResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
+import { matchesQuery } from "../shared/query.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
+import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -190,7 +192,33 @@ describe("authority", () => {
     expect(update.schema).toEqual(parseAppSchema(nextSchema));
   });
 
-  it("resets remote data to the seed schema and clears records", async () => {
+  it("keeps dev seed fixture IDs and references coherent", () => {
+    expectUniqueIds(taskSeedRecords);
+    expectUniqueIds(rateCardSeedRecords);
+
+    const cardIds = new Set(
+      rateCardSeedRecords.filter((record) => record.entity === "card").map((record) => record.id),
+    );
+    const resourceIds = new Set(
+      rateCardSeedRecords
+        .filter((record) => record.entity === "resource")
+        .map((record) => record.id),
+    );
+    const rates = rateCardSeedRecords.filter((record) => record.entity === "rate");
+    const pairs = new Set<string>();
+
+    for (const rate of rates) {
+      expect(resourceIds.has(String(rate.values.resource))).toBe(true);
+      expect(cardIds.has(String(rate.values.card))).toBe(true);
+      pairs.add(`${rate.values.resource}:${rate.values.card}`);
+    }
+
+    expect(cardIds).toEqual(new Set(["rec_card_default", "rec_card_premium"]));
+    expect(pairs.size).toBe(rates.length);
+    expect(rates).toHaveLength(cardIds.size * resourceIds.size);
+  });
+
+  it("resets remote data to the task seed schema and sample records", async () => {
     const nextSchema = {
       version: 1,
       entities: {
@@ -213,29 +241,75 @@ describe("authority", () => {
 
     const reset = await postJson<BootstrapResponse>("/api/dev/reset", {});
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const activeTasks = reset.records.filter((record) => record.values.done === false);
+    const completedTasks = reset.records.filter((record) => record.values.done === true);
+    const overdueTasks = reset.records.filter((record) =>
+      matchesQuery(record, appSchema.queries.taskOverdue.expression, { today: "2026-05-02" }),
+    );
 
     expect(reset).toEqual({
       schema: appSchema,
       schemaUpdatedAt: expect.any(String),
-      records: [],
-      cursor: 0,
+      records: taskSeedRecords,
+      cursor: taskSeedRecords.length,
     });
+    expect(activeTasks.map((record) => record.id)).toEqual([
+      "rec_task_overdue",
+      "rec_task_today",
+      "rec_task_later",
+      "rec_task_backlog",
+    ]);
+    expect(completedTasks.map((record) => record.id)).toEqual(["rec_task_completed"]);
+    expect(overdueTasks.map((record) => record.id)).toEqual(["rec_task_overdue"]);
     expect(bootstrap).toEqual(reset);
   });
 
-  it("resets remote data to the rate-card sample schema without seed records", async () => {
+  it("resets remote data to the rate-card sample schema and seed records", async () => {
     await postMutation("mutation-1", { title: "First", done: false });
 
     const reset = await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const recordsByEntity = countRecordsByEntity(reset.records);
 
     expect(reset).toEqual({
       schema: rateCardSchema,
       schemaUpdatedAt: expect.any(String),
-      records: [],
-      cursor: 0,
+      records: rateCardSeedRecords,
+      cursor: rateCardSeedRecords.length,
+    });
+    expect(recordsByEntity).toEqual({
+      card: 2,
+      rate: 10,
+      resource: 5,
     });
     expect(bootstrap).toEqual(reset);
+  });
+
+  it("returns seeded create changes from sync after reset", async () => {
+    await postJson<BootstrapResponse>("/api/dev/reset", {});
+
+    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+
+    expect(sync.cursor).toBe(taskSeedRecords.length);
+    expect(sync.changes).toHaveLength(taskSeedRecords.length);
+    expect(sync.changes.map((change) => change.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(sync.changes.map((change) => change.mutationId)).toEqual(
+      taskSeedRecords.map((record) => `seed-task:${record.id}`),
+    );
+    expect(sync.changes.map((change) => change.op)).toEqual(taskSeedRecords.map(() => "create"));
+    expect(sync.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
+  });
+
+  it("clears records when switching reset targets", async () => {
+    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+
+    const reset = await postJson<BootstrapResponse>("/api/dev/reset", {});
+    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+
+    expect(reset.records).toEqual(taskSeedRecords);
+    expect(reset.records.every((record) => record.entity === "task")).toBe(true);
+    expect(sync.cursor).toBe(taskSeedRecords.length);
+    expect(sync.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
   });
 
   it("applies expanded rate-card defaults when creating sample records", async () => {
@@ -1447,6 +1521,17 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
     patch: { enabled: true },
     delete: { enabled: false },
   };
+}
+
+function expectUniqueIds(records: Array<{ id: string }>) {
+  expect(new Set(records.map((record) => record.id)).size).toBe(records.length);
+}
+
+function countRecordsByEntity(records: Array<{ entity: string }>) {
+  return records.reduce<Record<string, number>>((counts, record) => {
+    counts[record.entity] = (counts[record.entity] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 function schemaWithPriorityEnum(

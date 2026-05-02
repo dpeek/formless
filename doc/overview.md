@@ -549,7 +549,7 @@ It currently proves:
 
 The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, collection tabs and count badges use schema-owned queries, and `clearCompletedTasks` proves the query-targeted named-action path with authority-reported affected counts.
 
-The next slice is about making generated rows denser and giving views better display policy. The rough priority list lives in [doc/roadmap.md](/Users/dpeek/code/formless/doc/roadmap.md).
+The next slice is about making generated rows denser and giving views better display policy.
 
 ## What success looks like
 

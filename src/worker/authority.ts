@@ -27,9 +27,11 @@ import {
   getStoredRecord,
   patchStoredRecord,
   resetStorage,
+  type StorageResetSeed,
   writeActiveSchema,
 } from "./storage.ts";
 import { executeEntityAction } from "./actions.ts";
+import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
 import type { Env } from "./index.ts";
 
 const seedSchema = parseAppSchema(rawSeedSchema);
@@ -139,17 +141,25 @@ export class FormlessAuthority extends DurableObject<Env> {
   }
 }
 
-function validateDevResetRequest(value: unknown): AppSchema {
+function validateDevResetRequest(value: unknown): StorageResetSeed {
   if (!isRecord(value)) {
     throw new BadRequestError("Reset request must be an object.");
   }
 
   if (value.schema === undefined || value.schema === "default") {
-    return seedSchema;
+    return {
+      schema: seedSchema,
+      records: taskSeedRecords,
+      changeMutationPrefix: "seed-task",
+    };
   }
 
   if (value.schema === "rate-card") {
-    return rateCardSchema;
+    return {
+      schema: rateCardSchema,
+      records: rateCardSeedRecords,
+      changeMutationPrefix: "seed-rate-card",
+    };
   }
 
   throw new BadRequestError(`Unknown reset schema "${formatResetSchemaValue(value.schema)}".`);

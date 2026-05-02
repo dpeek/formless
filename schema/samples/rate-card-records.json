@@ -1,0 +1,216 @@
+[
+  {
+    "id": "rec_card_default",
+    "entity": "card",
+    "values": {
+      "name": "Default",
+      "isDefault": true,
+      "marginMin": 0.4,
+      "marginMed": 0.5,
+      "marginMax": 0.6
+    },
+    "createdAt": "2026-05-01T00:00:01.000Z"
+  },
+  {
+    "id": "rec_card_premium",
+    "entity": "card",
+    "values": {
+      "name": "Premium",
+      "isDefault": false,
+      "marginMin": 0.5,
+      "marginMed": 0.6,
+      "marginMax": 0.7
+    },
+    "createdAt": "2026-05-01T00:00:02.000Z"
+  },
+  {
+    "id": "rec_resource_designer",
+    "entity": "resource",
+    "values": {
+      "name": "Designer",
+      "kind": "role",
+      "unit": "day"
+    },
+    "createdAt": "2026-05-01T00:00:03.000Z"
+  },
+  {
+    "id": "rec_resource_developer",
+    "entity": "resource",
+    "values": {
+      "name": "Developer",
+      "kind": "role",
+      "unit": "day"
+    },
+    "createdAt": "2026-05-01T00:00:04.000Z"
+  },
+  {
+    "id": "rec_resource_producer",
+    "entity": "resource",
+    "values": {
+      "name": "Producer",
+      "kind": "role",
+      "unit": "day"
+    },
+    "createdAt": "2026-05-01T00:00:05.000Z"
+  },
+  {
+    "id": "rec_resource_qa",
+    "entity": "resource",
+    "values": {
+      "name": "QA",
+      "kind": "role",
+      "unit": "day"
+    },
+    "createdAt": "2026-05-01T00:00:06.000Z"
+  },
+  {
+    "id": "rec_resource_product_lead",
+    "entity": "resource",
+    "values": {
+      "name": "Product lead",
+      "kind": "role",
+      "unit": "day"
+    },
+    "createdAt": "2026-05-01T00:00:07.000Z"
+  },
+  {
+    "id": "rec_rate_default_designer",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_designer",
+      "card": "rec_card_default",
+      "cost": 550,
+      "costUnit": "day",
+      "price": 825,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:08.000Z"
+  },
+  {
+    "id": "rec_rate_default_developer",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_developer",
+      "card": "rec_card_default",
+      "cost": 650,
+      "costUnit": "day",
+      "price": 975,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:09.000Z"
+  },
+  {
+    "id": "rec_rate_default_producer",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_producer",
+      "card": "rec_card_default",
+      "cost": 500,
+      "costUnit": "day",
+      "price": 750,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:10.000Z"
+  },
+  {
+    "id": "rec_rate_default_qa",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_qa",
+      "card": "rec_card_default",
+      "cost": 425,
+      "costUnit": "day",
+      "price": 640,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:11.000Z"
+  },
+  {
+    "id": "rec_rate_default_product_lead",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_product_lead",
+      "card": "rec_card_default",
+      "cost": 700,
+      "costUnit": "day",
+      "price": 1050,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:12.000Z"
+  },
+  {
+    "id": "rec_rate_premium_designer",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_designer",
+      "card": "rec_card_premium",
+      "cost": 550,
+      "costUnit": "day",
+      "price": 990,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:13.000Z"
+  },
+  {
+    "id": "rec_rate_premium_developer",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_developer",
+      "card": "rec_card_premium",
+      "cost": 650,
+      "costUnit": "day",
+      "price": 1170,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:14.000Z"
+  },
+  {
+    "id": "rec_rate_premium_producer",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_producer",
+      "card": "rec_card_premium",
+      "cost": 500,
+      "costUnit": "day",
+      "price": 900,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:15.000Z"
+  },
+  {
+    "id": "rec_rate_premium_qa",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_qa",
+      "card": "rec_card_premium",
+      "cost": 425,
+      "costUnit": "day",
+      "price": 770,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:16.000Z"
+  },
+  {
+    "id": "rec_rate_premium_product_lead",
+    "entity": "rate",
+    "values": {
+      "resource": "rec_resource_product_lead",
+      "card": "rec_card_premium",
+      "cost": 700,
+      "costUnit": "day",
+      "price": 1260,
+      "priceSet": true,
+      "currency": "usd"
+    },
+    "createdAt": "2026-05-01T00:00:17.000Z"
+  }
+]
