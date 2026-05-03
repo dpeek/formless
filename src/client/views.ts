@@ -98,7 +98,7 @@ export type HomeActionConfig =
       entityName: string;
       actionName: string;
       action: EntityActionSchema;
-      targetQuery: QueryExpression;
+      targetQuery?: QueryExpression;
       count?: CountDisplaySchema;
     };
 
@@ -250,9 +250,10 @@ function selectHomeActions(
       throw new Error(`Missing entity action "${slot.action}".`);
     }
 
-    const targetQuery = schema.queries[action.target.query];
+    const targetQuery =
+      action.kind === "clear-completed" ? schema.queries[action.target.query] : undefined;
 
-    if (!targetQuery) {
+    if (action.kind === "clear-completed" && !targetQuery) {
       throw new Error(`Missing action target query "${action.target.query}".`);
     }
 
@@ -262,7 +263,7 @@ function selectHomeActions(
       entityName: collectionView.entity,
       actionName: slot.action,
       action,
-      targetQuery: targetQuery.expression,
+      ...(targetQuery === undefined ? {} : { targetQuery: targetQuery.expression }),
       ...(slot.count === undefined ? {} : { count: slot.count }),
     };
   });

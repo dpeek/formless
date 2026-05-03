@@ -65,8 +65,9 @@ describe("seed app schema", () => {
       { query: "taskCompleted", count: { type: "count" } },
       { query: "taskOverdue", count: { type: "count" } },
     ]);
-    expect(appSchema.entities.task?.actions?.clearCompletedTasks.target.query).toBe(
-      "taskCompleted",
-    );
+    const clearCompleted = appSchema.entities.task?.actions?.clearCompletedTasks;
+    expect(
+      clearCompleted?.kind === "clear-completed" ? clearCompleted.target.query : undefined,
+    ).toBe("taskCompleted");
   });
 });

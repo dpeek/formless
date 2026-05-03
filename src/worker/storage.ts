@@ -415,6 +415,87 @@ export function tombstoneRecordsForAction(
   });
 }
 
+export function createRecordsForAction(
+  storage: DurableObjectStorage,
+  actionId: string,
+  entity: string,
+  action: string,
+  recordValuesToCreate: RecordValues[],
+): ActionResponse {
+  return storage.transactionSync(() => {
+    const existingExecution = findActionExecution(storage, actionId);
+
+    if (existingExecution) {
+      return {
+        actionId,
+        changes: findChangesByMutationId(storage, actionId),
+        cursor: existingExecution.cursor,
+      };
+    }
+
+    const createdAt = nowIsoString();
+    const changes: ChangeRow[] = [];
+
+    for (const values of recordValuesToCreate) {
+      const record: StoredRecord = {
+        id: createRecordId(),
+        entity,
+        values,
+        createdAt,
+      };
+
+      storage.sql.exec(
+        `
+          INSERT INTO records (id, entity, values_json, created_at)
+          VALUES (?, ?, ?, ?)
+        `,
+        record.id,
+        record.entity,
+        JSON.stringify(record.values),
+        record.createdAt,
+      );
+
+      storage.sql.exec(
+        `
+          INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        actionId,
+        "action",
+        entity,
+        record.id,
+        JSON.stringify(record),
+        createdAt,
+      );
+
+      const change = findLatestChangeForRecord(storage, actionId, record.id);
+      if (change) {
+        changes.push(change);
+      }
+    }
+
+    const cursor = getCurrentCursor(storage);
+
+    storage.sql.exec(
+      `
+        INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+      actionId,
+      entity,
+      action,
+      cursor,
+      createdAt,
+    );
+
+    return {
+      actionId,
+      changes,
+      cursor,
+    };
+  });
+}
+
 export function getActionResponseById(
   storage: DurableObjectStorage,
   actionId: string,

@@ -207,4 +207,24 @@ describe("home view model collections", () => {
       ],
     });
   });
+
+  it("resolves the rate-card regenerate action without a target query", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const action = rateModel?.actions.find((candidate) => candidate.type === "entity-action");
+
+    expect(rateModel?.actions.map((candidate) => candidate.label)).toEqual([
+      "Create Rate",
+      "Regenerate missing rates",
+    ]);
+    expect(action).toMatchObject({
+      type: "entity-action",
+      actionName: "regenerateMissingRates",
+      action: {
+        kind: "create-missing-join-records",
+      },
+    });
+    expect(action?.type === "entity-action" ? action.targetQuery : undefined).toBeUndefined();
+  });
 });

@@ -82,7 +82,7 @@ describe("generated collection home", () => {
     applyBootstrapResponse(
       bootstrap([
         taskRecord("record-1", "Open overdue", false, "2026-01-01"),
-        taskRecord("record-2", "Open later", false, "2026-05-03"),
+        taskRecord("record-2", "Open later", false, "2026-12-31"),
         taskRecord("record-3", "Finished", true, "2026-05-01"),
       ]),
     );
@@ -239,6 +239,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Backup");
     expect(html).toContain("Create Rate card");
     expect(html).toMatch(/<button[^>]*>Create Rate<\/button>/);
+    expect(html).toContain("Regenerate missing rates");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("<th");
     expect(html).toContain("Role");

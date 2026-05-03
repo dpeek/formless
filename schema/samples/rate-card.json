@@ -201,6 +201,22 @@
         "delete": {
           "enabled": false
         }
+      },
+      "actions": {
+        "regenerateMissingRates": {
+          "label": "Regenerate missing rates",
+          "kind": "create-missing-join-records",
+          "join": {
+            "left": {
+              "field": "resource",
+              "query": "resourceAll"
+            },
+            "right": {
+              "field": "card",
+              "query": "cardAll"
+            }
+          }
+        }
       }
     }
   },
@@ -429,6 +445,10 @@
         {
           "type": "create",
           "createView": "rateCreateForCard"
+        },
+        {
+          "type": "entityAction",
+          "action": "regenerateMissingRates"
         }
       ]
     },

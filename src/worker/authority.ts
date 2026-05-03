@@ -196,7 +196,7 @@ function validateActionRequest(value: unknown, schema: AppSchema): ActionRequest
     throw new BadRequestError(`Unknown action "${value.action}" for entity "${value.entity}".`);
   }
 
-  if (entity.fields.done?.type !== "boolean") {
+  if (action.kind === "clear-completed" && entity.fields.done?.type !== "boolean") {
     throw new BadRequestError(
       `Action "${value.action}" requires entity "${value.entity}" to have a boolean done field.`,
     );

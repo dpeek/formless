@@ -375,6 +375,55 @@ describe("authority", () => {
     });
   });
 
+  it("creates missing rate join records through the rate-card action", async () => {
+    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+
+    const card = await postMutationForEntity("mutation-card", "card", { name: "Enterprise" });
+    const action = await postActionForEntity(
+      "action-regenerate-rates",
+      "rate",
+      "regenerateMissingRates",
+    );
+    const replay = await postActionForEntity(
+      "action-regenerate-rates",
+      "rate",
+      "regenerateMissingRates",
+    );
+    const noOp = await postActionForEntity(
+      "action-regenerate-rates-noop",
+      "rate",
+      "regenerateMissingRates",
+    );
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const createdRates = action.changes.map((change) => change.payload);
+
+    expect(action.changes).toHaveLength(5);
+    expect(action.changes.every((change) => change.op === "action")).toBe(true);
+    expect(createdRates.map((record) => record.values.card)).toEqual(
+      Array.from({ length: 5 }, () => card.record.id),
+    );
+    expect(createdRates[0]?.values).toEqual({
+      resource: "rec_resource_designer",
+      card: card.record.id,
+      cost: 0,
+      costUnit: "day",
+      price: 0,
+      priceSet: true,
+      currency: "usd",
+    });
+    expect(countRecordsByEntity(bootstrap.records)).toEqual({
+      card: 3,
+      rate: 15,
+      resource: 5,
+    });
+    expect(replay).toEqual(action);
+    expect(noOp).toEqual({
+      actionId: "action-regenerate-rates-noop",
+      changes: [],
+      cursor: action.cursor,
+    });
+  });
+
   it("rejects unknown dev reset schemas", async () => {
     await expectError(
       "/api/dev/reset",
@@ -1991,9 +2040,13 @@ async function postMutationForEntity(
 }
 
 async function postAction(actionId: string, action: string) {
+  return postActionForEntity(actionId, "task", action);
+}
+
+async function postActionForEntity(actionId: string, entity: string, action: string) {
   return postJson<ActionResponse>("/api/actions", {
     actionId,
-    entity: "task",
+    entity,
     action,
   });
 }

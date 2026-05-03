@@ -42,7 +42,7 @@ import {
   type FieldSchema,
 } from "./shared/schema.ts";
 import type { FieldValue, RecordValues } from "./shared/protocol.ts";
-import type { QueryEvaluationContext } from "./shared/query.ts";
+import type { QueryEvaluationContext, QueryExpression } from "./shared/query.ts";
 import { Checkbox } from "@formless/ui/checkbox";
 import { Button } from "@formless/ui/button";
 import { Label } from "@formless/ui/label";
@@ -63,6 +63,10 @@ import { Badge } from "@formless/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@formless/ui/table";
 
 type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
+type EntityHomeActionConfig = Extract<HomeActionConfig, { type: "entity-action" }>;
+type CountedEntityHomeActionConfig = EntityHomeActionConfig & {
+  targetQuery: QueryExpression;
+};
 
 function HomeRoute() {
   const schema = useSchema();
@@ -1095,9 +1099,46 @@ function HomeEntityActionButton({
   pending,
   queryContext,
 }: {
-  action: Extract<HomeActionConfig, { type: "entity-action" }>;
+  action: EntityHomeActionConfig;
   disabled: boolean;
-  onRun: (action: Extract<HomeActionConfig, { type: "entity-action" }>) => Promise<void>;
+  onRun: (action: EntityHomeActionConfig) => Promise<void>;
+  pending: boolean;
+  queryContext: QueryEvaluationContext;
+}) {
+  if (action.count?.type !== "count" || !hasTargetQuery(action)) {
+    return (
+      <Button
+        disabled={disabled}
+        onClick={() => void onRun(action)}
+        type="button"
+        variant="outline"
+      >
+        {pending ? `${action.label}...` : action.label}
+      </Button>
+    );
+  }
+
+  return (
+    <CountedHomeEntityActionButton
+      action={action}
+      disabled={disabled}
+      onRun={onRun}
+      pending={pending}
+      queryContext={queryContext}
+    />
+  );
+}
+
+function CountedHomeEntityActionButton({
+  action,
+  disabled,
+  onRun,
+  pending,
+  queryContext,
+}: {
+  action: CountedEntityHomeActionConfig;
+  disabled: boolean;
+  onRun: (action: EntityHomeActionConfig) => Promise<void>;
   pending: boolean;
   queryContext: QueryEvaluationContext;
 }) {
@@ -1121,6 +1162,10 @@ function HomeEntityActionButton({
       ) : null}
     </Button>
   );
+}
+
+function hasTargetQuery(action: EntityHomeActionConfig): action is CountedEntityHomeActionConfig {
+  return action.targetQuery !== undefined;
 }
 
 function RecordRow({

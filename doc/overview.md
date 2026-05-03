@@ -1,7 +1,7 @@
 ---
 name: Formless overview
 description: "Big-picture product and runtime overview for the new Formless prototype."
-last_updated: 2026-04-30
+last_updated: 2026-05-04
 ---
 
 # Formless overview
@@ -93,7 +93,7 @@ For the current prototype, an entity is still small:
 - a label
 - a set of fields
 - a generic mutation policy for create, patch, and disabled delete
-- optional named actions such as `clearCompletedTasks`
+- optional named actions such as `clearCompletedTasks` and `regenerateMissingRates`
 
 That is enough for a first slice. It is not enough for the whole system.
 
@@ -239,9 +239,11 @@ The current prototype already has the backbone of this through `bootstrap`, `syn
 
 Named actions now use the same change-log and local-merge path, so commands such as `clearCompletedTasks` can update the local replica without a bespoke client-side state model.
 
-Named actions can also declare a target query. The client submits only `{ actionId, entity, action }`; it does not send target IDs or a query. The authority reads the active schema, evaluates the target query against its own active records, and then runs the action effect.
+Named actions can declare a target query. The client submits only `{ actionId, entity, action }`; it does not send target IDs or a query. The authority reads the active schema, evaluates the target query against its own active records, and then runs the action effect.
 
 For example, `clearCompletedTasks` is a named action whose target is `value.done eq true`. If a record no longer matches on the authority, it is not affected. If a matching record exists on the authority but the client has not seen it yet, it is still affected. Replay by `actionId` returns the recorded execution instead of selecting targets again.
+
+Named actions can also create records. The first generic creation action is `create-missing-join-records`: an entity declares two reference fields and the source queries for each side, and the authority creates any missing join records with schema defaults. The rate-card sample uses this for `rate.regenerateMissingRates`, filling missing `rate(resource, card)` rows through the normal action/change stream while keeping the model flat.
 
 ## Running example: personal task planner
 

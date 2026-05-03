@@ -1315,6 +1315,14 @@ describe("rate-card sample schema", () => {
       "priceSet",
       "currency",
     ]);
+    expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual({
+      label: "Regenerate missing rates",
+      kind: "create-missing-join-records",
+      join: {
+        left: { field: "resource", query: "resourceAll" },
+        right: { field: "card", query: "cardAll" },
+      },
+    });
     expect(schema.itemViews.rateListItem?.fields).toEqual({
       resource: { editor: "reference", commit: "immediate" },
       cost: { editor: "number", commit: "field-commit" },
@@ -1332,6 +1340,10 @@ describe("rate-card sample schema", () => {
     expect(schema.views.rateHome).toMatchObject({
       type: "collection",
       result: { type: "table", tableView: "rateTable" },
+      actions: [
+        { type: "create", createView: "rateCreateForCard" },
+        { type: "entityAction", action: "regenerateMissingRates" },
+      ],
     });
   });
 });
@@ -1425,6 +1437,49 @@ describe("schema entity actions", () => {
         }),
       ),
     ).toThrow("target must be value.done eq true");
+  });
+
+  it("accepts create-missing-join-records actions over reference fields", () => {
+    const entities = scopedRateEntities();
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        entities: {
+          ...entities,
+          rate: {
+            ...entities.rate,
+            actions: {
+              regenerateMissingRates: rateJoinAction(),
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual(rateJoinAction());
+  });
+
+  it("rejects create-missing-join-records actions without required defaults", () => {
+    const entities = scopedRateEntities();
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              fields: {
+                ...entities.rate.fields,
+                cost: { type: "number", required: true, label: "Cost", min: 0 },
+              },
+              actions: {
+                regenerateMissingRates: rateJoinAction(),
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('requires field "cost" to have a default');
   });
 });
 
@@ -1898,6 +1953,17 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
       fields: {
         name: { editor: "text" },
       },
+    },
+  };
+}
+
+function rateJoinAction() {
+  return {
+    label: "Regenerate missing rates",
+    kind: "create-missing-join-records",
+    join: {
+      left: { field: "resource", query: "resourceAll" },
+      right: { field: "card", query: "cardAll" },
     },
   };
 }
