@@ -472,6 +472,7 @@ function schemaWithSummary() {
     },
     queries: appSchema.queries,
     itemViews: appSchema.itemViews,
+    tableViews: appSchema.tableViews,
     views: appSchema.views,
   } satisfies AppSchema;
 }

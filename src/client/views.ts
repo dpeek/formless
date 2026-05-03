@@ -10,6 +10,8 @@ import type {
   FieldEditor,
   FieldSchema,
   ItemViewSchema,
+  TableColumnAlign,
+  TableViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
 import type { QueryExpression } from "../shared/query.ts";
@@ -19,6 +21,12 @@ export type RecordFieldConfig = {
   field: FieldSchema;
   editor: FieldEditor;
   commit: FieldCommitPolicy;
+  label?: string;
+};
+
+export type TableColumnConfig = RecordFieldConfig & {
+  label: string;
+  align?: TableColumnAlign;
 };
 
 export type CreateFieldConfig = {
@@ -40,11 +48,17 @@ export type HomeQueryTabConfig = {
   count?: CountDisplaySchema;
 };
 
-export type HomeResultConfig = {
-  type: "list";
-  itemViewName: string;
-  recordFields: RecordFieldConfig[];
-};
+export type HomeResultConfig =
+  | {
+      type: "list";
+      itemViewName: string;
+      recordFields: RecordFieldConfig[];
+    }
+  | {
+      type: "table";
+      tableViewName: string;
+      columns: TableColumnConfig[];
+    };
 
 export type HomeContextConfig = {
   name: string;
@@ -186,6 +200,20 @@ function selectResult(
   collectionView: CollectionViewSchema,
   entity: EntitySchema,
 ): HomeResultConfig {
+  if (collectionView.result.type === "table") {
+    const tableView = schema.tableViews[collectionView.result.tableView];
+
+    if (!tableView) {
+      throw new Error(`Missing table view "${collectionView.result.tableView}".`);
+    }
+
+    return {
+      type: "table",
+      tableViewName: collectionView.result.tableView,
+      columns: selectTableColumns(tableView, entity),
+    };
+  }
+
   const itemView = schema.itemViews[collectionView.result.itemView];
 
   if (!itemView) {
@@ -287,4 +315,42 @@ function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordF
     editor: viewField.editor,
     commit: viewField.commit,
   }));
+}
+
+function selectTableColumns(view: TableViewSchema, entity: EntitySchema): TableColumnConfig[] {
+  return view.columns.map((column) => {
+    const field = entity.fields[column.field] as FieldSchema;
+
+    return {
+      fieldName: column.field,
+      field,
+      editor: column.editor ?? field.type,
+      commit: column.commit ?? defaultCommitPolicy(field),
+      label: column.label ?? fieldLabel(column.field, field),
+      ...(column.align === undefined ? {} : { align: column.align }),
+    };
+  });
+}
+
+function defaultCommitPolicy(field: FieldSchema): FieldCommitPolicy {
+  return field.type === "boolean" || field.type === "enum" || field.type === "reference"
+    ? "immediate"
+    : "field-commit";
+}
+
+export function fieldLabel(fieldName: string, field: FieldSchema) {
+  return field.label ?? humanizeFieldName(fieldName);
+}
+
+function humanizeFieldName(fieldName: string) {
+  const withSpaces = fieldName
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+
+  if (withSpaces === "") {
+    return fieldName;
+  }
+
+  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1).toLowerCase();
 }

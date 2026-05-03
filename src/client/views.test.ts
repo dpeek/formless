@@ -35,13 +35,11 @@ describe("home view model collections", () => {
       type: "list",
       itemViewName: "taskListItem",
     });
-    expect(model?.result.recordFields.map((field) => field.fieldName)).toEqual([
-      "title",
-      "done",
-      "dueDate",
-      "estimate",
-      "priority",
-    ]);
+    expect(
+      model?.result.type === "list"
+        ? model.result.recordFields.map((field) => field.fieldName)
+        : [],
+    ).toEqual(["title", "done", "dueDate", "estimate", "priority"]);
   });
 
   it("resolves collection actions and clear-completed target query", () => {
@@ -103,24 +101,60 @@ describe("home view model collections", () => {
       "Create Rate card",
       "Create Rate",
     ]);
-    expect(models[0]?.result.recordFields.map((field) => field.fieldName)).toEqual([
-      "name",
-      "kind",
-      "unit",
+    expect(
+      models[0]?.result.type === "list"
+        ? models[0].result.recordFields.map((field) => field.fieldName)
+        : [],
+    ).toEqual(["name", "kind", "unit"]);
+    expect(
+      models[1]?.result.type === "list"
+        ? models[1].result.recordFields.map((field) => field.fieldName)
+        : [],
+    ).toEqual(["name", "isDefault", "marginMin", "marginMed", "marginMax"]);
+    expect(models[2]?.result).toMatchObject({
+      type: "table",
+      tableViewName: "rateTable",
+    });
+    expect(
+      models[2]?.result.type === "table"
+        ? models[2].result.columns.map((column) => column.fieldName)
+        : [],
+    ).toEqual(["resource", "cost", "costUnit", "price", "currency"]);
+  });
+
+  it("resolves rate-card table columns with labels, editors, and alignment", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
+
+    expect(columns.map((column) => column.label)).toEqual([
+      "Role",
+      "Cost",
+      "Cost unit",
+      "Price",
+      "Currency",
     ]);
-    expect(models[1]?.result.recordFields.map((field) => field.fieldName)).toEqual([
-      "name",
-      "isDefault",
-      "marginMin",
-      "marginMed",
-      "marginMax",
+    expect(columns.map((column) => column.editor)).toEqual([
+      "reference",
+      "number",
+      "enum",
+      "number",
+      "enum",
     ]);
-    expect(models[2]?.result.recordFields.map((field) => field.fieldName)).toEqual([
-      "resource",
-      "cost",
-      "costUnit",
-      "price",
-      "currency",
+    expect(columns.map((column) => column.commit)).toEqual([
+      "immediate",
+      "field-commit",
+      "immediate",
+      "field-commit",
+      "immediate",
+    ]);
+    expect(columns.map((column) => column.align ?? "start")).toEqual([
+      "start",
+      "end",
+      "start",
+      "end",
+      "start",
     ]);
   });
 

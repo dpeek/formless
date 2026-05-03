@@ -31,8 +31,9 @@ import type {
   HomeQueryTabConfig,
   HomeResultConfig,
   RecordFieldConfig,
+  TableColumnConfig,
 } from "./client/views.ts";
-import { selectCollectionModels } from "./client/views.ts";
+import { fieldLabel, selectCollectionModels } from "./client/views.ts";
 import { todayDateString } from "./shared/date.ts";
 import {
   parseAppSchema,
@@ -59,6 +60,7 @@ import {
 import { Field, FieldError, FieldSet } from "@formless/ui/field";
 import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
 import { Badge } from "@formless/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@formless/ui/table";
 
 type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
@@ -646,12 +648,12 @@ export function HomeCollection({
         </Tabs>
       )}
 
-      <RecordList
+      <CollectionResult
         entity={entity}
         entityName={entityName}
         query={selectedQuery.query}
         queryContext={queryContext}
-        recordFields={result.recordFields}
+        result={result}
       />
 
       {actions.length > 0 ? <HomeActionRow actions={actions} queryContext={queryContext} /> : null}
@@ -737,12 +739,12 @@ function ScopedHomeCollection({
       )}
 
       {queryContext ? (
-        <RecordList
+        <CollectionResult
           entity={entity}
           entityName={entityName}
           query={selectedQuery.query}
           queryContext={queryContext}
-          recordFields={result.recordFields}
+          result={result}
         />
       ) : null}
 
@@ -854,6 +856,42 @@ function QueryCountBadge({
   );
 }
 
+function CollectionResult({
+  entity,
+  entityName,
+  query,
+  queryContext,
+  result,
+}: {
+  entity: EntitySchema;
+  entityName: string;
+  query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
+  result: HomeResultConfig;
+}) {
+  if (result.type === "table") {
+    return (
+      <RecordTable
+        columns={result.columns}
+        entity={entity}
+        entityName={entityName}
+        query={query}
+        queryContext={queryContext}
+      />
+    );
+  }
+
+  return (
+    <RecordList
+      entity={entity}
+      entityName={entityName}
+      query={query}
+      queryContext={queryContext}
+      recordFields={result.recordFields}
+    />
+  );
+}
+
 export function RecordList({
   entity,
   entityName,
@@ -893,6 +931,75 @@ export function RecordList({
       )}
     </section>
   );
+}
+
+export function RecordTable({
+  columns,
+  entity,
+  entityName,
+  query,
+  queryContext,
+}: {
+  columns: TableColumnConfig[];
+  entity: EntitySchema;
+  entityName: string;
+  query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
+}) {
+  const canPatch = entity.mutations.patch.enabled;
+  const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
+
+  return (
+    <section className="space-y-3">
+      {!canPatch && recordIds.length > 0 ? (
+        <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
+      ) : null}
+
+      {recordIds.length === 0 ? (
+        <p className="text-sm text-slate-600">No records yet.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {columns.map((column) => (
+                <TableHead className={tableAlignClass(column.align)} key={column.fieldName}>
+                  {column.label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {recordIds.map((recordId) => (
+              <TableRow key={recordId}>
+                {columns.map((column) => (
+                  <TableCell className={tableAlignClass(column.align)} key={column.fieldName}>
+                    <RecordFieldEditor
+                      canPatch={canPatch}
+                      entityName={entityName}
+                      fieldConfig={column}
+                      recordId={recordId}
+                    />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </section>
+  );
+}
+
+function tableAlignClass(align: TableColumnConfig["align"]) {
+  if (align === "center") {
+    return "text-center [&_input]:text-center";
+  }
+
+  if (align === "end") {
+    return "text-end [&_input]:text-end";
+  }
+
+  return "text-start";
 }
 
 function HomeActionRow({
@@ -1056,6 +1163,7 @@ function RecordFieldEditor({
   recordId: string;
 }) {
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
+  const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const recordValue = useRecordField(recordId, fieldName);
   const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
   const [isPending, setIsPending] = useState(false);
@@ -1096,8 +1204,6 @@ function RecordFieldEditor({
   }
 
   if (editor === "boolean") {
-    const label = fieldLabel(fieldName, field);
-
     return (
       <div className="flex h-7 shrink-0 items-center">
         <Field orientation="horizontal">
@@ -1119,7 +1225,6 @@ function RecordFieldEditor({
   }
 
   if (editor === "enum" && field.type === "enum") {
-    const label = fieldLabel(fieldName, field);
     const unknownValue = draft !== "" && !Object.hasOwn(field.values, draft) ? draft : null;
 
     return (
@@ -1162,8 +1267,8 @@ function RecordFieldEditor({
         draft={draft}
         error={error}
         field={field}
-        fieldName={fieldName}
         isPending={isPending}
+        label={label}
         onCommit={commit}
         onDraftChange={setDraft}
       />
@@ -1192,9 +1297,9 @@ function RecordFieldEditor({
       }
     >
       <Field>
-        <Label className="sr-only">{fieldLabel(fieldName, field)}</Label>
+        <Label className="sr-only">{label}</Label>
         <Input
-          aria-label={fieldLabel(fieldName, field)}
+          aria-label={label}
           className="w-full rounded border border-slate-300 px-3 py-2"
           disabled={!canPatch || isPending}
           onBlur={(event) => {
@@ -1220,8 +1325,8 @@ function RecordReferenceEditor({
   draft,
   error,
   field,
-  fieldName,
   isPending,
+  label,
   onCommit,
   onDraftChange,
 }: {
@@ -1229,12 +1334,11 @@ function RecordReferenceEditor({
   draft: string;
   error: string | null;
   field: Extract<FieldSchema, { type: "reference" }>;
-  fieldName: string;
   isPending: boolean;
+  label: string;
   onCommit: (value: FieldValue) => Promise<void>;
   onDraftChange: (value: string) => void;
 }) {
-  const label = fieldLabel(fieldName, field);
   const options = useReferenceOptions(field.to, field.displayField);
   const unknownValue =
     draft !== "" && !options.some((option) => option.id === draft) ? draft : null;
@@ -1302,23 +1406,6 @@ function numberInputAttributes(field: FieldSchema) {
     min: field.min,
     step: field.integer ? "1" : "any",
   };
-}
-
-function fieldLabel(fieldName: string, field: FieldSchema) {
-  return field.label ?? humanizeFieldName(fieldName);
-}
-
-function humanizeFieldName(fieldName: string) {
-  const withSpaces = fieldName
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .trim();
-
-  if (withSpaces === "") {
-    return fieldName;
-  }
-
-  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1).toLowerCase();
 }
 
 function DeveloperStatusLine({

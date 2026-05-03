@@ -663,6 +663,157 @@ describe("schema item views", () => {
   });
 });
 
+describe("schema table views", () => {
+  it("parses table field columns and table collection results", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        views: scopedRateViews({
+          result: { type: "table", tableView: "rateTable" },
+        }),
+      }),
+    );
+
+    expect(schema.tableViews.rateTable).toEqual({
+      entity: "rate",
+      columns: [
+        {
+          type: "field",
+          field: "resource",
+          label: "Role",
+          editor: "reference",
+          commit: "immediate",
+        },
+        {
+          type: "field",
+          field: "cost",
+          editor: "number",
+          commit: "field-commit",
+          align: "end",
+        },
+        {
+          type: "field",
+          field: "costUnit",
+          editor: "enum",
+          commit: "immediate",
+        },
+        {
+          type: "field",
+          field: "price",
+          editor: "number",
+          commit: "field-commit",
+          align: "end",
+        },
+        {
+          type: "field",
+          field: "currency",
+          editor: "enum",
+          commit: "immediate",
+        },
+      ],
+    });
+    expect(schema.views.rateHome).toMatchObject({
+      type: "collection",
+      result: { type: "table", tableView: "rateTable" },
+    });
+  });
+
+  it("validates table view field columns", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [],
+            },
+          },
+        }),
+      ),
+    ).toThrow("columns must be a non-empty array");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "missing" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", editor: "text" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('editor must match field type "number"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "resource", commit: "field-commit" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("reference fields must commit immediately");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", align: "right" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('align must be "start", "center", or "end"');
+  });
+
+  it("validates collection table result references", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {},
+          views: scopedRateViews({
+            result: { type: "table", tableView: "missing" },
+          }),
+        }),
+      ),
+    ).toThrow('references unknown table view "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            resourceTable: {
+              entity: "resource",
+              columns: [{ type: "field", field: "name" }],
+            },
+          },
+          views: scopedRateViews({
+            result: { type: "table", tableView: "resourceTable" },
+          }),
+        }),
+      ),
+    ).toThrow('table view "resourceTable" must use entity "rate"');
+  });
+});
+
 describe("schema collection views", () => {
   it("parses query slots, defaults, results, and action slots", () => {
     const schema = parseAppSchema(baseSchema());
@@ -1171,6 +1322,17 @@ describe("rate-card sample schema", () => {
       price: { editor: "number", commit: "field-commit" },
       currency: { editor: "enum", commit: "immediate" },
     });
+    expect(schema.tableViews.rateTable?.columns.map((column) => column.field)).toEqual([
+      "resource",
+      "cost",
+      "costUnit",
+      "price",
+      "currency",
+    ]);
+    expect(schema.views.rateHome).toMatchObject({
+      type: "collection",
+      result: { type: "table", tableView: "rateTable" },
+    });
   });
 });
 
@@ -1272,6 +1434,7 @@ function baseSchema(overrides: Record<string, unknown> = {}) {
     entities: defaultEntities(),
     queries: defaultQueries(),
     itemViews: defaultItemViews(),
+    tableViews: {},
     views: defaultViews(),
     ...overrides,
   };
@@ -1375,6 +1538,7 @@ function referenceSchema(overrides: Record<string, unknown> = {}) {
         },
       },
     },
+    tableViews: {},
     views: referenceViews(),
     ...overrides,
   };
@@ -1453,6 +1617,7 @@ function scopedRateSchema(overrides: Record<string, unknown> = {}) {
     entities: scopedRateEntities(),
     queries: scopedRateQueries(),
     itemViews: scopedRateItemViews(),
+    tableViews: scopedRateTableViews(),
     views: scopedRateViews(),
     ...overrides,
   };
@@ -1637,6 +1802,49 @@ function scopedRateItemViews() {
         price: { editor: "number", commit: "field-commit" },
         currency: { editor: "enum", commit: "immediate" },
       },
+    },
+  };
+}
+
+function scopedRateTableViews() {
+  return {
+    rateTable: {
+      entity: "rate",
+      columns: [
+        {
+          type: "field",
+          field: "resource",
+          label: "Role",
+          editor: "reference",
+          commit: "immediate",
+        },
+        {
+          type: "field",
+          field: "cost",
+          editor: "number",
+          commit: "field-commit",
+          align: "end",
+        },
+        {
+          type: "field",
+          field: "costUnit",
+          editor: "enum",
+          commit: "immediate",
+        },
+        {
+          type: "field",
+          field: "price",
+          editor: "number",
+          commit: "field-commit",
+          align: "end",
+        },
+        {
+          type: "field",
+          field: "currency",
+          editor: "enum",
+          commit: "immediate",
+        },
+      ],
     },
   };
 }

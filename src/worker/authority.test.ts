@@ -77,6 +77,7 @@ describe("authority", () => {
       },
       queries: defaultQueries(),
       itemViews: defaultItemViews(),
+      tableViews: {},
       views: defaultViews(),
     } satisfies AppSchema;
 
@@ -158,6 +159,30 @@ describe("authority", () => {
     );
   });
 
+  it("rejects invalid table views through the schema route", async () => {
+    await expectError(
+      "/api/schema",
+      {
+        schema: {
+          ...schemaWithViews({
+            ...defaultViews(),
+            taskHome: {
+              ...defaultCollectionView(),
+              result: { type: "table", tableView: "taskTable" },
+            },
+          }),
+          tableViews: {
+            taskTable: {
+              entity: "task",
+              columns: [{ type: "field", field: "missing" }],
+            },
+          },
+        },
+      },
+      'references unknown field "task.missing"',
+    );
+  });
+
   it("accepts compatible schema updates that change query labels and selected scope", async () => {
     const initialSchema = schemaWithQueries({
       ...defaultQueries(),
@@ -233,6 +258,7 @@ describe("authority", () => {
       },
       queries: defaultQueries(),
       itemViews: defaultItemViews(),
+      tableViews: {},
       views: defaultViews(),
     } satisfies AppSchema;
 
@@ -374,6 +400,7 @@ describe("authority", () => {
       },
       queries: defaultQueries(),
       itemViews: defaultItemViews(),
+      tableViews: {},
       views: defaultViews(),
     } satisfies AppSchema;
 
@@ -407,6 +434,7 @@ describe("authority", () => {
           },
           queries: {},
           itemViews: {},
+          tableViews: {},
           views: {},
         },
       },
@@ -443,6 +471,7 @@ describe("authority", () => {
           },
         },
       },
+      tableViews: {},
       views: {
         taskHome: {
           type: "collection",
@@ -914,6 +943,7 @@ describe("authority", () => {
       },
       queries: defaultQueries(),
       itemViews: defaultItemViews(),
+      tableViews: {},
       views: defaultViews(),
     } satisfies AppSchema;
 
@@ -1123,6 +1153,7 @@ describe("authority", () => {
           },
         },
       },
+      tableViews: {},
       views: {
         taskHome: {
           type: "collection",
@@ -1206,6 +1237,7 @@ describe("authority", () => {
               },
             },
           },
+          tableViews: {},
           views: {},
         },
       },
@@ -1240,6 +1272,7 @@ describe("authority", () => {
               },
             },
           },
+          tableViews: {},
           views: {},
         },
       },
@@ -1378,6 +1411,7 @@ describe("authority", () => {
           },
           queries: {},
           itemViews: {},
+          tableViews: {},
           views: {},
         },
       },
@@ -1566,6 +1600,7 @@ function schemaWithPriorityEnum(
     },
     queries: defaultQueries(),
     itemViews: defaultItemViews(),
+    tableViews: {},
     views: defaultViews(),
   };
 }
@@ -1582,6 +1617,7 @@ function schemaWithMutations(mutations: unknown) {
     },
     queries: defaultQueries(),
     itemViews: defaultItemViews(),
+    tableViews: {},
     views: defaultViews(),
   };
 }
@@ -1611,6 +1647,7 @@ function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {})
     },
     queries: appSchema.queries,
     itemViews: appSchema.itemViews,
+    tableViews: appSchema.tableViews,
     views: appSchema.views,
   };
 }
@@ -1642,6 +1679,7 @@ function schemaWithRequiredScore() {
     },
     queries: defaultQueries(),
     itemViews: defaultItemViews(),
+    tableViews: {},
     views: {
       ...views,
       taskCreate: {
@@ -1705,6 +1743,7 @@ function schemaWithRateReferences() {
     },
     queries: appSchema.queries,
     itemViews: appSchema.itemViews,
+    tableViews: appSchema.tableViews,
     views: appSchema.views,
   } satisfies AppSchema;
 }
@@ -1730,6 +1769,7 @@ function schemaWithAssignmentReference() {
     },
     queries: appSchema.queries,
     itemViews: appSchema.itemViews,
+    tableViews: appSchema.tableViews,
     views: appSchema.views,
   } satisfies AppSchema;
 }
@@ -1792,6 +1832,7 @@ function schemaWithTaskProjectReference({
     entities,
     queries: appSchema.queries,
     itemViews: appSchema.itemViews,
+    tableViews: appSchema.tableViews,
     views: {
       ...appSchema.views,
       taskCreate: {
@@ -1817,6 +1858,7 @@ function schemaWithViews(views: unknown = defaultViews()) {
     },
     queries: defaultQueries(),
     itemViews: defaultItemViews(),
+    tableViews: {},
     views,
   };
 }
@@ -1848,6 +1890,7 @@ function schemaWithActions(actions: unknown) {
     },
     queries: defaultQueries(),
     itemViews: defaultItemViews(),
+    tableViews: {},
     views: defaultViews(),
   };
 }

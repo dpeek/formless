@@ -312,6 +312,46 @@
       }
     }
   },
+  "tableViews": {
+    "rateTable": {
+      "entity": "rate",
+      "columns": [
+        {
+          "type": "field",
+          "field": "resource",
+          "label": "Role",
+          "editor": "reference",
+          "commit": "immediate"
+        },
+        {
+          "type": "field",
+          "field": "cost",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end"
+        },
+        {
+          "type": "field",
+          "field": "costUnit",
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        {
+          "type": "field",
+          "field": "price",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end"
+        },
+        {
+          "type": "field",
+          "field": "currency",
+          "editor": "enum",
+          "commit": "immediate"
+        }
+      ]
+    }
+  },
   "views": {
     "resourceHome": {
       "type": "collection",
@@ -382,8 +422,8 @@
       ],
       "defaultQuery": "ratesForSelectedCard",
       "result": {
-        "type": "list",
-        "itemView": "rateListItem"
+        "type": "table",
+        "tableView": "rateTable"
       },
       "actions": [
         {

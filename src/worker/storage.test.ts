@@ -50,6 +50,7 @@ describe("storage", () => {
       },
       queries: defaultQueries(),
       itemViews: defaultItemViews(),
+      tableViews: {},
       views: defaultViews(),
     } satisfies AppSchema;
 
@@ -77,6 +78,7 @@ describe("storage", () => {
       },
       queries: defaultQueries(),
       itemViews: defaultItemViews(),
+      tableViews: {},
       views: defaultViews(),
     } satisfies AppSchema;
 

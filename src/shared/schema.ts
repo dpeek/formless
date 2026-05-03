@@ -71,6 +71,22 @@ export type CreateViewFieldSchema = {
   editor: FieldEditor;
 };
 
+export type TableColumnAlign = "start" | "center" | "end";
+
+export type TableColumnSchema = {
+  type: "field";
+  field: string;
+  label?: string;
+  editor?: FieldEditor;
+  commit?: FieldCommitPolicy;
+  align?: TableColumnAlign;
+};
+
+export type TableViewSchema = {
+  entity: string;
+  columns: TableColumnSchema[];
+};
+
 export type CreateDefaultValueSchema = {
   kind: "context";
   name: string;
@@ -98,10 +114,15 @@ export type CollectionViewQuerySlotSchema = {
   count?: CountDisplaySchema;
 };
 
-export type CollectionResultSchema = {
-  type: "list";
-  itemView: string;
-};
+export type CollectionResultSchema =
+  | {
+      type: "list";
+      itemView: string;
+    }
+  | {
+      type: "table";
+      tableView: string;
+    };
 
 export type CollectionContextSchema = {
   name: string;
@@ -182,6 +203,7 @@ export type AppSchema = {
   entities: Record<string, EntitySchema>;
   queries: Record<string, CollectionQuerySchema>;
   itemViews: Record<string, ItemViewSchema>;
+  tableViews: Record<string, TableViewSchema>;
   views: Record<string, ViewSchema>;
 };
 
@@ -195,7 +217,14 @@ export function parseAppSchema(value: unknown): AppSchema {
     throw new Error("Schema must be an object.");
   }
 
-  assertExactKeys("Schema", value, ["version", "entities", "queries", "itemViews", "views"]);
+  assertExactKeys("Schema", value, [
+    "version",
+    "entities",
+    "queries",
+    "itemViews",
+    "tableViews",
+    "views",
+  ]);
 
   const version = value.version;
   if (version !== 1) {
@@ -214,9 +243,10 @@ export function parseAppSchema(value: unknown): AppSchema {
     queries,
   );
   const itemViews = parseItemViews(value.itemViews, entities);
-  const views = parseViews(value.views, entities, queries, itemViews);
+  const tableViews = parseTableViews(value.tableViews, entities);
+  const views = parseViews(value.views, entities, queries, itemViews, tableViews);
 
-  return { version, entities, queries, itemViews, views };
+  return { version, entities, queries, itemViews, tableViews, views };
 }
 
 export function stringifySchema(schema: AppSchema) {
@@ -404,11 +434,122 @@ function parseItemView(
   };
 }
 
+function parseTableViews(
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): Record<string, TableViewSchema> {
+  if (!isRecord(value)) {
+    throw new Error("Schema tableViews must be an object.");
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([tableViewName, tableView]) => {
+      if (tableViewName.trim() === "") {
+        throw new Error("Table view names must be non-empty.");
+      }
+
+      return [tableViewName, parseTableView(tableViewName, tableView, entities)];
+    }),
+  );
+}
+
+function parseTableView(
+  tableViewName: string,
+  value: unknown,
+  entities: Record<string, EntitySchema>,
+): TableViewSchema {
+  if (!isRecord(value)) {
+    throw new Error(`Table view "${tableViewName}" must be an object.`);
+  }
+
+  assertExactKeys(`Table view "${tableViewName}"`, value, ["entity", "columns"]);
+
+  const entityName = parseRequiredNonEmptyString(
+    `Table view "${tableViewName}" entity`,
+    value.entity,
+  );
+  const entity = entities[entityName];
+
+  if (!entity) {
+    throw new Error(`Table view "${tableViewName}" references unknown entity "${entityName}".`);
+  }
+
+  const columns = parseTableColumns(tableViewName, entityName, value.columns, entity);
+
+  return {
+    entity: entityName,
+    columns,
+  };
+}
+
+function parseTableColumns(
+  tableViewName: string,
+  entityName: string,
+  value: unknown,
+  entity: EntitySchema,
+): TableColumnSchema[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Table view "${tableViewName}" columns must be a non-empty array.`);
+  }
+
+  return value.map((column, index) =>
+    parseTableColumn(tableViewName, entityName, index, column, entity),
+  );
+}
+
+function parseTableColumn(
+  tableViewName: string,
+  entityName: string,
+  index: number,
+  value: unknown,
+  entity: EntitySchema,
+): TableColumnSchema {
+  const context = `Table view "${tableViewName}" column ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["type", "field"], ["label", "editor", "commit", "align"]);
+
+  if (value.type !== "field") {
+    throw new Error(`${context} type must be "field".`);
+  }
+
+  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+  const field = entity.fields[fieldName];
+
+  if (!field) {
+    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const editor =
+    value.editor === undefined
+      ? undefined
+      : parseFieldEditor(`${context} field "${fieldName}"`, value.editor, field);
+  const commit =
+    value.commit === undefined
+      ? undefined
+      : parseFieldCommitPolicy(`${context} field "${fieldName}"`, value.commit, field);
+  const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
+
+  return {
+    type: "field",
+    field: fieldName,
+    ...(label === undefined ? {} : { label }),
+    ...(editor === undefined ? {} : { editor }),
+    ...(commit === undefined ? {} : { commit }),
+    ...(align === undefined ? {} : { align }),
+  };
+}
+
 function parseViews(
   value: unknown,
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
   itemViews: Record<string, ItemViewSchema>,
+  tableViews: Record<string, TableViewSchema>,
 ): Record<string, ViewSchema> {
   if (!isRecord(value)) {
     throw new Error("Schema views must be an object.");
@@ -417,7 +558,7 @@ function parseViews(
   const views = Object.fromEntries(
     Object.entries(value).map(([viewName, view]) => [
       viewName,
-      parseView(viewName, view, entities, queries, itemViews),
+      parseView(viewName, view, entities, queries, itemViews, tableViews),
     ]),
   );
 
@@ -558,6 +699,7 @@ function parseView(
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
   itemViews: Record<string, ItemViewSchema>,
+  tableViews: Record<string, TableViewSchema>,
 ): ViewSchema {
   if (viewName.trim() === "") {
     throw new Error("View names must be non-empty.");
@@ -572,7 +714,7 @@ function parseView(
   }
 
   if (value.type === "collection") {
-    return parseCollectionView(viewName, value, entities, queries, itemViews);
+    return parseCollectionView(viewName, value, entities, queries, itemViews, tableViews);
   }
 
   assertExactKeys(`View "${viewName}"`, value, ["type", "entity", "fields"], ["defaults"]);
@@ -605,6 +747,7 @@ function parseCollectionView(
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
   itemViews: Record<string, ItemViewSchema>,
+  tableViews: Record<string, TableViewSchema>,
 ): CollectionViewSchema {
   assertExactKeys(
     `Collection view "${viewName}"`,
@@ -646,7 +789,7 @@ function parseCollectionView(
     );
   }
 
-  const result = parseCollectionResult(viewName, value.entity, value.result, itemViews);
+  const result = parseCollectionResult(viewName, value.entity, value.result, itemViews, tableViews);
   const actions = parseCollectionActionSlots(viewName, value.entity, entity, value.actions);
 
   return {
@@ -851,38 +994,65 @@ function parseCollectionResult(
   entityName: string,
   value: unknown,
   itemViews: Record<string, ItemViewSchema>,
+  tableViews: Record<string, TableViewSchema>,
 ): CollectionResultSchema {
   if (!isRecord(value)) {
     throw new Error(`Collection view "${viewName}" result must be an object.`);
   }
 
-  assertExactKeys(`Collection view "${viewName}" result`, value, ["type", "itemView"]);
+  if (value.type === "list") {
+    assertExactKeys(`Collection view "${viewName}" result`, value, ["type", "itemView"]);
 
-  if (value.type !== "list") {
-    throw new Error(`Collection view "${viewName}" result type must be "list".`);
+    if (typeof value.itemView !== "string" || value.itemView.trim() === "") {
+      throw new Error(`Collection view "${viewName}" result itemView must be a non-empty string.`);
+    }
+
+    const itemView = itemViews[value.itemView];
+    if (!itemView) {
+      throw new Error(
+        `Collection view "${viewName}" result references unknown item view "${value.itemView}".`,
+      );
+    }
+
+    if (itemView.entity !== entityName) {
+      throw new Error(
+        `Collection view "${viewName}" result item view "${value.itemView}" must use entity "${entityName}".`,
+      );
+    }
+
+    return {
+      type: "list",
+      itemView: value.itemView,
+    };
   }
 
-  if (typeof value.itemView !== "string" || value.itemView.trim() === "") {
-    throw new Error(`Collection view "${viewName}" result itemView must be a non-empty string.`);
+  if (value.type === "table") {
+    assertExactKeys(`Collection view "${viewName}" result`, value, ["type", "tableView"]);
+
+    if (typeof value.tableView !== "string" || value.tableView.trim() === "") {
+      throw new Error(`Collection view "${viewName}" result tableView must be a non-empty string.`);
+    }
+
+    const tableView = tableViews[value.tableView];
+    if (!tableView) {
+      throw new Error(
+        `Collection view "${viewName}" result references unknown table view "${value.tableView}".`,
+      );
+    }
+
+    if (tableView.entity !== entityName) {
+      throw new Error(
+        `Collection view "${viewName}" result table view "${value.tableView}" must use entity "${entityName}".`,
+      );
+    }
+
+    return {
+      type: "table",
+      tableView: value.tableView,
+    };
   }
 
-  const itemView = itemViews[value.itemView];
-  if (!itemView) {
-    throw new Error(
-      `Collection view "${viewName}" result references unknown item view "${value.itemView}".`,
-    );
-  }
-
-  if (itemView.entity !== entityName) {
-    throw new Error(
-      `Collection view "${viewName}" result item view "${value.itemView}" must use entity "${entityName}".`,
-    );
-  }
-
-  return {
-    type: "list",
-    itemView: value.itemView,
-  };
+  throw new Error(`Collection view "${viewName}" result type must be "list" or "table".`);
 }
 
 function parseCollectionActionSlots(
@@ -1039,44 +1209,13 @@ function parseListViewField(
     throw new Error(`View "${viewName}" references unknown field "${entityName}.${fieldName}".`);
   }
 
-  const editor = parseViewFieldEditor(viewName, fieldName, value.editor, field);
-
-  if (value.commit !== "immediate" && value.commit !== "field-commit") {
-    throw new Error(
-      `View field "${viewName}.${fieldName}" has unsupported commit policy "${String(
-        value.commit,
-      )}".`,
-    );
-  }
-
-  if (field.type === "boolean" && value.commit !== "immediate") {
-    throw new Error(
-      `View field "${viewName}.${fieldName}" boolean fields must commit immediately.`,
-    );
-  }
-
-  if (field.type === "enum" && value.commit !== "immediate") {
-    throw new Error(`View field "${viewName}.${fieldName}" enum fields must commit immediately.`);
-  }
-
-  if (field.type === "reference" && value.commit !== "immediate") {
-    throw new Error(
-      `View field "${viewName}.${fieldName}" reference fields must commit immediately.`,
-    );
-  }
-
-  if (
-    (field.type === "text" || field.type === "date" || field.type === "number") &&
-    value.commit !== "field-commit"
-  ) {
-    throw new Error(
-      `View field "${viewName}.${fieldName}" ${field.type} fields must use field-commit.`,
-    );
-  }
+  const context = `View field "${viewName}.${fieldName}"`;
+  const editor = parseFieldEditor(context, value.editor, field);
+  const commit = parseFieldCommitPolicy(context, value.commit, field);
 
   return {
     editor,
-    commit: value.commit,
+    commit,
   };
 }
 
@@ -1206,6 +1345,10 @@ function parseViewFieldEditor(
   value: unknown,
   field: FieldSchema,
 ): FieldEditor {
+  return parseFieldEditor(`View field "${viewName}.${fieldName}"`, value, field);
+}
+
+function parseFieldEditor(context: string, value: unknown, field: FieldSchema): FieldEditor {
   if (
     value !== "text" &&
     value !== "boolean" &&
@@ -1214,15 +1357,57 @@ function parseViewFieldEditor(
     value !== "enum" &&
     value !== "reference"
   ) {
-    throw new Error(
-      `View field "${viewName}.${fieldName}" has unsupported editor "${String(value)}".`,
-    );
+    throw new Error(`${context} has unsupported editor "${String(value)}".`);
   }
 
   if (value !== field.type) {
-    throw new Error(
-      `View field "${viewName}.${fieldName}" editor must match field type "${field.type}".`,
-    );
+    throw new Error(`${context} editor must match field type "${field.type}".`);
+  }
+
+  return value;
+}
+
+function parseFieldCommitPolicy(
+  context: string,
+  value: unknown,
+  field: FieldSchema,
+): FieldCommitPolicy {
+  if (value !== "immediate" && value !== "field-commit") {
+    throw new Error(`${context} has unsupported commit policy "${String(value)}".`);
+  }
+
+  if (field.type === "boolean" && value !== "immediate") {
+    throw new Error(`${context} boolean fields must commit immediately.`);
+  }
+
+  if (field.type === "enum" && value !== "immediate") {
+    throw new Error(`${context} enum fields must commit immediately.`);
+  }
+
+  if (field.type === "reference" && value !== "immediate") {
+    throw new Error(`${context} reference fields must commit immediately.`);
+  }
+
+  if (
+    (field.type === "text" || field.type === "date" || field.type === "number") &&
+    value !== "field-commit"
+  ) {
+    throw new Error(`${context} ${field.type} fields must use field-commit.`);
+  }
+
+  return value;
+}
+
+function parseOptionalTableColumnAlign(
+  context: string,
+  value: unknown,
+): TableColumnAlign | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "start" && value !== "center" && value !== "end") {
+    throw new Error(`${context} must be "start", "center", or "end".`);
   }
 
   return value;

@@ -8,6 +8,7 @@ import {
   GeneratedCreateForm,
   HomeCollection,
   RecordList,
+  RecordTable,
   resolveCreateValues,
 } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
@@ -104,7 +105,7 @@ describe("generated collection home", () => {
         entity={task}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={model?.result.recordFields ?? []}
+        recordFields={model?.result.type === "list" ? model.result.recordFields : []}
       />,
     );
 
@@ -141,8 +142,33 @@ describe("generated collection home", () => {
   });
 
   it("renders seeded task records with useful query and action counts", () => {
+    const model = selectHomeModel(appSchema);
+
     applyBootstrapResponse(bootstrap(taskSeedRecords));
-    const html = renderRoute("/");
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={model?.actions ?? []}
+        entity={model?.entity ?? appSchema.entities.task}
+        entityName="task"
+        onSelectQuery={() => {}}
+        queryTabs={model?.queryTabs ?? []}
+        result={
+          model?.result ?? {
+            type: "list",
+            itemViewName: "taskListItem",
+            recordFields: [],
+          }
+        }
+        selectedQuery={
+          model?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-02"
+      />,
+    );
 
     expect(html).toContain("Review overdue proposal");
     expect(html).toContain("Plan today&#x27;s delivery");
@@ -213,13 +239,67 @@ describe("generated collection home", () => {
     expect(html).toContain("Backup");
     expect(html).toContain("Create Rate card");
     expect(html).toMatch(/<button[^>]*>Create Rate<\/button>/);
-    expect(html).toContain('aria-label="Resource"');
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain("<th");
+    expect(html).toContain("Role");
+    expect(html).toContain('aria-label="Role"');
     expect(html).toContain('aria-label="Cost"');
     expect(html).toContain('aria-label="Cost unit"');
     expect(html).toContain('aria-label="Currency"');
     expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
     expect(html).not.toContain('value="900"');
+  });
+
+  it("changes visible table rows when the selected card changes", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-1", "card-2", 900),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId="card-2"
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-01"
+      />,
+    );
+
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('value="750"');
+    expect(html).toContain('value="900"');
+    expect(html).not.toContain('value="325"');
+    expect(html).not.toContain('value="475"');
   });
 
   it("renders seeded rate-card rows under the selected card", () => {
@@ -257,6 +337,7 @@ describe("generated collection home", () => {
 
     expect(html).toContain("Default");
     expect(html).toContain("Premium");
+    expect(html).toContain('data-slot="table"');
     expect(html).toContain("Designer");
     expect(html).toContain("Developer");
     expect(html).toContain('value="825"');
@@ -357,6 +438,40 @@ describe("generated forms and records", () => {
     expect(html).toContain("legacy");
     expect(html).toContain("Role");
     expect(html).toContain("Stream");
+  });
+
+  it("renders table cells through the same inline field editors", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={rateCardSchema.entities.rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain("Role");
+    expect(html).toContain('aria-label="Role"');
+    expect(html).toContain("Designer");
+    expect(html).toContain('aria-label="Cost"');
+    expect(html).toContain('type="number"');
+    expect(html).toContain('value="325"');
+    expect(html).toContain('value="475"');
   });
 
   it("renders number create controls and inline editors with numeric constraints", () => {
@@ -607,7 +722,7 @@ describe("generated forms and records", () => {
         entity={task}
         entityName="task"
         query={appSchema.queries.taskCompleted?.expression ?? { kind: "all" }}
-        recordFields={model?.result.recordFields ?? []}
+        recordFields={model?.result.type === "list" ? model.result.recordFields : []}
       />,
     );
 
