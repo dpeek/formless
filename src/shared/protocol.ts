@@ -61,6 +61,7 @@ export type SyncResponse = {
 
 export type MutationResponse = {
   record: StoredRecord;
+  changes: ChangeRow[];
   cursor: number;
   mutationId: string;
 };

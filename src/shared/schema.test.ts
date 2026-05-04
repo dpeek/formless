@@ -1458,6 +1458,94 @@ describe("schema entity actions", () => {
     expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual(rateJoinAction());
   });
 
+  it("accepts create afterCreate hooks that reference create-missing-join-records actions", () => {
+    const entities = scopedRateEntities();
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        entities: {
+          ...entities,
+          resource: {
+            ...entities.resource,
+            mutations: {
+              ...entities.resource.mutations,
+              create: {
+                enabled: true,
+                afterCreate: [{ entity: "rate", action: "regenerateMissingRates" }],
+              },
+            },
+          },
+          card: {
+            ...entities.card,
+            mutations: {
+              ...entities.card.mutations,
+              create: {
+                enabled: true,
+                afterCreate: [{ entity: "rate", action: "regenerateMissingRates" }],
+              },
+            },
+          },
+          rate: {
+            ...entities.rate,
+            actions: {
+              regenerateMissingRates: rateJoinAction(),
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.resource?.mutations.create.afterCreate).toEqual([
+      { entity: "rate", action: "regenerateMissingRates" },
+    ]);
+    expect(schema.entities.card?.mutations.create.afterCreate).toEqual([
+      { entity: "rate", action: "regenerateMissingRates" },
+    ]);
+  });
+
+  it("rejects invalid create afterCreate hooks", () => {
+    const entities = scopedRateEntities();
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            resource: {
+              ...entities.resource,
+              mutations: {
+                ...entities.resource.mutations,
+                create: {
+                  enabled: true,
+                  afterCreate: [{ entity: "missing", action: "regenerateMissingRates" }],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('create.afterCreate hook 0 references unknown entity "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            resource: {
+              ...entities.resource,
+              mutations: {
+                ...entities.resource.mutations,
+                create: {
+                  enabled: true,
+                  afterCreate: [{ entity: "rate", action: "missing" }],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('create.afterCreate hook 0 references unknown action "missing" for entity "rate"');
+  });
+
   it("rejects create-missing-join-records actions without required defaults", () => {
     const entities = scopedRateEntities();
 

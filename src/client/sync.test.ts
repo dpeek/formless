@@ -141,6 +141,7 @@ describe("client sync", () => {
 
         return Response.json({
           record: acceptedRecord,
+          changes: [mutationChange(1, mutation.mutationId, acceptedRecord, "create")],
           cursor: 1,
           mutationId: mutation.mutationId,
         } satisfies MutationResponse);
@@ -175,6 +176,7 @@ describe("client sync", () => {
 
         return Response.json({
           record: acceptedRecord,
+          changes: [mutationChange(2, mutation.mutationId, acceptedRecord, "patch")],
           cursor: 2,
           mutationId: mutation.mutationId,
         } satisfies MutationResponse);
@@ -185,6 +187,32 @@ describe("client sync", () => {
 
     expect(response.record).toEqual(acceptedRecord);
     expect(snapshot.records).toEqual([acceptedRecord]);
+    expect(snapshot.cursor).toBe(2);
+  });
+
+  it("merges all records returned by an accepted create mutation before advancing cursor", async () => {
+    const primaryRecord = record("record-1", "First");
+    const lifecycleRecord = record("record-2", "Lifecycle");
+
+    await submitCreateMutation("task", { title: "First", done: false }, async (_input, init) => {
+      const mutation = parseRequestBody(init?.body);
+
+      return Response.json({
+        record: primaryRecord,
+        changes: [
+          mutationChange(1, mutation.mutationId, primaryRecord, "create"),
+          mutationChange(2, mutation.mutationId, lifecycleRecord, "action"),
+        ],
+        cursor: 2,
+        mutationId: mutation.mutationId,
+      } satisfies MutationResponse);
+    });
+
+    const snapshot = await readLocalSnapshot();
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(snapshot.records).toEqual([primaryRecord, lifecycleRecord]);
+    expect(storeSnapshot.recordsById[lifecycleRecord.id]).toEqual(lifecycleRecord);
     expect(snapshot.cursor).toBe(2);
   });
 
@@ -544,6 +572,23 @@ function change(
     entity: "task",
     recordId,
     payload: record(recordId, title, done),
+    createdAt: `2026-04-28T00:00:0${seq}.000Z`,
+  };
+}
+
+function mutationChange(
+  seq: number,
+  mutationId: string,
+  payload: StoredRecord,
+  op: "create" | "patch" | "action",
+): ChangeRow {
+  return {
+    seq,
+    mutationId,
+    op,
+    entity: payload.entity,
+    recordId: payload.id,
+    payload,
     createdAt: `2026-04-28T00:00:0${seq}.000Z`,
   };
 }

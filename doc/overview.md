@@ -18,6 +18,7 @@ The interesting part is the full combination:
 - the browser keeps a local replica
 - the server is still authoritative
 - updates flow through a small generic mutation layer by default, with named actions where the domain actually needs them
+- create mutations can declare action-backed after-create hooks for domain side effects
 - built-in field types carry their own editors and validation rules
 - React only rerenders the exact pieces of UI that depend on the changed data
 
@@ -94,6 +95,7 @@ For the current prototype, an entity is still small:
 - a set of fields
 - a generic mutation policy for create, patch, and disabled delete
 - optional named actions such as `clearCompletedTasks` and `regenerateMissingRates`
+- optional `create.afterCreate` hooks that run named actions after ordinary creates
 
 That is enough for a first slice. It is not enough for the whole system.
 
@@ -120,6 +122,8 @@ The default mutation layer should stay small:
 That gives the runtime a generic way to support most editing surfaces. A title input can commit a patch. A checkbox can commit a patch. A form save can commit one patch that spans several fields.
 
 The current prototype makes this mutation surface explicit in the schema. Each entity declares whether generic `create` and `patch` are enabled, and `delete` is explicitly disabled until delete execution exists. The authority enforces that policy for new writes, while accepted mutation IDs still replay idempotently.
+
+Create policies can also declare narrow after-create hooks. The first supported shape is action-backed: after an ordinary generic create succeeds, the authority can run a declared named action and return all caused change rows in the same mutation response. This lets the client merge lifecycle-created rows before it advances its cursor.
 
 Generic patching is not enough for the full product. The server will still need a place for business logic. The cleanest eventual model is:
 
@@ -239,11 +243,15 @@ The current prototype already has the backbone of this through `bootstrap`, `syn
 
 Named actions now use the same change-log and local-merge path, so commands such as `clearCompletedTasks` can update the local replica without a bespoke client-side state model.
 
+Mutation responses also carry change rows. For simple creates and patches that usually means one primary record change. For lifecycle-backed creates it can include additional authority-created records, and the client merges those changes before storing the returned cursor.
+
 Named actions can declare a target query. The client submits only `{ actionId, entity, action }`; it does not send target IDs or a query. The authority reads the active schema, evaluates the target query against its own active records, and then runs the action effect.
 
 For example, `clearCompletedTasks` is a named action whose target is `value.done eq true`. If a record no longer matches on the authority, it is not affected. If a matching record exists on the authority but the client has not seen it yet, it is still affected. Replay by `actionId` returns the recorded execution instead of selecting targets again.
 
 Named actions can also create records. The first generic creation action is `create-missing-join-records`: an entity declares two reference fields and the source queries for each side, and the authority creates any missing join records with schema defaults. The rate-card sample uses this for `rate.regenerateMissingRates`, filling missing `rate(resource, card)` rows through the normal action/change stream while keeping the model flat.
+
+The rate-card sample also proves authority-owned create lifecycle. `resource.create` and `card.create` declare `afterCreate` hooks that run `rate.regenerateMissingRates`, so creating a resource fills rates for every card and creating a card fills rates for every resource. Replaying the original create mutation returns the original full change set and does not create duplicate rates.
 
 ## Running example: personal task planner
 

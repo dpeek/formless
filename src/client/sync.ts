@@ -2,7 +2,6 @@ import { listenForClientEvents, publishClientEvent } from "./broadcast.ts";
 import {
   deleteClientDb,
   mergeChanges,
-  mergeRecords,
   readCursor,
   readSchemaUpdatedAt,
   saveBootstrapResponse,
@@ -11,7 +10,6 @@ import {
 import {
   applyBootstrapResponse,
   applyChanges,
-  applyRecordMerge,
   applySchemaSave,
   resetClientStore,
 } from "./store.ts";
@@ -102,8 +100,8 @@ export async function submitCreateMutation(
 
   const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
 
-  await mergeRecords([response.record], response.cursor);
-  applyRecordMerge([response.record], response.cursor);
+  await mergeChanges(response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor);
   await notifyLocalDataChanged();
 
   return response;
@@ -125,8 +123,8 @@ export async function submitPatchMutation(
 
   const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
 
-  await mergeRecords([response.record], response.cursor);
-  applyRecordMerge([response.record], response.cursor);
+  await mergeChanges(response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor);
   await notifyLocalDataChanged();
 
   return response;

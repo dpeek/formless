@@ -228,14 +228,10 @@ export function createStoredRecord(
   mutation: CreateMutation,
 ): MutationResponse {
   return storage.transactionSync(() => {
-    const existingChange = findChangeByMutationId(storage, mutation.mutationId);
+    const existingResponse = getMutationResponseById(storage, mutation.mutationId);
 
-    if (existingChange) {
-      return {
-        record: existingChange.payload,
-        cursor: existingChange.seq,
-        mutationId: mutation.mutationId,
-      };
+    if (existingResponse) {
+      return existingResponse;
     }
 
     const createdAt = nowIsoString();
@@ -270,8 +266,15 @@ export function createStoredRecord(
       createdAt,
     );
 
+    const change = findLatestChangeForRecord(storage, mutation.mutationId, record.id);
+
+    if (!change) {
+      throw new Error(`Could not read create change for record "${record.id}".`);
+    }
+
     return {
       record,
+      changes: [change],
       cursor: getCurrentCursor(storage),
       mutationId: mutation.mutationId,
     };
@@ -284,14 +287,10 @@ export function patchStoredRecord(
   values?: RecordValues,
 ): MutationResponse {
   return storage.transactionSync(() => {
-    const existingChange = findChangeByMutationId(storage, mutation.mutationId);
+    const existingResponse = getMutationResponseById(storage, mutation.mutationId);
 
-    if (existingChange) {
-      return {
-        record: existingChange.payload,
-        cursor: existingChange.seq,
-        mutationId: mutation.mutationId,
-      };
+    if (existingResponse) {
+      return existingResponse;
     }
 
     const existingRecord = getStoredRecord(storage, mutation.recordId);
@@ -329,8 +328,15 @@ export function patchStoredRecord(
       changedAt,
     );
 
+    const change = findLatestChangeForRecord(storage, mutation.mutationId, record.id);
+
+    if (!change) {
+      throw new Error(`Could not read patch change for record "${record.id}".`);
+    }
+
     return {
       record,
+      changes: [change],
       cursor: getCurrentCursor(storage),
       mutationId: mutation.mutationId,
     };
@@ -496,6 +502,58 @@ export function createRecordsForAction(
   });
 }
 
+export function createRecordsForMutation(
+  storage: DurableObjectStorage,
+  mutationId: string,
+  entity: string,
+  recordValuesToCreate: RecordValues[],
+): ChangeRow[] {
+  return storage.transactionSync(() => {
+    const createdAt = nowIsoString();
+    const changes: ChangeRow[] = [];
+
+    for (const values of recordValuesToCreate) {
+      const record: StoredRecord = {
+        id: createRecordId(),
+        entity,
+        values,
+        createdAt,
+      };
+
+      storage.sql.exec(
+        `
+          INSERT INTO records (id, entity, values_json, created_at)
+          VALUES (?, ?, ?, ?)
+        `,
+        record.id,
+        record.entity,
+        JSON.stringify(record.values),
+        record.createdAt,
+      );
+
+      storage.sql.exec(
+        `
+          INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        mutationId,
+        "action",
+        entity,
+        record.id,
+        JSON.stringify(record),
+        createdAt,
+      );
+
+      const change = findLatestChangeForRecord(storage, mutationId, record.id);
+      if (change) {
+        changes.push(change);
+      }
+    }
+
+    return changes;
+  });
+}
+
 export function getActionResponseById(
   storage: DurableObjectStorage,
   actionId: string,
@@ -543,7 +601,8 @@ export function getMutationResponseById(
   storage: DurableObjectStorage,
   mutationId: string,
 ): MutationResponse | undefined {
-  const change = findChangeByMutationId(storage, mutationId);
+  const changes = findChangesByMutationId(storage, mutationId);
+  const change = changes[0];
 
   if (!change) {
     return undefined;
@@ -551,27 +610,10 @@ export function getMutationResponseById(
 
   return {
     record: change.payload,
-    cursor: change.seq,
+    changes,
+    cursor: changes.at(-1)?.seq ?? change.seq,
     mutationId,
   };
-}
-
-function findChangeByMutationId(
-  storage: DurableObjectStorage,
-  mutationId: string,
-): ChangeRow | undefined {
-  const row = storage.sql
-    .exec<ChangeSqlRow>(
-      `
-        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
-        FROM changes
-        WHERE mutation_id = ?
-      `,
-      mutationId,
-    )
-    .next();
-
-  return row.done ? undefined : changeFromRow(row.value);
 }
 
 function findChangesByMutationId(storage: DurableObjectStorage, mutationId: string): ChangeRow[] {

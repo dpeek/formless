@@ -165,8 +165,17 @@ export type CreateViewSchema = {
 
 export type ViewSchema = CollectionViewSchema | CreateViewSchema;
 
+export type AfterCreateHookSchema = {
+  entity: string;
+  action: string;
+};
+
 export type GenericMutationPolicy = {
   enabled: boolean;
+};
+
+export type CreateMutationPolicy = GenericMutationPolicy & {
+  afterCreate?: AfterCreateHookSchema[];
 };
 
 export type DeleteMutationPolicy = {
@@ -174,7 +183,7 @@ export type DeleteMutationPolicy = {
 };
 
 export type EntityMutationPolicy = {
-  create: GenericMutationPolicy;
+  create: CreateMutationPolicy;
   patch: GenericMutationPolicy;
   delete: DeleteMutationPolicy;
 };
@@ -390,7 +399,7 @@ function parseEntityActionsForEntities(
   actionInputsByEntity: Record<string, unknown>,
   queries: Record<string, CollectionQuerySchema>,
 ): Record<string, EntitySchema> {
-  return Object.fromEntries(
+  const parsedEntities = Object.fromEntries(
     Object.entries(entities).map(([entityName, entity]) => {
       const actions = parseEntityActions(
         entityName,
@@ -402,6 +411,10 @@ function parseEntityActionsForEntities(
       return [entityName, actions ? { ...entity, actions } : entity];
     }),
   );
+
+  validateCreateAfterCreateHooks(parsedEntities);
+
+  return parsedEntities;
 }
 
 function parseItemViews(
@@ -1726,6 +1739,31 @@ function fieldHasCreateDefault(field: FieldSchema) {
   );
 }
 
+function validateCreateAfterCreateHooks(entities: Record<string, EntitySchema>) {
+  for (const [entityName, entity] of Object.entries(entities)) {
+    for (const [index, hook] of (entity.mutations.create.afterCreate ?? []).entries()) {
+      const context = `Entity "${entityName}" create.afterCreate hook ${index}`;
+      const targetEntity = entities[hook.entity];
+
+      if (!targetEntity) {
+        throw new Error(`${context} references unknown entity "${hook.entity}".`);
+      }
+
+      const action = targetEntity.actions?.[hook.action];
+
+      if (!action) {
+        throw new Error(
+          `${context} references unknown action "${hook.action}" for entity "${hook.entity}".`,
+        );
+      }
+
+      if (action.kind !== "create-missing-join-records") {
+        throw new Error(`${context} action must create missing join records.`);
+      }
+    }
+  }
+}
+
 function parseEntityActionTarget(
   entityName: string,
   actionName: string,
@@ -1794,9 +1832,62 @@ function parseEntityMutations(entityName: string, value: unknown): EntityMutatio
   }
 
   return {
-    create: parseGenericMutationPolicy(entityName, "create", value.create),
+    create: parseCreateMutationPolicy(entityName, value.create),
     patch: parseGenericMutationPolicy(entityName, "patch", value.patch),
     delete: parseDeleteMutationPolicy(entityName, value.delete),
+  };
+}
+
+function parseCreateMutationPolicy(entityName: string, value: unknown): CreateMutationPolicy {
+  if (!isRecord(value)) {
+    throw new Error(`Entity "${entityName}" create mutation policy must be an object.`);
+  }
+
+  assertExactPolicyKeys(entityName, "create", value);
+
+  if (typeof value.enabled !== "boolean") {
+    throw new Error(`Entity "${entityName}" create.enabled must be a boolean.`);
+  }
+
+  const afterCreate = parseAfterCreateHooks(entityName, value.afterCreate);
+
+  return {
+    enabled: value.enabled,
+    ...(afterCreate === undefined ? {} : { afterCreate }),
+  };
+}
+
+function parseAfterCreateHooks(
+  entityName: string,
+  value: unknown,
+): AfterCreateHookSchema[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Entity "${entityName}" create.afterCreate must be a non-empty array.`);
+  }
+
+  return value.map((hook, index) => parseAfterCreateHook(entityName, index, hook));
+}
+
+function parseAfterCreateHook(
+  entityName: string,
+  index: number,
+  value: unknown,
+): AfterCreateHookSchema {
+  const context = `Entity "${entityName}" create.afterCreate hook ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["entity", "action"]);
+
+  return {
+    entity: parseRequiredNonEmptyString(`${context} entity`, value.entity),
+    action: parseRequiredNonEmptyString(`${context} action`, value.action),
   };
 }
 
@@ -1839,8 +1930,10 @@ function assertExactPolicyKeys(
   mutationName: "create" | "patch" | "delete",
   value: Record<string, unknown>,
 ) {
+  const optionalKeys = mutationName === "create" ? new Set(["afterCreate"]) : new Set<string>();
+
   for (const key of Object.keys(value)) {
-    if (key !== "enabled") {
+    if (key !== "enabled" && !optionalKeys.has(key)) {
       throw new Error(
         `Entity "${entityName}" ${mutationName} mutation policy has unsupported key "${key}".`,
       );

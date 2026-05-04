@@ -65,7 +65,7 @@ function selectActionTargetRecords(
   );
 }
 
-function selectMissingJoinRecordValues(
+export function selectMissingJoinRecordValues(
   storage: DurableObjectStorage,
   request: ActionRequest,
   schema: AppSchema,

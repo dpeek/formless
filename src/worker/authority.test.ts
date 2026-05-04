@@ -377,6 +377,9 @@ describe("authority", () => {
 
   it("creates missing rate join records through the rate-card action", async () => {
     await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: rateCardSchemaWithoutAfterCreateHooks(),
+    });
 
     const card = await postMutationForEntity("mutation-card", "card", { name: "Enterprise" });
     const action = await postActionForEntity(
@@ -397,6 +400,7 @@ describe("authority", () => {
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
     const createdRates = action.changes.map((change) => change.payload);
 
+    expect(card.changes).toHaveLength(1);
     expect(action.changes).toHaveLength(5);
     expect(action.changes.every((change) => change.op === "action")).toBe(true);
     expect(createdRates.map((record) => record.values.card)).toEqual(
@@ -421,6 +425,64 @@ describe("authority", () => {
       actionId: "action-regenerate-rates-noop",
       changes: [],
       cursor: action.cursor,
+    });
+  });
+
+  it("runs rate-card afterCreate hooks for card creates through mutation changes", async () => {
+    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+
+    const body = {
+      mutationId: "mutation-card-lifecycle",
+      entity: "card",
+      op: "create",
+      values: { name: "Enterprise" },
+    };
+    const first = await postJson<MutationResponse>("/api/mutations", body);
+    const replay = await postJson<MutationResponse>("/api/mutations", body);
+    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const createdRates = first.changes.slice(1).map((change) => change.payload);
+
+    expect(first.record.entity).toBe("card");
+    expect(first.record.id).toBe(first.changes[0]?.recordId);
+    expect(first.changes).toHaveLength(6);
+    expect(first.changes[0]?.op).toBe("create");
+    expect(first.changes.slice(1).every((change) => change.op === "action")).toBe(true);
+    expect(createdRates.map((record) => record.values.card)).toEqual(
+      Array.from({ length: 5 }, () => first.record.id),
+    );
+    expect(sync.changes.filter((change) => change.mutationId === body.mutationId)).toHaveLength(6);
+    expect(countRecordsByEntity(bootstrap.records)).toEqual({
+      card: 3,
+      rate: 15,
+      resource: 5,
+    });
+    expect(replay).toEqual(first);
+  });
+
+  it("runs rate-card afterCreate hooks for resource creates through mutation changes", async () => {
+    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+
+    const resource = await postMutationForEntity("mutation-resource-lifecycle", "resource", {
+      name: "Producer",
+    });
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const createdRates = resource.changes.slice(1).map((change) => change.payload);
+
+    expect(resource.record.entity).toBe("resource");
+    expect(resource.changes).toHaveLength(3);
+    expect(resource.changes[0]?.op).toBe("create");
+    expect(resource.changes.slice(1).every((change) => change.op === "action")).toBe(true);
+    expect(createdRates.map((record) => record.values.resource)).toEqual(
+      Array.from({ length: 2 }, () => resource.record.id),
+    );
+    expect(new Set(createdRates.map((record) => record.values.card))).toEqual(
+      new Set(["rec_card_default", "rec_card_premium"]),
+    );
+    expect(countRecordsByEntity(bootstrap.records)).toEqual({
+      card: 2,
+      rate: 12,
+      resource: 6,
     });
   });
 
@@ -1603,6 +1665,36 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
     create: { enabled: true },
     patch: { enabled: true },
     delete: { enabled: false },
+  };
+}
+
+function rateCardSchemaWithoutAfterCreateHooks(): AppSchema {
+  const resource = rateCardSchema.entities.resource;
+  const card = rateCardSchema.entities.card;
+
+  if (!resource || !card) {
+    throw new Error("Rate-card schema must include resource and card entities.");
+  }
+
+  return {
+    ...rateCardSchema,
+    entities: {
+      ...rateCardSchema.entities,
+      resource: {
+        ...resource,
+        mutations: {
+          ...resource.mutations,
+          create: { enabled: resource.mutations.create.enabled },
+        },
+      },
+      card: {
+        ...card,
+        mutations: {
+          ...card.mutations,
+          create: { enabled: card.mutations.create.enabled },
+        },
+      },
+    },
   };
 }
 

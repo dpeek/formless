@@ -5,13 +5,16 @@ import { isDateString } from "../shared/date.ts";
 import {
   parseAppSchema,
   type AppSchema,
+  type AfterCreateHookSchema,
   type EntitySchema,
   type NumberFieldSchema,
 } from "../shared/schema.ts";
 import type {
   ActionRequest,
+  ChangeRow,
   CreateMutation,
   Mutation,
+  MutationResponse,
   PatchMutation,
   RecordValues,
   StoredRecord,
@@ -25,12 +28,13 @@ import {
   getCurrentCursor,
   getMutationResponseById,
   getStoredRecord,
+  createRecordsForMutation,
   patchStoredRecord,
   resetStorage,
   type StorageResetSeed,
   writeActiveSchema,
 } from "./storage.ts";
-import { executeEntityAction } from "./actions.ts";
+import { executeEntityAction, selectMissingJoinRecordValues } from "./actions.ts";
 import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
 import type { Env } from "./index.ts";
 
@@ -96,16 +100,38 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       if (request.method === "POST" && url.pathname === "/api/mutations") {
         const { schema } = getActiveSchema(this.ctx.storage, seedSchema);
-        const mutation = validateMutation(await readJson(request), schema, this.ctx.storage);
+        const validatedMutation = validateMutation(
+          await readJson(request),
+          schema,
+          this.ctx.storage,
+        );
+
+        if (validatedMutation.replay) {
+          return jsonResponse(validatedMutation.replay);
+        }
+
+        const mutation = validatedMutation.mutation;
+        if (!mutation) {
+          throw new Error("Validated mutation was missing.");
+        }
+
+        if (mutation.op === "create") {
+          const response = createStoredRecord(this.ctx.storage, mutation);
+          const afterCreateChanges = executeAfterCreateHooks(this.ctx.storage, mutation, schema);
+
+          return jsonResponse({
+            ...response,
+            changes: [...response.changes, ...afterCreateChanges],
+            cursor: getCurrentCursor(this.ctx.storage),
+          });
+        }
 
         return jsonResponse(
-          mutation.op === "create"
-            ? createStoredRecord(this.ctx.storage, mutation)
-            : patchStoredRecord(
-                this.ctx.storage,
-                mutation,
-                "recordValues" in mutation ? mutation.recordValues : undefined,
-              ),
+          patchStoredRecord(
+            this.ctx.storage,
+            mutation,
+            "recordValues" in mutation ? mutation.recordValues : undefined,
+          ),
         );
       }
 
@@ -230,11 +256,53 @@ function parseCursor(value: string | null) {
   return cursor;
 }
 
+function executeAfterCreateHooks(
+  storage: DurableObjectStorage,
+  mutation: CreateMutation,
+  schema: AppSchema,
+): ChangeRow[] {
+  const hooks = schema.entities[mutation.entity]?.mutations.create.afterCreate ?? [];
+  const changes: ChangeRow[] = [];
+
+  for (const hook of hooks) {
+    changes.push(...executeAfterCreateHook(storage, mutation, schema, hook));
+  }
+
+  return changes;
+}
+
+function executeAfterCreateHook(
+  storage: DurableObjectStorage,
+  mutation: CreateMutation,
+  schema: AppSchema,
+  hook: AfterCreateHookSchema,
+): ChangeRow[] {
+  const action = schema.entities[hook.entity]?.actions?.[hook.action];
+
+  if (action?.kind !== "create-missing-join-records") {
+    throw new Error(
+      `Create hook "${mutation.entity}.${mutation.mutationId}" references unsupported action "${hook.entity}.${hook.action}".`,
+    );
+  }
+
+  const request: ActionRequest = {
+    actionId: mutation.mutationId,
+    entity: hook.entity,
+    action: hook.action,
+  };
+  const values = selectMissingJoinRecordValues(storage, request, schema, action);
+
+  return createRecordsForMutation(storage, mutation.mutationId, hook.entity, values);
+}
+
 function validateMutation(
   value: unknown,
   schema: AppSchema,
   storage: DurableObjectStorage,
-): Mutation | (PatchMutation & { recordValues: RecordValues }) {
+): {
+  mutation?: Mutation | (PatchMutation & { recordValues: RecordValues });
+  replay?: MutationResponse;
+} {
   if (!isRecord(value)) {
     throw new BadRequestError("Mutation must be an object.");
   }
@@ -258,13 +326,7 @@ function validateMutation(
 
   const replay = getMutationResponseById(storage, value.mutationId);
   if (replay) {
-    return {
-      mutationId: value.mutationId,
-      entity: replay.record.entity,
-      op: value.op,
-      ...(value.op === "patch" ? { recordId: replay.record.id } : {}),
-      values: replay.record.values,
-    } as Mutation;
+    return { replay };
   }
 
   if (value.op === "create" && !entity.mutations.create.enabled) {
@@ -301,21 +363,25 @@ function validateMutation(
     );
 
     return {
-      mutationId: value.mutationId,
-      entity: value.entity,
-      op: "patch",
-      recordId: value.recordId,
-      values: patchValues,
-      recordValues,
+      mutation: {
+        mutationId: value.mutationId,
+        entity: value.entity,
+        op: "patch",
+        recordId: value.recordId,
+        values: patchValues,
+        recordValues,
+      },
     };
   }
 
   return {
-    mutationId: value.mutationId,
-    entity: value.entity,
-    op: "create",
-    values: validateRecordValues(value.values, entity, storage),
-  } satisfies CreateMutation;
+    mutation: {
+      mutationId: value.mutationId,
+      entity: value.entity,
+      op: "create",
+      values: validateRecordValues(value.values, entity, storage),
+    } satisfies CreateMutation,
+  };
 }
 
 function validatePatchValues(values: Record<string, unknown>, entity: EntitySchema) {

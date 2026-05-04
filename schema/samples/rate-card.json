@@ -52,7 +52,13 @@
       },
       "mutations": {
         "create": {
-          "enabled": true
+          "enabled": true,
+          "afterCreate": [
+            {
+              "entity": "rate",
+              "action": "regenerateMissingRates"
+            }
+          ]
         },
         "patch": {
           "enabled": true
@@ -100,7 +106,13 @@
       },
       "mutations": {
         "create": {
-          "enabled": true
+          "enabled": true,
+          "afterCreate": [
+            {
+              "entity": "rate",
+              "action": "regenerateMissingRates"
+            }
+          ]
         },
         "patch": {
           "enabled": true
