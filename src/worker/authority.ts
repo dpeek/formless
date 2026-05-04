@@ -5,13 +5,11 @@ import { isDateString } from "../shared/date.ts";
 import {
   parseAppSchema,
   type AppSchema,
-  type AfterCreateHookSchema,
   type EntitySchema,
   type NumberFieldSchema,
 } from "../shared/schema.ts";
 import type {
   ActionRequest,
-  ChangeRow,
   CreateMutation,
   Mutation,
   MutationResponse,
@@ -28,13 +26,12 @@ import {
   getCurrentCursor,
   getMutationResponseById,
   getStoredRecord,
-  createRecordsForMutation,
   patchStoredRecord,
   resetStorage,
   type StorageResetSeed,
   writeActiveSchema,
 } from "./storage.ts";
-import { executeEntityAction, selectMissingJoinRecordValues } from "./actions.ts";
+import { executeCreateAfterCreateHooks, executeEntityAction } from "./actions.ts";
 import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
 import type { Env } from "./index.ts";
 
@@ -116,14 +113,16 @@ export class FormlessAuthority extends DurableObject<Env> {
         }
 
         if (mutation.op === "create") {
-          const response = createStoredRecord(this.ctx.storage, mutation);
-          const afterCreateChanges = executeAfterCreateHooks(this.ctx.storage, mutation, schema);
-
-          return jsonResponse({
-            ...response,
-            changes: [...response.changes, ...afterCreateChanges],
-            cursor: getCurrentCursor(this.ctx.storage),
-          });
+          return jsonResponse(
+            createStoredRecord(this.ctx.storage, mutation, (context) => {
+              executeCreateAfterCreateHooks(
+                context.storage,
+                context.mutation,
+                schema,
+                context.createRecords,
+              );
+            }),
+          );
         }
 
         return jsonResponse(
@@ -254,45 +253,6 @@ function parseCursor(value: string | null) {
   }
 
   return cursor;
-}
-
-function executeAfterCreateHooks(
-  storage: DurableObjectStorage,
-  mutation: CreateMutation,
-  schema: AppSchema,
-): ChangeRow[] {
-  const hooks = schema.entities[mutation.entity]?.mutations.create.afterCreate ?? [];
-  const changes: ChangeRow[] = [];
-
-  for (const hook of hooks) {
-    changes.push(...executeAfterCreateHook(storage, mutation, schema, hook));
-  }
-
-  return changes;
-}
-
-function executeAfterCreateHook(
-  storage: DurableObjectStorage,
-  mutation: CreateMutation,
-  schema: AppSchema,
-  hook: AfterCreateHookSchema,
-): ChangeRow[] {
-  const action = schema.entities[hook.entity]?.actions?.[hook.action];
-
-  if (action?.kind !== "create-missing-join-records") {
-    throw new Error(
-      `Create hook "${mutation.entity}.${mutation.mutationId}" references unsupported action "${hook.entity}.${hook.action}".`,
-    );
-  }
-
-  const request: ActionRequest = {
-    actionId: mutation.mutationId,
-    entity: hook.entity,
-    action: hook.action,
-  };
-  const values = selectMissingJoinRecordValues(storage, request, schema, action);
-
-  return createRecordsForMutation(storage, mutation.mutationId, hook.entity, values);
 }
 
 function validateMutation(

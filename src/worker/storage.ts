@@ -54,6 +54,18 @@ export type StorageResetSeed = {
   changeMutationPrefix?: string;
 };
 
+export type CreateMutationCausedRecordWriter = (
+  entity: string,
+  recordValuesToCreate: RecordValues[],
+) => void;
+
+type ApplyCreateMutationSideEffects = (context: {
+  storage: DurableObjectStorage;
+  mutation: CreateMutation;
+  record: StoredRecord;
+  createRecords: CreateMutationCausedRecordWriter;
+}) => void;
+
 export function ensureStorageTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS records (
@@ -226,6 +238,7 @@ export function getChangesAfter(storage: DurableObjectStorage, after: number): C
 export function createStoredRecord(
   storage: DurableObjectStorage,
   mutation: CreateMutation,
+  applySideEffects?: ApplyCreateMutationSideEffects,
 ): MutationResponse {
   return storage.transactionSync(() => {
     const existingResponse = getMutationResponseById(storage, mutation.mutationId);
@@ -235,47 +248,38 @@ export function createStoredRecord(
     }
 
     const createdAt = nowIsoString();
-    const record: StoredRecord = {
-      id: createRecordId(),
-      entity: mutation.entity,
-      values: mutation.values,
-      createdAt,
-    };
-
-    storage.sql.exec(
-      `
-        INSERT INTO records (id, entity, values_json, created_at)
-        VALUES (?, ?, ?, ?)
-      `,
-      record.id,
-      record.entity,
-      JSON.stringify(record.values),
-      record.createdAt,
-    );
-
-    storage.sql.exec(
-      `
-        INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
+    const record = insertCreatedRecordChange(
+      storage,
       mutation.mutationId,
       mutation.op,
       mutation.entity,
-      record.id,
-      JSON.stringify(record),
+      mutation.values,
       createdAt,
     );
 
-    const change = findLatestChangeForRecord(storage, mutation.mutationId, record.id);
+    applySideEffects?.({
+      storage,
+      mutation,
+      record,
+      createRecords: (entity, recordValuesToCreate) => {
+        insertCreatedRecordChanges(
+          storage,
+          mutation.mutationId,
+          "action",
+          entity,
+          recordValuesToCreate,
+          nowIsoString(),
+        );
+      },
+    });
 
-    if (!change) {
-      throw new Error(`Could not read create change for record "${record.id}".`);
-    }
+    const changes = findChangesByMutationId(storage, mutation.mutationId);
+    const cursor = changes.at(-1)?.seq ?? getCurrentCursor(storage);
 
     return {
       record,
-      changes: [change],
-      cursor: getCurrentCursor(storage),
+      changes,
+      cursor,
       mutationId: mutation.mutationId,
     };
   });
@@ -502,56 +506,59 @@ export function createRecordsForAction(
   });
 }
 
-export function createRecordsForMutation(
+function insertCreatedRecordChanges(
   storage: DurableObjectStorage,
   mutationId: string,
+  op: "create" | "action",
   entity: string,
   recordValuesToCreate: RecordValues[],
-): ChangeRow[] {
-  return storage.transactionSync(() => {
-    const createdAt = nowIsoString();
-    const changes: ChangeRow[] = [];
+  createdAt: string,
+): StoredRecord[] {
+  return recordValuesToCreate.map((values) =>
+    insertCreatedRecordChange(storage, mutationId, op, entity, values, createdAt),
+  );
+}
 
-    for (const values of recordValuesToCreate) {
-      const record: StoredRecord = {
-        id: createRecordId(),
-        entity,
-        values,
-        createdAt,
-      };
+function insertCreatedRecordChange(
+  storage: DurableObjectStorage,
+  mutationId: string,
+  op: "create" | "action",
+  entity: string,
+  values: RecordValues,
+  createdAt: string,
+): StoredRecord {
+  const record: StoredRecord = {
+    id: createRecordId(),
+    entity,
+    values,
+    createdAt,
+  };
 
-      storage.sql.exec(
-        `
-          INSERT INTO records (id, entity, values_json, created_at)
-          VALUES (?, ?, ?, ?)
-        `,
-        record.id,
-        record.entity,
-        JSON.stringify(record.values),
-        record.createdAt,
-      );
+  storage.sql.exec(
+    `
+      INSERT INTO records (id, entity, values_json, created_at)
+      VALUES (?, ?, ?, ?)
+    `,
+    record.id,
+    record.entity,
+    JSON.stringify(record.values),
+    record.createdAt,
+  );
 
-      storage.sql.exec(
-        `
-          INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-        mutationId,
-        "action",
-        entity,
-        record.id,
-        JSON.stringify(record),
-        createdAt,
-      );
+  storage.sql.exec(
+    `
+      INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    mutationId,
+    op,
+    entity,
+    record.id,
+    JSON.stringify(record),
+    createdAt,
+  );
 
-      const change = findLatestChangeForRecord(storage, mutationId, record.id);
-      if (change) {
-        changes.push(change);
-      }
-    }
-
-    return changes;
-  });
+  return record;
 }
 
 export function getActionResponseById(

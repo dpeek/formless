@@ -149,6 +149,59 @@ describe("storage", () => {
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(1);
   });
 
+  it("commits create side effects in the same mutation response", async () => {
+    const body = {
+      mutation: {
+        mutationId: "mutation-1",
+        entity: "task",
+        op: "create",
+        values: { title: "First", done: false },
+      },
+      caused: [
+        {
+          entity: "task",
+          values: [{ title: "Lifecycle", done: false }],
+        },
+      ],
+    };
+
+    const first = await postJson<MutationResponse>("/create-with-side-effects", body);
+    const replay = await postJson<MutationResponse>("/create-with-side-effects", {
+      ...body,
+      fail: true,
+    });
+
+    expect(first.cursor).toBe(2);
+    expect(first.changes.map((change) => change.op)).toEqual(["create", "action"]);
+    expect(first.changes.map((change) => change.seq)).toEqual([1, 2]);
+    expect(first.changes[0]?.payload).toEqual(first.record);
+    expect(first.changes[1]?.payload.values).toEqual({ title: "Lifecycle", done: false });
+    expect(await getJson<unknown[]>("/records")).toHaveLength(2);
+    expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
+    expect(replay).toEqual(first);
+  });
+
+  it("rolls back the primary create when a side effect fails", async () => {
+    const response = await harness.fetch("/create-with-side-effects", {
+      body: JSON.stringify({
+        mutation: {
+          mutationId: "mutation-1",
+          entity: "task",
+          op: "create",
+          values: { title: "First", done: false },
+        },
+        fail: true,
+      }),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "side effect failed" });
+    expect(await getJson<unknown[]>("/records")).toEqual([]);
+    expect(await getJson<unknown[]>("/changes?after=0")).toEqual([]);
+    expect(await getJson<number>("/cursor")).toBe(0);
+  });
+
   it("returns only changes after the requested cursor", async () => {
     await createRecord("mutation-1", "First");
     const second = await createRecord("mutation-2", "Second");
@@ -392,6 +445,29 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/create") {
             return Response.json(createStoredRecord(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/create-with-side-effects") {
+            const body = await request.json();
+
+            try {
+              return Response.json(
+                createStoredRecord(this.ctx.storage, body.mutation, ({ createRecords }) => {
+                  if (body.fail) {
+                    throw new Error("side effect failed");
+                  }
+
+                  for (const caused of body.caused ?? []) {
+                    createRecords(caused.entity, caused.values);
+                  }
+                }),
+              );
+            } catch (error) {
+              return Response.json(
+                { error: error instanceof Error ? error.message : "Unknown error." },
+                { status: 500 },
+              );
+            }
           }
 
           if (request.method === "POST" && url.pathname === "/patch") {

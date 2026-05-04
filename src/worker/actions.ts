@@ -1,13 +1,21 @@
 import type {
   ActionRequest,
   ActionResponse,
+  CreateMutation,
   RecordValues,
   StoredRecord,
 } from "../shared/protocol.ts";
 import { matchesQuery } from "../shared/query.ts";
-import type { AppSchema, EntityActionSchema, EntitySchema, FieldSchema } from "../shared/schema.ts";
+import type {
+  AfterCreateHookSchema,
+  AppSchema,
+  EntityActionSchema,
+  EntitySchema,
+  FieldSchema,
+} from "../shared/schema.ts";
 import {
   createRecordsForAction,
+  type CreateMutationCausedRecordWriter,
   getActionResponseById,
   getActiveRecordsByEntity,
   tombstoneRecordsForAction,
@@ -44,6 +52,44 @@ export function executeEntityAction(
   }
 
   throw new Error(`Unsupported action "${request.action}".`);
+}
+
+export function executeCreateAfterCreateHooks(
+  storage: DurableObjectStorage,
+  mutation: CreateMutation,
+  schema: AppSchema,
+  createRecords: CreateMutationCausedRecordWriter,
+) {
+  const hooks = schema.entities[mutation.entity]?.mutations.create.afterCreate ?? [];
+
+  for (const hook of hooks) {
+    executeCreateAfterCreateHook(storage, mutation, schema, hook, createRecords);
+  }
+}
+
+function executeCreateAfterCreateHook(
+  storage: DurableObjectStorage,
+  mutation: CreateMutation,
+  schema: AppSchema,
+  hook: AfterCreateHookSchema,
+  createRecords: CreateMutationCausedRecordWriter,
+) {
+  const action = schema.entities[hook.entity]?.actions?.[hook.action];
+
+  if (action?.kind !== "create-missing-join-records") {
+    throw new Error(
+      `Create hook "${mutation.entity}.${mutation.mutationId}" references unsupported action "${hook.entity}.${hook.action}".`,
+    );
+  }
+
+  const request: ActionRequest = {
+    actionId: mutation.mutationId,
+    entity: hook.entity,
+    action: hook.action,
+  };
+  const values = selectMissingJoinRecordValues(storage, request, schema, action);
+
+  createRecords(hook.entity, values);
 }
 
 function selectActionTargetRecords(
