@@ -75,6 +75,8 @@ export type HomeContextConfig = {
   query: QueryExpression;
   labelField: string;
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
+  itemViewName?: string;
+  recordFields?: RecordFieldConfig[];
 };
 
 export type HomeViewModel = {
@@ -170,6 +172,15 @@ function selectContext(
           contextEntity,
           `Create ${contextEntity.label}`,
         );
+  const itemViewName = collectionView.context.itemView;
+  const itemView = itemViewName === undefined ? undefined : schema.itemViews[itemViewName];
+
+  if (itemViewName !== undefined && itemView === undefined) {
+    throw new Error(`Missing context item view "${itemViewName}".`);
+  }
+
+  const recordFields =
+    itemView === undefined ? undefined : selectRecordFields(itemView, contextEntity);
 
   return {
     name: collectionView.context.name,
@@ -179,6 +190,12 @@ function selectContext(
     query: contextQuery.expression,
     labelField: collectionView.context.labelField,
     ...(createAction === undefined ? {} : { createAction }),
+    ...(itemViewName === undefined
+      ? {}
+      : {
+          itemViewName,
+          recordFields,
+        }),
   };
 }
 

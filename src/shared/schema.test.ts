@@ -1003,6 +1003,7 @@ describe("schema collection views", () => {
         query: "cardAll",
         labelField: "name",
         createView: "cardCreate",
+        itemView: "cardListItem",
       },
       queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
       defaultQuery: "ratesForSelectedCard",
@@ -1084,6 +1085,38 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow("labelField must reference a text field");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              itemView: "missing",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context itemView references unknown item view "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              itemView: "rateListItem",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context itemView "rateListItem" must use entity "card"');
   });
 
   it("validates context create views separately from collection create actions", () => {
@@ -1402,6 +1435,9 @@ describe("rate-card sample schema", () => {
     ]);
     expect(schema.views.rateHome).toMatchObject({
       type: "collection",
+      context: {
+        itemView: "cardListItem",
+      },
       result: { type: "table", tableView: "rateTable" },
       actions: [
         { type: "create", createView: "rateCreateForCard" },
@@ -1999,6 +2035,16 @@ function scopedRateQueries() {
 
 function scopedRateItemViews() {
   return {
+    cardListItem: {
+      entity: "card",
+      fields: {
+        name: { editor: "text", commit: "field-commit" },
+        isDefault: { editor: "boolean", commit: "immediate" },
+        marginMin: { editor: "number", commit: "field-commit" },
+        marginMed: { editor: "number", commit: "field-commit" },
+        marginMax: { editor: "number", commit: "field-commit" },
+      },
+    },
     rateListItem: {
       entity: "rate",
       fields: {
@@ -2078,6 +2124,7 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
         query: "cardAll",
         labelField: "name",
         createView: "cardCreate",
+        itemView: "cardListItem",
       },
       queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
       defaultQuery: "ratesForSelectedCard",

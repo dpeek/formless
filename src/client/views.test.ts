@@ -185,6 +185,14 @@ describe("home view model collections", () => {
       queryName: "cardAll",
       query: rateCardSchema.queries.cardAll?.expression,
       labelField: "name",
+      itemViewName: "cardListItem",
+      recordFields: [
+        { fieldName: "name" },
+        { fieldName: "isDefault" },
+        { fieldName: "marginMin" },
+        { fieldName: "marginMed" },
+        { fieldName: "marginMax" },
+      ],
       createAction: {
         type: "create",
         label: "Create Rate card",

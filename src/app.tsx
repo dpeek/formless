@@ -773,40 +773,44 @@ function ContextSelector({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   return (
-    <section className="flex flex-wrap items-end gap-3 border-b border-slate-200 pb-4">
-      <Field className="min-w-60 flex-1">
-        <Label>{context.entity.label}</Label>
-        <NativeSelect
-          className="w-full"
-          disabled={options.length === 0}
-          onChange={(event) => onSelectContext?.(event.currentTarget.value || null)}
-          value={selectedContextRecordId ?? ""}
-        >
-          {options.length === 0 ? <NativeSelectOption value="" /> : null}
-          {options.map((option) => (
-            <NativeSelectOption key={option.id} value={option.id}>
-              {option.label}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
+    <section className="space-y-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field className="min-w-60 flex-1">
+          <Label>{context.entity.label}</Label>
+          <NativeSelect
+            className="w-full"
+            disabled={options.length === 0}
+            onChange={(event) => onSelectContext?.(event.currentTarget.value || null)}
+            value={selectedContextRecordId ?? ""}
+          >
+            {options.length === 0 ? <NativeSelectOption value="" /> : null}
+            {options.map((option) => (
+              <NativeSelectOption key={option.id} value={option.id}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
 
-      {context.createAction ? (
-        <Button
-          disabled={!context.createAction.enabled}
-          onClick={() => setCreateDialogOpen(true)}
-          type="button"
-          variant="outline"
-        >
-          {context.createAction.enabled ? context.createAction.label : "Create disabled"}
-        </Button>
-      ) : null}
+        {context.createAction ? (
+          <Button
+            disabled={!context.createAction.enabled}
+            onClick={() => setCreateDialogOpen(true)}
+            type="button"
+            variant="outline"
+          >
+            {context.createAction.enabled ? context.createAction.label : "Create disabled"}
+          </Button>
+        ) : null}
+      </div>
 
       {options.length === 0 ? (
-        <p className="basis-full text-sm text-slate-600">
+        <p className="text-sm text-slate-600">
           No {context.entity.label.toLowerCase()} records yet.
         </p>
       ) : null}
+
+      <ContextRecordEditor context={context} recordId={selectedContextRecordId} />
 
       {context.createAction && createDialogOpen ? (
         <GeneratedCreateDialog
@@ -820,6 +824,35 @@ function ContextSelector({
         />
       ) : null}
     </section>
+  );
+}
+
+function ContextRecordEditor({
+  context,
+  recordId,
+}: {
+  context: HomeContextConfig;
+  recordId: string | null;
+}) {
+  const recordFields = context.recordFields ?? [];
+
+  if (!recordId || recordFields.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-3 pt-1">
+      {recordFields.map((fieldConfig) => (
+        <RecordFieldEditor
+          canPatch={context.entity.mutations.patch.enabled}
+          entityName={context.entityName}
+          fieldConfig={fieldConfig}
+          key={fieldConfig.fieldName}
+          recordId={recordId}
+          showLabel={true}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -1355,15 +1388,18 @@ function RecordFieldEditor({
   entityName,
   fieldConfig,
   recordId,
+  showLabel = false,
 }: {
   canPatch: boolean;
   density?: "default" | "compact";
   entityName: string;
   fieldConfig: RecordFieldConfig;
   recordId: string;
+  showLabel?: boolean;
 }) {
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
+  const labelClass = showLabel ? "text-xs font-medium text-slate-600" : "sr-only";
   const recordValue = useRecordField(recordId, fieldName);
   const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
   const [isPending, setIsPending] = useState(false);
@@ -1404,6 +1440,28 @@ function RecordFieldEditor({
   }
 
   if (editor === "boolean") {
+    if (showLabel) {
+      return (
+        <div className="min-w-28 flex-none space-y-1">
+          <Label className={labelClass}>{label}</Label>
+          <Field orientation="horizontal">
+            <Checkbox
+              aria-label={label}
+              checked={recordValue === true}
+              className="size-4 rounded border-slate-300"
+              disabled={!canPatch || isPending}
+              onCheckedChange={(checked) => {
+                if (commitPolicy === "immediate") {
+                  void commit(checked);
+                }
+              }}
+            />
+            {error ? <FieldError>{error}</FieldError> : null}
+          </Field>
+        </div>
+      );
+    }
+
     return (
       <div className={`${density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}>
         <Field orientation="horizontal">
@@ -1434,7 +1492,7 @@ function RecordFieldEditor({
         }
       >
         <Field>
-          <Label className="sr-only">{label}</Label>
+          <Label className={labelClass}>{label}</Label>
           <NativeSelect
             aria-label={label}
             className="w-full"
@@ -1475,6 +1533,7 @@ function RecordFieldEditor({
         field={field}
         isPending={isPending}
         label={label}
+        labelClass={labelClass}
         onCommit={commit}
         onDraftChange={setDraft}
       />
@@ -1505,7 +1564,7 @@ function RecordFieldEditor({
       }
     >
       <Field>
-        <Label className="sr-only">{label}</Label>
+        <Label className={labelClass}>{label}</Label>
         <Input
           aria-label={label}
           className={
@@ -1540,6 +1599,7 @@ function RecordReferenceEditor({
   field,
   isPending,
   label,
+  labelClass,
   onCommit,
   onDraftChange,
 }: {
@@ -1550,6 +1610,7 @@ function RecordReferenceEditor({
   field: Extract<FieldSchema, { type: "reference" }>;
   isPending: boolean;
   label: string;
+  labelClass: string;
   onCommit: (value: FieldValue) => Promise<void>;
   onDraftChange: (value: string) => void;
 }) {
@@ -1564,7 +1625,7 @@ function RecordReferenceEditor({
       }
     >
       <Field>
-        <Label className="sr-only">{label}</Label>
+        <Label className={labelClass}>{label}</Label>
         <NativeSelect
           aria-label={label}
           className="w-full"

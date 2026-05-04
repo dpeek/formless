@@ -137,6 +137,7 @@ export type CollectionContextSchema = {
   query: string;
   labelField: string;
   createView?: string;
+  itemView?: string;
 };
 
 export type CollectionActionSlotSchema =
@@ -820,7 +821,7 @@ function parseCollectionView(
     throw new Error(`Collection view "${viewName}" references unknown entity "${value.entity}".`);
   }
 
-  const context = parseCollectionContext(viewName, value.context, entities, queries);
+  const context = parseCollectionContext(viewName, value.context, entities, queries, itemViews);
   const querySlots = parseCollectionViewQuerySlots(
     viewName,
     value.entity,
@@ -926,6 +927,7 @@ function parseCollectionContext(
   value: unknown,
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
+  itemViews: Record<string, ItemViewSchema>,
 ): CollectionContextSchema | undefined {
   if (value === undefined) {
     return undefined;
@@ -937,13 +939,19 @@ function parseCollectionContext(
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, ["name", "entity", "query", "labelField"], ["createView"]);
+  assertExactKeys(
+    context,
+    value,
+    ["name", "entity", "query", "labelField"],
+    ["createView", "itemView"],
+  );
 
   const name = parseRequiredNonEmptyString(`${context} name`, value.name);
   const entityName = parseRequiredNonEmptyString(`${context} entity`, value.entity);
   const queryName = parseRequiredNonEmptyString(`${context} query`, value.query);
   const labelField = parseRequiredNonEmptyString(`${context} labelField`, value.labelField);
   const createView = parseOptionalNonEmptyString(`${context} createView`, value.createView);
+  const itemViewName = parseOptionalNonEmptyString(`${context} itemView`, value.itemView);
   const entity = entities[entityName];
 
   if (!entity) {
@@ -975,12 +983,25 @@ function parseCollectionContext(
     throw new Error(`${context} labelField must reference a text field.`);
   }
 
+  if (itemViewName !== undefined) {
+    const itemView = itemViews[itemViewName];
+
+    if (!itemView) {
+      throw new Error(`${context} itemView references unknown item view "${itemViewName}".`);
+    }
+
+    if (itemView.entity !== entityName) {
+      throw new Error(`${context} itemView "${itemViewName}" must use entity "${entityName}".`);
+    }
+  }
+
   return {
     name,
     entity: entityName,
     query: queryName,
     labelField,
     ...(createView === undefined ? {} : { createView }),
+    ...(itemViewName === undefined ? {} : { itemView: itemViewName }),
   };
 }
 

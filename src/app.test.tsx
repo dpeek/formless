@@ -255,6 +255,92 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="900"');
   });
 
+  it("renders selected card context fields from the context item view", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    applyBootstrapResponse(
+      bootstrap([cardRecord("card-1", "Default"), cardRecord("card-2", "Backup")], rateCardSchema),
+    );
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId="card-2"
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-01"
+      />,
+    );
+
+    expect(html).toContain('aria-label="Name"');
+    expect(html).toContain('value="Backup"');
+    expect(html).toContain('aria-label="Default"');
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('aria-label="Minimum margin"');
+    expect(html).toContain('aria-label="Medium margin"');
+    expect(html).toContain('aria-label="Maximum margin"');
+    expect(html).toContain('value="0.4"');
+    expect(html).toContain('value="0.5"');
+    expect(html).toContain('value="0.6"');
+  });
+
+  it("does not render context item fields when no context record is selected", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    applyBootstrapResponse(bootstrap([], rateCardSchema));
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId={null}
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-01"
+      />,
+    );
+
+    expect(html).toContain("No rate card records yet.");
+    expect(html).not.toContain('aria-label="Minimum margin"');
+    expect(html).not.toContain('aria-label="Medium margin"');
+    expect(html).not.toContain('aria-label="Maximum margin"');
+  });
+
   it("changes visible table rows when the selected card changes", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",

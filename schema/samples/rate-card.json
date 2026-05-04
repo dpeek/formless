@@ -449,7 +449,8 @@
         "entity": "card",
         "query": "cardAll",
         "labelField": "name",
-        "createView": "cardCreate"
+        "createView": "cardCreate",
+        "itemView": "cardListItem"
       },
       "queries": [
         {
