@@ -19,8 +19,8 @@ import {
   resetClientStore,
 } from "./client/store.ts";
 import {
-  selectHomeModel,
   selectCollectionModels,
+  selectPrimaryCollectionModels,
   type CreateFieldConfig,
   type HomeActionConfig,
   type RecordFieldConfig,
@@ -102,7 +102,7 @@ describe("generated collection home", () => {
 
   it("renders the selected list through the shared task item view", () => {
     const task = appSchema.entities.task;
-    const model = selectHomeModel(appSchema);
+    const model = selectPrimaryCollectionModels(appSchema)[0];
     const record: StoredRecord = taskRecord("record-1", "First", true, "2026-05-01");
 
     applyBootstrapResponse(bootstrap([record]));
@@ -148,7 +148,7 @@ describe("generated collection home", () => {
   });
 
   it("renders seeded task records with useful query and action counts", () => {
-    const model = selectHomeModel(appSchema);
+    const model = selectPrimaryCollectionModels(appSchema)[0];
 
     applyBootstrapResponse(bootstrap(taskSeedRecords));
     const html = renderToStaticMarkup(
@@ -185,15 +185,15 @@ describe("generated collection home", () => {
     expect(html).toMatch(/aria-label="Clear completed target count"[^>]*>1</);
   });
 
-  it("renders collection switching for a multi-collection schema", () => {
-    applyBootstrapResponse(bootstrap([], rateCardSchema));
+  it("renders only primary rate-card collection navigation", () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema));
     const html = renderRoute("/");
 
-    expect(html).toContain('aria-label="Collections"');
-    expect(html).toContain("Resources");
-    expect(html).toContain("Rate cards");
+    expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain("Rates");
-    expect(html).toContain("Create Resource");
+    expect(html).toContain("Create Rate");
+    expect(html).toContain("Regenerate missing rates");
+    expect(html).not.toContain("Create Resource");
   });
 
   it("renders the scoped rate-card collection with a card selector", () => {
@@ -883,7 +883,7 @@ describe("generated forms and records", () => {
 
   it("filters records through the selected query and hides tombstones", () => {
     const task = appSchema.entities.task;
-    const model = selectHomeModel(appSchema);
+    const model = selectPrimaryCollectionModels(appSchema)[0];
     const active = taskRecord("record-1", "Open", false);
     const deletedCompleted = {
       ...taskRecord("record-2", "Finished", true),

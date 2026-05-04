@@ -940,6 +940,25 @@ describe("schema collection views", () => {
     });
   });
 
+  it("parses collection primary navigation hints", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        views: {
+          ...defaultViews(),
+          taskHome: {
+            ...defaultCollectionView(),
+            navigation: { primary: true },
+          },
+        },
+      }),
+    );
+
+    expect(schema.views.taskHome).toMatchObject({
+      type: "collection",
+      navigation: { primary: true },
+    });
+  });
+
   it("rejects collection query and result entity mismatches", () => {
     expect(() =>
       parseAppSchema(
@@ -1030,6 +1049,50 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow('references unknown action "missing"');
+  });
+
+  it("validates collection primary navigation hints", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          views: {
+            ...defaultViews(),
+            taskHome: {
+              ...defaultCollectionView(),
+              navigation: "hidden",
+            },
+          },
+        }),
+      ),
+    ).toThrow('Collection view "taskHome" navigation must be an object.');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          views: {
+            ...defaultViews(),
+            taskHome: {
+              ...defaultCollectionView(),
+              navigation: { primary: "no" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('Collection view "taskHome" navigation primary must be a boolean.');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          views: {
+            ...defaultViews(),
+            taskHome: {
+              ...defaultCollectionView(),
+              navigation: { primary: false },
+            },
+          },
+        }),
+      ),
+    ).toThrow("Schema must define at least one primary collection view.");
   });
 
   it("accepts collection contexts and context-bound child queries", () => {
@@ -1479,8 +1542,17 @@ describe("rate-card sample schema", () => {
       display: "readOnly",
       referenceItemView: "resourceListItem",
     });
+    expect(schema.views.resourceHome).toMatchObject({
+      type: "collection",
+      navigation: { primary: false },
+    });
+    expect(schema.views.cardHome).toMatchObject({
+      type: "collection",
+      navigation: { primary: false },
+    });
     expect(schema.views.rateHome).toMatchObject({
       type: "collection",
+      navigation: { primary: true },
       context: {
         itemView: "cardListItem",
       },

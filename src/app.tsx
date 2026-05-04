@@ -33,7 +33,7 @@ import type {
   RecordFieldConfig,
   TableColumnConfig,
 } from "./client/views.ts";
-import { fieldLabel, selectCollectionModels } from "./client/views.ts";
+import { fieldLabel, selectPrimaryCollectionModels } from "./client/views.ts";
 import { todayDateString } from "./shared/date.ts";
 import {
   parseAppSchema,
@@ -71,7 +71,10 @@ type CountedEntityHomeActionConfig = EntityHomeActionConfig & {
 
 function HomeRoute() {
   const schema = useSchema();
-  const collectionModels = useMemo(() => (schema ? selectCollectionModels(schema) : []), [schema]);
+  const collectionModels = useMemo(
+    () => (schema ? selectPrimaryCollectionModels(schema) : []),
+    [schema],
+  );
   const [selectedViewName, setSelectedViewName] = useState<string | null>(null);
   const homeModel =
     collectionModels.find((model) => model.viewName === selectedViewName) ?? collectionModels[0];

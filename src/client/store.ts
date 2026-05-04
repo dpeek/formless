@@ -1,7 +1,6 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { listenForClientEvents } from "./broadcast.ts";
 import { readLocalSnapshot, type LocalSnapshot } from "./db.ts";
-import { selectHomeModel, type HomeViewModel } from "./views.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { BootstrapResponse, ChangeRow, FieldValue, StoredRecord } from "../shared/protocol.ts";
 import {
@@ -21,10 +20,6 @@ export type NormalizedClientState = {
   lastSyncedAt: string | null;
 };
 
-export type ClientStoreState = NormalizedClientState & {
-  homeViewModel: HomeViewModel | undefined;
-};
-
 export type ReferenceOption = {
   id: string;
   label: string;
@@ -38,7 +33,7 @@ const EMPTY_RECORD_IDS: string[] = [];
 const EMPTY_REFERENCE_OPTIONS: ReferenceOption[] = [];
 const listeners = new Set<StoreListener>();
 
-let state: ClientStoreState = withDerivedState({
+let state: NormalizedClientState = {
   hydrated: false,
   schema: null,
   schemaUpdatedAt: null,
@@ -46,7 +41,7 @@ let state: ClientStoreState = withDerivedState({
   recordIdsByEntity: {},
   cursor: 0,
   lastSyncedAt: null,
-});
+};
 
 export function getClientStoreSnapshot(): NormalizedClientState {
   return state;
@@ -61,7 +56,7 @@ export function subscribeToClientStore(listener: StoreListener) {
 }
 
 export function subscribeToClientStoreSelector<T>(
-  selector: (snapshot: ClientStoreState) => T,
+  selector: (snapshot: NormalizedClientState) => T,
   listener: (selectedValue: T) => void,
 ) {
   let selectedValue = selector(state);
@@ -79,17 +74,15 @@ export function subscribeToClientStoreSelector<T>(
 }
 
 export function resetClientStore() {
-  setState(
-    withDerivedState({
-      hydrated: false,
-      schema: null,
-      schemaUpdatedAt: null,
-      recordsById: {},
-      recordIdsByEntity: {},
-      cursor: 0,
-      lastSyncedAt: null,
-    }),
-  );
+  setState({
+    hydrated: false,
+    schema: null,
+    schemaUpdatedAt: null,
+    recordsById: {},
+    recordIdsByEntity: {},
+    cursor: 0,
+    lastSyncedAt: null,
+  });
 }
 
 export async function hydrateClientStore() {
@@ -101,31 +94,24 @@ export async function refreshClientStoreFromDb() {
 }
 
 export function applyBootstrapResponse(response: BootstrapResponse) {
-  setState(
-    withDerivedState({
-      hydrated: true,
-      schema: response.schema,
-      schemaUpdatedAt: response.schemaUpdatedAt,
-      recordsById: recordsById(sortRecords(response.records)),
-      recordIdsByEntity: recordIdsByEntity(sortRecords(response.records)),
-      cursor: response.cursor,
-      lastSyncedAt: nowIsoString(),
-    }),
-  );
+  setState({
+    hydrated: true,
+    schema: response.schema,
+    schemaUpdatedAt: response.schemaUpdatedAt,
+    recordsById: recordsById(sortRecords(response.records)),
+    recordIdsByEntity: recordIdsByEntity(sortRecords(response.records)),
+    cursor: response.cursor,
+    lastSyncedAt: nowIsoString(),
+  });
 }
 
 export function applySchemaSave(schema: AppSchema, schemaUpdatedAt: string) {
-  updateState((current) =>
-    withDerivedState(
-      {
-        ...current,
-        schema,
-        schemaUpdatedAt,
-        lastSyncedAt: nowIsoString(),
-      },
-      current,
-    ),
-  );
+  updateState((current) => ({
+    ...current,
+    schema,
+    schemaUpdatedAt,
+    lastSyncedAt: nowIsoString(),
+  }));
 }
 
 export function applyChanges(changes: ChangeRow[], cursor: number) {
@@ -162,16 +148,13 @@ export function applyRecordMerge(recordsToMerge: StoredRecord[], cursor?: number
       return current;
     }
 
-    return withDerivedState(
-      {
-        ...current,
-        recordsById: recordsByIdChanged ? nextRecordsById : current.recordsById,
-        recordIdsByEntity,
-        cursor: cursor ?? current.cursor,
-        lastSyncedAt: hasLastSyncedAtUpdate ? nowIsoString() : current.lastSyncedAt,
-      },
-      current,
-    );
+    return {
+      ...current,
+      recordsById: recordsByIdChanged ? nextRecordsById : current.recordsById,
+      recordIdsByEntity,
+      cursor: cursor ?? current.cursor,
+      lastSyncedAt: hasLastSyncedAtUpdate ? nowIsoString() : current.lastSyncedAt,
+    };
   });
 }
 
@@ -181,10 +164,6 @@ export function useHydrated() {
 
 export function useSchema() {
   return useClientStoreSelector((snapshot) => snapshot.schema);
-}
-
-export function useHomeViewModel() {
-  return useClientStoreSelector((snapshot) => snapshot.homeViewModel);
 }
 
 export function useEntityRecordIds(entityName: string) {
@@ -279,7 +258,7 @@ export function connectBroadcastToClientStore() {
   });
 }
 
-function useClientStoreSelector<T>(selector: (snapshot: ClientStoreState) => T) {
+function useClientStoreSelector<T>(selector: (snapshot: NormalizedClientState) => T) {
   return useSyncExternalStore(
     (listener) => subscribeToClientStoreSelector(selector, listener),
     () => selector(state),
@@ -288,27 +267,22 @@ function useClientStoreSelector<T>(selector: (snapshot: ClientStoreState) => T) 
 }
 
 function applyLocalSnapshot(snapshot: LocalSnapshot) {
-  updateState((current) =>
-    withDerivedState(
-      {
-        hydrated: true,
-        schema: reuseSchema(current.schema, snapshot.schema),
-        schemaUpdatedAt: snapshot.schemaUpdatedAt,
-        recordsById: reconcileRecordsById(current.recordsById, snapshot.records),
-        recordIdsByEntity: reconcileRecordIdsByEntity(current.recordIdsByEntity, snapshot.records),
-        cursor: snapshot.cursor,
-        lastSyncedAt: snapshot.lastSyncedAt,
-      },
-      current,
-    ),
-  );
+  updateState((current) => ({
+    hydrated: true,
+    schema: reuseSchema(current.schema, snapshot.schema),
+    schemaUpdatedAt: snapshot.schemaUpdatedAt,
+    recordsById: reconcileRecordsById(current.recordsById, snapshot.records),
+    recordIdsByEntity: reconcileRecordIdsByEntity(current.recordIdsByEntity, snapshot.records),
+    cursor: snapshot.cursor,
+    lastSyncedAt: snapshot.lastSyncedAt,
+  }));
 }
 
-function updateState(getNextState: (current: ClientStoreState) => ClientStoreState) {
+function updateState(getNextState: (current: NormalizedClientState) => NormalizedClientState) {
   setState(getNextState(state));
 }
 
-function setState(nextState: ClientStoreState) {
+function setState(nextState: NormalizedClientState) {
   if (nextState === state || normalizedStatesEqual(state, nextState)) {
     return;
   }
@@ -321,21 +295,6 @@ function emit() {
   for (const listener of listeners) {
     listener();
   }
-}
-
-function withDerivedState(
-  state: NormalizedClientState,
-  previousState?: ClientStoreState,
-): ClientStoreState {
-  return {
-    ...state,
-    homeViewModel:
-      previousState?.schema === state.schema
-        ? previousState.homeViewModel
-        : state.schema
-          ? selectHomeModel(state.schema)
-          : undefined,
-  };
 }
 
 function createEntityRecordIdsMatchingQuerySelector(
@@ -576,7 +535,7 @@ function reconcileRecordIdsByEntity(
   return changed ? reconciledIdsByEntity : existingIdsByEntity;
 }
 
-function normalizedStatesEqual(left: ClientStoreState, right: ClientStoreState) {
+function normalizedStatesEqual(left: NormalizedClientState, right: NormalizedClientState) {
   return (
     left.hydrated === right.hydrated &&
     left.schema === right.schema &&
@@ -584,8 +543,7 @@ function normalizedStatesEqual(left: ClientStoreState, right: ClientStoreState) 
     left.recordsById === right.recordsById &&
     left.recordIdsByEntity === right.recordIdsByEntity &&
     left.cursor === right.cursor &&
-    left.lastSyncedAt === right.lastSyncedAt &&
-    left.homeViewModel === right.homeViewModel
+    left.lastSyncedAt === right.lastSyncedAt
   );
 }
 

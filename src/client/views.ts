@@ -1,5 +1,6 @@
 import type {
   AppSchema,
+  CollectionNavigationSchema,
   CollectionViewSchema,
   CountDisplaySchema,
   CreateDefaultValueSchema,
@@ -90,6 +91,7 @@ export type HomeViewModel = {
   label: string;
   entityName: string;
   entity: EntitySchema;
+  navigation: CollectionNavigationSchema;
   context?: HomeContextConfig;
   queryTabs: HomeQueryTabConfig[];
   defaultQueryName: string;
@@ -117,8 +119,8 @@ export type HomeActionConfig =
       count?: CountDisplaySchema;
     };
 
-export function selectHomeModel(schema: AppSchema): HomeViewModel | undefined {
-  return selectCollectionModels(schema)[0];
+export function selectPrimaryCollectionModels(schema: AppSchema): HomeViewModel[] {
+  return selectCollectionModels(schema).filter((model) => model.navigation.primary);
 }
 
 export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
@@ -139,6 +141,9 @@ export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
       label: collectionView.label,
       entityName: collectionView.entity,
       entity,
+      navigation: {
+        primary: collectionView.navigation?.primary ?? true,
+      },
       context: selectContext(schema, viewEntries, collectionView),
       queryTabs: selectQueryTabs(schema, collectionView),
       defaultQueryName: collectionView.defaultQuery,

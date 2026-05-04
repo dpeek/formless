@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/samples/rate-card.json";
 import { appSchema } from "./schema.ts";
-import { selectCollectionModels, selectHomeModel } from "./views.ts";
+import { selectCollectionModels, selectPrimaryCollectionModels } from "./views.ts";
 import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
 
 const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
 describe("home view model collections", () => {
   it("selects the task collection and resolves query tabs in schema order", () => {
-    const model = selectHomeModel(appSchema);
+    const model = selectPrimaryCollectionModels(appSchema)[0];
 
     expect(model?.viewName).toBe("taskHome");
     expect(model?.label).toBe("Tasks");
@@ -29,7 +29,7 @@ describe("home view model collections", () => {
   });
 
   it("resolves result fields from the shared task item view", () => {
-    const model = selectHomeModel(appSchema);
+    const model = selectPrimaryCollectionModels(appSchema)[0];
 
     expect(model?.result).toMatchObject({
       type: "list",
@@ -43,7 +43,7 @@ describe("home view model collections", () => {
   });
 
   it("resolves collection actions and clear-completed target query", () => {
-    const model = selectHomeModel(appSchema);
+    const model = selectPrimaryCollectionModels(appSchema)[0];
 
     expect(model?.actions.map((action) => action.label)).toEqual([
       "Create Task",
@@ -86,7 +86,7 @@ describe("home view model collections", () => {
         },
       },
     };
-    const model = selectHomeModel(schema);
+    const model = selectPrimaryCollectionModels(schema)[0];
 
     expect(model?.queryTabs.map((tab) => tab.label)).toEqual(["Everything"]);
   });
@@ -96,6 +96,7 @@ describe("home view model collections", () => {
 
     expect(models.map((model) => model.viewName)).toEqual(["resourceHome", "cardHome", "rateHome"]);
     expect(models.map((model) => model.label)).toEqual(["Resources", "Rate cards", "Rates"]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([false, false, true]);
     expect(models.map((model) => model.actions[0]?.label)).toEqual([
       "Create Resource",
       "Create Rate card",
@@ -120,6 +121,13 @@ describe("home view model collections", () => {
         ? models[2].result.columns.map((column) => column.fieldName)
         : [],
     ).toEqual(["resource", "cost", "costUnit", "price", "currency"]);
+  });
+
+  it("selects only primary collection models for home navigation", () => {
+    const models = selectPrimaryCollectionModels(rateCardSchema);
+
+    expect(models.map((model) => model.viewName)).toEqual(["rateHome"]);
+    expect(selectPrimaryCollectionModels(rateCardSchema)[0]?.viewName).toBe("rateHome");
   });
 
   it("resolves rate-card table columns with labels, editors, and alignment", () => {

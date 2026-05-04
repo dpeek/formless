@@ -172,7 +172,7 @@ Views now separate the reusable pieces:
 - create views choose which fields participate in generated create forms
 - item views choose which fields render inline and how they commit edits
 - table views choose which fields render as table columns, with column labels, alignment, width tokens, display mode, suffixes, display-only formatting, and referenced-record edit affordances
-- collection views define a user-facing workspace around one entity
+- collection views define a user-facing workspace around one entity, including whether that workspace participates in primary navigation
 - collection query slots choose which named queries appear as tabs
 - collection action slots choose which create views and entity actions appear in that workspace
 

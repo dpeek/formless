@@ -132,6 +132,10 @@ export type CollectionResultSchema =
       tableView: string;
     };
 
+export type CollectionNavigationSchema = {
+  primary: boolean;
+};
+
 export type CollectionContextSchema = {
   name: string;
   entity: string;
@@ -158,6 +162,7 @@ export type CollectionViewSchema = {
   type: "collection";
   label: string;
   entity: string;
+  navigation?: CollectionNavigationSchema;
   context?: CollectionContextSchema;
   queries: CollectionViewQuerySlotSchema[];
   defaultQuery: string;
@@ -649,10 +654,16 @@ function assertCollectionViews(
   views: Record<string, ViewSchema>,
   entities: Record<string, EntitySchema>,
 ) {
-  const collectionEntries = Object.entries(views).filter(([, view]) => view.type === "collection");
+  const collectionEntries = Object.entries(views).filter(
+    (entry): entry is [string, CollectionViewSchema] => entry[1].type === "collection",
+  );
 
   if (collectionEntries.length === 0) {
     throw new Error('Schema must define at least one "collection" view.');
+  }
+
+  if (!collectionEntries.some(([, view]) => view.navigation?.primary ?? true)) {
+    throw new Error("Schema must define at least one primary collection view.");
   }
 
   for (const [viewName, view] of collectionEntries) {
@@ -827,7 +838,7 @@ function parseCollectionView(
     `Collection view "${viewName}"`,
     value,
     ["type", "label", "entity", "queries", "defaultQuery", "result"],
-    ["context", "actions"],
+    ["navigation", "context", "actions"],
   );
 
   if (typeof value.label !== "string" || value.label.trim() === "") {
@@ -843,6 +854,7 @@ function parseCollectionView(
     throw new Error(`Collection view "${viewName}" references unknown entity "${value.entity}".`);
   }
 
+  const navigation = parseCollectionNavigation(viewName, value.navigation);
   const context = parseCollectionContext(viewName, value.context, entities, queries, itemViews);
   const querySlots = parseCollectionViewQuerySlots(
     viewName,
@@ -870,12 +882,36 @@ function parseCollectionView(
     type: "collection",
     label: value.label,
     entity: value.entity,
+    ...(navigation === undefined ? {} : { navigation }),
     ...(context === undefined ? {} : { context }),
     queries: querySlots,
     defaultQuery: value.defaultQuery,
     result,
     ...(actions ? { actions } : {}),
   };
+}
+
+function parseCollectionNavigation(
+  viewName: string,
+  value: unknown,
+): CollectionNavigationSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const context = `Collection view "${viewName}" navigation`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["primary"]);
+
+  if (typeof value.primary !== "boolean") {
+    throw new Error(`${context} primary must be a boolean.`);
+  }
+
+  return { primary: value.primary };
 }
 
 function parseCollectionViewQuerySlots(

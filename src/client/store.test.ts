@@ -174,26 +174,6 @@ describe("client store selectors", () => {
     }
   });
 
-  it("changes the home view model on schema update but not record patch", () => {
-    const models: unknown[] = [];
-
-    applyBootstrapResponse(bootstrap([record("record-1", "First")]));
-    const unsubscribe = subscribeToClientStoreSelector(
-      (snapshot) => snapshot.homeViewModel,
-      (value) => models.push(value),
-    );
-
-    try {
-      applyRecordMerge([record("record-1", "Updated")], 2);
-      applySchemaSave(schemaWithSummary(), "2026-04-28T00:01:00.000Z");
-
-      expect(models).toHaveLength(1);
-      expect((models[0] as { entity: { label: string } }).entity.label).toBe("Planner task");
-    } finally {
-      unsubscribe();
-    }
-  });
-
   it("count selectors update after create", () => {
     const counts: number[] = [];
 

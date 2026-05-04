@@ -2,6 +2,7 @@ node_modules
 .wrangler
 .worker-test-*
 .storage-harness-*
+.playwright-cli
 dist
 .DS_Store
 tmp

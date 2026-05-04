@@ -398,6 +398,9 @@
       "type": "collection",
       "label": "Resources",
       "entity": "resource",
+      "navigation": {
+        "primary": false
+      },
       "queries": [
         {
           "query": "resourceAll",
@@ -422,6 +425,9 @@
       "type": "collection",
       "label": "Rate cards",
       "entity": "card",
+      "navigation": {
+        "primary": false
+      },
       "queries": [
         {
           "query": "cardAll",
@@ -446,6 +452,9 @@
       "type": "collection",
       "label": "Rates",
       "entity": "rate",
+      "navigation": {
+        "primary": true
+      },
       "context": {
         "name": "card",
         "entity": "card",
