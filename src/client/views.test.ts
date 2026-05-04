@@ -156,6 +156,22 @@ describe("home view model collections", () => {
       "end",
       "start",
     ]);
+    expect(columns.map((column) => column.width ?? "none")).toEqual(["lg", "sm", "xs", "sm", "xs"]);
+    expect(columns.map((column) => column.display)).toEqual([
+      "editor",
+      "editor",
+      "hidden",
+      "editor",
+      "readOnly",
+    ]);
+    expect(columns.map((column) => column.suffix ?? "")).toEqual(["", "/ day", "", "/ day", ""]);
+    expect(columns.map((column) => column.format)).toEqual([
+      "plain",
+      "number",
+      "plain",
+      "number",
+      "plain",
+    ]);
   });
 
   it("resolves scoped rate-card collection context", () => {

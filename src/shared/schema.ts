@@ -72,6 +72,9 @@ export type CreateViewFieldSchema = {
 };
 
 export type TableColumnAlign = "start" | "center" | "end";
+export type TableColumnWidth = "xs" | "sm" | "md" | "lg";
+export type TableColumnDisplay = "editor" | "readOnly" | "hidden";
+export type TableColumnFormat = "plain" | "number" | "currency" | "percent";
 
 export type TableColumnSchema = {
   type: "field";
@@ -80,6 +83,10 @@ export type TableColumnSchema = {
   editor?: FieldEditor;
   commit?: FieldCommitPolicy;
   align?: TableColumnAlign;
+  width?: TableColumnWidth;
+  display?: TableColumnDisplay;
+  suffix?: string;
+  format?: TableColumnFormat;
 };
 
 export type TableViewSchema = {
@@ -541,7 +548,12 @@ function parseTableColumn(
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, ["type", "field"], ["label", "editor", "commit", "align"]);
+  assertExactKeys(
+    context,
+    value,
+    ["type", "field"],
+    ["label", "editor", "commit", "align", "width", "display", "suffix", "format"],
+  );
 
   if (value.type !== "field") {
     throw new Error(`${context} type must be "field".`);
@@ -564,6 +576,10 @@ function parseTableColumn(
       ? undefined
       : parseFieldCommitPolicy(`${context} field "${fieldName}"`, value.commit, field);
   const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
+  const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
+  const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
+  const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
+  const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
 
   return {
     type: "field",
@@ -572,6 +588,10 @@ function parseTableColumn(
     ...(editor === undefined ? {} : { editor }),
     ...(commit === undefined ? {} : { commit }),
     ...(align === undefined ? {} : { align }),
+    ...(width === undefined ? {} : { width }),
+    ...(display === undefined ? {} : { display }),
+    ...(suffix === undefined ? {} : { suffix }),
+    ...(format === undefined ? {} : { format }),
   };
 }
 
@@ -1439,6 +1459,51 @@ function parseOptionalTableColumnAlign(
 
   if (value !== "start" && value !== "center" && value !== "end") {
     throw new Error(`${context} must be "start", "center", or "end".`);
+  }
+
+  return value;
+}
+
+function parseOptionalTableColumnWidth(
+  context: string,
+  value: unknown,
+): TableColumnWidth | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "xs" && value !== "sm" && value !== "md" && value !== "lg") {
+    throw new Error(`${context} must be "xs", "sm", "md", or "lg".`);
+  }
+
+  return value;
+}
+
+function parseOptionalTableColumnDisplay(
+  context: string,
+  value: unknown,
+): TableColumnDisplay | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "editor" && value !== "readOnly" && value !== "hidden") {
+    throw new Error(`${context} must be "editor", "readOnly", or "hidden".`);
+  }
+
+  return value;
+}
+
+function parseOptionalTableColumnFormat(
+  context: string,
+  value: unknown,
+): TableColumnFormat | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "plain" && value !== "number" && value !== "currency" && value !== "percent") {
+    throw new Error(`${context} must be "plain", "number", "currency", or "percent".`);
   }
 
   return value;

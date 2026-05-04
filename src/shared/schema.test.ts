@@ -682,6 +682,7 @@ describe("schema table views", () => {
           label: "Role",
           editor: "reference",
           commit: "immediate",
+          width: "lg",
         },
         {
           type: "field",
@@ -689,12 +690,17 @@ describe("schema table views", () => {
           editor: "number",
           commit: "field-commit",
           align: "end",
+          width: "sm",
+          suffix: "/ day",
+          format: "number",
         },
         {
           type: "field",
           field: "costUnit",
           editor: "enum",
           commit: "immediate",
+          width: "xs",
+          display: "hidden",
         },
         {
           type: "field",
@@ -702,12 +708,17 @@ describe("schema table views", () => {
           editor: "number",
           commit: "field-commit",
           align: "end",
+          width: "sm",
+          suffix: "/ day",
+          format: "number",
         },
         {
           type: "field",
           field: "currency",
           editor: "enum",
           commit: "immediate",
+          width: "xs",
+          display: "readOnly",
         },
       ],
     });
@@ -782,6 +793,58 @@ describe("schema table views", () => {
         }),
       ),
     ).toThrow('align must be "start", "center", or "end"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", width: "massive" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('width must be "xs", "sm", "md", or "lg"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", display: "readonly" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('display must be "editor", "readOnly", or "hidden"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", suffix: "" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("suffix must be a non-empty string");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", format: "money" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('format must be "plain", "number", "currency", or "percent"');
   });
 
   it("validates collection table result references", () => {
@@ -1960,6 +2023,7 @@ function scopedRateTableViews() {
           label: "Role",
           editor: "reference",
           commit: "immediate",
+          width: "lg",
         },
         {
           type: "field",
@@ -1967,12 +2031,17 @@ function scopedRateTableViews() {
           editor: "number",
           commit: "field-commit",
           align: "end",
+          width: "sm",
+          suffix: "/ day",
+          format: "number",
         },
         {
           type: "field",
           field: "costUnit",
           editor: "enum",
           commit: "immediate",
+          width: "xs",
+          display: "hidden",
         },
         {
           type: "field",
@@ -1980,12 +2049,17 @@ function scopedRateTableViews() {
           editor: "number",
           commit: "field-commit",
           align: "end",
+          width: "sm",
+          suffix: "/ day",
+          format: "number",
         },
         {
           type: "field",
           field: "currency",
           editor: "enum",
           commit: "immediate",
+          width: "xs",
+          display: "readOnly",
         },
       ],
     },

@@ -952,6 +952,7 @@ export function RecordTable({
 }) {
   const canPatch = entity.mutations.patch.enabled;
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
+  const visibleColumns = columns.filter((column) => column.display !== "hidden");
 
   return (
     <section className="space-y-3">
@@ -962,11 +963,11 @@ export function RecordTable({
       {recordIds.length === 0 ? (
         <p className="text-sm text-slate-600">No records yet.</p>
       ) : (
-        <Table>
+        <Table className="table-fixed text-xs">
           <TableHeader>
             <TableRow>
-              {columns.map((column) => (
-                <TableHead className={tableAlignClass(column.align)} key={column.fieldName}>
+              {visibleColumns.map((column) => (
+                <TableHead className={tableHeadClass(column)} key={column.fieldName}>
                   {column.label}
                 </TableHead>
               ))}
@@ -975,12 +976,12 @@ export function RecordTable({
           <TableBody>
             {recordIds.map((recordId) => (
               <TableRow key={recordId}>
-                {columns.map((column) => (
-                  <TableCell className={tableAlignClass(column.align)} key={column.fieldName}>
-                    <RecordFieldEditor
+                {visibleColumns.map((column) => (
+                  <TableCell className={tableCellClass(column)} key={column.fieldName}>
+                    <RecordTableCell
                       canPatch={canPatch}
                       entityName={entityName}
-                      fieldConfig={column}
+                      column={column}
                       recordId={recordId}
                     />
                   </TableCell>
@@ -994,6 +995,138 @@ export function RecordTable({
   );
 }
 
+function RecordTableCell({
+  canPatch,
+  column,
+  entityName,
+  recordId,
+}: {
+  canPatch: boolean;
+  column: TableColumnConfig;
+  entityName: string;
+  recordId: string;
+}) {
+  const justifyClass =
+    column.align === "end"
+      ? "justify-end"
+      : column.align === "center"
+        ? "justify-center"
+        : "justify-start";
+
+  if (column.display === "readOnly") {
+    return (
+      <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
+        <RecordFieldDisplay column={column} recordId={recordId} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-center gap-1 ${justifyClass}`}>
+      <RecordFieldEditor
+        canPatch={canPatch}
+        density="compact"
+        entityName={entityName}
+        fieldConfig={column}
+        recordId={recordId}
+      />
+      {column.suffix ? (
+        <span className="shrink-0 text-xs text-slate-500">{column.suffix}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function RecordFieldDisplay({ column, recordId }: { column: TableColumnConfig; recordId: string }) {
+  const recordValue = useRecordField(recordId, column.fieldName);
+
+  if (column.field.type === "reference") {
+    return (
+      <RecordReferenceDisplay
+        field={column.field}
+        recordValue={recordValue}
+        suffix={column.suffix}
+      />
+    );
+  }
+
+  return (
+    <>
+      <span>{formatFieldDisplayValue(column, recordValue)}</span>
+      {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+    </>
+  );
+}
+
+function RecordReferenceDisplay({
+  field,
+  recordValue,
+  suffix,
+}: {
+  field: Extract<FieldSchema, { type: "reference" }>;
+  recordValue: FieldValue | undefined;
+  suffix?: string;
+}) {
+  const options = useReferenceOptions(field.to, field.displayField);
+  const label =
+    typeof recordValue === "string"
+      ? (options.find((option) => option.id === recordValue)?.label ?? recordValue)
+      : "";
+
+  return (
+    <>
+      <span>{label}</span>
+      {suffix ? <span className="text-slate-500">{suffix}</span> : null}
+    </>
+  );
+}
+
+function formatFieldDisplayValue(column: TableColumnConfig, value: FieldValue | undefined) {
+  if (value === undefined || value === "") {
+    return "";
+  }
+
+  if (column.field.type === "enum" && typeof value === "string") {
+    return column.field.values[value]?.label ?? value;
+  }
+
+  if (column.field.type === "boolean") {
+    return value === true ? "Yes" : value === false ? "No" : String(value);
+  }
+
+  if (typeof value === "number") {
+    if (column.format === "currency") {
+      return `$${value.toFixed(2)}`;
+    }
+
+    if (column.format === "percent") {
+      return `${formatPlainNumber(value * 100)}%`;
+    }
+
+    if (column.format === "number") {
+      return formatPlainNumber(value);
+    }
+  }
+
+  return String(value);
+}
+
+function formatPlainNumber(value: number) {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function tableHeadClass(column: TableColumnConfig) {
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column.width)} h-8 px-1.5`;
+}
+
+function tableCellClass(column: TableColumnConfig) {
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column.width)} px-1.5 py-1`;
+}
+
 function tableAlignClass(align: TableColumnConfig["align"]) {
   if (align === "center") {
     return "text-center [&_input]:text-center";
@@ -1004,6 +1137,26 @@ function tableAlignClass(align: TableColumnConfig["align"]) {
   }
 
   return "text-start";
+}
+
+function tableWidthClass(width: TableColumnConfig["width"]) {
+  if (width === "xs") {
+    return "w-20 min-w-20 max-w-24";
+  }
+
+  if (width === "sm") {
+    return "w-28 min-w-28 max-w-32";
+  }
+
+  if (width === "md") {
+    return "w-40 min-w-40 max-w-48";
+  }
+
+  if (width === "lg") {
+    return "w-64 min-w-56";
+  }
+
+  return "";
 }
 
 function HomeActionRow({
@@ -1198,11 +1351,13 @@ function RecordRow({
 
 function RecordFieldEditor({
   canPatch,
+  density = "default",
   entityName,
   fieldConfig,
   recordId,
 }: {
   canPatch: boolean;
+  density?: "default" | "compact";
   entityName: string;
   fieldConfig: RecordFieldConfig;
   recordId: string;
@@ -1250,7 +1405,7 @@ function RecordFieldEditor({
 
   if (editor === "boolean") {
     return (
-      <div className="flex h-7 shrink-0 items-center">
+      <div className={`${density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}>
         <Field orientation="horizontal">
           <Checkbox
             aria-label={label}
@@ -1273,13 +1428,18 @@ function RecordFieldEditor({
     const unknownValue = draft !== "" && !Object.hasOwn(field.values, draft) ? draft : null;
 
     return (
-      <div className="min-w-40 flex-none space-y-1">
+      <div
+        className={
+          density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-40 flex-none space-y-1"
+        }
+      >
         <Field>
           <Label className="sr-only">{label}</Label>
           <NativeSelect
             aria-label={label}
             className="w-full"
             disabled={!canPatch || isPending}
+            size={density === "compact" ? "sm" : "default"}
             onChange={(event) => {
               const value = event.currentTarget.value;
 
@@ -1309,6 +1469,7 @@ function RecordFieldEditor({
     return (
       <RecordReferenceEditor
         canPatch={canPatch}
+        density={density}
         draft={draft}
         error={error}
         field={field}
@@ -1336,16 +1497,22 @@ function RecordFieldEditor({
   return (
     <div
       className={
-        editor === "date" || editor === "number"
-          ? "min-w-36 flex-none space-y-1"
-          : "min-w-52 flex-1 space-y-1"
+        density === "compact"
+          ? "w-full min-w-0 space-y-1"
+          : editor === "date" || editor === "number"
+            ? "min-w-36 flex-none space-y-1"
+            : "min-w-52 flex-1 space-y-1"
       }
     >
       <Field>
         <Label className="sr-only">{label}</Label>
         <Input
           aria-label={label}
-          className="w-full rounded border border-slate-300 px-3 py-2"
+          className={
+            density === "compact"
+              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+              : "w-full rounded border border-slate-300 px-3 py-2"
+          }
           disabled={!canPatch || isPending}
           onBlur={(event) => {
             if (commitPolicy === "field-commit") {
@@ -1367,6 +1534,7 @@ function RecordFieldEditor({
 
 function RecordReferenceEditor({
   canPatch,
+  density = "default",
   draft,
   error,
   field,
@@ -1376,6 +1544,7 @@ function RecordReferenceEditor({
   onDraftChange,
 }: {
   canPatch: boolean;
+  density?: "default" | "compact";
   draft: string;
   error: string | null;
   field: Extract<FieldSchema, { type: "reference" }>;
@@ -1389,13 +1558,18 @@ function RecordReferenceEditor({
     draft !== "" && !options.some((option) => option.id === draft) ? draft : null;
 
   return (
-    <div className="min-w-48 flex-none space-y-1">
+    <div
+      className={
+        density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-48 flex-none space-y-1"
+      }
+    >
       <Field>
         <Label className="sr-only">{label}</Label>
         <NativeSelect
           aria-label={label}
           className="w-full"
           disabled={!canPatch || isPending}
+          size={density === "compact" ? "sm" : "default"}
           onChange={(event) => {
             const value = event.currentTarget.value;
 

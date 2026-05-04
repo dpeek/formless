@@ -171,7 +171,7 @@ Views now separate the reusable pieces:
 
 - create views choose which fields participate in generated create forms
 - item views choose which fields render inline and how they commit edits
-- table views choose which fields render as table columns, with column labels and alignment
+- table views choose which fields render as table columns, with column labels, alignment, width tokens, display mode, suffixes, and display-only formatting
 - collection views define a user-facing workspace around one entity
 - collection query slots choose which named queries appear as tabs
 - collection action slots choose which create views and entity actions appear in that workspace
@@ -560,7 +560,7 @@ It currently proves:
 
 The task planner foundation is now implemented: the checked-in task schema seeds storage, `/schema` edits the authority-owned schema, polling sync can refresh stale browser replicas, ordinary field edits submit validated patches back to the authority, collection tabs and count badges use schema-owned queries, and `clearCompletedTasks` proves the query-targeted named-action path with authority-reported affected counts.
 
-The next slice is about making generated rows denser and giving views better display policy.
+The rate-card table display-policy slice is now implemented. Table views can keep field-based editing while also declaring compact column sizing, hidden/read-only columns, static suffixes such as `/ day`, and display-only number/currency/percent formatting. The next slice is about making the selected rate card editable from the scoped rate workspace.
 
 ## What success looks like
 

@@ -19,6 +19,7 @@ import {
   type CreateFieldConfig,
   type HomeActionConfig,
   type RecordFieldConfig,
+  type TableColumnConfig,
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import { parseAppSchema, type EntitySchema } from "./shared/schema.ts";
@@ -245,8 +246,10 @@ describe("generated collection home", () => {
     expect(html).toContain("Role");
     expect(html).toContain('aria-label="Role"');
     expect(html).toContain('aria-label="Cost"');
-    expect(html).toContain('aria-label="Cost unit"');
-    expect(html).toContain('aria-label="Currency"');
+    expect(html).not.toContain("Cost unit");
+    expect(html).not.toContain('aria-label="Currency"');
+    expect(html).toContain("USD");
+    expect(html).toContain("/ day");
     expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
     expect(html).not.toContain('value="900"');
@@ -470,9 +473,42 @@ describe("generated forms and records", () => {
     expect(html).toContain('aria-label="Role"');
     expect(html).toContain("Designer");
     expect(html).toContain('aria-label="Cost"');
+    expect(html).not.toContain("Cost unit");
+    expect(html).toContain("USD");
+    expect(html).toContain("/ day");
     expect(html).toContain('type="number"');
     expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
+  });
+
+  it("renders read-only table cells with display formatting", () => {
+    const rate = rateCardSchema.entities.rate;
+    const columns: TableColumnConfig[] = [
+      {
+        fieldName: "price",
+        field: rate.fields.price,
+        editor: "number",
+        commit: "field-commit",
+        label: "Price",
+        align: "end",
+        width: "sm",
+        display: "readOnly",
+        suffix: "/ day",
+        format: "currency",
+      },
+    ];
+
+    applyBootstrapResponse(
+      bootstrap([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], rateCardSchema),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+    );
+
+    expect(html).toContain("Price");
+    expect(html).toContain("$475.00");
+    expect(html).toContain("/ day");
+    expect(html).not.toContain('type="number"');
   });
 
   it("renders number create controls and inline editors with numeric constraints", () => {

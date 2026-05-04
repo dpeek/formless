@@ -11,6 +11,9 @@ import type {
   FieldSchema,
   ItemViewSchema,
   TableColumnAlign,
+  TableColumnDisplay,
+  TableColumnFormat,
+  TableColumnWidth,
   TableViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
@@ -27,6 +30,10 @@ export type RecordFieldConfig = {
 export type TableColumnConfig = RecordFieldConfig & {
   label: string;
   align?: TableColumnAlign;
+  width?: TableColumnWidth;
+  display: TableColumnDisplay;
+  suffix?: string;
+  format: TableColumnFormat;
 };
 
 export type CreateFieldConfig = {
@@ -329,6 +336,10 @@ function selectTableColumns(view: TableViewSchema, entity: EntitySchema): TableC
       commit: column.commit ?? defaultCommitPolicy(field),
       label: column.label ?? fieldLabel(column.field, field),
       ...(column.align === undefined ? {} : { align: column.align }),
+      ...(column.width === undefined ? {} : { width: column.width }),
+      display: column.display ?? "editor",
+      ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
+      format: column.format ?? "plain",
     };
   });
 }

@@ -349,33 +349,44 @@
           "field": "resource",
           "label": "Role",
           "editor": "reference",
-          "commit": "immediate"
+          "commit": "immediate",
+          "width": "lg"
         },
         {
           "type": "field",
           "field": "cost",
           "editor": "number",
           "commit": "field-commit",
-          "align": "end"
+          "align": "end",
+          "width": "sm",
+          "suffix": "/ day",
+          "format": "number"
         },
         {
           "type": "field",
           "field": "costUnit",
           "editor": "enum",
-          "commit": "immediate"
+          "commit": "immediate",
+          "width": "xs",
+          "display": "hidden"
         },
         {
           "type": "field",
           "field": "price",
           "editor": "number",
           "commit": "field-commit",
-          "align": "end"
+          "align": "end",
+          "width": "sm",
+          "suffix": "/ day",
+          "format": "number"
         },
         {
           "type": "field",
           "field": "currency",
           "editor": "enum",
-          "commit": "immediate"
+          "commit": "immediate",
+          "width": "xs",
+          "display": "readOnly"
         }
       ]
     }
