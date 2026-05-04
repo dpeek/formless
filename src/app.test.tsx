@@ -2,15 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../schema/samples/rate-card.json";
+import { App } from "./app.tsx";
+import { HomeCollection, RecordList } from "./app/generated/collection.tsx";
 import {
-  App,
   GeneratedCreateDialogForm,
   GeneratedCreateForm,
-  HomeCollection,
-  RecordList,
-  RecordTable,
   resolveCreateValues,
-} from "./app.tsx";
+} from "./app/generated/create.tsx";
+import { RecordTable } from "./app/generated/table.tsx";
 import { appSchema } from "./client/schema.ts";
 import {
   applyBootstrapResponse,

@@ -1,0 +1,287 @@
+import { useEffect, useState } from "react";
+import { Checkbox } from "@formless/ui/checkbox";
+import { Field, FieldError } from "@formless/ui/field";
+import { Input } from "@formless/ui/input";
+import { Label } from "@formless/ui/label";
+import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
+import { useRecordField, useReferenceOptions } from "../../client/store.ts";
+import { setSyncStatus } from "../../client/sync-status.ts";
+import { submitPatchMutation } from "../../client/sync.ts";
+import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
+import type { FieldValue } from "../../shared/protocol.ts";
+import type { FieldSchema } from "../../shared/schema.ts";
+import { fieldValueToInputValue, inputValueToFieldValue, numberInputAttributes } from "./format.ts";
+
+export function RecordFieldEditor({
+  canPatch,
+  density = "default",
+  entityName,
+  fieldConfig,
+  recordId,
+  showLabel = false,
+}: {
+  canPatch: boolean;
+  density?: "default" | "compact";
+  entityName: string;
+  fieldConfig: RecordFieldConfig;
+  recordId: string;
+  showLabel?: boolean;
+}) {
+  const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
+  const label = fieldConfig.label ?? fieldLabel(fieldName, field);
+  const labelClass = showLabel ? "text-xs font-medium text-slate-600" : "sr-only";
+  const recordValue = useRecordField(recordId, fieldName);
+  const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(fieldValueToInputValue(recordValue));
+  }, [recordValue]);
+
+  async function commit(value: FieldValue) {
+    if (!canPatch || isPending) {
+      return;
+    }
+
+    if (recordValue === value || (recordValue === undefined && value === "")) {
+      return;
+    }
+
+    setIsPending(true);
+    setSyncStatus({ state: "syncing", message: `Updating ${fieldName}...` });
+
+    try {
+      await submitPatchMutation(entityName, recordId, { [fieldName]: value });
+      setError(null);
+      setSyncStatus({ state: "idle", message: "Updated and synced." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Update failed.";
+
+      setDraft(fieldValueToInputValue(recordValue));
+      setError(message);
+      setSyncStatus({
+        state: "error",
+        message,
+      });
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  if (editor === "boolean") {
+    if (showLabel) {
+      return (
+        <div className="min-w-28 flex-none space-y-1">
+          <Label className={labelClass}>{label}</Label>
+          <Field orientation="horizontal">
+            <Checkbox
+              aria-label={label}
+              checked={recordValue === true}
+              className="size-4 rounded border-slate-300"
+              disabled={!canPatch || isPending}
+              onCheckedChange={(checked) => {
+                if (commitPolicy === "immediate") {
+                  void commit(checked);
+                }
+              }}
+            />
+            {error ? <FieldError>{error}</FieldError> : null}
+          </Field>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`${density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}>
+        <Field orientation="horizontal">
+          <Checkbox
+            aria-label={label}
+            checked={recordValue === true}
+            className="size-4 rounded border-slate-300"
+            disabled={!canPatch || isPending}
+            onCheckedChange={(checked) => {
+              if (commitPolicy === "immediate") {
+                void commit(checked);
+              }
+            }}
+          />
+          {error ? <FieldError>{error}</FieldError> : null}
+        </Field>
+      </div>
+    );
+  }
+
+  if (editor === "enum" && field.type === "enum") {
+    const unknownValue = draft !== "" && !Object.hasOwn(field.values, draft) ? draft : null;
+
+    return (
+      <div
+        className={
+          density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-40 flex-none space-y-1"
+        }
+      >
+        <Field>
+          <Label className={labelClass}>{label}</Label>
+          <NativeSelect
+            aria-label={label}
+            className="w-full"
+            disabled={!canPatch || isPending}
+            size={density === "compact" ? "sm" : "default"}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+
+              setDraft(value);
+              void commit(value);
+            }}
+            required={field.required}
+            value={draft}
+          >
+            {!field.required || draft === "" ? <NativeSelectOption value="" /> : null}
+            {unknownValue ? (
+              <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
+            ) : null}
+            {Object.entries(field.values).map(([value, option]) => (
+              <NativeSelectOption key={value} value={value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+        {error ? <FieldError>{error}</FieldError> : null}
+      </div>
+    );
+  }
+
+  if (editor === "reference" && field.type === "reference") {
+    return (
+      <RecordReferenceEditor
+        canPatch={canPatch}
+        density={density}
+        draft={draft}
+        error={error}
+        field={field}
+        isPending={isPending}
+        label={label}
+        labelClass={labelClass}
+        onCommit={commit}
+        onDraftChange={setDraft}
+      />
+    );
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void commit(inputValueToFieldValue(field, event.currentTarget.value));
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setDraft(fieldValueToInputValue(recordValue));
+    }
+  }
+
+  return (
+    <div
+      className={
+        density === "compact"
+          ? "w-full min-w-0 space-y-1"
+          : editor === "date" || editor === "number"
+            ? "min-w-36 flex-none space-y-1"
+            : "min-w-52 flex-1 space-y-1"
+      }
+    >
+      <Field>
+        <Label className={labelClass}>{label}</Label>
+        <Input
+          aria-label={label}
+          className={
+            density === "compact"
+              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+              : "w-full rounded border border-slate-300 px-3 py-2"
+          }
+          disabled={!canPatch || isPending}
+          onBlur={(event) => {
+            if (commitPolicy === "field-commit") {
+              void commit(inputValueToFieldValue(field, event.currentTarget.value));
+            }
+          }}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onKeyDown={handleKeyDown}
+          required={field.required}
+          {...numberInputAttributes(field)}
+          type={editor === "date" ? "date" : editor === "number" ? "number" : "text"}
+          value={draft}
+        />
+      </Field>
+      {error ? <FieldError>{error}</FieldError> : null}
+    </div>
+  );
+}
+
+function RecordReferenceEditor({
+  canPatch,
+  density = "default",
+  draft,
+  error,
+  field,
+  isPending,
+  label,
+  labelClass,
+  onCommit,
+  onDraftChange,
+}: {
+  canPatch: boolean;
+  density?: "default" | "compact";
+  draft: string;
+  error: string | null;
+  field: Extract<FieldSchema, { type: "reference" }>;
+  isPending: boolean;
+  label: string;
+  labelClass: string;
+  onCommit: (value: FieldValue) => Promise<void>;
+  onDraftChange: (value: string) => void;
+}) {
+  const options = useReferenceOptions(field.to, field.displayField);
+  const unknownValue =
+    draft !== "" && !options.some((option) => option.id === draft) ? draft : null;
+
+  return (
+    <div
+      className={
+        density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-48 flex-none space-y-1"
+      }
+    >
+      <Field>
+        <Label className={labelClass}>{label}</Label>
+        <NativeSelect
+          aria-label={label}
+          className="w-full"
+          disabled={!canPatch || isPending}
+          size={density === "compact" ? "sm" : "default"}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+
+            onDraftChange(value);
+            void onCommit(value);
+          }}
+          required={field.required}
+          value={draft}
+        >
+          {!field.required || draft === "" ? <NativeSelectOption value="" /> : null}
+          {unknownValue ? (
+            <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
+          ) : null}
+          {options.map((option) => (
+            <NativeSelectOption key={option.id} value={option.id}>
+              {option.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      {error ? <FieldError>{error}</FieldError> : null}
+    </div>
+  );
+}
