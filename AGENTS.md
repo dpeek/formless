@@ -1,39 +1,24 @@
 # Formless Agent
 
-Read `/Users/dpeek/code/llm/formless/*.md`. Keep it current.
+. Keep it current.
 Current focus: `focus.md`. Future work: `backlog.md`.
-Use `./llm/*` only for ignored worktree scratch.
 
 ## Work
 
-- current cwd is the Codex worktree
-- start every chat:
-  1. read `/Users/dpeek/code/llm/formless/*.md`
-  2. inspect: `git status --short --branch`
-  3. if detached, create branch before dev: `git switch -c codex/<topic>`
-  4. `bun i`
-  5. `mkdir -p ./llm`
-  6. if `./llm/dev.pid` is live, reuse dev server
-  7. otherwise: `nohup bun run dev > ./llm/dev.log 2>&1 & echo $! > ./llm/dev.pid`
-  8. tail startup/errors only: `tail -80 ./llm/dev.log`
-  9. open `https://<slug>.formless.local`
-- slug = branch with `codex/` stripped and `/` replaced by `-`
-- `codex/topic` -> `https://topic.formless.local`
-- never start portless from detached HEAD
-- if no topic is obvious, use `codex/smoke`
-- change code
-- verify until green: `bun run test`; `bun run check`
-- end turn: what changed, tests
+1. Read `/Users/dpeek/code/llm/formless/{project.md,focus.md,next.md,state.md}`
+2. Dev server is running at `https://branch.formless.local`
+3. Launch app with Browser Use skill
+4. Change code, tests, docs
+5. Verify until green: `bun run test`; `bun run check`
+6. End turn: what changed, tests
 
 ## Done
 
-Only after user says `done`:
+When user says `done`:
 
-- kill dev server from `./llm/dev.pid`
-- update tracked docs if behavior changed
-- update `/Users/dpeek/code/llm/formless/*`
+- Update `/Users/dpeek/code/llm/formless/*`
 - commit
-- merge to main
+- rebase on main and merge
 
 ## Rules
 
