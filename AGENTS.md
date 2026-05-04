@@ -6,11 +6,13 @@ Current focus: `focus.md`. Future work: `backlog.md`.
 ## Work
 
 1. Read `/Users/dpeek/code/llm/formless/{project.md,focus.md,next.md,state.md}`
-2. Dev server is running at `https://branch.formless.local`
-3. Launch app with Browser Use skill
-4. Change code, tests, docs
-5. Verify until green: `bun run test`; `bun run check`
-6. End turn: what changed, tests
+2. Change code, tests, docs
+3. Verify until green: `bun run test`; `bun run check`
+4. Test app (if needed):
+   - `bun dev` and capture local URL `http://localhost:{port}`
+   - Launch app with Browser Use skill
+   - Kill server when done
+5. End turn: what changed, tests
 
 ## Done
 
