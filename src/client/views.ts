@@ -29,20 +29,36 @@ export type RecordFieldConfig = {
   label?: string;
 };
 
-export type TableColumnConfig = RecordFieldConfig & {
+export type TableColumnBaseConfig = {
+  key: string;
   label: string;
   align?: TableColumnAlign;
   width?: TableColumnWidth;
   display: TableColumnDisplay;
   suffix?: string;
   format: TableColumnFormat;
-  referenceItem?: {
-    itemViewName: string;
-    entityName: string;
-    entity: EntitySchema;
-    recordFields: RecordFieldConfig[];
-  };
 };
+
+export type FieldTableColumnConfig = RecordFieldConfig &
+  TableColumnBaseConfig & {
+    type: "field";
+    referenceItem?: {
+      itemViewName: string;
+      entityName: string;
+      entity: EntitySchema;
+      recordFields: RecordFieldConfig[];
+    };
+  };
+
+export type ReferenceFieldTableColumnConfig = RecordFieldConfig &
+  TableColumnBaseConfig & {
+    type: "referenceField";
+    sourceReferenceFieldName: string;
+    referencedEntityName: string;
+    referencedEntity: EntitySchema;
+  };
+
+export type TableColumnConfig = FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
 
 export type CreateFieldConfig = {
   fieldName: string;
@@ -178,10 +194,9 @@ function selectContext(
     collectionView.context.createView === undefined
       ? undefined
       : selectCreateAction(
+          schema,
           viewEntries,
           collectionView.context.createView,
-          collectionView.context.entity,
-          contextEntity,
           `Create ${contextEntity.label}`,
         );
   const itemViewName = collectionView.context.itemView;
@@ -271,13 +286,7 @@ function selectHomeActions(
 ): HomeActionConfig[] {
   return (collectionView.actions ?? []).map((slot) => {
     if (slot.type === "create") {
-      return selectCreateAction(
-        viewEntries,
-        slot.createView,
-        collectionView.entity,
-        entity,
-        slot.label ?? `Create ${entity.label}`,
-      );
+      return selectCreateAction(schema, viewEntries, slot.createView, slot.label);
     }
 
     const action = entity.actions?.[slot.action];
@@ -306,11 +315,10 @@ function selectHomeActions(
 }
 
 function selectCreateAction(
+  schema: AppSchema,
   viewEntries: Array<[string, ViewSchema]>,
   createViewName: string,
-  entityName: string,
-  entity: EntitySchema,
-  label: string,
+  label?: string,
 ): Extract<HomeActionConfig, { type: "create" }> {
   const createView = viewEntries.find(([viewName]) => viewName === createViewName)?.[1];
 
@@ -318,10 +326,16 @@ function selectCreateAction(
     throw new Error(`Missing create view "${createViewName}".`);
   }
 
+  const entity = schema.entities[createView.entity];
+
+  if (!entity) {
+    throw new Error(`Missing create view entity "${createView.entity}".`);
+  }
+
   return {
     type: "create",
-    label,
-    entityName,
+    label: label ?? `Create ${entity.label}`,
+    entityName: createView.entity,
     entity,
     fields: selectCreateFields(createView, entity),
     defaults: selectCreateDefaults(createView, entity),
@@ -360,10 +374,41 @@ function selectTableColumns(
   entity: EntitySchema,
 ): TableColumnConfig[] {
   return view.columns.map((column) => {
+    if (column.type === "referenceField") {
+      const sourceReferenceField = entity.fields[column.referenceField] as FieldSchema;
+
+      if (sourceReferenceField.type !== "reference") {
+        throw new Error(`Missing reference field "${column.referenceField}".`);
+      }
+
+      const referencedEntity = schema.entities[sourceReferenceField.to] as EntitySchema;
+      const field = referencedEntity.fields[column.field] as FieldSchema;
+
+      return {
+        type: "referenceField",
+        key: `referenceField:${column.referenceField}.${column.field}`,
+        sourceReferenceFieldName: column.referenceField,
+        referencedEntityName: sourceReferenceField.to,
+        referencedEntity,
+        fieldName: column.field,
+        field,
+        editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
+        commit: column.commit ?? getFieldTypeBehavior(field).defaultCommit,
+        label: column.label ?? fieldLabel(column.field, field),
+        ...(column.align === undefined ? {} : { align: column.align }),
+        ...(column.width === undefined ? {} : { width: column.width }),
+        display: column.display ?? "editor",
+        ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
+        format: column.format ?? "plain",
+      };
+    }
+
     const field = entity.fields[column.field] as FieldSchema;
     const referenceItem = selectReferenceItem(schema, field, column.referenceItemView);
 
     return {
+      type: "field",
+      key: `field:${column.field}`,
       fieldName: column.field,
       field,
       editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
@@ -383,7 +428,7 @@ function selectReferenceItem(
   schema: AppSchema,
   field: FieldSchema,
   itemViewName: string | undefined,
-): TableColumnConfig["referenceItem"] | undefined {
+): FieldTableColumnConfig["referenceItem"] | undefined {
   if (itemViewName === undefined || field.type !== "reference") {
     return undefined;
   }

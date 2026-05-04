@@ -888,6 +888,141 @@ describe("schema table views", () => {
     ).toThrow('referenceItemView "rateListItem" must use entity "resource"');
   });
 
+  it("parses and validates referenced-record field columns", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        tableViews: {
+          rateTable: {
+            entity: "rate",
+            columns: [
+              {
+                type: "referenceField",
+                referenceField: "resource",
+                field: "name",
+                label: "Role",
+                editor: "text",
+                commit: "field-commit",
+                width: "lg",
+              },
+            ],
+          },
+        },
+        views: scopedRateViews({
+          result: { type: "table", tableView: "rateTable" },
+        }),
+      }),
+    );
+
+    expect(schema.tableViews.rateTable?.columns[0]).toEqual({
+      type: "referenceField",
+      referenceField: "resource",
+      field: "name",
+      label: "Role",
+      editor: "text",
+      commit: "field-commit",
+      width: "lg",
+    });
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [{ type: "referenceField", referenceField: "missing", field: "name" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown referenceField "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [{ type: "referenceField", referenceField: "cost", field: "name" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('referenceField "rate.cost" must be a reference field');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [{ type: "referenceField", referenceField: "resource", field: "missing" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "resource.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [
+                {
+                  type: "referenceField",
+                  referenceField: "resource",
+                  field: "name",
+                  editor: "number",
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    ).toThrow('editor must match field type "text"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [
+                {
+                  type: "referenceField",
+                  referenceField: "resource",
+                  field: "name",
+                  commit: "immediate",
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    ).toThrow("text fields must use field-commit");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [
+                {
+                  type: "referenceField",
+                  referenceField: "resource",
+                  field: "name",
+                  referenceItemView: "resourceListItem",
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    ).toThrow('has unsupported key "referenceItemView"');
+  });
+
   it("validates collection table result references", () => {
     expect(() =>
       parseAppSchema(
@@ -1010,31 +1145,34 @@ describe("schema collection views", () => {
     ).toThrow('item view "noteListItem" must use entity "task"');
   });
 
-  it("validates collection action slots", () => {
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            ...defaultEntities(),
-            note: noteEntity(),
-          },
-          views: {
-            ...defaultViews(),
-            noteCreate: {
-              type: "create",
-              entity: "note",
-              fields: {
-                title: { editor: "text" },
-              },
-            },
-            taskHome: {
-              ...defaultCollectionView(),
-              actions: [{ type: "create", createView: "noteCreate" }],
+  it("allows collection create actions for other entities and validates entity action slots", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          ...defaultEntities(),
+          note: noteEntity(),
+        },
+        views: {
+          ...defaultViews(),
+          noteCreate: {
+            type: "create",
+            entity: "note",
+            fields: {
+              title: { editor: "text" },
             },
           },
-        }),
-      ),
-    ).toThrow('create action view "noteCreate" must use entity "task"');
+          taskHome: {
+            ...defaultCollectionView(),
+            actions: [{ type: "create", createView: "noteCreate" }],
+          },
+        },
+      }),
+    );
+
+    expect(schema.views.taskHome).toMatchObject({
+      type: "collection",
+      actions: [{ type: "create", createView: "noteCreate" }],
+    });
 
     expect(() =>
       parseAppSchema(
@@ -1534,17 +1672,25 @@ describe("rate-card sample schema", () => {
       price: { editor: "number", commit: "field-commit" },
       currency: { editor: "enum", commit: "immediate" },
     });
-    expect(schema.tableViews.rateTable?.columns.map((column) => column.field)).toEqual([
-      "resource",
-      "cost",
-      "costUnit",
-      "price",
-      "currency",
+    expect(schema.tableViews.rateTable?.columns).toMatchObject([
+      {
+        type: "referenceField",
+        referenceField: "resource",
+        field: "name",
+        label: "Role",
+        editor: "text",
+        commit: "field-commit",
+        width: "lg",
+      },
+      { type: "field", field: "cost" },
+      { type: "field", field: "costUnit" },
+      { type: "field", field: "price" },
+      { type: "field", field: "currency" },
     ]);
     expect(schema.tableViews.rateTable?.columns[0]).toMatchObject({
-      field: "resource",
-      display: "readOnly",
-      referenceItemView: "resourceListItem",
+      type: "referenceField",
+      referenceField: "resource",
+      field: "name",
     });
     expect(schema.views.resourceHome).toMatchObject({
       type: "collection",
@@ -1558,11 +1704,11 @@ describe("rate-card sample schema", () => {
       type: "collection",
       navigation: { primary: true },
       context: {
-        itemView: "cardListItem",
+        itemView: "rateCardContextItem",
       },
       result: { type: "table", tableView: "rateTable" },
       actions: [
-        { type: "create", createView: "rateCreateForCard" },
+        { type: "create", createView: "resourceCreate" },
         { type: "entityAction", action: "regenerateMissingRates" },
       ],
     });

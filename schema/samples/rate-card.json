@@ -320,6 +320,23 @@
         }
       }
     },
+    "rateCardContextItem": {
+      "entity": "card",
+      "fields": {
+        "marginMin": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "marginMed": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "marginMax": {
+          "editor": "number",
+          "commit": "field-commit"
+        }
+      }
+    },
     "rateListItem": {
       "entity": "rate",
       "fields": {
@@ -351,14 +368,13 @@
       "entity": "rate",
       "columns": [
         {
-          "type": "field",
-          "field": "resource",
+          "type": "referenceField",
+          "referenceField": "resource",
+          "field": "name",
           "label": "Role",
-          "editor": "reference",
-          "commit": "immediate",
-          "width": "lg",
-          "display": "readOnly",
-          "referenceItemView": "resourceListItem"
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
         },
         {
           "type": "field",
@@ -467,7 +483,7 @@
         "query": "cardAll",
         "labelField": "name",
         "createView": "cardCreate",
-        "itemView": "cardListItem"
+        "itemView": "rateCardContextItem"
       },
       "queries": [
         {
@@ -485,7 +501,7 @@
       "actions": [
         {
           "type": "create",
-          "createView": "rateCreateForCard"
+          "createView": "resourceCreate"
         },
         {
           "type": "entityAction",

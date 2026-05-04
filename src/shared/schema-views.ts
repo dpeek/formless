@@ -183,7 +183,14 @@ function parseTableView(
     throw new Error(`Table view "${tableViewName}" references unknown entity "${entityName}".`);
   }
 
-  const columns = parseTableColumns(tableViewName, entityName, value.columns, entity, itemViews);
+  const columns = parseTableColumns(
+    tableViewName,
+    entityName,
+    value.columns,
+    entity,
+    itemViews,
+    entities,
+  );
 
   return {
     entity: entityName,
@@ -197,13 +204,14 @@ function parseTableColumns(
   value: unknown,
   entity: EntitySchema,
   itemViews: Record<string, ItemViewSchema>,
+  entities: Record<string, EntitySchema>,
 ): TableColumnSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Table view "${tableViewName}" columns must be a non-empty array.`);
   }
 
   return value.map((column, index) =>
-    parseTableColumn(tableViewName, entityName, index, column, entity, itemViews),
+    parseTableColumn(tableViewName, entityName, index, column, entity, itemViews, entities),
   );
 }
 
@@ -214,6 +222,7 @@ function parseTableColumn(
   value: unknown,
   entity: EntitySchema,
   itemViews: Record<string, ItemViewSchema>,
+  entities: Record<string, EntitySchema>,
 ): TableColumnSchema {
   const context = `Table view "${tableViewName}" column ${index}`;
 
@@ -221,6 +230,20 @@ function parseTableColumn(
     throw new Error(`${context} must be an object.`);
   }
 
+  if (value.type === "referenceField") {
+    return parseReferenceFieldTableColumn(context, value, entityName, entity, entities);
+  }
+
+  return parseFieldTableColumn(context, value, entityName, entity, itemViews);
+}
+
+function parseFieldTableColumn(
+  context: string,
+  value: Record<string, unknown>,
+  entityName: string,
+  entity: EntitySchema,
+  itemViews: Record<string, ItemViewSchema>,
+): TableColumnSchema {
   assertExactKeys(
     context,
     value,
@@ -282,6 +305,86 @@ function parseTableColumn(
     ...(suffix === undefined ? {} : { suffix }),
     ...(format === undefined ? {} : { format }),
     ...(referenceItemView === undefined ? {} : { referenceItemView }),
+  };
+}
+
+function parseReferenceFieldTableColumn(
+  context: string,
+  value: Record<string, unknown>,
+  entityName: string,
+  entity: EntitySchema,
+  entities: Record<string, EntitySchema>,
+): TableColumnSchema {
+  assertExactKeys(
+    context,
+    value,
+    ["type", "referenceField", "field"],
+    ["label", "editor", "commit", "align", "width", "display", "suffix", "format"],
+  );
+
+  const referenceFieldName = parseRequiredNonEmptyString(
+    `${context} referenceField`,
+    value.referenceField,
+  );
+  const sourceField = entity.fields[referenceFieldName];
+
+  if (!sourceField) {
+    throw new Error(
+      `${context} references unknown referenceField "${entityName}.${referenceFieldName}".`,
+    );
+  }
+
+  if (sourceField.type !== "reference") {
+    throw new Error(
+      `${context} referenceField "${entityName}.${referenceFieldName}" must be a reference field.`,
+    );
+  }
+
+  const referencedEntity = entities[sourceField.to];
+  if (!referencedEntity) {
+    throw new Error(
+      `${context} referenceField "${entityName}.${referenceFieldName}" targets unknown entity "${sourceField.to}".`,
+    );
+  }
+
+  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+  const field = referencedEntity.fields[fieldName];
+
+  if (!field) {
+    throw new Error(`${context} references unknown field "${sourceField.to}.${fieldName}".`);
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const editor =
+    value.editor === undefined
+      ? undefined
+      : parseFieldEditor(`${context} field "${sourceField.to}.${fieldName}"`, value.editor, field);
+  const commit =
+    value.commit === undefined
+      ? undefined
+      : parseFieldCommitPolicy(
+          `${context} field "${sourceField.to}.${fieldName}"`,
+          value.commit,
+          field,
+        );
+  const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
+  const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
+  const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
+  const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
+  const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
+
+  return {
+    type: "referenceField",
+    referenceField: referenceFieldName,
+    field: fieldName,
+    ...(label === undefined ? {} : { label }),
+    ...(editor === undefined ? {} : { editor }),
+    ...(commit === undefined ? {} : { commit }),
+    ...(align === undefined ? {} : { align }),
+    ...(width === undefined ? {} : { width }),
+    ...(display === undefined ? {} : { display }),
+    ...(suffix === undefined ? {} : { suffix }),
+    ...(format === undefined ? {} : { format }),
   };
 }
 
@@ -348,12 +451,6 @@ function assertCollectionViews(
       if (createView.type !== "create") {
         throw new Error(
           `Collection view "${viewName}" create action must reference a create view.`,
-        );
-      }
-
-      if (createView.entity !== view.entity) {
-        throw new Error(
-          `Collection view "${viewName}" create action view "${actionSlot.createView}" must use entity "${view.entity}".`,
         );
       }
 

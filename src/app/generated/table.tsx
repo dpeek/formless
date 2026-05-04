@@ -10,8 +10,13 @@ import {
   DialogTitle,
 } from "@formless/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@formless/ui/table";
-import { useEntityRecordIdsMatchingQuery, useRecordField } from "../../client/store.ts";
-import type { HomeQueryTabConfig, TableColumnConfig } from "../../client/views.ts";
+import { useEntityRecordIdsMatchingQuery, useRecord, useRecordField } from "../../client/store.ts";
+import type {
+  FieldTableColumnConfig,
+  HomeQueryTabConfig,
+  ReferenceFieldTableColumnConfig,
+  TableColumnConfig,
+} from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
@@ -47,7 +52,7 @@ export function RecordTable({
           <TableHeader>
             <TableRow>
               {visibleColumns.map((column) => (
-                <TableHead className={tableHeadClass(column)} key={column.fieldName}>
+                <TableHead className={tableHeadClass(column)} key={column.key}>
                   {column.label}
                 </TableHead>
               ))}
@@ -57,7 +62,7 @@ export function RecordTable({
             {recordIds.map((recordId) => (
               <TableRow key={recordId}>
                 {visibleColumns.map((column) => (
-                  <TableCell className={tableCellClass(column)} key={column.fieldName}>
+                  <TableCell className={tableCellClass(column)} key={column.key}>
                     <RecordTableCell
                       canPatch={canPatch}
                       entityName={entityName}
@@ -93,6 +98,16 @@ function RecordTableCell({
         ? "justify-center"
         : "justify-start";
 
+  if (column.type === "referenceField") {
+    return (
+      <ReferenceFieldTableCell
+        column={column}
+        justifyClass={justifyClass}
+        sourceRecordId={recordId}
+      />
+    );
+  }
+
   if (column.display === "readOnly") {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
@@ -123,7 +138,7 @@ function ReferencedRecordEditButton({
   column,
   sourceRecordId,
 }: {
-  column: TableColumnConfig;
+  column: FieldTableColumnConfig;
   sourceRecordId: string;
 }) {
   const referenceRecordId = useRecordField(sourceRecordId, column.fieldName);
@@ -161,13 +176,91 @@ function ReferencedRecordEditButton({
   );
 }
 
+function ReferenceFieldTableCell({
+  column,
+  justifyClass,
+  sourceRecordId,
+}: {
+  column: ReferenceFieldTableColumnConfig;
+  justifyClass: string;
+  sourceRecordId: string;
+}) {
+  const referenceRecordId = useRecordField(sourceRecordId, column.sourceReferenceFieldName);
+
+  if (typeof referenceRecordId !== "string" || referenceRecordId.trim() === "") {
+    return <EmptyReferenceFieldCell column={column} justifyClass={justifyClass} />;
+  }
+
+  return (
+    <ResolvedReferenceFieldTableCell
+      column={column}
+      justifyClass={justifyClass}
+      referenceRecordId={referenceRecordId}
+    />
+  );
+}
+
+function ResolvedReferenceFieldTableCell({
+  column,
+  justifyClass,
+  referenceRecordId,
+}: {
+  column: ReferenceFieldTableColumnConfig;
+  justifyClass: string;
+  referenceRecordId: string;
+}) {
+  const referenceRecord = useRecord(referenceRecordId);
+
+  if (!referenceRecord) {
+    return <EmptyReferenceFieldCell column={column} justifyClass={justifyClass} />;
+  }
+
+  if (column.display === "readOnly") {
+    return (
+      <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
+        <RecordFieldDisplay column={column} recordId={referenceRecordId} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-center gap-1 ${justifyClass}`}>
+      <RecordFieldEditor
+        canPatch={column.referencedEntity.mutations.patch.enabled}
+        density="compact"
+        entityName={column.referencedEntityName}
+        fieldConfig={column}
+        recordId={referenceRecordId}
+      />
+      {column.suffix ? (
+        <span className="shrink-0 text-xs text-slate-500">{column.suffix}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function EmptyReferenceFieldCell({
+  column,
+  justifyClass,
+}: {
+  column: ReferenceFieldTableColumnConfig;
+  justifyClass: string;
+}) {
+  return (
+    <div
+      aria-label={`${column.label} unavailable`}
+      className={`flex min-h-6 items-center text-xs text-slate-400 ${justifyClass}`}
+    />
+  );
+}
+
 function ReferencedRecordEditorDialog({
   column,
   onOpenChange,
   open,
   referenceRecordId,
 }: {
-  column: TableColumnConfig;
+  column: FieldTableColumnConfig;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   referenceRecordId: string;

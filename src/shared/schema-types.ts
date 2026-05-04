@@ -75,7 +75,7 @@ export type TableColumnWidth = "xs" | "sm" | "md" | "lg";
 export type TableColumnDisplay = "editor" | "readOnly" | "hidden";
 export type TableColumnFormat = "plain" | "number" | "currency" | "percent";
 
-export type TableColumnSchema = {
+export type FieldTableColumnSchema = {
   type: "field";
   field: string;
   label?: string;
@@ -88,6 +88,22 @@ export type TableColumnSchema = {
   format?: TableColumnFormat;
   referenceItemView?: string;
 };
+
+export type ReferenceFieldTableColumnSchema = {
+  type: "referenceField";
+  referenceField: string;
+  field: string;
+  label?: string;
+  editor?: FieldEditor;
+  commit?: FieldCommitPolicy;
+  align?: TableColumnAlign;
+  width?: TableColumnWidth;
+  display?: TableColumnDisplay;
+  suffix?: string;
+  format?: TableColumnFormat;
+};
+
+export type TableColumnSchema = FieldTableColumnSchema | ReferenceFieldTableColumnSchema;
 
 export type TableViewSchema = {
   entity: string;

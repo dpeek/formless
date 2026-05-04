@@ -100,7 +100,7 @@ describe("home view model collections", () => {
     expect(models.map((model) => model.actions[0]?.label)).toEqual([
       "Create Resource",
       "Create Rate card",
-      "Create Rate",
+      "Create Resource",
     ]);
     expect(
       models[0]?.result.type === "list"
@@ -118,9 +118,15 @@ describe("home view model collections", () => {
     });
     expect(
       models[2]?.result.type === "table"
-        ? models[2].result.columns.map((column) => column.fieldName)
+        ? models[2].result.columns.map((column) => column.key)
         : [],
-    ).toEqual(["resource", "cost", "costUnit", "price", "currency"]);
+    ).toEqual([
+      "referenceField:resource.name",
+      "field:cost",
+      "field:costUnit",
+      "field:price",
+      "field:currency",
+    ]);
   });
 
   it("selects only primary collection models for home navigation", () => {
@@ -144,14 +150,14 @@ describe("home view model collections", () => {
       "Currency",
     ]);
     expect(columns.map((column) => column.editor)).toEqual([
-      "reference",
+      "text",
       "number",
       "enum",
       "number",
       "enum",
     ]);
     expect(columns.map((column) => column.commit)).toEqual([
-      "immediate",
+      "field-commit",
       "field-commit",
       "immediate",
       "field-commit",
@@ -166,7 +172,7 @@ describe("home view model collections", () => {
     ]);
     expect(columns.map((column) => column.width ?? "none")).toEqual(["lg", "sm", "xs", "sm", "xs"]);
     expect(columns.map((column) => column.display)).toEqual([
-      "readOnly",
+      "editor",
       "editor",
       "hidden",
       "editor",
@@ -180,10 +186,13 @@ describe("home view model collections", () => {
       "number",
       "plain",
     ]);
-    expect(columns[0]?.referenceItem).toMatchObject({
-      itemViewName: "resourceListItem",
-      entityName: "resource",
-      recordFields: [{ fieldName: "name" }, { fieldName: "kind" }, { fieldName: "unit" }],
+    expect(columns[0]).toMatchObject({
+      type: "referenceField",
+      key: "referenceField:resource.name",
+      sourceReferenceFieldName: "resource",
+      referencedEntityName: "resource",
+      fieldName: "name",
+      field: rateCardSchema.entities.resource?.fields.name,
     });
   });
 
@@ -244,10 +253,8 @@ describe("home view model collections", () => {
       queryName: "cardAll",
       query: rateCardSchema.queries.cardAll?.expression,
       labelField: "name",
-      itemViewName: "cardListItem",
+      itemViewName: "rateCardContextItem",
       recordFields: [
-        { fieldName: "name" },
-        { fieldName: "isDefault" },
         { fieldName: "marginMin" },
         { fieldName: "marginMed" },
         { fieldName: "marginMax" },
@@ -267,7 +274,7 @@ describe("home view model collections", () => {
     });
   });
 
-  it("resolves scoped rate create defaults from the create view", () => {
+  it("resolves the rate-home resource create action from the create view entity", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
@@ -275,19 +282,10 @@ describe("home view model collections", () => {
 
     expect(create).toMatchObject({
       type: "create",
-      entityName: "rate",
-      fields: [
-        { fieldName: "resource" },
-        { fieldName: "cost" },
-        { fieldName: "costUnit" },
-        { fieldName: "price" },
-      ],
-      defaults: [
-        {
-          fieldName: "card",
-          value: { kind: "context", name: "card" },
-        },
-      ],
+      label: "Create Resource",
+      entityName: "resource",
+      fields: [{ fieldName: "name" }],
+      defaults: [],
     });
   });
 
@@ -298,7 +296,7 @@ describe("home view model collections", () => {
     const action = rateModel?.actions.find((candidate) => candidate.type === "entity-action");
 
     expect(rateModel?.actions.map((candidate) => candidate.label)).toEqual([
-      "Create Rate",
+      "Create Resource",
       "Regenerate missing rates",
     ]);
     expect(action).toMatchObject({

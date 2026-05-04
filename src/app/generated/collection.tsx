@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { Badge } from "@formless/ui/badge";
 import { Button } from "@formless/ui/button";
-import { Field } from "@formless/ui/field";
-import { Label } from "@formless/ui/label";
-import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
 import {
   useEntityRecordCountMatchingQuery,
@@ -215,32 +212,34 @@ function ContextSelector({
 
   return (
     <section className="space-y-3 border-b border-slate-200 pb-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <Field className="min-w-60 flex-1">
-          <Label>{context.entity.label}</Label>
-          <NativeSelect
-            className="w-full"
-            disabled={options.length === 0}
-            onChange={(event) => onSelectContext?.(event.currentTarget.value || null)}
-            value={selectedContextRecordId ?? ""}
-          >
-            {options.length === 0 ? <NativeSelectOption value="" /> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Tabs
+          onValueChange={(value) => {
+            if (typeof value === "string") {
+              onSelectContext?.(value || null);
+            }
+          }}
+          value={selectedContextRecordId ?? ""}
+        >
+          <TabsList aria-label={`${context.entity.label} records`} variant="line">
             {options.map((option) => (
-              <NativeSelectOption key={option.id} value={option.id}>
+              <TabsTrigger key={option.id} value={option.id}>
                 {option.label}
-              </NativeSelectOption>
+              </TabsTrigger>
             ))}
-          </NativeSelect>
-        </Field>
+          </TabsList>
+        </Tabs>
 
         {context.createAction ? (
           <Button
+            aria-label={`Create ${context.entity.label}`}
             disabled={!context.createAction.enabled}
             onClick={() => setCreateDialogOpen(true)}
+            size="icon-sm"
             type="button"
             variant="outline"
           >
-            {context.createAction.enabled ? context.createAction.label : "Create disabled"}
+            +
           </Button>
         ) : null}
       </div>

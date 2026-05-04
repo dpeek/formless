@@ -190,9 +190,9 @@ describe("generated collection home", () => {
 
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain("Rates");
-    expect(html).toContain("Create Rate");
+    expect(html).toContain("Create Resource");
     expect(html).toContain("Regenerate missing rates");
-    expect(html).not.toContain("Create Resource");
+    expect(html).not.toMatch(/<button[^>]*>Create Rate<\/button>/);
   });
 
   it("renders the scoped rate-card collection with a card selector", () => {
@@ -239,17 +239,20 @@ describe("generated collection home", () => {
       />,
     );
 
-    expect(html).toContain("Rate card");
+    expect(html).toContain('aria-label="Rate card records"');
+    expect(html).not.toContain("<select");
     expect(html).toContain("Default");
     expect(html).toContain("Backup");
-    expect(html).toContain("Create Rate card");
-    expect(html).toMatch(/<button[^>]*>Create Rate<\/button>/);
+    expect(html).toContain('aria-label="Create Rate card"');
+    expect(html).toMatch(/<button[^>]*>Create Resource<\/button>/);
     expect(html).toContain("Regenerate missing rates");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("<th");
     expect(html).toContain("Role");
-    expect(html).toContain("Edit shared");
-    expect(html).toContain('aria-label="Edit shared resource"');
+    expect(html).toContain('aria-label="Role"');
+    expect(html).toContain('value="Designer"');
+    expect(html).not.toContain("Edit shared");
+    expect(html).not.toContain('aria-label="Edit shared resource"');
     expect(html).toContain('aria-label="Cost"');
     expect(html).not.toContain("Cost unit");
     expect(html).not.toContain('aria-label="Currency"');
@@ -295,10 +298,9 @@ describe("generated collection home", () => {
       />,
     );
 
-    expect(html).toContain('aria-label="Name"');
-    expect(html).toContain('value="Backup"');
-    expect(html).toContain('aria-label="Default"');
-    expect(html).toContain('type="checkbox"');
+    expect(html).not.toContain('aria-label="Name"');
+    expect(html).not.toContain('aria-label="Default"');
+    expect(html).not.toContain('type="checkbox"');
     expect(html).toContain('aria-label="Minimum margin"');
     expect(html).toContain('aria-label="Medium margin"');
     expect(html).toContain('aria-label="Maximum margin"');
@@ -441,7 +443,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="1170"');
   });
 
-  it("disables scoped create actions until context is selected", () => {
+  it("keeps the resource create action enabled without a selected card", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
@@ -475,7 +477,8 @@ describe("generated collection home", () => {
     );
 
     expect(html).toContain("No rate card records yet.");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
+    expect(html).toContain(">Create Resource</button>");
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Create Resource<\/button>/);
   });
 });
 
@@ -561,9 +564,10 @@ describe("generated forms and records", () => {
 
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Role");
-    expect(html).toContain("Designer");
-    expect(html).toContain("Edit shared");
-    expect(html).toContain('aria-label="Edit shared resource"');
+    expect(html).toContain('aria-label="Role"');
+    expect(html).toContain('value="Designer"');
+    expect(html).not.toContain("Edit shared");
+    expect(html).not.toContain('aria-label="Edit shared resource"');
     expect(html).toContain('aria-label="Cost"');
     expect(html).not.toContain("Cost unit");
     expect(html).toContain("USD");
@@ -613,14 +617,39 @@ describe("generated forms and records", () => {
 
     expect(before.match(/Designer/g)?.length).toBe(2);
     expect(after.match(/Principal designer/g)?.length).toBe(2);
-    expect(after).not.toContain(">Designer<");
+    expect(after).not.toContain('value="Designer"');
     expect(resourceIds).toEqual(["resource-1"]);
+  });
+
+  it("renders missing referenced-record table cells without crashing", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
+
+    applyBootstrapResponse(
+      bootstrap([rateCardRateRecord("rate-1", "missing-resource", "card-1", 475)], rateCardSchema),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={rateCardSchema.entities.rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('aria-label="Role unavailable"');
+    expect(html).toContain('value="475"');
   });
 
   it("renders read-only table cells with display formatting", () => {
     const rate = rateCardSchema.entities.rate;
     const columns: TableColumnConfig[] = [
       {
+        type: "field",
+        key: "field:price",
         fieldName: "price",
         field: rate.fields.price,
         editor: "number",
@@ -700,14 +729,14 @@ describe("generated forms and records", () => {
     expect(html).toContain("Lead");
   });
 
-  it("renders scoped rate create dialogs without the defaulted card field", () => {
+  it("renders the rate-home resource create dialog with only name visible", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
     const action = rateModel?.actions.find((candidate) => candidate.type === "create");
 
     if (!action || action.type !== "create") {
-      throw new Error("Missing scoped rate create action.");
+      throw new Error("Missing resource create action.");
     }
 
     applyBootstrapResponse(
@@ -717,19 +746,17 @@ describe("generated forms and records", () => {
       ),
     );
     const html = renderToStaticMarkup(
-      <GeneratedCreateDialogForm
-        action={action}
-        queryContext={{ today: "2026-05-01", values: { card: "card-1" } }}
-        renderDialogCancel={false}
-      />,
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain('name="resource"');
-    expect(html).toContain('name="cost"');
-    expect(html).toContain('name="costUnit"');
-    expect(html).toContain('name="price"');
+    expect(html).toContain('name="name"');
+    expect(html).not.toContain('name="resource"');
+    expect(html).not.toContain('name="cost"');
+    expect(html).not.toContain('name="costUnit"');
+    expect(html).not.toContain('name="price"');
+    expect(html).not.toContain('name="kind"');
+    expect(html).not.toContain('name="unit"');
     expect(html).not.toContain('name="card"');
-    expect(html).not.toContain("Rate card</label>");
   });
 
   it("renders terse rate-card resource and card create dialogs with schema defaults hidden", () => {
@@ -768,16 +795,26 @@ describe("generated forms and records", () => {
     expect(cardHtml).not.toContain('name="marginMax"');
   });
 
-  it("resolves create values from visible fields and context defaults", () => {
+  it("resolves resource create values without hidden schema defaults", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
     const action = rateModel?.actions.find((candidate) => candidate.type === "create");
 
     if (!action || action.type !== "create") {
-      throw new Error("Missing scoped rate create action.");
+      throw new Error("Missing resource create action.");
     }
 
+    const formData = new FormData();
+    formData.set("name", "Producer");
+
+    expect(resolveCreateValues(formData, action, { today: "2026-05-01" })).toEqual({
+      name: "Producer",
+    });
+  });
+
+  it("still resolves scoped create defaults for views that use them", () => {
+    const action = scopedRateCreateAction();
     const formData = new FormData();
     formData.set("resource", "resource-1");
     formData.set("cost", "325");
@@ -799,14 +836,7 @@ describe("generated forms and records", () => {
   });
 
   it("throws when create context defaults are unresolved", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
-    const action = rateModel?.actions.find((candidate) => candidate.type === "create");
-
-    if (!action || action.type !== "create") {
-      throw new Error("Missing scoped rate create action.");
-    }
+    const action = scopedRateCreateAction();
 
     const formData = new FormData();
     formData.set("resource", "resource-1");
@@ -944,6 +974,26 @@ function createAction(
     fields: createFields(entity, fieldNames),
     defaults: [],
     enabled: entity.mutations.create.enabled,
+  };
+}
+
+function scopedRateCreateAction(): Extract<HomeActionConfig, { type: "create" }> {
+  const rate = rateCardSchema.entities.rate;
+
+  return {
+    type: "create",
+    label: "Create Rate",
+    entityName: "rate",
+    entity: rate,
+    fields: createFields(rate, ["resource", "cost", "costUnit", "price"]),
+    defaults: [
+      {
+        fieldName: "card",
+        field: rate.fields.card,
+        value: { kind: "context", name: "card" },
+      },
+    ],
+    enabled: rate.mutations.create.enabled,
   };
 }
 
