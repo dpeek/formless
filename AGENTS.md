@@ -9,8 +9,8 @@ Current focus: `focus.md`. Future work: `backlog.md`.
 2. Change code, tests, docs
 3. Verify until green: `bun run test`; `bun run check`
 4. Test app (if needed):
-   - `bun dev` and capture local URL `http://localhost:{port}`
-   - Launch app with Browser Use skill
+   - `bun dev --open`
+   - Use "Browser Use" skill
    - Kill server when done
 5. End turn: what changed, tests
 
