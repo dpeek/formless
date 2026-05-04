@@ -59,6 +59,12 @@ export type CreateMutationCausedRecordWriter = (
   recordValuesToCreate: RecordValues[],
 ) => void;
 
+export type RecordConstraintValidator = (
+  entity: string,
+  values: RecordValues,
+  options?: { ignoreRecordId?: string },
+) => void;
+
 type ApplyCreateMutationSideEffects = (context: {
   storage: DurableObjectStorage;
   mutation: CreateMutation;
@@ -239,6 +245,7 @@ export function createStoredRecord(
   storage: DurableObjectStorage,
   mutation: CreateMutation,
   applySideEffects?: ApplyCreateMutationSideEffects,
+  validateConstraints?: RecordConstraintValidator,
 ): MutationResponse {
   return storage.transactionSync(() => {
     const existingResponse = getMutationResponseById(storage, mutation.mutationId);
@@ -255,6 +262,7 @@ export function createStoredRecord(
       mutation.entity,
       mutation.values,
       createdAt,
+      validateConstraints,
     );
 
     applySideEffects?.({
@@ -269,6 +277,7 @@ export function createStoredRecord(
           entity,
           recordValuesToCreate,
           nowIsoString(),
+          validateConstraints,
         );
       },
     });
@@ -289,6 +298,7 @@ export function patchStoredRecord(
   storage: DurableObjectStorage,
   mutation: PatchMutation,
   values?: RecordValues,
+  validateConstraints?: RecordConstraintValidator,
 ): MutationResponse {
   return storage.transactionSync(() => {
     const existingResponse = getMutationResponseById(storage, mutation.mutationId);
@@ -308,6 +318,8 @@ export function patchStoredRecord(
       ...existingRecord,
       values: values ?? mergeRecordValues(existingRecord.values, mutation.values),
     };
+
+    validateConstraints?.(mutation.entity, record.values, { ignoreRecordId: record.id });
 
     storage.sql.exec(
       `
@@ -431,6 +443,7 @@ export function createRecordsForAction(
   entity: string,
   action: string,
   recordValuesToCreate: RecordValues[],
+  validateConstraints?: RecordConstraintValidator,
 ): ActionResponse {
   return storage.transactionSync(() => {
     const existingExecution = findActionExecution(storage, actionId);
@@ -447,6 +460,8 @@ export function createRecordsForAction(
     const changes: ChangeRow[] = [];
 
     for (const values of recordValuesToCreate) {
+      validateConstraints?.(entity, values);
+
       const record: StoredRecord = {
         id: createRecordId(),
         entity,
@@ -513,9 +528,18 @@ function insertCreatedRecordChanges(
   entity: string,
   recordValuesToCreate: RecordValues[],
   createdAt: string,
+  validateConstraints?: RecordConstraintValidator,
 ): StoredRecord[] {
   return recordValuesToCreate.map((values) =>
-    insertCreatedRecordChange(storage, mutationId, op, entity, values, createdAt),
+    insertCreatedRecordChange(
+      storage,
+      mutationId,
+      op,
+      entity,
+      values,
+      createdAt,
+      validateConstraints,
+    ),
   );
 }
 
@@ -526,7 +550,10 @@ function insertCreatedRecordChange(
   entity: string,
   values: RecordValues,
   createdAt: string,
+  validateConstraints?: RecordConstraintValidator,
 ): StoredRecord {
+  validateConstraints?.(entity, values);
+
   const record: StoredRecord = {
     id: createRecordId(),
     entity,

@@ -340,6 +340,9 @@ describe("authority", () => {
 
   it("applies expanded rate-card defaults when creating sample records", async () => {
     await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: rateCardSchemaWithoutAfterCreateHooks(),
+    });
 
     const resource = await postMutationForEntity("mutation-resource", "resource", {
       name: "Designer",
@@ -373,6 +376,90 @@ describe("authority", () => {
       priceSet: true,
       currency: "usd",
     });
+  });
+
+  it("rejects create and patch mutations that violate unique constraints", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithRateReferences({
+        constraints: uniqueRatePairConstraints(),
+      }),
+    });
+
+    const resource = await postMutationForEntity("mutation-resource", "resource", {
+      name: "Designer",
+    });
+    const card = await postMutationForEntity("mutation-card-default", "card", {
+      name: "Default",
+    });
+    const premiumCard = await postMutationForEntity("mutation-card-premium", "card", {
+      name: "Premium",
+    });
+    const defaultRate = await postMutationForEntity("mutation-rate-default", "rate", {
+      resource: resource.record.id,
+      card: card.record.id,
+      price: 125,
+    });
+    const premiumRate = await postMutationForEntity("mutation-rate-premium", "rate", {
+      resource: resource.record.id,
+      card: premiumCard.record.id,
+      price: 150,
+    });
+    const pricePatch = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-rate-price",
+      entity: "rate",
+      op: "patch",
+      recordId: defaultRate.record.id,
+      values: { price: 130 },
+    });
+
+    expect(pricePatch.record.values.price).toBe(130);
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-rate-duplicate",
+        entity: "rate",
+        op: "create",
+        values: {
+          resource: resource.record.id,
+          card: card.record.id,
+          price: 175,
+        },
+      },
+      'Unique constraint "rate.uniqueRatePair" would be violated.',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-rate-move",
+        entity: "rate",
+        op: "patch",
+        recordId: premiumRate.record.id,
+        values: { card: card.record.id },
+      },
+      'Unique constraint "rate.uniqueRatePair" would be violated.',
+    );
+  });
+
+  it("ignores tombstoned records when checking unique constraints", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskConstraints({
+        uniqueTitle: { kind: "unique", fields: ["title"] },
+      }),
+    });
+
+    const completed = await postMutation("mutation-completed", {
+      title: "Reusable",
+      done: true,
+    });
+
+    await postAction("action-clear", "clearCompletedTasks");
+    const recreated = await postMutation("mutation-recreated", {
+      title: "Reusable",
+      done: false,
+    });
+
+    expect(recreated.record.values.title).toBe(completed.record.values.title);
   });
 
   it("creates missing rate join records through the rate-card action", async () => {
@@ -990,6 +1077,40 @@ describe("authority", () => {
         schema: schemaWithTaskProjectReference({ required: true }),
       },
       'Cannot require field "task.project"',
+    );
+  });
+
+  it("rejects schema updates that add violated unique constraints", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithRateReferences(),
+    });
+
+    const resource = await postMutationForEntity("mutation-resource", "resource", {
+      name: "Designer",
+    });
+    const card = await postMutationForEntity("mutation-card", "card", {
+      name: "Default",
+    });
+
+    await postMutationForEntity("mutation-rate-1", "rate", {
+      resource: resource.record.id,
+      card: card.record.id,
+      price: 125,
+    });
+    await postMutationForEntity("mutation-rate-2", "rate", {
+      resource: resource.record.id,
+      card: card.record.id,
+      price: 150,
+    });
+
+    await expectError(
+      "/api/schema",
+      {
+        schema: schemaWithRateReferences({
+          constraints: uniqueRatePairConstraints(),
+        }),
+      },
+      'Cannot add unique constraint "rate.uniqueRatePair" because existing records violate it.',
     );
   });
 
@@ -1834,7 +1955,11 @@ function schemaWithRequiredScore() {
   };
 }
 
-function schemaWithRateReferences() {
+function schemaWithRateReferences({
+  constraints,
+}: {
+  constraints?: EntitySchema["constraints"];
+} = {}) {
   return {
     version: 1,
     entities: {
@@ -1880,6 +2005,7 @@ function schemaWithRateReferences() {
           price: { type: "number", required: false, label: "Price", min: 0 },
         },
         mutations: defaultMutations(),
+        ...(constraints === undefined ? {} : { constraints }),
       },
     },
     queries: appSchema.queries,
@@ -1887,6 +2013,34 @@ function schemaWithRateReferences() {
     tableViews: appSchema.tableViews,
     views: appSchema.views,
   } satisfies AppSchema;
+}
+
+function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
+  return {
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: appSchema.entities.task.fields,
+        mutations: defaultMutations(),
+        constraints,
+        actions: appSchema.entities.task.actions,
+      },
+    },
+    queries: defaultQueries(),
+    itemViews: defaultItemViews(),
+    tableViews: {},
+    views: defaultViews(),
+  } satisfies AppSchema;
+}
+
+function uniqueRatePairConstraints(): NonNullable<EntitySchema["constraints"]> {
+  return {
+    uniqueRatePair: {
+      kind: "unique",
+      fields: ["resource", "card"],
+    },
+  };
 }
 
 function schemaWithAssignmentReference() {

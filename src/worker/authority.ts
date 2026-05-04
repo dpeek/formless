@@ -32,18 +32,16 @@ import {
   writeActiveSchema,
 } from "./storage.ts";
 import { executeCreateAfterCreateHooks, executeEntityAction } from "./actions.ts";
+import {
+  assertExistingRecordsSatisfyUniqueConstraints,
+  assertUniqueConstraints,
+} from "./constraints.ts";
+import { BadRequestError } from "./errors.ts";
 import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
 import type { Env } from "./index.ts";
 
 const seedSchema = parseAppSchema(rawSeedSchema);
 const rateCardSchema = parseAppSchema(rawRateCardSchema);
-
-export class BadRequestError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "BadRequestError";
-  }
-}
 
 export class FormlessAuthority extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -114,14 +112,21 @@ export class FormlessAuthority extends DurableObject<Env> {
 
         if (mutation.op === "create") {
           return jsonResponse(
-            createStoredRecord(this.ctx.storage, mutation, (context) => {
-              executeCreateAfterCreateHooks(
-                context.storage,
-                context.mutation,
-                schema,
-                context.createRecords,
-              );
-            }),
+            createStoredRecord(
+              this.ctx.storage,
+              mutation,
+              (context) => {
+                executeCreateAfterCreateHooks(
+                  context.storage,
+                  context.mutation,
+                  schema,
+                  context.createRecords,
+                );
+              },
+              (entity, values, options) => {
+                assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
+              },
+            ),
           );
         }
 
@@ -130,6 +135,9 @@ export class FormlessAuthority extends DurableObject<Env> {
             this.ctx.storage,
             mutation,
             "recordValues" in mutation ? mutation.recordValues : undefined,
+            (entity, values, options) => {
+              assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
+            },
           ),
         );
       }
@@ -565,6 +573,7 @@ function validateSchemaUpdate(
   }
 
   validateCompatibleSchemaChange(currentSchema, nextSchema, records);
+  assertExistingRecordsSatisfyUniqueConstraints(nextSchema, records);
 
   return nextSchema;
 }

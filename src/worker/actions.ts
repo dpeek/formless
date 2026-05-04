@@ -13,6 +13,7 @@ import type {
   EntitySchema,
   FieldSchema,
 } from "../shared/schema.ts";
+import { assertUniqueConstraints } from "./constraints.ts";
 import {
   createRecordsForAction,
   type CreateMutationCausedRecordWriter,
@@ -48,6 +49,9 @@ export function executeEntityAction(
       request.entity,
       request.action,
       values,
+      (entity, recordValues, options) => {
+        assertUniqueConstraints(storage, schema, entity, recordValues, options);
+      },
     );
   }
 

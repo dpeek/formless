@@ -1515,6 +1515,10 @@ describe("rate-card sample schema", () => {
       "priceSet",
       "currency",
     ]);
+    expect(schema.entities.rate?.constraints?.uniqueRatePair).toEqual({
+      kind: "unique",
+      fields: ["resource", "card"],
+    });
     expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual({
       label: "Regenerate missing rates",
       kind: "create-missing-join-records",
@@ -1562,6 +1566,147 @@ describe("rate-card sample schema", () => {
         { type: "entityAction", action: "regenerateMissingRates" },
       ],
     });
+  });
+});
+
+describe("schema entity constraints", () => {
+  it("parses unique constraints over entity fields", () => {
+    const entities = scopedRateEntities();
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        entities: {
+          ...entities,
+          rate: {
+            ...entities.rate,
+            constraints: {
+              uniqueRatePair: {
+                kind: "unique",
+                fields: ["resource", "card"],
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.rate?.constraints?.uniqueRatePair).toEqual({
+      kind: "unique",
+      fields: ["resource", "card"],
+    });
+  });
+
+  it("rejects malformed unique constraints", () => {
+    const entities = scopedRateEntities();
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              constraints: {},
+            },
+          },
+        }),
+      ),
+    ).toThrow('Entity "rate" constraints must not be empty');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              constraints: {
+                uniqueRatePair: {
+                  kind: "unique",
+                  fields: ["resource", "card"],
+                  label: "Unique rate pair",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('constraint "uniqueRatePair" has unsupported key "label"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              constraints: {
+                uniqueRatePair: {
+                  kind: "unique",
+                  fields: [],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("fields must be a non-empty array");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              constraints: {
+                uniqueRatePair: {
+                  kind: "unique",
+                  fields: ["resource", "missing"],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              constraints: {
+                duplicateField: {
+                  kind: "unique",
+                  fields: ["resource", "resource"],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("fields must be unique");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              constraints: {
+                oneDefaultCard: {
+                  kind: "uniqueWhere",
+                  fields: ["card"],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('constraint "oneDefaultCard" has unsupported kind "uniqueWhere"');
   });
 });
 

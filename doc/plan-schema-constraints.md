@@ -6,7 +6,7 @@ last_updated: 2026-05-04
 
 # Schema constraints
 
-Status: proposed
+Status: implemented
 
 ## Must read
 

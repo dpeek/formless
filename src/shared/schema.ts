@@ -232,10 +232,18 @@ export type EntityActionSchema =
   | ClearCompletedEntityActionSchema
   | CreateMissingJoinRecordsEntityActionSchema;
 
+export type UniqueConstraintSchema = {
+  kind: "unique";
+  fields: string[];
+};
+
+export type EntityConstraintSchema = UniqueConstraintSchema;
+
 export type EntitySchema = {
   label: string;
   fields: Record<string, FieldSchema>;
   mutations: EntityMutationPolicy;
+  constraints?: Record<string, EntityConstraintSchema>;
   actions?: Record<string, EntityActionSchema>;
 };
 
@@ -1656,6 +1664,14 @@ function parseEntityBase(
     throw new Error(`Entity "${entityName}" must be an object.`);
   }
 
+  assertSupportedKeys(`Entity "${entityName}"`, value, [
+    "label",
+    "fields",
+    "mutations",
+    "constraints",
+    "actions",
+  ]);
+
   const label = value.label;
   if (typeof label !== "string" || label.trim() === "") {
     throw new Error(`Entity "${entityName}" must have a label.`);
@@ -1667,11 +1683,101 @@ function parseEntityBase(
   }
 
   const mutations = parseEntityMutations(entityName, value.mutations);
+  const constraints = parseEntityConstraints(entityName, value.constraints, fields);
 
   return {
-    entity: { label, fields, mutations },
+    entity: {
+      label,
+      fields,
+      mutations,
+      ...(constraints === undefined ? {} : { constraints }),
+    },
     actionsInput: value.actions,
   };
+}
+
+function parseEntityConstraints(
+  entityName: string,
+  value: unknown,
+  fields: Record<string, FieldSchema>,
+): Record<string, EntityConstraintSchema> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Entity "${entityName}" constraints must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error(`Entity "${entityName}" constraints must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([constraintName, constraint]) => {
+      if (constraintName.trim() === "") {
+        throw new Error(`Entity "${entityName}" constraint names must be non-empty.`);
+      }
+
+      return [
+        constraintName,
+        parseEntityConstraint(entityName, constraintName, constraint, fields),
+      ];
+    }),
+  );
+}
+
+function parseEntityConstraint(
+  entityName: string,
+  constraintName: string,
+  value: unknown,
+  fields: Record<string, FieldSchema>,
+): EntityConstraintSchema {
+  const context = `Entity "${entityName}" constraint "${constraintName}"`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  if (value.kind === "unique") {
+    assertExactKeys(context, value, ["kind", "fields"]);
+
+    return {
+      kind: "unique",
+      fields: parseUniqueConstraintFields(context, value.fields, fields),
+    };
+  }
+
+  throw new Error(`${context} has unsupported kind "${String(value.kind)}".`);
+}
+
+function parseUniqueConstraintFields(
+  context: string,
+  value: unknown,
+  fields: Record<string, FieldSchema>,
+): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${context} fields must be a non-empty array.`);
+  }
+
+  const names = value.map((fieldName) => {
+    if (typeof fieldName !== "string" || fieldName.trim() === "") {
+      throw new Error(`${context} fields must contain non-empty field names.`);
+    }
+
+    if (!fields[fieldName]) {
+      throw new Error(`${context} references unknown field "${fieldName}".`);
+    }
+
+    return fieldName;
+  });
+
+  if (new Set(names).size !== names.length) {
+    throw new Error(`${context} fields must be unique.`);
+  }
+
+  return names;
 }
 
 function parseEntityActions(
@@ -2423,6 +2529,16 @@ function assertExactKeys(
   for (const key of requiredKeys) {
     if (!(key in value)) {
       throw new Error(`${context} must include "${key}".`);
+    }
+  }
+}
+
+function assertSupportedKeys(context: string, value: Record<string, unknown>, keys: string[]) {
+  const allowedKeys = new Set(keys);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`${context} has unsupported key "${key}".`);
     }
   }
 }

@@ -253,6 +253,8 @@ Named actions can also create records. The first generic creation action is `cre
 
 The rate-card sample also proves authority-owned create lifecycle. `resource.create` and `card.create` declare `afterCreate` hooks that run `rate.regenerateMissingRates`, so creating a resource fills rates for every card and creating a card fills rates for every resource. Replaying the original create mutation returns the original full change set and does not create duplicate rates.
 
+Entities can also declare narrow authority-enforced constraints. The first supported kind is `unique`, which checks active records for duplicate field tuples on generic creates, generic patches, and action-created records. The rate-card sample uses `rate.uniqueRatePair` over `resource` and `card`, so the flat join model is protected by the authority instead of the table UI.
+
 ## Running example: personal task planner
 
 The best working example for this system is not a generic todo list. It is a personal task planner.
