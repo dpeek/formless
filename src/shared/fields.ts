@@ -1,6 +1,7 @@
 import type { FieldValue, StoredRecord } from "./protocol.ts";
 import type { EntitySchema, EnumValueSchema, FieldSchema } from "./schema.ts";
 import type { QueryOperator } from "./query.ts";
+import { getFieldTypeBehavior } from "./field-types.ts";
 
 export type SystemFieldName = "id" | "createdAt" | "deletedAt";
 
@@ -104,7 +105,7 @@ function valueFieldCatalogEntry(fieldName: string, field: FieldSchema): Addressa
     type: field.type,
     label: field.label ?? humanizeFieldName(fieldName),
     writable: true,
-    filterOps: field.type === "date" ? ["eq", "before"] : ["eq"],
+    filterOps: [...getFieldTypeBehavior(field).filterOps],
     ...(field.type === "enum" ? { values: field.values } : {}),
     ...(field.type === "reference"
       ? {

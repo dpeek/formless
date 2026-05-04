@@ -21,6 +21,7 @@ import { fieldLabel, type CreateFieldConfig, type HomeActionConfig } from "../..
 import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
+import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import { numberInputValueToFieldValue } from "./format.ts";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
@@ -193,56 +194,57 @@ export function GeneratedCreateDialogForm({
 }
 
 function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
-  const { field, fieldName } = fieldConfig;
+  const { field, fieldName, editor } = fieldConfig;
+  const adapter = selectGeneratedFieldEditorAdapter(field, editor);
   const label = fieldLabel(fieldName, field);
 
-  if (field.type === "boolean") {
+  if (adapter.kind === "boolean") {
     return (
       <Field orientation="horizontal">
-        <Checkbox defaultChecked={field.default ?? false} name={fieldName} />
+        <Checkbox defaultChecked={adapter.field.default ?? false} name={fieldName} />
         <Label>{label}</Label>
       </Field>
     );
   }
 
-  if (field.type === "date") {
+  if (adapter.kind === "date") {
     return (
       <Field>
         <Label>{label}</Label>
-        <DateInput name={fieldName} required={field.required} />
+        <DateInput name={fieldName} required={adapter.field.required} />
       </Field>
     );
   }
 
-  if (field.type === "number") {
+  if (adapter.kind === "number") {
     return (
       <Field>
         <Label>{label}</Label>
         <Input
-          defaultValue={field.default}
-          max={field.max}
-          min={field.min}
+          defaultValue={adapter.field.default}
+          max={adapter.field.max}
+          min={adapter.field.min}
           name={fieldName}
-          required={field.required}
-          step={field.integer ? "1" : "any"}
+          required={adapter.field.required}
+          step={adapter.field.integer ? "1" : "any"}
           type="number"
         />
       </Field>
     );
   }
 
-  if (field.type === "enum") {
+  if (adapter.kind === "enum") {
     return (
       <Field>
         <Label>{label}</Label>
         <NativeSelect
           className="w-full"
-          defaultValue={field.default ?? (field.required ? undefined : "")}
+          defaultValue={adapter.field.default ?? (adapter.field.required ? undefined : "")}
           name={fieldName}
-          required={field.required}
+          required={adapter.field.required}
         >
-          {field.required ? null : <NativeSelectOption value="" />}
-          {Object.entries(field.values).map(([value, option]) => (
+          {adapter.field.required ? null : <NativeSelectOption value="" />}
+          {Object.entries(adapter.field.values).map(([value, option]) => (
             <NativeSelectOption key={value} value={value}>
               {option.label}
             </NativeSelectOption>
@@ -252,8 +254,8 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
     );
   }
 
-  if (field.type === "reference") {
-    return <ReferenceCreateField field={field} fieldName={fieldName} label={label} />;
+  if (adapter.kind === "reference") {
+    return <ReferenceCreateField field={adapter.field} fieldName={fieldName} label={label} />;
   }
 
   return (

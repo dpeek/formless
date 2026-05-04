@@ -1,4 +1,10 @@
 import { findAddressableField, getEntityFieldCatalog } from "./fields.ts";
+import {
+  fieldHasCreateDefault,
+  getFieldTypeBehavior,
+  isFieldCommitPolicy,
+  isFieldEditor,
+} from "./field-types.ts";
 import { collectQueryContextNames, parseQueryExpression, type QueryExpression } from "./query.ts";
 import {
   assertExactKeys,
@@ -1119,18 +1125,11 @@ function parseViewFieldEditor(
 }
 
 function parseFieldEditor(context: string, value: unknown, field: FieldSchema): FieldEditor {
-  if (
-    value !== "text" &&
-    value !== "boolean" &&
-    value !== "date" &&
-    value !== "number" &&
-    value !== "enum" &&
-    value !== "reference"
-  ) {
+  if (!isFieldEditor(value)) {
     throw new Error(`${context} has unsupported editor "${String(value)}".`);
   }
 
-  if (value !== field.type) {
+  if (!getFieldTypeBehavior(field).editors.includes(value)) {
     throw new Error(`${context} editor must match field type "${field.type}".`);
   }
 
@@ -1142,27 +1141,15 @@ function parseFieldCommitPolicy(
   value: unknown,
   field: FieldSchema,
 ): FieldCommitPolicy {
-  if (value !== "immediate" && value !== "field-commit") {
+  if (!isFieldCommitPolicy(value)) {
     throw new Error(`${context} has unsupported commit policy "${String(value)}".`);
   }
 
-  if (field.type === "boolean" && value !== "immediate") {
-    throw new Error(`${context} boolean fields must commit immediately.`);
-  }
-
-  if (field.type === "enum" && value !== "immediate") {
-    throw new Error(`${context} enum fields must commit immediately.`);
-  }
-
-  if (field.type === "reference" && value !== "immediate") {
-    throw new Error(`${context} reference fields must commit immediately.`);
-  }
-
-  if (
-    (field.type === "text" || field.type === "date" || field.type === "number") &&
-    value !== "field-commit"
-  ) {
-    throw new Error(`${context} ${field.type} fields must use field-commit.`);
+  const defaultCommit = getFieldTypeBehavior(field).defaultCommit;
+  if (value !== defaultCommit) {
+    const requirement =
+      defaultCommit === "immediate" ? "must commit immediately" : "must use field-commit";
+    throw new Error(`${context} ${field.type} fields ${requirement}.`);
   }
 
   return value;
@@ -1273,17 +1260,9 @@ function assertCreateViewIncludesRequiredFields(
       field.required &&
       !(fieldName in fields) &&
       !(fieldName in defaults) &&
-      !hasCreateDefault(field)
+      !fieldHasCreateDefault(field)
     ) {
       throw new Error(`Create view "${viewName}" must include required field "${fieldName}".`);
     }
   }
-}
-
-function hasCreateDefault(field: FieldSchema) {
-  return (
-    (field.type === "boolean" && typeof field.default === "boolean") ||
-    (field.type === "number" && typeof field.default === "number") ||
-    (field.type === "enum" && typeof field.default === "string")
-  );
 }

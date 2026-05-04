@@ -187,6 +187,52 @@ describe("home view model collections", () => {
     });
   });
 
+  it("applies field type default commit policies to table columns", () => {
+    const taskHome = appSchema.views.taskHome as Extract<
+      AppSchema["views"][string],
+      { type: "collection" }
+    >;
+    const schema: AppSchema = {
+      ...appSchema,
+      tableViews: {
+        taskTable: {
+          entity: "task",
+          columns: [
+            { type: "field", field: "title" },
+            { type: "field", field: "done" },
+            { type: "field", field: "dueDate" },
+            { type: "field", field: "estimate" },
+            { type: "field", field: "priority" },
+          ],
+        },
+      },
+      views: {
+        ...appSchema.views,
+        taskHome: {
+          ...taskHome,
+          result: { type: "table", tableView: "taskTable" },
+        },
+      },
+    };
+    const model = selectPrimaryCollectionModels(schema)[0];
+    const columns = model?.result.type === "table" ? model.result.columns : [];
+
+    expect(columns.map((column) => column.editor)).toEqual([
+      "text",
+      "boolean",
+      "date",
+      "number",
+      "enum",
+    ]);
+    expect(columns.map((column) => column.commit)).toEqual([
+      "field-commit",
+      "immediate",
+      "field-commit",
+      "field-commit",
+      "immediate",
+    ]);
+  });
+
   it("resolves scoped rate-card collection context", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",

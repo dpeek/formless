@@ -10,6 +10,7 @@ import { submitPatchMutation } from "../../client/sync.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
+import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import { fieldValueToInputValue, inputValueToFieldValue, numberInputAttributes } from "./format.ts";
 
 export function RecordFieldEditor({
@@ -28,6 +29,7 @@ export function RecordFieldEditor({
   showLabel?: boolean;
 }) {
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
+  const adapter = selectGeneratedFieldEditorAdapter(field, editor);
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const labelClass = showLabel ? "text-xs font-medium text-slate-600" : "sr-only";
   const recordValue = useRecordField(recordId, fieldName);
@@ -69,7 +71,7 @@ export function RecordFieldEditor({
     }
   }
 
-  if (editor === "boolean") {
+  if (adapter.kind === "boolean") {
     if (showLabel) {
       return (
         <div className="min-w-28 flex-none space-y-1">
@@ -112,8 +114,8 @@ export function RecordFieldEditor({
     );
   }
 
-  if (editor === "enum" && field.type === "enum") {
-    const unknownValue = draft !== "" && !Object.hasOwn(field.values, draft) ? draft : null;
+  if (adapter.kind === "enum") {
+    const unknownValue = draft !== "" && !Object.hasOwn(adapter.field.values, draft) ? draft : null;
 
     return (
       <div
@@ -134,14 +136,14 @@ export function RecordFieldEditor({
               setDraft(value);
               void commit(value);
             }}
-            required={field.required}
+            required={adapter.field.required}
             value={draft}
           >
-            {!field.required || draft === "" ? <NativeSelectOption value="" /> : null}
+            {!adapter.field.required || draft === "" ? <NativeSelectOption value="" /> : null}
             {unknownValue ? (
               <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
             ) : null}
-            {Object.entries(field.values).map(([value, option]) => (
+            {Object.entries(adapter.field.values).map(([value, option]) => (
               <NativeSelectOption key={value} value={value}>
                 {option.label}
               </NativeSelectOption>
@@ -153,14 +155,14 @@ export function RecordFieldEditor({
     );
   }
 
-  if (editor === "reference" && field.type === "reference") {
+  if (adapter.kind === "reference") {
     return (
       <RecordReferenceEditor
         canPatch={canPatch}
         density={density}
         draft={draft}
         error={error}
-        field={field}
+        field={adapter.field}
         isPending={isPending}
         label={label}
         labelClass={labelClass}
@@ -188,7 +190,7 @@ export function RecordFieldEditor({
       className={
         density === "compact"
           ? "w-full min-w-0 space-y-1"
-          : editor === "date" || editor === "number"
+          : adapter.kind === "date" || adapter.kind === "number"
             ? "min-w-36 flex-none space-y-1"
             : "min-w-52 flex-1 space-y-1"
       }
@@ -212,7 +214,7 @@ export function RecordFieldEditor({
           onKeyDown={handleKeyDown}
           required={field.required}
           {...numberInputAttributes(field)}
-          type={editor === "date" ? "date" : editor === "number" ? "number" : "text"}
+          type={adapter.kind === "date" ? "date" : adapter.kind === "number" ? "number" : "text"}
           value={draft}
         />
       </Field>

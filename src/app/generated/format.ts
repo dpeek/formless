@@ -1,18 +1,11 @@
 import type { TableColumnConfig } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
+import { formatFieldDisplayPrimitive } from "../../shared/field-types.ts";
 
 export function formatFieldDisplayValue(column: TableColumnConfig, value: FieldValue | undefined) {
   if (value === undefined || value === "") {
     return "";
-  }
-
-  if (column.field.type === "enum" && typeof value === "string") {
-    return column.field.values[value]?.label ?? value;
-  }
-
-  if (column.field.type === "boolean") {
-    return value === true ? "Yes" : value === false ? "No" : String(value);
   }
 
   if (typeof value === "number") {
@@ -29,7 +22,7 @@ export function formatFieldDisplayValue(column: TableColumnConfig, value: FieldV
     }
   }
 
-  return String(value);
+  return formatFieldDisplayPrimitive(column.field, value);
 }
 
 export function formatPlainNumber(value: number) {

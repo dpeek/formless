@@ -19,6 +19,7 @@ import type {
   ViewSchema,
 } from "../shared/schema.ts";
 import type { QueryExpression } from "../shared/query.ts";
+import { getFieldTypeBehavior } from "../shared/field-types.ts";
 
 export type RecordFieldConfig = {
   fieldName: string;
@@ -365,8 +366,8 @@ function selectTableColumns(
     return {
       fieldName: column.field,
       field,
-      editor: column.editor ?? field.type,
-      commit: column.commit ?? defaultCommitPolicy(field),
+      editor: column.editor ?? getFieldTypeBehavior(field).defaultEditor,
+      commit: column.commit ?? getFieldTypeBehavior(field).defaultCommit,
       label: column.label ?? fieldLabel(column.field, field),
       ...(column.align === undefined ? {} : { align: column.align }),
       ...(column.width === undefined ? {} : { width: column.width }),
@@ -400,12 +401,6 @@ function selectReferenceItem(
     entity,
     recordFields: selectRecordFields(itemView, entity),
   };
-}
-
-function defaultCommitPolicy(field: FieldSchema): FieldCommitPolicy {
-  return field.type === "boolean" || field.type === "enum" || field.type === "reference"
-    ? "immediate"
-    : "field-commit";
 }
 
 export function fieldLabel(fieldName: string, field: FieldSchema) {

@@ -5,13 +5,13 @@ import type {
   RecordValues,
   StoredRecord,
 } from "../shared/protocol.ts";
+import { fieldCreateDefaultValue } from "../shared/field-types.ts";
 import { matchesQuery } from "../shared/query.ts";
 import type {
   AfterCreateHookSchema,
   AppSchema,
   EntityActionSchema,
   EntitySchema,
-  FieldSchema,
 } from "../shared/schema.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import {
@@ -198,21 +198,13 @@ function createJoinRecordValues(
       continue;
     }
 
-    const defaultValue = fieldDefaultValue(field);
+    const defaultValue = fieldCreateDefaultValue(field);
     if (defaultValue !== undefined) {
       values[fieldName] = defaultValue;
     }
   }
 
   return values;
-}
-
-function fieldDefaultValue(field: FieldSchema) {
-  if (field.type === "boolean" || field.type === "enum" || field.type === "number") {
-    return field.default;
-  }
-
-  return undefined;
 }
 
 function executeActionEffect(

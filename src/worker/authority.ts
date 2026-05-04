@@ -1,13 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import rawSeedSchema from "../../schema/app-schema.json";
 import rawRateCardSchema from "../../schema/samples/rate-card.json";
-import { isDateString } from "../shared/date.ts";
 import {
-  parseAppSchema,
-  type AppSchema,
-  type EntitySchema,
-  type NumberFieldSchema,
-} from "../shared/schema.ts";
+  isValidStoredFieldValue as isValidStoredFieldValueForType,
+  shouldValidateExistingFieldValue,
+  validateAuthorityFieldValue,
+} from "../shared/field-types.ts";
+import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
 import type {
   ActionRequest,
   CreateMutation,
@@ -382,115 +381,26 @@ function validateRecordValues(
   for (const [fieldName, field] of Object.entries(entity.fields)) {
     const fieldValue = values[fieldName];
     const fieldWasProvided = fieldName in values;
+    const result = validateAuthorityRecordFieldValue(
+      fieldName,
+      field,
+      fieldValue,
+      fieldWasProvided,
+    );
 
-    if (field.type === "boolean") {
-      if (typeof fieldValue === "boolean") {
-        validated[fieldName] = fieldValue;
-        continue;
-      }
-
-      if (fieldName in values) {
-        throw new BadRequestError(`Field "${fieldName}" must be a boolean.`);
-      }
-
-      if (typeof field.default === "boolean") {
-        validated[fieldName] = field.default;
-        continue;
-      }
-
-      if (field.required) {
-        throw new BadRequestError(`Field "${fieldName}" is required.`);
-      }
-
-      continue;
-    }
-
-    if (field.type === "enum") {
-      if (fieldWasProvided) {
-        if (typeof fieldValue !== "string") {
-          throw new BadRequestError(`Field "${fieldName}" must be a known enum value.`);
-        }
-
-        if (fieldValue === "") {
-          if (field.required) {
-            throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
-          }
-
-          continue;
-        }
-
-        if (!Object.hasOwn(field.values, fieldValue)) {
-          throw new BadRequestError(`Field "${fieldName}" must be a known enum value.`);
-        }
-
-        validated[fieldName] = fieldValue;
-        continue;
-      }
-
-      if (field.default !== undefined) {
-        validated[fieldName] = field.default;
-        continue;
-      }
-
-      if (field.required) {
-        throw new BadRequestError(`Field "${fieldName}" is required.`);
-      }
-
-      continue;
-    }
-
-    if (field.type === "number") {
-      if (fieldWasProvided) {
-        if (fieldValue === "") {
-          if (field.required) {
-            throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
-          }
-
-          continue;
-        }
-
-        validateNumberFieldValue(fieldName, fieldValue, field);
-        validated[fieldName] = fieldValue;
-        continue;
-      }
-
-      if (field.default !== undefined) {
-        validated[fieldName] = field.default;
-        continue;
-      }
-
-      if (field.required) {
-        throw new BadRequestError(`Field "${fieldName}" is required.`);
-      }
-
+    if (result.kind === "omit") {
       continue;
     }
 
     if (field.type === "reference") {
-      if (!fieldWasProvided) {
-        if (field.required) {
-          throw new BadRequestError(`Field "${fieldName}" is required.`);
-        }
-
-        continue;
+      if (typeof result.value !== "string") {
+        throw new Error("Reference field validation returned a non-string value.");
       }
 
-      if (typeof fieldValue !== "string") {
-        throw new BadRequestError(`Field "${fieldName}" must be a reference ID.`);
-      }
-
-      if (fieldValue.trim() === "") {
-        if (field.required) {
-          throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
-        }
-
-        continue;
-      }
-
-      const targetRecord = getStoredRecord(storage, fieldValue);
+      const targetRecord = getStoredRecord(storage, result.value);
       if (!targetRecord) {
         throw new BadRequestError(
-          `Field "${fieldName}" references unknown ${field.to} record "${fieldValue}".`,
+          `Field "${fieldName}" references unknown ${field.to} record "${result.value}".`,
         );
       }
 
@@ -500,59 +410,27 @@ function validateRecordValues(
 
       if (targetRecord.deletedAt) {
         throw new BadRequestError(
-          `Field "${fieldName}" cannot reference tombstoned record "${fieldValue}".`,
+          `Field "${fieldName}" cannot reference tombstoned record "${result.value}".`,
         );
       }
-
-      validated[fieldName] = fieldValue;
-      continue;
     }
 
-    if (typeof fieldValue !== "string") {
-      if (field.required) {
-        throw new BadRequestError(`Field "${fieldName}" is required.`);
-      }
-
-      continue;
-    }
-
-    if (field.required && fieldValue.trim() === "") {
-      throw new BadRequestError(`Field "${fieldName}" cannot be empty.`);
-    }
-
-    if (field.type === "date" && fieldValue !== "" && !isDateString(fieldValue)) {
-      throw new BadRequestError(`Field "${fieldName}" must be a YYYY-MM-DD date.`);
-    }
-
-    if (fieldValue !== "" || field.required) {
-      validated[fieldName] = fieldValue;
-    }
+    validated[fieldName] = result.value;
   }
 
   return validated;
 }
 
-function validateNumberFieldValue(
+function validateAuthorityRecordFieldValue(
   fieldName: string,
-  value: unknown,
-  field: NumberFieldSchema,
-): asserts value is number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new BadRequestError(`Field "${fieldName}" must be a finite number.`);
-  }
-
-  if (field.min !== undefined && value < field.min) {
-    throw new BadRequestError(
-      `Field "${fieldName}" must be greater than or equal to ${field.min}.`,
-    );
-  }
-
-  if (field.max !== undefined && value > field.max) {
-    throw new BadRequestError(`Field "${fieldName}" must be less than or equal to ${field.max}.`);
-  }
-
-  if (field.integer && !Number.isInteger(value)) {
-    throw new BadRequestError(`Field "${fieldName}" must be an integer.`);
+  field: EntitySchema["fields"][string],
+  fieldValue: unknown,
+  fieldWasProvided: boolean,
+) {
+  try {
+    return validateAuthorityFieldValue(fieldName, field, fieldValue, fieldWasProvided);
+  } catch (error) {
+    throw new BadRequestError(error instanceof Error ? error.message : "Field value is invalid.");
   }
 }
 
@@ -649,7 +527,7 @@ function validateCompatibleSchemaChange(
 }
 
 function shouldValidateExistingValues(field: EntitySchema["fields"][string]) {
-  return field.required || field.type === "number" || field.type === "reference";
+  return shouldValidateExistingFieldValue(field);
 }
 
 function isValidStoredFieldValue(
@@ -657,36 +535,12 @@ function isValidStoredFieldValue(
   field: EntitySchema["fields"][string],
   recordsById: Map<string, StoredRecord>,
 ) {
-  if (value === undefined) {
-    if (field.type === "boolean") {
-      return !field.required || typeof field.default === "boolean";
-    }
-
-    if (field.type === "number") {
-      return !field.required || field.default !== undefined;
-    }
-
-    if (field.type === "enum") {
-      return !field.required || field.default !== undefined;
-    }
-
-    return !field.required;
+  if (!isValidStoredFieldValueForType(value, field)) {
+    return false;
   }
 
-  if (field.type === "boolean") {
-    return typeof value === "boolean";
-  }
-
-  if (field.type === "enum") {
-    return typeof value === "string" && value !== "";
-  }
-
-  if (field.type === "number") {
-    return isValidNumberFieldValue(value, field);
-  }
-
-  if (field.type === "reference") {
-    if (typeof value !== "string" || value.trim() === "") {
+  if (field.type === "reference" && value !== undefined) {
+    if (typeof value !== "string") {
       return false;
     }
 
@@ -695,21 +549,7 @@ function isValidStoredFieldValue(
     return !!targetRecord && targetRecord.entity === field.to && !targetRecord.deletedAt;
   }
 
-  return (
-    typeof value === "string" &&
-    (!field.required || value.trim() !== "") &&
-    (field.type !== "date" || isDateString(value))
-  );
-}
-
-function isValidNumberFieldValue(value: RecordValues[string], field: NumberFieldSchema) {
-  return (
-    typeof value === "number" &&
-    Number.isFinite(value) &&
-    (field.min === undefined || value >= field.min) &&
-    (field.max === undefined || value <= field.max) &&
-    (!field.integer || Number.isInteger(value))
-  );
+  return true;
 }
 
 function jsonResponse(body: unknown, status = 200) {

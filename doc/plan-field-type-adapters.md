@@ -1,12 +1,12 @@
 ---
 name: Field type adapters
 description: "Plan to centralize built-in field behavior before adding richer types."
-last_updated: 2026-05-04
+last_updated: 2026-05-05
 ---
 
 # Field type adapters
 
-Status: proposed
+Status: implemented
 
 ## Must read
 
@@ -53,6 +53,12 @@ UI behavior can stay in React modules initially, but should call the same shared
 
 - Should formatting live fully in shared code, or should shared code return normalized display primitives for React to render?
 - Should `reference` be one adapter or a family of relationship adapters later?
+
+## Implementation notes
+
+- Shared behavior lives in `src/shared/field-types.ts`.
+- Authority field value validation delegates to shared behavior; reference target existence stays in `src/worker/authority.ts`.
+- Generated React field selection routes through `src/app/generated/field-ui-adapters.ts`, while React components remain local.
 
 ## Success criteria
 

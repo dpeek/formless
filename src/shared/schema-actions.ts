@@ -1,4 +1,5 @@
 import { fieldRefsEqual } from "./fields.ts";
+import { fieldHasCreateDefault } from "./field-types.ts";
 import { collectQueryContextNames, type QueryExpression } from "./query.ts";
 import { assertExactKeys, isRecord, parseRequiredNonEmptyString } from "./schema-parse-helpers.ts";
 import type {
@@ -10,7 +11,6 @@ import type {
   EntityActionSchema,
   EntityActionTargetSchema,
   EntitySchema,
-  FieldSchema,
 } from "./schema-types.ts";
 
 export function parseEntityActionsForEntities(
@@ -263,14 +263,6 @@ function validateCreateMissingJoinRecordDefaults(
       `Entity action "${entityName}.${actionName}" kind "create-missing-join-records" requires field "${fieldName}" to have a default.`,
     );
   }
-}
-
-function fieldHasCreateDefault(field: FieldSchema) {
-  return (
-    (field.type === "boolean" && field.default !== undefined) ||
-    (field.type === "enum" && field.default !== undefined) ||
-    (field.type === "number" && field.default !== undefined)
-  );
 }
 
 function validateCreateAfterCreateHooks(entities: Record<string, EntitySchema>) {
