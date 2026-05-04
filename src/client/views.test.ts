@@ -158,7 +158,7 @@ describe("home view model collections", () => {
     ]);
     expect(columns.map((column) => column.width ?? "none")).toEqual(["lg", "sm", "xs", "sm", "xs"]);
     expect(columns.map((column) => column.display)).toEqual([
-      "editor",
+      "readOnly",
       "editor",
       "hidden",
       "editor",
@@ -172,6 +172,11 @@ describe("home view model collections", () => {
       "number",
       "plain",
     ]);
+    expect(columns[0]?.referenceItem).toMatchObject({
+      itemViewName: "resourceListItem",
+      entityName: "resource",
+      recordFields: [{ fieldName: "name" }, { fieldName: "kind" }, { fieldName: "unit" }],
+    });
   });
 
   it("resolves scoped rate-card collection context", () => {

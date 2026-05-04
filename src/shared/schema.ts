@@ -87,6 +87,7 @@ export type TableColumnSchema = {
   display?: TableColumnDisplay;
   suffix?: string;
   format?: TableColumnFormat;
+  referenceItemView?: string;
 };
 
 export type TableViewSchema = {
@@ -278,7 +279,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     queries,
   );
   const itemViews = parseItemViews(value.itemViews, entities);
-  const tableViews = parseTableViews(value.tableViews, entities);
+  const tableViews = parseTableViews(value.tableViews, entities, itemViews);
   const views = parseViews(value.views, entities, queries, itemViews, tableViews);
 
   return { version, entities, queries, itemViews, tableViews, views };
@@ -476,6 +477,7 @@ function parseItemView(
 function parseTableViews(
   value: unknown,
   entities: Record<string, EntitySchema>,
+  itemViews: Record<string, ItemViewSchema>,
 ): Record<string, TableViewSchema> {
   if (!isRecord(value)) {
     throw new Error("Schema tableViews must be an object.");
@@ -487,7 +489,7 @@ function parseTableViews(
         throw new Error("Table view names must be non-empty.");
       }
 
-      return [tableViewName, parseTableView(tableViewName, tableView, entities)];
+      return [tableViewName, parseTableView(tableViewName, tableView, entities, itemViews)];
     }),
   );
 }
@@ -496,6 +498,7 @@ function parseTableView(
   tableViewName: string,
   value: unknown,
   entities: Record<string, EntitySchema>,
+  itemViews: Record<string, ItemViewSchema>,
 ): TableViewSchema {
   if (!isRecord(value)) {
     throw new Error(`Table view "${tableViewName}" must be an object.`);
@@ -513,7 +516,7 @@ function parseTableView(
     throw new Error(`Table view "${tableViewName}" references unknown entity "${entityName}".`);
   }
 
-  const columns = parseTableColumns(tableViewName, entityName, value.columns, entity);
+  const columns = parseTableColumns(tableViewName, entityName, value.columns, entity, itemViews);
 
   return {
     entity: entityName,
@@ -526,13 +529,14 @@ function parseTableColumns(
   entityName: string,
   value: unknown,
   entity: EntitySchema,
+  itemViews: Record<string, ItemViewSchema>,
 ): TableColumnSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Table view "${tableViewName}" columns must be a non-empty array.`);
   }
 
   return value.map((column, index) =>
-    parseTableColumn(tableViewName, entityName, index, column, entity),
+    parseTableColumn(tableViewName, entityName, index, column, entity, itemViews),
   );
 }
 
@@ -542,6 +546,7 @@ function parseTableColumn(
   index: number,
   value: unknown,
   entity: EntitySchema,
+  itemViews: Record<string, ItemViewSchema>,
 ): TableColumnSchema {
   const context = `Table view "${tableViewName}" column ${index}`;
 
@@ -553,7 +558,17 @@ function parseTableColumn(
     context,
     value,
     ["type", "field"],
-    ["label", "editor", "commit", "align", "width", "display", "suffix", "format"],
+    [
+      "label",
+      "editor",
+      "commit",
+      "align",
+      "width",
+      "display",
+      "suffix",
+      "format",
+      "referenceItemView",
+    ],
   );
 
   if (value.type !== "field") {
@@ -581,6 +596,12 @@ function parseTableColumn(
   const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
   const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
   const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
+  const referenceItemView = parseOptionalReferenceItemView(
+    `${context} referenceItemView`,
+    value.referenceItemView,
+    field,
+    itemViews,
+  );
 
   return {
     type: "field",
@@ -593,6 +614,7 @@ function parseTableColumn(
     ...(display === undefined ? {} : { display }),
     ...(suffix === undefined ? {} : { suffix }),
     ...(format === undefined ? {} : { format }),
+    ...(referenceItemView === undefined ? {} : { referenceItemView }),
   };
 }
 
@@ -1528,6 +1550,34 @@ function parseOptionalTableColumnFormat(
   }
 
   return value;
+}
+
+function parseOptionalReferenceItemView(
+  context: string,
+  value: unknown,
+  field: FieldSchema,
+  itemViews: Record<string, ItemViewSchema>,
+): string | undefined {
+  const itemViewName = parseOptionalNonEmptyString(context, value);
+
+  if (itemViewName === undefined) {
+    return undefined;
+  }
+
+  if (field.type !== "reference") {
+    throw new Error(`${context} requires a reference field.`);
+  }
+
+  const itemView = itemViews[itemViewName];
+  if (!itemView) {
+    throw new Error(`${context} references unknown item view "${itemViewName}".`);
+  }
+
+  if (itemView.entity !== field.to) {
+    throw new Error(`${context} "${itemViewName}" must use entity "${field.to}".`);
+  }
+
+  return itemViewName;
 }
 
 function assertViewHasFields(viewName: string, fields: Record<string, unknown>) {

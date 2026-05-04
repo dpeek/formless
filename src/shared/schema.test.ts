@@ -683,6 +683,8 @@ describe("schema table views", () => {
           editor: "reference",
           commit: "immediate",
           width: "lg",
+          display: "readOnly",
+          referenceItemView: "resourceListItem",
         },
         {
           type: "field",
@@ -845,6 +847,45 @@ describe("schema table views", () => {
         }),
       ),
     ).toThrow('format must be "plain", "number", "currency", or "percent"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", referenceItemView: "resourceListItem" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("referenceItemView requires a reference field");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "resource", referenceItemView: "missing" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('referenceItemView references unknown item view "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "resource", referenceItemView: "rateListItem" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('referenceItemView "rateListItem" must use entity "resource"');
   });
 
   it("validates collection table result references", () => {
@@ -1433,6 +1474,11 @@ describe("rate-card sample schema", () => {
       "price",
       "currency",
     ]);
+    expect(schema.tableViews.rateTable?.columns[0]).toMatchObject({
+      field: "resource",
+      display: "readOnly",
+      referenceItemView: "resourceListItem",
+    });
     expect(schema.views.rateHome).toMatchObject({
       type: "collection",
       context: {
@@ -2035,6 +2081,14 @@ function scopedRateQueries() {
 
 function scopedRateItemViews() {
   return {
+    resourceListItem: {
+      entity: "resource",
+      fields: {
+        name: { editor: "text", commit: "field-commit" },
+        kind: { editor: "enum", commit: "immediate" },
+        unit: { editor: "enum", commit: "immediate" },
+      },
+    },
     cardListItem: {
       entity: "card",
       fields: {
@@ -2070,6 +2124,8 @@ function scopedRateTableViews() {
           editor: "reference",
           commit: "immediate",
           width: "lg",
+          display: "readOnly",
+          referenceItemView: "resourceListItem",
         },
         {
           type: "field",

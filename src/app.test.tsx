@@ -12,7 +12,12 @@ import {
   resolveCreateValues,
 } from "./app.tsx";
 import { appSchema } from "./client/schema.ts";
-import { applyBootstrapResponse, applyRecordMerge, resetClientStore } from "./client/store.ts";
+import {
+  applyBootstrapResponse,
+  applyRecordMerge,
+  getClientStoreSnapshot,
+  resetClientStore,
+} from "./client/store.ts";
 import {
   selectHomeModel,
   selectCollectionModels,
@@ -244,7 +249,8 @@ describe("generated collection home", () => {
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("<th");
     expect(html).toContain("Role");
-    expect(html).toContain('aria-label="Role"');
+    expect(html).toContain("Edit shared");
+    expect(html).toContain('aria-label="Edit shared resource"');
     expect(html).toContain('aria-label="Cost"');
     expect(html).not.toContain("Cost unit");
     expect(html).not.toContain('aria-label="Currency"');
@@ -556,8 +562,9 @@ describe("generated forms and records", () => {
 
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Role");
-    expect(html).toContain('aria-label="Role"');
     expect(html).toContain("Designer");
+    expect(html).toContain("Edit shared");
+    expect(html).toContain('aria-label="Edit shared resource"');
     expect(html).toContain('aria-label="Cost"');
     expect(html).not.toContain("Cost unit");
     expect(html).toContain("USD");
@@ -565,6 +572,50 @@ describe("generated forms and records", () => {
     expect(html).toContain('type="number"');
     expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
+  });
+
+  it("renders shared resource label updates across rate cards without duplicating resources", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-1", "card-2", 900),
+        ],
+        rateCardSchema,
+      ),
+    );
+
+    const before = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={rateCardSchema.entities.rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    applyRecordMerge([resourceRecord("resource-1", "Principal designer")], 2);
+
+    const after = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={rateCardSchema.entities.rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+      />,
+    );
+    const resourceIds = getClientStoreSnapshot().recordIdsByEntity.resource ?? [];
+
+    expect(before.match(/Designer/g)?.length).toBe(2);
+    expect(after.match(/Principal designer/g)?.length).toBe(2);
+    expect(after).not.toContain(">Designer<");
+    expect(resourceIds).toEqual(["resource-1"]);
   });
 
   it("renders read-only table cells with display formatting", () => {

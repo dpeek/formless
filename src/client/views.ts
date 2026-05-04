@@ -34,6 +34,12 @@ export type TableColumnConfig = RecordFieldConfig & {
   display: TableColumnDisplay;
   suffix?: string;
   format: TableColumnFormat;
+  referenceItem?: {
+    itemViewName: string;
+    entityName: string;
+    entity: EntitySchema;
+    recordFields: RecordFieldConfig[];
+  };
 };
 
 export type CreateFieldConfig = {
@@ -234,7 +240,7 @@ function selectResult(
     return {
       type: "table",
       tableViewName: collectionView.result.tableView,
-      columns: selectTableColumns(tableView, entity),
+      columns: selectTableColumns(schema, tableView, entity),
     };
   }
 
@@ -342,9 +348,14 @@ function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordF
   }));
 }
 
-function selectTableColumns(view: TableViewSchema, entity: EntitySchema): TableColumnConfig[] {
+function selectTableColumns(
+  schema: AppSchema,
+  view: TableViewSchema,
+  entity: EntitySchema,
+): TableColumnConfig[] {
   return view.columns.map((column) => {
     const field = entity.fields[column.field] as FieldSchema;
+    const referenceItem = selectReferenceItem(schema, field, column.referenceItemView);
 
     return {
       fieldName: column.field,
@@ -357,8 +368,33 @@ function selectTableColumns(view: TableViewSchema, entity: EntitySchema): TableC
       display: column.display ?? "editor",
       ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
       format: column.format ?? "plain",
+      ...(referenceItem === undefined ? {} : { referenceItem }),
     };
   });
+}
+
+function selectReferenceItem(
+  schema: AppSchema,
+  field: FieldSchema,
+  itemViewName: string | undefined,
+): TableColumnConfig["referenceItem"] | undefined {
+  if (itemViewName === undefined || field.type !== "reference") {
+    return undefined;
+  }
+
+  const entity = schema.entities[field.to];
+  const itemView = schema.itemViews[itemViewName];
+
+  if (!entity || !itemView) {
+    return undefined;
+  }
+
+  return {
+    itemViewName,
+    entityName: field.to,
+    entity,
+    recordFields: selectRecordFields(itemView, entity),
+  };
 }
 
 function defaultCommitPolicy(field: FieldSchema): FieldCommitPolicy {

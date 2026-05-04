@@ -53,6 +53,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -1050,6 +1051,7 @@ function RecordTableCell({
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
         <RecordFieldDisplay column={column} recordId={recordId} />
+        <ReferencedRecordEditButton column={column} sourceRecordId={recordId} />
       </div>
     );
   }
@@ -1066,7 +1068,102 @@ function RecordTableCell({
       {column.suffix ? (
         <span className="shrink-0 text-xs text-slate-500">{column.suffix}</span>
       ) : null}
+      <ReferencedRecordEditButton column={column} sourceRecordId={recordId} />
     </div>
+  );
+}
+
+function ReferencedRecordEditButton({
+  column,
+  sourceRecordId,
+}: {
+  column: TableColumnConfig;
+  sourceRecordId: string;
+}) {
+  const referenceRecordId = useRecordField(sourceRecordId, column.fieldName);
+  const [open, setOpen] = useState(false);
+
+  if (!column.referenceItem || column.field.type !== "reference") {
+    return null;
+  }
+
+  if (typeof referenceRecordId !== "string" || referenceRecordId.trim() === "") {
+    return null;
+  }
+
+  return (
+    <>
+      <Button
+        aria-label={`Edit shared ${column.referenceItem.entity.label.toLowerCase()}`}
+        className="ml-1"
+        onClick={() => setOpen(true)}
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        Edit shared
+      </Button>
+      {open ? (
+        <ReferencedRecordEditorDialog
+          column={column}
+          onOpenChange={setOpen}
+          open={open}
+          referenceRecordId={referenceRecordId}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ReferencedRecordEditorDialog({
+  column,
+  onOpenChange,
+  open,
+  referenceRecordId,
+}: {
+  column: TableColumnConfig;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  referenceRecordId: string;
+}) {
+  const referenceItem = column.referenceItem;
+
+  if (!referenceItem) {
+    return null;
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Shared {referenceItem.entity.label}</DialogTitle>
+          <DialogDescription>
+            Changes apply to every rate card that uses this{" "}
+            {referenceItem.entity.label.toLowerCase()}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap items-end gap-3">
+          {referenceItem.recordFields.map((fieldConfig) => (
+            <RecordFieldEditor
+              canPatch={referenceItem.entity.mutations.patch.enabled}
+              entityName={referenceItem.entityName}
+              fieldConfig={fieldConfig}
+              key={fieldConfig.fieldName}
+              recordId={referenceRecordId}
+              showLabel={true}
+            />
+          ))}
+        </div>
+        {!referenceItem.entity.mutations.patch.enabled ? (
+          <p className="text-sm text-slate-600">
+            Editing is disabled for {referenceItem.entity.label}.
+          </p>
+        ) : null}
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" type="button" />}>Done</DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -350,7 +350,9 @@
           "label": "Role",
           "editor": "reference",
           "commit": "immediate",
-          "width": "lg"
+          "width": "lg",
+          "display": "readOnly",
+          "referenceItemView": "resourceListItem"
         },
         {
           "type": "field",
