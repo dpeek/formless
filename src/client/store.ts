@@ -8,6 +8,7 @@ import {
   type QueryEvaluationContext,
   type QueryExpression,
 } from "../shared/query.ts";
+import { getRecordReadinessWarnings, type RecordReadinessWarning } from "./readiness.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
@@ -33,6 +34,7 @@ type QuerySelectorSnapshot = Pick<NormalizedClientState, "recordsById" | "record
 
 const EMPTY_RECORD_IDS: string[] = [];
 const EMPTY_REFERENCE_OPTIONS: ReferenceOption[] = [];
+const EMPTY_READINESS_WARNINGS: RecordReadinessWarning[] = [];
 const listeners = new Set<StoreListener>();
 
 let state: NormalizedClientState = emptyClientState(null);
@@ -256,6 +258,12 @@ export function useRecordField(recordId: string, fieldName: string) {
   });
 }
 
+export function useRecordReadinessWarnings(recordId: string) {
+  const selector = useMemo(() => createRecordReadinessWarningsSelector(recordId), [recordId]);
+
+  return useClientStoreSelector(selector);
+}
+
 export function useCursor() {
   return useClientStoreSelector((snapshot) => snapshot.cursor);
 }
@@ -477,6 +485,43 @@ export function createReferenceOptionsSelector(entityName: string, displayField?
   };
 }
 
+function createRecordReadinessWarningsSelector(recordId: string) {
+  let previousRecord: StoredRecord | undefined;
+  let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousResult = EMPTY_READINESS_WARNINGS;
+
+  return (snapshot: ReferenceOptionsSnapshot) => {
+    const record = snapshot.recordsById[recordId];
+
+    if (!record) {
+      return EMPTY_READINESS_WARNINGS;
+    }
+
+    if (record === previousRecord && snapshot.recordsById === previousRecordsById) {
+      return previousResult;
+    }
+
+    const warnings = getRecordReadinessWarnings(record, snapshot.recordsById);
+
+    previousRecord = record;
+    previousRecordsById = snapshot.recordsById;
+    previousResult = reuseReadinessWarnings(previousResult, warnings);
+
+    return previousResult;
+  };
+}
+
+function reuseReadinessWarnings(
+  existing: RecordReadinessWarning[],
+  next: RecordReadinessWarning[],
+) {
+  if (readinessWarningsEqual(existing, next)) {
+    return existing;
+  }
+
+  return next.length === 0 ? EMPTY_READINESS_WARNINGS : next;
+}
+
 function referenceOptionLabel(record: StoredRecord, displayField?: string) {
   if (!displayField) {
     return record.id;
@@ -616,6 +661,25 @@ function arraysEqual<T>(left: T[] | undefined, right: T[]) {
     left !== undefined &&
     left.length === right.length &&
     left.every((value, index) => value === right[index])
+  );
+}
+
+function readinessWarningsEqual(
+  left: RecordReadinessWarning[] | undefined,
+  right: RecordReadinessWarning[],
+) {
+  return (
+    left !== undefined &&
+    left.length === right.length &&
+    left.every((warning, index) => {
+      const rightWarning = right[index];
+
+      return (
+        rightWarning !== undefined &&
+        warning.code === rightWarning.code &&
+        warning.message === rightWarning.message
+      );
+    })
   );
 }
 

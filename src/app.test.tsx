@@ -286,6 +286,46 @@ describe("generated collection home", () => {
     expect(html).toMatch(/aria-label="Featured count"[^>]*>6</);
   });
 
+  it("surfaces site readiness warnings without disabling generated editors", () => {
+    const contentModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "contentHome",
+    );
+    const incompletePost: StoredRecord = {
+      id: "rec_incomplete_post",
+      entity: "contentItem",
+      values: {
+        kind: "post",
+        title: "Published without metadata",
+        status: "published",
+        featured: false,
+      },
+      createdAt: "2026-05-05T00:00:00.000Z",
+    };
+
+    if (!contentModel || contentModel.result.type !== "table") {
+      throw new Error("Missing content table model.");
+    }
+
+    applyBootstrapResponse(bootstrap([incompletePost], siteSourceSchema), "site");
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={contentModel.result.columns}
+        entity={contentModel.entity}
+        entityName={contentModel.entityName}
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Readiness warnings"');
+    expect(html).toContain("Published post should have a slug or link.");
+    expect(html).toContain("Published post should include body content.");
+    expect(html).toContain("Published post should have a published date.");
+    expect(html).toContain("Published post should have an author.");
+    expect(html).toContain("Published without metadata");
+    expect(html).toMatch(/<textarea[^>]*aria-label="Body"/);
+    expect(html).not.toMatch(/aria-label="Body"[^>]*disabled/);
+  });
+
   it("renders the scoped site composition workspace for selected content", () => {
     const compositionModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "contentCompositionHome",

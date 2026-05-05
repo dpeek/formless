@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Button } from "@formless/ui/button";
 import {
   Dialog,
@@ -10,7 +10,12 @@ import {
   DialogTitle,
 } from "@formless/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@formless/ui/table";
-import { useEntityRecordIdsMatchingQuery, useRecord, useRecordField } from "../../client/store.ts";
+import {
+  useEntityRecordIdsMatchingQuery,
+  useRecord,
+  useRecordField,
+  useRecordReadinessWarnings,
+} from "../../client/store.ts";
 import type {
   FieldTableColumnConfig,
   HomeQueryTabConfig,
@@ -21,6 +26,7 @@ import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
+import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 
 export function RecordTable({
   columns,
@@ -60,23 +66,48 @@ export function RecordTable({
           </TableHeader>
           <TableBody>
             {recordIds.map((recordId) => (
-              <TableRow key={recordId}>
-                {visibleColumns.map((column) => (
-                  <TableCell className={tableCellClass(column)} key={column.key}>
-                    <RecordTableCell
-                      canPatch={canPatch}
-                      entityName={entityName}
-                      column={column}
-                      recordId={recordId}
-                    />
-                  </TableCell>
-                ))}
-              </TableRow>
+              <Fragment key={recordId}>
+                <TableRow>
+                  {visibleColumns.map((column) => (
+                    <TableCell className={tableCellClass(column)} key={column.key}>
+                      <RecordTableCell
+                        canPatch={canPatch}
+                        entityName={entityName}
+                        column={column}
+                        recordId={recordId}
+                      />
+                    </TableCell>
+                  ))}
+                </TableRow>
+                <ReadinessWarningTableRow columnCount={visibleColumns.length} recordId={recordId} />
+              </Fragment>
             ))}
           </TableBody>
         </Table>
       )}
     </section>
+  );
+}
+
+function ReadinessWarningTableRow({
+  columnCount,
+  recordId,
+}: {
+  columnCount: number;
+  recordId: string;
+}) {
+  const warnings = useRecordReadinessWarnings(recordId);
+
+  if (warnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <TableRow>
+      <TableCell className="px-1.5 py-1" colSpan={columnCount}>
+        <RecordReadinessWarnings warnings={warnings} />
+      </TableCell>
+    </TableRow>
   );
 }
 

@@ -1,7 +1,7 @@
 # PRD 03: Personal site content authoring
 
 Status: ready
-Current chunk: PS-04 editorial readiness checks
+Current chunk: PS-05 browser smoke and cleanup
 Last updated: 2026-05-05
 
 ## Goal
@@ -657,7 +657,7 @@ Rules:
 | PS-01 | shipped | none       | `src/shared/*`, `src/app/generated/*`, tests                     | Text formats and multiline/markdown-style editors parse and work in generated UI. |
 | PS-02 | shipped | PS-01      | `schema/apps/site/*`, app registries, route tests                | Site source schema and seed records parse, bootstrap, and expose `/site` routes.  |
 | PS-03 | shipped | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
-| PS-04 | pending | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
+| PS-04 | shipped | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
 | PS-05 | pending | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
 
 ## Shipped chunks
@@ -825,41 +825,46 @@ Acceptance checks:
 - [x] `bun run test` passes.
 - [x] `bun run check` passes.
 
-## Current chunk
-
 ### PS-04 editorial readiness checks
 
-Goal: warn authors about incomplete publishable content without creating a renderer.
+Status: shipped 2026-05-05.
 
-Checks:
+Outcome:
 
-- [ ] Published `page`, `post`, and `project` items should have `slug` or `href`.
-- [ ] Published `post` items should have `body`.
-- [ ] Published `post` items should have `publishedAt`.
-- [ ] Published `post` items should have `author`.
-- [ ] Published `project` items should have summary or body.
-- [ ] Nav items should resolve to either an internal item or `href`.
-- [ ] Media assets should have `alt`.
-- [ ] Content placements should have required source data for their kind.
-- [ ] Query-backed placements should have `queryKey`.
+- Added client-side readiness warnings for site authoring records.
+- Published page, post, and project content warns when route data is incomplete.
+- Published posts warn when body, publish date, or author data is missing.
+- Published projects warn when summary/body data is missing.
+- Navigation items warn when they do not resolve to an internal content item or link.
+- Media assets warn when alt text is missing.
+- Content placements warn when kind-specific source data is missing.
+- Query-backed content list/grid placements warn when `queryKey` is missing.
+- Generated list/table rows render warnings without blocking create or patch editors.
+
+Evidence:
+
+- Readiness helper coverage: `src/client/readiness.test.ts`.
+- Generated UI coverage: `src/app.test.tsx`.
+- `bun run test` passed.
+- `bun run check` passed.
 
 Tasks:
 
-- [ ] Add client-side readiness helper over schema records.
-- [ ] Surface warnings in relevant generated/admin views.
-- [ ] Keep warnings non-blocking.
-- [ ] Add tests for warning output.
+- [x] Add client-side readiness helper over schema records.
+- [x] Surface warnings in relevant generated/admin views.
+- [x] Keep warnings non-blocking.
+- [x] Add tests for warning output.
 
 Acceptance checks:
 
-- [ ] Draft records can stay incomplete.
-- [ ] Published incomplete records show warnings.
-- [ ] Warnings do not prevent generic create/patch mutations.
-- [ ] Warnings do not require a public renderer.
-- [ ] `bun run test` passes.
-- [ ] `bun run check` passes.
+- [x] Draft records can stay incomplete.
+- [x] Published incomplete records show warnings.
+- [x] Warnings do not prevent generic create/patch mutations.
+- [x] Warnings do not require a public renderer.
+- [x] `bun run test` passes.
+- [x] `bun run check` passes.
 
-## Later chunks
+## Current chunk
 
 ### PS-05 browser smoke and cleanup
 
@@ -934,6 +939,7 @@ When this PRD ships, update `doc/current.md`:
 - Site authoring app has media, people, navigation, and content placement entities.
 - Text fields support editorial formats and multiline markdown authoring.
 - Site authoring surfaces are generated from schema views.
+- Site authoring surfaces show non-blocking readiness warnings for incomplete publishable content.
 
 When this PRD ships, update `doc/roadmap.md`:
 

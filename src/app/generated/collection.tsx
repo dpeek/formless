@@ -6,6 +6,7 @@ import {
   useEntityRecordCountMatchingQuery,
   useEntityRecordIdsMatchingQuery,
   useEntityRecordOptionsMatchingQuery,
+  useRecordReadinessWarnings,
 } from "../../client/store.ts";
 import type {
   HomeActionConfig,
@@ -18,6 +19,7 @@ import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { HomeActionRow } from "./actions.tsx";
 import { GeneratedCreateDialog } from "./create.tsx";
+import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTable } from "./table.tsx";
 
@@ -421,6 +423,8 @@ function RecordRow({
   recordFields: RecordFieldConfig[];
   recordId: string;
 }) {
+  const warnings = useRecordReadinessWarnings(recordId);
+
   return (
     <li className="p-3">
       <div className="flex flex-wrap items-start gap-2">
@@ -434,6 +438,11 @@ function RecordRow({
           />
         ))}
       </div>
+      {warnings.length > 0 ? (
+        <div className="mt-3">
+          <RecordReadinessWarnings warnings={warnings} />
+        </div>
+      ) : null}
     </li>
   );
 }
