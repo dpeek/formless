@@ -1,7 +1,7 @@
 # PRD 04: Relationship model
 
 Status: ready
-Current chunk: REL-01 relationship registry
+Current chunk: REL-02 source schema adoption
 Last updated: 2026-05-06
 
 ## Goal
@@ -411,8 +411,8 @@ First-class support needed:
 
 | ID     | Status  | Depends on | Main files                                                                              | Acceptance                                                                  |
 | ------ | ------- | ---------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| REL-01 | ready   | none       | `src/shared/schema-types.ts`, `src/shared/schema.ts`, `src/shared/schema.test.ts`       | Schemas can declare validated `toOne`, `toMany`, and `manyToMany` metadata. |
-| REL-02 | planned | REL-01     | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`, source schema tests    | Rates and site source schemas name their existing relationships.            |
+| REL-01 | shipped | none       | `src/shared/schema-types.ts`, `src/shared/schema.ts`, `src/shared/schema.test.ts`       | Schemas can declare validated `toOne`, `toMany`, and `manyToMany` metadata. |
+| REL-02 | ready   | REL-01     | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`, source schema tests    | Rates and site source schemas name their existing relationships.            |
 | REL-03 | planned | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
 | REL-04 | planned | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
 | REL-05 | planned | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
@@ -556,7 +556,7 @@ Acceptance:
 
 ## Promote after ship
 
-- `doc/current.md`: add top-level relationship registry support after REL-01 ships.
+- `doc/current.md`: add top-level relationship registry support. REL-01 shipped facts: `AppSchema.relationships` is optional; `toOne`, `toMany`, and `manyToMany` metadata parse in `src/shared/schema-relationships.ts`; metadata does not change stored record shape.
 - `doc/current.md`: list source app relationships after REL-02 ships.
 - `doc/current.md`: describe relationship-backed generated related collections after REL-04 ships.
 - `doc/roadmap.md`: add first-release relationship scope only if this PRD becomes release-blocking.
@@ -565,11 +565,18 @@ Acceptance:
 
 - PRD created 2026-05-05.
 - Estii browser and code exploration captured 2026-05-05.
-- No runtime relationship chunk has shipped yet.
-- No global doc promotion is due yet.
+- REL-01 shipped 2026-05-06.
+- REL-01 added optional top-level relationship metadata only.
+- REL-01 parser validates relationship names, reference fields, inverse pointers, through fields, and through unique constraints.
+- REL-01 tests cover valid rates-shaped relationships and malformed targets, fields, inverse links, and constraints.
+- REL-01 changed no storage, seed, sync, authority, or generated UI behavior.
+- No new decisions in REL-01; REL-D3, REL-D4, and REL-D5 stand.
+- No blockers.
+- Global doc promotion is pending for REL-01 in a docs/steward pass.
 - Current source apps already prove the storage model.
 - Estii proves this PRD is necessary but not sufficient for full app generation.
-- REL-01 is safe because it only adds optional schema metadata and parser tests.
+- REL-02 should adopt relationship metadata in source schemas without changing queries or views.
 - UI behavior should wait until source schemas name relationships.
 - Keep later Estii-shaped work in follow-on PRDs unless the user explicitly broadens this PRD.
-- Done pass 2026-05-06: Estii exploration is captured; PRD remains ready; no blockers; no global doc promotion is due.
+- Done pass 2026-05-06: Estii exploration is captured; PRD remains ready; no blockers.
+- Done pass 2026-05-06: REL-01 stopped cleanly; tests and check pass; no blockers.

@@ -216,6 +216,55 @@ export type CreateViewSchema = {
 
 export type ViewSchema = CollectionViewSchema | CreateViewSchema;
 
+export type ToOneRelationshipSchema = {
+  kind: "toOne";
+  label?: string;
+  from: {
+    entity: string;
+    field: string;
+  };
+  to: {
+    entity: string;
+  };
+  inverse?: string;
+};
+
+export type ToManyRelationshipSchema = {
+  kind: "toMany";
+  label?: string;
+  from: {
+    entity: string;
+  };
+  to: {
+    entity: string;
+    field: string;
+  };
+  inverse?: string;
+};
+
+export type ManyToManyRelationshipSchema = {
+  kind: "manyToMany";
+  label?: string;
+  from: {
+    entity: string;
+  };
+  to: {
+    entity: string;
+  };
+  through: {
+    entity: string;
+    fromField: string;
+    toField: string;
+    uniqueConstraint?: string;
+  };
+  inverse?: string;
+};
+
+export type RelationshipSchema =
+  | ToOneRelationshipSchema
+  | ToManyRelationshipSchema
+  | ManyToManyRelationshipSchema;
+
 export type AfterCreateHookSchema = {
   entity: string;
   action: string;
@@ -287,6 +336,7 @@ export type EntitySchema = {
 export type AppSchema = {
   version: number;
   entities: Record<string, EntitySchema>;
+  relationships?: Record<string, RelationshipSchema>;
   queries: Record<string, CollectionQuerySchema>;
   itemViews: Record<string, ItemViewSchema>;
   tableViews: Record<string, TableViewSchema>;

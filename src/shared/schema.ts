@@ -1,6 +1,7 @@
 import { parseEntityActionsForEntities } from "./schema-actions.ts";
 import { parseEntities } from "./schema-fields.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
+import { parseRelationships } from "./schema-relationships.ts";
 import {
   parseCollectionQueries,
   parseItemViews,
@@ -16,14 +17,12 @@ export function parseAppSchema(value: unknown): AppSchema {
     throw new Error("Schema must be an object.");
   }
 
-  assertExactKeys("Schema", value, [
-    "version",
-    "entities",
-    "queries",
-    "itemViews",
-    "tableViews",
-    "views",
-  ]);
+  assertExactKeys(
+    "Schema",
+    value,
+    ["version", "entities", "queries", "itemViews", "tableViews", "views"],
+    ["relationships"],
+  );
 
   const version = value.version;
   if (version !== 1) {
@@ -41,11 +40,20 @@ export function parseAppSchema(value: unknown): AppSchema {
     parsedEntities.actionInputsByEntity,
     queries,
   );
+  const relationships = parseRelationships(value.relationships, entities);
   const itemViews = parseItemViews(value.itemViews, entities);
   const tableViews = parseTableViews(value.tableViews, entities, itemViews);
   const views = parseViews(value.views, entities, queries, itemViews, tableViews);
 
-  return { version, entities, queries, itemViews, tableViews, views };
+  return {
+    version,
+    entities,
+    ...(relationships === undefined ? {} : { relationships }),
+    queries,
+    itemViews,
+    tableViews,
+    views,
+  };
 }
 
 export function stringifySchema(schema: AppSchema) {

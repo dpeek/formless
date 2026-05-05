@@ -2095,6 +2095,205 @@ describe("schema entity constraints", () => {
   });
 });
 
+describe("schema relationships", () => {
+  it("keeps relationship metadata optional and parses rates-shaped relationships", () => {
+    expect(parseAppSchema(scopedRateSchema()).relationships).toBeUndefined();
+
+    const schema = parseAppSchema(rateRelationshipSchema());
+
+    expect(schema.relationships?.rateCard).toEqual({
+      kind: "toOne",
+      label: "Rate card",
+      from: { entity: "rate", field: "card" },
+      to: { entity: "card" },
+      inverse: "cardRates",
+    });
+    expect(schema.relationships?.cardRates).toEqual({
+      kind: "toMany",
+      label: "Rates",
+      from: { entity: "card" },
+      to: { entity: "rate", field: "card" },
+      inverse: "rateCard",
+    });
+    expect(schema.relationships?.cardResources).toEqual({
+      kind: "manyToMany",
+      label: "Resources",
+      from: { entity: "card" },
+      to: { entity: "resource" },
+      through: {
+        entity: "rate",
+        fromField: "card",
+        toField: "resource",
+        uniqueConstraint: "uniqueRatePair",
+      },
+      inverse: "resourceCards",
+    });
+  });
+
+  it("rejects malformed relationship registries and names", () => {
+    expect(() => parseAppSchema(scopedRateSchema({ relationships: [] }))).toThrow(
+      "Schema relationships must be an object",
+    );
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            "": {
+              kind: "toOne",
+              from: { entity: "rate", field: "card" },
+              to: { entity: "card" },
+            },
+          },
+        }),
+      ),
+    ).toThrow("Relationship names must be non-empty");
+  });
+
+  it("rejects invalid to-one and to-many relationship fields", () => {
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            rateCard: {
+              ...rateRelationships().rateCard,
+              to: { entity: "resource" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('from field "rate.card" must reference entity "resource"');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            rateCard: {
+              ...rateRelationships().rateCard,
+              from: { entity: "rate", field: "cost" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('from field "rate.cost" must be a reference field');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            cardRates: {
+              ...rateRelationships().cardRates,
+              to: { entity: "rate", field: "resource" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('to field "rate.resource" must reference entity "card"');
+  });
+
+  it("rejects invalid many-to-many through fields and constraints", () => {
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            cardResources: {
+              ...rateRelationships().cardResources,
+              through: {
+                entity: "rate",
+                fromField: "cost",
+                toField: "resource",
+                uniqueConstraint: "uniqueRatePair",
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('through fromField field "rate.cost" must be a reference field');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            cardResources: {
+              ...rateRelationships().cardResources,
+              through: {
+                entity: "rate",
+                fromField: "card",
+                toField: "card",
+                uniqueConstraint: "uniqueRatePair",
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('through toField "rate.card" must reference entity "resource"');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            cardResources: {
+              ...rateRelationships().cardResources,
+              through: {
+                entity: "rate",
+                fromField: "card",
+                toField: "resource",
+                uniqueConstraint: "missing",
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('uniqueConstraint references unknown constraint "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          entities: scopedRateEntitiesWithUniqueRatePair(["card"]),
+        }),
+      ),
+    ).toThrow(
+      'uniqueConstraint "rate.uniqueRatePair" must cover through fields "card" and "resource"',
+    );
+  });
+
+  it("rejects invalid reciprocal inverse links", () => {
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            rateCard: {
+              ...rateRelationships().rateCard,
+              inverse: "missing",
+            },
+          },
+        }),
+      ),
+    ).toThrow('inverse references unknown relationship "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          relationships: {
+            ...rateRelationships(),
+            cardRates: {
+              ...rateRelationships().cardRates,
+              inverse: "cardResources",
+            },
+          },
+        }),
+      ),
+    ).toThrow('inverse "cardRates" must point back to "rateCard"');
+  });
+});
+
 describe("schema entity actions", () => {
   it("accepts valid clear-completed actions that target named queries", () => {
     const schema = parseAppSchema(baseSchema());
@@ -2641,6 +2840,23 @@ function scopedRateEntities() {
   };
 }
 
+function scopedRateEntitiesWithUniqueRatePair(fields = ["resource", "card"]) {
+  const entities = scopedRateEntities();
+
+  return {
+    ...entities,
+    rate: {
+      ...entities.rate,
+      constraints: {
+        uniqueRatePair: {
+          kind: "unique",
+          fields,
+        },
+      },
+    },
+  };
+}
+
 function costUnitField() {
   return {
     type: "enum",
@@ -2836,6 +3052,59 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
       fields: {
         name: { editor: "text" },
       },
+    },
+  };
+}
+
+function rateRelationshipSchema(overrides: Record<string, unknown> = {}) {
+  return scopedRateSchema({
+    entities: scopedRateEntitiesWithUniqueRatePair(),
+    relationships: rateRelationships(),
+    ...overrides,
+  });
+}
+
+function rateRelationships() {
+  return {
+    rateCard: {
+      kind: "toOne",
+      label: "Rate card",
+      from: { entity: "rate", field: "card" },
+      to: { entity: "card" },
+      inverse: "cardRates",
+    },
+    cardRates: {
+      kind: "toMany",
+      label: "Rates",
+      from: { entity: "card" },
+      to: { entity: "rate", field: "card" },
+      inverse: "rateCard",
+    },
+    cardResources: {
+      kind: "manyToMany",
+      label: "Resources",
+      from: { entity: "card" },
+      to: { entity: "resource" },
+      through: {
+        entity: "rate",
+        fromField: "card",
+        toField: "resource",
+        uniqueConstraint: "uniqueRatePair",
+      },
+      inverse: "resourceCards",
+    },
+    resourceCards: {
+      kind: "manyToMany",
+      label: "Rate cards",
+      from: { entity: "resource" },
+      to: { entity: "card" },
+      through: {
+        entity: "rate",
+        fromField: "resource",
+        toField: "card",
+        uniqueConstraint: "uniqueRatePair",
+      },
+      inverse: "cardResources",
     },
   };
 }
