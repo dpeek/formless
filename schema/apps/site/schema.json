@@ -1054,6 +1054,7 @@
         "entity": "contentItem",
         "query": "contentAll",
         "labelField": "title",
+        "relationship": "contentPlacements",
         "itemView": "contentContextItem"
       },
       "queries": [

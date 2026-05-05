@@ -566,6 +566,7 @@
         "entity": "card",
         "query": "cardAll",
         "labelField": "name",
+        "relationship": "cardRates",
         "createView": "cardCreate",
         "itemView": "rateCardContextItem"
       },

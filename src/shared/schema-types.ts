@@ -178,6 +178,7 @@ export type CollectionContextSchema = {
   entity: string;
   query: string;
   labelField: string;
+  relationship?: string;
   createView?: string;
   itemView?: string;
 };

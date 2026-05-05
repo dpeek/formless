@@ -43,7 +43,7 @@ export function parseAppSchema(value: unknown): AppSchema {
   const relationships = parseRelationships(value.relationships, entities);
   const itemViews = parseItemViews(value.itemViews, entities);
   const tableViews = parseTableViews(value.tableViews, entities, itemViews);
-  const views = parseViews(value.views, entities, queries, itemViews, tableViews);
+  const views = parseViews(value.views, entities, queries, itemViews, tableViews, relationships);
 
   return {
     version,

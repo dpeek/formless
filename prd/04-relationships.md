@@ -1,7 +1,7 @@
 # PRD 04: Relationship model
 
 Status: ready
-Current chunk: REL-03 relationship-aware collection validation
+Current chunk: REL-04 generated related collections
 Last updated: 2026-05-06
 
 ## Goal
@@ -413,8 +413,8 @@ First-class support needed:
 | ------ | ------- | ---------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | REL-01 | shipped | none       | `src/shared/schema-types.ts`, `src/shared/schema.ts`, `src/shared/schema.test.ts`       | Schemas can declare validated `toOne`, `toMany`, and `manyToMany` metadata. |
 | REL-02 | shipped | REL-01     | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`, source schema tests    | Rates and site source schemas name their existing relationships.            |
-| REL-03 | ready   | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
-| REL-04 | planned | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
+| REL-03 | shipped | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
+| REL-04 | ready   | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
 | REL-05 | planned | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
 | REL-06 | planned | REL-05     | Browser Use, source schemas, PRD promote notes                                          | Relationship flows are smoke-tested in rates and site apps.                 |
 
@@ -558,6 +558,7 @@ Acceptance:
 
 - `doc/current.md`: add top-level relationship registry support. REL-01 shipped facts: `AppSchema.relationships` is optional; `toOne`, `toMany`, and `manyToMany` metadata parse in `src/shared/schema-relationships.ts`; metadata does not change stored record shape.
 - `doc/current.md`: list source app relationships after REL-02 ships. REL-02 shipped facts: rates source names `rateCard`, `cardRates`, `rateResource`, `resourceRates`, `cardResources`, and `resourceCards`; site source names `contentPrimaryMedia`, `mediaPrimaryContentItems`, `placementParent`, `contentPlacements`, `placementItem`, `itemPlacements`, `placementMedia`, and `mediaPlacements`; queries, views, records, and storage shape are unchanged.
+- `doc/current.md`: list relationship-backed collection context validation after REL-03 ships. REL-03 shipped facts: collection contexts can set `relationship` to a `toMany` relationship; parser validates the relationship from entity, target entity, context query field, and context create default field; `rateHome` uses `cardRates`; `contentCompositionHome` uses `contentPlacements`; client view models expose relationship name and metadata.
 - `doc/current.md`: describe relationship-backed generated related collections after REL-04 ships.
 - `doc/roadmap.md`: add first-release relationship scope only if this PRD becomes release-blocking.
 
@@ -588,3 +589,16 @@ Acceptance:
 - No new decisions in REL-02; REL-D3, REL-D4, and REL-D5 stand.
 - No blockers.
 - Done pass 2026-05-06: REL-02 stopped cleanly; tests and check pass; no blockers.
+- REL-03 shipped 2026-05-06.
+- REL-03 added optional `context.relationship` on collection views.
+- REL-03 relationship-backed contexts require a `toMany` relationship.
+- REL-03 parser validates context entity, collection entity, child query context predicate, and context create default field against the relationship.
+- REL-03 wired rates `rateHome` to `cardRates`.
+- REL-03 wired site `contentCompositionHome` to `contentPlacements`.
+- REL-03 client home view models expose relationship name and metadata for scoped contexts.
+- REL-03 changed no storage, seed record, sync, authority, or UI rendering behavior.
+- REL-03 tests cover valid relationship-backed contexts, bad relationship names/kinds/entities, bad query fields, bad create default fields, and source view model selection.
+- Browser smoke not run for REL-03 because the chunk changes schema validation and view model metadata only.
+- No new decisions in REL-03; REL-D3 and REL-D4 stand.
+- No blockers.
+- Done pass 2026-05-06: REL-03 stopped cleanly; tests and check pass; no blockers.

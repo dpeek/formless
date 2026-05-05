@@ -254,6 +254,12 @@ describe("home view model collections", () => {
       queryName: "cardAll",
       query: rateCardSchema.queries.cardAll?.expression,
       labelField: "name",
+      relationshipName: "cardRates",
+      relationship: {
+        kind: "toMany",
+        from: { entity: "card" },
+        to: { entity: "rate", field: "card" },
+      },
       itemViewName: "rateCardContextItem",
       recordFields: [
         { fieldName: "marginMin" },
@@ -405,6 +411,12 @@ describe("home view model collections", () => {
       queryName: "contentAll",
       query: siteSourceSchema.queries.contentAll?.expression,
       labelField: "title",
+      relationshipName: "contentPlacements",
+      relationship: {
+        kind: "toMany",
+        from: { entity: "contentItem" },
+        to: { entity: "contentPlacement", field: "parent" },
+      },
       itemViewName: "contentContextItem",
       recordFields: [{ fieldName: "kind" }, { fieldName: "status" }, { fieldName: "featured" }],
     });

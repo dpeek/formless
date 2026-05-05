@@ -11,6 +11,7 @@ import type {
   FieldEditor,
   FieldSchema,
   ItemViewSchema,
+  ToManyRelationshipSchema,
   TableColumnAlign,
   TableColumnDisplay,
   TableColumnFormat,
@@ -98,6 +99,8 @@ export type HomeContextConfig = {
   queryName: string;
   query: QueryExpression;
   labelField: string;
+  relationshipName?: string;
+  relationship?: ToManyRelationshipSchema;
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
   itemViewName?: string;
   recordFields?: RecordFieldConfig[];
@@ -181,6 +184,9 @@ function selectContext(
 
   const contextEntity = schema.entities[collectionView.context.entity];
   const contextQuery = schema.queries[collectionView.context.query];
+  const relationshipName = collectionView.context.relationship;
+  const relationship =
+    relationshipName === undefined ? undefined : selectToManyRelationship(schema, relationshipName);
 
   if (!contextEntity) {
     throw new Error(`Missing context entity "${collectionView.context.entity}".`);
@@ -216,6 +222,7 @@ function selectContext(
     queryName: collectionView.context.query,
     query: contextQuery.expression,
     labelField: collectionView.context.labelField,
+    ...(relationshipName === undefined ? {} : { relationshipName, relationship }),
     ...(createAction === undefined ? {} : { createAction }),
     ...(itemViewName === undefined
       ? {}
@@ -224,6 +231,20 @@ function selectContext(
           recordFields,
         }),
   };
+}
+
+function selectToManyRelationship(schema: AppSchema, relationshipName: string) {
+  const relationship = schema.relationships?.[relationshipName];
+
+  if (!relationship) {
+    throw new Error(`Missing relationship "${relationshipName}".`);
+  }
+
+  if (relationship.kind !== "toMany") {
+    throw new Error(`Relationship "${relationshipName}" must be a toMany relationship.`);
+  }
+
+  return relationship;
 }
 
 function selectQueryTabs(

@@ -29,11 +29,13 @@ import type {
   FieldEditor,
   FieldSchema,
   ItemViewSchema,
+  RelationshipSchema,
   TableColumnAlign,
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnSchema,
   TableColumnWidth,
+  ToManyRelationshipSchema,
   TableViewSchema,
   ViewFieldSchema,
   ViewSchema,
@@ -394,6 +396,7 @@ export function parseViews(
   queries: Record<string, CollectionQuerySchema>,
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): Record<string, ViewSchema> {
   if (!isRecord(value)) {
     throw new Error("Schema views must be an object.");
@@ -402,7 +405,7 @@ export function parseViews(
   const views = Object.fromEntries(
     Object.entries(value).map(([viewName, view]) => [
       viewName,
-      parseView(viewName, view, entities, queries, itemViews, tableViews),
+      parseView(viewName, view, entities, queries, itemViews, tableViews, relationships),
     ]),
   );
 
@@ -410,7 +413,7 @@ export function parseViews(
     throw new Error("Schema must define at least one view.");
   }
 
-  assertCollectionViews(views, entities);
+  assertCollectionViews(views, entities, relationships);
 
   return views;
 }
@@ -418,6 +421,7 @@ export function parseViews(
 function assertCollectionViews(
   views: Record<string, ViewSchema>,
   entities: Record<string, EntitySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ) {
   const collectionEntries = Object.entries(views).filter(
     (entry): entry is [string, CollectionViewSchema] => entry[1].type === "collection",
@@ -460,6 +464,7 @@ function assertCollectionViews(
         createView,
         entities,
         view.context,
+        relationships,
       );
     }
 
@@ -500,6 +505,7 @@ function validateCreateActionContextDefaults(
   createView: CreateViewSchema,
   entities: Record<string, EntitySchema>,
   collectionContext: CollectionContextSchema | undefined,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ) {
   if (!createViewRequiresContextDefaults(createView)) {
     return;
@@ -517,6 +523,11 @@ function validateCreateActionContextDefaults(
     throw new Error(`${context} references unknown entity "${createView.entity}".`);
   }
 
+  const relationship = getCollectionContextRelationship(collectionContext, relationships);
+  if (relationship !== undefined && createView.entity !== relationship.to.entity) {
+    throw new Error(`${context} must use relationship target entity "${relationship.to.entity}".`);
+  }
+
   for (const [fieldName, defaultValue] of Object.entries(createView.defaults ?? {})) {
     if (defaultValue.name !== collectionContext.name) {
       throw new Error(
@@ -528,6 +539,12 @@ function validateCreateActionContextDefaults(
     if (field?.type !== "reference" || field.to !== collectionContext.entity) {
       throw new Error(
         `${context} default field "${fieldName}" must reference entity "${collectionContext.entity}".`,
+      );
+    }
+
+    if (relationship !== undefined && fieldName !== relationship.to.field) {
+      throw new Error(
+        `${context} default field "${fieldName}" must use relationship field "${relationship.to.entity}.${relationship.to.field}".`,
       );
     }
   }
@@ -544,6 +561,7 @@ function parseView(
   queries: Record<string, CollectionQuerySchema>,
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): ViewSchema {
   if (viewName.trim() === "") {
     throw new Error("View names must be non-empty.");
@@ -558,7 +576,15 @@ function parseView(
   }
 
   if (value.type === "collection") {
-    return parseCollectionView(viewName, value, entities, queries, itemViews, tableViews);
+    return parseCollectionView(
+      viewName,
+      value,
+      entities,
+      queries,
+      itemViews,
+      tableViews,
+      relationships,
+    );
   }
 
   assertExactKeys(`View "${viewName}"`, value, ["type", "entity", "fields"], ["defaults"]);
@@ -592,6 +618,7 @@ function parseCollectionView(
   queries: Record<string, CollectionQuerySchema>,
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): CollectionViewSchema {
   assertExactKeys(
     `Collection view "${viewName}"`,
@@ -614,7 +641,15 @@ function parseCollectionView(
   }
 
   const navigation = parseCollectionNavigation(viewName, value.navigation);
-  const context = parseCollectionContext(viewName, value.context, entities, queries, itemViews);
+  const context = parseCollectionContext(
+    viewName,
+    value.context,
+    value.entity,
+    entities,
+    queries,
+    itemViews,
+    relationships,
+  );
   const querySlots = parseCollectionViewQuerySlots(
     viewName,
     value.entity,
@@ -622,6 +657,7 @@ function parseCollectionView(
     value.queries,
     queries,
     context,
+    relationships,
   );
 
   if (typeof value.defaultQuery !== "string" || value.defaultQuery.trim() === "") {
@@ -680,13 +716,23 @@ function parseCollectionViewQuerySlots(
   value: unknown,
   queries: Record<string, CollectionQuerySchema>,
   context?: CollectionContextSchema,
+  relationships?: Record<string, RelationshipSchema>,
 ): CollectionViewQuerySlotSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Collection view "${viewName}" queries must be a non-empty array.`);
   }
 
   return value.map((slot, index) =>
-    parseCollectionViewQuerySlot(viewName, entityName, entity, index, slot, queries, context),
+    parseCollectionViewQuerySlot(
+      viewName,
+      entityName,
+      entity,
+      index,
+      slot,
+      queries,
+      context,
+      relationships,
+    ),
   );
 }
 
@@ -698,6 +744,7 @@ function parseCollectionViewQuerySlot(
   value: unknown,
   queries: Record<string, CollectionQuerySchema>,
   collectionContext?: CollectionContextSchema,
+  relationships?: Record<string, RelationshipSchema>,
 ): CollectionViewQuerySlotSchema {
   const context = `Collection view "${viewName}" query slot ${index}`;
 
@@ -726,6 +773,7 @@ function parseCollectionViewQuerySlot(
     query.expression,
     entity,
     collectionContext,
+    relationships,
   );
 
   const label = parseOptionalNonEmptyString(`${context} label`, value.label);
@@ -742,9 +790,11 @@ function parseCollectionViewQuerySlot(
 function parseCollectionContext(
   viewName: string,
   value: unknown,
+  collectionEntityName: string,
   entities: Record<string, EntitySchema>,
   queries: Record<string, CollectionQuerySchema>,
   itemViews: Record<string, ItemViewSchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): CollectionContextSchema | undefined {
   if (value === undefined) {
     return undefined;
@@ -760,13 +810,20 @@ function parseCollectionContext(
     context,
     value,
     ["name", "entity", "query", "labelField"],
-    ["createView", "itemView"],
+    ["relationship", "createView", "itemView"],
   );
 
   const name = parseRequiredNonEmptyString(`${context} name`, value.name);
   const entityName = parseRequiredNonEmptyString(`${context} entity`, value.entity);
   const queryName = parseRequiredNonEmptyString(`${context} query`, value.query);
   const labelField = parseRequiredNonEmptyString(`${context} labelField`, value.labelField);
+  const relationship = parseCollectionContextRelationship(
+    context,
+    parseOptionalNonEmptyString(`${context} relationship`, value.relationship),
+    entityName,
+    collectionEntityName,
+    relationships,
+  );
   const createView = parseOptionalNonEmptyString(`${context} createView`, value.createView);
   const itemViewName = parseOptionalNonEmptyString(`${context} itemView`, value.itemView);
   const entity = entities[entityName];
@@ -817,9 +874,47 @@ function parseCollectionContext(
     entity: entityName,
     query: queryName,
     labelField,
+    ...(relationship === undefined ? {} : { relationship }),
     ...(createView === undefined ? {} : { createView }),
     ...(itemViewName === undefined ? {} : { itemView: itemViewName }),
   };
+}
+
+function parseCollectionContextRelationship(
+  context: string,
+  relationshipName: string | undefined,
+  contextEntityName: string,
+  collectionEntityName: string,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): string | undefined {
+  if (relationshipName === undefined) {
+    return undefined;
+  }
+
+  const relationship = relationships?.[relationshipName];
+  if (!relationship) {
+    throw new Error(
+      `${context} relationship references unknown relationship "${relationshipName}".`,
+    );
+  }
+
+  if (relationship.kind !== "toMany") {
+    throw new Error(`${context} relationship "${relationshipName}" must be a toMany relationship.`);
+  }
+
+  if (relationship.from.entity !== contextEntityName) {
+    throw new Error(
+      `${context} relationship "${relationshipName}" must start from context entity "${contextEntityName}".`,
+    );
+  }
+
+  if (relationship.to.entity !== collectionEntityName) {
+    throw new Error(
+      `${context} relationship "${relationshipName}" must target collection entity "${collectionEntityName}".`,
+    );
+  }
+
+  return relationshipName;
 }
 
 function validateCollectionQueryContextRequirements(
@@ -828,10 +923,12 @@ function validateCollectionQueryContextRequirements(
   query: QueryExpression,
   entity: EntitySchema,
   collectionContext: CollectionContextSchema | undefined,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ) {
   const requiredContextNames = collectQueryContextNames(query);
 
   if (requiredContextNames.length === 0) {
+    validateRelationshipContextQuery(context, queryName, query, collectionContext, relationships);
     return;
   }
 
@@ -850,6 +947,7 @@ function validateCollectionQueryContextRequirements(
   }
 
   validateContextPredicateTargets(context, query, entity, collectionContext);
+  validateRelationshipContextQuery(context, queryName, query, collectionContext, relationships);
 }
 
 function validateContextPredicateTargets(
@@ -876,6 +974,70 @@ function validateContextPredicateTargets(
       `${context} context query field must reference entity "${collectionContext.entity}".`,
     );
   }
+}
+
+function validateRelationshipContextQuery(
+  context: string,
+  queryName: string,
+  query: QueryExpression,
+  collectionContext: CollectionContextSchema | undefined,
+  relationships: Record<string, RelationshipSchema> | undefined,
+) {
+  if (collectionContext === undefined) {
+    return;
+  }
+
+  const relationship = getCollectionContextRelationship(collectionContext, relationships);
+  if (relationship === undefined) {
+    return;
+  }
+
+  if (queryFiltersRelationshipField(query, relationship.to.field, collectionContext.name)) {
+    return;
+  }
+
+  throw new Error(
+    `${context} query "${queryName}" must filter relationship field "${relationship.to.entity}.${relationship.to.field}" against context "${collectionContext.name}".`,
+  );
+}
+
+function queryFiltersRelationshipField(
+  query: QueryExpression,
+  fieldName: string,
+  contextName: string,
+): boolean {
+  if (query.kind === "and") {
+    return query.expressions.some((expression) =>
+      queryFiltersRelationshipField(expression, fieldName, contextName),
+    );
+  }
+
+  return (
+    query.kind === "where" &&
+    query.op === "eq" &&
+    query.ref.kind === "value" &&
+    query.ref.name === fieldName &&
+    typeof query.value === "object" &&
+    query.value.kind === "context" &&
+    query.value.name === contextName
+  );
+}
+
+function getCollectionContextRelationship(
+  collectionContext: CollectionContextSchema | undefined,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): ToManyRelationshipSchema | undefined {
+  if (collectionContext?.relationship === undefined) {
+    return undefined;
+  }
+
+  const relationship = relationships?.[collectionContext.relationship];
+
+  if (relationship?.kind !== "toMany") {
+    return undefined;
+  }
+
+  return relationship;
 }
 
 function parseCollectionResult(

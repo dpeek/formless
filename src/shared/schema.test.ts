@@ -1331,6 +1331,35 @@ describe("schema collection views", () => {
     });
   });
 
+  it("accepts relationship-backed collection contexts", () => {
+    const schema = parseAppSchema(
+      rateRelationshipSchema({
+        views: scopedRateViews({
+          context: {
+            name: "card",
+            entity: "card",
+            query: "cardAll",
+            labelField: "name",
+            relationship: "cardRates",
+            createView: "cardCreate",
+            itemView: "cardListItem",
+          },
+        }),
+      }),
+    );
+
+    expect(schema.views.rateHome).toMatchObject({
+      type: "collection",
+      entity: "rate",
+      context: {
+        name: "card",
+        entity: "card",
+        relationship: "cardRates",
+      },
+      queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
+    });
+  });
+
   it("validates collection context shape", () => {
     expect(() =>
       parseAppSchema(
@@ -1438,6 +1467,73 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow('context itemView "rateListItem" must use entity "card"');
+  });
+
+  it("rejects invalid relationship-backed collection contexts", () => {
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              relationship: "missing",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context relationship references unknown relationship "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              relationship: "cardResources",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context relationship "cardResources" must be a toMany relationship');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "resource",
+              query: "resourceAll",
+              labelField: "name",
+              relationship: "cardRates",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context relationship "cardRates" must start from context entity "resource"');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          views: scopedRateViews({
+            entity: "resource",
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              relationship: "cardRates",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context relationship "cardRates" must target collection entity "resource"');
   });
 
   it("validates context create views separately from collection create actions", () => {
@@ -1569,6 +1665,54 @@ describe("schema collection views", () => {
     ).toThrow('context query field must reference entity "card"');
   });
 
+  it("rejects relationship-backed collection queries that use the wrong reference field", () => {
+    const entities = scopedRateEntitiesWithUniqueRatePair();
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              fields: {
+                ...entities.rate.fields,
+                alternateCard: {
+                  type: "reference",
+                  required: false,
+                  label: "Alternate card",
+                  to: "card",
+                },
+              },
+            },
+          },
+          queries: {
+            ...scopedRateQueries(),
+            ratesForSelectedCard: {
+              label: "For selected card",
+              entity: "rate",
+              expression: {
+                kind: "where",
+                ref: { kind: "value", name: "alternateCard" },
+                op: "eq",
+                value: { kind: "context", name: "card" },
+              },
+            },
+          },
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              relationship: "cardRates",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('query "ratesForSelectedCard" must filter relationship field "rate.card"');
+  });
+
   it("rejects context values in context selector and entity action target queries", () => {
     expect(() =>
       parseAppSchema(
@@ -1697,6 +1841,57 @@ describe("schema collection views", () => {
         }),
       ),
     ).toThrow('default field "resource" must reference entity "card"');
+  });
+
+  it("rejects relationship-backed create defaults that use the wrong reference field", () => {
+    const entities = scopedRateEntitiesWithUniqueRatePair();
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              fields: {
+                ...entities.rate.fields,
+                alternateCard: {
+                  type: "reference",
+                  required: false,
+                  label: "Alternate card",
+                  to: "card",
+                },
+              },
+            },
+          },
+          views: {
+            ...scopedRateViews({
+              context: {
+                name: "card",
+                entity: "card",
+                query: "cardAll",
+                labelField: "name",
+                relationship: "cardRates",
+              },
+            }),
+            rateCreateForCard: {
+              type: "create",
+              entity: "rate",
+              fields: {
+                resource: { editor: "reference" },
+                card: { editor: "reference" },
+                cost: { editor: "number" },
+                costUnit: { editor: "enum" },
+                price: { editor: "number" },
+              },
+              defaults: {
+                alternateCard: { kind: "context", name: "card" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default field "alternateCard" must use relationship field "rate.card"');
   });
 });
 
@@ -1834,6 +2029,7 @@ describe("rate-card sample schema", () => {
       navigation: { primary: true },
       context: {
         itemView: "rateCardContextItem",
+        relationship: "cardRates",
       },
       result: { type: "table", tableView: "rateTable" },
       actions: [
@@ -2031,6 +2227,7 @@ describe("personal site sample schema", () => {
         entity: "contentItem",
         query: "contentAll",
         labelField: "title",
+        relationship: "contentPlacements",
         itemView: "contentContextItem",
       },
       result: { type: "table", tableView: "contentPlacementTable" },
