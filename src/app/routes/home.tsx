@@ -13,6 +13,7 @@ import { selectPrimaryCollectionModels } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import { HomeCollection } from "../generated/collection.tsx";
+import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
 export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
@@ -163,25 +164,27 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
         </Tabs>
       )}
 
-      <HomeCollection
-        actions={actions}
-        context={homeModel.context}
-        entity={entity}
-        entityName={entityName}
-        onSelectContext={(recordId) =>
-          setSelectedContextIdsByView((current) =>
-            current[homeModel.viewName] === recordId
-              ? current
-              : { ...current, [homeModel.viewName]: recordId },
-          )
-        }
-        onSelectQuery={setSelectedQueryName}
-        queryTabs={queryTabs}
-        result={result}
-        selectedContextRecordId={selectedContextRecordId}
-        selectedQuery={selectedQuery}
-        today={today}
-      />
+      <SchemaAppProvider schemaKey={schemaKey}>
+        <HomeCollection
+          actions={actions}
+          context={homeModel.context}
+          entity={entity}
+          entityName={entityName}
+          onSelectContext={(recordId) =>
+            setSelectedContextIdsByView((current) =>
+              current[homeModel.viewName] === recordId
+                ? current
+                : { ...current, [homeModel.viewName]: recordId },
+            )
+          }
+          onSelectQuery={setSelectedQueryName}
+          queryTabs={queryTabs}
+          result={result}
+          selectedContextRecordId={selectedContextRecordId}
+          selectedQuery={selectedQuery}
+          today={today}
+        />
+      </SchemaAppProvider>
     </section>
   );
 }

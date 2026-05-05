@@ -9,10 +9,10 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
-import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import { fieldValueToInputValue, inputValueToFieldValue, numberInputAttributes } from "./format.ts";
+import { useSchemaKey } from "./schema-app-context.tsx";
 
 export function RecordFieldEditor({
   canPatch,
@@ -29,6 +29,7 @@ export function RecordFieldEditor({
   recordId: string;
   showLabel?: boolean;
 }) {
+  const schemaKey = useSchemaKey();
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
   const adapter = selectGeneratedFieldEditorAdapter(field, editor);
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
@@ -55,7 +56,7 @@ export function RecordFieldEditor({
     setSyncStatus({ state: "syncing", message: `Updating ${fieldName}...` });
 
     try {
-      await submitPatchMutation(defaultSchemaKey, entityName, recordId, { [fieldName]: value });
+      await submitPatchMutation(schemaKey, entityName, recordId, { [fieldName]: value });
       setError(null);
       setSyncStatus({ state: "idle", message: "Updated and synced." });
     } catch (error) {

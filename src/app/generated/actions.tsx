@@ -6,12 +6,12 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";
 import type { HomeActionConfig } from "../../client/views.ts";
 import type { QueryEvaluationContext, QueryExpression } from "../../shared/query.ts";
-import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 import {
   createDefaultsAreResolved,
   GeneratedCreateDialog,
   type CreateHomeActionConfig,
 } from "./create.tsx";
+import { useSchemaKey } from "./schema-app-context.tsx";
 
 type EntityHomeActionConfig = Extract<HomeActionConfig, { type: "entity-action" }>;
 type CountedEntityHomeActionConfig = EntityHomeActionConfig & {
@@ -25,6 +25,7 @@ export function HomeActionRow({
   actions: HomeActionConfig[];
   queryContext: QueryEvaluationContext;
 }) {
+  const schemaKey = useSchemaKey();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [createDialogAction, setCreateDialogAction] = useState<CreateHomeActionConfig | null>(null);
 
@@ -37,7 +38,7 @@ export function HomeActionRow({
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      const response = await submitAction(defaultSchemaKey, action.entityName, action.actionName);
+      const response = await submitAction(schemaKey, action.entityName, action.actionName);
       const affected = response.changes.length;
       const message =
         action.count?.type === "count"

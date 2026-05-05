@@ -20,10 +20,10 @@ import { submitCreateMutation } from "../../client/sync.ts";
 import { fieldLabel, type CreateFieldConfig, type HomeActionConfig } from "../../client/views.ts";
 import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
-import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import { numberInputValueToFieldValue } from "./format.ts";
+import { useSchemaKey } from "./schema-app-context.tsx";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
@@ -36,6 +36,7 @@ export function GeneratedCreateForm({
   entity: EntitySchema;
   entityName: string;
 }) {
+  const schemaKey = useSchemaKey();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canCreate = entity.mutations.create.enabled;
 
@@ -54,7 +55,7 @@ export function GeneratedCreateForm({
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
 
     try {
-      await submitCreateMutation(defaultSchemaKey, entityName, values);
+      await submitCreateMutation(schemaKey, entityName, values);
       form.reset();
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
@@ -131,6 +132,7 @@ export function GeneratedCreateDialogForm({
   queryContext?: QueryEvaluationContext;
   renderDialogCancel?: boolean;
 }) {
+  const schemaKey = useSchemaKey();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canSubmit = action.enabled && createDefaultsAreResolved(action, queryContext);
 
@@ -152,7 +154,7 @@ export function GeneratedCreateDialogForm({
     });
 
     try {
-      const response = await submitCreateMutation(defaultSchemaKey, action.entityName, values);
+      const response = await submitCreateMutation(schemaKey, action.entityName, values);
       form.reset();
       onSuccess?.(response.record.id);
       setSyncStatus({ state: "idle", message: "Saved and synced." });

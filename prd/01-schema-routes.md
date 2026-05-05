@@ -1,7 +1,7 @@
 # PRD 01: Schema-backed app routes
 
 Status: active
-Current chunk: SR-06 generated UI schema-key propagation
+Current chunk: SR-07 route-specific schema editing and reset UI
 Last updated: 2026-05-05
 
 ## Goal
@@ -77,7 +77,7 @@ The result should feel like two schema-backed apps, not one global app whose sch
 | SR-03 | shipped | SR-02      | `src/worker/storage.ts`, `src/worker/authority.ts`                         | Fresh bootstrap and reset endpoints use source schema plus source seed records. |
 | SR-04 | shipped | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
 | SR-05 | shipped | SR-04      | `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`      | `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema` render the right app.  |
-| SR-06 | pending | SR-05      | `src/app/generated/**`, `src/client/sync.ts`                               | Generated create, patch, and action calls submit to the active schema key.      |
+| SR-06 | shipped | SR-05      | `src/app/generated/**`, `src/client/sync.ts`                               | Generated create, patch, and action calls submit to the active schema key.      |
 | SR-07 | pending | SR-05      | `src/app/routes/schema.tsx`, `src/app/dev-actions.tsx`                     | Schema editing and reset controls are route-scoped.                             |
 | SR-08 | pending | SR-07      | tests and cleanup                                                          | Old global schema swap paths are removed and browser smoke passes.              |
 
@@ -206,38 +206,32 @@ Evidence:
 - `bun run test` passed.
 - `bun run check` passed.
 
-## Current chunk
-
 ### SR-06 generated UI schema-key propagation
 
-Goal: generated components submit mutations and actions to the active app route.
+Status: shipped 2026-05-05.
 
-Preferred pattern:
+Outcome:
 
-- Add `SchemaAppProvider`.
-- Read schema key through `useSchemaKey()`.
+- Added `SchemaAppProvider` in `src/app/generated/schema-app-context.tsx`.
+- Generated create forms read the active schema key through `useSchemaKey()`.
+- `RecordFieldEditor` patch mutations read the active schema key through `useSchemaKey()`.
+- Generated action buttons read the active schema key through `useSchemaKey()`.
+- `HomeRoute` wraps `HomeCollection` with the active route schema key.
+- Collection, table, list, context editor, referenced editor, and dialog paths inherit the provider.
+- Selectors stay schema-key-free while the client store has one active in-memory schema.
 
-Acceptable fallback:
+Evidence:
 
-- Thread explicit `schemaKey` props through generated components.
+- `src/app/generated/create.tsx`.
+- `src/app/generated/record-field-editor.tsx`.
+- `src/app/generated/actions.tsx`.
+- `src/app/routes/home.tsx`.
+- `src/client/sync.test.ts` covers keyed create, patch, and action URLs.
+- Browser Use smoke covered task create from `/tasks`, resource create from `/rates`, rate price inline edit from `/rates`, `clearCompletedTasks` from `/tasks`, and `regenerateMissingRates` from `/rates`.
+- `bun run test` passed.
+- `bun run check` passed.
 
-Tasks:
-
-- [ ] Update generated create submit paths.
-- [ ] Update `RecordFieldEditor` patch submit paths.
-- [ ] Update generated action buttons.
-- [ ] Update call sites in collection, table, list, and context editors.
-- [ ] Keep selectors schema-key-free while there is one active in-memory store.
-
-Acceptance checks:
-
-- [ ] Creating a task from `/tasks` posts to `/api/tasks/mutations`.
-- [ ] Creating a resource from `/rates` posts to `/api/rates/mutations`.
-- [ ] Inline editing a rate posts to `/api/rates/mutations`.
-- [ ] `clearCompletedTasks` posts to `/api/tasks/actions`.
-- [ ] `regenerateMissingRates` posts to `/api/rates/actions`.
-
-## Later chunks
+## Current chunk
 
 ### SR-07 route-specific schema editing and reset UI
 
@@ -262,6 +256,8 @@ Acceptance checks:
 - [ ] Saving `/rates/schema` does not affect `/tasks/schema`.
 - [ ] Reset schema preserves route records in client state.
 - [ ] Reset seed replaces only route records in client state.
+
+## Later chunks
 
 ### SR-08 browser smoke and cleanup
 
