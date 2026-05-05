@@ -8,7 +8,7 @@ import {
   useSchema,
 } from "../../client/store.ts";
 import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
-import { bootstrapClient, startPollingSync } from "../../client/sync.ts";
+import { bootstrapClient, startPushSync } from "../../client/sync.ts";
 import { selectPrimaryCollectionModels } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
@@ -44,7 +44,7 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   useEffect(() => {
     selectClientStoreSchemaKey(schemaKey);
     const stopBroadcast = connectBroadcastToClientStore(schemaKey);
-    let stopPolling = () => {};
+    let stopPushSync = () => {};
     let cancelled = false;
 
     async function startSync() {
@@ -59,7 +59,7 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
         }
 
         setSyncStatus({ state: "idle", message: "Synced." });
-        stopPolling = startPollingSync(schemaKey);
+        stopPushSync = startPushSync(schemaKey);
       } catch (error) {
         if (cancelled) {
           return;
@@ -77,7 +77,7 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
     return () => {
       cancelled = true;
       stopBroadcast();
-      stopPolling();
+      stopPushSync();
     };
   }, [app.label, schemaKey]);
 

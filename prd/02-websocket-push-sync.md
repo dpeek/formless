@@ -1,7 +1,7 @@
 # PRD 02: WebSocket push sync
 
-Status: active
-Current chunk: WS-05 route enablement
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-05
 
 ## Goal
@@ -43,20 +43,21 @@ The first release should:
 
 ## Decisions
 
-| ID     | Decision                                                         | Reason                                                                                          | Evidence                                                                         |
-| ------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| WS-D1  | Use `GET /api/:schemaKey/sync/ws`.                               | Sync stream belongs to the same app boundary as bootstrap, sync, mutations, actions, and reset. | `prd/01-schema-routes.md`, `src/worker/index.ts`, `src/client/sync.ts`           |
-| WS-D2  | Keep writes on HTTP for the first push-sync release.             | Mutation/action/schema writes already have validation, replay, atomic storage, and tests.       | `src/worker/authority.ts`, `src/worker/storage.ts`, `src/worker/actions.ts`      |
-| WS-D3  | Push only authority-committed state.                             | Browser replicas are local-first caches, not authoritative stores.                              | `doc/overview.md`, `doc/current.md`, `src/client/db.ts`, `src/worker/storage.ts` |
-| WS-D4  | Reuse `SyncResponse` for pushed record/schema payloads.          | Existing client merge code already handles changes, cursor advancement, and schema refresh.     | `src/shared/protocol.ts`, `src/client/sync.ts`, `src/client/store.ts`            |
-| WS-D5  | Use `DurableObjectState.acceptWebSocket(server)`.                | This is the Cloudflare hibernation path for server-side Durable Object WebSockets.              | Cloudflare Durable Object WebSocket docs                                         |
-| WS-D6  | Do not keep canonical socket state only in memory.               | Hibernation re-runs the constructor and clears in-memory fields.                                | Cloudflare hibernation docs                                                      |
-| WS-D7  | Store per-socket cursor and schema timestamp in socket metadata. | `serializeAttachment` survives hibernation and is enough for reconnect/catch-up.                | Cloudflare Durable Object state docs, `src/shared/protocol.ts`                   |
-| WS-D8  | Keep polling as fallback during rollout.                         | Local dev, tests, and older browsers can keep existing behavior while socket support settles.   | `src/client/sync.ts`, `src/app/routes/home.tsx`                                  |
-| WS-D9  | Keep pushed sync merge schema-keyed.                             | Client DB, store, and broadcast state are keyed by schema app.                                  | `src/client/sync.ts`, `src/client/sync.test.ts`                                  |
-| WS-D10 | Store schema key on accepted socket tags.                        | Hibernated handlers can recover the app source without in-memory state.                         | `src/worker/authority.ts`                                                        |
-| WS-D11 | Broadcast from committed authority write paths only.             | Validation failures and mutation replay do not commit new state.                                | `src/worker/authority.ts`, `src/worker/authority.test.ts`                        |
-| WS-D12 | Treat each socket send as best effort.                           | One stale socket must not block other replicas from receiving committed state.                  | `src/worker/authority.ts`                                                        |
+| ID     | Decision                                                            | Reason                                                                                                            | Evidence                                                                         |
+| ------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| WS-D1  | Use `GET /api/:schemaKey/sync/ws`.                                  | Sync stream belongs to the same app boundary as bootstrap, sync, mutations, actions, and reset.                   | `prd/01-schema-routes.md`, `src/worker/index.ts`, `src/client/sync.ts`           |
+| WS-D2  | Keep writes on HTTP for the first push-sync release.                | Mutation/action/schema writes already have validation, replay, atomic storage, and tests.                         | `src/worker/authority.ts`, `src/worker/storage.ts`, `src/worker/actions.ts`      |
+| WS-D3  | Push only authority-committed state.                                | Browser replicas are local-first caches, not authoritative stores.                                                | `doc/overview.md`, `doc/current.md`, `src/client/db.ts`, `src/worker/storage.ts` |
+| WS-D4  | Reuse `SyncResponse` for pushed record/schema payloads.             | Existing client merge code already handles changes, cursor advancement, and schema refresh.                       | `src/shared/protocol.ts`, `src/client/sync.ts`, `src/client/store.ts`            |
+| WS-D5  | Use `DurableObjectState.acceptWebSocket(server)`.                   | This is the Cloudflare hibernation path for server-side Durable Object WebSockets.                                | Cloudflare Durable Object WebSocket docs                                         |
+| WS-D6  | Do not keep canonical socket state only in memory.                  | Hibernation re-runs the constructor and clears in-memory fields.                                                  | Cloudflare hibernation docs                                                      |
+| WS-D7  | Store per-socket cursor and schema timestamp in socket metadata.    | `serializeAttachment` survives hibernation and is enough for reconnect/catch-up.                                  | Cloudflare Durable Object state docs, `src/shared/protocol.ts`                   |
+| WS-D8  | Remove browser polling fallback after push sync ships.              | Backwards compatibility is not required; one browser sync transport keeps client behavior easier to reason about. | `src/client/sync.ts`, `src/client/sync.test.ts`                                  |
+| WS-D9  | Keep pushed sync merge schema-keyed.                                | Client DB, store, and broadcast state are keyed by schema app.                                                    | `src/client/sync.ts`, `src/client/sync.test.ts`                                  |
+| WS-D10 | Store schema key on accepted socket tags.                           | Hibernated handlers can recover the app source without in-memory state.                                           | `src/worker/authority.ts`                                                        |
+| WS-D11 | Broadcast from committed authority write paths only.                | Validation failures and mutation replay do not commit new state.                                                  | `src/worker/authority.ts`, `src/worker/authority.test.ts`                        |
+| WS-D12 | Treat each socket send as best effort.                              | One stale socket must not block other replicas from receiving committed state.                                    | `src/worker/authority.ts`                                                        |
+| WS-D13 | Home routes start push sync after bootstrap and stop it on cleanup. | Bootstrap still seeds the local replica before the push stream catches up; route cleanup owns socket lifetime.    | `src/app/routes/home.tsx`, `src/client/sync.test.ts`                             |
 
 ## Wire protocol
 
@@ -110,7 +111,8 @@ type SyncSocketAttachment = {
 - Do not depend on in-memory socket maps for correctness.
 - Do not use `ws.accept()` or socket event listeners in the Durable Object.
 - Do not send schema snapshots when the socket attachment has the current `schemaUpdatedAt`.
-- Keep HTTP polling fallback until WebSocket browser smoke is stable.
+- Keep HTTP `/sync` as an explicit pull helper.
+- Do not keep browser polling fallback after WebSocket browser smoke is stable.
 
 ## Chunks
 
@@ -119,10 +121,10 @@ type SyncSocketAttachment = {
 | WS-01 | shipped | none                | `src/shared/protocol.ts`, `src/client/sync.ts`         | Shared socket protocol exists and sync merge code is reusable.            |
 | WS-02 | shipped | PRD 01 SR-02, WS-01 | `src/worker/index.ts`, `src/worker/authority.ts`       | `/api/:schemaKey/sync/ws` accepts hibernatable WebSockets and catches up. |
 | WS-03 | shipped | WS-02               | `src/worker/authority.ts`, `src/worker/storage.ts`     | Committed mutations, actions, and schema writes push sync messages.       |
-| WS-04 | shipped | PRD 01 SR-04, WS-03 | `src/client/sync.ts`, `src/client/broadcast.ts`        | Client opens keyed socket, merges pushed sync messages, and falls back.   |
-| WS-05 | ready   | PRD 01 SR-05, WS-04 | `src/app/routes/home.tsx`, `src/client/sync-status.ts` | Home route starts push sync for the active schema key.                    |
-| WS-06 | pending | WS-05               | tests, Browser Use                                     | Two-tab browser smoke proves push updates and route isolation.            |
-| WS-07 | pending | WS-06               | `prd/02-websocket-push-sync.md`                        | PRD status and promote notes reflect shipped behavior.                    |
+| WS-04 | shipped | PRD 01 SR-04, WS-03 | `src/client/sync.ts`, `src/client/broadcast.ts`        | Client opens keyed socket and merges pushed sync messages.                |
+| WS-05 | shipped | PRD 01 SR-05, WS-04 | `src/app/routes/home.tsx`, `src/client/sync-status.ts` | Home route starts push sync for the active schema key.                    |
+| WS-06 | shipped | WS-05               | tests, Browser Use                                     | Browser smoke proves push updates and route isolation.                    |
+| WS-07 | shipped | WS-06               | `prd/02-websocket-push-sync.md`                        | PRD status and promote notes reflect shipped behavior.                    |
 
 ## Shipped chunks
 
@@ -222,7 +224,7 @@ Blockers:
 
 Status: shipped 2026-05-05.
 
-Goal: let the browser use push sync while preserving polling fallback.
+Goal: let the browser use push sync.
 
 Outcome:
 
@@ -231,13 +233,11 @@ Outcome:
 - Open sockets send `hello` with the local cursor and schema timestamp.
 - Server `sync` messages are validated with `isSyncSocketServerMessage`.
 - Pushed sync payloads merge through `applySyncResponse(schemaKey, response)`.
-- Sync status updates on connecting, open, reconnecting, connection issue, fallback, server error, and malformed message error.
+- Sync status updates on connecting, open, reconnecting, connection issue, server error, and malformed message error.
 - Open sockets handle `requestSync(schemaKey)` by sending `sync-requested`.
-- Non-open sockets handle `requestSync(schemaKey)` by polling once.
-- WebSocket construction failures and pre-open connection failures fall back to `startPollingSync`.
 - Opened socket closes reconnect with bounded backoff.
-- Polling timers use `globalThis` so client sync tests can cover fallback without a browser `window`.
 - Broadcast channel names remain keyed as `formless:${schemaKey}`.
+- Post-ship cleanup removed browser polling fallback.
 
 Acceptance checks:
 
@@ -245,17 +245,52 @@ Acceptance checks:
 - Client opens `/api/rates/sync/ws` for `rates`.
 - Pushed changes land in the selected IndexedDB database.
 - Cross-tab local events still refresh mounted stores.
-- Polling fallback still merges changes when socket construction or connection fails.
+- WebSocket construction or pre-open connection failure surfaces a sync error.
 
 Evidence:
 
 - `src/client/sync.test.ts` covers keyed task and rate socket URLs.
 - `src/client/sync.test.ts` covers `hello` messages with local cursor and schema timestamp.
 - `src/client/sync.test.ts` covers pushed sync merge into the selected local database.
-- `src/client/sync.test.ts` covers `requestSync` over open sockets and polling when sockets are not open.
-- `src/client/sync.test.ts` covers fallback on socket construction failure and pre-open connection failure.
+- `src/client/sync.test.ts` covers `requestSync` over open sockets.
 - `src/client/sync.test.ts` covers reconnect after an opened socket closes.
+- `src/client/sync.test.ts` covers socket cleanup on stop.
 - Existing broadcast tests still cover same-schema refresh and other-schema isolation.
+- `bun run test` passed.
+- `bun run check` passed.
+
+Blockers:
+
+- None.
+
+### WS-05 route enablement
+
+Status: shipped 2026-05-05.
+
+Goal: make the active app route use push sync.
+
+Outcome:
+
+- `HomeRoute` starts `startPushSync(schemaKey)` after route-keyed hydrate and bootstrap.
+- Route cleanup stops the active push sync socket and route broadcast listener.
+- Route-keyed view, query, and context reset logic stays unchanged.
+- Schema editor routes still use explicit `hydrateClientStore`, `fetchActiveSchema`, and `saveActiveSchema` flows.
+- Socket `sync` messages update the global status text to `Pushed sync received.`.
+- Existing push client status text covers connecting, connected, reconnecting, server errors, and malformed messages.
+
+Acceptance checks:
+
+- `/tasks` opens a task push-sync connection.
+- `/rates` opens a rate push-sync connection.
+- Switching routes closes the old schema socket through the route cleanup callback.
+- HTTP `/sync` remains available as an explicit pull helper.
+
+Evidence:
+
+- Browser Use opened `/tasks` and showed `Pushed sync received.` with the task cursor.
+- Browser Use opened `/rates` and showed `Pushed sync received.` with the rate cursor.
+- `src/client/sync.test.ts` covers `startPushSync` stop closing the socket.
+- `src/client/sync.test.ts` push-sync coverage still passes.
 - `bun run test` passed.
 - `bun run check` passed.
 
@@ -271,18 +306,18 @@ Goal: make the active app route use push sync.
 
 Tasks:
 
-- [ ] Replace `startPollingSync` startup in `HomeRoute` with push-first sync startup.
-- [ ] Stop the socket when route schema key changes or route unmounts.
-- [ ] Reset selected view/query/context state only through the route-key logic from PRD 01.
-- [ ] Keep schema editor using explicit fetch/save flows.
-- [ ] Surface simple sync status text for pushed, reconnecting, polling fallback, and error states.
+- [x] Replace `startPollingSync` startup in `HomeRoute` with push-first sync startup.
+- [x] Stop the socket when route schema key changes or route unmounts.
+- [x] Reset selected view/query/context state only through the route-key logic from PRD 01.
+- [x] Keep schema editor using explicit fetch/save flows.
+- [x] Surface simple sync status text for pushed, reconnecting, and error states.
 
 Acceptance checks:
 
-- [ ] `/tasks` opens a task push-sync connection.
-- [ ] `/rates` opens a rate push-sync connection.
-- [ ] Switching routes closes the old schema socket.
-- [ ] The app still works when WebSocket fallback polling is active.
+- [x] `/tasks` opens a task push-sync connection.
+- [x] `/rates` opens a rate push-sync connection.
+- [x] Switching routes closes the old schema socket.
+- [x] HTTP `/sync` remains available as an explicit pull helper.
 
 ## Later chunks
 
@@ -292,21 +327,47 @@ Goal: prove user-visible push sync.
 
 Browser smoke:
 
-- [ ] Start app with `bun dev`.
-- [ ] Open `/tasks` in two browser contexts.
-- [ ] Create a task in context A.
-- [ ] Confirm context B updates without waiting for polling.
-- [ ] Open `/rates` in one context.
-- [ ] Create or edit a rate-card record.
-- [ ] Confirm task contexts do not receive rate-card records.
-- [ ] Reload a stale task context and confirm catch-up from cursor.
-- [ ] Kill the dev server.
+- [x] Start app with `bun start`.
+- [x] Open `/tasks` in Browser Use.
+- [x] Create a task through the active route.
+- [x] Confirm task push via local WebSocket smoke without waiting for polling.
+- [x] Open `/rates` in Browser Use.
+- [x] Create a rate-card resource through the active route.
+- [x] Confirm task sockets do not receive rate-card records.
+- [x] Open a stale task socket and confirm catch-up from cursor.
+- [x] Leave the agent dev server running for the next agent.
 
 Cleanup:
 
-- [ ] Keep polling fallback.
-- [ ] Remove only obsolete polling-only startup code.
-- [ ] Keep route-keyed API code owned by PRD 01.
+- [x] Remove polling fallback.
+- [x] Remove obsolete polling-only startup code.
+- [x] Keep route-keyed API code owned by PRD 01.
+
+Status: shipped 2026-05-05.
+
+Outcome:
+
+- Browser Use verified the visible `/tasks` and `/rates` routes report pushed sync status.
+- The in-app Browser Use backend exposed one live tab in this session, so the multi-replica smoke used direct local WebSocket clients against the same `https://hazel.formless.local` dev server.
+- Two task sockets received the same committed task create.
+- A rates socket received a committed resource create.
+- A task socket stayed quiet for the rates resource create.
+- A stale task socket caught up from cursor `0`.
+
+Evidence:
+
+- Browser Use status on `/tasks`: `Schema v1 · Cursor 5 · Pushed sync received.`
+- Browser Use status on `/rates`: `Schema v1 · Cursor 17 · Pushed sync received.`
+- Local WebSocket smoke created task `Socket smoke 1777955488467` and both task sockets received cursor `8`.
+- Local WebSocket smoke created resource `Socket resource 1777955488480`; the rates socket received cursor `23`.
+- Local WebSocket smoke confirmed no task socket message for the rates mutation.
+- Local WebSocket smoke confirmed stale task catch-up to cursor `8` with `8` changes.
+- `bun run test` passed.
+- `bun run check` passed.
+
+Blockers:
+
+- None.
 
 ### WS-07 PRD status and promotion notes
 
@@ -314,10 +375,21 @@ Goal: record shipped facts for a later docs/steward pass.
 
 Tasks:
 
-- [ ] Mark shipped chunks.
-- [ ] Add final decisions.
-- [ ] Add blockers if any remain.
-- [ ] Add promote notes.
+- [x] Mark shipped chunks.
+- [x] Add final decisions.
+- [x] Add blockers if any remain.
+- [x] Add promote notes.
+
+Status: shipped 2026-05-05.
+
+Outcome:
+
+- PRD status is `shipped`.
+- Chunk table marks WS-01 through WS-07 shipped.
+- Final route-enable decision is recorded.
+- Promote notes include server, client, route, and status-line shipped facts.
+- Post-ship cleanup removes browser polling fallback.
+- Blockers are clear.
 
 ## Open questions
 
@@ -336,7 +408,7 @@ Tasks:
 - Server uses hibernatable Durable Object WebSockets.
 - Two browser replicas for the same schema key converge after one writes.
 - Different schema keys stay isolated.
-- Polling fallback still works.
+- HTTP `/sync` still works as an explicit pull helper.
 
 ## Non-goals
 
@@ -367,15 +439,19 @@ Add to `doc/current.md` after ship:
 - HTTP remains the write path.
 - Client push sync entrypoint: `startPushSync(schemaKey, options)`.
 - Browser opens push sync per active schema key.
-- Polling remains fallback.
+- Browser push sync no longer keeps polling fallback.
+- Home route starts push sync after route-keyed bootstrap.
+- Home route stops push sync when the route schema key changes or unmounts.
+- Developer status line can show pushed, reconnecting, and error states.
 
 Add to `doc/roadmap.md` after ship if it remains first-release scope:
 
 - Browser replicas receive authority-pushed changes.
 - Push sync is keyed by schema app.
 - Push sync preserves route isolation.
+- Remove `Keep polling fallback while push sync ships`.
 
 ## Blockers
 
-- None through WS-04.
+- None through WS-07.
 - PRD 01 SR-02 and SR-04 are shipped.

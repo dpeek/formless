@@ -34,7 +34,6 @@ import type {
 import { isSyncSocketServerMessage } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
-const DEFAULT_POLL_INTERVAL_MS = 1500;
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 500;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5000;
 const WEB_SOCKET_OPEN_READY_STATE = 1;
@@ -50,8 +49,6 @@ type SyncWebSocket = {
 };
 
 type StartPushSyncOptions = {
-  fetcher?: typeof fetch;
-  intervalMs?: number;
   reconnectInitialDelayMs?: number;
   reconnectMaxDelayMs?: number;
   socketFactory?: (url: string) => SyncWebSocket;
@@ -230,33 +227,7 @@ export async function resetSeedData(schemaKey: SchemaKey, fetcher: typeof fetch 
   return response;
 }
 
-export function startPollingSync(
-  schemaKey: SchemaKey,
-  options: { intervalMs?: number; fetcher?: typeof fetch } = {},
-) {
-  const intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const fetcher = options.fetcher ?? fetch;
-  const stopListening = listenForClientEvents(schemaKey, (event) => {
-    if (event.type === "sync-requested") {
-      void syncClient(schemaKey, fetcher);
-    }
-  });
-
-  void syncClient(schemaKey, fetcher);
-
-  const intervalId = globalThis.setInterval(() => {
-    void syncClient(schemaKey, fetcher);
-  }, intervalMs);
-
-  return () => {
-    stopListening();
-    globalThis.clearInterval(intervalId);
-  };
-}
-
 export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOptions = {}) {
-  const fetcher = options.fetcher ?? fetch;
-  const intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const reconnectInitialDelayMs =
     options.reconnectInitialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS;
   const reconnectMaxDelayMs = options.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS;
@@ -266,11 +237,9 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
   let reconnectTimerId: ReturnType<typeof setTimeout> | undefined;
   let reconnectDelayMs = reconnectInitialDelayMs;
   let stopListening = () => {};
-  let stopPolling = () => {};
-  let usingPollingFallback = false;
 
   function connect() {
-    if (stopped || usingPollingFallback) {
+    if (stopped) {
       return;
     }
 
@@ -281,7 +250,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     try {
       nextSocket = socketFactory(syncWebSocketUrl(schemaKey));
     } catch {
-      startFallback();
+      setSyncStatus({ state: "error", message: "Push sync unavailable." });
       return;
     }
 
@@ -289,7 +258,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     let opened = false;
 
     nextSocket.onopen = () => {
-      if (stopped || usingPollingFallback || socket !== nextSocket) {
+      if (stopped || socket !== nextSocket) {
         return;
       }
 
@@ -297,14 +266,14 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
       reconnectDelayMs = reconnectInitialDelayMs;
       setSyncStatus({ state: "idle", message: "Push sync connected." });
       void sendSyncSocketClientMessage(schemaKey, nextSocket, "hello").catch(() => {
-        if (!stopped && !usingPollingFallback && socket === nextSocket) {
+        if (!stopped && socket === nextSocket) {
           nextSocket.close();
         }
       });
     };
 
     nextSocket.onmessage = (event) => {
-      if (stopped || usingPollingFallback || socket !== nextSocket) {
+      if (stopped || socket !== nextSocket) {
         return;
       }
 
@@ -317,12 +286,13 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     };
 
     nextSocket.onerror = () => {
-      if (stopped || usingPollingFallback || socket !== nextSocket) {
+      if (stopped || socket !== nextSocket) {
         return;
       }
 
       if (!opened) {
-        startFallback();
+        socket = undefined;
+        setSyncStatus({ state: "error", message: "Push sync connection failed." });
         return;
       }
 
@@ -330,14 +300,14 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     };
 
     nextSocket.onclose = () => {
-      if (stopped || usingPollingFallback || socket !== nextSocket) {
+      if (stopped || socket !== nextSocket) {
         return;
       }
 
       socket = undefined;
 
       if (!opened) {
-        startFallback();
+        setSyncStatus({ state: "error", message: "Push sync connection failed." });
         return;
       }
 
@@ -347,7 +317,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
   }
 
   function scheduleReconnect() {
-    if (stopped || usingPollingFallback) {
+    if (stopped) {
       return;
     }
 
@@ -359,30 +329,16 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     }, delayMs);
   }
 
-  function startFallback() {
-    if (stopped || usingPollingFallback) {
-      return;
-    }
-
-    usingPollingFallback = true;
-    socket = undefined;
-    stopListening();
-    clearReconnectTimer();
-    setSyncStatus({ state: "idle", message: "Using polling sync fallback." });
-    stopPolling = startPollingSync(schemaKey, { intervalMs, fetcher });
-  }
-
   function requestSocketSync() {
     const currentSocket = socket;
 
     if (currentSocket && currentSocket.readyState === WEB_SOCKET_OPEN_READY_STATE) {
       void sendSyncSocketClientMessage(schemaKey, currentSocket, "sync-requested").catch(() => {
-        void syncClient(schemaKey, fetcher);
+        if (!stopped && socket === currentSocket) {
+          currentSocket.close();
+        }
       });
-      return;
     }
-
-    void syncClient(schemaKey, fetcher);
   }
 
   stopListening = listenForClientEvents(schemaKey, (event) => {
@@ -396,7 +352,6 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
   return () => {
     stopped = true;
     stopListening();
-    stopPolling();
     clearReconnectTimer();
     socket?.close();
     socket = undefined;
@@ -445,6 +400,7 @@ async function handleSyncSocketMessage(schemaKey: SchemaKey, event: MessageEvent
   }
 
   await applySyncResponse(schemaKey, message.payload);
+  setSyncStatus({ state: "idle", message: "Pushed sync received." });
 }
 
 function parseSyncSocketServerMessage(data: unknown): SyncSocketServerMessage | undefined {

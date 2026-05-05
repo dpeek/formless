@@ -122,7 +122,7 @@ describe("client sync", () => {
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
   });
 
-  it("merges schema returned by polling sync", async () => {
+  it("merges schema returned by HTTP sync", async () => {
     const nextSchema = schemaWithSummary();
 
     await saveBootstrapResponse("tasks", {
@@ -312,113 +312,6 @@ describe("client sync", () => {
     }
   });
 
-  it("polls once for sync requests while the push sync socket is not open", async () => {
-    const sockets = fakeSocketFactory();
-    const fetchedPaths: string[] = [];
-
-    await saveBootstrapResponse("tasks", {
-      schema: appSchema,
-      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
-      records: [record("record-1", "First")],
-      cursor: 1,
-    });
-
-    const stop = startPushSync("tasks", {
-      fetcher: async (input) => {
-        fetchedPaths.push(requestInputToString(input));
-
-        return Response.json({
-          changes: [change(2, "record-2", "Second")],
-          cursor: 2,
-        } satisfies SyncResponse);
-      },
-      socketFactory: sockets.create,
-    });
-
-    try {
-      requestSync("tasks");
-
-      await waitFor(() => fetchedPaths.length === 1);
-      expect(fetchedPaths).toEqual([
-        "/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
-      ]);
-      expect((await readLocalSnapshot("tasks")).cursor).toBe(2);
-    } finally {
-      stop();
-    }
-  });
-
-  it("falls back to polling when push sync socket construction fails", async () => {
-    const fetchedPaths: string[] = [];
-
-    await saveBootstrapResponse("tasks", {
-      schema: appSchema,
-      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
-      records: [record("record-1", "First")],
-      cursor: 1,
-    });
-
-    const stop = startPushSync("tasks", {
-      fetcher: async (input) => {
-        fetchedPaths.push(requestInputToString(input));
-
-        return Response.json({
-          changes: [],
-          cursor: 1,
-        } satisfies SyncResponse);
-      },
-      intervalMs: 60_000,
-      socketFactory: () => {
-        throw new Error("WebSocket unavailable.");
-      },
-    });
-
-    try {
-      await waitFor(() => fetchedPaths.length === 1);
-      expect(fetchedPaths).toEqual([
-        "/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
-      ]);
-    } finally {
-      stop();
-    }
-  });
-
-  it("falls back to polling when the push sync connection fails before opening", async () => {
-    const sockets = fakeSocketFactory();
-    const fetchedPaths: string[] = [];
-
-    await saveBootstrapResponse("tasks", {
-      schema: appSchema,
-      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
-      records: [record("record-1", "First")],
-      cursor: 1,
-    });
-
-    const stop = startPushSync("tasks", {
-      fetcher: async (input) => {
-        fetchedPaths.push(requestInputToString(input));
-
-        return Response.json({
-          changes: [],
-          cursor: 1,
-        } satisfies SyncResponse);
-      },
-      intervalMs: 60_000,
-      socketFactory: sockets.create,
-    });
-
-    try {
-      sockets.instances[0]?.fail();
-
-      await waitFor(() => fetchedPaths.length === 1);
-      expect(fetchedPaths).toEqual([
-        "/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
-      ]);
-    } finally {
-      stop();
-    }
-  });
-
   it("reconnects push sync after an opened socket closes", async () => {
     const sockets = fakeSocketFactory();
     const stop = startPushSync("tasks", {
@@ -436,6 +329,17 @@ describe("client sync", () => {
     } finally {
       stop();
     }
+  });
+
+  it("closes the push sync socket when stopped", async () => {
+    const sockets = fakeSocketFactory();
+    const stop = startPushSync("tasks", { socketFactory: sockets.create });
+
+    sockets.instances[0]?.open();
+    await waitFor(() => sockets.instances[0]?.sentMessages.length === 1);
+    stop();
+
+    expect(sockets.instances[0]?.readyState).toBe(3);
   });
 
   it("merges accepted create mutations into local state", async () => {
@@ -913,10 +817,6 @@ class FakeSyncSocket {
     this.onopen?.(new Event("open"));
   }
 
-  fail() {
-    this.onerror?.(new Event("error"));
-  }
-
   receive(message: SyncSocketServerMessage) {
     this.onmessage?.({ data: JSON.stringify(message) } as MessageEvent);
   }
@@ -932,18 +832,6 @@ function parseSocketClientMessage(data: string | undefined): SyncSocketClientMes
   }
 
   return JSON.parse(data) as SyncSocketClientMessage;
-}
-
-function requestInputToString(input: RequestInfo | URL) {
-  if (typeof input === "string") {
-    return input;
-  }
-
-  if (input instanceof URL) {
-    return input.toString();
-  }
-
-  return input.url;
 }
 
 function jsonFetcher(expectedPath: string, body: unknown): typeof fetch {
