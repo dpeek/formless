@@ -59,6 +59,33 @@ export type SyncResponse = {
   schemaUpdatedAt?: string;
 };
 
+export type SyncSocketClientMessage =
+  | {
+      type: "hello";
+      cursor: number;
+      schemaUpdatedAt: string | null;
+    }
+  | {
+      type: "sync-requested";
+      cursor: number;
+      schemaUpdatedAt: string | null;
+    };
+
+export type SyncSocketServerMessage =
+  | {
+      type: "sync";
+      payload: SyncResponse;
+    }
+  | {
+      type: "error";
+      message: string;
+    };
+
+export type SyncSocketAttachment = {
+  cursor: number;
+  schemaUpdatedAt: string | null;
+};
+
 export type MutationResponse = {
   record: StoredRecord;
   changes: ChangeRow[];
@@ -81,3 +108,96 @@ export type SchemaUpdateResponse = {
   schema: AppSchema;
   updatedAt: string;
 };
+
+export function isSyncSocketClientMessage(value: unknown): value is SyncSocketClientMessage {
+  return (
+    isRecord(value) &&
+    (value.type === "hello" || value.type === "sync-requested") &&
+    isCursor(value.cursor) &&
+    isNullableString(value.schemaUpdatedAt)
+  );
+}
+
+export function isSyncSocketServerMessage(value: unknown): value is SyncSocketServerMessage {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (value.type === "error") {
+    return typeof value.message === "string";
+  }
+
+  return value.type === "sync" && isSyncResponse(value.payload);
+}
+
+export function isSyncSocketAttachment(value: unknown): value is SyncSocketAttachment {
+  return isRecord(value) && isCursor(value.cursor) && isNullableString(value.schemaUpdatedAt);
+}
+
+function isSyncResponse(value: unknown): value is SyncResponse {
+  if (!isRecord(value) || !Array.isArray(value.changes) || !isCursor(value.cursor)) {
+    return false;
+  }
+
+  if (!value.changes.every(isChangeRow)) {
+    return false;
+  }
+
+  if ("schema" in value && !isRecord(value.schema)) {
+    return false;
+  }
+
+  if ("schemaUpdatedAt" in value && typeof value.schemaUpdatedAt !== "string") {
+    return false;
+  }
+
+  return true;
+}
+
+function isChangeRow(value: unknown): value is ChangeRow {
+  return (
+    isRecord(value) &&
+    isCursor(value.seq) &&
+    typeof value.mutationId === "string" &&
+    (value.op === "create" || value.op === "patch" || value.op === "action") &&
+    typeof value.entity === "string" &&
+    typeof value.recordId === "string" &&
+    isStoredRecord(value.payload) &&
+    typeof value.createdAt === "string"
+  );
+}
+
+function isStoredRecord(value: unknown): value is StoredRecord {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.entity === "string" &&
+    isRecordValues(value.values) &&
+    typeof value.createdAt === "string" &&
+    (!("deletedAt" in value) || typeof value.deletedAt === "string")
+  );
+}
+
+function isRecordValues(value: unknown): value is RecordValues {
+  return isRecord(value) && Object.values(value).every(isFieldValue);
+}
+
+function isFieldValue(value: unknown): value is FieldValue {
+  return typeof value === "string" || typeof value === "boolean" || isFiniteNumber(value);
+}
+
+function isCursor(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return typeof value === "string" || value === null;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

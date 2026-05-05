@@ -11,6 +11,7 @@ import {
   subscribeToClientStoreSelector,
 } from "./store.ts";
 import {
+  applySyncResponse,
   bootstrapClient,
   fetchActiveSchema,
   resetSeedData,
@@ -141,6 +142,60 @@ describe("client sync", () => {
 
     expect(snapshot.schema).toEqual(nextSchema);
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
+  });
+
+  it("applies pushed sync responses and advances the cursor", async () => {
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    await applySyncResponse("tasks", {
+      changes: [change(2, "record-2", "Second")],
+      cursor: 2,
+    } satisfies SyncResponse);
+
+    const snapshot = await readLocalSnapshot("tasks");
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(snapshot.records.map((storedRecord) => storedRecord.id)).toEqual([
+      "record-1",
+      "record-2",
+    ]);
+    expect(snapshot.cursor).toBe(2);
+    expect(storeSnapshot.recordsById["record-2"]).toEqual(record("record-2", "Second"));
+    expect(storeSnapshot.cursor).toBe(2);
+  });
+
+  it("applies schema-only pushed sync responses", async () => {
+    const nextSchema = schemaWithSummary();
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    await applySyncResponse("tasks", {
+      changes: [],
+      cursor: 1,
+      schema: nextSchema,
+      schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+    } satisfies SyncResponse);
+
+    const snapshot = await readLocalSnapshot("tasks");
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(snapshot.schema).toEqual(nextSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
+    expect(snapshot.cursor).toBe(1);
+    expect(storeSnapshot.schema).toEqual(nextSchema);
+    expect(storeSnapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
   });
 
   it("merges accepted create mutations into local state", async () => {

@@ -1,7 +1,7 @@
 # PRD 02: WebSocket push sync
 
-Status: proposed
-Current chunk: WS-01 shared push-sync protocol
+Status: active
+Current chunk: WS-02 hibernatable socket route
 Last updated: 2026-05-05
 
 ## Goal
@@ -53,6 +53,7 @@ The first release should:
 | WS-D6 | Do not keep canonical socket state only in memory.               | Hibernation re-runs the constructor and clears in-memory fields.                                | Cloudflare hibernation docs                                                      |
 | WS-D7 | Store per-socket cursor and schema timestamp in socket metadata. | `serializeAttachment` survives hibernation and is enough for reconnect/catch-up.                | Cloudflare Durable Object state docs, `src/shared/protocol.ts`                   |
 | WS-D8 | Keep polling as fallback during rollout.                         | Local dev, tests, and older browsers can keep existing behavior while socket support settles.   | `src/client/sync.ts`, `src/app/routes/home.tsx`                                  |
+| WS-D9 | Keep pushed sync merge schema-keyed.                             | Client DB, store, and broadcast state are keyed by schema app.                                  | `src/client/sync.ts`, `src/client/sync.test.ts`                                  |
 
 ## Wire protocol
 
@@ -112,37 +113,38 @@ type SyncSocketAttachment = {
 
 | ID    | Status  | Depends on          | Main files                                             | Acceptance                                                                |
 | ----- | ------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
-| WS-01 | ready   | none                | `src/shared/protocol.ts`, `src/client/sync.ts`         | Shared socket protocol exists and sync merge code is reusable.            |
-| WS-02 | pending | PRD 01 SR-02, WS-01 | `src/worker/index.ts`, `src/worker/authority.ts`       | `/api/:schemaKey/sync/ws` accepts hibernatable WebSockets and catches up. |
+| WS-01 | shipped | none                | `src/shared/protocol.ts`, `src/client/sync.ts`         | Shared socket protocol exists and sync merge code is reusable.            |
+| WS-02 | ready   | PRD 01 SR-02, WS-01 | `src/worker/index.ts`, `src/worker/authority.ts`       | `/api/:schemaKey/sync/ws` accepts hibernatable WebSockets and catches up. |
 | WS-03 | pending | WS-02               | `src/worker/authority.ts`, `src/worker/storage.ts`     | Committed mutations, actions, and schema writes push sync messages.       |
 | WS-04 | pending | PRD 01 SR-04, WS-03 | `src/client/sync.ts`, `src/client/broadcast.ts`        | Client opens keyed socket, merges pushed sync messages, and falls back.   |
 | WS-05 | pending | PRD 01 SR-05, WS-04 | `src/app/routes/home.tsx`, `src/client/sync-status.ts` | Home route starts push sync for the active schema key.                    |
 | WS-06 | pending | WS-05               | tests, Browser Use                                     | Two-tab browser smoke proves push updates and route isolation.            |
 | WS-07 | pending | WS-06               | `prd/02-websocket-push-sync.md`                        | PRD status and promote notes reflect shipped behavior.                    |
 
-## Current chunk
+## Shipped chunks
 
 ### WS-01 shared push-sync protocol
 
+Status: shipped 2026-05-05.
+
 Goal: prepare the protocol and client merge seam without changing runtime behavior.
 
-Tasks:
+Outcome:
 
-- [ ] Add `SyncSocketClientMessage`, `SyncSocketServerMessage`, and `SyncSocketAttachment` to `src/shared/protocol.ts`.
-- [ ] Add validation helpers for socket messages.
-- [ ] Extract the merge body of `syncClient` into a reusable `applySyncResponse(response)` helper.
-- [ ] Keep `syncClient` behavior unchanged.
-- [ ] Add client tests for pushed `SyncResponse` merge behavior.
-- [ ] Add client tests for schema-only pushed sync messages.
+- Added `SyncSocketClientMessage`, `SyncSocketServerMessage`, and `SyncSocketAttachment` to `src/shared/protocol.ts`.
+- Added `isSyncSocketClientMessage`, `isSyncSocketServerMessage`, and `isSyncSocketAttachment`.
+- Added `applySyncResponse(schemaKey, response)` in `src/client/sync.ts`.
+- `syncClient` still builds the keyed `/sync` URL, fetches HTTP sync, and delegates the merge to `applySyncResponse`.
+- No WebSocket opens in WS-01.
 
-Acceptance checks:
+Evidence:
 
-- [ ] `syncClient` still fetches `/sync`, merges changes, saves schema, and notifies local events.
-- [ ] `applySyncResponse` advances cursor from a pushed response.
-- [ ] `applySyncResponse` saves and applies pushed schema changes.
-- [ ] No WebSocket is opened in WS-01.
+- `src/shared/protocol.test.ts` covers socket message and attachment validation.
+- `src/client/sync.test.ts` covers pushed record sync and schema-only sync merge.
+- `bun run test` passed.
+- `bun run check` passed.
 
-## Later chunks
+## Current chunk
 
 ### WS-02 hibernatable socket route
 
@@ -170,6 +172,8 @@ Acceptance checks:
 - [ ] `/api/tasks/sync/ws` without upgrade returns `426`.
 - [ ] A stale cursor receives the same changes as `GET /api/tasks/sync?after=...`.
 - [ ] A current schema timestamp omits schema from the pushed message.
+
+## Later chunks
 
 ### WS-03 authority write notifications
 
@@ -304,6 +308,8 @@ Tasks:
 
 Add to `doc/current.md` after ship:
 
+- Push sync protocol types: `SyncSocketClientMessage`, `SyncSocketServerMessage`, `SyncSocketAttachment`.
+- Client pushed sync merge helper: `applySyncResponse(schemaKey, response)`.
 - Push sync route: `/api/:schemaKey/sync/ws`.
 - Durable Object accepts hibernatable WebSockets.
 - HTTP remains the write path.
@@ -318,5 +324,5 @@ Add to `doc/roadmap.md` after ship if it remains first-release scope:
 
 ## Blockers
 
-- PRD 01 keyed client persistence must land before browser enablement.
-- Current active route work owns `src/worker/index.ts`, `src/worker/authority.ts`, and `src/worker/authority.test.ts`.
+- None for WS-02.
+- PRD 01 SR-02 and SR-04 are shipped.

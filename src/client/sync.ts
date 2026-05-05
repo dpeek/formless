@@ -48,6 +48,17 @@ export async function syncClient(schemaKey: SchemaKey, fetcher: typeof fetch = f
   const url = syncUrl(schemaKey, cursor, schemaUpdatedAt);
   const response = await fetchJson<SyncResponse>(fetcher, url);
 
+  await applySyncResponse(schemaKey, response, { currentCursor: cursor });
+
+  return response;
+}
+
+export async function applySyncResponse(
+  schemaKey: SchemaKey,
+  response: SyncResponse,
+  options: { currentCursor?: number } = {},
+) {
+  const cursor = options.currentCursor ?? (await readCursor(schemaKey));
   const schemaChanged = Boolean(response.schema && response.schemaUpdatedAt);
 
   if (response.schema && response.schemaUpdatedAt) {
