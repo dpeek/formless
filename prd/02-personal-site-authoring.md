@@ -1,0 +1,861 @@
+# PRD 02: Personal site content authoring
+
+Status: proposed
+Current chunk: PS-01 text formats and editorial editors
+Last updated: 2026-05-05
+
+## Goal
+
+Add a schema-backed personal site authoring app.
+
+This PRD is only about:
+
+- content schema;
+- source schema and seed records;
+- admin/editorial generated surfaces;
+- authoring validation;
+- future handoff shape for a rendered site.
+
+This PRD is not about rendering the public website.
+
+The schema should support a personal website with:
+
+- header and footer navigation;
+- grouped navigation sections and items;
+- social links;
+- copyright line;
+- reusable editorial blocks;
+- long-form markdown content;
+- pages such as home, blog, resume, and projects;
+- project pages such as Estii, OpenSurf, and Formless;
+- query-backed lists such as recent posts and featured projects.
+
+The schema should stay generic enough for other content-heavy sites.
+
+## Problem
+
+A domain-specific schema like `post`, `project`, `page`, `homeHero`, and `footerCta` is easy to understand at first, but it locks the app into one website shape.
+
+A single generic record can also go too far. If every concept is one sparse record with unrelated fields, the admin gets noisy and validation gets weak.
+
+The first useful model should split the difference:
+
+- generic content records for editorial things;
+- small relationship records for ordered placement, navigation, and media;
+- schema-declared views for authoring workflows;
+- no public renderer or layout DSL yet.
+
+## Source map
+
+Existing anchors:
+
+- Schema parser: `src/shared/schema.ts`.
+- Schema field parser: `src/shared/schema-fields.ts`.
+- Schema view parser: `src/shared/schema-views.ts`.
+- Schema types: `src/shared/schema-types.ts`.
+- Field behavior: `src/shared/field-types.ts`.
+- Generated field editors: `src/app/generated/record-field-editor.tsx`.
+- Generated create editors: `src/app/generated/create.tsx`.
+- Generated table renderer: `src/app/generated/table.tsx`.
+- View model selection: `src/client/views.ts`.
+- Query evaluator: `src/shared/query.ts`.
+- App registry: `src/shared/schema-apps.ts`.
+- Worker source schema registry: `src/worker/schema-apps.ts`.
+- Current source apps: `schema/apps/tasks/`, `schema/apps/rates/`.
+- Route workstream: `prd/01-schema-routes.md`.
+
+New files:
+
+- `schema/apps/site/schema.json`.
+- `schema/apps/site/seed-records.json`.
+
+Likely changed files:
+
+- `src/shared/schema-types.ts`.
+- `src/shared/schema-fields.ts`.
+- `src/shared/schema-views.ts`.
+- `src/shared/field-types.ts`.
+- `src/app/generated/field-ui-adapters.ts`.
+- `src/app/generated/record-field-editor.tsx`.
+- `src/app/generated/create.tsx`.
+- `src/shared/schema-apps.ts`.
+- `src/worker/schema-apps.ts`.
+- `src/shared/schema.test.ts`.
+- `src/shared/field-types.test.ts`.
+- `src/client/views.test.ts`.
+- `src/app.test.tsx`.
+
+## Requirements
+
+### Content model
+
+- Records stay flat.
+- Use `contentItem` as the main reusable editorial entity.
+- Use `contentItem.kind` to discriminate pages, posts, projects, links, blocks, and profile content.
+- Do not split `post`, `project`, and `page` into separate entities in the first version.
+- Split out entities only when authoring rules become meaningfully different.
+- Keep media as its own entity.
+- Keep people/authors as their own entity.
+- Keep navigation and ordered composition as relationship entities.
+
+### Long-form content
+
+- Store markdown as text in the first version.
+- Markdown should support source text for headings, links, code fences, diagrams, and media references.
+- Do not parse or render markdown in the authority.
+- Do not require Cloudflare asset upload in this PRD.
+- Store Cloudflare-ready media metadata in `mediaAsset`.
+- Use stable media keys and alt text now so a later renderer can resolve Cloudflare URLs.
+
+### Admin/editorial surfaces
+
+- Authors can manage content items from generated collection/table views.
+- Authors can filter content by kind and status.
+- Authors can edit long-form body content in a multiline editor.
+- Authors can manage media records and alt text.
+- Authors can manage people/authors.
+- Authors can manage header and footer navigation sections.
+- Authors can manage ordered navigation items inside a selected section.
+- Authors can manage ordered page/content placements inside a selected content item.
+- Authors can create draft posts, projects, pages, links, blocks, media, people, nav sections, nav items, and placements.
+
+### Validation
+
+- Authority validation stays generic.
+- The first version should validate field types, references, required fields, enum values, and existing supported constraints.
+- Publish-readiness checks can be client/editorial warnings.
+- Publish-readiness checks must not become a hidden public renderer.
+- Missing public renderer behavior is not a failure for this PRD.
+
+### Portability
+
+- `contentItem` should not encode one person's site as a hard-coded domain.
+- Use generic kinds and reusable placements.
+- Use records and schema views that could also support a portfolio, consultancy site, product-marketing site, or knowledge base.
+- Public renderer templates can later map generic records to site-specific UI.
+
+## Decisions
+
+| ID    | Decision                                                                                           | Reason                                                                                        | Evidence                                     |
+| ----- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| PS-D1 | Use a generic `contentItem` entity for pages, posts, projects, links, blocks, and profile content. | Reduces early domain lock-in while preserving one main authoring collection.                  | `doc/overview.md`, `src/shared/schema.ts`    |
+| PS-D2 | Keep `mediaAsset`, `person`, `navSection`, `navItem`, and `contentPlacement` separate.             | These are relationships or reusable records with different authoring workflows.               | `schema/apps/rates/schema.json` references   |
+| PS-D3 | Store long-form markdown in text fields at first.                                                  | Avoids creating a rendered content engine before the admin workflow exists.                   | Existing `text` field behavior               |
+| PS-D4 | Add text editor variants before adding new persisted field types.                                  | `markdown`, `textarea`, `href`, `slug`, `color`, and `icon` are string authoring needs first. | `src/shared/field-types.ts`                  |
+| PS-D5 | Use `contentPlacement` for ordered page composition.                                               | Repeated blocks need order, slot, optional item/query binding, and overrides.                 | Flat-record rule in `doc/overview.md`        |
+| PS-D6 | Keep public render templates out of the first schema.                                              | The user asked for schema and admin/editorial surfaces only.                                  | This PRD                                     |
+| PS-D7 | Use queries for authoring scopes, not persisted aggregate data.                                    | Counts and lists should derive from records locally.                                          | `src/shared/query.ts`, `src/client/views.ts` |
+| PS-D8 | Use source-owned seed JSON for sample site content.                                                | Seeds should stay close to future import/export snapshot shape.                               | `schema/apps/*/seed-records.json`            |
+
+## Non-goals
+
+- Do not build the public rendered site.
+- Do not implement a full layout DSL.
+- Do not implement a public route matcher for site pages.
+- Do not implement Cloudflare upload, image transforms, R2, or CDN serving.
+- Do not implement markdown rendering for public visitors.
+- Do not implement rich text blocks as nested database records.
+- Do not implement comments, likes, analytics, search, RSS, or sitemap generation.
+- Do not implement multi-author permissions.
+- Do not implement import/export UI.
+- Do not implement cross-app references.
+- Do not make `post`, `project`, or `page` separate entities unless a later PRD proves the generic model is too weak.
+
+## Schema direction
+
+### Entity: `contentItem`
+
+Purpose: reusable editorial content.
+
+Fields:
+
+- `kind`: enum, required.
+  - `page`
+  - `post`
+  - `project`
+  - `link`
+  - `block`
+  - `profile`
+- `title`: text, required.
+- `subtitle`: text, optional.
+- `body`: text, optional, markdown editor.
+- `slug`: text, optional, slug editor.
+- `href`: text, optional, href editor.
+- `icon`: text, optional, icon editor.
+- `color`: text, optional, color editor.
+- `status`: enum, required, default `draft`.
+  - `draft`
+  - `published`
+  - `archived`
+- `featured`: boolean, required, default `false`.
+- `publishedAt`: date, optional.
+- `order`: number, optional, integer, min `0`.
+- `templateKey`: text, optional.
+- `primaryMedia`: reference to `mediaAsset`, optional, display field `label`.
+- `author`: reference to `person`, optional, display field `name`.
+
+Notes:
+
+- `kind` describes what the record means.
+- `profile` records can hold site owner, intro, newsletter, copyright, and other site-wide copy.
+- `templateKey` is an authoring hint for future renderers.
+- `body` is markdown source text, not a parsed content tree.
+- `href` can be internal or external.
+- `slug` is source data for later route generation.
+- `featured` supports home/project/post selections without a specialized entity.
+
+### Entity: `mediaAsset`
+
+Purpose: media library metadata.
+
+Fields:
+
+- `label`: text, required.
+- `kind`: enum, required.
+  - `image`
+  - `video`
+  - `file`
+- `key`: text, required.
+- `alt`: text, required.
+- `href`: text, optional, href editor.
+- `credit`: text, optional.
+- `width`: number, optional, integer, min `0`.
+- `height`: number, optional, integer, min `0`.
+
+Notes:
+
+- `key` should be stable and Cloudflare-ready.
+- `href` is optional until upload/serving exists.
+- `alt` is required so authoring starts accessible.
+
+### Entity: `person`
+
+Purpose: authors and profile records.
+
+Fields:
+
+- `name`: text, required.
+- `role`: text, optional.
+- `bio`: text, optional, markdown editor.
+- `avatar`: reference to `mediaAsset`, optional, display field `label`.
+- `href`: text, optional, href editor.
+- `email`: text, optional.
+
+Notes:
+
+- `person` can represent the site owner or later guest authors.
+- Social links can be `contentItem.kind = "link"` records placed near a person/profile.
+
+### Entity: `navSection`
+
+Purpose: header/footer navigation grouping.
+
+Fields:
+
+- `area`: enum, required.
+  - `header`
+  - `footer`
+- `label`: text, required.
+- `order`: number, required, integer, min `0`, default `0`.
+- `visible`: boolean, required, default `true`.
+
+Notes:
+
+- Header and footer can share the same entity.
+- Footer columns are sections.
+
+### Entity: `navItem`
+
+Purpose: ordered navigation links inside a section.
+
+Fields:
+
+- `section`: reference to `navSection`, required, display field `label`.
+- `item`: reference to `contentItem`, optional, display field `title`.
+- `label`: text, optional.
+- `href`: text, optional, href editor.
+- `icon`: text, optional, icon editor.
+- `order`: number, required, integer, min `0`, default `0`.
+- `visible`: boolean, required, default `true`.
+
+Notes:
+
+- Use `item` for internal content.
+- Use `href` for external or custom links.
+- `label` overrides the referenced item title when present.
+- Publish-readiness should warn when both `item` and `href` are empty.
+
+### Entity: `contentPlacement`
+
+Purpose: ordered composition records for pages, posts, projects, and reusable blocks.
+
+Fields:
+
+- `parent`: reference to `contentItem`, required, display field `title`.
+- `slot`: enum, required.
+  - `main`
+  - `aside`
+  - `footer`
+  - `meta`
+- `kind`: enum, required.
+  - `hero`
+  - `markdown`
+  - `contentCard`
+  - `contentList`
+  - `contentGrid`
+  - `media`
+  - `cta`
+  - `subscribe`
+  - `author`
+  - `nav`
+- `item`: reference to `contentItem`, optional, display field `title`.
+- `media`: reference to `mediaAsset`, optional, display field `label`.
+- `title`: text, optional.
+- `subtitle`: text, optional.
+- `queryKey`: text, optional.
+- `limit`: number, optional, integer, min `0`.
+- `color`: text, optional, color editor.
+- `order`: number, required, integer, min `0`, default `0`.
+- `visible`: boolean, required, default `true`.
+
+Notes:
+
+- `parent` selects the page/content item being composed.
+- `kind` selects an abstract block role.
+- `item` points to a featured record when the block is record-backed.
+- `queryKey` points to a named schema query for list/grid blocks.
+- `limit` is authoring metadata for future list/grid renderers.
+- `title` and `subtitle` are overrides.
+- No renderer is required in this PRD.
+
+## Text format and editor direction
+
+The first authoring work should extend text authoring without changing storage.
+
+Preferred schema addition:
+
+```json
+{
+  "type": "text",
+  "required": false,
+  "label": "Body",
+  "format": "markdown"
+}
+```
+
+Preferred view/editor addition:
+
+```json
+{
+  "editor": "markdown",
+  "commit": "field-commit"
+}
+```
+
+Text formats:
+
+- `plain`: default single-line text.
+- `longText`: multiline prose without markdown assumptions.
+- `markdown`: multiline markdown source.
+- `href`: internal or external link target.
+- `slug`: route/source slug.
+- `color`: color token or hex value.
+- `icon`: icon token.
+
+Editor behavior:
+
+- `text`: current single-line editor.
+- `textarea`: multiline editor for `longText`.
+- `markdown`: multiline editor for markdown source.
+- `href`: text editor with link-focused label/help in future.
+- `slug`: text editor with slug-focused label/help in future.
+- `color`: text editor first, visual swatch later.
+- `icon`: text editor first, icon picker later.
+
+Rules:
+
+- All text formats store strings.
+- Authority validation should keep formats permissive in the first chunk.
+- Format-specific strict validation can land later after export/import and editing flows are clearer.
+- Markdown preview is optional in the first chunk.
+
+## Queries
+
+Initial content queries:
+
+- `contentAll`: all content items.
+- `contentDraft`: `status = draft`.
+- `contentPublished`: `status = published`.
+- `contentPages`: `kind = page`.
+- `contentPosts`: `kind = post`.
+- `contentProjects`: `kind = project`.
+- `contentLinks`: `kind = link`.
+- `contentBlocks`: `kind = block`.
+- `featuredContent`: `featured = true`.
+- `publishedPosts`: `kind = post` and `status = published`.
+- `featuredProjects`: `kind = project` and `featured = true`.
+
+Initial relationship queries:
+
+- `mediaAll`: all media assets.
+- `peopleAll`: all people.
+- `navSectionsAll`: all navigation sections.
+- `navItemsForSelectedSection`: `section = context.section`.
+- `placementsForSelectedContent`: `parent = context.content`.
+
+Notes:
+
+- Sorting is not a query feature today.
+- Store `order` now and show it in tables.
+- A later table/query PRD can add sort order.
+- Counts should be host-level displays over queries, not persisted fields.
+
+## Admin surfaces
+
+### Content workspace
+
+View: `contentHome`.
+
+Entity: `contentItem`.
+
+Queries:
+
+- all;
+- draft;
+- published;
+- pages;
+- posts;
+- projects;
+- links;
+- blocks;
+- featured.
+
+Result:
+
+- table view.
+
+Columns:
+
+- `kind`;
+- `title`;
+- `status`;
+- `featured`;
+- `slug`;
+- `href`;
+- `publishedAt`;
+- `order`.
+
+Actions:
+
+- create content item.
+
+Create fields:
+
+- `kind`;
+- `title`;
+- `subtitle`;
+- `status`;
+- `featured`;
+- `slug`;
+- `href`;
+- `templateKey`;
+- `author`;
+- `primaryMedia`.
+
+Notes:
+
+- Body editing can happen in row detail or inline once markdown editor layout exists.
+- The first version can include body in create if the UI handles multiline fields well.
+
+### Composition workspace
+
+View: `contentCompositionHome`.
+
+Context:
+
+- selected `contentItem`.
+
+Entity:
+
+- `contentPlacement`.
+
+Query:
+
+- `placementsForSelectedContent`.
+
+Result:
+
+- table view.
+
+Columns:
+
+- `slot`;
+- `kind`;
+- `item`;
+- `media`;
+- `title`;
+- `queryKey`;
+- `limit`;
+- `order`;
+- `visible`.
+
+Actions:
+
+- create placement with selected `contentItem` as context default.
+
+Notes:
+
+- This is the admin surface for home sections, project sections, post CTAs, and footer/meta blocks.
+- It does not render the final page.
+
+### Navigation workspace
+
+View: `navigationHome`.
+
+Context:
+
+- selected `navSection`.
+
+Entity:
+
+- `navItem`.
+
+Query:
+
+- `navItemsForSelectedSection`.
+
+Result:
+
+- table view.
+
+Columns:
+
+- `item`;
+- `label`;
+- `href`;
+- `icon`;
+- `order`;
+- `visible`.
+
+Actions:
+
+- create nav section.
+- create nav item for selected section.
+
+Notes:
+
+- Header and footer use the same workflow.
+- Footer columns are `navSection` records.
+
+### Media workspace
+
+View: `mediaHome`.
+
+Entity:
+
+- `mediaAsset`.
+
+Query:
+
+- `mediaAll`.
+
+Result:
+
+- table view.
+
+Columns:
+
+- `label`;
+- `kind`;
+- `key`;
+- `alt`;
+- `href`;
+- `width`;
+- `height`;
+
+Actions:
+
+- create media asset.
+
+### People workspace
+
+View: `peopleHome`.
+
+Entity:
+
+- `person`.
+
+Query:
+
+- `peopleAll`.
+
+Result:
+
+- list or table view.
+
+Fields:
+
+- `name`;
+- `role`;
+- `bio`;
+- `avatar`;
+- `href`;
+- `email`.
+
+Actions:
+
+- create person.
+
+## Sample seed records
+
+Seed records should include enough content to exercise the admin workflows:
+
+- one profile/person for the site owner;
+- one media asset for an avatar or hero;
+- one home page content item;
+- one blog index page content item;
+- one resume page content item;
+- one projects page content item;
+- three project content items:
+  - Estii;
+  - OpenSurf;
+  - Formless;
+- two draft/published post content items;
+- header nav section;
+- footer nav sections;
+- header nav items;
+- footer nav items;
+- social link content items;
+- copyright/profile content item;
+- home placements:
+  - hero;
+  - recent posts list;
+  - projects grid;
+- post template/example placements:
+  - markdown body;
+  - author;
+  - related/recent posts.
+
+Rules:
+
+- Seed records stay close to `StoredRecord`.
+- Do not store change rows.
+- Do not include public HTML.
+- Do not include generated Cloudflare URLs unless they are stable source data.
+
+## Chunks
+
+| ID    | Status  | Depends on | Main files                                                       | Acceptance                                                                        |
+| ----- | ------- | ---------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| PS-01 | pending | none       | `src/shared/*`, `src/app/generated/*`, tests                     | Text formats and multiline/markdown-style editors parse and work in generated UI. |
+| PS-02 | pending | PS-01      | `schema/apps/site/*`, app registries, tests                      | Site source schema and seed records parse and bootstrap as a source app.          |
+| PS-03 | pending | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
+| PS-04 | pending | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
+| PS-05 | pending | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
+
+## Current chunk
+
+### PS-01 text formats and editorial editors
+
+Goal: make text fields usable for long-form and editorial data without adding new persisted value types.
+
+Tasks:
+
+- [ ] Add optional `format` to text field schema.
+- [ ] Parse supported text formats in `src/shared/schema-fields.ts`.
+- [ ] Extend `TextFieldSchema` in `src/shared/schema-types.ts`.
+- [ ] Add text-compatible editors:
+  - `textarea`;
+  - `markdown`;
+  - `href`;
+  - `slug`;
+  - `color`;
+  - `icon`.
+- [ ] Update field behavior in `src/shared/field-types.ts`.
+- [ ] Update generated record field editor for multiline text.
+- [ ] Update generated create editor for multiline text.
+- [ ] Keep field values as strings in protocol/storage.
+- [ ] Add parser and field behavior tests.
+- [ ] Add generated editor tests.
+
+Acceptance checks:
+
+- [ ] Schema accepts `text` fields with `format: "markdown"`.
+- [ ] Schema rejects unknown text formats.
+- [ ] `markdown` editor is valid for text fields.
+- [ ] `markdown` editor is invalid for non-text fields.
+- [ ] Generated record editor renders a multiline input for markdown text.
+- [ ] Generated create editor renders a multiline input for markdown text.
+- [ ] Stored values stay plain strings.
+- [ ] `bun run test` passes.
+- [ ] `bun run check` passes.
+
+## Later chunks
+
+### PS-02 source site schema and seed records
+
+Goal: add a checked-in personal site source app.
+
+Tasks:
+
+- [ ] Add `schema/apps/site/schema.json`.
+- [ ] Add `schema/apps/site/seed-records.json`.
+- [ ] Add `site` to `src/shared/schema-apps.ts`.
+- [ ] Add parsed site source app to `src/worker/schema-apps.ts`.
+- [ ] Add parser tests for all site entities.
+- [ ] Add source registry tests for site schema and seeds.
+- [ ] Keep seed records close to `StoredRecord`.
+
+Acceptance checks:
+
+- [ ] Site schema parses.
+- [ ] Site seed records parse against the source schema.
+- [ ] `contentItem` supports generic kinds.
+- [ ] `contentPlacement` supports page composition.
+- [ ] `navSection` and `navItem` support header/footer navigation.
+- [ ] `mediaAsset` requires alt text.
+- [ ] `person` supports author/profile data.
+- [ ] `bun run test` passes.
+- [ ] `bun run check` passes.
+
+### PS-03 editorial workspaces
+
+Goal: make the source schema pleasant to edit in the generated app.
+
+Tasks:
+
+- [ ] Add `contentHome` collection view.
+- [ ] Add `contentTable` table view.
+- [ ] Add `contentCreate` create view.
+- [ ] Add `contentCompositionHome` scoped collection view.
+- [ ] Add `contentPlacementTable` table view.
+- [ ] Add `contentPlacementCreate` create view with context default.
+- [ ] Add `navigationHome` scoped collection view.
+- [ ] Add `navItemTable` table view.
+- [ ] Add `navSectionCreate` and `navItemCreate` create views.
+- [ ] Add `mediaHome` collection view.
+- [ ] Add `peopleHome` collection view.
+- [ ] Mark primary navigation views intentionally.
+- [ ] Add app/render tests for visible workspaces.
+
+Acceptance checks:
+
+- [ ] Authors can create content items.
+- [ ] Authors can filter content items by kind and status.
+- [ ] Authors can edit markdown body fields.
+- [ ] Authors can choose an author and media asset by reference.
+- [ ] Authors can select a content item and edit its placements.
+- [ ] Authors can select a nav section and edit its items.
+- [ ] Authors can create media assets with alt text.
+- [ ] Authors can create people/authors.
+- [ ] Browser route for the site admin opens after route PRD support is available.
+- [ ] `bun run test` passes.
+- [ ] `bun run check` passes.
+
+### PS-04 editorial readiness checks
+
+Goal: warn authors about incomplete publishable content without creating a renderer.
+
+Checks:
+
+- [ ] Published `page`, `post`, and `project` items should have `slug` or `href`.
+- [ ] Published `post` items should have `body`.
+- [ ] Published `post` items should have `publishedAt`.
+- [ ] Published `post` items should have `author`.
+- [ ] Published `project` items should have summary or body.
+- [ ] Nav items should resolve to either an internal item or `href`.
+- [ ] Media assets should have `alt`.
+- [ ] Content placements should have required source data for their kind.
+- [ ] Query-backed placements should have `queryKey`.
+
+Tasks:
+
+- [ ] Add client-side readiness helper over schema records.
+- [ ] Surface warnings in relevant generated/admin views.
+- [ ] Keep warnings non-blocking.
+- [ ] Add tests for warning output.
+
+Acceptance checks:
+
+- [ ] Draft records can stay incomplete.
+- [ ] Published incomplete records show warnings.
+- [ ] Warnings do not prevent generic create/patch mutations.
+- [ ] Warnings do not require a public renderer.
+- [ ] `bun run test` passes.
+- [ ] `bun run check` passes.
+
+### PS-05 browser smoke and cleanup
+
+Goal: prove the authoring workflow and document promotion facts.
+
+Browser smoke:
+
+- [ ] Start app with `bun dev`.
+- [ ] Open the site authoring route.
+- [ ] Confirm content workspace loads seed content.
+- [ ] Create a draft post.
+- [ ] Edit the post body in the markdown editor.
+- [ ] Create or edit a media asset.
+- [ ] Select a page/content item in the composition workspace.
+- [ ] Add a placement for recent posts.
+- [ ] Select a nav section.
+- [ ] Add a nav item.
+- [ ] Confirm readiness warnings appear for incomplete published content.
+- [ ] Kill the dev server.
+
+Final checks:
+
+- [ ] `bun run test`.
+- [ ] `bun run check`.
+
+## Open decisions
+
+| ID    | Question                                                                | Default for implementation                                                                       |
+| ----- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| PS-O1 | Should text `format` enforce URL, slug, color, or icon syntax?          | No. Treat format as an authoring/editor hint first.                                              |
+| PS-O2 | Should `contentItem.kind` include `resume` separately from `page`?      | No. Use `kind = page` with `templateKey = resume`.                                               |
+| PS-O3 | Should social links be a separate entity?                               | No. Use `contentItem.kind = link` and placements/nav items.                                      |
+| PS-O4 | Should page composition be records or schema-only template definitions? | Use `contentPlacement` records first so authors can manage ordering without editing schema JSON. |
+| PS-O5 | Should markdown media references be validated against `mediaAsset.key`? | Not in the first version. Add after markdown preview or renderer exists.                         |
+| PS-O6 | Should slug uniqueness be authority-enforced now?                       | Not until sparse unique semantics are explicit. Warn in admin first.                             |
+
+## Blockers
+
+| ID    | Status | Blocks | Notes                                                                                           |
+| ----- | ------ | ------ | ----------------------------------------------------------------------------------------------- |
+| PS-B1 | open   | PS-03  | Dedicated `/site` admin route depends on schema-backed route work in `prd/01-schema-routes.md`. |
+
+## Cross-PRD dependencies
+
+| Dependency                        | Direction      | Notes                                                                                                 |
+| --------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
+| PRD 01 schema-backed app routes   | upstream       | Site source app can be added before route smoke, but `/site` route smoke waits for route-key support. |
+| Declarative table/query evolution | optional input | Sorting/filter improvements can improve admin tables later. Do not block this PRD on them.            |
+| Cloudflare media serving          | downstream     | This PRD stores media metadata only. Upload/serving belongs in a later workstream.                    |
+| Public site renderer              | downstream     | This PRD should leave clean data for a renderer but should not implement one.                         |
+
+## Progress rules
+
+- Mark exactly one chunk as `doing` when implementation starts.
+- When a chunk ships, mark it `shipped`.
+- Replace shipped task detail with outcome plus evidence.
+- Do not append terminal logs.
+- Keep decisions in `Decisions`.
+- Keep renderer questions in `Open decisions` or a future renderer PRD.
+- Put global-doc updates in `Promote after ship`.
+
+## Promote after ship
+
+When this PRD ships, update `doc/current.md`:
+
+- Site source schema exists under `schema/apps/site/`.
+- Site source seed records exist under `schema/apps/site/seed-records.json`.
+- Site authoring app uses generic `contentItem` records.
+- Site authoring app has media, people, navigation, and content placement entities.
+- Text fields support editorial formats and multiline markdown authoring.
+- Site authoring surfaces are generated from schema views.
+
+When this PRD ships, update `doc/roadmap.md`:
+
+- Personal site authoring schema is no longer target work.
+- Public site rendering remains outside first authoring scope unless a later PRD adds it.
