@@ -4,17 +4,13 @@ Repo docs are the project memory. Keep them current and source-faithful.
 
 ## Work
 
+1. Run `bun start` and read `./tmp/state.txt`
 1. Read `doc/overview.md`, `doc/current.md` and `doc/roadmap.md`
-2. Ship the next ready chunk from that PRD.
-3. Update only the assigned PRD with status, decisions, blockers, and promotion notes.
-4. Verify until green:
-   - `bun run test`
-   - `bun run check`
-5. Test app behavior when needed:
-   - `bun dev`
-   - Use Browser Use.
-   - Kill server when done.
-6. End turn with changed files, checks, and PRD status.
+1. Ship the next ready chunk from the assigned PRD.
+1. Update only the assigned PRD with status, decisions, blockers, and promotion notes.
+1. Read `./tmp/state.txt` and fix issues
+1. Test app with Browser Use if needed
+1. End turn with changed files, checks, and PRD status.
 
 ## Docs
 
@@ -27,7 +23,6 @@ Repo docs are the project memory. Keep them current and source-faithful.
 - A normal PRD agent does not edit `doc/current.md` or `doc/roadmap.md`.
 - Put shipped facts for global docs under the PRD's `Promote after ship` section.
 - Update `doc/current.md` and `doc/roadmap.md` only in a docs/steward pass or when the user asks.
-- Do not add a PRD index or archive unless the user asks.
 
 ## Parallel Work
 
@@ -40,8 +35,8 @@ Repo docs are the project memory. Keep them current and source-faithful.
 
 When user says `done`:
 
-- Make sure the assigned PRD is updated.
-- Run `bun run test` and `bun run check`.
+- Update assigned PRD
+- Run `bun stop` and fix issues.
 - Commit.
 - Rebase on main and merge.
 

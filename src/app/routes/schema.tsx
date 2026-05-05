@@ -9,11 +9,13 @@ import {
 } from "../../client/store.ts";
 import { type SyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
-import { type SchemaKey } from "../../shared/schema-apps.ts";
+import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import { parseAppSchema, stringifySchema } from "../../shared/schema.ts";
+import { DevActions } from "../dev-actions.tsx";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
 export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
+  const app = getSchemaAppDefinition(schemaKey);
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
   const routeIsActive = activeSchemaKey === null || activeSchemaKey === schemaKey;
@@ -89,9 +91,32 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   return (
     <section className="mx-auto max-w-3xl space-y-4">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Schema</h1>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold">{app.label} Schema</h1>
+          <p className="text-sm text-slate-600">
+            Key <code>{app.key}</code>
+          </p>
+        </div>
         <DeveloperStatusLine schemaVersion={schema?.version} status={status} />
       </header>
+
+      <DevActions
+        schemaKey={schemaKey}
+        onResetSchema={(response) => {
+          setEditorText(stringifySchema(response.schema));
+          setStatus({
+            state: "idle",
+            message: `Reset schema at ${response.schemaUpdatedAt}.`,
+          });
+        }}
+        onResetSeedData={(response) => {
+          setEditorText(stringifySchema(response.schema));
+          setStatus({
+            state: "idle",
+            message: `Reset seed data at ${response.schemaUpdatedAt}.`,
+          });
+        }}
+      />
 
       <form className="space-y-4" onSubmit={submitSchema}>
         <textarea

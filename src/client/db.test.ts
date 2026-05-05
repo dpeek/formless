@@ -9,9 +9,9 @@ import {
   readCursor,
   readLocalSnapshot,
 } from "./db.ts";
-import { appSchema } from "./schema.ts";
 import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
 beforeEach(async () => {
   await deleteClientDb("tasks");

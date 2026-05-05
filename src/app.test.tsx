@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../schema/apps/rates/schema.json";
 import { App } from "./app.tsx";
 import { HomeCollection, RecordList } from "./app/generated/collection.tsx";
 import {
@@ -10,7 +9,6 @@ import {
   resolveCreateValues,
 } from "./app/generated/create.tsx";
 import { RecordTable } from "./app/generated/table.tsx";
-import { appSchema } from "./client/schema.ts";
 import {
   applyBootstrapResponse,
   applyRecordMerge,
@@ -26,10 +24,13 @@ import {
   type TableColumnConfig,
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
-import { parseAppSchema, type EntitySchema } from "./shared/schema.ts";
-import { rateCardSeedRecords, taskSeedRecords } from "./worker/fixtures.ts";
-
-const rateCardSchema = parseAppSchema(rawRateCardSchema);
+import type { EntitySchema } from "./shared/schema.ts";
+import {
+  rateSeedRecords as rateCardSeedRecords,
+  rateSourceSchema as rateCardSchema,
+  taskSeedRecords,
+  taskSourceSchema as appSchema,
+} from "./test/schema-apps.ts";
 
 function renderRoute(path: string) {
   return renderToStaticMarkup(
@@ -75,8 +76,14 @@ describe("App smoke routes", () => {
     const html = renderRoute("/tasks/schema");
 
     expect(html).toContain('href="/tasks/schema"');
+    expect(html).toContain("Tasks Schema");
+    expect(html).toContain("<code>tasks</code>");
+    expect(html).toContain('aria-label="Tasks route reset controls"');
     expect(html).toContain("Save schema");
+    expect(html).toContain("Reset source schema");
+    expect(html).toContain("Reset seed data");
     expect(html).toContain("&quot;task&quot;");
+    expect(html).not.toContain("<code>rates</code>");
   });
 
   it('renders the "/rates/schema" route', () => {
@@ -84,9 +91,15 @@ describe("App smoke routes", () => {
     const html = renderRoute("/rates/schema");
 
     expect(html).toContain('href="/rates/schema"');
+    expect(html).toContain("Rates Schema");
+    expect(html).toContain("<code>rates</code>");
+    expect(html).toContain('aria-label="Rates route reset controls"');
     expect(html).toContain("Save schema");
+    expect(html).toContain("Reset source schema");
+    expect(html).toContain("Reset seed data");
     expect(html).toContain("&quot;rate&quot;");
     expect(html).toContain("&quot;resource&quot;");
+    expect(html).not.toContain("<code>tasks</code>");
   });
 });
 

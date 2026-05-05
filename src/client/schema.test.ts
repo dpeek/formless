@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vite-plus/test";
-import { appSchema } from "./schema.ts";
+import { taskSourceSchema } from "../test/schema-apps.ts";
 
-describe("seed app schema", () => {
+describe("task source schema", () => {
   it("imports and parses the checked-in schema", () => {
-    expect(appSchema.version).toBe(1);
-    expect(appSchema.entities.task?.label).toBe("Task");
+    expect(taskSourceSchema.version).toBe(1);
+    expect(taskSourceSchema.entities.task?.label).toBe("Task");
   });
 
   it("contains task queries in schema order", () => {
-    expect(Object.keys(appSchema.queries)).toEqual([
+    expect(Object.keys(taskSourceSchema.queries)).toEqual([
       "taskAll",
       "taskActive",
       "taskCompleted",
       "taskOverdue",
     ]);
-    expect(Object.values(appSchema.queries).map((query) => query.label)).toEqual([
+    expect(Object.values(taskSourceSchema.queries).map((query) => query.label)).toEqual([
       "All",
       "Active",
       "Completed",
@@ -23,7 +23,7 @@ describe("seed app schema", () => {
   });
 
   it("parses the overdue query into the normalized and query", () => {
-    expect(appSchema.queries.taskOverdue?.expression).toEqual({
+    expect(taskSourceSchema.queries.taskOverdue?.expression).toEqual({
       kind: "and",
       expressions: [
         {
@@ -43,14 +43,14 @@ describe("seed app schema", () => {
   });
 
   it("contains the task collection, item view, and clear-completed query target", () => {
-    expect(appSchema.itemViews.taskListItem?.fields).toEqual({
+    expect(taskSourceSchema.itemViews.taskListItem?.fields).toEqual({
       title: { editor: "text", commit: "field-commit" },
       done: { editor: "boolean", commit: "immediate" },
       dueDate: { editor: "date", commit: "field-commit" },
       estimate: { editor: "number", commit: "field-commit" },
       priority: { editor: "enum", commit: "immediate" },
     });
-    expect(appSchema.views.taskHome).toMatchObject({
+    expect(taskSourceSchema.views.taskHome).toMatchObject({
       type: "collection",
       label: "Tasks",
       entity: "task",
@@ -58,14 +58,16 @@ describe("seed app schema", () => {
       result: { type: "list", itemView: "taskListItem" },
     });
     expect(
-      appSchema.views.taskHome?.type === "collection" ? appSchema.views.taskHome.queries : [],
+      taskSourceSchema.views.taskHome?.type === "collection"
+        ? taskSourceSchema.views.taskHome.queries
+        : [],
     ).toEqual([
       { query: "taskAll", count: { type: "count" } },
       { query: "taskActive", count: { type: "count" } },
       { query: "taskCompleted", count: { type: "count" } },
       { query: "taskOverdue", count: { type: "count" } },
     ]);
-    const clearCompleted = appSchema.entities.task?.actions?.clearCompletedTasks;
+    const clearCompleted = taskSourceSchema.entities.task?.actions?.clearCompletedTasks;
     expect(
       clearCompleted?.kind === "clear-completed" ? clearCompleted.target.query : undefined,
     ).toBe("taskCompleted");

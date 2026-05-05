@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../../schema/apps/rates/schema.json";
-import { appSchema } from "./schema.ts";
+import {
+  rateSourceSchema as rateCardSchema,
+  taskSourceSchema as appSchema,
+} from "../test/schema-apps.ts";
 import { selectCollectionModels, selectPrimaryCollectionModels } from "./views.ts";
-import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
-
-const rateCardSchema = parseAppSchema(rawRateCardSchema);
+import type { AppSchema } from "../shared/schema.ts";
 
 describe("home view model collections", () => {
   it("selects the task collection and resolves query tabs in schema order", () => {

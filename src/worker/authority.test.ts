@@ -1,6 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../../schema/apps/rates/schema.json";
-import { appSchema } from "../client/schema.ts";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type {
   ActionResponse,
   BootstrapResponse,
@@ -11,23 +9,32 @@ import type {
 } from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
-import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
+import {
+  rateSeedRecords as rateCardSeedRecords,
+  rateSourceSchema as rateCardSchema,
+  taskSeedRecords,
+  taskSourceSchema as appSchema,
+} from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 let harness: Harness;
 let currentSchemaKey: SchemaKey;
-const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
-beforeEach(async () => {
-  currentSchemaKey = "tasks";
+beforeAll(async () => {
   harness = await createWorkerHarness("src/worker/index.ts", {
     FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
   });
 });
 
-afterEach(async () => {
+beforeEach(async () => {
+  await resetSchemaApp("tasks");
+  await resetSchemaApp("rates");
+  currentSchemaKey = "tasks";
+});
+
+afterAll(async () => {
   await harness.dispose();
 });
 
@@ -2303,6 +2310,16 @@ function defaultCollectionView(): Extract<AppSchema["views"][string], { type: "c
     defaultQuery: "taskAll",
     result: { type: "list", itemView: "taskListItem" },
   };
+}
+
+async function resetSchemaApp(schemaKey: SchemaKey) {
+  const response = await harness.fetch(`/api/${schemaKey}/reset/seed`, {
+    body: "{}",
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
 }
 
 function useSchemaApp(schemaKey: SchemaKey) {

@@ -4,23 +4,28 @@ Last updated: 2026-05-05
 
 Release target: first usable Formless release.
 
+Next workstream: WebSocket push sync.
+
 ## Runtime
 
-- Support direct schema-backed app routes.
-- First routes: `/tasks`, `/rates`.
+- Direct app routes stay `/tasks` and `/rates`.
+- Schema editor routes stay `/tasks/schema` and `/rates/schema`.
 - One schema key maps to one source schema.
 - One schema key maps to one authority instance.
 - One schema key maps to one browser local DB.
-- API paths include the schema key.
-- Target API paths: `/api/:schemaKey/bootstrap`, `/api/:schemaKey/schema`, `/api/:schemaKey/sync`, `/api/:schemaKey/mutations`, `/api/:schemaKey/actions`.
-- Reset schema and reset seed data are separate operations.
+- API paths stay schema-keyed.
+- Current API paths: `/api/:schemaKey/bootstrap`, `/api/:schemaKey/schema`, `/api/:schemaKey/sync`, `/api/:schemaKey/mutations`, `/api/:schemaKey/actions`, `/api/:schemaKey/reset/schema`, `/api/:schemaKey/reset/seed`.
+- Reset schema and reset seed data stay separate.
 - Fresh route bootstrap loads source schema and source seed records.
+- Add push sync at `/api/:schemaKey/sync/ws`.
+- Keep writes on HTTP: mutations, actions, schema, reset.
+- Keep polling fallback while push sync ships.
 - Authority writes stay atomic across primary and caused records.
 - Authority constraints protect shipped invariants.
 
 ## Source schemas
 
-- Move source app files under `schema/apps/`.
+- Source app files live under `schema/apps/`.
 - Task source: `schema/apps/tasks/schema.json`.
 - Task seed: `schema/apps/tasks/seed-records.json`.
 - Rate source: `schema/apps/rates/schema.json`.
@@ -60,7 +65,7 @@ Release target: first usable Formless release.
 - `doc/roadmap.md` is the first-release target.
 - Each `prd/*.md` owns one workstream.
 - PRD agents update PRDs.
-- A docs/steward pass promotes shipped facts into `doc/current.md` and adjusts this file.
+- Shipped PRD facts get promoted into `doc/current.md`.
 - External memory is not required for normal Formless work.
 
 ## Not first release

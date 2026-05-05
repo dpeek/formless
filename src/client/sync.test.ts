@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { publishClientEvent } from "./broadcast.ts";
 import { deleteClientDb, mergeRecords, readLocalSnapshot, saveBootstrapResponse } from "./db.ts";
-import { appSchema } from "./schema.ts";
 import {
   connectBroadcastToClientStore,
   getClientStoreSnapshot,
@@ -33,6 +32,7 @@ import type {
   SyncResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
 beforeEach(async () => {
   await deleteClientDb("tasks");

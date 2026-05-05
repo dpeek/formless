@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import type { ActionResponse, MutationResponse } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
@@ -9,14 +10,19 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 let harness: Harness;
 let storageHarnessDir: string | undefined;
+let storageHarnessName: string;
 
-beforeEach(async () => {
+beforeAll(async () => {
   harness = await createWorkerHarness(await writeStorageHarness(), {
     STORAGE_HARNESS: { className: "StorageHarness", useSQLite: true },
   });
 });
 
-afterEach(async () => {
+beforeEach(() => {
+  storageHarnessName = randomUUID();
+});
+
+afterAll(async () => {
   await harness.dispose();
 
   if (storageHarnessDir) {
@@ -182,7 +188,7 @@ describe("storage", () => {
   });
 
   it("rolls back the primary create when a side effect fails", async () => {
-    const response = await harness.fetch("/create-with-side-effects", {
+    const response = await fetchStorage("/create-with-side-effects", {
       body: JSON.stringify({
         mutation: {
           mutationId: "mutation-1",
@@ -373,7 +379,7 @@ function defaultViews(): AppSchema["views"] {
 }
 
 async function getJson<T>(path: string) {
-  const response = await harness.fetch(path);
+  const response = await fetchStorage(path);
 
   expect(response.status).toBe(200);
 
@@ -381,7 +387,7 @@ async function getJson<T>(path: string) {
 }
 
 async function postJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
+  const response = await fetchStorage(path, {
     body: JSON.stringify(body),
     method: "POST",
   });
@@ -389,6 +395,13 @@ async function postJson<T>(path: string, body: unknown) {
   expect(response.status).toBe(200);
 
   return (await response.json()) as T;
+}
+
+function fetchStorage(path: string, init: Parameters<Harness["fetch"]>[1] = {}) {
+  return harness.fetch(path, {
+    ...init,
+    headers: { "x-storage-harness-name": storageHarnessName },
+  });
 }
 
 async function writeStorageHarness() {
@@ -494,7 +507,10 @@ async function writeStorageHarness() {
 
       export default {
         fetch(request, env) {
-          const id = env.STORAGE_HARNESS.idFromName("default");
+          const id = env.STORAGE_HARNESS.idFromName(
+            request.headers.get("x-storage-harness-name") ?? "default",
+          );
+
           return env.STORAGE_HARNESS.get(id).fetch(request);
         },
       };

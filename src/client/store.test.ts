@@ -12,9 +12,9 @@ import {
   selectClientStoreSchemaKey,
   subscribeToClientStoreSelector,
 } from "./store.ts";
-import { appSchema } from "./schema.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
 beforeEach(() => {
   resetClientStore();

@@ -7,8 +7,10 @@
   ],
   "type": "module",
   "scripts": {
+    "start": "bun run scripts/agent-dev.ts start",
+    "stop": "bun run scripts/agent-dev.ts stop",
     "check": "vp check --fix",
-    "test": "vp test",
+    "test": "vp test --reporter=agent",
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",

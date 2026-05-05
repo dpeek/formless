@@ -1,7 +1,7 @@
 # PRD 01: Schema-backed app routes
 
-Status: active
-Current chunk: SR-07 route-specific schema editing and reset UI
+Status: shipped
+Current chunk: none
 Last updated: 2026-05-05
 
 ## Goal
@@ -31,8 +31,7 @@ The result should feel like two schema-backed apps, not one global app whose sch
 - Worker dispatch: `src/worker/index.ts`.
 - Authority routes: `src/worker/authority.ts`.
 - Storage: `src/worker/storage.ts`.
-- Seed parsing: `src/worker/schema-apps.ts`.
-- Seed compatibility exports: `src/worker/fixtures.ts`.
+- Source schema and seed parsing: `src/worker/schema-apps.ts`.
 - Client API calls: `src/client/sync.ts`.
 - Client local DB: `src/client/db.ts`.
 - Client broadcast: `src/client/broadcast.ts`.
@@ -44,6 +43,7 @@ The result should feel like two schema-backed apps, not one global app whose sch
 - Rate source schema: `schema/apps/rates/schema.json`.
 - Rate seed records: `schema/apps/rates/seed-records.json`.
 - Generated create/action/table UI: `src/app/generated/`.
+- Test source app helper: `src/test/schema-apps.ts`.
 - Tests: `src/app.test.tsx`, `src/client/*.test.ts`, `src/shared/schema.test.ts`, `src/worker/*.test.ts`.
 
 ## Decisions
@@ -78,8 +78,8 @@ The result should feel like two schema-backed apps, not one global app whose sch
 | SR-04 | shipped | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
 | SR-05 | shipped | SR-04      | `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`      | `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema` render the right app.  |
 | SR-06 | shipped | SR-05      | `src/app/generated/**`, `src/client/sync.ts`                               | Generated create, patch, and action calls submit to the active schema key.      |
-| SR-07 | pending | SR-05      | `src/app/routes/schema.tsx`, `src/app/dev-actions.tsx`                     | Schema editing and reset controls are route-scoped.                             |
-| SR-08 | pending | SR-07      | tests and cleanup                                                          | Old global schema swap paths are removed and browser smoke passes.              |
+| SR-07 | shipped | SR-05      | `src/app/routes/schema.tsx`, `src/app/dev-actions.tsx`                     | Schema editing and reset controls are route-scoped.                             |
+| SR-08 | shipped | SR-07      | tests and cleanup                                                          | Old global schema swap paths are removed and browser smoke passes.              |
 
 ## Shipped chunks
 
@@ -231,67 +231,60 @@ Evidence:
 - `bun run test` passed.
 - `bun run check` passed.
 
-## Current chunk
-
 ### SR-07 route-specific schema editing and reset UI
 
-Goal: schema editing and reset controls are scoped and understandable.
+Status: shipped 2026-05-05.
 
-Tasks:
+Outcome:
 
-- [ ] Show selected app label and key in `SchemaRoute`.
-- [ ] Load `/api/tasks/schema` from `/tasks/schema`.
-- [ ] Load `/api/rates/schema` from `/rates/schema`.
-- [ ] Save only the selected route schema.
-- [ ] Add route-scoped reset schema control.
-- [ ] Add route-scoped reset seed data control.
-- [ ] Add independent pending and error states.
-- [ ] After reset schema, update local schema and leave records in place.
-- [ ] After reset seed data, clear and replace only the selected local replica.
-- [ ] Add confirmation for reset seed data unless the user chooses otherwise.
+- `/tasks/schema` shows `Tasks Schema` and key `tasks`.
+- `/rates/schema` shows `Rates Schema` and key `rates`.
+- Schema editor load and save stay keyed by the mounted route schema key.
+- Reset controls render inside the mounted schema route.
+- Reset source schema calls the mounted route's `/api/:schemaKey/reset/schema`.
+- Reset seed data calls the mounted route's `/api/:schemaKey/reset/seed`.
+- Reset source schema and reset seed data have separate pending and error state.
+- Reset source schema updates the editor with the returned source schema and preserves returned records in local state.
+- Reset seed data updates the editor with the returned source schema and replaces only the selected local replica through keyed client sync.
+- Reset seed data requires the shared `@formless/ui/alert-dialog` confirmation before the reset action runs.
 
-Acceptance checks:
+Evidence:
 
-- [ ] Saving `/tasks/schema` does not affect `/rates/schema`.
-- [ ] Saving `/rates/schema` does not affect `/tasks/schema`.
-- [ ] Reset schema preserves route records in client state.
-- [ ] Reset seed replaces only route records in client state.
-
-## Later chunks
+- `src/app.test.tsx` covers `/tasks/schema` and `/rates/schema` route labels, keys, and route reset controls.
+- `src/client/sync.test.ts` covers keyed schema fetch/save, reset schema, reset seed data, and selected local database replacement.
+- Browser Use smoke covered `/tasks/schema`, `/rates/schema`, route labels and keys, route reset controls, reset source schema, and seed reset confirmation open/cancel.
+- `bun run test` passed.
+- `bun run check` passed.
 
 ### SR-08 browser smoke and cleanup
 
-Goal: prove route isolation in one browser session and remove obsolete global reset code.
+Status: shipped 2026-05-05.
 
-Tasks:
+Outcome:
 
-- [ ] Remove `DevResetSchema = "default" | "rate-card"`.
-- [ ] Remove `/api/dev/reset`.
-- [ ] Remove compatibility imports from old schema paths.
-- [ ] Browser smoke with Browser Use.
-- [ ] Kill the dev server.
+- Removed the old task-only schema shim `src/client/schema.ts`.
+- Removed the seed compatibility export shim `src/worker/fixtures.ts`.
+- Added `src/test/schema-apps.ts` so tests read parsed app-keyed source schemas and seed records through `src/worker/schema-apps.ts`.
+- Updated tests to stop importing old global schema and seed exports.
+- Confirmed no source code imports old schema paths, `DevResetSchema`, or `resetRemoteData`.
+- Promoted shipped route facts into `doc/current.md`.
+- Moved `doc/roadmap.md` past route isolation and onto WebSocket push sync.
+- Browser Use smoke proved `/tasks` and `/rates` load seeded records, preserve independent route edits, reset only `/rates` seed data, keep `/tasks` unaffected, and show correct `/tasks/schema` and `/rates/schema` editors.
+- Killed the dev server after smoke.
 
-Browser smoke:
+Evidence:
 
-- [ ] Start app with `bun dev`.
-- [ ] Open `/tasks`.
-- [ ] Confirm task schema and seed records load.
-- [ ] Create or edit a task.
-- [ ] Open `/rates`.
-- [ ] Confirm rate-card schema and seed records load.
-- [ ] Create or edit a rate-card record.
-- [ ] Switch back to `/tasks` and confirm the task edit is still present.
-- [ ] Switch back to `/rates` and confirm the rate edit is still present.
-- [ ] Reset only `/rates` seed data.
-- [ ] Confirm `/rates` returns to source seed records.
-- [ ] Confirm `/tasks` is unaffected.
-- [ ] Open `/tasks/schema` and `/rates/schema`.
-- [ ] Confirm each editor shows the correct schema.
+- `src/test/schema-apps.ts`.
+- `src/client/schema.test.ts`.
+- `src/worker/authority.test.ts`.
+- `rg "src/worker/fixtures|src/client/schema|schema/samples|schema/app-schema|DevResetSchema|resetRemoteData" src schema` returns no matches.
+- Browser Use smoke covered `/tasks`, `/rates`, `/rates` seed reset, `/tasks/schema`, and `/rates/schema`.
+- `bun run test` passed.
+- `bun run check` passed.
 
-Final checks:
+## Later chunks
 
-- [ ] `bun run test`.
-- [ ] `bun run check`.
+None.
 
 ## Open decisions
 
