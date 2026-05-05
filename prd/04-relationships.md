@@ -2,7 +2,7 @@
 
 Status: ready
 Current chunk: REL-01 relationship registry
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 ## Goal
 
@@ -43,6 +43,43 @@ Schema authors need to say:
 - these are inverses of existing reference fields, not duplicated stored data.
 
 Without named relationships, every inverse is rebuilt by hand with queries, context defaults, labels, and generated collection views.
+
+## Estii exploration notes
+
+Source:
+
+- Browser sandbox: `https://app.estii.local/estii`, explored 2026-05-05.
+- Estii code/docs: `/Users/dpeek/code/estii`.
+- Domain docs: `doc/domain/features.md`, `doc/domain/roles-and-rate-cards.md`, `doc/domain/streams.md`, `doc/domain/products.md`, `doc/domain/scoping.md`, `doc/domain/schedules.md`, `doc/domain/proposals.md`.
+- Code anchors: `packages/lib/src/deal/schema.ts`, `packages/lib/src/deal/query.ts`, `packages/lib/src/resource/schema.ts`.
+
+Patterns visible in Estii:
+
+| Pattern                   | Estii evidence                                                                                  | Formless implication                                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Record-scoped workspaces  | Deal route has Overview, Estimate, Scope, Schedule, Proposal, Settings tabs.                    | Views need route/context state, selected records, tab sets, and mode switches.                                   |
+| Ordered relationship tree | Deal -> Phase -> Category -> Section -> Feature -> Task -> Estimate.                            | Relationship metadata must name ordered child collections over flat records.                                     |
+| Contextual create/edit    | Add item under a section, add line item under a feature, assign resource.                       | Related create actions need hidden defaults from selected parent context.                                        |
+| Join records with payload | Streams use allocation rows; rate cards use role/card rates; estimates link resources to tasks. | Many-to-many support must keep explicit join entities because joins carry quantities, flags, and pricing fields. |
+| Variant entity behavior   | `resource.kind`, product `model`, category `allow_fixed`, estimate `period`.                    | Schema needs enum-driven view variants and capability gates after relationship metadata exists.                  |
+| Derived read models       | Budget, scope, schedule, forecasts, and proposal are computed from records.                     | Keep derived metrics/query outputs host-side; do not store inverse counts or aggregate rows.                     |
+| Grouped analytic views    | Pipeline columns, scope breakdowns, forecast filters, schedule resource groups.                 | Table/list views need declarative grouping, sorting, filters, and summary metrics.                               |
+| Editable projections      | Resource tables and estimate rows mix inputs, selectors, derived totals, chips.                 | Generated views need editable cells plus read-only computed cells in the same row.                               |
+| Document assembly         | Proposal deck is built from deal stats, category flags, themes, and params.                     | Later view definitions should describe output sections over query/stat data, not custom page code.               |
+| Library snapshot drift    | Deals snapshot roles/cards/products and surface update drift.                                   | Later app schemas may need library-to-instance snapshot/update workflows; not in REL-01.                         |
+
+Important translation:
+
+- Estii sometimes stores nested arrays, such as `resource.rates`.
+- Formless should translate those as flat records, such as `rate(resource, card)`.
+- The user-facing pattern is the same matrix; the persisted shape stays flat.
+
+Implications for this PRD:
+
+- REL-01 should stay narrow: parse and validate optional relationship metadata only.
+- Relationship definitions should leave room for ordered children, labels, inverse names, through aliases, and generated create defaults.
+- Relationship metadata is necessary for Estii-shaped apps, but not enough by itself.
+- Follow-on PRDs should cover workspace layout, grouped table views, variant forms, derived metrics, charts, and document/output views.
 
 ## Current support map
 
@@ -356,17 +393,19 @@ First-class support needed:
 
 ## Decisions
 
-| ID     | Decision                                                                  | Reason                                                                  | Evidence                                                             |
-| ------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| REL-D1 | Keep relationship data flat.                                              | Flat records are a core project rule and match existing source schemas. | `doc/overview.md`, `doc/current.md`, `schema/apps/rates/schema.json` |
-| REL-D2 | Keep `reference` as the only stored to-one primitive.                     | It is already parsed, validated, queried, edited, and smoke-tested.     | `src/shared/schema-types.ts`, `src/worker/authority.ts`              |
-| REL-D3 | Add a top-level `relationships` registry instead of inferring everything. | Inverse names, labels, order, UI hints, and through aliases need names. | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`      |
-| REL-D4 | Model one-to-many as inverse metadata over a child reference field.       | Parent arrays would duplicate state and break the flat-record rule.     | `src/shared/query.ts`, `src/shared/schema-views.ts`                  |
-| REL-D5 | Model many-to-many through explicit join entities.                        | Join records can hold attributes and already power the rate-card app.   | `rate` entity, `create-missing-join-records`, `uniqueRatePair`       |
-| REL-D6 | Treat one-to-one as to-one plus a unique constraint.                      | Cardinality is a constraint, not a new persisted field type.            | `src/worker/constraints.ts`, `src/shared/schema-fields.ts`           |
-| REL-D7 | Show join records first for many-to-many UI.                              | Traversing directly to target records needs query traversal work.       | Current query support is direct field equality only.                 |
-| REL-D8 | Keep relationship counts derived in the host.                             | Counts already work as query-derived display values.                    | `src/client/store.ts`, `src/client/views.ts`                         |
-| REL-D9 | Do not add cascade behavior in this PRD.                                  | Delete is disabled today and relationship metadata should not imply it. | `doc/current.md`, `EntityMutationPolicy.delete`                      |
+| ID      | Decision                                                                                         | Reason                                                                              | Evidence                                                             |
+| ------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| REL-D1  | Keep relationship data flat.                                                                     | Flat records are a core project rule and match existing source schemas.             | `doc/overview.md`, `doc/current.md`, `schema/apps/rates/schema.json` |
+| REL-D2  | Keep `reference` as the only stored to-one primitive.                                            | It is already parsed, validated, queried, edited, and smoke-tested.                 | `src/shared/schema-types.ts`, `src/worker/authority.ts`              |
+| REL-D3  | Add a top-level `relationships` registry instead of inferring everything.                        | Inverse names, labels, order, UI hints, and through aliases need names.             | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`      |
+| REL-D4  | Model one-to-many as inverse metadata over a child reference field.                              | Parent arrays would duplicate state and break the flat-record rule.                 | `src/shared/query.ts`, `src/shared/schema-views.ts`                  |
+| REL-D5  | Model many-to-many through explicit join entities.                                               | Join records can hold attributes and already power the rate-card app.               | `rate` entity, `create-missing-join-records`, `uniqueRatePair`       |
+| REL-D6  | Treat one-to-one as to-one plus a unique constraint.                                             | Cardinality is a constraint, not a new persisted field type.                        | `src/worker/constraints.ts`, `src/shared/schema-fields.ts`           |
+| REL-D7  | Show join records first for many-to-many UI.                                                     | Traversing directly to target records needs query traversal work.                   | Current query support is direct field equality only.                 |
+| REL-D8  | Keep relationship counts derived in the host.                                                    | Counts already work as query-derived display values.                                | `src/client/store.ts`, `src/client/views.ts`                         |
+| REL-D9  | Do not add cascade behavior in this PRD.                                                         | Delete is disabled today and relationship metadata should not imply it.             | `doc/current.md`, `EntityMutationPolicy.delete`                      |
+| REL-D10 | Keep REL-01 to metadata parsing after Estii exploration.                                         | Estii proves broader app patterns, but parser support is still the next safe slice. | Estii exploration notes, `packages/lib/src/deal/schema.ts`           |
+| REL-D11 | Treat workspace layout, grouped analytics, variant forms, and proposal output as follow-on PRDs. | Those patterns need more than relationship metadata and would blur this PRD.        | Estii exploration notes                                              |
 
 ## Chunks
 
@@ -511,6 +550,9 @@ Acceptance:
 - Should one-to-one inverse UI be a related item panel, a link field, or a constrained collection with max one row?
 - Should many-to-many direct target lists wait for a broader query traversal PRD?
 - Should relationship metadata define display order for generated entity detail pages?
+- Should relationship metadata name a default `order` field, or should order remain only on the query/view definition?
+- Should related create defaults live on relationships, create views, or both?
+- Should enum-driven variants be a view feature, a field feature, or a separate schema concept?
 
 ## Promote after ship
 
@@ -522,8 +564,12 @@ Acceptance:
 ## PRD status notes
 
 - PRD created 2026-05-05.
+- Estii browser and code exploration captured 2026-05-05.
 - No runtime relationship chunk has shipped yet.
 - No global doc promotion is due yet.
 - Current source apps already prove the storage model.
+- Estii proves this PRD is necessary but not sufficient for full app generation.
 - REL-01 is safe because it only adds optional schema metadata and parser tests.
 - UI behavior should wait until source schemas name relationships.
+- Keep later Estii-shaped work in follow-on PRDs unless the user explicitly broadens this PRD.
+- Done pass 2026-05-06: Estii exploration is captured; PRD remains ready; no blockers; no global doc promotion is due.
