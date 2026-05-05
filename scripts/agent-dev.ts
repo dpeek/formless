@@ -505,8 +505,8 @@ function inferDevStatus(log: string, current: DevStatus): DevStatus {
     if (
       line.includes(".formless.local") ||
       line.includes("ready in") ||
-      line.startsWith("local:") ||
-      line.startsWith("network:")
+      line.includes("local:") ||
+      line.includes("network:")
     ) {
       return "ready";
     }

@@ -20,9 +20,11 @@ type CountedEntityHomeActionConfig = EntityHomeActionConfig & {
 
 export function HomeActionRow({
   actions,
+  ariaLabel,
   queryContext,
 }: {
   actions: HomeActionConfig[];
+  ariaLabel: string;
   queryContext: QueryEvaluationContext;
 }) {
   const schemaKey = useSchemaKey();
@@ -57,7 +59,7 @@ export function HomeActionRow({
   }
 
   return (
-    <section aria-label="Task actions" className="flex flex-wrap gap-2">
+    <section aria-label={ariaLabel} className="flex flex-wrap gap-2">
       {actions.map((action) => {
         if (action.type === "create") {
           const canOpen = action.enabled && createDefaultsAreResolved(action, queryContext);

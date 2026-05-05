@@ -100,7 +100,13 @@ export function HomeCollection({
         result={result}
       />
 
-      {actions.length > 0 ? <HomeActionRow actions={actions} queryContext={queryContext} /> : null}
+      {actions.length > 0 ? (
+        <HomeActionRow
+          actions={actions}
+          ariaLabel={`${entity.label} actions`}
+          queryContext={queryContext}
+        />
+      ) : null}
     </div>
   );
 }
@@ -193,7 +199,11 @@ function ScopedHomeCollection({
       ) : null}
 
       {actions.length > 0 ? (
-        <HomeActionRow actions={actions} queryContext={queryContext ?? { today }} />
+        <HomeActionRow
+          actions={actions}
+          ariaLabel={`${entity.label} actions`}
+          queryContext={queryContext ?? { today }}
+        />
       ) : null}
     </div>
   );

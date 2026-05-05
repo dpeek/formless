@@ -1,7 +1,7 @@
 # PRD 03: Personal site content authoring
 
-Status: ready
-Current chunk: PS-05 browser smoke and cleanup
+Status: shipped
+Current chunk: none
 Last updated: 2026-05-05
 
 ## Goal
@@ -658,7 +658,7 @@ Rules:
 | PS-02 | shipped | PS-01      | `schema/apps/site/*`, app registries, route tests                | Site source schema and seed records parse, bootstrap, and expose `/site` routes.  |
 | PS-03 | shipped | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
 | PS-04 | shipped | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
-| PS-05 | pending | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
+| PS-05 | shipped | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
 
 ## Shipped chunks
 
@@ -864,32 +864,65 @@ Acceptance checks:
 - [x] `bun run test` passes.
 - [x] `bun run check` passes.
 
-## Current chunk
-
 ### PS-05 browser smoke and cleanup
 
-Goal: prove the authoring workflow and document promotion facts.
+Status: shipped 2026-05-05.
 
-Browser smoke:
+Outcome:
 
-- [ ] Start app with `bun dev`.
-- [ ] Open `/site`.
-- [ ] Open `/site/schema`.
-- [ ] Confirm content workspace loads seed content.
-- [ ] Create a draft post.
-- [ ] Edit the post body in the markdown editor.
-- [ ] Create or edit a media asset.
-- [ ] Select a page/content item in the composition workspace.
-- [ ] Add a placement for recent posts.
-- [ ] Select a nav section.
-- [ ] Add a nav item.
-- [ ] Confirm readiness warnings appear for incomplete published content.
-- [ ] Kill the dev server.
+- Browser Use smoke proved `/site` and `/site/schema` load against the route-keyed site app.
+- The Content workspace loaded source seed records.
+- Created a draft post from generated UI.
+- Edited the draft post body through the markdown textarea.
+- Edited media alt text from the Media workspace.
+- Selected the Home content item in Composition and added a recent-posts placement.
+- Selected the Header nav section and added a nav item.
+- Created incomplete published content and confirmed readiness warnings appeared.
+- Reset site seed data after smoke.
+- Stopped the dev server with `bun stop`.
+- Cleaned up generated action row labeling so action regions use the active entity label instead of legacy task text.
+- Made shared dialogs viewport-bounded and scrollable so long generated create forms can submit.
+- Fixed dev-state inference so Vite `Local:` ready lines are not hidden by earlier SSL warning text.
 
-Final checks:
+Evidence:
 
-- [ ] `bun run test`.
-- [ ] `bun run check`.
+- Browser Use smoke on `http://127.0.0.1:4984/site`.
+- App route smoke covered `/site` and `/site/schema`.
+- Generated create dialog submitted the full site content form after dialog overflow cleanup.
+- Readiness smoke showed published post warnings for missing route and body data.
+- `bun run test` passed: 19 files, 346 tests.
+- `bun run check` passed.
+- `bun stop` completed and left `./tmp/state.txt` with dev and supervisor stopped.
+
+Tasks:
+
+- [x] Start app with `bun start`.
+- [x] Open `/site`.
+- [x] Open `/site/schema`.
+- [x] Confirm content workspace loads seed content.
+- [x] Create a draft post.
+- [x] Edit the post body in the markdown editor.
+- [x] Create or edit a media asset.
+- [x] Select a page/content item in the composition workspace.
+- [x] Add a placement for recent posts.
+- [x] Select a nav section.
+- [x] Add a nav item.
+- [x] Confirm readiness warnings appear for incomplete published content.
+- [x] Kill the dev server.
+- [x] Clean up legacy generated UI labels.
+- [x] Fix dialog overflow found by smoke.
+- [x] Fix false dev-state failure found in `./tmp/state.txt`.
+
+Acceptance checks:
+
+- [x] Full admin/editorial browser smoke passes.
+- [x] Docs promotion notes are ready.
+- [x] `bun run test` passes.
+- [x] `bun run check` passes.
+
+## Current chunk
+
+None.
 
 ## Open decisions
 

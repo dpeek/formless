@@ -158,6 +158,14 @@ describe("generated collection home", () => {
     expect(html).not.toContain('aria-label="Collection summary"');
   });
 
+  it("labels generated action rows from the active entity", () => {
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute("/site");
+
+    expect(html).toContain('aria-label="Content item actions"');
+    expect(html).not.toContain('aria-label="Task actions"');
+  });
+
   it("renders query tab counts from each resolved query", () => {
     applyBootstrapResponse(
       bootstrap([
