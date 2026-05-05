@@ -1,7 +1,7 @@
 # PRD 04: Relationship model
 
 Status: ready
-Current chunk: REL-02 source schema adoption
+Current chunk: REL-03 relationship-aware collection validation
 Last updated: 2026-05-06
 
 ## Goal
@@ -412,8 +412,8 @@ First-class support needed:
 | ID     | Status  | Depends on | Main files                                                                              | Acceptance                                                                  |
 | ------ | ------- | ---------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | REL-01 | shipped | none       | `src/shared/schema-types.ts`, `src/shared/schema.ts`, `src/shared/schema.test.ts`       | Schemas can declare validated `toOne`, `toMany`, and `manyToMany` metadata. |
-| REL-02 | ready   | REL-01     | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`, source schema tests    | Rates and site source schemas name their existing relationships.            |
-| REL-03 | planned | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
+| REL-02 | shipped | REL-01     | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`, source schema tests    | Rates and site source schemas name their existing relationships.            |
+| REL-03 | ready   | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
 | REL-04 | planned | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
 | REL-05 | planned | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
 | REL-06 | planned | REL-05     | Browser Use, source schemas, PRD promote notes                                          | Relationship flows are smoke-tested in rates and site apps.                 |
@@ -557,7 +557,7 @@ Acceptance:
 ## Promote after ship
 
 - `doc/current.md`: add top-level relationship registry support. REL-01 shipped facts: `AppSchema.relationships` is optional; `toOne`, `toMany`, and `manyToMany` metadata parse in `src/shared/schema-relationships.ts`; metadata does not change stored record shape.
-- `doc/current.md`: list source app relationships after REL-02 ships.
+- `doc/current.md`: list source app relationships after REL-02 ships. REL-02 shipped facts: rates source names `rateCard`, `cardRates`, `rateResource`, `resourceRates`, `cardResources`, and `resourceCards`; site source names `contentPrimaryMedia`, `mediaPrimaryContentItems`, `placementParent`, `contentPlacements`, `placementItem`, `itemPlacements`, `placementMedia`, and `mediaPlacements`; queries, views, records, and storage shape are unchanged.
 - `doc/current.md`: describe relationship-backed generated related collections after REL-04 ships.
 - `doc/roadmap.md`: add first-release relationship scope only if this PRD becomes release-blocking.
 
@@ -580,3 +580,11 @@ Acceptance:
 - Keep later Estii-shaped work in follow-on PRDs unless the user explicitly broadens this PRD.
 - Done pass 2026-05-06: Estii exploration is captured; PRD remains ready; no blockers.
 - Done pass 2026-05-06: REL-01 stopped cleanly; tests and check pass; no blockers.
+- REL-02 shipped 2026-05-06.
+- REL-02 added relationship metadata to rates and site source schemas only.
+- REL-02 source parser tests assert the rates and site relationship registries.
+- REL-02 changed no queries, views, seed records, storage, sync, authority, or generated UI behavior.
+- Site app has no `navSection` or `navItem`; `contentPlacements` names the current content-item-to-placement inverse.
+- No new decisions in REL-02; REL-D3, REL-D4, and REL-D5 stand.
+- No blockers.
+- Done pass 2026-05-06: REL-02 stopped cleanly; tests and check pass; no blockers.

@@ -238,6 +238,90 @@
       }
     }
   },
+  "relationships": {
+    "rateCard": {
+      "kind": "toOne",
+      "label": "Rate card",
+      "from": {
+        "entity": "rate",
+        "field": "card"
+      },
+      "to": {
+        "entity": "card"
+      },
+      "inverse": "cardRates"
+    },
+    "cardRates": {
+      "kind": "toMany",
+      "label": "Rates",
+      "from": {
+        "entity": "card"
+      },
+      "to": {
+        "entity": "rate",
+        "field": "card"
+      },
+      "inverse": "rateCard"
+    },
+    "rateResource": {
+      "kind": "toOne",
+      "label": "Resource",
+      "from": {
+        "entity": "rate",
+        "field": "resource"
+      },
+      "to": {
+        "entity": "resource"
+      },
+      "inverse": "resourceRates"
+    },
+    "resourceRates": {
+      "kind": "toMany",
+      "label": "Rates",
+      "from": {
+        "entity": "resource"
+      },
+      "to": {
+        "entity": "rate",
+        "field": "resource"
+      },
+      "inverse": "rateResource"
+    },
+    "cardResources": {
+      "kind": "manyToMany",
+      "label": "Resources",
+      "from": {
+        "entity": "card"
+      },
+      "to": {
+        "entity": "resource"
+      },
+      "through": {
+        "entity": "rate",
+        "fromField": "card",
+        "toField": "resource",
+        "uniqueConstraint": "uniqueRatePair"
+      },
+      "inverse": "resourceCards"
+    },
+    "resourceCards": {
+      "kind": "manyToMany",
+      "label": "Rate cards",
+      "from": {
+        "entity": "resource"
+      },
+      "to": {
+        "entity": "card"
+      },
+      "through": {
+        "entity": "rate",
+        "fromField": "resource",
+        "toField": "card",
+        "uniqueConstraint": "uniqueRatePair"
+      },
+      "inverse": "cardResources"
+    }
+  },
   "queries": {
     "resourceAll": {
       "label": "All",

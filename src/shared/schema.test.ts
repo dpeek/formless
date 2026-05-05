@@ -1744,6 +1744,56 @@ describe("rate-card sample schema", () => {
         right: { field: "card", query: "cardAll" },
       },
     });
+    expect(schema.relationships).toMatchObject({
+      rateCard: {
+        kind: "toOne",
+        from: { entity: "rate", field: "card" },
+        to: { entity: "card" },
+        inverse: "cardRates",
+      },
+      cardRates: {
+        kind: "toMany",
+        from: { entity: "card" },
+        to: { entity: "rate", field: "card" },
+        inverse: "rateCard",
+      },
+      rateResource: {
+        kind: "toOne",
+        from: { entity: "rate", field: "resource" },
+        to: { entity: "resource" },
+        inverse: "resourceRates",
+      },
+      resourceRates: {
+        kind: "toMany",
+        from: { entity: "resource" },
+        to: { entity: "rate", field: "resource" },
+        inverse: "rateResource",
+      },
+      cardResources: {
+        kind: "manyToMany",
+        from: { entity: "card" },
+        to: { entity: "resource" },
+        through: {
+          entity: "rate",
+          fromField: "card",
+          toField: "resource",
+          uniqueConstraint: "uniqueRatePair",
+        },
+        inverse: "resourceCards",
+      },
+      resourceCards: {
+        kind: "manyToMany",
+        from: { entity: "resource" },
+        to: { entity: "card" },
+        through: {
+          entity: "rate",
+          fromField: "resource",
+          toField: "card",
+          uniqueConstraint: "uniqueRatePair",
+        },
+        inverse: "cardResources",
+      },
+    });
     expect(schema.itemViews.rateListItem?.fields).toEqual({
       resource: { editor: "reference", commit: "immediate" },
       cost: { editor: "number", commit: "field-commit" },
@@ -1850,6 +1900,56 @@ describe("personal site sample schema", () => {
       required: true,
       to: "contentItem",
       displayField: "title",
+    });
+    expect(schema.relationships).toMatchObject({
+      contentPrimaryMedia: {
+        kind: "toOne",
+        from: { entity: "contentItem", field: "primaryMedia" },
+        to: { entity: "mediaAsset" },
+        inverse: "mediaPrimaryContentItems",
+      },
+      mediaPrimaryContentItems: {
+        kind: "toMany",
+        from: { entity: "mediaAsset" },
+        to: { entity: "contentItem", field: "primaryMedia" },
+        inverse: "contentPrimaryMedia",
+      },
+      placementParent: {
+        kind: "toOne",
+        from: { entity: "contentPlacement", field: "parent" },
+        to: { entity: "contentItem" },
+        inverse: "contentPlacements",
+      },
+      contentPlacements: {
+        kind: "toMany",
+        from: { entity: "contentItem" },
+        to: { entity: "contentPlacement", field: "parent" },
+        inverse: "placementParent",
+      },
+      placementItem: {
+        kind: "toOne",
+        from: { entity: "contentPlacement", field: "item" },
+        to: { entity: "contentItem" },
+        inverse: "itemPlacements",
+      },
+      itemPlacements: {
+        kind: "toMany",
+        from: { entity: "contentItem" },
+        to: { entity: "contentPlacement", field: "item" },
+        inverse: "placementItem",
+      },
+      placementMedia: {
+        kind: "toOne",
+        from: { entity: "contentPlacement", field: "media" },
+        to: { entity: "mediaAsset" },
+        inverse: "mediaPlacements",
+      },
+      mediaPlacements: {
+        kind: "toMany",
+        from: { entity: "mediaAsset" },
+        to: { entity: "contentPlacement", field: "media" },
+        inverse: "placementMedia",
+      },
     });
     expect(schema.entities.contentPlacement?.fields.kind).toMatchObject({
       type: "enum",

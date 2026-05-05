@@ -359,6 +359,104 @@
       }
     }
   },
+  "relationships": {
+    "contentPrimaryMedia": {
+      "kind": "toOne",
+      "label": "Primary media",
+      "from": {
+        "entity": "contentItem",
+        "field": "primaryMedia"
+      },
+      "to": {
+        "entity": "mediaAsset"
+      },
+      "inverse": "mediaPrimaryContentItems"
+    },
+    "mediaPrimaryContentItems": {
+      "kind": "toMany",
+      "label": "Primary content items",
+      "from": {
+        "entity": "mediaAsset"
+      },
+      "to": {
+        "entity": "contentItem",
+        "field": "primaryMedia"
+      },
+      "inverse": "contentPrimaryMedia"
+    },
+    "placementParent": {
+      "kind": "toOne",
+      "label": "Parent content",
+      "from": {
+        "entity": "contentPlacement",
+        "field": "parent"
+      },
+      "to": {
+        "entity": "contentItem"
+      },
+      "inverse": "contentPlacements"
+    },
+    "contentPlacements": {
+      "kind": "toMany",
+      "label": "Placements",
+      "from": {
+        "entity": "contentItem"
+      },
+      "to": {
+        "entity": "contentPlacement",
+        "field": "parent"
+      },
+      "inverse": "placementParent"
+    },
+    "placementItem": {
+      "kind": "toOne",
+      "label": "Placed content",
+      "from": {
+        "entity": "contentPlacement",
+        "field": "item"
+      },
+      "to": {
+        "entity": "contentItem"
+      },
+      "inverse": "itemPlacements"
+    },
+    "itemPlacements": {
+      "kind": "toMany",
+      "label": "Used in placements",
+      "from": {
+        "entity": "contentItem"
+      },
+      "to": {
+        "entity": "contentPlacement",
+        "field": "item"
+      },
+      "inverse": "placementItem"
+    },
+    "placementMedia": {
+      "kind": "toOne",
+      "label": "Placement media",
+      "from": {
+        "entity": "contentPlacement",
+        "field": "media"
+      },
+      "to": {
+        "entity": "mediaAsset"
+      },
+      "inverse": "mediaPlacements"
+    },
+    "mediaPlacements": {
+      "kind": "toMany",
+      "label": "Placements",
+      "from": {
+        "entity": "mediaAsset"
+      },
+      "to": {
+        "entity": "contentPlacement",
+        "field": "media"
+      },
+      "inverse": "placementMedia"
+    }
+  },
   "queries": {
     "contentAll": {
       "label": "All",
