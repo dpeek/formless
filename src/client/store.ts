@@ -244,6 +244,20 @@ export function useEntityRecordCountMatchingQuery(
   return useClientStoreSelector(selector);
 }
 
+export function useEntityRecordCountReferencingField(
+  entityName: string,
+  fieldName: string,
+  referencedRecordId: string,
+) {
+  const selector = useMemo(
+    () =>
+      createEntityRecordCountReferencingFieldSelector(entityName, fieldName, referencedRecordId),
+    [entityName, fieldName, referencedRecordId],
+  );
+
+  return useClientStoreSelector(selector);
+}
+
 export function useRecord(recordId: string) {
   return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]);
 }
@@ -448,6 +462,27 @@ export function createEntityRecordCountMatchingQuerySelector(
       const record = snapshot.recordsById[recordId];
 
       if (record && matchesQuery(record, query, context)) {
+        count += 1;
+      }
+    }
+
+    return count;
+  };
+}
+
+export function createEntityRecordCountReferencingFieldSelector(
+  entityName: string,
+  fieldName: string,
+  referencedRecordId: string,
+) {
+  return (snapshot: QuerySelectorSnapshot) => {
+    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+    let count = 0;
+
+    for (const recordId of recordIds) {
+      const record = snapshot.recordsById[recordId];
+
+      if (record?.values[fieldName] === referencedRecordId) {
         count += 1;
       }
     }

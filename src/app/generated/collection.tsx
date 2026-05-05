@@ -4,6 +4,7 @@ import { Button } from "@formless/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
 import {
   useEntityRecordCountMatchingQuery,
+  useEntityRecordCountReferencingField,
   useEntityRecordIdsMatchingQuery,
   useEntityRecordOptionsMatchingQuery,
   useRecordReadinessWarnings,
@@ -14,6 +15,7 @@ import type {
   HomeQueryTabConfig,
   HomeResultConfig,
   RecordFieldConfig,
+  RelatedCollectionConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
@@ -235,9 +237,7 @@ function ContextSelector({
         >
           <TabsList aria-label={`${context.entity.label} records`} variant="line">
             {options.map((option) => (
-              <TabsTrigger key={option.id} value={option.id}>
-                {option.label}
-              </TabsTrigger>
+              <ContextSelectorTabTrigger context={context} key={option.id} option={option} />
             ))}
           </TabsList>
         </Tabs>
@@ -276,6 +276,50 @@ function ContextSelector({
         />
       ) : null}
     </section>
+  );
+}
+
+function ContextSelectorTabTrigger({
+  context,
+  option,
+}: {
+  context: HomeContextConfig;
+  option: { id: string; label: string };
+}) {
+  return (
+    <TabsTrigger value={option.id}>
+      <span>{option.label}</span>
+      {context.relatedCollection ? (
+        <RelatedCollectionCountBadge
+          option={option}
+          relatedCollection={context.relatedCollection}
+        />
+      ) : null}
+    </TabsTrigger>
+  );
+}
+
+function RelatedCollectionCountBadge({
+  option,
+  relatedCollection,
+}: {
+  option: { id: string; label: string };
+  relatedCollection: RelatedCollectionConfig;
+}) {
+  const count = useEntityRecordCountReferencingField(
+    relatedCollection.entityName,
+    relatedCollection.referenceFieldName,
+    option.id,
+  );
+
+  return (
+    <Badge
+      aria-label={`${option.label} ${relatedCollection.label} count`}
+      className="h-4 px-1.5"
+      variant="outline"
+    >
+      {count}
+    </Badge>
   );
 }
 

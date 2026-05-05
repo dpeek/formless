@@ -4,7 +4,11 @@ import {
   siteSourceSchema,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
-import { selectCollectionModels, selectPrimaryCollectionModels } from "./views.ts";
+import {
+  selectCollectionModels,
+  selectPrimaryCollectionModels,
+  selectRelatedCollectionModels,
+} from "./views.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 describe("home view model collections", () => {
@@ -260,6 +264,12 @@ describe("home view model collections", () => {
         from: { entity: "card" },
         to: { entity: "rate", field: "card" },
       },
+      relatedCollection: {
+        relationshipName: "cardRates",
+        label: "Rates",
+        entityName: "rate",
+        referenceFieldName: "card",
+      },
       itemViewName: "rateCardContextItem",
       recordFields: [
         { fieldName: "marginMin" },
@@ -426,5 +436,30 @@ describe("home view model collections", () => {
       entityName: "contentPlacement",
       defaults: [{ fieldName: "parent", value: { kind: "context", name: "content" } }],
     });
+  });
+
+  it("selects relationship-backed related collections for an entity", () => {
+    expect(selectRelatedCollectionModels(rateCardSchema, "card")).toMatchObject([
+      {
+        relationshipName: "cardRates",
+        label: "Rates",
+        entityName: "rate",
+        referenceFieldName: "card",
+      },
+    ]);
+    expect(selectRelatedCollectionModels(siteSourceSchema, "contentItem")).toMatchObject([
+      {
+        relationshipName: "contentPlacements",
+        label: "Placements",
+        entityName: "contentPlacement",
+        referenceFieldName: "parent",
+      },
+      {
+        relationshipName: "itemPlacements",
+        label: "Used in placements",
+        entityName: "contentPlacement",
+        referenceFieldName: "item",
+      },
+    ]);
   });
 });

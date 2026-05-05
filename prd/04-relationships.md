@@ -1,7 +1,7 @@
 # PRD 04: Relationship model
 
 Status: ready
-Current chunk: REL-04 generated related collections
+Current chunk: REL-05 many-to-many join helpers
 Last updated: 2026-05-06
 
 ## Goal
@@ -414,8 +414,8 @@ First-class support needed:
 | REL-01 | shipped | none       | `src/shared/schema-types.ts`, `src/shared/schema.ts`, `src/shared/schema.test.ts`       | Schemas can declare validated `toOne`, `toMany`, and `manyToMany` metadata. |
 | REL-02 | shipped | REL-01     | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`, source schema tests    | Rates and site source schemas name their existing relationships.            |
 | REL-03 | shipped | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
-| REL-04 | ready   | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
-| REL-05 | planned | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
+| REL-04 | shipped | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
+| REL-05 | ready   | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
 | REL-06 | planned | REL-05     | Browser Use, source schemas, PRD promote notes                                          | Relationship flows are smoke-tested in rates and site apps.                 |
 
 ## Chunk details
@@ -559,7 +559,7 @@ Acceptance:
 - `doc/current.md`: add top-level relationship registry support. REL-01 shipped facts: `AppSchema.relationships` is optional; `toOne`, `toMany`, and `manyToMany` metadata parse in `src/shared/schema-relationships.ts`; metadata does not change stored record shape.
 - `doc/current.md`: list source app relationships after REL-02 ships. REL-02 shipped facts: rates source names `rateCard`, `cardRates`, `rateResource`, `resourceRates`, `cardResources`, and `resourceCards`; site source names `contentPrimaryMedia`, `mediaPrimaryContentItems`, `placementParent`, `contentPlacements`, `placementItem`, `itemPlacements`, `placementMedia`, and `mediaPlacements`; queries, views, records, and storage shape are unchanged.
 - `doc/current.md`: list relationship-backed collection context validation after REL-03 ships. REL-03 shipped facts: collection contexts can set `relationship` to a `toMany` relationship; parser validates the relationship from entity, target entity, context query field, and context create default field; `rateHome` uses `cardRates`; `contentCompositionHome` uses `contentPlacements`; client view models expose relationship name and metadata.
-- `doc/current.md`: describe relationship-backed generated related collections after REL-04 ships.
+- `doc/current.md`: describe relationship-backed generated related collections after REL-04 ships. REL-04 shipped facts: client view models can select `toMany` related collection models; scoped context tabs render derived inverse-reference counts from local records; `cardRates` and `contentPlacements` counts render without storing parent-side values; related create defaults continue to hide the parent reference and resolve it from selected context; no storage, sync, seed, or authority behavior changed.
 - `doc/roadmap.md`: add first-release relationship scope only if this PRD becomes release-blocking.
 
 ## PRD status notes
@@ -602,3 +602,19 @@ Acceptance:
 - No new decisions in REL-03; REL-D3 and REL-D4 stand.
 - No blockers.
 - Done pass 2026-05-06: REL-03 stopped cleanly; tests and check pass; no blockers.
+- REL-04 shipped 2026-05-06.
+- REL-04 added `selectRelatedCollectionModels` for `toMany` relationships.
+- REL-04 context models expose the backing related collection for relationship-backed scoped views.
+- REL-04 renders derived related-count badges on context selector tabs.
+- REL-04 counts use local child records where the relationship reference field equals the parent id.
+- REL-04 changed no record shape, seed data, storage, sync, or authority behavior.
+- REL-04 kept related child creation on existing create views and context defaults.
+- REL-04 app tests cover `cardRates` counts, `contentPlacements` counts, count updates after local merges, and hidden parent defaults.
+- Browser smoke 2026-05-06 covered `/rates` `cardRates` counts and selected Premium rows.
+- Browser smoke 2026-05-06 covered `/site` `contentPlacements` counts, selected Home placements, and parent-hidden block placement create.
+- REL-04 did not cover `sectionNavItems` because the site source has no `navSection` or `navItem`; `contentPlacements` is the current site inverse.
+- `bun run test` passed 2026-05-06.
+- `bun run check` passed 2026-05-06.
+- No new decisions in REL-04; REL-D4 and REL-D8 stand.
+- No blockers.
+- Done pass 2026-05-06: REL-04 stopped cleanly; tests and check pass; no blockers.

@@ -101,9 +101,19 @@ export type HomeContextConfig = {
   labelField: string;
   relationshipName?: string;
   relationship?: ToManyRelationshipSchema;
+  relatedCollection?: RelatedCollectionConfig;
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
   itemViewName?: string;
   recordFields?: RecordFieldConfig[];
+};
+
+export type RelatedCollectionConfig = {
+  relationshipName: string;
+  relationship: ToManyRelationshipSchema;
+  label: string;
+  entityName: string;
+  entity: EntitySchema;
+  referenceFieldName: string;
 };
 
 export type HomeViewModel = {
@@ -173,6 +183,34 @@ export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
   });
 }
 
+export function selectRelatedCollectionModels(
+  schema: AppSchema,
+  entityName: string,
+): RelatedCollectionConfig[] {
+  return Object.entries(schema.relationships ?? {}).flatMap(([relationshipName, relationship]) => {
+    if (relationship.kind !== "toMany" || relationship.from.entity !== entityName) {
+      return [];
+    }
+
+    const entity = schema.entities[relationship.to.entity];
+
+    if (!entity) {
+      throw new Error(`Missing related entity "${relationship.to.entity}".`);
+    }
+
+    return [
+      {
+        relationshipName,
+        relationship,
+        label: relationship.label ?? entity.label,
+        entityName: relationship.to.entity,
+        entity,
+        referenceFieldName: relationship.to.field,
+      },
+    ];
+  });
+}
+
 function selectContext(
   schema: AppSchema,
   viewEntries: Array<[string, ViewSchema]>,
@@ -187,6 +225,12 @@ function selectContext(
   const relationshipName = collectionView.context.relationship;
   const relationship =
     relationshipName === undefined ? undefined : selectToManyRelationship(schema, relationshipName);
+  const relatedCollection =
+    relationshipName === undefined
+      ? undefined
+      : selectRelatedCollectionModels(schema, collectionView.context.entity).find(
+          (collection) => collection.relationshipName === relationshipName,
+        );
 
   if (!contextEntity) {
     throw new Error(`Missing context entity "${collectionView.context.entity}".`);
@@ -223,6 +267,7 @@ function selectContext(
     query: contextQuery.expression,
     labelField: collectionView.context.labelField,
     ...(relationshipName === undefined ? {} : { relationshipName, relationship }),
+    ...(relatedCollection === undefined ? {} : { relatedCollection }),
     ...(createAction === undefined ? {} : { createAction }),
     ...(itemViewName === undefined
       ? {}

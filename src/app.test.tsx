@@ -359,6 +359,7 @@ describe("generated collection home", () => {
 
     expect(html).toContain('aria-label="Content item records"');
     expect(html).toContain("Home");
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
     expect(html).toContain("Create Block placement");
     expect(html).toContain("Hero");
     expect(html).toContain("Content list");
@@ -396,6 +397,7 @@ describe("generated collection home", () => {
 
     expect(html).toContain('aria-label="Content item records"');
     expect(html).toContain("Header");
+    expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
     expect(html).toContain("Create Block placement");
     expect(html).toContain("Link");
     expect(html).toContain('value="Home"');
@@ -463,6 +465,8 @@ describe("generated collection home", () => {
     expect(html).not.toContain("<select");
     expect(html).toContain("Default");
     expect(html).toContain("Backup");
+    expect(html).toMatch(/aria-label="Default Rates count"[^>]*>1</);
+    expect(html).toMatch(/aria-label="Backup Rates count"[^>]*>1</);
     expect(html).toContain('aria-label="Create Rate card"');
     expect(html).toMatch(/<button[^>]*>Create Resource<\/button>/);
     expect(html).toContain("Regenerate missing rates");
@@ -481,6 +485,76 @@ describe("generated collection home", () => {
     expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
     expect(html).not.toContain('value="900"');
+  });
+
+  it("updates relationship counts after local record merges", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    applyBootstrapResponse(
+      bootstrap(
+        [cardRecord("card-1", "Default"), resourceRecord("resource-1", "Designer")],
+        rateCardSchema,
+      ),
+    );
+    const before = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId="card-1"
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-01"
+      />,
+    );
+
+    applyRecordMerge([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], 2);
+    const after = renderToStaticMarkup(
+      <HomeCollection
+        actions={rateModel?.actions ?? []}
+        context={rateModel?.context}
+        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
+        entityName="rate"
+        onSelectQuery={() => {}}
+        queryTabs={rateModel?.queryTabs ?? []}
+        result={
+          rateModel?.result ?? {
+            type: "list",
+            itemViewName: "rateListItem",
+            recordFields: [],
+          }
+        }
+        selectedContextRecordId="card-1"
+        selectedQuery={
+          rateModel?.queryTabs[0] ?? {
+            queryName: "missing",
+            label: "Missing",
+            query: { kind: "all" },
+          }
+        }
+        today="2026-05-01"
+      />,
+    );
+
+    expect(before).toMatch(/aria-label="Default Rates count"[^>]*>0</);
+    expect(after).toMatch(/aria-label="Default Rates count"[^>]*>1</);
   });
 
   it("renders selected card context fields from the context item view", () => {
@@ -1118,6 +1192,9 @@ describe("generated forms and records", () => {
       throw new Error("Missing placement create action.");
     }
 
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={placementAction} renderDialogCancel={false} />,
+    );
     const placementFormData = new FormData();
     placementFormData.set("slot", "main");
     placementFormData.set("kind", "contentList");
@@ -1127,6 +1204,7 @@ describe("generated forms and records", () => {
     placementFormData.set("order", "1");
     placementFormData.set("visible", "on");
 
+    expect(html).not.toContain('name="parent"');
     expect(
       resolveCreateValues(placementFormData, placementAction, {
         today: "2026-05-05",
