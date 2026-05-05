@@ -17,7 +17,7 @@ import type {
   SyncSocketServerMessage,
   StoredRecord,
 } from "../shared/protocol.ts";
-import { isSyncSocketClientMessage } from "../shared/protocol.ts";
+import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
 import {
   createStoredRecord,
   ensureStorageTables,
@@ -80,8 +80,11 @@ export class FormlessAuthority extends DurableObject<Env> {
         const currentSchema = initializeStorageFromSource(this.ctx.storage, source).schema;
         const records = getBootstrapRecords(this.ctx.storage);
         const nextSchema = validateSchemaUpdate(await readJson(request), currentSchema, records);
+        const response = writeActiveSchema(this.ctx.storage, nextSchema);
 
-        return jsonResponse(writeActiveSchema(this.ctx.storage, nextSchema));
+        this.broadcastSync(source);
+
+        return jsonResponse(response);
       }
 
       if (request.method === "GET" && route.path === "/sync") {
@@ -121,42 +124,49 @@ export class FormlessAuthority extends DurableObject<Env> {
         }
 
         if (mutation.op === "create") {
-          return jsonResponse(
-            createStoredRecord(
-              this.ctx.storage,
-              mutation,
-              (context) => {
-                executeCreateAfterCreateHooks(
-                  context.storage,
-                  context.mutation,
-                  schema,
-                  context.createRecords,
-                );
-              },
-              (entity, values, options) => {
-                assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
-              },
-            ),
-          );
-        }
-
-        return jsonResponse(
-          patchStoredRecord(
+          const response = createStoredRecord(
             this.ctx.storage,
             mutation,
-            "recordValues" in mutation ? mutation.recordValues : undefined,
+            (context) => {
+              executeCreateAfterCreateHooks(
+                context.storage,
+                context.mutation,
+                schema,
+                context.createRecords,
+              );
+            },
             (entity, values, options) => {
               assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
             },
-          ),
+          );
+
+          this.broadcastSync(source);
+
+          return jsonResponse(response);
+        }
+
+        const response = patchStoredRecord(
+          this.ctx.storage,
+          mutation,
+          "recordValues" in mutation ? mutation.recordValues : undefined,
+          (entity, values, options) => {
+            assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
+          },
         );
+
+        this.broadcastSync(source);
+
+        return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/actions") {
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const action = validateActionRequest(await readJson(request), schema);
+        const response = executeEntityAction(this.ctx.storage, action, schema);
 
-        return jsonResponse(executeEntityAction(this.ctx.storage, action, schema));
+        this.broadcastSync(source);
+
+        return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/reset/schema") {
@@ -165,14 +175,20 @@ export class FormlessAuthority extends DurableObject<Env> {
           source,
           validateSourceSchemaReset,
         );
+        const response = bootstrapResponse(this.ctx.storage, schema, updatedAt);
 
-        return jsonResponse(bootstrapResponse(this.ctx.storage, schema, updatedAt));
+        this.broadcastSync(source);
+
+        return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/reset/seed") {
         const { schema, updatedAt } = resetStorageToSourceSeed(this.ctx.storage, source);
+        const response = bootstrapResponse(this.ctx.storage, schema, updatedAt);
 
-        return jsonResponse(bootstrapResponse(this.ctx.storage, schema, updatedAt));
+        this.broadcastSync(source);
+
+        return jsonResponse(response);
       }
 
       return jsonResponse({ error: "Not found." }, 404);
@@ -200,6 +216,16 @@ export class FormlessAuthority extends DurableObject<Env> {
     } satisfies SyncSocketAttachment;
 
     sendSyncToSocket(this.ctx.storage, source, socket, attachment);
+  }
+
+  private broadcastSync(source: StorageSource) {
+    for (const socket of this.ctx.getWebSockets()) {
+      try {
+        sendSyncToSocket(this.ctx.storage, source, socket, syncSocketAttachment(socket));
+      } catch {
+        // A stale socket should not block other replicas from receiving committed state.
+      }
+    }
   }
 
   private handleSyncWebSocketRequest(request: Request, app: WorkerSchemaAppDefinition) {
@@ -251,6 +277,12 @@ function storageSourceFromSchemaKey(schemaKey: string | undefined): StorageSourc
 
 function initialSyncSocketAttachment(): SyncSocketAttachment {
   return { cursor: 0, schemaUpdatedAt: null };
+}
+
+function syncSocketAttachment(socket: WebSocket): SyncSocketAttachment {
+  const attachment = socket.deserializeAttachment();
+
+  return isSyncSocketAttachment(attachment) ? attachment : initialSyncSocketAttachment();
 }
 
 function parseSyncSocketMessage(message: string | ArrayBuffer) {

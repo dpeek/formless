@@ -1,7 +1,7 @@
 # PRD 02: WebSocket push sync
 
 Status: active
-Current chunk: WS-03 authority write notifications
+Current chunk: WS-04 keyed browser push client
 Last updated: 2026-05-05
 
 ## Goal
@@ -55,6 +55,8 @@ The first release should:
 | WS-D8  | Keep polling as fallback during rollout.                         | Local dev, tests, and older browsers can keep existing behavior while socket support settles.   | `src/client/sync.ts`, `src/app/routes/home.tsx`                                  |
 | WS-D9  | Keep pushed sync merge schema-keyed.                             | Client DB, store, and broadcast state are keyed by schema app.                                  | `src/client/sync.ts`, `src/client/sync.test.ts`                                  |
 | WS-D10 | Store schema key on accepted socket tags.                        | Hibernated handlers can recover the app source without in-memory state.                         | `src/worker/authority.ts`                                                        |
+| WS-D11 | Broadcast from committed authority write paths only.             | Validation failures and mutation replay do not commit new state.                                | `src/worker/authority.ts`, `src/worker/authority.test.ts`                        |
+| WS-D12 | Treat each socket send as best effort.                           | One stale socket must not block other replicas from receiving committed state.                  | `src/worker/authority.ts`                                                        |
 
 ## Wire protocol
 
@@ -116,8 +118,8 @@ type SyncSocketAttachment = {
 | ----- | ------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
 | WS-01 | shipped | none                | `src/shared/protocol.ts`, `src/client/sync.ts`         | Shared socket protocol exists and sync merge code is reusable.            |
 | WS-02 | shipped | PRD 01 SR-02, WS-01 | `src/worker/index.ts`, `src/worker/authority.ts`       | `/api/:schemaKey/sync/ws` accepts hibernatable WebSockets and catches up. |
-| WS-03 | ready   | WS-02               | `src/worker/authority.ts`, `src/worker/storage.ts`     | Committed mutations, actions, and schema writes push sync messages.       |
-| WS-04 | pending | PRD 01 SR-04, WS-03 | `src/client/sync.ts`, `src/client/broadcast.ts`        | Client opens keyed socket, merges pushed sync messages, and falls back.   |
+| WS-03 | shipped | WS-02               | `src/worker/authority.ts`, `src/worker/storage.ts`     | Committed mutations, actions, and schema writes push sync messages.       |
+| WS-04 | ready   | PRD 01 SR-04, WS-03 | `src/client/sync.ts`, `src/client/broadcast.ts`        | Client opens keyed socket, merges pushed sync messages, and falls back.   |
 | WS-05 | pending | PRD 01 SR-05, WS-04 | `src/app/routes/home.tsx`, `src/client/sync-status.ts` | Home route starts push sync for the active schema key.                    |
 | WS-06 | pending | WS-05               | tests, Browser Use                                     | Two-tab browser smoke proves push updates and route isolation.            |
 | WS-07 | pending | WS-06               | `prd/02-websocket-push-sync.md`                        | PRD status and promote notes reflect shipped behavior.                    |
@@ -173,32 +175,50 @@ Evidence:
 - `bun run test` passed.
 - `bun run check` passed.
 
-## Current chunk
-
 ### WS-03 authority write notifications
+
+Status: shipped 2026-05-05.
 
 Goal: push committed state after authority writes.
 
-Tasks:
+Outcome:
 
-- [ ] Reuse the `sendSyncToSocket(...)` helper in the authority.
-- [ ] Add a `broadcastSync()` helper that loops `this.ctx.getWebSockets()`.
-- [ ] Call `broadcastSync()` after successful create mutations.
-- [ ] Call `broadcastSync()` after successful patch mutations.
-- [ ] Call `broadcastSync()` after successful actions.
-- [ ] Call `broadcastSync()` after successful schema writes.
-- [ ] Reuse the same helper for reset endpoints after PRD 01 SR-03.
-- [ ] Catch per-socket send failures and continue sending to other sockets.
+- Added `broadcastSync(source)` on the authority.
+- `broadcastSync(source)` loops `this.ctx.getWebSockets()`.
+- Each socket send reuses `sendSyncToSocket(...)`.
+- Socket attachments are read with `deserializeAttachment()` and validated before use.
+- Per-socket send failures are caught so later sockets still receive sync.
+- Successful create mutations broadcast after storage commits.
+- Successful patch mutations broadcast after storage commits.
+- Successful actions broadcast after storage commits.
+- Successful schema writes broadcast after storage commits.
+- Reset schema and reset seed endpoints call the same broadcast helper after storage commits.
+- Mutation replay returns the stored response without broadcasting.
+- Failed validation returns an error without broadcasting.
 
 Acceptance checks:
 
-- [ ] Two sockets on `/api/tasks/sync/ws` receive a task create.
-- [ ] A socket on `/api/rates/sync/ws` does not receive task changes.
-- [ ] Schema save sends a schema-only sync message when no record cursor changed.
-- [ ] Failed mutation validation does not push.
-- [ ] Mutation replay does not duplicate change rows.
+- Two sockets on `/api/tasks/sync/ws` receive a task create.
+- A socket on `/api/rates/sync/ws` does not receive task changes.
+- Schema save sends a schema-only sync message when no record cursor changed.
+- Failed mutation validation does not push.
+- Mutation replay does not duplicate change rows or push a replay message.
 
-## Later chunks
+Evidence:
+
+- `src/worker/authority.test.ts` covers same-schema create broadcast to two sockets.
+- `src/worker/authority.test.ts` covers task/rate socket isolation.
+- `src/worker/authority.test.ts` covers patch and action broadcast.
+- `src/worker/authority.test.ts` covers schema-only broadcast.
+- `src/worker/authority.test.ts` covers failed validation and replay no-broadcast behavior.
+- `bun run test` passed.
+- `bun run check` passed.
+
+Blockers:
+
+- None.
+
+## Current chunk
 
 ### WS-04 keyed browser push client
 
@@ -223,6 +243,8 @@ Acceptance checks:
 - [ ] Pushed changes land in the selected IndexedDB database.
 - [ ] Cross-tab local events still refresh mounted stores.
 - [ ] Polling fallback still merges changes when socket fails.
+
+## Later chunks
 
 ### WS-05 route enablement
 
@@ -317,6 +339,10 @@ Add to `doc/current.md` after ship:
 - Server sync socket handles `hello` and `sync-requested`.
 - Server sync socket catches up from client cursor.
 - Server sync socket omits schema when the client timestamp is current.
+- Authority broadcasts committed create mutation, patch mutation, action, schema write, and reset sync messages.
+- Authority broadcast uses hibernatable WebSockets from `ctx.getWebSockets()`.
+- Authority broadcast catches per-socket send failures.
+- Failed validation and mutation replay do not broadcast.
 - HTTP remains the write path.
 - Browser opens push sync per active schema key.
 - Polling remains fallback.

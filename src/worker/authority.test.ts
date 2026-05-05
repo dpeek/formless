@@ -839,6 +839,177 @@ describe("authority", () => {
     });
   });
 
+  it("broadcasts committed task creates to same-schema sync WebSockets only", async () => {
+    const taskSocketA = await openSyncSocket("/api/sync/ws", "tasks");
+    const taskSocketB = await openSyncSocket("/api/sync/ws", "tasks");
+    const ratesSocket = await openSyncSocket("/api/sync/ws", "rates");
+    let ratesCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
+
+    try {
+      const taskSchema = await getJson<SchemaResponse>("/api/schema");
+      await primeSyncSocket(taskSocketA, taskSeedRecords.length, taskSchema.updatedAt);
+      await primeSyncSocket(taskSocketB, taskSeedRecords.length, taskSchema.updatedAt);
+
+      useSchemaApp("rates");
+      const rateSchema = await getJson<SchemaResponse>("/api/schema");
+      await primeSyncSocket(ratesSocket, rateCardSeedRecords.length, rateSchema.updatedAt);
+      ratesCapture = captureSyncSocketMessages(ratesSocket);
+
+      useSchemaApp("tasks");
+      const messageA = readSyncSocketMessage(taskSocketA);
+      const messageB = readSyncSocketMessage(taskSocketB);
+      const created = await postMutation("mutation-broadcast-create", {
+        title: "Broadcast create",
+        done: false,
+      });
+
+      await expect(messageA).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: created.changes,
+          cursor: created.cursor,
+        },
+      });
+      await expect(messageB).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: created.changes,
+          cursor: created.cursor,
+        },
+      });
+      await expectNoCapturedMessages(ratesCapture);
+    } finally {
+      ratesCapture?.stop();
+      taskSocketA.close();
+      taskSocketB.close();
+      ratesSocket.close();
+    }
+  });
+
+  it("broadcasts committed patch mutations and actions", async () => {
+    const created = await postMutation("mutation-broadcast-patch-source", {
+      title: "Broadcast patch",
+      done: false,
+    });
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, created.cursor, schemaResponse.updatedAt);
+
+      const patchMessage = readSyncSocketMessage(socket);
+      const patched = await postJson<MutationResponse>("/api/mutations", {
+        mutationId: "mutation-broadcast-patch",
+        entity: "task",
+        op: "patch",
+        recordId: created.record.id,
+        values: { done: true },
+      });
+
+      await expect(patchMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: patched.changes,
+          cursor: patched.cursor,
+        },
+      });
+
+      const actionMessage = readSyncSocketMessage(socket);
+      const action = await postAction("action-broadcast-clear", "clearCompletedTasks");
+
+      await expect(actionMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: action.changes,
+          cursor: action.cursor,
+        },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("broadcasts schema-only sync messages after schema writes", async () => {
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, taskSeedRecords.length, schemaResponse.updatedAt);
+
+      const schemaMessage = readSyncSocketMessage(socket);
+      const update = await postJson<SchemaUpdateResponse>("/api/schema", {
+        schema: schemaWithTaskLabel("Planner task"),
+      });
+
+      await expect(schemaMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: [],
+          cursor: taskSeedRecords.length,
+          schema: update.schema,
+          schemaUpdatedAt: update.updatedAt,
+        },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("does not broadcast failed mutation validation or mutation replay", async () => {
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, taskSeedRecords.length, schemaResponse.updatedAt);
+
+      const invalidCapture = captureSyncSocketMessages(socket);
+      const invalid = await harness.fetch(apiPath("/api/mutations"), {
+        body: JSON.stringify({
+          mutationId: "mutation-invalid-no-broadcast",
+          entity: "task",
+          op: "create",
+          values: { title: "   " },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      expect(invalid.status).toBe(400);
+      await expectNoCapturedMessages(invalidCapture);
+      invalidCapture.stop();
+
+      const createMessage = readSyncSocketMessage(socket);
+      const mutation = {
+        mutationId: "mutation-replay-no-broadcast",
+        entity: "task",
+        op: "create",
+        values: { title: "Replay check", done: false },
+      };
+      const created = await postJson<MutationResponse>("/api/mutations", mutation);
+
+      await expect(createMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: created.changes,
+          cursor: created.cursor,
+        },
+      });
+
+      const replayCapture = captureSyncSocketMessages(socket);
+      const replay = await postJson<MutationResponse>("/api/mutations", mutation);
+      const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length}`);
+
+      expect(replay).toEqual(created);
+      expect(
+        sync.changes.filter((change) => change.mutationId === mutation.mutationId),
+      ).toHaveLength(1);
+      await expectNoCapturedMessages(replayCapture);
+      replayCapture.stop();
+    } finally {
+      socket.close();
+    }
+  });
+
   it("rejects invalid sync cursors", async () => {
     await expectError("/api/sync?after=bad", undefined, "Sync cursor must be");
   });
@@ -2527,6 +2698,51 @@ function readSyncSocketMessage(socket: Awaited<ReturnType<typeof openSyncSocket>
     socket.addEventListener("message", onMessage);
     socket.addEventListener("error", onError);
   });
+}
+
+async function primeSyncSocket(
+  socket: Awaited<ReturnType<typeof openSyncSocket>>,
+  cursor: number,
+  schemaUpdatedAt: string | null,
+) {
+  socket.send(
+    JSON.stringify({
+      type: "hello",
+      cursor,
+      schemaUpdatedAt,
+    }),
+  );
+
+  await expect(readSyncSocketMessage(socket)).resolves.toEqual({
+    type: "sync",
+    payload: {
+      changes: [],
+      cursor,
+    },
+  });
+}
+
+function captureSyncSocketMessages(socket: Awaited<ReturnType<typeof openSyncSocket>>) {
+  const messages: SyncSocketServerMessage[] = [];
+  const onMessage = (event: WebSocketEventMap["message"]) => {
+    if (typeof event.data === "string") {
+      messages.push(JSON.parse(event.data) as SyncSocketServerMessage);
+    }
+  };
+
+  socket.addEventListener("message", onMessage);
+
+  return {
+    messages,
+    stop: () => {
+      socket.removeEventListener("message", onMessage);
+    },
+  };
+}
+
+async function expectNoCapturedMessages(capture: ReturnType<typeof captureSyncSocketMessages>) {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(capture.messages).toEqual([]);
 }
 
 async function getJson<T>(path: string) {
