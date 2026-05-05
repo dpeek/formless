@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   rateSourceSchema as rateCardSchema,
+  siteSourceSchema,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
 import { selectCollectionModels, selectPrimaryCollectionModels } from "./views.ts";
@@ -307,5 +308,134 @@ describe("home view model collections", () => {
       },
     });
     expect(action?.type === "entity-action" ? action.targetQuery : undefined).toBeUndefined();
+  });
+
+  it("selects the site editorial workspaces as primary collection models", () => {
+    const models = selectPrimaryCollectionModels(siteSourceSchema);
+
+    expect(models.map((model) => model.viewName)).toEqual([
+      "contentHome",
+      "contentCompositionHome",
+      "navigationHome",
+      "mediaHome",
+      "peopleHome",
+    ]);
+    expect(models.map((model) => model.label)).toEqual([
+      "Content",
+      "Composition",
+      "Navigation",
+      "Media",
+      "People",
+    ]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true, true, true]);
+    expect(
+      models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
+    ).toEqual([
+      "contentTable",
+      "contentPlacementTable",
+      "navItemTable",
+      "mediaTable",
+      "peopleTable",
+    ]);
+  });
+
+  it("resolves site content table columns and expanded create fields", () => {
+    const contentModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "contentHome",
+    );
+    const create = contentModel?.actions.find((action) => action.type === "create");
+
+    expect(contentModel?.queryTabs.map((tab) => tab.queryName)).toEqual([
+      "contentAll",
+      "contentDraft",
+      "contentPublished",
+      "contentPages",
+      "contentPosts",
+      "contentProjects",
+      "contentLinks",
+      "contentBlocks",
+      "featuredContent",
+    ]);
+    expect(
+      contentModel?.result.type === "table"
+        ? contentModel.result.columns.map((column) => column.key)
+        : [],
+    ).toEqual([
+      "field:kind",
+      "field:title",
+      "field:body",
+      "field:status",
+      "field:featured",
+      "field:slug",
+      "field:href",
+      "field:publishedAt",
+      "field:order",
+    ]);
+    expect(
+      contentModel?.result.type === "table"
+        ? contentModel.result.columns.map((column) => column.editor)
+        : [],
+    ).toEqual(["enum", "text", "markdown", "enum", "boolean", "slug", "href", "date", "number"]);
+    expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
+      "kind",
+      "title",
+      "subtitle",
+      "body",
+      "status",
+      "featured",
+      "publishedAt",
+      "order",
+      "slug",
+      "href",
+      "icon",
+      "color",
+      "templateKey",
+      "author",
+      "primaryMedia",
+    ]);
+  });
+
+  it("resolves site scoped composition and navigation contexts", () => {
+    const compositionModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "contentCompositionHome",
+    );
+    const navigationModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "navigationHome",
+    );
+
+    expect(compositionModel?.context).toMatchObject({
+      name: "content",
+      entityName: "contentItem",
+      queryName: "contentAll",
+      query: siteSourceSchema.queries.contentAll?.expression,
+      labelField: "title",
+      itemViewName: "contentContextItem",
+      recordFields: [{ fieldName: "kind" }, { fieldName: "status" }, { fieldName: "featured" }],
+    });
+    expect(compositionModel?.actions[0]).toMatchObject({
+      type: "create",
+      label: "Create Content placement",
+      entityName: "contentPlacement",
+      defaults: [{ fieldName: "parent", value: { kind: "context", name: "content" } }],
+    });
+    expect(navigationModel?.context).toMatchObject({
+      name: "section",
+      entityName: "navSection",
+      queryName: "navSectionsAll",
+      query: siteSourceSchema.queries.navSectionsAll?.expression,
+      labelField: "label",
+      itemViewName: "navSectionContextItem",
+      createAction: {
+        type: "create",
+        label: "Create Navigation section",
+        entityName: "navSection",
+      },
+    });
+    expect(navigationModel?.actions[0]).toMatchObject({
+      type: "create",
+      label: "Create Navigation item",
+      entityName: "navItem",
+      defaults: [{ fieldName: "section", value: { kind: "context", name: "section" } }],
+    });
   });
 });

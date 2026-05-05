@@ -1938,13 +1938,90 @@ describe("personal site sample schema", () => {
       ref: { kind: "value", name: "parent" },
       value: { kind: "context", name: "content" },
     });
+    expect(Object.keys(schema.tableViews)).toEqual([
+      "contentTable",
+      "contentPlacementTable",
+      "navItemTable",
+      "mediaTable",
+      "peopleTable",
+    ]);
     expect(schema.views.contentHome).toMatchObject({
       type: "collection",
       label: "Content",
       entity: "contentItem",
       navigation: { primary: true },
-      result: { type: "list", itemView: "contentListItem" },
+      result: { type: "table", tableView: "contentTable" },
       actions: [{ type: "create", createView: "contentCreate" }],
+    });
+    expect(schema.views.contentCreate).toMatchObject({
+      type: "create",
+      entity: "contentItem",
+      fields: {
+        body: { editor: "markdown" },
+        author: { editor: "reference" },
+        primaryMedia: { editor: "reference" },
+      },
+    });
+    expect(schema.views.contentCompositionHome).toMatchObject({
+      type: "collection",
+      label: "Composition",
+      entity: "contentPlacement",
+      navigation: { primary: true },
+      context: {
+        name: "content",
+        entity: "contentItem",
+        query: "contentAll",
+        labelField: "title",
+        itemView: "contentContextItem",
+      },
+      result: { type: "table", tableView: "contentPlacementTable" },
+      actions: [{ type: "create", createView: "contentPlacementCreate" }],
+    });
+    expect(schema.views.contentPlacementCreate).toMatchObject({
+      type: "create",
+      entity: "contentPlacement",
+      defaults: {
+        parent: { kind: "context", name: "content" },
+      },
+    });
+    expect(schema.views.navigationHome).toMatchObject({
+      type: "collection",
+      label: "Navigation",
+      entity: "navItem",
+      navigation: { primary: true },
+      context: {
+        name: "section",
+        entity: "navSection",
+        query: "navSectionsAll",
+        labelField: "label",
+        createView: "navSectionCreate",
+        itemView: "navSectionContextItem",
+      },
+      result: { type: "table", tableView: "navItemTable" },
+      actions: [{ type: "create", createView: "navItemCreate" }],
+    });
+    expect(schema.views.navItemCreate).toMatchObject({
+      type: "create",
+      entity: "navItem",
+      defaults: {
+        section: { kind: "context", name: "section" },
+      },
+    });
+    expect(schema.views.mediaHome).toMatchObject({
+      type: "collection",
+      label: "Media",
+      entity: "mediaAsset",
+      navigation: { primary: true },
+      result: { type: "table", tableView: "mediaTable" },
+      actions: [{ type: "create", createView: "mediaCreate" }],
+    });
+    expect(schema.views.peopleHome).toMatchObject({
+      type: "collection",
+      label: "People",
+      entity: "person",
+      navigation: { primary: true },
+      result: { type: "table", tableView: "peopleTable" },
+      actions: [{ type: "create", createView: "personCreate" }],
     });
   });
 });

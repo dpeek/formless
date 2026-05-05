@@ -1,7 +1,7 @@
 # PRD 03: Personal site content authoring
 
 Status: ready
-Current chunk: PS-03 editorial workspaces
+Current chunk: PS-04 editorial readiness checks
 Last updated: 2026-05-05
 
 ## Goal
@@ -656,7 +656,7 @@ Rules:
 | ----- | ------- | ---------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | PS-01 | shipped | none       | `src/shared/*`, `src/app/generated/*`, tests                     | Text formats and multiline/markdown-style editors parse and work in generated UI. |
 | PS-02 | shipped | PS-01      | `schema/apps/site/*`, app registries, route tests                | Site source schema and seed records parse, bootstrap, and expose `/site` routes.  |
-| PS-03 | pending | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
+| PS-03 | shipped | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
 | PS-04 | pending | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
 | PS-05 | pending | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
 
@@ -770,43 +770,62 @@ Acceptance checks:
 - [x] `bun run test` passes.
 - [x] `bun run check` passes.
 
-## Current chunk
-
 ### PS-03 editorial workspaces
 
-Goal: make the source schema pleasant to edit in the generated app.
+Status: shipped 2026-05-05.
+
+Outcome:
+
+- `contentHome` uses `contentTable` with kind/status filters, markdown body editing, slugs, links, publish dates, and order.
+- `contentCreate` includes editorial fields, markdown body, author reference, and primary media reference.
+- Added primary site workspaces: Content, Composition, Navigation, Media, People.
+- `contentCompositionHome` scopes placements by selected `contentItem`.
+- `contentPlacementCreate` defaults `parent` from selected content context.
+- `navigationHome` scopes nav items by selected `navSection`.
+- `navSectionCreate` creates new header/footer sections from the Navigation context.
+- `navItemCreate` defaults `section` from selected navigation context.
+- Added media and people table/create views.
+
+Evidence:
+
+- Schema parser coverage: `src/shared/schema.test.ts`.
+- View model coverage: `src/client/views.test.ts`.
+- App/render coverage: `src/app.test.tsx`.
+- Browser Use smoke on `https://ember.formless.local/site` verified Content tabs/tables/body editors, Composition with Home placement table, and Navigation with section/item tables.
+- `bun run test` passed.
+- `bun run check` passed.
 
 Tasks:
 
-- [ ] Expand `contentHome` beyond the PS-02 minimal route view.
-- [ ] Add `contentTable` table view.
-- [ ] Expand `contentCreate` for editorial fields.
-- [ ] Add `contentCompositionHome` scoped collection view.
-- [ ] Add `contentPlacementTable` table view.
-- [ ] Add `contentPlacementCreate` create view with context default.
-- [ ] Add `navigationHome` scoped collection view.
-- [ ] Add `navItemTable` table view.
-- [ ] Add `navSectionCreate` and `navItemCreate` create views.
-- [ ] Add `mediaHome` collection view.
-- [ ] Add `peopleHome` collection view.
-- [ ] Mark primary navigation views intentionally.
-- [ ] Add app/render tests for visible workspaces.
+- [x] Expand `contentHome` beyond the PS-02 minimal route view.
+- [x] Add `contentTable` table view.
+- [x] Expand `contentCreate` for editorial fields.
+- [x] Add `contentCompositionHome` scoped collection view.
+- [x] Add `contentPlacementTable` table view.
+- [x] Add `contentPlacementCreate` create view with context default.
+- [x] Add `navigationHome` scoped collection view.
+- [x] Add `navItemTable` table view.
+- [x] Add `navSectionCreate` and `navItemCreate` create views.
+- [x] Add `mediaHome` collection view.
+- [x] Add `peopleHome` collection view.
+- [x] Mark primary navigation views intentionally.
+- [x] Add app/render tests for visible workspaces.
 
 Acceptance checks:
 
-- [ ] Authors can create content items.
-- [ ] Authors can filter content items by kind and status.
-- [ ] Authors can edit markdown body fields.
-- [ ] Authors can choose an author and media asset by reference.
-- [ ] Authors can select a content item and edit its placements.
-- [ ] Authors can select a nav section and edit its items.
-- [ ] Authors can create media assets with alt text.
-- [ ] Authors can create people/authors.
-- [ ] Site route stays isolated from `/tasks` and `/rates`.
-- [ ] `bun run test` passes.
-- [ ] `bun run check` passes.
+- [x] Authors can create content items.
+- [x] Authors can filter content items by kind and status.
+- [x] Authors can edit markdown body fields.
+- [x] Authors can choose an author and media asset by reference.
+- [x] Authors can select a content item and edit its placements.
+- [x] Authors can select a nav section and edit its items.
+- [x] Authors can create media assets with alt text.
+- [x] Authors can create people/authors.
+- [x] Site route stays isolated from `/tasks` and `/rates`.
+- [x] `bun run test` passes.
+- [x] `bun run check` passes.
 
-## Later chunks
+## Current chunk
 
 ### PS-04 editorial readiness checks
 
@@ -839,6 +858,8 @@ Acceptance checks:
 - [ ] Warnings do not require a public renderer.
 - [ ] `bun run test` passes.
 - [ ] `bun run check` passes.
+
+## Later chunks
 
 ### PS-05 browser smoke and cleanup
 

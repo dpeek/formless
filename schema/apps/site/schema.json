@@ -749,9 +749,340 @@
           "commit": "immediate"
         }
       }
+    },
+    "contentContextItem": {
+      "entity": "contentItem",
+      "fields": {
+        "kind": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "featured": {
+          "editor": "boolean",
+          "commit": "immediate"
+        }
+      }
+    },
+    "navSectionContextItem": {
+      "entity": "navSection",
+      "fields": {
+        "area": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "order": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "visible": {
+          "editor": "boolean",
+          "commit": "immediate"
+        }
+      }
     }
   },
-  "tableViews": {},
+  "tableViews": {
+    "contentTable": {
+      "entity": "contentItem",
+      "columns": [
+        {
+          "type": "field",
+          "field": "kind",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "xs"
+        },
+        {
+          "type": "field",
+          "field": "title",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "body",
+          "editor": "markdown",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "featured",
+          "editor": "boolean",
+          "commit": "immediate",
+          "width": "xs"
+        },
+        {
+          "type": "field",
+          "field": "slug",
+          "editor": "slug",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "href",
+          "editor": "href",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "publishedAt",
+          "editor": "date",
+          "commit": "field-commit",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "order",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end",
+          "width": "xs",
+          "format": "number"
+        }
+      ]
+    },
+    "contentPlacementTable": {
+      "entity": "contentPlacement",
+      "columns": [
+        {
+          "type": "field",
+          "field": "slot",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "kind",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "item",
+          "editor": "reference",
+          "commit": "immediate",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "media",
+          "editor": "reference",
+          "commit": "immediate",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "title",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "queryKey",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "limit",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end",
+          "width": "xs",
+          "format": "number"
+        },
+        {
+          "type": "field",
+          "field": "order",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end",
+          "width": "xs",
+          "format": "number"
+        },
+        {
+          "type": "field",
+          "field": "visible",
+          "editor": "boolean",
+          "commit": "immediate",
+          "width": "xs"
+        }
+      ]
+    },
+    "navItemTable": {
+      "entity": "navItem",
+      "columns": [
+        {
+          "type": "field",
+          "field": "item",
+          "editor": "reference",
+          "commit": "immediate",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "href",
+          "editor": "href",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "icon",
+          "editor": "icon",
+          "commit": "field-commit",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "order",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end",
+          "width": "xs",
+          "format": "number"
+        },
+        {
+          "type": "field",
+          "field": "visible",
+          "editor": "boolean",
+          "commit": "immediate",
+          "width": "xs"
+        }
+      ]
+    },
+    "mediaTable": {
+      "entity": "mediaAsset",
+      "columns": [
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "kind",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "xs"
+        },
+        {
+          "type": "field",
+          "field": "key",
+          "editor": "slug",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "alt",
+          "editor": "textarea",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "href",
+          "editor": "href",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "width",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end",
+          "width": "xs",
+          "format": "number"
+        },
+        {
+          "type": "field",
+          "field": "height",
+          "editor": "number",
+          "commit": "field-commit",
+          "align": "end",
+          "width": "xs",
+          "format": "number"
+        }
+      ]
+    },
+    "peopleTable": {
+      "entity": "person",
+      "columns": [
+        {
+          "type": "field",
+          "field": "name",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "role",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "bio",
+          "editor": "markdown",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "avatar",
+          "editor": "reference",
+          "commit": "immediate",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "href",
+          "editor": "href",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "email",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
+        }
+      ]
+    }
+  },
   "views": {
     "contentHome": {
       "type": "collection",
@@ -818,8 +1149,8 @@
       ],
       "defaultQuery": "contentAll",
       "result": {
-        "type": "list",
-        "itemView": "contentListItem"
+        "type": "table",
+        "tableView": "contentTable"
       },
       "actions": [
         {
@@ -841,17 +1172,32 @@
         "subtitle": {
           "editor": "textarea"
         },
+        "body": {
+          "editor": "markdown"
+        },
         "status": {
           "editor": "enum"
         },
         "featured": {
           "editor": "boolean"
         },
+        "publishedAt": {
+          "editor": "date"
+        },
+        "order": {
+          "editor": "number"
+        },
         "slug": {
           "editor": "slug"
         },
         "href": {
           "editor": "href"
+        },
+        "icon": {
+          "editor": "icon"
+        },
+        "color": {
+          "editor": "color"
         },
         "templateKey": {
           "editor": "slug"
@@ -861,6 +1207,276 @@
         },
         "primaryMedia": {
           "editor": "reference"
+        }
+      }
+    },
+    "contentCompositionHome": {
+      "type": "collection",
+      "label": "Composition",
+      "entity": "contentPlacement",
+      "navigation": {
+        "primary": true
+      },
+      "context": {
+        "name": "content",
+        "entity": "contentItem",
+        "query": "contentAll",
+        "labelField": "title",
+        "itemView": "contentContextItem"
+      },
+      "queries": [
+        {
+          "query": "placementsForSelectedContent",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "placementsForSelectedContent",
+      "result": {
+        "type": "table",
+        "tableView": "contentPlacementTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "contentPlacementCreate"
+        }
+      ]
+    },
+    "contentPlacementCreate": {
+      "type": "create",
+      "entity": "contentPlacement",
+      "fields": {
+        "slot": {
+          "editor": "enum"
+        },
+        "kind": {
+          "editor": "enum"
+        },
+        "item": {
+          "editor": "reference"
+        },
+        "media": {
+          "editor": "reference"
+        },
+        "title": {
+          "editor": "text"
+        },
+        "subtitle": {
+          "editor": "textarea"
+        },
+        "queryKey": {
+          "editor": "text"
+        },
+        "limit": {
+          "editor": "number"
+        },
+        "color": {
+          "editor": "color"
+        },
+        "order": {
+          "editor": "number"
+        },
+        "visible": {
+          "editor": "boolean"
+        }
+      },
+      "defaults": {
+        "parent": {
+          "kind": "context",
+          "name": "content"
+        }
+      }
+    },
+    "navigationHome": {
+      "type": "collection",
+      "label": "Navigation",
+      "entity": "navItem",
+      "navigation": {
+        "primary": true
+      },
+      "context": {
+        "name": "section",
+        "entity": "navSection",
+        "query": "navSectionsAll",
+        "labelField": "label",
+        "createView": "navSectionCreate",
+        "itemView": "navSectionContextItem"
+      },
+      "queries": [
+        {
+          "query": "navItemsForSelectedSection",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "navItemsForSelectedSection",
+      "result": {
+        "type": "table",
+        "tableView": "navItemTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "navItemCreate"
+        }
+      ]
+    },
+    "navSectionCreate": {
+      "type": "create",
+      "entity": "navSection",
+      "fields": {
+        "area": {
+          "editor": "enum"
+        },
+        "label": {
+          "editor": "text"
+        },
+        "order": {
+          "editor": "number"
+        },
+        "visible": {
+          "editor": "boolean"
+        }
+      }
+    },
+    "navItemCreate": {
+      "type": "create",
+      "entity": "navItem",
+      "fields": {
+        "item": {
+          "editor": "reference"
+        },
+        "label": {
+          "editor": "text"
+        },
+        "href": {
+          "editor": "href"
+        },
+        "icon": {
+          "editor": "icon"
+        },
+        "order": {
+          "editor": "number"
+        },
+        "visible": {
+          "editor": "boolean"
+        }
+      },
+      "defaults": {
+        "section": {
+          "kind": "context",
+          "name": "section"
+        }
+      }
+    },
+    "mediaHome": {
+      "type": "collection",
+      "label": "Media",
+      "entity": "mediaAsset",
+      "navigation": {
+        "primary": true
+      },
+      "queries": [
+        {
+          "query": "mediaAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "mediaAll",
+      "result": {
+        "type": "table",
+        "tableView": "mediaTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "mediaCreate"
+        }
+      ]
+    },
+    "mediaCreate": {
+      "type": "create",
+      "entity": "mediaAsset",
+      "fields": {
+        "label": {
+          "editor": "text"
+        },
+        "kind": {
+          "editor": "enum"
+        },
+        "key": {
+          "editor": "slug"
+        },
+        "alt": {
+          "editor": "textarea"
+        },
+        "href": {
+          "editor": "href"
+        },
+        "credit": {
+          "editor": "text"
+        },
+        "width": {
+          "editor": "number"
+        },
+        "height": {
+          "editor": "number"
+        }
+      }
+    },
+    "peopleHome": {
+      "type": "collection",
+      "label": "People",
+      "entity": "person",
+      "navigation": {
+        "primary": true
+      },
+      "queries": [
+        {
+          "query": "peopleAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "peopleAll",
+      "result": {
+        "type": "table",
+        "tableView": "peopleTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "personCreate"
+        }
+      ]
+    },
+    "personCreate": {
+      "type": "create",
+      "entity": "person",
+      "fields": {
+        "name": {
+          "editor": "text"
+        },
+        "role": {
+          "editor": "text"
+        },
+        "bio": {
+          "editor": "markdown"
+        },
+        "avatar": {
+          "editor": "reference"
+        },
+        "href": {
+          "editor": "href"
+        },
+        "email": {
+          "editor": "text"
         }
       }
     }

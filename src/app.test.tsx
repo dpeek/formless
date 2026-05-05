@@ -265,7 +265,16 @@ describe("generated collection home", () => {
 
     expect(html).toContain("<h1");
     expect(html).toContain("Content");
+    expect(html).toContain('aria-label="Collections"');
+    expect(html).toContain("Composition");
+    expect(html).toContain("Navigation");
+    expect(html).toContain("Media");
+    expect(html).toContain("People");
     expect(html).toContain("Create Content item");
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain("Body");
+    expect(html).toContain("<textarea");
+    expect(html).toContain('aria-label="Body"');
     expect(html).toContain("Home");
     expect(html).toContain("Estii");
     expect(html).toContain("Formless");
@@ -275,6 +284,81 @@ describe("generated collection home", () => {
     expect(html).toMatch(/aria-label="Published count"[^>]*>12</);
     expect(html).toMatch(/aria-label="Projects count"[^>]*>3</);
     expect(html).toMatch(/aria-label="Featured count"[^>]*>6</);
+  });
+
+  it("renders the scoped site composition workspace for selected content", () => {
+    const compositionModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "contentCompositionHome",
+    );
+
+    if (!compositionModel) {
+      throw new Error("Missing composition model.");
+    }
+
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={compositionModel.actions}
+        context={compositionModel.context}
+        entity={compositionModel.entity}
+        entityName={compositionModel.entityName}
+        onSelectContext={() => {}}
+        onSelectQuery={() => {}}
+        queryTabs={compositionModel.queryTabs}
+        result={compositionModel.result}
+        selectedContextRecordId="rec_site_content_home"
+        selectedQuery={compositionModel.queryTabs[0]}
+        today="2026-05-05"
+      />,
+    );
+
+    expect(html).toContain('aria-label="Content item records"');
+    expect(html).toContain("Home");
+    expect(html).toContain("Create Content placement");
+    expect(html).toContain("Hero");
+    expect(html).toContain("Content list");
+    expect(html).toContain("Content grid");
+    expect(html).toContain('value="Recent posts"');
+    expect(html).toContain('value="publishedPosts"');
+    expect(html).toContain('value="featuredProjects"');
+  });
+
+  it("renders the scoped site navigation workspace for selected sections", () => {
+    const navigationModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "navigationHome",
+    );
+
+    if (!navigationModel) {
+      throw new Error("Missing navigation model.");
+    }
+
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const html = renderToStaticMarkup(
+      <HomeCollection
+        actions={navigationModel.actions}
+        context={navigationModel.context}
+        entity={navigationModel.entity}
+        entityName={navigationModel.entityName}
+        onSelectContext={() => {}}
+        onSelectQuery={() => {}}
+        queryTabs={navigationModel.queryTabs}
+        result={navigationModel.result}
+        selectedContextRecordId="rec_site_nav_header"
+        selectedQuery={navigationModel.queryTabs[0]}
+        today="2026-05-05"
+      />,
+    );
+
+    expect(html).toContain('aria-label="Navigation section records"');
+    expect(html).toContain("Header");
+    expect(html).toContain("Explore");
+    expect(html).toContain("Social");
+    expect(html).toContain('aria-label="Create Navigation section"');
+    expect(html).toContain("Create Navigation item");
+    expect(html).toContain('value="Home"');
+    expect(html).toContain('value="Blog"');
+    expect(html).toContain('value="Projects"');
+    expect(html).toContain('value="Resume"');
   });
 
   it("renders only primary rate-card collection navigation", () => {
@@ -978,6 +1062,67 @@ describe("generated forms and records", () => {
       costUnit: "day",
       price: 475,
       card: "card-1",
+    });
+  });
+
+  it("resolves site scoped create defaults for placements and nav items", () => {
+    const models = selectCollectionModels(siteSourceSchema);
+    const placementAction = models
+      .find((model) => model.viewName === "contentCompositionHome")
+      ?.actions.find((action) => action.type === "create");
+    const navItemAction = models
+      .find((model) => model.viewName === "navigationHome")
+      ?.actions.find((action) => action.type === "create");
+
+    if (!placementAction || placementAction.type !== "create") {
+      throw new Error("Missing placement create action.");
+    }
+
+    if (!navItemAction || navItemAction.type !== "create") {
+      throw new Error("Missing nav item create action.");
+    }
+
+    const placementFormData = new FormData();
+    placementFormData.set("slot", "main");
+    placementFormData.set("kind", "contentList");
+    placementFormData.set("title", "Recent posts");
+    placementFormData.set("queryKey", "publishedPosts");
+    placementFormData.set("limit", "3");
+    placementFormData.set("order", "1");
+    placementFormData.set("visible", "on");
+
+    const navItemFormData = new FormData();
+    navItemFormData.set("item", "rec_site_content_blog");
+    navItemFormData.set("label", "Blog");
+    navItemFormData.set("order", "1");
+    navItemFormData.set("visible", "on");
+
+    expect(
+      resolveCreateValues(placementFormData, placementAction, {
+        today: "2026-05-05",
+        values: { content: "rec_site_content_home" },
+      }),
+    ).toMatchObject({
+      parent: "rec_site_content_home",
+      slot: "main",
+      kind: "contentList",
+      title: "Recent posts",
+      queryKey: "publishedPosts",
+      limit: 3,
+      order: 1,
+      visible: true,
+    });
+    expect(
+      resolveCreateValues(navItemFormData, navItemAction, {
+        today: "2026-05-05",
+        values: { section: "rec_site_nav_header" },
+      }),
+    ).toMatchObject({
+      section: "rec_site_nav_header",
+      item: "rec_site_content_blog",
+      label: "Blog",
+      order: 1,
+      visible: true,
     });
   });
 
