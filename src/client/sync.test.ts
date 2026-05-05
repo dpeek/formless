@@ -16,7 +16,9 @@ import {
   fetchActiveSchema,
   resetSeedData,
   resetSourceSchema,
+  requestSync,
   saveActiveSchema,
+  startPushSync,
   submitAction,
   submitCreateMutation,
   submitPatchMutation,
@@ -30,6 +32,8 @@ import type {
   SchemaResponse,
   SchemaUpdateResponse,
   StoredRecord,
+  SyncSocketClientMessage,
+  SyncSocketServerMessage,
   SyncResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
@@ -196,6 +200,242 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(1);
     expect(storeSnapshot.schema).toEqual(nextSchema);
     expect(storeSnapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
+  });
+
+  it("opens a keyed push sync socket and sends hello with local sync state", async () => {
+    const sockets = fakeSocketFactory();
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+
+    const stop = startPushSync("tasks", { socketFactory: sockets.create });
+
+    try {
+      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe("/api/tasks/sync/ws");
+
+      sockets.instances[0]?.open();
+
+      await waitFor(() => sockets.instances[0]?.sentMessages.length === 1);
+      expect(parseSocketClientMessage(sockets.instances[0]?.sentMessages[0])).toEqual({
+        type: "hello",
+        cursor: 1,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      });
+    } finally {
+      stop();
+    }
+  });
+
+  it("opens rate-card push sync on the rate schema key", () => {
+    const sockets = fakeSocketFactory();
+    const stop = startPushSync("rates", { socketFactory: sockets.create });
+
+    try {
+      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe("/api/rates/sync/ws");
+    } finally {
+      stop();
+    }
+  });
+
+  it("merges pushed sync messages into the selected local database", async () => {
+    const sockets = fakeSocketFactory();
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    const stop = startPushSync("tasks", { socketFactory: sockets.create });
+
+    try {
+      sockets.instances[0]?.open();
+
+      sockets.instances[0]?.receive({
+        type: "sync",
+        payload: {
+          changes: [change(2, "record-2", "Second")],
+          cursor: 2,
+        },
+      });
+
+      await waitFor(() => getClientStoreSnapshot().cursor === 2);
+
+      const taskSnapshot = await readLocalSnapshot("tasks");
+      const rateSnapshot = await readLocalSnapshot("rates");
+
+      expect(taskSnapshot.records.map((storedRecord) => storedRecord.id)).toEqual([
+        "record-1",
+        "record-2",
+      ]);
+      expect(rateSnapshot.records).toEqual([]);
+      expect(getClientStoreSnapshot().recordsById["record-2"]).toEqual(
+        record("record-2", "Second"),
+      );
+    } finally {
+      stop();
+    }
+  });
+
+  it("sends sync-requested over an open push sync socket", async () => {
+    const sockets = fakeSocketFactory();
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+
+    const stop = startPushSync("tasks", { socketFactory: sockets.create });
+
+    try {
+      sockets.instances[0]?.open();
+      await waitFor(() => sockets.instances[0]?.sentMessages.length === 1);
+
+      requestSync("tasks");
+
+      await waitFor(() => sockets.instances[0]?.sentMessages.length === 2);
+      expect(parseSocketClientMessage(sockets.instances[0]?.sentMessages[1])).toEqual({
+        type: "sync-requested",
+        cursor: 1,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      });
+    } finally {
+      stop();
+    }
+  });
+
+  it("polls once for sync requests while the push sync socket is not open", async () => {
+    const sockets = fakeSocketFactory();
+    const fetchedPaths: string[] = [];
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+
+    const stop = startPushSync("tasks", {
+      fetcher: async (input) => {
+        fetchedPaths.push(requestInputToString(input));
+
+        return Response.json({
+          changes: [change(2, "record-2", "Second")],
+          cursor: 2,
+        } satisfies SyncResponse);
+      },
+      socketFactory: sockets.create,
+    });
+
+    try {
+      requestSync("tasks");
+
+      await waitFor(() => fetchedPaths.length === 1);
+      expect(fetchedPaths).toEqual([
+        "/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
+      ]);
+      expect((await readLocalSnapshot("tasks")).cursor).toBe(2);
+    } finally {
+      stop();
+    }
+  });
+
+  it("falls back to polling when push sync socket construction fails", async () => {
+    const fetchedPaths: string[] = [];
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+
+    const stop = startPushSync("tasks", {
+      fetcher: async (input) => {
+        fetchedPaths.push(requestInputToString(input));
+
+        return Response.json({
+          changes: [],
+          cursor: 1,
+        } satisfies SyncResponse);
+      },
+      intervalMs: 60_000,
+      socketFactory: () => {
+        throw new Error("WebSocket unavailable.");
+      },
+    });
+
+    try {
+      await waitFor(() => fetchedPaths.length === 1);
+      expect(fetchedPaths).toEqual([
+        "/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
+      ]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("falls back to polling when the push sync connection fails before opening", async () => {
+    const sockets = fakeSocketFactory();
+    const fetchedPaths: string[] = [];
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+
+    const stop = startPushSync("tasks", {
+      fetcher: async (input) => {
+        fetchedPaths.push(requestInputToString(input));
+
+        return Response.json({
+          changes: [],
+          cursor: 1,
+        } satisfies SyncResponse);
+      },
+      intervalMs: 60_000,
+      socketFactory: sockets.create,
+    });
+
+    try {
+      sockets.instances[0]?.fail();
+
+      await waitFor(() => fetchedPaths.length === 1);
+      expect(fetchedPaths).toEqual([
+        "/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
+      ]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("reconnects push sync after an opened socket closes", async () => {
+    const sockets = fakeSocketFactory();
+    const stop = startPushSync("tasks", {
+      reconnectInitialDelayMs: 1,
+      reconnectMaxDelayMs: 2,
+      socketFactory: sockets.create,
+    });
+
+    try {
+      sockets.instances[0]?.open();
+      sockets.instances[0]?.closeFromServer();
+
+      await waitFor(() => sockets.instances.length === 2);
+      expect(new URL(sockets.instances[1]?.url ?? "").pathname).toBe("/api/tasks/sync/ws");
+    } finally {
+      stop();
+    }
   });
 
   it("merges accepted create mutations into local state", async () => {
@@ -626,6 +866,85 @@ describe("client sync", () => {
     }
   });
 });
+
+function fakeSocketFactory() {
+  const instances: FakeSyncSocket[] = [];
+
+  return {
+    instances,
+    create: (url: string) => {
+      const socket = new FakeSyncSocket(url);
+
+      instances.push(socket);
+
+      return socket;
+    },
+  };
+}
+
+class FakeSyncSocket {
+  readonly url: string;
+  readyState = 0;
+  sentMessages: string[] = [];
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+  }
+
+  send(data: string) {
+    this.sentMessages.push(data);
+  }
+
+  close() {
+    if (this.readyState === 3) {
+      return;
+    }
+
+    this.readyState = 3;
+    this.onclose?.(new Event("close") as CloseEvent);
+  }
+
+  open() {
+    this.readyState = 1;
+    this.onopen?.(new Event("open"));
+  }
+
+  fail() {
+    this.onerror?.(new Event("error"));
+  }
+
+  receive(message: SyncSocketServerMessage) {
+    this.onmessage?.({ data: JSON.stringify(message) } as MessageEvent);
+  }
+
+  closeFromServer() {
+    this.close();
+  }
+}
+
+function parseSocketClientMessage(data: string | undefined): SyncSocketClientMessage {
+  if (!data) {
+    throw new Error("Expected a socket client message.");
+  }
+
+  return JSON.parse(data) as SyncSocketClientMessage;
+}
+
+function requestInputToString(input: RequestInfo | URL) {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input.url;
+}
 
 function jsonFetcher(expectedPath: string, body: unknown): typeof fetch {
   return async (input) => {

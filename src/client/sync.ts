@@ -13,6 +13,7 @@ import {
   applySchemaSave,
   resetClientStore,
 } from "./store.ts";
+import { setSyncStatus } from "./sync-status.ts";
 import { createActionId, createMutationId } from "../shared/ids.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type {
@@ -26,11 +27,35 @@ import type {
   RecordValues,
   SchemaResponse,
   SchemaUpdateResponse,
+  SyncSocketClientMessage,
+  SyncSocketServerMessage,
   SyncResponse,
 } from "../shared/protocol.ts";
+import { isSyncSocketServerMessage } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 const DEFAULT_POLL_INTERVAL_MS = 1500;
+const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 500;
+const DEFAULT_RECONNECT_MAX_DELAY_MS = 5000;
+const WEB_SOCKET_OPEN_READY_STATE = 1;
+
+type SyncWebSocket = {
+  readyState: number;
+  send: (data: string) => void;
+  close: () => void;
+  onopen: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onclose: ((event: CloseEvent) => void) | null;
+};
+
+type StartPushSyncOptions = {
+  fetcher?: typeof fetch;
+  intervalMs?: number;
+  reconnectInitialDelayMs?: number;
+  reconnectMaxDelayMs?: number;
+  socketFactory?: (url: string) => SyncWebSocket;
+};
 
 export async function bootstrapClient(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
   const response = await fetchJson<BootstrapResponse>(fetcher, apiPath(schemaKey, "bootstrap"));
@@ -219,18 +244,221 @@ export function startPollingSync(
 
   void syncClient(schemaKey, fetcher);
 
-  const intervalId = window.setInterval(() => {
+  const intervalId = globalThis.setInterval(() => {
     void syncClient(schemaKey, fetcher);
   }, intervalMs);
 
   return () => {
     stopListening();
-    window.clearInterval(intervalId);
+    globalThis.clearInterval(intervalId);
   };
+}
+
+export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOptions = {}) {
+  const fetcher = options.fetcher ?? fetch;
+  const intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const reconnectInitialDelayMs =
+    options.reconnectInitialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS;
+  const reconnectMaxDelayMs = options.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS;
+  const socketFactory = options.socketFactory ?? createWebSocket;
+  let stopped = false;
+  let socket: SyncWebSocket | undefined;
+  let reconnectTimerId: ReturnType<typeof setTimeout> | undefined;
+  let reconnectDelayMs = reconnectInitialDelayMs;
+  let stopListening = () => {};
+  let stopPolling = () => {};
+  let usingPollingFallback = false;
+
+  function connect() {
+    if (stopped || usingPollingFallback) {
+      return;
+    }
+
+    setSyncStatus({ state: "syncing", message: "Connecting push sync..." });
+
+    let nextSocket: SyncWebSocket;
+
+    try {
+      nextSocket = socketFactory(syncWebSocketUrl(schemaKey));
+    } catch {
+      startFallback();
+      return;
+    }
+
+    socket = nextSocket;
+    let opened = false;
+
+    nextSocket.onopen = () => {
+      if (stopped || usingPollingFallback || socket !== nextSocket) {
+        return;
+      }
+
+      opened = true;
+      reconnectDelayMs = reconnectInitialDelayMs;
+      setSyncStatus({ state: "idle", message: "Push sync connected." });
+      void sendSyncSocketClientMessage(schemaKey, nextSocket, "hello").catch(() => {
+        if (!stopped && !usingPollingFallback && socket === nextSocket) {
+          nextSocket.close();
+        }
+      });
+    };
+
+    nextSocket.onmessage = (event) => {
+      if (stopped || usingPollingFallback || socket !== nextSocket) {
+        return;
+      }
+
+      void handleSyncSocketMessage(schemaKey, event).catch((error: unknown) => {
+        setSyncStatus({
+          state: "error",
+          message: error instanceof Error ? error.message : "Push sync failed.",
+        });
+      });
+    };
+
+    nextSocket.onerror = () => {
+      if (stopped || usingPollingFallback || socket !== nextSocket) {
+        return;
+      }
+
+      if (!opened) {
+        startFallback();
+        return;
+      }
+
+      setSyncStatus({ state: "syncing", message: "Push sync connection issue." });
+    };
+
+    nextSocket.onclose = () => {
+      if (stopped || usingPollingFallback || socket !== nextSocket) {
+        return;
+      }
+
+      socket = undefined;
+
+      if (!opened) {
+        startFallback();
+        return;
+      }
+
+      setSyncStatus({ state: "syncing", message: "Push sync reconnecting..." });
+      scheduleReconnect();
+    };
+  }
+
+  function scheduleReconnect() {
+    if (stopped || usingPollingFallback) {
+      return;
+    }
+
+    const delayMs = reconnectDelayMs;
+    reconnectDelayMs = Math.min(reconnectDelayMs * 2, reconnectMaxDelayMs);
+    reconnectTimerId = globalThis.setTimeout(() => {
+      reconnectTimerId = undefined;
+      connect();
+    }, delayMs);
+  }
+
+  function startFallback() {
+    if (stopped || usingPollingFallback) {
+      return;
+    }
+
+    usingPollingFallback = true;
+    socket = undefined;
+    stopListening();
+    clearReconnectTimer();
+    setSyncStatus({ state: "idle", message: "Using polling sync fallback." });
+    stopPolling = startPollingSync(schemaKey, { intervalMs, fetcher });
+  }
+
+  function requestSocketSync() {
+    const currentSocket = socket;
+
+    if (currentSocket && currentSocket.readyState === WEB_SOCKET_OPEN_READY_STATE) {
+      void sendSyncSocketClientMessage(schemaKey, currentSocket, "sync-requested").catch(() => {
+        void syncClient(schemaKey, fetcher);
+      });
+      return;
+    }
+
+    void syncClient(schemaKey, fetcher);
+  }
+
+  stopListening = listenForClientEvents(schemaKey, (event) => {
+    if (event.type === "sync-requested") {
+      requestSocketSync();
+    }
+  });
+
+  connect();
+
+  return () => {
+    stopped = true;
+    stopListening();
+    stopPolling();
+    clearReconnectTimer();
+    socket?.close();
+    socket = undefined;
+  };
+
+  function clearReconnectTimer() {
+    if (reconnectTimerId !== undefined) {
+      globalThis.clearTimeout(reconnectTimerId);
+      reconnectTimerId = undefined;
+    }
+  }
 }
 
 export function requestSync(schemaKey: SchemaKey) {
   publishClientEvent(schemaKey, "sync-requested");
+}
+
+function createWebSocket(url: string): SyncWebSocket {
+  return new WebSocket(url);
+}
+
+async function sendSyncSocketClientMessage(
+  schemaKey: SchemaKey,
+  socket: SyncWebSocket,
+  type: SyncSocketClientMessage["type"],
+) {
+  const message = {
+    type,
+    cursor: await readCursor(schemaKey),
+    schemaUpdatedAt: await readSchemaUpdatedAt(schemaKey),
+  } satisfies SyncSocketClientMessage;
+
+  socket.send(JSON.stringify(message));
+}
+
+async function handleSyncSocketMessage(schemaKey: SchemaKey, event: MessageEvent) {
+  const message = parseSyncSocketServerMessage(event.data);
+
+  if (!message) {
+    throw new Error("Malformed sync socket message.");
+  }
+
+  if (message.type === "error") {
+    setSyncStatus({ state: "error", message: message.message });
+    return;
+  }
+
+  await applySyncResponse(schemaKey, message.payload);
+}
+
+function parseSyncSocketServerMessage(data: unknown): SyncSocketServerMessage | undefined {
+  if (typeof data !== "string") {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(data) as unknown;
+
+    return isSyncSocketServerMessage(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function fetchJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
@@ -303,4 +531,14 @@ function syncUrl(schemaKey: SchemaKey, cursor: number, schemaUpdatedAt: string |
   }
 
   return `${apiPath(schemaKey, "sync")}?${params.toString()}`;
+}
+
+function syncWebSocketUrl(schemaKey: SchemaKey) {
+  const baseUrl =
+    typeof globalThis.location === "undefined" ? "http://localhost/" : globalThis.location.href;
+  const url = new URL(apiPath(schemaKey, "sync/ws"), baseUrl);
+
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+
+  return url.toString();
 }

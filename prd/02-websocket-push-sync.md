@@ -1,7 +1,7 @@
 # PRD 02: WebSocket push sync
 
 Status: active
-Current chunk: WS-04 keyed browser push client
+Current chunk: WS-05 route enablement
 Last updated: 2026-05-05
 
 ## Goal
@@ -119,8 +119,8 @@ type SyncSocketAttachment = {
 | WS-01 | shipped | none                | `src/shared/protocol.ts`, `src/client/sync.ts`         | Shared socket protocol exists and sync merge code is reusable.            |
 | WS-02 | shipped | PRD 01 SR-02, WS-01 | `src/worker/index.ts`, `src/worker/authority.ts`       | `/api/:schemaKey/sync/ws` accepts hibernatable WebSockets and catches up. |
 | WS-03 | shipped | WS-02               | `src/worker/authority.ts`, `src/worker/storage.ts`     | Committed mutations, actions, and schema writes push sync messages.       |
-| WS-04 | ready   | PRD 01 SR-04, WS-03 | `src/client/sync.ts`, `src/client/broadcast.ts`        | Client opens keyed socket, merges pushed sync messages, and falls back.   |
-| WS-05 | pending | PRD 01 SR-05, WS-04 | `src/app/routes/home.tsx`, `src/client/sync-status.ts` | Home route starts push sync for the active schema key.                    |
+| WS-04 | shipped | PRD 01 SR-04, WS-03 | `src/client/sync.ts`, `src/client/broadcast.ts`        | Client opens keyed socket, merges pushed sync messages, and falls back.   |
+| WS-05 | ready   | PRD 01 SR-05, WS-04 | `src/app/routes/home.tsx`, `src/client/sync-status.ts` | Home route starts push sync for the active schema key.                    |
 | WS-06 | pending | WS-05               | tests, Browser Use                                     | Two-tab browser smoke proves push updates and route isolation.            |
 | WS-07 | pending | WS-06               | `prd/02-websocket-push-sync.md`                        | PRD status and promote notes reflect shipped behavior.                    |
 
@@ -218,33 +218,52 @@ Blockers:
 
 - None.
 
-## Current chunk
-
 ### WS-04 keyed browser push client
+
+Status: shipped 2026-05-05.
 
 Goal: let the browser use push sync while preserving polling fallback.
 
-Tasks:
+Outcome:
 
-- [ ] Add `startPushSync(schemaKey, options)` in `src/client/sync.ts`.
-- [ ] Build socket URL from the active schema key.
-- [ ] Send `hello` with local cursor and schema timestamp on open.
-- [ ] Merge `sync` messages with `applySyncResponse`.
-- [ ] Update sync status on open, close, reconnect, and fallback.
-- [ ] Reconnect with bounded backoff.
-- [ ] Fall back to `startPollingSync` when WebSocket construction or connection fails.
-- [ ] Keep `requestSync()` working by sending `sync-requested` when the socket is open, otherwise polling once.
-- [ ] Keep broadcast channel names keyed by schema key after PRD 01 SR-04.
+- Added `startPushSync(schemaKey, options)` in `src/client/sync.ts`.
+- Push sync builds `/api/:schemaKey/sync/ws` WebSocket URLs from the active schema key.
+- Open sockets send `hello` with the local cursor and schema timestamp.
+- Server `sync` messages are validated with `isSyncSocketServerMessage`.
+- Pushed sync payloads merge through `applySyncResponse(schemaKey, response)`.
+- Sync status updates on connecting, open, reconnecting, connection issue, fallback, server error, and malformed message error.
+- Open sockets handle `requestSync(schemaKey)` by sending `sync-requested`.
+- Non-open sockets handle `requestSync(schemaKey)` by polling once.
+- WebSocket construction failures and pre-open connection failures fall back to `startPollingSync`.
+- Opened socket closes reconnect with bounded backoff.
+- Polling timers use `globalThis` so client sync tests can cover fallback without a browser `window`.
+- Broadcast channel names remain keyed as `formless:${schemaKey}`.
 
 Acceptance checks:
 
-- [ ] Client opens `/api/tasks/sync/ws` from `/tasks`.
-- [ ] Client opens `/api/rates/sync/ws` from `/rates`.
-- [ ] Pushed changes land in the selected IndexedDB database.
-- [ ] Cross-tab local events still refresh mounted stores.
-- [ ] Polling fallback still merges changes when socket fails.
+- Client opens `/api/tasks/sync/ws` for `tasks`.
+- Client opens `/api/rates/sync/ws` for `rates`.
+- Pushed changes land in the selected IndexedDB database.
+- Cross-tab local events still refresh mounted stores.
+- Polling fallback still merges changes when socket construction or connection fails.
 
-## Later chunks
+Evidence:
+
+- `src/client/sync.test.ts` covers keyed task and rate socket URLs.
+- `src/client/sync.test.ts` covers `hello` messages with local cursor and schema timestamp.
+- `src/client/sync.test.ts` covers pushed sync merge into the selected local database.
+- `src/client/sync.test.ts` covers `requestSync` over open sockets and polling when sockets are not open.
+- `src/client/sync.test.ts` covers fallback on socket construction failure and pre-open connection failure.
+- `src/client/sync.test.ts` covers reconnect after an opened socket closes.
+- Existing broadcast tests still cover same-schema refresh and other-schema isolation.
+- `bun run test` passed.
+- `bun run check` passed.
+
+Blockers:
+
+- None.
+
+## Current chunk
 
 ### WS-05 route enablement
 
@@ -264,6 +283,8 @@ Acceptance checks:
 - [ ] `/rates` opens a rate push-sync connection.
 - [ ] Switching routes closes the old schema socket.
 - [ ] The app still works when WebSocket fallback polling is active.
+
+## Later chunks
 
 ### WS-06 browser smoke and cleanup
 
@@ -344,6 +365,7 @@ Add to `doc/current.md` after ship:
 - Authority broadcast catches per-socket send failures.
 - Failed validation and mutation replay do not broadcast.
 - HTTP remains the write path.
+- Client push sync entrypoint: `startPushSync(schemaKey, options)`.
 - Browser opens push sync per active schema key.
 - Polling remains fallback.
 
@@ -355,5 +377,5 @@ Add to `doc/roadmap.md` after ship if it remains first-release scope:
 
 ## Blockers
 
-- None for WS-03.
+- None through WS-04.
 - PRD 01 SR-02 and SR-04 are shipped.
