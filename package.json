@@ -7,7 +7,7 @@
   ],
   "type": "module",
   "scripts": {
-    "check": "vp check",
+    "check": "vp check --fix",
     "test": "vp test",
     "dev": "vp dev",
     "build": "vp build",

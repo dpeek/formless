@@ -9,7 +9,7 @@ import type {
   SchemaUpdateResponse,
   SyncResponse,
 } from "../shared/protocol.ts";
-import { matchesQuery } from "../shared/query.ts";
+import type { SchemaKey } from "../shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
 import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -17,9 +17,11 @@ import { createWorkerHarness } from "./miniflare-test.ts";
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 let harness: Harness;
+let currentSchemaKey: SchemaKey;
 const rateCardSchema = parseAppSchema(rawRateCardSchema);
 
 beforeEach(async () => {
+  currentSchemaKey = "tasks";
   harness = await createWorkerHarness("src/worker/index.ts", {
     FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
   });
@@ -36,9 +38,59 @@ describe("authority", () => {
     expect(body).toEqual({
       schema: appSchema,
       schemaUpdatedAt: expect.any(String),
-      records: [],
-      cursor: 0,
+      records: taskSeedRecords,
+      cursor: taskSeedRecords.length,
     });
+  });
+
+  it("returns the rate-card source schema from the rates bootstrap path", async () => {
+    useSchemaApp("rates");
+
+    const body = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(body).toEqual({
+      schema: rateCardSchema,
+      schemaUpdatedAt: expect.any(String),
+      records: rateCardSeedRecords,
+      cursor: rateCardSeedRecords.length,
+    });
+  });
+
+  it("returns source seed changes when sync initializes fresh storage", async () => {
+    const body = await getJson<SyncResponse>("/api/sync?after=0");
+
+    expect(body.cursor).toBe(taskSeedRecords.length);
+    expect(body.changes.map((change) => change.mutationId)).toEqual(
+      taskSeedRecords.map((record) => `seed-task:${record.id}`),
+    );
+    expect(body.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
+  });
+
+  it("rejects unknown schema keys and old unkeyed API paths", async () => {
+    await expectNotFound("/api/missing/bootstrap");
+    await expectNotFound("/api/bootstrap");
+    await expectNotFound("/api/schema");
+    await expectNotFound("/api/dev/reset");
+  });
+
+  it("isolates records and mutation replay by schema key", async () => {
+    const task = await postMutation("mutation-shared", { title: "First", done: false });
+
+    useSchemaApp("rates");
+    const resource = await postMutationForEntity("mutation-shared", "resource", {
+      name: "Designer",
+    });
+    const ratesBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    useSchemaApp("tasks");
+    const tasksBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(task.mutationId).toBe(resource.mutationId);
+    expect(tasksBootstrap.schema).toEqual(appSchema);
+    expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
+    expect(ratesBootstrap.schema).toEqual(rateCardSchema);
+    expect(ratesBootstrap.records).toContainEqual(resource.record);
+    expect(ratesBootstrap.records.every((record) => record.entity !== "task")).toBe(true);
   });
 
   it("returns query, item view, and collection definitions from bootstrap", async () => {
@@ -118,7 +170,7 @@ describe("authority", () => {
 
     expect(update.schema).toEqual(parsedNextSchema);
     expect(bootstrap.schema).toEqual(parsedNextSchema);
-    expect(bootstrap.records).toEqual([created.record]);
+    expect(bootstrap.records).toEqual([...taskSeedRecords, created.record]);
   });
 
   it("rejects query references that point at missing fields through the schema route", async () => {
@@ -243,35 +295,45 @@ describe("authority", () => {
     expect(rates).toHaveLength(cardIds.size * resourceIds.size);
   });
 
-  it("resets remote data to the task seed schema and sample records", async () => {
-    const nextSchema = {
-      version: 1,
-      entities: {
-        task: {
-          label: "Planner task",
-          fields: {
-            ...appSchema.entities.task.fields,
-            notes: { type: "text", required: false },
-          },
-          mutations: defaultMutations(),
-        },
-      },
-      queries: defaultQueries(),
-      itemViews: defaultItemViews(),
-      tableViews: {},
-      views: defaultViews(),
-    } satisfies AppSchema;
+  it("resets only the schema to the source schema while preserving records and cursor", async () => {
+    const created = await postMutation("mutation-reset-schema-record", {
+      title: "Keep me",
+      done: false,
+    });
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskLabel("Planner task"),
+    });
+    const beforeReset = await getJson<BootstrapResponse>("/api/bootstrap");
 
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
-    await postMutation("mutation-1", { title: "First", done: false });
+    const reset = await postJson<BootstrapResponse>("/api/reset/schema", {});
 
-    const reset = await postJson<BootstrapResponse>("/api/dev/reset", {});
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const activeTasks = reset.records.filter((record) => record.values.done === false);
-    const completedTasks = reset.records.filter((record) => record.values.done === true);
-    const overdueTasks = reset.records.filter((record) =>
-      matchesQuery(record, appSchema.queries.taskOverdue.expression, { today: "2026-05-02" }),
+    expect(beforeReset.schema.entities.task?.label).toBe("Planner task");
+    expect(reset.schema).toEqual(appSchema);
+    expect(reset.records).toEqual([...taskSeedRecords, created.record]);
+    expect(reset.cursor).toBe(beforeReset.cursor);
+  });
+
+  it("rejects source schema resets when existing records violate source constraints", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithEstimateNumber({ min: -10 }),
+    });
+    await postMutation("mutation-negative-estimate", {
+      title: "Negative",
+      estimate: -1,
+    });
+
+    await expectError(
+      "/api/reset/schema",
+      {},
+      'Cannot change number constraints for "task.estimate"',
     );
+  });
+
+  it("resets seed data to source schema, records, and seeded changes", async () => {
+    await postMutation("mutation-before-seed-reset", { title: "Temporary", done: false });
+
+    const reset = await postJson<BootstrapResponse>("/api/reset/seed", {});
+    const sync = await getJson<SyncResponse>("/api/sync?after=0");
 
     expect(reset).toEqual({
       schema: appSchema,
@@ -279,43 +341,6 @@ describe("authority", () => {
       records: taskSeedRecords,
       cursor: taskSeedRecords.length,
     });
-    expect(activeTasks.map((record) => record.id)).toEqual([
-      "rec_task_overdue",
-      "rec_task_today",
-      "rec_task_later",
-      "rec_task_backlog",
-    ]);
-    expect(completedTasks.map((record) => record.id)).toEqual(["rec_task_completed"]);
-    expect(overdueTasks.map((record) => record.id)).toEqual(["rec_task_overdue"]);
-    expect(bootstrap).toEqual(reset);
-  });
-
-  it("resets remote data to the rate-card sample schema and seed records", async () => {
-    await postMutation("mutation-1", { title: "First", done: false });
-
-    const reset = await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
-    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const recordsByEntity = countRecordsByEntity(reset.records);
-
-    expect(reset).toEqual({
-      schema: rateCardSchema,
-      schemaUpdatedAt: expect.any(String),
-      records: rateCardSeedRecords,
-      cursor: rateCardSeedRecords.length,
-    });
-    expect(recordsByEntity).toEqual({
-      card: 2,
-      rate: 10,
-      resource: 5,
-    });
-    expect(bootstrap).toEqual(reset);
-  });
-
-  it("returns seeded create changes from sync after reset", async () => {
-    await postJson<BootstrapResponse>("/api/dev/reset", {});
-
-    const sync = await getJson<SyncResponse>("/api/sync?after=0");
-
     expect(sync.cursor).toBe(taskSeedRecords.length);
     expect(sync.changes).toHaveLength(taskSeedRecords.length);
     expect(sync.changes.map((change) => change.seq)).toEqual([1, 2, 3, 4, 5]);
@@ -326,20 +351,28 @@ describe("authority", () => {
     expect(sync.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
   });
 
-  it("clears records when switching reset targets", async () => {
-    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+  it("resets seed data for one schema key without touching another", async () => {
+    const task = await postMutation("mutation-task-before-rate-reset", {
+      title: "Route local",
+      done: false,
+    });
 
-    const reset = await postJson<BootstrapResponse>("/api/dev/reset", {});
-    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+    useSchemaApp("rates");
+    await postMutationForEntity("mutation-rate-local-resource", "resource", {
+      name: "Temporary resource",
+    });
+    const rateReset = await postJson<BootstrapResponse>("/api/reset/seed", {});
 
-    expect(reset.records).toEqual(taskSeedRecords);
-    expect(reset.records.every((record) => record.entity === "task")).toBe(true);
-    expect(sync.cursor).toBe(taskSeedRecords.length);
-    expect(sync.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
+    useSchemaApp("tasks");
+    const tasksBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(rateReset.records).toEqual(rateCardSeedRecords);
+    expect(rateReset.cursor).toBe(rateCardSeedRecords.length);
+    expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
   });
 
   it("applies expanded rate-card defaults when creating sample records", async () => {
-    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+    useSchemaApp("rates");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: rateCardSchemaWithoutAfterCreateHooks(),
     });
@@ -463,11 +496,12 @@ describe("authority", () => {
   });
 
   it("creates missing rate join records through the rate-card action", async () => {
-    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+    useSchemaApp("rates");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: rateCardSchemaWithoutAfterCreateHooks(),
     });
 
+    const resources = await createRateResources(5);
     const card = await postMutationForEntity("mutation-card", "card", { name: "Enterprise" });
     const action = await postActionForEntity(
       "action-regenerate-rates",
@@ -488,24 +522,28 @@ describe("authority", () => {
     const createdRates = action.changes.map((change) => change.payload);
 
     expect(card.changes).toHaveLength(1);
-    expect(action.changes).toHaveLength(5);
+    expect(action.changes).toHaveLength(20);
     expect(action.changes.every((change) => change.op === "action")).toBe(true);
-    expect(createdRates.map((record) => record.values.card)).toEqual(
-      Array.from({ length: 5 }, () => card.record.id),
+    expect(
+      new Set(createdRates.map((record) => `${record.values.resource}:${record.values.card}`)).size,
+    ).toBe(20);
+    expect(createdRates).toContainEqual(
+      expect.objectContaining({
+        values: {
+          resource: resources[0]?.record.id,
+          card: card.record.id,
+          cost: 0,
+          costUnit: "day",
+          price: 0,
+          priceSet: true,
+          currency: "usd",
+        },
+      }),
     );
-    expect(createdRates[0]?.values).toEqual({
-      resource: "rec_resource_designer",
-      card: card.record.id,
-      cost: 0,
-      costUnit: "day",
-      price: 0,
-      priceSet: true,
-      currency: "usd",
-    });
     expect(countRecordsByEntity(bootstrap.records)).toEqual({
       card: 3,
-      rate: 15,
-      resource: 5,
+      rate: 30,
+      resource: 10,
     });
     expect(replay).toEqual(action);
     expect(noOp).toEqual({
@@ -516,7 +554,8 @@ describe("authority", () => {
   });
 
   it("runs rate-card afterCreate hooks for card creates through mutation changes", async () => {
-    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+    useSchemaApp("rates");
+    await createRateResources(5);
 
     const body = {
       mutationId: "mutation-card-lifecycle",
@@ -532,23 +571,24 @@ describe("authority", () => {
 
     expect(first.record.entity).toBe("card");
     expect(first.record.id).toBe(first.changes[0]?.recordId);
-    expect(first.changes).toHaveLength(6);
+    expect(first.changes).toHaveLength(11);
     expect(first.changes[0]?.op).toBe("create");
     expect(first.changes.slice(1).every((change) => change.op === "action")).toBe(true);
     expect(createdRates.map((record) => record.values.card)).toEqual(
-      Array.from({ length: 5 }, () => first.record.id),
+      Array.from({ length: 10 }, () => first.record.id),
     );
-    expect(sync.changes.filter((change) => change.mutationId === body.mutationId)).toHaveLength(6);
+    expect(sync.changes.filter((change) => change.mutationId === body.mutationId)).toHaveLength(11);
     expect(countRecordsByEntity(bootstrap.records)).toEqual({
       card: 3,
-      rate: 15,
-      resource: 5,
+      rate: 30,
+      resource: 10,
     });
     expect(replay).toEqual(first);
   });
 
   it("runs rate-card afterCreate hooks for resource creates through mutation changes", async () => {
-    await postJson<BootstrapResponse>("/api/dev/reset", { schema: "rate-card" });
+    useSchemaApp("rates");
+    const cards = await createRateCards(2);
 
     const resource = await postMutationForEntity("mutation-resource-lifecycle", "resource", {
       name: "Producer",
@@ -557,52 +597,30 @@ describe("authority", () => {
     const createdRates = resource.changes.slice(1).map((change) => change.payload);
 
     expect(resource.record.entity).toBe("resource");
-    expect(resource.changes).toHaveLength(3);
+    expect(resource.changes).toHaveLength(5);
     expect(resource.changes[0]?.op).toBe("create");
     expect(resource.changes.slice(1).every((change) => change.op === "action")).toBe(true);
     expect(createdRates.map((record) => record.values.resource)).toEqual(
-      Array.from({ length: 2 }, () => resource.record.id),
+      Array.from({ length: 4 }, () => resource.record.id),
     );
     expect(new Set(createdRates.map((record) => record.values.card))).toEqual(
-      new Set(["rec_card_default", "rec_card_premium"]),
+      new Set(["rec_card_default", "rec_card_premium", ...cards.map((card) => card.record.id)]),
     );
     expect(countRecordsByEntity(bootstrap.records)).toEqual({
-      card: 2,
-      rate: 12,
+      card: 4,
+      rate: 24,
       resource: 6,
     });
   });
 
-  it("rejects unknown dev reset schemas", async () => {
-    await expectError(
-      "/api/dev/reset",
-      {
-        schema: "missing",
-      },
-      'Unknown reset schema "missing".',
-    );
-  });
-
   it("uses the stored schema when validating mutations", async () => {
-    const nextSchema = {
-      version: 1,
-      entities: {
-        task: {
-          label: "Planner task",
-          fields: {
-            ...appSchema.entities.task.fields,
-            dueDate: { type: "date", required: true },
-          },
-          mutations: defaultMutations(),
-        },
-      },
-      queries: defaultQueries(),
-      itemViews: defaultItemViews(),
-      tableViews: {},
-      views: defaultViews(),
-    } satisfies AppSchema;
-
-    await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations({
+        create: { enabled: false },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      }),
+    });
 
     await expectError(
       "/api/mutations",
@@ -612,7 +630,7 @@ describe("authority", () => {
         op: "create",
         values: { title: "First" },
       },
-      'Field "dueDate" is required.',
+      'Create mutations are disabled for entity "task".',
     );
   });
 
@@ -700,9 +718,9 @@ describe("authority", () => {
     await postMutation("mutation-1", { title: "First", done: false });
     const second = await postMutation("mutation-2", { title: "Second", done: true });
 
-    const body = await getJson<SyncResponse>("/api/sync?after=1");
+    const body = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 1}`);
 
-    expect(body.cursor).toBe(2);
+    expect(body.cursor).toBe(taskSeedRecords.length + 2);
     expect(body.changes).toHaveLength(1);
     expect(body.changes[0]).toMatchObject({
       mutationId: "mutation-2",
@@ -917,7 +935,7 @@ describe("authority", () => {
     );
 
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    expect(bootstrap.records).toEqual([created.record]);
+    expect(bootstrap.records).toEqual([...taskSeedRecords, created.record]);
   });
 
   it("clears optional enum fields when patched to an empty value", async () => {
@@ -1038,18 +1056,10 @@ describe("authority", () => {
     });
     await postMutation("mutation-task", { title: "Scoped", project: project.record.id });
 
-    const required = await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskProjectReference({ required: true }),
-    });
     const displayChange = await postJson<SchemaUpdateResponse>("/api/schema", {
-      schema: schemaWithTaskProjectReference({ required: true, displayField: "code" }),
+      schema: schemaWithTaskProjectReference({ required: false, displayField: "code" }),
     });
 
-    expect(required.schema.entities.task?.fields.project).toMatchObject({
-      type: "reference",
-      required: true,
-      to: "project",
-    });
     expect(displayChange.schema.entities.task?.fields.project).toMatchObject({
       type: "reference",
       displayField: "code",
@@ -1059,7 +1069,7 @@ describe("authority", () => {
       "/api/schema",
       {
         schema: schemaWithTaskProjectReference({
-          required: true,
+          required: false,
           to: "milestone",
           includeMilestone: true,
         }),
@@ -1130,7 +1140,7 @@ describe("authority", () => {
     expect(update.schema.entities.task?.fields.priority).toEqual(
       parseAppSchema(nextSchema).entities.task?.fields.priority,
     );
-    expect(bootstrap.records).toEqual([created.record]);
+    expect(bootstrap.records).toEqual([...taskSeedRecords, created.record]);
   });
 
   it("patches an existing record and returns patch changes from sync", async () => {
@@ -1142,7 +1152,7 @@ describe("authority", () => {
       recordId: created.record.id,
       values: { done: true, dueDate: "2026-05-01" },
     });
-    const sync = await getJson<SyncResponse>("/api/sync?after=1");
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 1}`);
 
     expect(patched.record.values).toEqual({
       title: "First",
@@ -1228,7 +1238,7 @@ describe("authority", () => {
 
     const first = await postJson<MutationResponse>("/api/mutations", body);
     const replay = await postJson<MutationResponse>("/api/mutations", body);
-    const sync = await getJson<SyncResponse>("/api/sync?after=0");
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length}`);
 
     expect(replay).toEqual(first);
     expect(sync.changes).toHaveLength(2);
@@ -1260,44 +1270,49 @@ describe("authority", () => {
   });
 
   it("tombstones completed records through clearCompletedTasks", async () => {
+    const seedCompleted = getSeedCompletedTask();
     const completed = await postMutation("mutation-1", { title: "Done", done: true });
     const active = await postMutation("mutation-2", { title: "Open", done: false });
 
     const action = await postAction("action-1", "clearCompletedTasks");
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const sync = await getJson<SyncResponse>("/api/sync?after=2");
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 2}`);
 
     expect(action.actionId).toBe("action-1");
-    expect(action.cursor).toBe(3);
-    expect(action.changes).toHaveLength(1);
-    expect(action.changes[0]).toMatchObject({
-      mutationId: "action-1",
-      op: "action",
-      recordId: completed.record.id,
-      payload: {
-        id: completed.record.id,
-        deletedAt: expect.any(String),
-      },
-    });
-    expect(bootstrap.records).toEqual([
+    expect(action.cursor).toBe(taskSeedRecords.length + 4);
+    expect(action.changes).toHaveLength(2);
+    expect(action.changes.map((change) => change.recordId).sort()).toEqual(
+      [seedCompleted.id, completed.record.id].sort(),
+    );
+    expect(action.changes.every((change) => change.mutationId === "action-1")).toBe(true);
+    expect(action.changes.every((change) => change.op === "action")).toBe(true);
+    expect(bootstrap.records).toContainEqual(
+      expect.objectContaining({ id: seedCompleted.id, deletedAt: expect.any(String) }),
+    );
+    expect(bootstrap.records).toContainEqual(
       expect.objectContaining({ id: completed.record.id, deletedAt: expect.any(String) }),
-      active.record,
-    ]);
+    );
+    expect(bootstrap.records).toContainEqual(active.record);
     expect(sync.changes).toEqual(action.changes);
   });
 
   it("replays clearCompletedTasks action IDs without duplicating changes", async () => {
-    await postMutation("mutation-1", { title: "Done", done: true });
+    const seedCompleted = getSeedCompletedTask();
+    const completed = await postMutation("mutation-1", { title: "Done", done: true });
 
     const first = await postAction("action-1", "clearCompletedTasks");
     const replay = await postAction("action-1", "clearCompletedTasks");
     const sync = await getJson<SyncResponse>("/api/sync?after=0");
 
     expect(replay).toEqual(first);
-    expect(sync.changes.filter((change) => change.op === "action")).toHaveLength(1);
+    expect(first.changes.map((change) => change.recordId).sort()).toEqual(
+      [seedCompleted.id, completed.record.id].sort(),
+    );
+    expect(sync.changes.filter((change) => change.op === "action")).toHaveLength(2);
   });
 
   it("replays action IDs without selecting newly matching records", async () => {
+    const seedCompleted = getSeedCompletedTask();
     const firstCompleted = await postMutation("mutation-1", { title: "Done", done: true });
 
     const first = await postAction("action-1", "clearCompletedTasks");
@@ -1306,15 +1321,22 @@ describe("authority", () => {
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
 
     expect(replay).toEqual(first);
-    expect(first.changes.map((change) => change.recordId)).toEqual([firstCompleted.record.id]);
-    expect(bootstrap.records).toEqual([
+    expect(first.changes.map((change) => change.recordId).sort()).toEqual(
+      [seedCompleted.id, firstCompleted.record.id].sort(),
+    );
+    expect(bootstrap.records).toContainEqual(
+      expect.objectContaining({ id: seedCompleted.id, deletedAt: expect.any(String) }),
+    );
+    expect(bootstrap.records).toContainEqual(
       expect.objectContaining({ id: firstCompleted.record.id, deletedAt: expect.any(String) }),
-      secondCompleted.record,
-    ]);
+    );
+    expect(bootstrap.records).toContainEqual(secondCompleted.record);
   });
 
   it("records no-op action executions for idempotent replay", async () => {
+    await postAction("setup-clear-completed", "clearCompletedTasks");
     await postMutation("mutation-1", { title: "Open", done: false });
+    const beforeNoOp = await getJson<BootstrapResponse>("/api/bootstrap");
 
     const first = await postAction("action-1", "clearCompletedTasks");
     const replay = await postAction("action-1", "clearCompletedTasks");
@@ -1322,7 +1344,7 @@ describe("authority", () => {
     expect(first).toEqual({
       actionId: "action-1",
       changes: [],
-      cursor: 1,
+      cursor: beforeNoOp.cursor,
     });
     expect(replay).toEqual(first);
   });
@@ -1770,7 +1792,7 @@ describe("authority", () => {
   });
 
   it("rejects bad JSON request bodies", async () => {
-    const response = await harness.fetch("/api/mutations", {
+    const response = await harness.fetch(apiPath("/api/mutations"), {
       body: "{",
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -1830,6 +1852,16 @@ function countRecordsByEntity(records: Array<{ entity: string }>) {
   }, {});
 }
 
+function getSeedCompletedTask() {
+  const completed = taskSeedRecords.find((record) => record.values.done === true);
+
+  if (!completed) {
+    throw new Error("Task seed records must include a completed task.");
+  }
+
+  return completed;
+}
+
 function schemaWithPriorityEnum(
   enumOverrides: Partial<{
     required: boolean;
@@ -1865,6 +1897,19 @@ function schemaWithPriorityEnum(
     tableViews: {},
     views: defaultViews(),
   };
+}
+
+function schemaWithTaskLabel(label: string) {
+  return {
+    ...appSchema,
+    entities: {
+      ...appSchema.entities,
+      task: {
+        ...appSchema.entities.task,
+        label,
+      },
+    },
+  } satisfies AppSchema;
 }
 
 function schemaWithMutations(mutations: unknown) {
@@ -2260,6 +2305,46 @@ function defaultCollectionView(): Extract<AppSchema["views"][string], { type: "c
   };
 }
 
+function useSchemaApp(schemaKey: SchemaKey) {
+  currentSchemaKey = schemaKey;
+}
+
+function apiPath(path: string, schemaKey = currentSchemaKey) {
+  if (!path.startsWith("/api/")) {
+    throw new Error(`Expected API path, received "${path}".`);
+  }
+
+  return `/api/${schemaKey}${path.slice("/api".length)}`;
+}
+
+async function createRateResources(count: number) {
+  const resources: MutationResponse[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    resources.push(
+      await postMutationForEntity(`mutation-resource-${index + 1}`, "resource", {
+        name: `Resource ${index + 1}`,
+      }),
+    );
+  }
+
+  return resources;
+}
+
+async function createRateCards(count: number) {
+  const cards: MutationResponse[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    cards.push(
+      await postMutationForEntity(`mutation-card-${index + 1}`, "card", {
+        name: `Card ${index + 1}`,
+      }),
+    );
+  }
+
+  return cards;
+}
+
 async function postMutation(mutationId: string, values: Record<string, unknown>) {
   return postMutationForEntity(mutationId, "task", values);
 }
@@ -2269,7 +2354,7 @@ async function postMutationForEntity(
   entity: string,
   values: Record<string, unknown>,
 ) {
-  const response = await harness.fetch("/api/mutations", {
+  const response = await harness.fetch(apiPath("/api/mutations"), {
     body: JSON.stringify({
       mutationId,
       entity,
@@ -2298,7 +2383,7 @@ async function postActionForEntity(actionId: string, entity: string, action: str
 }
 
 async function getJson<T>(path: string) {
-  const response = await harness.fetch(path);
+  const response = await harness.fetch(apiPath(path));
 
   expect(response.status).toBe(200);
 
@@ -2306,7 +2391,7 @@ async function getJson<T>(path: string) {
 }
 
 async function postJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(path, {
+  const response = await harness.fetch(apiPath(path), {
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
     method: "POST",
@@ -2318,7 +2403,7 @@ async function postJson<T>(path: string, body: unknown) {
 }
 
 async function expectError(path: string, body: unknown, message: string) {
-  const response = await harness.fetch(path, {
+  const response = await harness.fetch(apiPath(path), {
     body: body === undefined ? undefined : JSON.stringify(body),
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     method: body === undefined ? "GET" : "POST",
@@ -2328,4 +2413,10 @@ async function expectError(path: string, body: unknown, message: string) {
   expect((await response.json()) as { error: string }).toEqual({
     error: expect.stringContaining(message),
   });
+}
+
+async function expectNotFound(path: string) {
+  const response = await harness.fetch(path);
+
+  expect(response.status).toBe(404);
 }

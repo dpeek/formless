@@ -17,15 +17,16 @@ import type {
 import {
   createStoredRecord,
   ensureStorageTables,
-  getActiveSchema,
   getBootstrapRecords,
   getChangesAfter,
   getCurrentCursor,
   getMutationResponseById,
   getStoredRecord,
+  initializeStorageFromSource,
   patchStoredRecord,
-  resetStorage,
-  type StorageResetSeed,
+  resetStorageSchemaToSource,
+  resetStorageToSourceSeed,
+  type StorageSource,
   writeActiveSchema,
 } from "./storage.ts";
 import { executeCreateAfterCreateHooks, executeEntityAction } from "./actions.ts";
@@ -35,11 +36,7 @@ import {
 } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import type { Env } from "./index.ts";
-import { getWorkerSchemaAppDefinition } from "./schema-apps.ts";
-
-const taskApp = getWorkerSchemaAppDefinition("tasks");
-const rateApp = getWorkerSchemaAppDefinition("rates");
-const seedSchema = taskApp.sourceSchema;
+import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -49,10 +46,17 @@ export class FormlessAuthority extends DurableObject<Env> {
 
   async fetch(request: Request) {
     const url = new URL(request.url);
+    const route = parseAuthorityRoute(url.pathname);
+
+    if (!route) {
+      return jsonResponse({ error: "Not found." }, 404);
+    }
+
+    const source = storageSourceFromApp(route.app);
 
     try {
-      if (request.method === "GET" && url.pathname === "/api/bootstrap") {
-        const { schema, updatedAt } = getActiveSchema(this.ctx.storage, seedSchema);
+      if (request.method === "GET" && route.path === "/bootstrap") {
+        const { schema, updatedAt } = initializeStorageFromSource(this.ctx.storage, source);
 
         return jsonResponse({
           schema,
@@ -62,24 +66,24 @@ export class FormlessAuthority extends DurableObject<Env> {
         });
       }
 
-      if (request.method === "GET" && url.pathname === "/api/schema") {
-        const { schema, updatedAt } = getActiveSchema(this.ctx.storage, seedSchema);
+      if (request.method === "GET" && route.path === "/schema") {
+        const { schema, updatedAt } = initializeStorageFromSource(this.ctx.storage, source);
 
         return jsonResponse({ schema, updatedAt });
       }
 
-      if (request.method === "POST" && url.pathname === "/api/schema") {
-        const currentSchema = getActiveSchema(this.ctx.storage, seedSchema).schema;
+      if (request.method === "POST" && route.path === "/schema") {
+        const currentSchema = initializeStorageFromSource(this.ctx.storage, source).schema;
         const records = getBootstrapRecords(this.ctx.storage);
         const nextSchema = validateSchemaUpdate(await readJson(request), currentSchema, records);
 
         return jsonResponse(writeActiveSchema(this.ctx.storage, nextSchema));
       }
 
-      if (request.method === "GET" && url.pathname === "/api/sync") {
+      if (request.method === "GET" && route.path === "/sync") {
         const after = parseCursor(url.searchParams.get("after"));
+        const { schema, updatedAt } = initializeStorageFromSource(this.ctx.storage, source);
         const changes = getChangesAfter(this.ctx.storage, after);
-        const { schema, updatedAt } = getActiveSchema(this.ctx.storage, seedSchema);
         const clientSchemaUpdatedAt = url.searchParams.get("schemaUpdatedAt");
         const schemaFields =
           clientSchemaUpdatedAt === updatedAt ? {} : { schema, schemaUpdatedAt: updatedAt };
@@ -91,8 +95,8 @@ export class FormlessAuthority extends DurableObject<Env> {
         });
       }
 
-      if (request.method === "POST" && url.pathname === "/api/mutations") {
-        const { schema } = getActiveSchema(this.ctx.storage, seedSchema);
+      if (request.method === "POST" && route.path === "/mutations") {
+        const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const validatedMutation = validateMutation(
           await readJson(request),
           schema,
@@ -140,25 +144,27 @@ export class FormlessAuthority extends DurableObject<Env> {
         );
       }
 
-      if (request.method === "POST" && url.pathname === "/api/actions") {
-        const { schema } = getActiveSchema(this.ctx.storage, seedSchema);
+      if (request.method === "POST" && route.path === "/actions") {
+        const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const action = validateActionRequest(await readJson(request), schema);
 
         return jsonResponse(executeEntityAction(this.ctx.storage, action, schema));
       }
 
-      if (request.method === "POST" && url.pathname === "/api/dev/reset") {
-        const { schema, updatedAt } = resetStorage(
+      if (request.method === "POST" && route.path === "/reset/schema") {
+        const { schema, updatedAt } = resetStorageSchemaToSource(
           this.ctx.storage,
-          validateDevResetRequest(await readJson(request)),
+          source,
+          validateSourceSchemaReset,
         );
 
-        return jsonResponse({
-          schema,
-          schemaUpdatedAt: updatedAt,
-          records: getBootstrapRecords(this.ctx.storage),
-          cursor: getCurrentCursor(this.ctx.storage),
-        });
+        return jsonResponse(bootstrapResponse(this.ctx.storage, schema, updatedAt));
+      }
+
+      if (request.method === "POST" && route.path === "/reset/seed") {
+        const { schema, updatedAt } = resetStorageToSourceSeed(this.ctx.storage, source);
+
+        return jsonResponse(bootstrapResponse(this.ctx.storage, schema, updatedAt));
       }
 
       return jsonResponse({ error: "Not found." }, 404);
@@ -172,32 +178,52 @@ export class FormlessAuthority extends DurableObject<Env> {
   }
 }
 
-function validateDevResetRequest(value: unknown): StorageResetSeed {
-  if (!isRecord(value)) {
-    throw new BadRequestError("Reset request must be an object.");
-  }
-
-  if (value.schema === undefined || value.schema === "default") {
-    return {
-      schema: taskApp.sourceSchema,
-      records: taskApp.seedRecords,
-      changeMutationPrefix: taskApp.seedChangeMutationPrefix,
-    };
-  }
-
-  if (value.schema === "rate-card") {
-    return {
-      schema: rateApp.sourceSchema,
-      records: rateApp.seedRecords,
-      changeMutationPrefix: rateApp.seedChangeMutationPrefix,
-    };
-  }
-
-  throw new BadRequestError(`Unknown reset schema "${formatResetSchemaValue(value.schema)}".`);
+function storageSourceFromApp(app: WorkerSchemaAppDefinition): StorageSource {
+  return {
+    schema: app.sourceSchema,
+    records: app.seedRecords,
+    changeMutationPrefix: app.seedChangeMutationPrefix,
+  };
 }
 
-function formatResetSchemaValue(value: unknown) {
-  return typeof value === "string" ? value : "non-string";
+function bootstrapResponse(
+  storage: DurableObjectStorage,
+  schema: AppSchema,
+  schemaUpdatedAt: string,
+) {
+  return {
+    schema,
+    schemaUpdatedAt,
+    records: getBootstrapRecords(storage),
+    cursor: getCurrentCursor(storage),
+  };
+}
+
+function parseAuthorityRoute(
+  pathname: string,
+): { app: WorkerSchemaAppDefinition; path: string } | undefined {
+  const [apiSegment, schemaKey, ...routeSegments] = pathname.split("/").filter(Boolean);
+
+  if (apiSegment !== "api" || !schemaKey || routeSegments.length === 0) {
+    return undefined;
+  }
+
+  const app = findWorkerSchemaAppDefinition(schemaKey);
+
+  if (!app) {
+    return undefined;
+  }
+
+  return { app, path: `/${routeSegments.join("/")}` };
+}
+
+function validateSourceSchemaReset(
+  currentSchema: AppSchema,
+  sourceSchema: AppSchema,
+  records: StoredRecord[],
+) {
+  validateCompatibleSchemaChange(currentSchema, sourceSchema, records);
+  assertExistingRecordsSatisfyUniqueConstraints(sourceSchema, records);
 }
 
 function validateActionRequest(value: unknown, schema: AppSchema): ActionRequest {

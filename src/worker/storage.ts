@@ -54,6 +54,18 @@ export type StorageResetSeed = {
   changeMutationPrefix?: string;
 };
 
+export type StorageSource = {
+  schema: AppSchema;
+  records: StoredRecord[];
+  changeMutationPrefix: string;
+};
+
+export type StorageSchemaResetValidator = (
+  currentSchema: AppSchema,
+  sourceSchema: AppSchema,
+  records: StoredRecord[],
+) => void;
+
 export type CreateMutationCausedRecordWriter = (
   entity: string,
   recordValuesToCreate: RecordValues[],
@@ -123,6 +135,21 @@ export function getActiveSchema(
   });
 }
 
+export function initializeStorageFromSource(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+): StoredSchema {
+  return storage.transactionSync(() => {
+    const existing = readStoredSchema(storage);
+
+    if (existing) {
+      return existing;
+    }
+
+    return writeSourceData(storage, source);
+  });
+}
+
 export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSchema): StoredSchema {
   const updatedAt = nowIsoString();
 
@@ -141,24 +168,60 @@ export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSche
   return { schema, updatedAt };
 }
 
-export function resetStorage(storage: DurableObjectStorage, seed: StorageResetSeed): StoredSchema {
+export function resetStorageSchemaToSource(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+  validate: StorageSchemaResetValidator,
+): StoredSchema {
   return storage.transactionSync(() => {
-    storage.sql.exec("DELETE FROM changes");
-    storage.sql.exec("DELETE FROM records");
-    storage.sql.exec("DELETE FROM action_executions");
-    storage.sql.exec("DELETE FROM app_schema");
-    storage.sql.exec("DELETE FROM sqlite_sequence WHERE name = 'changes'");
+    const current = readStoredSchema(storage);
 
-    const storedSchema = writeActiveSchema(storage, seed.schema);
-    const records = seed.records ?? [];
-    const changeMutationPrefix = seed.changeMutationPrefix ?? "seed";
-
-    for (const record of records) {
-      insertSeedRecord(storage, record, changeMutationPrefix);
+    if (!current) {
+      return writeSourceData(storage, source);
     }
 
-    return storedSchema;
+    const records = getBootstrapRecords(storage);
+    validate(current.schema, source.schema, records);
+
+    return writeActiveSchema(storage, source.schema);
   });
+}
+
+export function resetStorageToSourceSeed(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+): StoredSchema {
+  return storage.transactionSync(() => {
+    clearStorage(storage);
+
+    return writeSourceData(storage, source);
+  });
+}
+
+export function resetStorage(storage: DurableObjectStorage, seed: StorageResetSeed): StoredSchema {
+  return resetStorageToSourceSeed(storage, {
+    schema: seed.schema,
+    records: seed.records ?? [],
+    changeMutationPrefix: seed.changeMutationPrefix ?? "seed",
+  });
+}
+
+function clearStorage(storage: DurableObjectStorage) {
+  storage.sql.exec("DELETE FROM changes");
+  storage.sql.exec("DELETE FROM records");
+  storage.sql.exec("DELETE FROM action_executions");
+  storage.sql.exec("DELETE FROM app_schema");
+  storage.sql.exec("DELETE FROM sqlite_sequence WHERE name = 'changes'");
+}
+
+function writeSourceData(storage: DurableObjectStorage, source: StorageSource): StoredSchema {
+  const storedSchema = writeActiveSchema(storage, source.schema);
+
+  for (const record of source.records) {
+    insertSeedRecord(storage, record, source.changeMutationPrefix);
+  }
+
+  return storedSchema;
 }
 
 function insertSeedRecord(

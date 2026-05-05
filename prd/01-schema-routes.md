@@ -1,7 +1,7 @@
 # PRD 01: Schema-backed app routes
 
 Status: active
-Current chunk: SR-02 path-keyed worker dispatch
+Current chunk: SR-04 keyed client persistence and sync
 Last updated: 2026-05-05
 
 ## Goal
@@ -73,9 +73,9 @@ The result should feel like two schema-backed apps, not one global app whose sch
 | ID    | Status  | Depends on | Main files                                                                 | Acceptance                                                                      |
 | ----- | ------- | ---------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | SR-01 | shipped | none       | `schema/apps/**`, `src/shared/schema-apps.ts`, `src/worker/schema-apps.ts` | Source schemas and seed files are app-keyed and parse.                          |
-| SR-02 | ready   | SR-01      | `src/worker/index.ts`, `src/worker/authority.ts`                           | `/api/tasks/*` and `/api/rates/*` dispatch to isolated authority instances.     |
-| SR-03 | pending | SR-02      | `src/worker/storage.ts`, `src/worker/authority.ts`                         | Fresh bootstrap and reset endpoints use source schema plus source seed records. |
-| SR-04 | pending | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
+| SR-02 | shipped | SR-01      | `src/worker/index.ts`, `src/worker/authority.ts`                           | `/api/tasks/*` and `/api/rates/*` dispatch to isolated authority instances.     |
+| SR-03 | shipped | SR-02      | `src/worker/storage.ts`, `src/worker/authority.ts`                         | Fresh bootstrap and reset endpoints use source schema plus source seed records. |
+| SR-04 | ready   | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
 | SR-05 | pending | SR-04      | `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`      | `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema` render the right app.  |
 | SR-06 | pending | SR-05      | `src/app/generated/**`, `src/client/sync.ts`                               | Generated create, patch, and action calls submit to the active schema key.      |
 | SR-07 | pending | SR-05      | `src/app/routes/schema.tsx`, `src/app/dev-actions.tsx`                     | Schema editing and reset controls are route-scoped.                             |
@@ -105,78 +105,54 @@ Evidence:
 - `bun run test` passed.
 - `bun run check` passed.
 
-## Current chunk
-
 ### SR-02 path-keyed worker dispatch
 
-Goal: route `/api/tasks/*` and `/api/rates/*` to isolated authority instances.
+Status: shipped 2026-05-05.
 
-Target API paths:
+Outcome:
 
-```text
-GET  /api/:schemaKey/bootstrap
-GET  /api/:schemaKey/sync?after=0&schemaUpdatedAt=...
-GET  /api/:schemaKey/schema
-POST /api/:schemaKey/schema
-POST /api/:schemaKey/mutations
-POST /api/:schemaKey/actions
-POST /api/:schemaKey/reset/schema
-POST /api/:schemaKey/reset/seed
-```
+- `src/worker/index.ts` parses `/api/:schemaKey/*`.
+- Unknown schema keys and unkeyed `/api/*` paths return `404`.
+- Durable Object ids resolve with `idFromName(schemaKey)`.
+- `src/worker/authority.ts` parses the validated key and uses that app's source schema.
+- `/api/tasks/bootstrap` returns the task schema.
+- `/api/rates/bootstrap` returns the rate-card schema.
+- Task and rate records stay isolated across separate authority instances.
+- Mutation replay is isolated across separate authority instances.
+- Mutation, action, schema validation, and sync behavior stay unchanged inside one authority instance.
+- Reset endpoints are not implemented here. SR-03 owns source seed/reset semantics.
 
-Tasks:
+Evidence:
 
-- [ ] Parse `/api/:schemaKey/*` in `src/worker/index.ts`.
-- [ ] Reject unknown schema keys with `404`.
-- [ ] Resolve Durable Object ids with `idFromName(schemaKey)`.
-- [ ] Forward only validated schema keys to `FormlessAuthority`.
-- [ ] Make the authority operate with the selected app definition.
-- [ ] Replace hard-coded task/rate schema globals in `src/worker/authority.ts`.
-- [ ] Keep mutation, action, schema validation, and sync behavior unchanged inside one authority instance.
-
-Acceptance checks:
-
-- [ ] `/api/tasks/bootstrap` returns the task schema.
-- [ ] `/api/rates/bootstrap` returns the rate-card schema.
-- [ ] Mutating `/api/tasks` does not affect `/api/rates`.
-- [ ] Mutating `/api/rates` does not affect `/api/tasks`.
-- [ ] Unknown schema key returns `404`.
-- [ ] Old unkeyed API paths return `404` unless a compatibility redirect is explicitly needed.
-
-## Later chunks
+- `src/worker/authority.test.ts` covers keyed task bootstrap, keyed rate bootstrap, unknown key `404`, old unkeyed path `404`, and cross-key mutation isolation.
+- `bun run test` passed.
+- `bun run check` passed.
 
 ### SR-03 source bootstrap and reset semantics
 
-Goal: first route open and reset controls use source schema plus source seed records.
+Status: shipped 2026-05-05.
 
-Rules:
+Outcome:
 
-- Fresh storage writes source schema and seed records in one transaction.
-- Reset schema restores source schema and preserves records.
-- Reset seed data restores source schema and source seed records.
-- Reset seed data clears records, changes, action executions, and mutation replay history for that app.
-- Reset seed data does not affect another schema key.
+- Added `initializeStorageFromSource(storage, source)` in `src/worker/storage.ts`.
+- Added `resetStorageToSourceSeed(storage, source)` in `src/worker/storage.ts`.
+- Added `resetStorageSchemaToSource(storage, source, validate)` in `src/worker/storage.ts`.
+- Fresh keyed authority access writes source schema plus source seed records.
+- Added `POST /api/:schemaKey/reset/schema`.
+- Added `POST /api/:schemaKey/reset/seed`.
+- Reset schema restores the source schema, validates compatibility and source unique constraints, and preserves records and cursor.
+- Reset seed clears records, changes, action executions, and mutation replay history for that schema key.
+- Reset seed restores source schema, source records, and seeded create change rows.
+- `/api/dev/reset` remains gone from keyed and unkeyed authority paths.
+- Resetting `/rates` seed data does not affect `/tasks`.
 
-Tasks:
+Evidence:
 
-- [ ] Add `initializeStorageFromSource(storage, source)`.
-- [ ] Add `resetStorageToSourceSeed(storage, source)`.
-- [ ] Add `resetStorageSchemaToSource(storage, source, validate)`.
-- [ ] Add `POST /api/:schemaKey/reset/schema`.
-- [ ] Add `POST /api/:schemaKey/reset/seed`.
-- [ ] Remove request-body schema selection from `/api/dev/reset`.
-- [ ] Reuse `validateCompatibleSchemaChange` for reset schema.
-- [ ] Validate source unique constraints against existing records during reset schema.
+- `src/worker/authority.test.ts` covers fresh task seed bootstrap, fresh rate seed bootstrap, reset schema preserve behavior, reset schema rejection, reset seed restore behavior, seed change sync from cursor `0`, and cross-key reset isolation.
+- `bun run test` passed.
+- `bun run check` passed.
 
-Acceptance checks:
-
-- [ ] Fresh `/api/tasks/bootstrap` includes task seed records.
-- [ ] Fresh `/api/rates/bootstrap` includes rate seed records.
-- [ ] Reset schema preserves records and cursor.
-- [ ] Reset schema rejects incompatible existing records.
-- [ ] Reset seed restores schema, records, seeded changes, and cursor.
-- [ ] Reset seed in `/rates` does not affect `/tasks`.
-- [ ] Sync after reset seed returns seed create changes from cursor `0`.
+## Current chunk
 
 ### SR-04 keyed client persistence and sync
 
@@ -207,6 +183,8 @@ Acceptance checks:
 - [ ] Client calls use `/api/tasks/*` or `/api/rates/*`.
 - [ ] Reset seed clears only the selected local DB.
 - [ ] Broadcast events for one schema key do not refresh the other route.
+
+## Later chunks
 
 ### SR-05 route-keyed app shell
 
