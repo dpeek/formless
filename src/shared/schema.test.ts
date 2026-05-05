@@ -1798,14 +1798,7 @@ describe("personal site sample schema", () => {
   it("parses the generic content model, relationships, and source app view", () => {
     const schema = parseAppSchema(rawSiteSchema);
 
-    expect(Object.keys(schema.entities)).toEqual([
-      "contentItem",
-      "mediaAsset",
-      "person",
-      "navSection",
-      "navItem",
-      "contentPlacement",
-    ]);
+    expect(Object.keys(schema.entities)).toEqual(["contentItem", "mediaAsset", "contentPlacement"]);
     expect(schema.entities.contentItem?.fields.kind).toEqual({
       type: "enum",
       required: true,
@@ -1816,8 +1809,14 @@ describe("personal site sample schema", () => {
         project: { label: "Project" },
         link: { label: "Link" },
         block: { label: "Block" },
+        group: { label: "Group" },
         profile: { label: "Profile" },
       },
+    });
+    expect(schema.entities.contentItem?.fields.label).toEqual({
+      type: "text",
+      required: false,
+      label: "Label",
     });
     expect(schema.entities.contentItem?.fields.body).toEqual({
       type: "text",
@@ -1840,44 +1839,11 @@ describe("personal site sample schema", () => {
       to: "mediaAsset",
       displayField: "label",
     });
-    expect(schema.entities.contentItem?.fields.author).toEqual({
-      type: "reference",
-      required: false,
-      label: "Author",
-      to: "person",
-      displayField: "name",
-    });
     expect(schema.entities.mediaAsset?.fields.alt).toEqual({
       type: "text",
       required: true,
       label: "Alt text",
       format: "longText",
-    });
-    expect(schema.entities.person?.fields.bio).toEqual({
-      type: "text",
-      required: false,
-      label: "Bio",
-      format: "markdown",
-    });
-    expect(schema.entities.navSection?.fields.area).toMatchObject({
-      type: "enum",
-      required: true,
-      values: {
-        header: { label: "Header" },
-        footer: { label: "Footer" },
-      },
-    });
-    expect(schema.entities.navItem?.fields.section).toMatchObject({
-      type: "reference",
-      required: true,
-      to: "navSection",
-      displayField: "label",
-    });
-    expect(schema.entities.navItem?.fields.item).toMatchObject({
-      type: "reference",
-      required: false,
-      to: "contentItem",
-      displayField: "title",
     });
     expect(schema.entities.contentPlacement?.fields.parent).toMatchObject({
       type: "reference",
@@ -1889,16 +1855,18 @@ describe("personal site sample schema", () => {
       type: "enum",
       required: true,
       values: {
+        header: { label: "Header" },
+        footer: { label: "Footer" },
         hero: { label: "Hero" },
         markdown: { label: "Markdown" },
+        link: { label: "Link" },
         contentCard: { label: "Content card" },
         contentList: { label: "Content list" },
         contentGrid: { label: "Content grid" },
         media: { label: "Media" },
         cta: { label: "Call to action" },
         subscribe: { label: "Subscribe" },
-        author: { label: "Author" },
-        nav: { label: "Navigation" },
+        custom: { label: "Custom" },
       },
     });
     expect(schema.entities.contentPlacement?.fields.queryKey).toMatchObject({
@@ -1914,13 +1882,11 @@ describe("personal site sample schema", () => {
       "contentProjects",
       "contentLinks",
       "contentBlocks",
+      "contentGroups",
       "featuredContent",
       "publishedPosts",
       "featuredProjects",
       "mediaAll",
-      "peopleAll",
-      "navSectionsAll",
-      "navItemsForSelectedSection",
       "placementsForSelectedContent",
     ]);
     expect(schema.queries.publishedPosts?.expression).toMatchObject({
@@ -1930,10 +1896,6 @@ describe("personal site sample schema", () => {
         { ref: { kind: "value", name: "status" }, op: "eq", value: "published" },
       ],
     });
-    expect(schema.queries.navItemsForSelectedSection?.expression).toMatchObject({
-      ref: { kind: "value", name: "section" },
-      value: { kind: "context", name: "section" },
-    });
     expect(schema.queries.placementsForSelectedContent?.expression).toMatchObject({
       ref: { kind: "value", name: "parent" },
       value: { kind: "context", name: "content" },
@@ -1941,9 +1903,7 @@ describe("personal site sample schema", () => {
     expect(Object.keys(schema.tableViews)).toEqual([
       "contentTable",
       "contentPlacementTable",
-      "navItemTable",
       "mediaTable",
-      "peopleTable",
     ]);
     expect(schema.views.contentHome).toMatchObject({
       type: "collection",
@@ -1958,13 +1918,12 @@ describe("personal site sample schema", () => {
       entity: "contentItem",
       fields: {
         body: { editor: "markdown" },
-        author: { editor: "reference" },
         primaryMedia: { editor: "reference" },
       },
     });
     expect(schema.views.contentCompositionHome).toMatchObject({
       type: "collection",
-      label: "Composition",
+      label: "Blocks",
       entity: "contentPlacement",
       navigation: { primary: true },
       context: {
@@ -1984,29 +1943,6 @@ describe("personal site sample schema", () => {
         parent: { kind: "context", name: "content" },
       },
     });
-    expect(schema.views.navigationHome).toMatchObject({
-      type: "collection",
-      label: "Navigation",
-      entity: "navItem",
-      navigation: { primary: true },
-      context: {
-        name: "section",
-        entity: "navSection",
-        query: "navSectionsAll",
-        labelField: "label",
-        createView: "navSectionCreate",
-        itemView: "navSectionContextItem",
-      },
-      result: { type: "table", tableView: "navItemTable" },
-      actions: [{ type: "create", createView: "navItemCreate" }],
-    });
-    expect(schema.views.navItemCreate).toMatchObject({
-      type: "create",
-      entity: "navItem",
-      defaults: {
-        section: { kind: "context", name: "section" },
-      },
-    });
     expect(schema.views.mediaHome).toMatchObject({
       type: "collection",
       label: "Media",
@@ -2014,14 +1950,6 @@ describe("personal site sample schema", () => {
       navigation: { primary: true },
       result: { type: "table", tableView: "mediaTable" },
       actions: [{ type: "create", createView: "mediaCreate" }],
-    });
-    expect(schema.views.peopleHome).toMatchObject({
-      type: "collection",
-      label: "People",
-      entity: "person",
-      navigation: { primary: true },
-      result: { type: "table", tableView: "peopleTable" },
-      actions: [{ type: "create", createView: "personCreate" }],
     });
   });
 });

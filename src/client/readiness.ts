@@ -17,10 +17,6 @@ export function getRecordReadinessWarnings(
     return getContentItemWarnings(record);
   }
 
-  if (record.entity === "navItem") {
-    return getNavItemWarnings(record, recordsById);
-  }
-
   if (record.entity === "mediaAsset") {
     return getMediaAssetWarnings(record);
   }
@@ -63,50 +59,12 @@ function getContentItemWarnings(record: StoredRecord): RecordReadinessWarning[] 
         message: "Published post should have a published date.",
       });
     }
-
-    if (!hasTextValue(record, "author")) {
-      warnings.push({
-        code: "published-post-author",
-        message: "Published post should have an author.",
-      });
-    }
   }
 
   if (kind === "project" && !hasTextValue(record, "subtitle") && !hasTextValue(record, "body")) {
     warnings.push({
       code: "published-project-summary",
       message: "Published project should include a summary or body.",
-    });
-  }
-
-  return warnings;
-}
-
-function getNavItemWarnings(
-  record: StoredRecord,
-  recordsById: Record<string, StoredRecord>,
-): RecordReadinessWarning[] {
-  if (record.values.visible === false) {
-    return [];
-  }
-
-  const hasHref = hasTextValue(record, "href");
-  const itemValue = stringValue(record, "item");
-  const hasItem = itemValue !== "";
-  const itemResolves = hasLiveReference(record, "item", recordsById, "contentItem");
-  const warnings: RecordReadinessWarning[] = [];
-
-  if (!hasHref && !itemResolves) {
-    warnings.push({
-      code: "nav-item-target",
-      message: "Navigation item should point to a content item or link.",
-    });
-  }
-
-  if (hasItem && !itemResolves) {
-    warnings.push({
-      code: "nav-item-missing-content",
-      message: "Navigation item points to a missing content item.",
     });
   }
 
@@ -148,7 +106,7 @@ function getContentPlacementWarnings(
     });
   }
 
-  if (["markdown", "contentCard", "cta", "author"].includes(kind)) {
+  if (["header", "footer", "markdown", "link", "contentCard", "cta"].includes(kind)) {
     warnWhenMissingReference(warnings, record, recordsById, "item", "contentItem", {
       code: `placement-${kind}-item`,
       message: `${placementKindLabel(kind)} placement should point to a content item.`,

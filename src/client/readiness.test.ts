@@ -16,7 +16,7 @@ describe("record readiness warnings", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("warns when published posts are missing route, body, date, or author data", () => {
+  it("warns when published posts are missing route, body, or date data", () => {
     const warnings = getRecordReadinessWarnings(
       record("post-1", "contentItem", {
         kind: "post",
@@ -30,7 +30,6 @@ describe("record readiness warnings", () => {
       "published-content-route",
       "published-post-body",
       "published-post-date",
-      "published-post-author",
     ]);
   });
 
@@ -53,10 +52,12 @@ describe("record readiness warnings", () => {
     ]);
   });
 
-  it("warns when navigation items do not resolve to content or a link", () => {
+  it("warns when link placements do not resolve to content", () => {
     const warnings = getRecordReadinessWarnings(
-      record("nav-1", "navItem", {
-        section: "section-1",
+      record("placement-1", "contentPlacement", {
+        parent: "group-1",
+        slot: "header",
+        kind: "link",
         item: "missing-content",
         order: 0,
         visible: true,
@@ -64,20 +65,28 @@ describe("record readiness warnings", () => {
       {},
     );
 
-    expect(warnings.map((warning) => warning.code)).toEqual([
-      "nav-item-target",
-      "nav-item-missing-content",
-    ]);
+    expect(warnings.map((warning) => warning.code)).toEqual(["placement-link-item"]);
   });
 
-  it("accepts navigation items with an external link", () => {
+  it("accepts link placements with a live content item", () => {
     const warnings = getRecordReadinessWarnings(
-      record("nav-1", "navItem", {
-        section: "section-1",
-        href: "https://example.com",
+      record("placement-1", "contentPlacement", {
+        parent: "group-1",
+        slot: "header",
+        kind: "link",
+        item: "link-1",
         order: 0,
         visible: true,
       }),
+      {
+        "link-1": record("link-1", "contentItem", {
+          kind: "link",
+          title: "Example",
+          href: "https://example.com",
+          status: "published",
+          featured: false,
+        }),
+      },
     );
 
     expect(warnings).toEqual([]);

@@ -14,19 +14,6 @@
     "createdAt": "2026-05-05T00:00:01.000Z"
   },
   {
-    "id": "rec_site_person_owner",
-    "entity": "person",
-    "values": {
-      "name": "Site owner",
-      "role": "Product engineer",
-      "bio": "Builds small, durable software systems for content-heavy products.",
-      "avatar": "rec_site_media_avatar",
-      "href": "/resume",
-      "email": "hello@example.com"
-    },
-    "createdAt": "2026-05-05T00:00:02.000Z"
-  },
-  {
     "id": "rec_site_content_profile_intro",
     "entity": "contentItem",
     "values": {
@@ -38,8 +25,7 @@
       "featured": true,
       "order": 0,
       "templateKey": "profile-intro",
-      "primaryMedia": "rec_site_media_avatar",
-      "author": "rec_site_person_owner"
+      "primaryMedia": "rec_site_media_avatar"
     },
     "createdAt": "2026-05-05T00:00:03.000Z"
   },
@@ -57,8 +43,7 @@
       "publishedAt": "2026-05-05",
       "order": 0,
       "templateKey": "home",
-      "primaryMedia": "rec_site_media_avatar",
-      "author": "rec_site_person_owner"
+      "primaryMedia": "rec_site_media_avatar"
     },
     "createdAt": "2026-05-05T00:00:04.000Z"
   },
@@ -74,8 +59,7 @@
       "featured": false,
       "publishedAt": "2026-05-05",
       "order": 1,
-      "templateKey": "post-index",
-      "author": "rec_site_person_owner"
+      "templateKey": "post-index"
     },
     "createdAt": "2026-05-05T00:00:05.000Z"
   },
@@ -92,8 +76,7 @@
       "featured": false,
       "publishedAt": "2026-05-05",
       "order": 2,
-      "templateKey": "resume",
-      "author": "rec_site_person_owner"
+      "templateKey": "resume"
     },
     "createdAt": "2026-05-05T00:00:06.000Z"
   },
@@ -109,8 +92,7 @@
       "featured": false,
       "publishedAt": "2026-05-05",
       "order": 3,
-      "templateKey": "project-index",
-      "author": "rec_site_person_owner"
+      "templateKey": "project-index"
     },
     "createdAt": "2026-05-05T00:00:07.000Z"
   },
@@ -127,8 +109,7 @@
       "featured": true,
       "publishedAt": "2026-05-05",
       "order": 0,
-      "templateKey": "project",
-      "author": "rec_site_person_owner"
+      "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:08.000Z"
   },
@@ -145,8 +126,7 @@
       "featured": true,
       "publishedAt": "2026-05-05",
       "order": 1,
-      "templateKey": "project",
-      "author": "rec_site_person_owner"
+      "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:09.000Z"
   },
@@ -163,8 +143,7 @@
       "featured": true,
       "publishedAt": "2026-05-05",
       "order": 2,
-      "templateKey": "project",
-      "author": "rec_site_person_owner"
+      "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:10.000Z"
   },
@@ -181,8 +160,7 @@
       "featured": true,
       "publishedAt": "2026-05-05",
       "order": 0,
-      "templateKey": "post",
-      "author": "rec_site_person_owner"
+      "templateKey": "post"
     },
     "createdAt": "2026-05-05T00:00:11.000Z"
   },
@@ -198,8 +176,7 @@
       "status": "draft",
       "featured": false,
       "order": 1,
-      "templateKey": "post",
-      "author": "rec_site_person_owner"
+      "templateKey": "post"
     },
     "createdAt": "2026-05-05T00:00:12.000Z"
   },
@@ -246,131 +223,154 @@
     "createdAt": "2026-05-05T00:00:15.000Z"
   },
   {
-    "id": "rec_site_nav_header",
-    "entity": "navSection",
+    "id": "rec_site_content_group_header",
+    "entity": "contentItem",
     "values": {
-      "area": "header",
+      "kind": "group",
+      "title": "Header",
       "label": "Header",
+      "status": "published",
+      "featured": false,
       "order": 0,
-      "visible": true
+      "templateKey": "header"
     },
     "createdAt": "2026-05-05T00:00:16.000Z"
   },
   {
-    "id": "rec_site_nav_footer_main",
-    "entity": "navSection",
+    "id": "rec_site_content_group_footer_main",
+    "entity": "contentItem",
     "values": {
-      "area": "footer",
+      "kind": "group",
+      "title": "Explore",
       "label": "Explore",
+      "status": "published",
+      "featured": false,
       "order": 0,
-      "visible": true
+      "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:17.000Z"
   },
   {
-    "id": "rec_site_nav_footer_social",
-    "entity": "navSection",
+    "id": "rec_site_content_group_footer_social",
+    "entity": "contentItem",
     "values": {
-      "area": "footer",
+      "kind": "group",
+      "title": "Social",
       "label": "Social",
+      "status": "published",
+      "featured": false,
       "order": 1,
-      "visible": true
+      "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:18.000Z"
   },
   {
-    "id": "rec_site_nav_header_home",
-    "entity": "navItem",
+    "id": "rec_site_place_header_home",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_header",
+      "parent": "rec_site_content_group_header",
+      "slot": "header",
+      "kind": "link",
       "item": "rec_site_content_home",
-      "label": "Home",
+      "title": "Home",
       "order": 0,
       "visible": true
     },
     "createdAt": "2026-05-05T00:00:19.000Z"
   },
   {
-    "id": "rec_site_nav_header_blog",
-    "entity": "navItem",
+    "id": "rec_site_place_header_blog",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_header",
+      "parent": "rec_site_content_group_header",
+      "slot": "header",
+      "kind": "link",
       "item": "rec_site_content_blog",
-      "label": "Blog",
+      "title": "Blog",
       "order": 1,
       "visible": true
     },
     "createdAt": "2026-05-05T00:00:20.000Z"
   },
   {
-    "id": "rec_site_nav_header_projects",
-    "entity": "navItem",
+    "id": "rec_site_place_header_projects",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_header",
+      "parent": "rec_site_content_group_header",
+      "slot": "header",
+      "kind": "link",
       "item": "rec_site_content_projects",
-      "label": "Projects",
+      "title": "Projects",
       "order": 2,
       "visible": true
     },
     "createdAt": "2026-05-05T00:00:21.000Z"
   },
   {
-    "id": "rec_site_nav_header_resume",
-    "entity": "navItem",
+    "id": "rec_site_place_header_resume",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_header",
+      "parent": "rec_site_content_group_header",
+      "slot": "header",
+      "kind": "link",
       "item": "rec_site_content_resume",
-      "label": "Resume",
+      "title": "Resume",
       "order": 3,
       "visible": true
     },
     "createdAt": "2026-05-05T00:00:22.000Z"
   },
   {
-    "id": "rec_site_nav_footer_projects",
-    "entity": "navItem",
+    "id": "rec_site_place_footer_projects",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_footer_main",
+      "parent": "rec_site_content_group_footer_main",
+      "slot": "footer",
+      "kind": "link",
       "item": "rec_site_content_projects",
-      "label": "Projects",
+      "title": "Projects",
       "order": 0,
       "visible": true
     },
     "createdAt": "2026-05-05T00:00:23.000Z"
   },
   {
-    "id": "rec_site_nav_footer_resume",
-    "entity": "navItem",
+    "id": "rec_site_place_footer_resume",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_footer_main",
+      "parent": "rec_site_content_group_footer_main",
+      "slot": "footer",
+      "kind": "link",
       "item": "rec_site_content_resume",
-      "label": "Resume",
+      "title": "Resume",
       "order": 1,
       "visible": true
     },
     "createdAt": "2026-05-05T00:00:24.000Z"
   },
   {
-    "id": "rec_site_nav_footer_github",
-    "entity": "navItem",
+    "id": "rec_site_place_footer_github",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_footer_social",
+      "parent": "rec_site_content_group_footer_social",
+      "slot": "footer",
+      "kind": "link",
       "item": "rec_site_content_link_github",
-      "label": "GitHub",
-      "icon": "github",
+      "title": "GitHub",
       "order": 0,
       "visible": true
     },
     "createdAt": "2026-05-05T00:00:25.000Z"
   },
   {
-    "id": "rec_site_nav_footer_linkedin",
-    "entity": "navItem",
+    "id": "rec_site_place_footer_linkedin",
+    "entity": "contentPlacement",
     "values": {
-      "section": "rec_site_nav_footer_social",
+      "parent": "rec_site_content_group_footer_social",
+      "slot": "footer",
+      "kind": "link",
       "item": "rec_site_content_link_linkedin",
-      "label": "LinkedIn",
-      "icon": "linkedin",
+      "title": "LinkedIn",
       "order": 1,
       "visible": true
     },
@@ -437,14 +437,14 @@
     "createdAt": "2026-05-05T00:00:30.000Z"
   },
   {
-    "id": "rec_site_place_post_author",
+    "id": "rec_site_place_post_profile",
     "entity": "contentPlacement",
     "values": {
       "parent": "rec_site_content_post_shipped_schema",
       "slot": "meta",
-      "kind": "author",
+      "kind": "contentCard",
       "item": "rec_site_content_profile_intro",
-      "title": "Author",
+      "title": "Profile",
       "order": 1,
       "visible": true
     },

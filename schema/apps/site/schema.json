@@ -24,6 +24,9 @@
             "block": {
               "label": "Block"
             },
+            "group": {
+              "label": "Group"
+            },
             "profile": {
               "label": "Profile"
             }
@@ -33,6 +36,11 @@
           "type": "text",
           "required": true,
           "label": "Title"
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "label": "Label"
         },
         "subtitle": {
           "type": "text",
@@ -117,13 +125,6 @@
           "label": "Primary media",
           "to": "mediaAsset",
           "displayField": "label"
-        },
-        "author": {
-          "type": "reference",
-          "required": false,
-          "label": "Author",
-          "to": "person",
-          "displayField": "name"
         }
       },
       "mutations": {
@@ -212,167 +213,8 @@
         }
       }
     },
-    "person": {
-      "label": "Person",
-      "fields": {
-        "name": {
-          "type": "text",
-          "required": true,
-          "label": "Name"
-        },
-        "role": {
-          "type": "text",
-          "required": false,
-          "label": "Role"
-        },
-        "bio": {
-          "type": "text",
-          "required": false,
-          "label": "Bio",
-          "format": "markdown"
-        },
-        "avatar": {
-          "type": "reference",
-          "required": false,
-          "label": "Avatar",
-          "to": "mediaAsset",
-          "displayField": "label"
-        },
-        "href": {
-          "type": "text",
-          "required": false,
-          "label": "Link",
-          "format": "href"
-        },
-        "email": {
-          "type": "text",
-          "required": false,
-          "label": "Email"
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      }
-    },
-    "navSection": {
-      "label": "Navigation section",
-      "fields": {
-        "area": {
-          "type": "enum",
-          "required": true,
-          "label": "Area",
-          "values": {
-            "header": {
-              "label": "Header"
-            },
-            "footer": {
-              "label": "Footer"
-            }
-          }
-        },
-        "label": {
-          "type": "text",
-          "required": true,
-          "label": "Label"
-        },
-        "order": {
-          "type": "number",
-          "required": true,
-          "label": "Order",
-          "default": 0,
-          "integer": true,
-          "min": 0
-        },
-        "visible": {
-          "type": "boolean",
-          "required": true,
-          "label": "Visible",
-          "default": true
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      }
-    },
-    "navItem": {
-      "label": "Navigation item",
-      "fields": {
-        "section": {
-          "type": "reference",
-          "required": true,
-          "label": "Section",
-          "to": "navSection",
-          "displayField": "label"
-        },
-        "item": {
-          "type": "reference",
-          "required": false,
-          "label": "Content item",
-          "to": "contentItem",
-          "displayField": "title"
-        },
-        "label": {
-          "type": "text",
-          "required": false,
-          "label": "Label"
-        },
-        "href": {
-          "type": "text",
-          "required": false,
-          "label": "Link",
-          "format": "href"
-        },
-        "icon": {
-          "type": "text",
-          "required": false,
-          "label": "Icon",
-          "format": "icon"
-        },
-        "order": {
-          "type": "number",
-          "required": true,
-          "label": "Order",
-          "default": 0,
-          "integer": true,
-          "min": 0
-        },
-        "visible": {
-          "type": "boolean",
-          "required": true,
-          "label": "Visible",
-          "default": true
-        }
-      },
-      "mutations": {
-        "create": {
-          "enabled": true
-        },
-        "patch": {
-          "enabled": true
-        },
-        "delete": {
-          "enabled": false
-        }
-      }
-    },
     "contentPlacement": {
-      "label": "Content placement",
+      "label": "Block placement",
       "fields": {
         "parent": {
           "type": "reference",
@@ -386,6 +228,9 @@
           "required": true,
           "label": "Slot",
           "values": {
+            "header": {
+              "label": "Header"
+            },
             "main": {
               "label": "Main"
             },
@@ -405,11 +250,20 @@
           "required": true,
           "label": "Kind",
           "values": {
+            "header": {
+              "label": "Header"
+            },
+            "footer": {
+              "label": "Footer"
+            },
             "hero": {
               "label": "Hero"
             },
             "markdown": {
               "label": "Markdown"
+            },
+            "link": {
+              "label": "Link"
             },
             "contentCard": {
               "label": "Content card"
@@ -429,11 +283,8 @@
             "subscribe": {
               "label": "Subscribe"
             },
-            "author": {
-              "label": "Author"
-            },
-            "nav": {
-              "label": "Navigation"
+            "custom": {
+              "label": "Custom"
             }
           }
         },
@@ -607,6 +458,19 @@
         "value": "block"
       }
     },
+    "contentGroups": {
+      "label": "Groups",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "kind"
+        },
+        "op": "eq",
+        "value": "group"
+      }
+    },
     "featuredContent": {
       "label": "Featured",
       "entity": "contentItem",
@@ -681,36 +545,6 @@
         "kind": "all"
       }
     },
-    "peopleAll": {
-      "label": "All",
-      "entity": "person",
-      "expression": {
-        "kind": "all"
-      }
-    },
-    "navSectionsAll": {
-      "label": "All",
-      "entity": "navSection",
-      "expression": {
-        "kind": "all"
-      }
-    },
-    "navItemsForSelectedSection": {
-      "label": "Selected section",
-      "entity": "navItem",
-      "expression": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "section"
-        },
-        "op": "eq",
-        "value": {
-          "kind": "context",
-          "name": "section"
-        }
-      }
-    },
     "placementsForSelectedContent": {
       "label": "Selected content",
       "entity": "contentPlacement",
@@ -766,23 +600,6 @@
           "commit": "immediate"
         }
       }
-    },
-    "navSectionContextItem": {
-      "entity": "navSection",
-      "fields": {
-        "area": {
-          "editor": "enum",
-          "commit": "immediate"
-        },
-        "order": {
-          "editor": "number",
-          "commit": "field-commit"
-        },
-        "visible": {
-          "editor": "boolean",
-          "commit": "immediate"
-        }
-      }
     }
   },
   "tableViews": {
@@ -802,6 +619,13 @@
           "editor": "text",
           "commit": "field-commit",
           "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "md"
         },
         {
           "type": "field",
@@ -928,55 +752,6 @@
         }
       ]
     },
-    "navItemTable": {
-      "entity": "navItem",
-      "columns": [
-        {
-          "type": "field",
-          "field": "item",
-          "editor": "reference",
-          "commit": "immediate",
-          "width": "lg"
-        },
-        {
-          "type": "field",
-          "field": "label",
-          "editor": "text",
-          "commit": "field-commit",
-          "width": "md"
-        },
-        {
-          "type": "field",
-          "field": "href",
-          "editor": "href",
-          "commit": "field-commit",
-          "width": "md"
-        },
-        {
-          "type": "field",
-          "field": "icon",
-          "editor": "icon",
-          "commit": "field-commit",
-          "width": "sm"
-        },
-        {
-          "type": "field",
-          "field": "order",
-          "editor": "number",
-          "commit": "field-commit",
-          "align": "end",
-          "width": "xs",
-          "format": "number"
-        },
-        {
-          "type": "field",
-          "field": "visible",
-          "editor": "boolean",
-          "commit": "immediate",
-          "width": "xs"
-        }
-      ]
-    },
     "mediaTable": {
       "entity": "mediaAsset",
       "columns": [
@@ -1032,53 +807,6 @@
           "align": "end",
           "width": "xs",
           "format": "number"
-        }
-      ]
-    },
-    "peopleTable": {
-      "entity": "person",
-      "columns": [
-        {
-          "type": "field",
-          "field": "name",
-          "editor": "text",
-          "commit": "field-commit",
-          "width": "lg"
-        },
-        {
-          "type": "field",
-          "field": "role",
-          "editor": "text",
-          "commit": "field-commit",
-          "width": "md"
-        },
-        {
-          "type": "field",
-          "field": "bio",
-          "editor": "markdown",
-          "commit": "field-commit",
-          "width": "lg"
-        },
-        {
-          "type": "field",
-          "field": "avatar",
-          "editor": "reference",
-          "commit": "immediate",
-          "width": "md"
-        },
-        {
-          "type": "field",
-          "field": "href",
-          "editor": "href",
-          "commit": "field-commit",
-          "width": "md"
-        },
-        {
-          "type": "field",
-          "field": "email",
-          "editor": "text",
-          "commit": "field-commit",
-          "width": "md"
         }
       ]
     }
@@ -1141,6 +869,12 @@
           }
         },
         {
+          "query": "contentGroups",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
           "query": "featuredContent",
           "count": {
             "type": "count"
@@ -1167,6 +901,9 @@
           "editor": "enum"
         },
         "title": {
+          "editor": "text"
+        },
+        "label": {
           "editor": "text"
         },
         "subtitle": {
@@ -1202,9 +939,6 @@
         "templateKey": {
           "editor": "slug"
         },
-        "author": {
-          "editor": "reference"
-        },
         "primaryMedia": {
           "editor": "reference"
         }
@@ -1212,7 +946,7 @@
     },
     "contentCompositionHome": {
       "type": "collection",
-      "label": "Composition",
+      "label": "Blocks",
       "entity": "contentPlacement",
       "navigation": {
         "primary": true
@@ -1289,89 +1023,6 @@
         }
       }
     },
-    "navigationHome": {
-      "type": "collection",
-      "label": "Navigation",
-      "entity": "navItem",
-      "navigation": {
-        "primary": true
-      },
-      "context": {
-        "name": "section",
-        "entity": "navSection",
-        "query": "navSectionsAll",
-        "labelField": "label",
-        "createView": "navSectionCreate",
-        "itemView": "navSectionContextItem"
-      },
-      "queries": [
-        {
-          "query": "navItemsForSelectedSection",
-          "count": {
-            "type": "count"
-          }
-        }
-      ],
-      "defaultQuery": "navItemsForSelectedSection",
-      "result": {
-        "type": "table",
-        "tableView": "navItemTable"
-      },
-      "actions": [
-        {
-          "type": "create",
-          "createView": "navItemCreate"
-        }
-      ]
-    },
-    "navSectionCreate": {
-      "type": "create",
-      "entity": "navSection",
-      "fields": {
-        "area": {
-          "editor": "enum"
-        },
-        "label": {
-          "editor": "text"
-        },
-        "order": {
-          "editor": "number"
-        },
-        "visible": {
-          "editor": "boolean"
-        }
-      }
-    },
-    "navItemCreate": {
-      "type": "create",
-      "entity": "navItem",
-      "fields": {
-        "item": {
-          "editor": "reference"
-        },
-        "label": {
-          "editor": "text"
-        },
-        "href": {
-          "editor": "href"
-        },
-        "icon": {
-          "editor": "icon"
-        },
-        "order": {
-          "editor": "number"
-        },
-        "visible": {
-          "editor": "boolean"
-        }
-      },
-      "defaults": {
-        "section": {
-          "kind": "context",
-          "name": "section"
-        }
-      }
-    },
     "mediaHome": {
       "type": "collection",
       "label": "Media",
@@ -1426,57 +1077,6 @@
         },
         "height": {
           "editor": "number"
-        }
-      }
-    },
-    "peopleHome": {
-      "type": "collection",
-      "label": "People",
-      "entity": "person",
-      "navigation": {
-        "primary": true
-      },
-      "queries": [
-        {
-          "query": "peopleAll",
-          "count": {
-            "type": "count"
-          }
-        }
-      ],
-      "defaultQuery": "peopleAll",
-      "result": {
-        "type": "table",
-        "tableView": "peopleTable"
-      },
-      "actions": [
-        {
-          "type": "create",
-          "createView": "personCreate"
-        }
-      ]
-    },
-    "personCreate": {
-      "type": "create",
-      "entity": "person",
-      "fields": {
-        "name": {
-          "editor": "text"
-        },
-        "role": {
-          "editor": "text"
-        },
-        "bio": {
-          "editor": "markdown"
-        },
-        "avatar": {
-          "editor": "reference"
-        },
-        "href": {
-          "editor": "href"
-        },
-        "email": {
-          "editor": "text"
         }
       }
     }

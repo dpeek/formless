@@ -274,10 +274,8 @@ describe("generated collection home", () => {
     expect(html).toContain("<h1");
     expect(html).toContain("Content");
     expect(html).toContain('aria-label="Collections"');
-    expect(html).toContain("Composition");
-    expect(html).toContain("Navigation");
+    expect(html).toContain("Blocks");
     expect(html).toContain("Media");
-    expect(html).toContain("People");
     expect(html).toContain("Create Content item");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Body");
@@ -287,9 +285,9 @@ describe("generated collection home", () => {
     expect(html).toContain("Estii");
     expect(html).toContain("Formless");
     expect(html).toContain("Draft notes on generated editorial tools");
-    expect(html).toMatch(/aria-label="All count"[^>]*>13</);
+    expect(html).toMatch(/aria-label="All count"[^>]*>16</);
     expect(html).toMatch(/aria-label="Draft count"[^>]*>1</);
-    expect(html).toMatch(/aria-label="Published count"[^>]*>12</);
+    expect(html).toMatch(/aria-label="Published count"[^>]*>15</);
     expect(html).toMatch(/aria-label="Projects count"[^>]*>3</);
     expect(html).toMatch(/aria-label="Featured count"[^>]*>6</);
   });
@@ -328,7 +326,6 @@ describe("generated collection home", () => {
     expect(html).toContain("Published post should have a slug or link.");
     expect(html).toContain("Published post should include body content.");
     expect(html).toContain("Published post should have a published date.");
-    expect(html).toContain("Published post should have an author.");
     expect(html).toContain("Published without metadata");
     expect(html).toMatch(/<textarea[^>]*aria-label="Body"/);
     expect(html).not.toMatch(/aria-label="Body"[^>]*disabled/);
@@ -362,7 +359,7 @@ describe("generated collection home", () => {
 
     expect(html).toContain('aria-label="Content item records"');
     expect(html).toContain("Home");
-    expect(html).toContain("Create Content placement");
+    expect(html).toContain("Create Block placement");
     expect(html).toContain("Hero");
     expect(html).toContain("Content list");
     expect(html).toContain("Content grid");
@@ -371,38 +368,36 @@ describe("generated collection home", () => {
     expect(html).toContain('value="featuredProjects"');
   });
 
-  it("renders the scoped site navigation workspace for selected sections", () => {
-    const navigationModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "navigationHome",
+  it("renders header navigation as content block placements", () => {
+    const blocksModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "contentCompositionHome",
     );
 
-    if (!navigationModel) {
-      throw new Error("Missing navigation model.");
+    if (!blocksModel) {
+      throw new Error("Missing blocks model.");
     }
 
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const html = renderToStaticMarkup(
       <HomeCollection
-        actions={navigationModel.actions}
-        context={navigationModel.context}
-        entity={navigationModel.entity}
-        entityName={navigationModel.entityName}
+        actions={blocksModel.actions}
+        context={blocksModel.context}
+        entity={blocksModel.entity}
+        entityName={blocksModel.entityName}
         onSelectContext={() => {}}
         onSelectQuery={() => {}}
-        queryTabs={navigationModel.queryTabs}
-        result={navigationModel.result}
-        selectedContextRecordId="rec_site_nav_header"
-        selectedQuery={navigationModel.queryTabs[0]}
+        queryTabs={blocksModel.queryTabs}
+        result={blocksModel.result}
+        selectedContextRecordId="rec_site_content_group_header"
+        selectedQuery={blocksModel.queryTabs[0]}
         today="2026-05-05"
       />,
     );
 
-    expect(html).toContain('aria-label="Navigation section records"');
+    expect(html).toContain('aria-label="Content item records"');
     expect(html).toContain("Header");
-    expect(html).toContain("Explore");
-    expect(html).toContain("Social");
-    expect(html).toContain('aria-label="Create Navigation section"');
-    expect(html).toContain("Create Navigation item");
+    expect(html).toContain("Create Block placement");
+    expect(html).toContain("Link");
     expect(html).toContain('value="Home"');
     expect(html).toContain('value="Blog"');
     expect(html).toContain('value="Projects"');
@@ -1113,21 +1108,14 @@ describe("generated forms and records", () => {
     });
   });
 
-  it("resolves site scoped create defaults for placements and nav items", () => {
+  it("resolves site scoped create defaults for block placements", () => {
     const models = selectCollectionModels(siteSourceSchema);
     const placementAction = models
       .find((model) => model.viewName === "contentCompositionHome")
       ?.actions.find((action) => action.type === "create");
-    const navItemAction = models
-      .find((model) => model.viewName === "navigationHome")
-      ?.actions.find((action) => action.type === "create");
 
     if (!placementAction || placementAction.type !== "create") {
       throw new Error("Missing placement create action.");
-    }
-
-    if (!navItemAction || navItemAction.type !== "create") {
-      throw new Error("Missing nav item create action.");
     }
 
     const placementFormData = new FormData();
@@ -1138,12 +1126,6 @@ describe("generated forms and records", () => {
     placementFormData.set("limit", "3");
     placementFormData.set("order", "1");
     placementFormData.set("visible", "on");
-
-    const navItemFormData = new FormData();
-    navItemFormData.set("item", "rec_site_content_blog");
-    navItemFormData.set("label", "Blog");
-    navItemFormData.set("order", "1");
-    navItemFormData.set("visible", "on");
 
     expect(
       resolveCreateValues(placementFormData, placementAction, {
@@ -1157,18 +1139,6 @@ describe("generated forms and records", () => {
       title: "Recent posts",
       queryKey: "publishedPosts",
       limit: 3,
-      order: 1,
-      visible: true,
-    });
-    expect(
-      resolveCreateValues(navItemFormData, navItemAction, {
-        today: "2026-05-05",
-        values: { section: "rec_site_nav_header" },
-      }),
-    ).toMatchObject({
-      section: "rec_site_nav_header",
-      item: "rec_site_content_blog",
-      label: "Blog",
       order: 1,
       visible: true,
     });

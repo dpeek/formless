@@ -15,7 +15,7 @@ describe("worker schema app definitions", () => {
     expect(tasks.sourceSchema.entities.task?.label).toBe("Task");
     expect(rates.sourceSchema.entities.rate?.label).toBe("Rate");
     expect(site.sourceSchema.entities.contentItem?.label).toBe("Content item");
-    expect(site.sourceSchema.entities.contentPlacement?.label).toBe("Content placement");
+    expect(site.sourceSchema.entities.contentPlacement?.label).toBe("Block placement");
   });
 
   it("loads parsed seed records for each app", () => {
@@ -29,9 +29,9 @@ describe("worker schema app definitions", () => {
     expect(new Set(rates.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["card", "resource", "rate"]),
     );
-    expect(site.seedRecords).toHaveLength(32);
+    expect(site.seedRecords).toHaveLength(31);
     expect(new Set(site.seedRecords.map((record) => record.entity))).toEqual(
-      new Set(["contentItem", "contentPlacement", "mediaAsset", "navItem", "navSection", "person"]),
+      new Set(["contentItem", "contentPlacement", "mediaAsset"]),
     );
   });
 

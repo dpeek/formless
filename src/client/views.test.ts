@@ -316,27 +316,13 @@ describe("home view model collections", () => {
     expect(models.map((model) => model.viewName)).toEqual([
       "contentHome",
       "contentCompositionHome",
-      "navigationHome",
       "mediaHome",
-      "peopleHome",
     ]);
-    expect(models.map((model) => model.label)).toEqual([
-      "Content",
-      "Composition",
-      "Navigation",
-      "Media",
-      "People",
-    ]);
-    expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true, true, true]);
+    expect(models.map((model) => model.label)).toEqual(["Content", "Blocks", "Media"]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true]);
     expect(
       models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
-    ).toEqual([
-      "contentTable",
-      "contentPlacementTable",
-      "navItemTable",
-      "mediaTable",
-      "peopleTable",
-    ]);
+    ).toEqual(["contentTable", "contentPlacementTable", "mediaTable"]);
   });
 
   it("resolves site content table columns and expanded create fields", () => {
@@ -354,6 +340,7 @@ describe("home view model collections", () => {
       "contentProjects",
       "contentLinks",
       "contentBlocks",
+      "contentGroups",
       "featuredContent",
     ]);
     expect(
@@ -363,6 +350,7 @@ describe("home view model collections", () => {
     ).toEqual([
       "field:kind",
       "field:title",
+      "field:label",
       "field:body",
       "field:status",
       "field:featured",
@@ -375,10 +363,22 @@ describe("home view model collections", () => {
       contentModel?.result.type === "table"
         ? contentModel.result.columns.map((column) => column.editor)
         : [],
-    ).toEqual(["enum", "text", "markdown", "enum", "boolean", "slug", "href", "date", "number"]);
+    ).toEqual([
+      "enum",
+      "text",
+      "text",
+      "markdown",
+      "enum",
+      "boolean",
+      "slug",
+      "href",
+      "date",
+      "number",
+    ]);
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "kind",
       "title",
+      "label",
       "subtitle",
       "body",
       "status",
@@ -390,17 +390,13 @@ describe("home view model collections", () => {
       "icon",
       "color",
       "templateKey",
-      "author",
       "primaryMedia",
     ]);
   });
 
-  it("resolves site scoped composition and navigation contexts", () => {
+  it("resolves the site scoped block composition context", () => {
     const compositionModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "contentCompositionHome",
-    );
-    const navigationModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "navigationHome",
     );
 
     expect(compositionModel?.context).toMatchObject({
@@ -414,28 +410,9 @@ describe("home view model collections", () => {
     });
     expect(compositionModel?.actions[0]).toMatchObject({
       type: "create",
-      label: "Create Content placement",
+      label: "Create Block placement",
       entityName: "contentPlacement",
       defaults: [{ fieldName: "parent", value: { kind: "context", name: "content" } }],
-    });
-    expect(navigationModel?.context).toMatchObject({
-      name: "section",
-      entityName: "navSection",
-      queryName: "navSectionsAll",
-      query: siteSourceSchema.queries.navSectionsAll?.expression,
-      labelField: "label",
-      itemViewName: "navSectionContextItem",
-      createAction: {
-        type: "create",
-        label: "Create Navigation section",
-        entityName: "navSection",
-      },
-    });
-    expect(navigationModel?.actions[0]).toMatchObject({
-      type: "create",
-      label: "Create Navigation item",
-      entityName: "navItem",
-      defaults: [{ fieldName: "section", value: { kind: "context", name: "section" } }],
     });
   });
 });
