@@ -1,6 +1,4 @@
 import { DurableObject } from "cloudflare:workers";
-import rawSeedSchema from "../../schema/app-schema.json";
-import rawRateCardSchema from "../../schema/samples/rate-card.json";
 import {
   isValidStoredFieldValue as isValidStoredFieldValueForType,
   shouldValidateExistingFieldValue,
@@ -36,11 +34,12 @@ import {
   assertUniqueConstraints,
 } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
-import { rateCardSeedRecords, taskSeedRecords } from "./fixtures.ts";
 import type { Env } from "./index.ts";
+import { getWorkerSchemaAppDefinition } from "./schema-apps.ts";
 
-const seedSchema = parseAppSchema(rawSeedSchema);
-const rateCardSchema = parseAppSchema(rawRateCardSchema);
+const taskApp = getWorkerSchemaAppDefinition("tasks");
+const rateApp = getWorkerSchemaAppDefinition("rates");
+const seedSchema = taskApp.sourceSchema;
 
 export class FormlessAuthority extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -180,17 +179,17 @@ function validateDevResetRequest(value: unknown): StorageResetSeed {
 
   if (value.schema === undefined || value.schema === "default") {
     return {
-      schema: seedSchema,
-      records: taskSeedRecords,
-      changeMutationPrefix: "seed-task",
+      schema: taskApp.sourceSchema,
+      records: taskApp.seedRecords,
+      changeMutationPrefix: taskApp.seedChangeMutationPrefix,
     };
   }
 
   if (value.schema === "rate-card") {
     return {
-      schema: rateCardSchema,
-      records: rateCardSeedRecords,
-      changeMutationPrefix: "seed-rate-card",
+      schema: rateApp.sourceSchema,
+      records: rateApp.seedRecords,
+      changeMutationPrefix: rateApp.seedChangeMutationPrefix,
     };
   }
 

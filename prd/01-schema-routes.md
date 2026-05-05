@@ -1,7 +1,7 @@
 # PRD 01: Schema-backed app routes
 
 Status: active
-Current chunk: SR-01 registry and source layout
+Current chunk: SR-02 path-keyed worker dispatch
 Last updated: 2026-05-05
 
 ## Goal
@@ -31,29 +31,32 @@ The result should feel like two schema-backed apps, not one global app whose sch
 - Worker dispatch: `src/worker/index.ts`.
 - Authority routes: `src/worker/authority.ts`.
 - Storage: `src/worker/storage.ts`.
-- Seed parsing: `src/worker/fixtures.ts`.
+- Seed parsing: `src/worker/schema-apps.ts`.
+- Seed compatibility exports: `src/worker/fixtures.ts`.
 - Client API calls: `src/client/sync.ts`.
 - Client local DB: `src/client/db.ts`.
 - Client broadcast: `src/client/broadcast.ts`.
 - Client store: `src/client/store.ts`.
-- Task source schema today: `schema/app-schema.json`.
-- Task seed records today: `schema/samples/task-records.json`.
-- Rate source schema today: `schema/samples/rate-card.json`.
-- Rate seed records today: `schema/samples/rate-card-records.json`.
+- Shared app registry: `src/shared/schema-apps.ts`.
+- Worker app registry: `src/worker/schema-apps.ts`.
+- Task source schema: `schema/apps/tasks/schema.json`.
+- Task seed records: `schema/apps/tasks/seed-records.json`.
+- Rate source schema: `schema/apps/rates/schema.json`.
+- Rate seed records: `schema/apps/rates/seed-records.json`.
 - Generated create/action/table UI: `src/app/generated/`.
 - Tests: `src/app.test.tsx`, `src/client/*.test.ts`, `src/shared/schema.test.ts`, `src/worker/*.test.ts`.
 
 ## Decisions
 
-| ID    | Decision                                                      | Reason                                                                                            | Evidence                                                  |
-| ----- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| SR-D1 | Use separate schema instances keyed by `tasks` and `rates`.   | Schema artifact names are app-local. Merging would force global collision naming.                 | `schema/app-schema.json`, `schema/samples/rate-card.json` |
-| SR-D2 | Do not merge task and rate-card schemas into one `AppSchema`. | The current parser and view model treat one active schema as the app boundary.                    | `src/shared/schema.ts`, `src/client/views.ts`             |
-| SR-D3 | Use path-keyed APIs.                                          | The schema key is part of resource identity and is visible in tests/browser tools.                | `src/client/sync.ts`, `src/worker/authority.ts`           |
-| SR-D4 | Use one Durable Object instance per schema key.               | Existing storage can remain unkeyed inside each app instance.                                     | `src/worker/index.ts`, `src/worker/storage.ts`            |
-| SR-D5 | Use one IndexedDB database per schema key.                    | Reset and browser debugging are simpler than storing multiple schemas in one local DB.            | `src/client/db.ts`                                        |
-| SR-D6 | Split reset schema from reset seed data.                      | Schema reset should preserve records. Seed reset should restore source schema and source records. | `src/worker/storage.ts`, `src/app/dev-actions.tsx`        |
-| SR-D7 | Fresh bootstrap should initialize source seed records.        | Opening `/tasks` or `/rates` should work without a manual dev reset.                              | `schema/samples/*-records.json`, `src/worker/storage.ts`  |
+| ID    | Decision                                                      | Reason                                                                                            | Evidence                                                         |
+| ----- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| SR-D1 | Use separate schema instances keyed by `tasks` and `rates`.   | Schema artifact names are app-local. Merging would force global collision naming.                 | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json` |
+| SR-D2 | Do not merge task and rate-card schemas into one `AppSchema`. | The current parser and view model treat one active schema as the app boundary.                    | `src/shared/schema.ts`, `src/client/views.ts`                    |
+| SR-D3 | Use path-keyed APIs.                                          | The schema key is part of resource identity and is visible in tests/browser tools.                | `src/client/sync.ts`, `src/worker/authority.ts`                  |
+| SR-D4 | Use one Durable Object instance per schema key.               | Existing storage can remain unkeyed inside each app instance.                                     | `src/worker/index.ts`, `src/worker/storage.ts`                   |
+| SR-D5 | Use one IndexedDB database per schema key.                    | Reset and browser debugging are simpler than storing multiple schemas in one local DB.            | `src/client/db.ts`                                               |
+| SR-D6 | Split reset schema from reset seed data.                      | Schema reset should preserve records. Seed reset should restore source schema and source records. | `src/worker/storage.ts`, `src/app/dev-actions.tsx`               |
+| SR-D7 | Fresh bootstrap should initialize source seed records.        | Opening `/tasks` or `/rates` should work without a manual dev reset.                              | `schema/apps/*/seed-records.json`, `src/worker/storage.ts`       |
 
 ## Non-goals
 
@@ -69,8 +72,8 @@ The result should feel like two schema-backed apps, not one global app whose sch
 
 | ID    | Status  | Depends on | Main files                                                                 | Acceptance                                                                      |
 | ----- | ------- | ---------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| SR-01 | ready   | none       | `schema/apps/**`, `src/shared/schema-apps.ts`, `src/worker/schema-apps.ts` | Source schemas and seed files are app-keyed and parse.                          |
-| SR-02 | pending | SR-01      | `src/worker/index.ts`, `src/worker/authority.ts`                           | `/api/tasks/*` and `/api/rates/*` dispatch to isolated authority instances.     |
+| SR-01 | shipped | none       | `schema/apps/**`, `src/shared/schema-apps.ts`, `src/worker/schema-apps.ts` | Source schemas and seed files are app-keyed and parse.                          |
+| SR-02 | ready   | SR-01      | `src/worker/index.ts`, `src/worker/authority.ts`                           | `/api/tasks/*` and `/api/rates/*` dispatch to isolated authority instances.     |
 | SR-03 | pending | SR-02      | `src/worker/storage.ts`, `src/worker/authority.ts`                         | Fresh bootstrap and reset endpoints use source schema plus source seed records. |
 | SR-04 | pending | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
 | SR-05 | pending | SR-04      | `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`      | `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema` render the right app.  |
@@ -78,66 +81,31 @@ The result should feel like two schema-backed apps, not one global app whose sch
 | SR-07 | pending | SR-05      | `src/app/routes/schema.tsx`, `src/app/dev-actions.tsx`                     | Schema editing and reset controls are route-scoped.                             |
 | SR-08 | pending | SR-07      | tests and cleanup                                                          | Old global schema swap paths are removed and browser smoke passes.              |
 
-## Current chunk
+## Shipped chunks
 
 ### SR-01 registry and source layout
 
-Goal: make `tasks` and `rates` first-class app definitions without changing runtime behavior yet.
+Status: shipped 2026-05-05.
 
-Add:
+Outcome:
 
-- `src/shared/schema-apps.ts`
-- `src/worker/schema-apps.ts`
-- `schema/apps/tasks/schema.json`
-- `schema/apps/tasks/seed-records.json`
-- `schema/apps/rates/schema.json`
-- `schema/apps/rates/seed-records.json`
+- Added `src/shared/schema-apps.ts` with `SchemaKey`, app metadata, and key/route lookup helpers.
+- Added `src/worker/schema-apps.ts` with parsed source schemas and parsed seed records.
+- Moved task source files to `schema/apps/tasks/schema.json` and `schema/apps/tasks/seed-records.json`.
+- Moved rate source files to `schema/apps/rates/schema.json` and `schema/apps/rates/seed-records.json`.
+- Updated code and tests to import the new app-keyed source paths.
+- Kept no forwarding copies of old schema paths.
+- Kept runtime behavior unchanged: unkeyed APIs and `/api/dev/reset` remain until SR-02/SR-03.
 
-Recommended shared shape:
+Evidence:
 
-```ts
-export type SchemaKey = "tasks" | "rates";
+- `src/shared/schema-apps.test.ts`.
+- `src/worker/schema-apps.test.ts`.
+- `rg "schema/app-schema|schema/samples|app-schema.json|task-records.json|rate-card.json|rate-card-records.json" src schema` returns no matches.
+- `bun run test` passed.
+- `bun run check` passed.
 
-export type SchemaAppDefinition = {
-  key: SchemaKey;
-  label: string;
-  route: `/${string}`;
-  schemaRoute: `/${string}/schema`;
-  seedChangeMutationPrefix: string;
-};
-```
-
-Recommended worker shape:
-
-```ts
-export type WorkerSchemaAppDefinition = SchemaAppDefinition & {
-  sourceSchema: AppSchema;
-  seedRecords: StoredRecord[];
-};
-```
-
-Tasks:
-
-- [ ] Add shared app metadata and lookup helpers.
-- [ ] Add worker app definitions with parsed source schemas and parsed seed records.
-- [ ] Move `schema/app-schema.json` to `schema/apps/tasks/schema.json`.
-- [ ] Move `schema/samples/task-records.json` to `schema/apps/tasks/seed-records.json`.
-- [ ] Move `schema/samples/rate-card.json` to `schema/apps/rates/schema.json`.
-- [ ] Move `schema/samples/rate-card-records.json` to `schema/apps/rates/seed-records.json`.
-- [ ] Update imports that read old schema paths.
-- [ ] Keep no forwarding copies unless tests prove a short transition is needed.
-
-Acceptance checks:
-
-- [ ] Task source schema parses through `parseAppSchema`.
-- [ ] Rate source schema parses through `parseAppSchema`.
-- [ ] Task seed records parse as `StoredRecord[]`.
-- [ ] Rate seed records parse as `StoredRecord[]`.
-- [ ] No code imports old schema paths after the move.
-- [ ] `bun run test`.
-- [ ] `bun run check`.
-
-## Later chunks
+## Current chunk
 
 ### SR-02 path-keyed worker dispatch
 
@@ -174,6 +142,8 @@ Acceptance checks:
 - [ ] Mutating `/api/rates` does not affect `/api/tasks`.
 - [ ] Unknown schema key returns `404`.
 - [ ] Old unkeyed API paths return `404` unless a compatibility redirect is explicitly needed.
+
+## Later chunks
 
 ### SR-03 source bootstrap and reset semantics
 
@@ -365,9 +335,9 @@ Final checks:
 
 ## Blockers
 
-| ID    | Status | Blocks | Notes                                                                 |
-| ----- | ------ | ------ | --------------------------------------------------------------------- |
-| SR-B1 | open   | SR-02  | SR-01 must land first so dispatch can resolve schema app definitions. |
+| ID    | Status | Blocks | Notes                                                                                         |
+| ----- | ------ | ------ | --------------------------------------------------------------------------------------------- |
+| SR-B1 | closed | SR-02  | SR-01 shipped app definitions in `src/shared/schema-apps.ts` and `src/worker/schema-apps.ts`. |
 
 ## Cross-PRD dependencies
 

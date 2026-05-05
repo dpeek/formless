@@ -1,4 +1,4 @@
-import rawSchema from "../../schema/app-schema.json";
+import rawSchema from "../../schema/apps/tasks/schema.json";
 import { parseAppSchema, stringifySchema } from "../shared/schema.ts";
 
 export const appSchema = parseAppSchema(rawSchema);

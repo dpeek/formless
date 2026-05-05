@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../../schema/samples/rate-card.json";
+import rawRateCardSchema from "../../schema/apps/rates/schema.json";
 import { parseAppSchema } from "./schema.ts";
 
 describe("schema enum fields", () => {

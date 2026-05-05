@@ -400,7 +400,7 @@ async function writeStorageHarness() {
     harnessPath,
     `
       import { DurableObject } from "cloudflare:workers";
-      import rawSeedSchema from "${process.cwd()}/schema/app-schema.json";
+      import rawSeedSchema from "${process.cwd()}/schema/apps/tasks/schema.json";
       import { parseAppSchema } from "${process.cwd()}/src/shared/schema.ts";
       import {
         createStoredRecord,

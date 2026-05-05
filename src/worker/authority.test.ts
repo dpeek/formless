@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../../schema/samples/rate-card.json";
+import rawRateCardSchema from "../../schema/apps/rates/schema.json";
 import { appSchema } from "../client/schema.ts";
 import type {
   ActionResponse,

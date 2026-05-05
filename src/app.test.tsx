@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../schema/samples/rate-card.json";
+import rawRateCardSchema from "../schema/apps/rates/schema.json";
 import { App } from "./app.tsx";
 import { HomeCollection, RecordList } from "./app/generated/collection.tsx";
 import {
