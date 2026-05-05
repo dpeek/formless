@@ -44,32 +44,56 @@ beforeEach(() => {
 });
 
 describe("App smoke routes", () => {
-  it('renders the "/" route', () => {
-    const html = renderRoute("/");
+  it('renders the "/tasks" route with task navigation', () => {
+    const html = renderRoute("/tasks");
 
-    expect(html).toContain("Loading active schema...");
+    expect(html).toContain('href="/tasks"');
+    expect(html).toContain("Tasks");
+    expect(html).toContain('href="/rates"');
+    expect(html).toContain("Rates");
+    expect(html).toContain('href="/tasks/schema"');
+    expect(html).toContain("Schema");
+    expect(html).toContain("Loading Tasks...");
     expect(html).not.toContain("Create Task");
   });
 
-  it('renders the "/schema" route', () => {
-    const html = renderRoute("/schema");
+  it('renders the "/rates" route with rate navigation', () => {
+    const html = renderRoute("/rates");
 
-    expect(html).toContain("Loading active schema.");
-    expect(html).toContain("Save schema");
+    expect(html).toContain('href="/tasks"');
+    expect(html).toContain("Tasks");
+    expect(html).toContain('href="/rates"');
+    expect(html).toContain("Rates");
+    expect(html).toContain('href="/rates/schema"');
+    expect(html).toContain("Schema");
+    expect(html).toContain("Loading Rates...");
+    expect(html).not.toContain("Create Resource");
   });
 
-  it("renders a dev reset action", () => {
-    const html = renderRoute("/");
+  it('renders the "/tasks/schema" route', () => {
+    applyBootstrapResponse(bootstrap([], appSchema), "tasks");
+    const html = renderRoute("/tasks/schema");
 
-    expect(html).toContain("Reset task seed data");
-    expect(html).toContain("Reset rate-card seed data");
+    expect(html).toContain('href="/tasks/schema"');
+    expect(html).toContain("Save schema");
+    expect(html).toContain("&quot;task&quot;");
+  });
+
+  it('renders the "/rates/schema" route', () => {
+    applyBootstrapResponse(bootstrap([], rateCardSchema), "rates");
+    const html = renderRoute("/rates/schema");
+
+    expect(html).toContain('href="/rates/schema"');
+    expect(html).toContain("Save schema");
+    expect(html).toContain("&quot;rate&quot;");
+    expect(html).toContain("&quot;resource&quot;");
   });
 });
 
 describe("generated collection home", () => {
   it("renders Tasks as the collection title with query tabs and actions", () => {
     applyBootstrapResponse(bootstrap([]));
-    const html = renderRoute("/");
+    const html = renderRoute("/tasks");
 
     expect(html).toContain("<h1");
     expect(html).toContain("Tasks");
@@ -91,7 +115,7 @@ describe("generated collection home", () => {
         taskRecord("record-3", "Finished", true, "2026-05-01"),
       ]),
     );
-    const html = renderRoute("/");
+    const html = renderRoute("/tasks");
 
     expect(html).toMatch(/aria-label="All count"[^>]*>3</);
     expect(html).toMatch(/aria-label="Active count"[^>]*>2</);
@@ -128,7 +152,7 @@ describe("generated collection home", () => {
 
   it("renders clear-completed target count and keeps the button enabled at zero", () => {
     applyBootstrapResponse(bootstrap([]));
-    const html = renderRoute("/");
+    const html = renderRoute("/tasks");
 
     expect(html).toMatch(/aria-label="Clear completed target count"[^>]*>0</);
     expect(html).toContain("Clear completed");
@@ -137,10 +161,10 @@ describe("generated collection home", () => {
 
   it("updates action target counts after local record merges", () => {
     applyBootstrapResponse(bootstrap([taskRecord("record-1", "Open", false)]));
-    const before = renderRoute("/");
+    const before = renderRoute("/tasks");
 
     applyRecordMerge([taskRecord("record-2", "Finished", true)], 2);
-    const after = renderRoute("/");
+    const after = renderRoute("/tasks");
 
     expect(before).toMatch(/aria-label="Clear completed target count"[^>]*>0</);
     expect(after).toMatch(/aria-label="Clear completed target count"[^>]*>1</);
@@ -186,7 +210,7 @@ describe("generated collection home", () => {
 
   it("renders only primary rate-card collection navigation", () => {
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema));
-    const html = renderRoute("/");
+    const html = renderRoute("/rates");
 
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain("Rates");

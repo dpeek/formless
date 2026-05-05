@@ -1,7 +1,7 @@
 # PRD 01: Schema-backed app routes
 
 Status: active
-Current chunk: SR-05 route-keyed app shell
+Current chunk: SR-06 generated UI schema-key propagation
 Last updated: 2026-05-05
 
 ## Goal
@@ -76,7 +76,7 @@ The result should feel like two schema-backed apps, not one global app whose sch
 | SR-02 | shipped | SR-01      | `src/worker/index.ts`, `src/worker/authority.ts`                           | `/api/tasks/*` and `/api/rates/*` dispatch to isolated authority instances.     |
 | SR-03 | shipped | SR-02      | `src/worker/storage.ts`, `src/worker/authority.ts`                         | Fresh bootstrap and reset endpoints use source schema plus source seed records. |
 | SR-04 | shipped | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
-| SR-05 | pending | SR-04      | `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`      | `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema` render the right app.  |
+| SR-05 | shipped | SR-04      | `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`      | `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema` render the right app.  |
 | SR-06 | pending | SR-05      | `src/app/generated/**`, `src/client/sync.ts`                               | Generated create, patch, and action calls submit to the active schema key.      |
 | SR-07 | pending | SR-05      | `src/app/routes/schema.tsx`, `src/app/dev-actions.tsx`                     | Schema editing and reset controls are route-scoped.                             |
 | SR-08 | pending | SR-07      | tests and cleanup                                                          | Old global schema swap paths are removed and browser smoke passes.              |
@@ -177,39 +177,36 @@ Evidence:
 - `bun run test` passed.
 - `bun run check` passed.
 
-## Current chunk
-
 ### SR-05 route-keyed app shell
 
-Goal: direct browser routes render the correct app and switch cleanly.
+Status: shipped 2026-05-05.
 
-Routes:
+Outcome:
 
-- `/` defaults to `/tasks`.
-- `/tasks` renders task home.
-- `/rates` renders rate-card home.
-- `/tasks/schema` renders task schema editor.
-- `/rates/schema` renders rate-card schema editor.
+- `/` redirects to `/tasks`.
+- `/tasks` renders the task home route.
+- `/rates` renders the rate-card home route.
+- `/tasks/schema` renders the task schema editor.
+- `/rates/schema` renders the rate-card schema editor.
+- App navigation shows `Tasks`, `Rates`, and the active app's `Schema` link.
+- The app shell no longer renders global seed reset buttons.
+- `HomeRoute` takes a `schemaKey`.
+- `HomeRoute` hydrates, bootstraps, broadcasts, and polls with the mounted schema key.
+- `HomeRoute` resets selected view, query, and context state when the schema key changes.
+- `SchemaRoute` takes a `schemaKey`.
+- `SchemaRoute` hydrates, fetches, and saves the mounted schema key.
+- Client store state tracks the active schema key.
+- Late client sync responses for an inactive schema key do not replace the visible route state.
 
-Tasks:
+Evidence:
 
-- [ ] Pass `schemaKey` through `HomeRoute`.
-- [ ] Pass `schemaKey` through `SchemaRoute`.
-- [ ] Reset selected view/query/context state when schema key changes.
-- [ ] Start and stop polling per mounted schema key.
-- [ ] Hydrate from keyed IndexedDB before keyed bootstrap.
-- [ ] Show navigation for `Tasks`, `Rates`, and current app `Schema`.
-- [ ] Remove global reset buttons that can mutate another app.
+- `src/app.test.tsx` covers `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema`.
+- `src/client/store.test.ts` covers ignoring stale responses for an inactive schema key.
+- Browser Use smoke covered `/`, `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema`.
+- `bun run test` passed.
+- `bun run check` passed.
 
-Acceptance checks:
-
-- [ ] `/tasks` shows task loading state and task nav.
-- [ ] `/rates` shows rate loading state and rate nav.
-- [ ] `/tasks/schema` shows the task schema editor.
-- [ ] `/rates/schema` shows the rate-card schema editor.
-- [ ] App tests bootstrap and render both routes.
-
-## Later chunks
+## Current chunk
 
 ### SR-06 generated UI schema-key propagation
 
@@ -239,6 +236,8 @@ Acceptance checks:
 - [ ] Inline editing a rate posts to `/api/rates/mutations`.
 - [ ] `clearCompletedTasks` posts to `/api/tasks/actions`.
 - [ ] `regenerateMissingRates` posts to `/api/rates/actions`.
+
+## Later chunks
 
 ### SR-07 route-specific schema editing and reset UI
 

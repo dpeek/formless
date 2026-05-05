@@ -36,7 +36,7 @@ export async function bootstrapClient(schemaKey: SchemaKey, fetcher: typeof fetc
   const response = await fetchJson<BootstrapResponse>(fetcher, apiPath(schemaKey, "bootstrap"));
 
   await saveBootstrapResponse(schemaKey, response);
-  applyBootstrapResponse(response);
+  applyBootstrapResponse(response, schemaKey);
   notifyLocalDataChanged(schemaKey, { schemaChanged: true });
 
   return response;
@@ -52,12 +52,12 @@ export async function syncClient(schemaKey: SchemaKey, fetcher: typeof fetch = f
 
   if (response.schema && response.schemaUpdatedAt) {
     await saveSchema(schemaKey, response.schema, response.schemaUpdatedAt);
-    applySchemaSave(response.schema, response.schemaUpdatedAt);
+    applySchemaSave(response.schema, response.schemaUpdatedAt, schemaKey);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor) {
     await mergeChanges(schemaKey, response.changes, response.cursor);
-    applyChanges(response.changes, response.cursor);
+    applyChanges(response.changes, response.cursor, schemaKey);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor || schemaChanged) {
@@ -71,7 +71,7 @@ export async function fetchActiveSchema(schemaKey: SchemaKey, fetcher: typeof fe
   const response = await fetchJson<SchemaResponse>(fetcher, apiPath(schemaKey, "schema"));
 
   await saveSchema(schemaKey, response.schema, response.updatedAt);
-  applySchemaSave(response.schema, response.updatedAt);
+  applySchemaSave(response.schema, response.updatedAt, schemaKey);
   notifySchemaChanged(schemaKey);
 
   return response;
@@ -87,7 +87,7 @@ export async function saveActiveSchema(
   });
 
   await saveSchema(schemaKey, response.schema, response.updatedAt);
-  applySchemaSave(response.schema, response.updatedAt);
+  applySchemaSave(response.schema, response.updatedAt, schemaKey);
   notifySchemaChanged(schemaKey);
 
   return response;
@@ -113,7 +113,7 @@ export async function submitCreateMutation(
   );
 
   await mergeChanges(schemaKey, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, schemaKey);
   notifyLocalDataChanged(schemaKey);
 
   return response;
@@ -141,7 +141,7 @@ export async function submitPatchMutation(
   );
 
   await mergeChanges(schemaKey, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, schemaKey);
   notifyLocalDataChanged(schemaKey);
 
   return response;
@@ -162,7 +162,7 @@ export async function submitAction(
   const response = await postJson<ActionResponse>(fetcher, apiPath(schemaKey, "actions"), action);
 
   await mergeChanges(schemaKey, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, schemaKey);
   notifyLocalDataChanged(schemaKey);
 
   return response;
@@ -176,7 +176,7 @@ export async function resetSourceSchema(schemaKey: SchemaKey, fetcher: typeof fe
   );
 
   await saveBootstrapResponse(schemaKey, response);
-  applyBootstrapResponse(response);
+  applyBootstrapResponse(response, schemaKey);
   notifyLocalDataChanged(schemaKey, { schemaChanged: true });
 
   return response;
@@ -188,7 +188,7 @@ export async function resetSeedData(schemaKey: SchemaKey, fetcher: typeof fetch 
   resetClientStore();
   await deleteClientDb(schemaKey);
   await saveBootstrapResponse(schemaKey, response);
-  applyBootstrapResponse(response);
+  applyBootstrapResponse(response, schemaKey);
   notifyLocalDataChanged(schemaKey, { schemaChanged: true });
 
   return response;

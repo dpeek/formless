@@ -12,6 +12,7 @@ import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 export type NormalizedClientState = {
+  activeSchemaKey: SchemaKey | null;
   hydrated: boolean;
   schema: AppSchema | null;
   schemaUpdatedAt: string | null;
@@ -34,15 +35,7 @@ const EMPTY_RECORD_IDS: string[] = [];
 const EMPTY_REFERENCE_OPTIONS: ReferenceOption[] = [];
 const listeners = new Set<StoreListener>();
 
-let state: NormalizedClientState = {
-  hydrated: false,
-  schema: null,
-  schemaUpdatedAt: null,
-  recordsById: {},
-  recordIdsByEntity: {},
-  cursor: 0,
-  lastSyncedAt: null,
-};
+let state: NormalizedClientState = emptyClientState(null);
 
 export function getClientStoreSnapshot(): NormalizedClientState {
   return state;
@@ -75,27 +68,32 @@ export function subscribeToClientStoreSelector<T>(
 }
 
 export function resetClientStore() {
-  setState({
-    hydrated: false,
-    schema: null,
-    schemaUpdatedAt: null,
-    recordsById: {},
-    recordIdsByEntity: {},
-    cursor: 0,
-    lastSyncedAt: null,
-  });
+  setState(emptyClientState(null));
+}
+
+export function selectClientStoreSchemaKey(schemaKey: SchemaKey) {
+  if (state.activeSchemaKey === schemaKey) {
+    return;
+  }
+
+  setState(emptyClientState(schemaKey));
 }
 
 export async function hydrateClientStore(schemaKey: SchemaKey) {
-  applyLocalSnapshot(await readLocalSnapshot(schemaKey));
+  applyLocalSnapshot(schemaKey, await readLocalSnapshot(schemaKey));
 }
 
 export async function refreshClientStoreFromDb(schemaKey: SchemaKey) {
-  applyLocalSnapshot(await readLocalSnapshot(schemaKey));
+  applyLocalSnapshot(schemaKey, await readLocalSnapshot(schemaKey));
 }
 
-export function applyBootstrapResponse(response: BootstrapResponse) {
+export function applyBootstrapResponse(response: BootstrapResponse, schemaKey?: SchemaKey) {
+  if (!shouldApplySchemaKey(schemaKey)) {
+    return;
+  }
+
   setState({
+    activeSchemaKey: schemaKey ?? state.activeSchemaKey,
     hydrated: true,
     schema: response.schema,
     schemaUpdatedAt: response.schemaUpdatedAt,
@@ -106,23 +104,37 @@ export function applyBootstrapResponse(response: BootstrapResponse) {
   });
 }
 
-export function applySchemaSave(schema: AppSchema, schemaUpdatedAt: string) {
+export function applySchemaSave(schema: AppSchema, schemaUpdatedAt: string, schemaKey?: SchemaKey) {
+  if (!shouldApplySchemaKey(schemaKey)) {
+    return;
+  }
+
   updateState((current) => ({
     ...current,
+    activeSchemaKey: schemaKey ?? current.activeSchemaKey,
     schema,
     schemaUpdatedAt,
     lastSyncedAt: nowIsoString(),
   }));
 }
 
-export function applyChanges(changes: ChangeRow[], cursor: number) {
+export function applyChanges(changes: ChangeRow[], cursor: number, schemaKey?: SchemaKey) {
   applyRecordMerge(
     changes.map((change) => change.payload),
     cursor,
+    schemaKey,
   );
 }
 
-export function applyRecordMerge(recordsToMerge: StoredRecord[], cursor?: number) {
+export function applyRecordMerge(
+  recordsToMerge: StoredRecord[],
+  cursor?: number,
+  schemaKey?: SchemaKey,
+) {
+  if (!shouldApplySchemaKey(schemaKey)) {
+    return;
+  }
+
   updateState((current) => {
     let recordsByIdChanged = false;
     const nextRecordsById = { ...current.recordsById };
@@ -151,6 +163,7 @@ export function applyRecordMerge(recordsToMerge: StoredRecord[], cursor?: number
 
     return {
       ...current,
+      activeSchemaKey: schemaKey ?? current.activeSchemaKey,
       recordsById: recordsByIdChanged ? nextRecordsById : current.recordsById,
       recordIdsByEntity,
       cursor: cursor ?? current.cursor,
@@ -161,6 +174,10 @@ export function applyRecordMerge(recordsToMerge: StoredRecord[], cursor?: number
 
 export function useHydrated() {
   return useClientStoreSelector((snapshot) => snapshot.hydrated);
+}
+
+export function useActiveSchemaKey() {
+  return useClientStoreSelector((snapshot) => snapshot.activeSchemaKey);
 }
 
 export function useSchema() {
@@ -267,8 +284,13 @@ function useClientStoreSelector<T>(selector: (snapshot: NormalizedClientState) =
   );
 }
 
-function applyLocalSnapshot(snapshot: LocalSnapshot) {
+function applyLocalSnapshot(schemaKey: SchemaKey, snapshot: LocalSnapshot) {
+  if (!shouldApplySchemaKey(schemaKey)) {
+    return;
+  }
+
   updateState((current) => ({
+    activeSchemaKey: schemaKey,
     hydrated: true,
     schema: reuseSchema(current.schema, snapshot.schema),
     schemaUpdatedAt: snapshot.schemaUpdatedAt,
@@ -277,6 +299,25 @@ function applyLocalSnapshot(snapshot: LocalSnapshot) {
     cursor: snapshot.cursor,
     lastSyncedAt: snapshot.lastSyncedAt,
   }));
+}
+
+function emptyClientState(activeSchemaKey: SchemaKey | null): NormalizedClientState {
+  return {
+    activeSchemaKey,
+    hydrated: false,
+    schema: null,
+    schemaUpdatedAt: null,
+    recordsById: {},
+    recordIdsByEntity: {},
+    cursor: 0,
+    lastSyncedAt: null,
+  };
+}
+
+function shouldApplySchemaKey(schemaKey: SchemaKey | undefined) {
+  return (
+    schemaKey === undefined || state.activeSchemaKey === null || state.activeSchemaKey === schemaKey
+  );
 }
 
 function updateState(getNextState: (current: NormalizedClientState) => NormalizedClientState) {
@@ -538,6 +579,7 @@ function reconcileRecordIdsByEntity(
 
 function normalizedStatesEqual(left: NormalizedClientState, right: NormalizedClientState) {
   return (
+    left.activeSchemaKey === right.activeSchemaKey &&
     left.hydrated === right.hydrated &&
     left.schema === right.schema &&
     left.schemaUpdatedAt === right.schemaUpdatedAt &&

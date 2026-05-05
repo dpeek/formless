@@ -3,17 +3,23 @@ import { Button } from "@formless/ui/button";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
+  selectClientStoreSchemaKey,
+  useActiveSchemaKey,
   useSchema,
 } from "../../client/store.ts";
 import { type SyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
-import { defaultSchemaKey } from "../../shared/schema-apps.ts";
+import { type SchemaKey } from "../../shared/schema-apps.ts";
 import { parseAppSchema, stringifySchema } from "../../shared/schema.ts";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
-export function SchemaRoute() {
-  const schema = useSchema();
+export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
+  const activeSchemaKey = useActiveSchemaKey();
+  const activeSchema = useSchema();
+  const routeIsActive = activeSchemaKey === null || activeSchemaKey === schemaKey;
+  const schema = routeIsActive ? activeSchema : null;
   const [editorText, setEditorText] = useState(() => (schema ? stringifySchema(schema) : ""));
+  const routeEditorText = routeIsActive ? editorText : "";
   const [status, setStatus] = useState<SyncStatus>({
     state: "idle",
     message: "Schema editor ready.",
@@ -21,13 +27,16 @@ export function SchemaRoute() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const stopBroadcast = connectBroadcastToClientStore(defaultSchemaKey);
+    selectClientStoreSchemaKey(schemaKey);
+    setEditorText("");
+    setStatus({ state: "syncing", message: "Loading active schema." });
+    const stopBroadcast = connectBroadcastToClientStore(schemaKey);
     let cancelled = false;
 
     async function loadSchema() {
       try {
-        await hydrateClientStore(defaultSchemaKey);
-        await fetchActiveSchema(defaultSchemaKey);
+        await hydrateClientStore(schemaKey);
+        await fetchActiveSchema(schemaKey);
 
         if (!cancelled) {
           setStatus({ state: "idle", message: "Loaded active schema." });
@@ -48,7 +57,7 @@ export function SchemaRoute() {
       cancelled = true;
       stopBroadcast();
     };
-  }, []);
+  }, [schemaKey]);
 
   useEffect(() => {
     if (schema) {
@@ -63,7 +72,7 @@ export function SchemaRoute() {
 
     try {
       const parsed = parseAppSchema(JSON.parse(editorText) as unknown);
-      const response = await saveActiveSchema(defaultSchemaKey, parsed);
+      const response = await saveActiveSchema(schemaKey, parsed);
 
       setEditorText(stringifySchema(response.schema));
       setStatus({ state: "idle", message: `Saved schema at ${response.updatedAt}.` });
@@ -90,7 +99,7 @@ export function SchemaRoute() {
           onChange={(event) => setEditorText(event.currentTarget.value)}
           placeholder="Loading active schema..."
           spellCheck={false}
-          value={editorText}
+          value={routeEditorText}
         />
 
         <Button disabled={isSaving} type="submit">

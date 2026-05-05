@@ -9,6 +9,7 @@ import {
   createReferenceOptionsSelector,
   getClientStoreSnapshot,
   resetClientStore,
+  selectClientStoreSchemaKey,
   subscribeToClientStoreSelector,
 } from "./store.ts";
 import { appSchema } from "./schema.ts";
@@ -90,6 +91,19 @@ describe("client store", () => {
     expect(after.schema).toBe(before.schema);
     expect(after.recordsById).toBe(before.recordsById);
     expect(after.recordIdsByEntity).toBe(before.recordIdsByEntity);
+  });
+
+  it("ignores stale responses for an inactive schema key", () => {
+    selectClientStoreSchemaKey("rates");
+
+    applyBootstrapResponse(bootstrap([record("record-1", "First")]), "tasks");
+
+    expect(getClientStoreSnapshot().activeSchemaKey).toBe("rates");
+    expect(getClientStoreSnapshot().recordsById).toEqual({});
+
+    applyBootstrapResponse(bootstrap([record("record-2", "Rate")]), "rates");
+
+    expect(getClientStoreSnapshot().recordsById["record-2"]).toEqual(record("record-2", "Rate"));
   });
 });
 

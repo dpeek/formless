@@ -3,18 +3,23 @@ import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
+  selectClientStoreSchemaKey,
+  useActiveSchemaKey,
   useSchema,
 } from "../../client/store.ts";
 import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
 import { bootstrapClient, startPollingSync } from "../../client/sync.ts";
 import { selectPrimaryCollectionModels } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
-import { defaultSchemaKey } from "../../shared/schema-apps.ts";
+import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import { HomeCollection } from "../generated/collection.tsx";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
-export function HomeRoute() {
-  const schema = useSchema();
+export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
+  const activeSchemaKey = useActiveSchemaKey();
+  const activeSchema = useSchema();
+  const schema = activeSchemaKey === null || activeSchemaKey === schemaKey ? activeSchema : null;
+  const app = getSchemaAppDefinition(schemaKey);
   const collectionModels = useMemo(
     () => (schema ? selectPrimaryCollectionModels(schema) : []),
     [schema],
@@ -30,23 +35,30 @@ export function HomeRoute() {
   >({});
 
   useEffect(() => {
-    const stopBroadcast = connectBroadcastToClientStore(defaultSchemaKey);
+    setSelectedViewName(null);
+    setSelectedQueryName(null);
+    setSelectedContextIdsByView({});
+  }, [schemaKey]);
+
+  useEffect(() => {
+    selectClientStoreSchemaKey(schemaKey);
+    const stopBroadcast = connectBroadcastToClientStore(schemaKey);
     let stopPolling = () => {};
     let cancelled = false;
 
     async function startSync() {
-      setSyncStatus({ state: "syncing", message: "Syncing with authority..." });
+      setSyncStatus({ state: "syncing", message: `Syncing ${app.label}...` });
 
       try {
-        await hydrateClientStore(defaultSchemaKey);
-        await bootstrapClient(defaultSchemaKey);
+        await hydrateClientStore(schemaKey);
+        await bootstrapClient(schemaKey);
 
         if (cancelled) {
           return;
         }
 
         setSyncStatus({ state: "idle", message: "Synced." });
-        stopPolling = startPollingSync(defaultSchemaKey);
+        stopPolling = startPollingSync(schemaKey);
       } catch (error) {
         if (cancelled) {
           return;
@@ -66,7 +78,7 @@ export function HomeRoute() {
       stopBroadcast();
       stopPolling();
     };
-  }, []);
+  }, [app.label, schemaKey]);
 
   useEffect(() => {
     const selectedViewExists = collectionModels.some(
@@ -93,7 +105,7 @@ export function HomeRoute() {
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p className="text-sm text-slate-600">
-          <SchemaLoadingMessage />
+          <SchemaLoadingMessage appLabel={app.label} />
         </p>
         <DeveloperStatusLine />
       </section>
@@ -174,12 +186,10 @@ export function HomeRoute() {
   );
 }
 
-function SchemaLoadingMessage() {
+function SchemaLoadingMessage({ appLabel }: { appLabel: string }) {
   const syncStatus = useSyncStatus();
 
-  return syncStatus.state === "error"
-    ? "Could not load the active schema."
-    : "Loading active schema...";
+  return syncStatus.state === "error" ? `Could not load ${appLabel}.` : `Loading ${appLabel}...`;
 }
 
 function useTodayDateString() {
