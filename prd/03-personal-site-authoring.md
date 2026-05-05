@@ -1,7 +1,7 @@
 # PRD 03: Personal site content authoring
 
 Status: ready
-Current chunk: PS-01 text formats and editorial editors
+Current chunk: PS-02 source site schema and seed records
 Last updated: 2026-05-05
 
 ## Goal
@@ -654,50 +654,68 @@ Rules:
 
 | ID    | Status  | Depends on | Main files                                                       | Acceptance                                                                        |
 | ----- | ------- | ---------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| PS-01 | pending | none       | `src/shared/*`, `src/app/generated/*`, tests                     | Text formats and multiline/markdown-style editors parse and work in generated UI. |
+| PS-01 | shipped | none       | `src/shared/*`, `src/app/generated/*`, tests                     | Text formats and multiline/markdown-style editors parse and work in generated UI. |
 | PS-02 | pending | PS-01      | `schema/apps/site/*`, app registries, route tests                | Site source schema and seed records parse, bootstrap, and expose `/site` routes.  |
 | PS-03 | pending | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
 | PS-04 | pending | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
 | PS-05 | pending | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
 
-## Current chunk
+## Shipped chunks
 
 ### PS-01 text formats and editorial editors
 
-Goal: make text fields usable for long-form and editorial data without adding new persisted value types.
+Status: shipped 2026-05-05.
+
+Outcome:
+
+- `TextFieldSchema` has optional `format`.
+- Supported text formats are `plain`, `longText`, `markdown`, `href`, `slug`, `color`, and `icon`.
+- Unknown text formats are rejected during schema parse.
+- Text fields support `text`, `textarea`, `markdown`, `href`, `slug`, `color`, and `icon` editors.
+- `markdown` and `textarea` render as multiline textareas in generated create and record editors.
+- Text values still validate and store as plain strings.
+
+Evidence:
+
+- Parser coverage: `src/shared/schema.test.ts`.
+- Field behavior coverage: `src/shared/field-types.test.ts`.
+- Generated UI coverage: `src/app.test.tsx`.
+- Browser Use smoke verified temporary markdown inline and create textareas, then the dev session was restarted on `https://winter.formless.local`.
+- `bun run test` passed.
+- `bun run check` passed.
 
 Tasks:
 
-- [ ] Add optional `format` to text field schema.
-- [ ] Parse supported text formats in `src/shared/schema-fields.ts`.
-- [ ] Extend `TextFieldSchema` in `src/shared/schema-types.ts`.
-- [ ] Add text-compatible editors:
+- [x] Add optional `format` to text field schema.
+- [x] Parse supported text formats in `src/shared/schema-fields.ts`.
+- [x] Extend `TextFieldSchema` in `src/shared/schema-types.ts`.
+- [x] Add text-compatible editors:
   - `textarea`;
   - `markdown`;
   - `href`;
   - `slug`;
   - `color`;
   - `icon`.
-- [ ] Update field behavior in `src/shared/field-types.ts`.
-- [ ] Update generated record field editor for multiline text.
-- [ ] Update generated create editor for multiline text.
-- [ ] Keep field values as strings in protocol/storage.
-- [ ] Add parser and field behavior tests.
-- [ ] Add generated editor tests.
+- [x] Update field behavior in `src/shared/field-types.ts`.
+- [x] Update generated record field editor for multiline text.
+- [x] Update generated create editor for multiline text.
+- [x] Keep field values as strings in protocol/storage.
+- [x] Add parser and field behavior tests.
+- [x] Add generated editor tests.
 
 Acceptance checks:
 
-- [ ] Schema accepts `text` fields with `format: "markdown"`.
-- [ ] Schema rejects unknown text formats.
-- [ ] `markdown` editor is valid for text fields.
-- [ ] `markdown` editor is invalid for non-text fields.
-- [ ] Generated record editor renders a multiline input for markdown text.
-- [ ] Generated create editor renders a multiline input for markdown text.
-- [ ] Stored values stay plain strings.
-- [ ] `bun run test` passes.
-- [ ] `bun run check` passes.
+- [x] Schema accepts `text` fields with `format: "markdown"`.
+- [x] Schema rejects unknown text formats.
+- [x] `markdown` editor is valid for text fields.
+- [x] `markdown` editor is invalid for non-text fields.
+- [x] Generated record editor renders a multiline input for markdown text.
+- [x] Generated create editor renders a multiline input for markdown text.
+- [x] Stored values stay plain strings.
+- [x] `bun run test` passes.
+- [x] `bun run check` passes.
 
-## Later chunks
+## Current chunk
 
 ### PS-02 source site schema and seed records
 
@@ -730,6 +748,8 @@ Acceptance checks:
 - [ ] `person` supports author/profile data.
 - [ ] `bun run test` passes.
 - [ ] `bun run check` passes.
+
+## Later chunks
 
 ### PS-03 editorial workspaces
 

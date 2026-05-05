@@ -1,8 +1,17 @@
 import { getFieldTypeBehavior } from "../../shared/field-types.ts";
 import type { FieldEditor, FieldSchema } from "../../shared/schema.ts";
 
+export type TextFieldEditor = Extract<
+  FieldEditor,
+  "text" | "textarea" | "markdown" | "href" | "slug" | "color" | "icon"
+>;
+
 export type GeneratedFieldEditorAdapter =
-  | { kind: "text"; field: Extract<FieldSchema, { type: "text" }> }
+  | {
+      kind: "text";
+      field: Extract<FieldSchema, { type: "text" }>;
+      editor: TextFieldEditor;
+    }
   | { kind: "boolean"; field: Extract<FieldSchema, { type: "boolean" }> }
   | { kind: "date"; field: Extract<FieldSchema, { type: "date" }> }
   | { kind: "number"; field: Extract<FieldSchema, { type: "number" }> }
@@ -37,5 +46,21 @@ export function selectGeneratedFieldEditorAdapter(
     return { kind: "reference", field };
   }
 
-  return { kind: "text", field };
+  if (!isTextFieldEditor(editor)) {
+    throw new Error(`Editor "${editor}" is not valid for field type "text".`);
+  }
+
+  return { kind: "text", field, editor };
+}
+
+function isTextFieldEditor(editor: FieldEditor): editor is TextFieldEditor {
+  return (
+    editor === "text" ||
+    editor === "textarea" ||
+    editor === "markdown" ||
+    editor === "href" ||
+    editor === "slug" ||
+    editor === "color" ||
+    editor === "icon"
+  );
 }

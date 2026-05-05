@@ -2,6 +2,84 @@ import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/rates/schema.json";
 import { parseAppSchema } from "./schema.ts";
 
+describe("schema text fields", () => {
+  it("parses text formats and text-compatible generated editors", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: taskEntityWithMarkdownBody(),
+        },
+        itemViews: {
+          taskListItem: {
+            entity: "task",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+              body: { editor: "markdown", commit: "field-commit" },
+            },
+          },
+        },
+        views: {
+          taskHome: defaultCollectionView(),
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text" },
+              body: { editor: "markdown" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.task?.fields.body).toEqual({
+      type: "text",
+      required: false,
+      label: "Body",
+      format: "markdown",
+    });
+    expect(schema.itemViews.taskListItem?.fields.body).toEqual({
+      editor: "markdown",
+      commit: "field-commit",
+    });
+    expect(schema.views.taskCreate).toMatchObject({
+      type: "create",
+      fields: {
+        body: { editor: "markdown" },
+      },
+    });
+  });
+
+  it("rejects unknown text formats and text editors on non-text fields", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithMarkdownBody({
+              body: { type: "text", required: false, format: "html" },
+            }),
+          },
+        }),
+      ),
+    ).toThrow("text format must be");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                dueDate: { editor: "markdown", commit: "field-commit" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('editor must match field type "date"');
+  });
+});
+
 describe("schema enum fields", () => {
   it("parses enum fields, query values, and generated editors", () => {
     const schema = parseAppSchema(
@@ -2130,6 +2208,22 @@ function taskEntityWithKindEnum() {
           role: { label: "Role" },
           stream: { label: "Stream" },
         },
+      },
+    },
+  };
+}
+
+function taskEntityWithMarkdownBody(overrides: Record<string, Record<string, unknown>> = {}) {
+  return {
+    ...defaultEntities().task,
+    fields: {
+      ...defaultEntities().task.fields,
+      body: {
+        type: "text",
+        required: false,
+        label: "Body",
+        format: "markdown",
+        ...overrides.body,
       },
     },
   };

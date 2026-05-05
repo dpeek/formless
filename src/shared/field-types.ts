@@ -28,7 +28,7 @@ export const fieldTypeBehaviors = {
   text: {
     type: "text",
     filterOps: ["eq"],
-    editors: ["text"],
+    editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
     defaultEditor: "text",
     defaultCommit: "field-commit",
     validatesExistingStoredValues: false,
@@ -113,6 +113,12 @@ export const fieldTypeBehaviors = {
 
 export const fieldEditors = [
   "text",
+  "textarea",
+  "markdown",
+  "href",
+  "slug",
+  "color",
+  "icon",
   "boolean",
   "date",
   "number",

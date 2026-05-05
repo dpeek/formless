@@ -549,6 +549,59 @@ describe("generated forms and records", () => {
     expect(html).toContain("Stream");
   });
 
+  it("renders markdown create controls as multiline textareas", () => {
+    const task = taskEntityWithMarkdownBody();
+    const action: Extract<HomeActionConfig, { type: "create" }> = {
+      type: "create",
+      label: "Create Task",
+      entityName: "task",
+      entity: task,
+      fields: [
+        {
+          fieldName: "body",
+          field: task.fields.body,
+          editor: "markdown",
+        },
+      ],
+      defaults: [],
+      enabled: task.mutations.create.enabled,
+    };
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+
+    expect(html).toContain("<textarea");
+    expect(html).toContain('name="body"');
+    expect(html).toContain("Body");
+  });
+
+  it("renders markdown inline editors as multiline textareas", () => {
+    const task = taskEntityWithMarkdownBody();
+    const recordFields: RecordFieldConfig[] = [
+      {
+        fieldName: "body",
+        field: task.fields.body,
+        editor: "markdown",
+        commit: "field-commit",
+      },
+    ];
+
+    applyBootstrapResponse(bootstrap([markdownRecord("## Draft\n\nLong body")]));
+    const html = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={recordFields}
+      />,
+    );
+
+    expect(html).toContain("<textarea");
+    expect(html).toContain('aria-label="Body"');
+    expect(html).toContain("## Draft");
+    expect(html).not.toContain('type="text"');
+  });
+
   it("renders enum inline editors with labels and raw unknown values", () => {
     const task = taskEntityWithKindEnum();
     const recordFields: RecordFieldConfig[] = [
@@ -1057,6 +1110,15 @@ function enumRecord(kind: string): StoredRecord {
   };
 }
 
+function markdownRecord(body: string): StoredRecord {
+  return {
+    id: "record-1",
+    entity: "task",
+    values: { body },
+    createdAt: "2026-04-29T00:00:01.000Z",
+  };
+}
+
 function numberRecord(estimate: number): StoredRecord {
   return {
     id: "record-1",
@@ -1128,6 +1190,25 @@ function taskEntityWithKindEnum(): EntitySchema {
           role: { label: "Role" },
           stream: { label: "Stream" },
         },
+      },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
+  };
+}
+
+function taskEntityWithMarkdownBody(): EntitySchema {
+  return {
+    label: "Task",
+    fields: {
+      body: {
+        type: "text",
+        required: false,
+        label: "Body",
+        format: "markdown",
       },
     },
     mutations: {

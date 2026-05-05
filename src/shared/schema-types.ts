@@ -4,7 +4,17 @@ export type TextFieldSchema = {
   type: "text";
   required: boolean;
   label?: string;
+  format?: TextFieldFormat;
 };
+
+export type TextFieldFormat =
+  | "plain"
+  | "longText"
+  | "markdown"
+  | "href"
+  | "slug"
+  | "color"
+  | "icon";
 
 export type BooleanFieldSchema = {
   type: "boolean";
@@ -59,7 +69,19 @@ export type FieldSchema =
 
 export type FieldCommitPolicy = "immediate" | "field-commit";
 
-export type FieldEditor = "text" | "boolean" | "date" | "number" | "enum" | "reference";
+export type FieldEditor =
+  | "text"
+  | "textarea"
+  | "markdown"
+  | "href"
+  | "slug"
+  | "color"
+  | "icon"
+  | "boolean"
+  | "date"
+  | "number"
+  | "enum"
+  | "reference";
 
 export type ViewFieldSchema = {
   editor: FieldEditor;

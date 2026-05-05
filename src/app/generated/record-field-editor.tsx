@@ -4,6 +4,7 @@ import { Field, FieldError } from "@formless/ui/field";
 import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
+import { Textarea } from "@formless/ui/textarea";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
@@ -174,13 +175,23 @@ export function RecordFieldEditor({
     );
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  const isMultilineTextEditor =
+    adapter.kind === "text" && (adapter.editor === "textarea" || adapter.editor === "markdown");
+
+  function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
       void commit(inputValueToFieldValue(field, event.currentTarget.value));
       return;
     }
 
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setDraft(fieldValueToInputValue(recordValue));
+    }
+  }
+
+  function handleTextareaKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
       setDraft(fieldValueToInputValue(recordValue));
@@ -199,26 +210,47 @@ export function RecordFieldEditor({
     >
       <Field>
         <Label className={labelClass}>{label}</Label>
-        <Input
-          aria-label={label}
-          className={
-            density === "compact"
-              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
-              : "w-full rounded border border-slate-300 px-3 py-2"
-          }
-          disabled={!canPatch || isPending}
-          onBlur={(event) => {
-            if (commitPolicy === "field-commit") {
-              void commit(inputValueToFieldValue(field, event.currentTarget.value));
+        {isMultilineTextEditor ? (
+          <Textarea
+            aria-label={label}
+            className={
+              density === "compact"
+                ? "min-h-20 w-full rounded border border-slate-300 px-2 py-1 text-xs"
+                : "min-h-28 w-full rounded border border-slate-300 px-3 py-2"
             }
-          }}
-          onChange={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={handleKeyDown}
-          required={field.required}
-          {...numberInputAttributes(field)}
-          type={adapter.kind === "date" ? "date" : adapter.kind === "number" ? "number" : "text"}
-          value={draft}
-        />
+            disabled={!canPatch || isPending}
+            onBlur={(event) => {
+              if (commitPolicy === "field-commit") {
+                void commit(event.currentTarget.value);
+              }
+            }}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={handleTextareaKeyDown}
+            required={field.required}
+            value={draft}
+          />
+        ) : (
+          <Input
+            aria-label={label}
+            className={
+              density === "compact"
+                ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+                : "w-full rounded border border-slate-300 px-3 py-2"
+            }
+            disabled={!canPatch || isPending}
+            onBlur={(event) => {
+              if (commitPolicy === "field-commit") {
+                void commit(inputValueToFieldValue(field, event.currentTarget.value));
+              }
+            }}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            onKeyDown={handleInputKeyDown}
+            required={field.required}
+            {...numberInputAttributes(field)}
+            type={adapter.kind === "date" ? "date" : adapter.kind === "number" ? "number" : "text"}
+            value={draft}
+          />
+        )}
       </Field>
       {error ? <FieldError>{error}</FieldError> : null}
     </div>

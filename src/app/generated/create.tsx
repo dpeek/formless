@@ -14,6 +14,7 @@ import { Field, FieldSet } from "@formless/ui/field";
 import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
+import { Textarea } from "@formless/ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitCreateMutation } from "../../client/sync.ts";
@@ -259,6 +260,15 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
 
   if (adapter.kind === "reference") {
     return <ReferenceCreateField field={adapter.field} fieldName={fieldName} label={label} />;
+  }
+
+  if (adapter.kind === "text" && (adapter.editor === "textarea" || adapter.editor === "markdown")) {
+    return (
+      <Field>
+        <Label>{label}</Label>
+        <Textarea name={fieldName} required={field.required} />
+      </Field>
+    );
   }
 
   return (

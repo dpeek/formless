@@ -16,8 +16,19 @@ import type {
   FieldSchema,
   NumberFieldSchema,
   ReferenceFieldSchema,
+  TextFieldFormat,
   TextFieldSchema,
 } from "./schema-types.ts";
+
+const textFieldFormats = [
+  "plain",
+  "longText",
+  "markdown",
+  "href",
+  "slug",
+  "color",
+  "icon",
+] satisfies TextFieldFormat[];
 
 export type ParsedEntityCatalog = {
   entities: Record<string, EntitySchema>;
@@ -233,6 +244,13 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
   const label = parseFieldLabel(entityName, fieldName, value.label);
 
   if (value.type === "text") {
+    assertExactKeys(
+      `Field "${entityName}.${fieldName}"`,
+      value,
+      ["type", "required"],
+      ["label", "format"],
+    );
+
     const field: TextFieldSchema = {
       type: "text",
       required: value.required,
@@ -240,6 +258,11 @@ function parseField(entityName: string, fieldName: string, value: unknown): Fiel
 
     if (label !== undefined) {
       field.label = label;
+    }
+
+    const format = parseOptionalTextFieldFormat(entityName, fieldName, value.format);
+    if (format !== undefined) {
+      field.format = format;
     }
 
     return field;
@@ -495,4 +518,22 @@ function parseFieldLabel(
   }
 
   return value;
+}
+
+function parseOptionalTextFieldFormat(
+  entityName: string,
+  fieldName: string,
+  value: unknown,
+): TextFieldFormat | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !textFieldFormats.includes(value as TextFieldFormat)) {
+    throw new Error(
+      `Field "${entityName}.${fieldName}" text format must be "plain", "longText", "markdown", "href", "slug", "color", or "icon".`,
+    );
+  }
+
+  return value as TextFieldFormat;
 }

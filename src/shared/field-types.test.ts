@@ -31,7 +31,13 @@ describe("field type behavior", () => {
     ).toEqual({
       title: {
         filterOps: ["eq"],
-        editors: ["text"],
+        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
+        defaultEditor: "text",
+        defaultCommit: "field-commit",
+      },
+      body: {
+        filterOps: ["eq"],
+        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
         defaultEditor: "text",
         defaultCommit: "field-commit",
       },
@@ -110,6 +116,10 @@ describe("field type behavior", () => {
       kind: "set",
       value: "rec_resource_1",
     });
+    expect(validateAuthorityFieldValue("body", fields.body, "## Heading\n\nBody", true)).toEqual({
+      kind: "set",
+      value: "## Heading\n\nBody",
+    });
 
     expect(() => validateAuthorityFieldValue("estimate", fields.estimate, Infinity, true)).toThrow(
       'Field "estimate" must be a finite number.',
@@ -137,6 +147,7 @@ describe("field type behavior", () => {
 
 const fields = {
   title: { type: "text", required: true },
+  body: { type: "text", required: false, format: "markdown" },
   done: { type: "boolean", required: true, default: false },
   dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false, default: 0, min: 0, integer: true },
