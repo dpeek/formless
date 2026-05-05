@@ -1,6 +1,6 @@
-# PRD 02: Personal site content authoring
+# PRD 03: Personal site content authoring
 
-Status: proposed
+Status: ready
 Current chunk: PS-01 text formats and editorial editors
 Last updated: 2026-05-05
 
@@ -59,10 +59,13 @@ Existing anchors:
 - Generated table renderer: `src/app/generated/table.tsx`.
 - View model selection: `src/client/views.ts`.
 - Query evaluator: `src/shared/query.ts`.
-- App registry: `src/shared/schema-apps.ts`.
+- App route registry: `src/shared/schema-apps.ts`.
+- App shell route generation: `src/app.tsx`.
+- Schema editor route: `src/app/routes/schema.tsx`.
 - Worker source schema registry: `src/worker/schema-apps.ts`.
+- Keyed authority routes: `src/worker/authority.ts`.
 - Current source apps: `schema/apps/tasks/`, `schema/apps/rates/`.
-- Route workstream: `prd/01-schema-routes.md`.
+- Shipped route workstream: `prd/01-schema-routes.md`.
 
 New files:
 
@@ -80,6 +83,9 @@ Likely changed files:
 - `src/app/generated/create.tsx`.
 - `src/shared/schema-apps.ts`.
 - `src/worker/schema-apps.ts`.
+- `src/shared/schema-apps.test.ts`.
+- `src/worker/schema-apps.test.ts`.
+- `src/test/schema-apps.ts`.
 - `src/shared/schema.test.ts`.
 - `src/shared/field-types.test.ts`.
 - `src/client/views.test.ts`.
@@ -146,6 +152,7 @@ Likely changed files:
 | PS-D6 | Keep public render templates out of the first schema.                                              | The user asked for schema and admin/editorial surfaces only.                                  | This PRD                                     |
 | PS-D7 | Use queries for authoring scopes, not persisted aggregate data.                                    | Counts and lists should derive from records locally.                                          | `src/shared/query.ts`, `src/client/views.ts` |
 | PS-D8 | Use source-owned seed JSON for sample site content.                                                | Seeds should stay close to future import/export snapshot shape.                               | `schema/apps/*/seed-records.json`            |
+| PS-D9 | Add site as a first-class schema app with `/site` and `/site/schema`.                              | Schema-backed app routes have shipped and app routes are generated from `schemaApps`.         | `prd/01-schema-routes.md`, `src/app.tsx`     |
 
 ## Non-goals
 
@@ -648,7 +655,7 @@ Rules:
 | ID    | Status  | Depends on | Main files                                                       | Acceptance                                                                        |
 | ----- | ------- | ---------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | PS-01 | pending | none       | `src/shared/*`, `src/app/generated/*`, tests                     | Text formats and multiline/markdown-style editors parse and work in generated UI. |
-| PS-02 | pending | PS-01      | `schema/apps/site/*`, app registries, tests                      | Site source schema and seed records parse and bootstrap as a source app.          |
+| PS-02 | pending | PS-01      | `schema/apps/site/*`, app registries, route tests                | Site source schema and seed records parse, bootstrap, and expose `/site` routes.  |
 | PS-03 | pending | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
 | PS-04 | pending | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
 | PS-05 | pending | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
@@ -702,14 +709,20 @@ Tasks:
 - [ ] Add `schema/apps/site/seed-records.json`.
 - [ ] Add `site` to `src/shared/schema-apps.ts`.
 - [ ] Add parsed site source app to `src/worker/schema-apps.ts`.
+- [ ] Add `site` to `SchemaKey` and route metadata.
+- [ ] Confirm `src/app.tsx` renders `/site` and `/site/schema` from the registry.
 - [ ] Add parser tests for all site entities.
 - [ ] Add source registry tests for site schema and seeds.
+- [ ] Add route tests for `/site` and `/site/schema`.
 - [ ] Keep seed records close to `StoredRecord`.
 
 Acceptance checks:
 
 - [ ] Site schema parses.
 - [ ] Site seed records parse against the source schema.
+- [ ] `/api/site/bootstrap` returns the site schema and seed records.
+- [ ] `/site` opens the site authoring app.
+- [ ] `/site/schema` opens the site schema editor.
 - [ ] `contentItem` supports generic kinds.
 - [ ] `contentPlacement` supports page composition.
 - [ ] `navSection` and `navItem` support header/footer navigation.
@@ -748,7 +761,7 @@ Acceptance checks:
 - [ ] Authors can select a nav section and edit its items.
 - [ ] Authors can create media assets with alt text.
 - [ ] Authors can create people/authors.
-- [ ] Browser route for the site admin opens after route PRD support is available.
+- [ ] Site route stays isolated from `/tasks` and `/rates`.
 - [ ] `bun run test` passes.
 - [ ] `bun run check` passes.
 
@@ -791,7 +804,8 @@ Goal: prove the authoring workflow and document promotion facts.
 Browser smoke:
 
 - [ ] Start app with `bun dev`.
-- [ ] Open the site authoring route.
+- [ ] Open `/site`.
+- [ ] Open `/site/schema`.
 - [ ] Confirm content workspace loads seed content.
 - [ ] Create a draft post.
 - [ ] Edit the post body in the markdown editor.
@@ -821,18 +835,18 @@ Final checks:
 
 ## Blockers
 
-| ID    | Status | Blocks | Notes                                                                                           |
-| ----- | ------ | ------ | ----------------------------------------------------------------------------------------------- |
-| PS-B1 | open   | PS-03  | Dedicated `/site` admin route depends on schema-backed route work in `prd/01-schema-routes.md`. |
+| ID    | Status | Blocks | Notes                                                                                    |
+| ----- | ------ | ------ | ---------------------------------------------------------------------------------------- |
+| PS-B1 | closed | PS-02  | `prd/01-schema-routes.md` shipped route-keyed app, schema, API, reset, and client paths. |
 
 ## Cross-PRD dependencies
 
-| Dependency                        | Direction      | Notes                                                                                                 |
-| --------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
-| PRD 01 schema-backed app routes   | upstream       | Site source app can be added before route smoke, but `/site` route smoke waits for route-key support. |
-| Declarative table/query evolution | optional input | Sorting/filter improvements can improve admin tables later. Do not block this PRD on them.            |
-| Cloudflare media serving          | downstream     | This PRD stores media metadata only. Upload/serving belongs in a later workstream.                    |
-| Public site renderer              | downstream     | This PRD should leave clean data for a renderer but should not implement one.                         |
+| Dependency                        | Direction      | Notes                                                                                                  |
+| --------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| PRD 01 schema-backed app routes   | satisfied      | Route-key support has shipped; adding `site` to `schemaApps` should expose `/site` and `/site/schema`. |
+| Declarative table/query evolution | optional input | Sorting/filter improvements can improve admin tables later. Do not block this PRD on them.             |
+| Cloudflare media serving          | downstream     | This PRD stores media metadata only. Upload/serving belongs in a later workstream.                     |
+| Public site renderer              | downstream     | This PRD should leave clean data for a renderer but should not implement one.                          |
 
 ## Progress rules
 
@@ -850,6 +864,8 @@ When this PRD ships, update `doc/current.md`:
 
 - Site source schema exists under `schema/apps/site/`.
 - Site source seed records exist under `schema/apps/site/seed-records.json`.
+- Site route exists at `/site`.
+- Site schema editor route exists at `/site/schema`.
 - Site authoring app uses generic `contentItem` records.
 - Site authoring app has media, people, navigation, and content placement entities.
 - Text fields support editorial formats and multiline markdown authoring.
