@@ -1,3 +1,5 @@
+import type { SchemaKey } from "../shared/schema-apps.ts";
+
 export type BroadcastEventType =
   | "records-updated"
   | "cursor-updated"
@@ -8,10 +10,10 @@ export type BroadcastEvent = {
   type: BroadcastEventType;
 };
 
-const CHANNEL_NAME = "formless";
+const CHANNEL_NAME_PREFIX = "formless";
 
-export function publishClientEvent(type: BroadcastEventType) {
-  const channel = createChannel();
+export function publishClientEvent(schemaKey: SchemaKey, type: BroadcastEventType) {
+  const channel = createChannel(schemaKey);
 
   if (!channel) {
     return;
@@ -21,8 +23,11 @@ export function publishClientEvent(type: BroadcastEventType) {
   channel.close();
 }
 
-export function listenForClientEvents(listener: (event: BroadcastEvent) => void) {
-  const channel = createChannel();
+export function listenForClientEvents(
+  schemaKey: SchemaKey,
+  listener: (event: BroadcastEvent) => void,
+) {
+  const channel = createChannel(schemaKey);
 
   if (!channel) {
     return () => {};
@@ -39,12 +44,16 @@ export function listenForClientEvents(listener: (event: BroadcastEvent) => void)
   return () => channel.close();
 }
 
-function createChannel() {
+function createChannel(schemaKey: SchemaKey) {
   if (typeof BroadcastChannel === "undefined") {
     return undefined;
   }
 
-  return new BroadcastChannel(CHANNEL_NAME);
+  return new BroadcastChannel(channelName(schemaKey));
+}
+
+function channelName(schemaKey: SchemaKey) {
+  return `${CHANNEL_NAME_PREFIX}:${schemaKey}`;
 }
 
 function isBroadcastEvent(value: unknown): value is BroadcastEvent {

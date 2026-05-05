@@ -14,6 +14,7 @@ import {
   resetClientStore,
 } from "./store.ts";
 import { createActionId, createMutationId } from "../shared/ids.ts";
+import type { SchemaKey } from "../shared/schema-apps.ts";
 import type {
   ActionRequest,
   ActionResponse,
@@ -31,62 +32,69 @@ import type { AppSchema } from "../shared/schema.ts";
 
 const DEFAULT_POLL_INTERVAL_MS = 1500;
 
-export async function bootstrapClient(fetcher: typeof fetch = fetch) {
-  const response = await fetchJson<BootstrapResponse>(fetcher, "/api/bootstrap");
+export async function bootstrapClient(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
+  const response = await fetchJson<BootstrapResponse>(fetcher, apiPath(schemaKey, "bootstrap"));
 
-  await saveBootstrapResponse(response);
+  await saveBootstrapResponse(schemaKey, response);
   applyBootstrapResponse(response);
-  await notifyLocalDataChanged({ schemaChanged: true });
+  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
 
   return response;
 }
 
-export async function syncClient(fetcher: typeof fetch = fetch) {
-  const cursor = await readCursor();
-  const schemaUpdatedAt = await readSchemaUpdatedAt();
-  const url = syncUrl(cursor, schemaUpdatedAt);
+export async function syncClient(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
+  const cursor = await readCursor(schemaKey);
+  const schemaUpdatedAt = await readSchemaUpdatedAt(schemaKey);
+  const url = syncUrl(schemaKey, cursor, schemaUpdatedAt);
   const response = await fetchJson<SyncResponse>(fetcher, url);
 
   const schemaChanged = Boolean(response.schema && response.schemaUpdatedAt);
 
   if (response.schema && response.schemaUpdatedAt) {
-    await saveSchema(response.schema, response.schemaUpdatedAt);
+    await saveSchema(schemaKey, response.schema, response.schemaUpdatedAt);
     applySchemaSave(response.schema, response.schemaUpdatedAt);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor) {
-    await mergeChanges(response.changes, response.cursor);
+    await mergeChanges(schemaKey, response.changes, response.cursor);
     applyChanges(response.changes, response.cursor);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor || schemaChanged) {
-    await notifyLocalDataChanged({ schemaChanged });
+    notifyLocalDataChanged(schemaKey, { schemaChanged });
   }
 
   return response;
 }
 
-export async function fetchActiveSchema(fetcher: typeof fetch = fetch) {
-  const response = await fetchJson<SchemaResponse>(fetcher, "/api/schema");
+export async function fetchActiveSchema(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
+  const response = await fetchJson<SchemaResponse>(fetcher, apiPath(schemaKey, "schema"));
 
-  await saveSchema(response.schema, response.updatedAt);
+  await saveSchema(schemaKey, response.schema, response.updatedAt);
   applySchemaSave(response.schema, response.updatedAt);
-  await notifySchemaChanged();
+  notifySchemaChanged(schemaKey);
 
   return response;
 }
 
-export async function saveActiveSchema(schema: AppSchema, fetcher: typeof fetch = fetch) {
-  const response = await postJson<SchemaUpdateResponse>(fetcher, "/api/schema", { schema });
+export async function saveActiveSchema(
+  schemaKey: SchemaKey,
+  schema: AppSchema,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await postJson<SchemaUpdateResponse>(fetcher, apiPath(schemaKey, "schema"), {
+    schema,
+  });
 
-  await saveSchema(response.schema, response.updatedAt);
+  await saveSchema(schemaKey, response.schema, response.updatedAt);
   applySchemaSave(response.schema, response.updatedAt);
-  await notifySchemaChanged();
+  notifySchemaChanged(schemaKey);
 
   return response;
 }
 
 export async function submitCreateMutation(
+  schemaKey: SchemaKey,
   entity: EntityName,
   values: RecordValues,
   fetcher: typeof fetch = fetch,
@@ -98,16 +106,21 @@ export async function submitCreateMutation(
     values,
   };
 
-  const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
+  const response = await postJson<MutationResponse>(
+    fetcher,
+    apiPath(schemaKey, "mutations"),
+    mutation,
+  );
 
-  await mergeChanges(response.changes, response.cursor);
+  await mergeChanges(schemaKey, response.changes, response.cursor);
   applyChanges(response.changes, response.cursor);
-  await notifyLocalDataChanged();
+  notifyLocalDataChanged(schemaKey);
 
   return response;
 }
 
 export async function submitPatchMutation(
+  schemaKey: SchemaKey,
   entity: EntityName,
   recordId: string,
   values: Partial<RecordValues>,
@@ -121,16 +134,21 @@ export async function submitPatchMutation(
     values,
   };
 
-  const response = await postJson<MutationResponse>(fetcher, "/api/mutations", mutation);
+  const response = await postJson<MutationResponse>(
+    fetcher,
+    apiPath(schemaKey, "mutations"),
+    mutation,
+  );
 
-  await mergeChanges(response.changes, response.cursor);
+  await mergeChanges(schemaKey, response.changes, response.cursor);
   applyChanges(response.changes, response.cursor);
-  await notifyLocalDataChanged();
+  notifyLocalDataChanged(schemaKey);
 
   return response;
 }
 
 export async function submitAction(
+  schemaKey: SchemaKey,
   entity: EntityName,
   actionName: string,
   fetcher: typeof fetch = fetch,
@@ -141,49 +159,57 @@ export async function submitAction(
     action: actionName,
   };
 
-  const response = await postJson<ActionResponse>(fetcher, "/api/actions", action);
+  const response = await postJson<ActionResponse>(fetcher, apiPath(schemaKey, "actions"), action);
 
-  await mergeChanges(response.changes, response.cursor);
+  await mergeChanges(schemaKey, response.changes, response.cursor);
   applyChanges(response.changes, response.cursor);
-  await notifyLocalDataChanged();
+  notifyLocalDataChanged(schemaKey);
 
   return response;
 }
 
-export type DevResetSchema = "default" | "rate-card";
+export async function resetSourceSchema(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
+  const response = await postJson<BootstrapResponse>(
+    fetcher,
+    apiPath(schemaKey, "reset/schema"),
+    {},
+  );
 
-export async function resetRemoteData(
-  schemaOrFetcher: DevResetSchema | typeof fetch = "default",
-  fetcher: typeof fetch = fetch,
-) {
-  const schema = typeof schemaOrFetcher === "function" ? "default" : schemaOrFetcher;
-  const resolvedFetcher = typeof schemaOrFetcher === "function" ? schemaOrFetcher : fetcher;
-  const response = await postJson<BootstrapResponse>(resolvedFetcher, "/api/dev/reset", {
-    schema,
-  });
+  await saveBootstrapResponse(schemaKey, response);
+  applyBootstrapResponse(response);
+  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
+
+  return response;
+}
+
+export async function resetSeedData(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
+  const response = await postJson<BootstrapResponse>(fetcher, apiPath(schemaKey, "reset/seed"), {});
 
   resetClientStore();
-  await deleteClientDb();
-  await saveBootstrapResponse(response);
+  await deleteClientDb(schemaKey);
+  await saveBootstrapResponse(schemaKey, response);
   applyBootstrapResponse(response);
-  await notifyLocalDataChanged({ schemaChanged: true });
+  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
 
   return response;
 }
 
-export function startPollingSync(options: { intervalMs?: number; fetcher?: typeof fetch } = {}) {
+export function startPollingSync(
+  schemaKey: SchemaKey,
+  options: { intervalMs?: number; fetcher?: typeof fetch } = {},
+) {
   const intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const fetcher = options.fetcher ?? fetch;
-  const stopListening = listenForClientEvents((event) => {
+  const stopListening = listenForClientEvents(schemaKey, (event) => {
     if (event.type === "sync-requested") {
-      void syncClient(fetcher);
+      void syncClient(schemaKey, fetcher);
     }
   });
 
-  void syncClient(fetcher);
+  void syncClient(schemaKey, fetcher);
 
   const intervalId = window.setInterval(() => {
-    void syncClient(fetcher);
+    void syncClient(schemaKey, fetcher);
   }, intervalMs);
 
   return () => {
@@ -192,8 +218,8 @@ export function startPollingSync(options: { intervalMs?: number; fetcher?: typeo
   };
 }
 
-export function requestSync() {
-  publishClientEvent("sync-requested");
+export function requestSync(schemaKey: SchemaKey) {
+  publishClientEvent(schemaKey, "sync-requested");
 }
 
 async function fetchJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
@@ -232,16 +258,16 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-async function notifyLocalDataChanged(options: { schemaChanged?: boolean } = {}) {
-  publishClientEvent("records-updated");
-  publishClientEvent("cursor-updated");
+function notifyLocalDataChanged(schemaKey: SchemaKey, options: { schemaChanged?: boolean } = {}) {
+  publishClientEvent(schemaKey, "records-updated");
+  publishClientEvent(schemaKey, "cursor-updated");
   if (options.schemaChanged) {
-    publishClientEvent("schema-updated");
+    publishClientEvent(schemaKey, "schema-updated");
   }
 }
 
-async function notifySchemaChanged() {
-  publishClientEvent("schema-updated");
+function notifySchemaChanged(schemaKey: SchemaKey) {
+  publishClientEvent(schemaKey, "schema-updated");
 }
 
 function isErrorResponse(value: unknown): value is { error: string } {
@@ -254,12 +280,16 @@ function isErrorResponse(value: unknown): value is { error: string } {
   );
 }
 
-function syncUrl(cursor: number, schemaUpdatedAt: string | null) {
+function apiPath(schemaKey: SchemaKey, path: string) {
+  return `/api/${schemaKey}/${path}`;
+}
+
+function syncUrl(schemaKey: SchemaKey, cursor: number, schemaUpdatedAt: string | null) {
   const params = new URLSearchParams({ after: String(cursor) });
 
   if (schemaUpdatedAt) {
     params.set("schemaUpdatedAt", schemaUpdatedAt);
   }
 
-  return `/api/sync?${params.toString()}`;
+  return `${apiPath(schemaKey, "sync")}?${params.toString()}`;
 }

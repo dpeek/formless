@@ -1,5 +1,7 @@
 export type SchemaKey = "tasks" | "rates";
 
+export const defaultSchemaKey = "tasks" satisfies SchemaKey;
+
 export type SchemaAppDefinition = {
   key: SchemaKey;
   label: string;

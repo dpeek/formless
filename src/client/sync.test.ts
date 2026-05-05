@@ -14,7 +14,8 @@ import {
 import {
   bootstrapClient,
   fetchActiveSchema,
-  resetRemoteData,
+  resetSeedData,
+  resetSourceSchema,
   saveActiveSchema,
   submitAction,
   submitCreateMutation,
@@ -34,14 +35,16 @@ import type {
 import type { AppSchema } from "../shared/schema.ts";
 
 beforeEach(async () => {
-  await deleteClientDb();
+  await deleteClientDb("tasks");
+  await deleteClientDb("rates");
   resetClientStore();
 });
 
 describe("client sync", () => {
   it("bootstraps local state from the authority", async () => {
     await bootstrapClient(
-      jsonFetcher("/api/bootstrap", {
+      "tasks",
+      jsonFetcher("/api/tasks/bootstrap", {
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
         records: [record("record-1", "First")],
@@ -49,7 +52,7 @@ describe("client sync", () => {
       } satisfies BootstrapResponse),
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(snapshot.schema).toEqual(appSchema);
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
@@ -57,8 +60,23 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(1);
   });
 
+  it("bootstraps rate data into the rate local database only", async () => {
+    await bootstrapClient(
+      "rates",
+      jsonFetcher("/api/rates/bootstrap", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+        records: [record("record-2", "Rate")],
+        cursor: 2,
+      } satisfies BootstrapResponse),
+    );
+
+    expect((await readLocalSnapshot("tasks")).records).toEqual([]);
+    expect((await readLocalSnapshot("rates")).records).toEqual([record("record-2", "Rate")]);
+  });
+
   it("merges incremental sync records and advances the cursor", async () => {
-    await saveBootstrapResponse({
+    await saveBootstrapResponse("tasks", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-1", "First")],
@@ -66,13 +84,14 @@ describe("client sync", () => {
     });
 
     await syncClient(
-      jsonFetcher("/api/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+      "tasks",
+      jsonFetcher("/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
         changes: [change(2, "record-2", "Second")],
         cursor: 2,
       } satisfies SyncResponse),
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(snapshot.records.map((storedRecord) => storedRecord.id)).toEqual([
       "record-1",
@@ -83,7 +102,8 @@ describe("client sync", () => {
 
   it("requests sync without schema metadata when no schema is cached", async () => {
     await syncClient(
-      jsonFetcher("/api/sync?after=0", {
+      "tasks",
+      jsonFetcher("/api/tasks/sync?after=0", {
         changes: [],
         cursor: 0,
         schema: appSchema,
@@ -91,7 +111,7 @@ describe("client sync", () => {
       } satisfies SyncResponse),
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(snapshot.schema).toEqual(appSchema);
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
@@ -100,7 +120,7 @@ describe("client sync", () => {
   it("merges schema returned by polling sync", async () => {
     const nextSchema = schemaWithSummary();
 
-    await saveBootstrapResponse({
+    await saveBootstrapResponse("tasks", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [],
@@ -108,7 +128,8 @@ describe("client sync", () => {
     });
 
     await syncClient(
-      jsonFetcher("/api/sync?after=0&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+      "tasks",
+      jsonFetcher("/api/tasks/sync?after=0&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
         changes: [],
         cursor: 0,
         schema: nextSchema,
@@ -116,7 +137,7 @@ describe("client sync", () => {
       } satisfies SyncResponse),
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(snapshot.schema).toEqual(nextSchema);
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
@@ -126,12 +147,13 @@ describe("client sync", () => {
     const acceptedRecord = record("record-1", "First");
 
     const response = await submitCreateMutation(
+      "tasks",
       "task",
       { title: "First", done: false },
       async (input, init) => {
         const mutation = parseRequestBody(init?.body);
 
-        expect(input).toBe("/api/mutations");
+        expect(input).toBe("/api/tasks/mutations");
         expect(init?.method).toBe("POST");
         expect(mutation).toMatchObject({
           entity: "task",
@@ -148,7 +170,7 @@ describe("client sync", () => {
       },
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(response.record).toEqual(acceptedRecord);
     expect(snapshot.records).toEqual([acceptedRecord]);
@@ -159,13 +181,14 @@ describe("client sync", () => {
     const acceptedRecord = record("record-1", "First", true);
 
     const response = await submitPatchMutation(
+      "tasks",
       "task",
       "record-1",
       { done: true },
       async (input, init) => {
         const mutation = parseRequestBody(init?.body);
 
-        expect(input).toBe("/api/mutations");
+        expect(input).toBe("/api/tasks/mutations");
         expect(init?.method).toBe("POST");
         expect(mutation).toMatchObject({
           entity: "task",
@@ -183,7 +206,7 @@ describe("client sync", () => {
       },
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(response.record).toEqual(acceptedRecord);
     expect(snapshot.records).toEqual([acceptedRecord]);
@@ -194,21 +217,26 @@ describe("client sync", () => {
     const primaryRecord = record("record-1", "First");
     const lifecycleRecord = record("record-2", "Lifecycle");
 
-    await submitCreateMutation("task", { title: "First", done: false }, async (_input, init) => {
-      const mutation = parseRequestBody(init?.body);
+    await submitCreateMutation(
+      "tasks",
+      "task",
+      { title: "First", done: false },
+      async (_input, init) => {
+        const mutation = parseRequestBody(init?.body);
 
-      return Response.json({
-        record: primaryRecord,
-        changes: [
-          mutationChange(1, mutation.mutationId, primaryRecord, "create"),
-          mutationChange(2, mutation.mutationId, lifecycleRecord, "action"),
-        ],
-        cursor: 2,
-        mutationId: mutation.mutationId,
-      } satisfies MutationResponse);
-    });
+        return Response.json({
+          record: primaryRecord,
+          changes: [
+            mutationChange(1, mutation.mutationId, primaryRecord, "create"),
+            mutationChange(2, mutation.mutationId, lifecycleRecord, "action"),
+          ],
+          cursor: 2,
+          mutationId: mutation.mutationId,
+        } satisfies MutationResponse);
+      },
+    );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(snapshot.records).toEqual([primaryRecord, lifecycleRecord]);
@@ -217,7 +245,7 @@ describe("client sync", () => {
   });
 
   it("merges remote patched records", async () => {
-    await saveBootstrapResponse({
+    await saveBootstrapResponse("tasks", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-1", "First", false)],
@@ -225,13 +253,14 @@ describe("client sync", () => {
     });
 
     await syncClient(
-      jsonFetcher("/api/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+      "tasks",
+      jsonFetcher("/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
         changes: [change(2, "record-1", "First", true, "patch")],
         cursor: 2,
       } satisfies SyncResponse),
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(snapshot.records).toEqual([record("record-1", "First", true)]);
     expect(snapshot.cursor).toBe(2);
@@ -243,32 +272,37 @@ describe("client sync", () => {
       deletedAt: "2026-04-28T00:01:00.000Z",
     };
 
-    await saveBootstrapResponse({
+    await saveBootstrapResponse("tasks", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-1", "Done", true)],
       cursor: 1,
     });
-    await refreshClientStoreFromDb();
+    await refreshClientStoreFromDb("tasks");
 
-    const response = await submitAction("task", "clearCompletedTasks", async (input, init) => {
-      const action = parseActionRequestBody(init?.body);
+    const response = await submitAction(
+      "tasks",
+      "task",
+      "clearCompletedTasks",
+      async (input, init) => {
+        const action = parseActionRequestBody(init?.body);
 
-      expect(input).toBe("/api/actions");
-      expect(init?.method).toBe("POST");
-      expect(action).toMatchObject({
-        entity: "task",
-        action: "clearCompletedTasks",
-      });
+        expect(input).toBe("/api/tasks/actions");
+        expect(init?.method).toBe("POST");
+        expect(action).toMatchObject({
+          entity: "task",
+          action: "clearCompletedTasks",
+        });
 
-      return Response.json({
-        actionId: action.actionId,
-        changes: [actionChange(2, tombstone, action.actionId)],
-        cursor: 2,
-      } satisfies ActionResponse);
-    });
+        return Response.json({
+          actionId: action.actionId,
+          changes: [actionChange(2, tombstone, action.actionId)],
+          cursor: 2,
+        } satisfies ActionResponse);
+      },
+    );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(response.changes[0]?.payload).toEqual(tombstone);
@@ -284,22 +318,23 @@ describe("client sync", () => {
       deletedAt: "2026-04-28T00:01:00.000Z",
     };
 
-    await saveBootstrapResponse({
+    await saveBootstrapResponse("tasks", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-1", "Done", true), record("record-2", "Open")],
       cursor: 1,
     });
-    await refreshClientStoreFromDb();
+    await refreshClientStoreFromDb("tasks");
 
     await syncClient(
-      jsonFetcher("/api/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+      "tasks",
+      jsonFetcher("/api/tasks/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
         changes: [actionChange(2, tombstone, "action-1")],
         cursor: 2,
       } satisfies SyncResponse),
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(snapshot.records).toContainEqual(tombstone);
@@ -311,13 +346,14 @@ describe("client sync", () => {
     const nextSchema = schemaWithSummary();
 
     await fetchActiveSchema(
-      jsonFetcher("/api/schema", {
+      "tasks",
+      jsonFetcher("/api/tasks/schema", {
         schema: nextSchema,
         updatedAt: "2026-04-28T00:00:00.000Z",
       } satisfies SchemaResponse),
     );
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(snapshot.schema).toEqual(nextSchema);
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
@@ -326,8 +362,8 @@ describe("client sync", () => {
   it("saves accepted schema updates into local state", async () => {
     const nextSchema = schemaWithSummary();
 
-    const response = await saveActiveSchema(nextSchema, async (input, init) => {
-      expect(input).toBe("/api/schema");
+    const response = await saveActiveSchema("tasks", nextSchema, async (input, init) => {
+      expect(input).toBe("/api/tasks/schema");
       expect(init?.method).toBe("POST");
       expect(parsePlainRequestBody(init?.body)).toEqual({ schema: nextSchema });
 
@@ -337,32 +373,33 @@ describe("client sync", () => {
       } satisfies SchemaUpdateResponse);
     });
 
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
 
     expect(response.schema).toEqual(nextSchema);
     expect(snapshot.schema).toEqual(nextSchema);
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
   });
 
-  it("resets remote data and reseeds the local replica from the reset response", async () => {
+  it("resets source schema without deleting the selected local database", async () => {
     const acceptedRecord = record("record-2", "Second");
 
-    await saveBootstrapResponse({
+    await saveBootstrapResponse("tasks", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-1", "First")],
       cursor: 1,
     });
 
-    const response = await resetRemoteData(
-      jsonFetcher("/api/dev/reset", {
+    const response = await resetSourceSchema(
+      "tasks",
+      jsonFetcher("/api/tasks/reset/schema", {
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
         records: [acceptedRecord],
         cursor: 2,
       } satisfies BootstrapResponse),
     );
-    const snapshot = await readLocalSnapshot();
+    const snapshot = await readLocalSnapshot("tasks");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(response.records).toEqual([acceptedRecord]);
@@ -373,11 +410,49 @@ describe("client sync", () => {
     expect(storeSnapshot.cursor).toBe(2);
   });
 
-  it("can request the rate-card reset schema", async () => {
-    await resetRemoteData("rate-card", async (input, init) => {
-      expect(input).toBe("/api/dev/reset");
+  it("resets seed data and reseeds only the selected local database", async () => {
+    const acceptedRecord = record("record-2", "Second");
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+    await saveBootstrapResponse("rates", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-3", "Rate")],
+      cursor: 3,
+    });
+
+    const response = await resetSeedData(
+      "rates",
+      jsonFetcher("/api/rates/reset/seed", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+        records: [acceptedRecord],
+        cursor: 2,
+      } satisfies BootstrapResponse),
+    );
+    const taskSnapshot = await readLocalSnapshot("tasks");
+    const rateSnapshot = await readLocalSnapshot("rates");
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(response.records).toEqual([acceptedRecord]);
+    expect(taskSnapshot.records).toEqual([record("record-1", "First")]);
+    expect(rateSnapshot.records).toEqual([acceptedRecord]);
+    expect(rateSnapshot.cursor).toBe(2);
+    expect(storeSnapshot.recordsById["record-1"]).toBeUndefined();
+    expect(storeSnapshot.recordsById["record-2"]).toEqual(acceptedRecord);
+    expect(storeSnapshot.cursor).toBe(2);
+  });
+
+  it("can request the rate-card source schema reset", async () => {
+    await resetSourceSchema("rates", async (input, init) => {
+      expect(input).toBe("/api/rates/reset/schema");
       expect(init?.method).toBe("POST");
-      expect(parsePlainRequestBody(init?.body)).toEqual({ schema: "rate-card" });
+      expect(parsePlainRequestBody(init?.body)).toEqual({});
 
       return Response.json({
         schema: appSchema,
@@ -391,13 +466,14 @@ describe("client sync", () => {
   it("refreshes schema state from broadcast events", async () => {
     const states = [getClientStoreSnapshot()];
     const unsubscribe = subscribeToClientStore(() => states.push(getClientStoreSnapshot()));
-    const stopBroadcast = connectBroadcastToClientStore();
+    const stopBroadcast = connectBroadcastToClientStore("tasks");
     const nextSchema = schemaWithSummary();
 
     try {
       await saveActiveSchema(
+        "tasks",
         nextSchema,
-        jsonFetcher("/api/schema", {
+        jsonFetcher("/api/tasks/schema", {
           schema: nextSchema,
           updatedAt: "2026-04-28T00:00:00.000Z",
         } satisfies SchemaUpdateResponse),
@@ -416,11 +492,34 @@ describe("client sync", () => {
   it("refreshes state from broadcast events without remounting routes", async () => {
     const states = [getClientStoreSnapshot()];
     const unsubscribe = subscribeToClientStore(() => states.push(getClientStoreSnapshot()));
-    const stopBroadcast = connectBroadcastToClientStore();
+    const stopBroadcast = connectBroadcastToClientStore("tasks");
 
     try {
-      await mergeRecords([record("record-1", "First")], 1);
-      publishClientEvent("records-updated");
+      await mergeRecords("tasks", [record("record-1", "First")], 1);
+      publishClientEvent("tasks", "records-updated");
+
+      await waitFor(() => states.some((state) => state.recordIdsByEntity.task?.length === 1));
+      expect(states.at(-1)?.recordsById["record-1"]).toEqual(record("record-1", "First"));
+    } finally {
+      stopBroadcast();
+      unsubscribe();
+    }
+  });
+
+  it("ignores broadcast events for another schema key", async () => {
+    const states = [getClientStoreSnapshot()];
+    const unsubscribe = subscribeToClientStore(() => states.push(getClientStoreSnapshot()));
+    const stopBroadcast = connectBroadcastToClientStore("tasks");
+
+    try {
+      await mergeRecords("rates", [record("record-2", "Rate")], 1);
+      publishClientEvent("rates", "records-updated");
+
+      await delay(20);
+      expect(states).toEqual([getClientStoreSnapshot()]);
+
+      await mergeRecords("tasks", [record("record-1", "First")], 1);
+      publishClientEvent("tasks", "records-updated");
 
       await waitFor(() => states.some((state) => state.recordIdsByEntity.task?.length === 1));
       expect(states.at(-1)?.recordsById["record-1"]).toEqual(record("record-1", "First"));
@@ -434,7 +533,8 @@ describe("client sync", () => {
     const notifications: unknown[] = [];
 
     await bootstrapClient(
-      jsonFetcher("/api/bootstrap", {
+      "tasks",
+      jsonFetcher("/api/tasks/bootstrap", {
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
         records: [record("record-1", "First")],
@@ -456,7 +556,7 @@ describe("client sync", () => {
     );
 
     try {
-      await refreshClientStoreFromDb();
+      await refreshClientStoreFromDb("tasks");
 
       const after = getClientStoreSnapshot();
 
@@ -615,4 +715,8 @@ async function waitFor(predicate: () => boolean) {
 
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
+}
+
+async function delay(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }

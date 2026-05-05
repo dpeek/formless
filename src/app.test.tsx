@@ -61,8 +61,8 @@ describe("App smoke routes", () => {
   it("renders a dev reset action", () => {
     const html = renderRoute("/");
 
-    expect(html).toContain("Reset task schema");
-    expect(html).toContain("Reset rate-card schema");
+    expect(html).toContain("Reset task seed data");
+    expect(html).toContain("Reset rate-card seed data");
   });
 });
 

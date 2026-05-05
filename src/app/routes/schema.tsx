@@ -7,6 +7,7 @@ import {
 } from "../../client/store.ts";
 import { type SyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
+import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 import { parseAppSchema, stringifySchema } from "../../shared/schema.ts";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
@@ -20,13 +21,13 @@ export function SchemaRoute() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const stopBroadcast = connectBroadcastToClientStore();
+    const stopBroadcast = connectBroadcastToClientStore(defaultSchemaKey);
     let cancelled = false;
 
     async function loadSchema() {
       try {
-        await hydrateClientStore();
-        await fetchActiveSchema();
+        await hydrateClientStore(defaultSchemaKey);
+        await fetchActiveSchema(defaultSchemaKey);
 
         if (!cancelled) {
           setStatus({ state: "idle", message: "Loaded active schema." });
@@ -62,7 +63,7 @@ export function SchemaRoute() {
 
     try {
       const parsed = parseAppSchema(JSON.parse(editorText) as unknown);
-      const response = await saveActiveSchema(parsed);
+      const response = await saveActiveSchema(defaultSchemaKey, parsed);
 
       setEditorText(stringifySchema(response.schema));
       setStatus({ state: "idle", message: `Saved schema at ${response.updatedAt}.` });

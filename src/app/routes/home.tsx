@@ -9,6 +9,7 @@ import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
 import { bootstrapClient, startPollingSync } from "../../client/sync.ts";
 import { selectPrimaryCollectionModels } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
+import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 import { HomeCollection } from "../generated/collection.tsx";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
@@ -29,7 +30,7 @@ export function HomeRoute() {
   >({});
 
   useEffect(() => {
-    const stopBroadcast = connectBroadcastToClientStore();
+    const stopBroadcast = connectBroadcastToClientStore(defaultSchemaKey);
     let stopPolling = () => {};
     let cancelled = false;
 
@@ -37,15 +38,15 @@ export function HomeRoute() {
       setSyncStatus({ state: "syncing", message: "Syncing with authority..." });
 
       try {
-        await hydrateClientStore();
-        await bootstrapClient();
+        await hydrateClientStore(defaultSchemaKey);
+        await bootstrapClient(defaultSchemaKey);
 
         if (cancelled) {
           return;
         }
 
         setSyncStatus({ state: "idle", message: "Synced." });
-        stopPolling = startPollingSync();
+        stopPolling = startPollingSync(defaultSchemaKey);
       } catch (error) {
         if (cancelled) {
           return;

@@ -6,6 +6,7 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";
 import type { HomeActionConfig } from "../../client/views.ts";
 import type { QueryEvaluationContext, QueryExpression } from "../../shared/query.ts";
+import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 import {
   createDefaultsAreResolved,
   GeneratedCreateDialog,
@@ -36,7 +37,7 @@ export function HomeActionRow({
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      const response = await submitAction(action.entityName, action.actionName);
+      const response = await submitAction(defaultSchemaKey, action.entityName, action.actionName);
       const affected = response.changes.length;
       const message =
         action.count?.type === "count"

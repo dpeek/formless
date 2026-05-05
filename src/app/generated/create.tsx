@@ -20,6 +20,7 @@ import { submitCreateMutation } from "../../client/sync.ts";
 import { fieldLabel, type CreateFieldConfig, type HomeActionConfig } from "../../client/views.ts";
 import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
+import { defaultSchemaKey } from "../../shared/schema-apps.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import { numberInputValueToFieldValue } from "./format.ts";
@@ -53,7 +54,7 @@ export function GeneratedCreateForm({
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
 
     try {
-      await submitCreateMutation(entityName, values);
+      await submitCreateMutation(defaultSchemaKey, entityName, values);
       form.reset();
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
@@ -151,7 +152,7 @@ export function GeneratedCreateDialogForm({
     });
 
     try {
-      const response = await submitCreateMutation(action.entityName, values);
+      const response = await submitCreateMutation(defaultSchemaKey, action.entityName, values);
       form.reset();
       onSuccess?.(response.record.id);
       setSyncStatus({ state: "idle", message: "Saved and synced." });

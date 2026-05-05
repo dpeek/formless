@@ -1,8 +1,9 @@
 import type { AppSchema } from "../shared/schema.ts";
 import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
 import { nowIsoString } from "../shared/clock.ts";
+import type { SchemaKey } from "../shared/schema-apps.ts";
 
-const DB_NAME = "formless";
+const DB_NAME_PREFIX = "formless";
 const DB_VERSION = 1;
 
 const META_STORE = "meta";
@@ -21,8 +22,8 @@ export type LocalSnapshot = {
   lastSyncedAt: string | null;
 };
 
-export async function readLocalSnapshot(): Promise<LocalSnapshot> {
-  const db = await openClientDb();
+export async function readLocalSnapshot(schemaKey: SchemaKey): Promise<LocalSnapshot> {
+  const db = await openClientDb(schemaKey);
 
   try {
     const transaction = db.transaction([META_STORE, RECORDS_STORE], "readonly");
@@ -50,8 +51,8 @@ export async function readLocalSnapshot(): Promise<LocalSnapshot> {
   }
 }
 
-export async function saveBootstrapResponse(response: BootstrapResponse) {
-  const db = await openClientDb();
+export async function saveBootstrapResponse(schemaKey: SchemaKey, response: BootstrapResponse) {
+  const db = await openClientDb(schemaKey);
 
   try {
     const transaction = db.transaction([META_STORE, RECORDS_STORE], "readwrite");
@@ -74,8 +75,8 @@ export async function saveBootstrapResponse(response: BootstrapResponse) {
   }
 }
 
-export async function saveSchema(schema: AppSchema, updatedAt: string) {
-  const db = await openClientDb();
+export async function saveSchema(schemaKey: SchemaKey, schema: AppSchema, updatedAt: string) {
+  const db = await openClientDb(schemaKey);
 
   try {
     const transaction = db.transaction(META_STORE, "readwrite");
@@ -91,15 +92,20 @@ export async function saveSchema(schema: AppSchema, updatedAt: string) {
   }
 }
 
-export async function mergeChanges(changes: ChangeRow[], cursor: number) {
+export async function mergeChanges(schemaKey: SchemaKey, changes: ChangeRow[], cursor: number) {
   await mergeRecords(
+    schemaKey,
     changes.map((change) => change.payload),
     cursor,
   );
 }
 
-export async function mergeRecords(recordsToMerge: StoredRecord[], cursor?: number) {
-  const db = await openClientDb();
+export async function mergeRecords(
+  schemaKey: SchemaKey,
+  recordsToMerge: StoredRecord[],
+  cursor?: number,
+) {
+  const db = await openClientDb(schemaKey);
 
   try {
     const transaction = db.transaction([META_STORE, RECORDS_STORE], "readwrite");
@@ -121,8 +127,8 @@ export async function mergeRecords(recordsToMerge: StoredRecord[], cursor?: numb
   }
 }
 
-export async function readSchemaUpdatedAt() {
-  const db = await openClientDb();
+export async function readSchemaUpdatedAt(schemaKey: SchemaKey) {
+  const db = await openClientDb(schemaKey);
 
   try {
     const transaction = db.transaction(META_STORE, "readonly");
@@ -137,8 +143,8 @@ export async function readSchemaUpdatedAt() {
   }
 }
 
-export async function readCursor() {
-  const db = await openClientDb();
+export async function readCursor(schemaKey: SchemaKey) {
+  const db = await openClientDb(schemaKey);
 
   try {
     const transaction = db.transaction(META_STORE, "readonly");
@@ -153,9 +159,9 @@ export async function readCursor() {
   }
 }
 
-export function deleteClientDb() {
+export function deleteClientDb(schemaKey: SchemaKey) {
   return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(DB_NAME);
+    const request = indexedDB.deleteDatabase(clientDbName(schemaKey));
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error ?? new Error("Could not delete IndexedDB."));
@@ -163,9 +169,9 @@ export function deleteClientDb() {
   });
 }
 
-function openClientDb() {
+function openClientDb(schemaKey: SchemaKey) {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(clientDbName(schemaKey), DB_VERSION);
 
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -182,6 +188,10 @@ function openClientDb() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("Could not open IndexedDB."));
   });
+}
+
+function clientDbName(schemaKey: SchemaKey) {
+  return `${DB_NAME_PREFIX}:${schemaKey}`;
 }
 
 function requestToPromise<T>(request: IDBRequest<T>) {

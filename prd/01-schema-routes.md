@@ -1,7 +1,7 @@
 # PRD 01: Schema-backed app routes
 
 Status: active
-Current chunk: SR-04 keyed client persistence and sync
+Current chunk: SR-05 route-keyed app shell
 Last updated: 2026-05-05
 
 ## Goal
@@ -75,7 +75,7 @@ The result should feel like two schema-backed apps, not one global app whose sch
 | SR-01 | shipped | none       | `schema/apps/**`, `src/shared/schema-apps.ts`, `src/worker/schema-apps.ts` | Source schemas and seed files are app-keyed and parse.                          |
 | SR-02 | shipped | SR-01      | `src/worker/index.ts`, `src/worker/authority.ts`                           | `/api/tasks/*` and `/api/rates/*` dispatch to isolated authority instances.     |
 | SR-03 | shipped | SR-02      | `src/worker/storage.ts`, `src/worker/authority.ts`                         | Fresh bootstrap and reset endpoints use source schema plus source seed records. |
-| SR-04 | ready   | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
+| SR-04 | shipped | SR-02      | `src/client/db.ts`, `src/client/sync.ts`, `src/client/broadcast.ts`        | Client persistence, sync, and broadcast are keyed by schema key.                |
 | SR-05 | pending | SR-04      | `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`      | `/tasks`, `/rates`, `/tasks/schema`, and `/rates/schema` render the right app.  |
 | SR-06 | pending | SR-05      | `src/app/generated/**`, `src/client/sync.ts`                               | Generated create, patch, and action calls submit to the active schema key.      |
 | SR-07 | pending | SR-05      | `src/app/routes/schema.tsx`, `src/app/dev-actions.tsx`                     | Schema editing and reset controls are route-scoped.                             |
@@ -152,39 +152,32 @@ Evidence:
 - `bun run test` passed.
 - `bun run check` passed.
 
-## Current chunk
-
 ### SR-04 keyed client persistence and sync
 
-Goal: local IndexedDB, API calls, and broadcast refreshes are isolated per app route.
+Status: shipped 2026-05-05.
 
-Target local DB names:
+Outcome:
 
-```text
-formless:tasks
-formless:rates
-```
+- `src/client/db.ts` takes `schemaKey` on every exported persistence operation.
+- Local DB names are `formless:tasks` and `formless:rates`.
+- Object stores stay unchanged: `meta`, `records`.
+- `src/client/sync.ts` takes `schemaKey` for bootstrap, sync, schema fetch/save, mutation, action, and reset calls.
+- Sync URLs are built as `/api/${schemaKey}/sync`.
+- Removed `resetRemoteData`.
+- Added `resetSourceSchema(schemaKey)` and `resetSeedData(schemaKey)`.
+- Reset seed deletes only the selected IndexedDB database before writing the selected reset response.
+- Broadcast channel names are keyed as `formless:${schemaKey}`.
+- Store hydration, refresh, and broadcast listeners read from the selected client DB.
+- Existing root routes and generated submit paths pass `defaultSchemaKey` until SR-05 and SR-06 provide active route context.
 
-Tasks:
+Evidence:
 
-- [ ] Add `schemaKey` to every exported persistence operation in `src/client/db.ts`.
-- [ ] Keep object stores unchanged: `meta`, `records`.
-- [ ] Add `schemaKey` to bootstrap, sync, schema fetch/save, mutation, action, and reset calls in `src/client/sync.ts`.
-- [ ] Build sync URLs as `/api/${schemaKey}/sync`.
-- [ ] Replace `resetRemoteData` with `resetSourceSchema(schemaKey)` and `resetSeedData(schemaKey)`.
-- [ ] Delete only the selected IndexedDB database during reset seed data.
-- [ ] Key broadcast channel names by schema key.
+- `src/client/db.test.ts` covers separate client DBs and raw deletion of `formless:rates` without deleting `formless:tasks`.
+- `src/client/sync.test.ts` covers keyed task and rate bootstrap, keyed API URLs, selected reset seed DB deletion, and broadcast isolation.
+- `bun run test` passed.
+- `bun run check` passed.
 
-Acceptance checks:
-
-- [ ] Task bootstrap data writes to `formless:tasks`.
-- [ ] Rate bootstrap data writes to `formless:rates`.
-- [ ] Deleting `formless:rates` does not delete `formless:tasks`.
-- [ ] Client calls use `/api/tasks/*` or `/api/rates/*`.
-- [ ] Reset seed clears only the selected local DB.
-- [ ] Broadcast events for one schema key do not refresh the other route.
-
-## Later chunks
+## Current chunk
 
 ### SR-05 route-keyed app shell
 
@@ -215,6 +208,8 @@ Acceptance checks:
 - [ ] `/tasks/schema` shows the task schema editor.
 - [ ] `/rates/schema` shows the rate-card schema editor.
 - [ ] App tests bootstrap and render both routes.
+
+## Later chunks
 
 ### SR-06 generated UI schema-key propagation
 
@@ -340,6 +335,7 @@ When this PRD ships, update `doc/current.md`:
 - Current API paths are schema-keyed.
 - Source schemas live under `schema/apps/`.
 - Client DBs are schema-keyed.
+- Client broadcast channels are schema-keyed.
 - Global `/api/dev/reset` is gone.
 
 When this PRD ships, update `doc/roadmap.md`:

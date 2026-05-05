@@ -8,6 +8,7 @@ import {
   type QueryEvaluationContext,
   type QueryExpression,
 } from "../shared/query.ts";
+import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
 export type NormalizedClientState = {
@@ -85,12 +86,12 @@ export function resetClientStore() {
   });
 }
 
-export async function hydrateClientStore() {
-  applyLocalSnapshot(await readLocalSnapshot());
+export async function hydrateClientStore(schemaKey: SchemaKey) {
+  applyLocalSnapshot(await readLocalSnapshot(schemaKey));
 }
 
-export async function refreshClientStoreFromDb() {
-  applyLocalSnapshot(await readLocalSnapshot());
+export async function refreshClientStoreFromDb(schemaKey: SchemaKey) {
+  applyLocalSnapshot(await readLocalSnapshot(schemaKey));
 }
 
 export function applyBootstrapResponse(response: BootstrapResponse) {
@@ -246,14 +247,14 @@ export function useLastSyncedAt() {
   return useClientStoreSelector((snapshot) => snapshot.lastSyncedAt);
 }
 
-export function connectBroadcastToClientStore() {
-  return listenForClientEvents((event) => {
+export function connectBroadcastToClientStore(schemaKey: SchemaKey) {
+  return listenForClientEvents(schemaKey, (event) => {
     if (
       event.type === "records-updated" ||
       event.type === "cursor-updated" ||
       event.type === "schema-updated"
     ) {
-      void refreshClientStoreFromDb();
+      void refreshClientStoreFromDb(schemaKey);
     }
   });
 }
