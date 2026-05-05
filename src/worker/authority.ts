@@ -12,8 +12,12 @@ import type {
   MutationResponse,
   PatchMutation,
   RecordValues,
+  SyncResponse,
+  SyncSocketAttachment,
+  SyncSocketServerMessage,
   StoredRecord,
 } from "../shared/protocol.ts";
+import { isSyncSocketClientMessage } from "../shared/protocol.ts";
 import {
   createStoredRecord,
   ensureStorageTables,
@@ -93,6 +97,10 @@ export class FormlessAuthority extends DurableObject<Env> {
           cursor: getCurrentCursor(this.ctx.storage),
           ...schemaFields,
         });
+      }
+
+      if (route.path === "/sync/ws") {
+        return this.handleSyncWebSocketRequest(request, route.app);
       }
 
       if (request.method === "POST" && route.path === "/mutations") {
@@ -176,6 +184,47 @@ export class FormlessAuthority extends DurableObject<Env> {
       throw error;
     }
   }
+
+  webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
+    const parsedMessage = parseSyncSocketMessage(message);
+
+    if (!parsedMessage) {
+      closeMalformedSyncSocket(socket);
+      return;
+    }
+
+    const source = storageSourceFromSyncSocket(this.ctx, socket);
+    const attachment = {
+      cursor: parsedMessage.cursor,
+      schemaUpdatedAt: parsedMessage.schemaUpdatedAt,
+    } satisfies SyncSocketAttachment;
+
+    sendSyncToSocket(this.ctx.storage, source, socket, attachment);
+  }
+
+  private handleSyncWebSocketRequest(request: Request, app: WorkerSchemaAppDefinition) {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "WebSocket sync requires GET." }, 405, { Allow: "GET" });
+    }
+
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+      return jsonResponse({ error: "Expected Upgrade: websocket." }, 426, {
+        Upgrade: "websocket",
+      });
+    }
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+
+    server.serializeAttachment(initialSyncSocketAttachment());
+    this.ctx.acceptWebSocket(server, [app.key]);
+
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+    });
+  }
 }
 
 function storageSourceFromApp(app: WorkerSchemaAppDefinition): StorageSource {
@@ -184,6 +233,91 @@ function storageSourceFromApp(app: WorkerSchemaAppDefinition): StorageSource {
     records: app.seedRecords,
     changeMutationPrefix: app.seedChangeMutationPrefix,
   };
+}
+
+function storageSourceFromSyncSocket(ctx: DurableObjectState, socket: WebSocket): StorageSource {
+  return storageSourceFromSchemaKey(ctx.getTags(socket)[0] ?? ctx.id.name);
+}
+
+function storageSourceFromSchemaKey(schemaKey: string | undefined): StorageSource {
+  const app = schemaKey ? findWorkerSchemaAppDefinition(schemaKey) : undefined;
+
+  if (!app) {
+    throw new Error("Authority Durable Object is missing a valid schema key.");
+  }
+
+  return storageSourceFromApp(app);
+}
+
+function initialSyncSocketAttachment(): SyncSocketAttachment {
+  return { cursor: 0, schemaUpdatedAt: null };
+}
+
+function parseSyncSocketMessage(message: string | ArrayBuffer) {
+  if (typeof message !== "string") {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(message) as unknown;
+
+    return isSyncSocketClientMessage(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sendSyncToSocket(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+  socket: WebSocket,
+  attachment: SyncSocketAttachment,
+) {
+  const response = syncResponseForAttachment(storage, source, attachment);
+  const message = {
+    type: "sync",
+    payload: response,
+  } satisfies SyncSocketServerMessage;
+
+  socket.send(JSON.stringify(message));
+  socket.serializeAttachment({
+    cursor: response.cursor,
+    schemaUpdatedAt: response.schemaUpdatedAt ?? attachment.schemaUpdatedAt,
+  } satisfies SyncSocketAttachment);
+}
+
+function syncResponseForAttachment(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+  attachment: SyncSocketAttachment,
+): SyncResponse {
+  const { schema, updatedAt } = initializeStorageFromSource(storage, source);
+  const schemaFields =
+    attachment.schemaUpdatedAt === updatedAt ? {} : { schema, schemaUpdatedAt: updatedAt };
+
+  return {
+    changes: getChangesAfter(storage, attachment.cursor),
+    cursor: getCurrentCursor(storage),
+    ...schemaFields,
+  };
+}
+
+function closeMalformedSyncSocket(socket: WebSocket) {
+  sendSyncSocketError(socket, "Malformed sync socket message.");
+  socket.close(1003, "Malformed sync message.");
+}
+
+function sendSyncSocketError(socket: WebSocket, message: string) {
+  const response = {
+    type: "error",
+    message,
+  } satisfies SyncSocketServerMessage;
+
+  try {
+    socket.send(JSON.stringify(response));
+  } catch {
+    // The socket is already closing or closed.
+  }
 }
 
 function bootstrapResponse(
@@ -577,12 +711,13 @@ function isValidStoredFieldValue(
   return true;
 }
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}) {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("Cache-Control", "no-store");
+
   return Response.json(body, {
     status,
-    headers: {
-      "Cache-Control": "no-store",
-    },
+    headers: responseHeaders,
   });
 }
 

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+import type { WebSocketEventMap } from "miniflare";
 import type {
   ActionResponse,
   BootstrapResponse,
@@ -6,6 +7,7 @@ import type {
   SchemaResponse,
   SchemaUpdateResponse,
   SyncResponse,
+  SyncSocketServerMessage,
 } from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
@@ -756,6 +758,85 @@ describe("authority", () => {
     expect(missing.schemaUpdatedAt).toEqual(expect.any(String));
     expect(stale.schema).toEqual(appSchema);
     expect(stale.schemaUpdatedAt).toBe(missing.schemaUpdatedAt);
+  });
+
+  it("accepts keyed hibernatable sync WebSocket upgrades", async () => {
+    const tasksSocket = await openSyncSocket("/api/sync/ws", "tasks");
+    const ratesSocket = await openSyncSocket("/api/sync/ws", "rates");
+
+    tasksSocket.close();
+    ratesSocket.close();
+  });
+
+  it("rejects missing schema keys, non-upgrade requests, and non-GET sync WebSocket requests", async () => {
+    await expectNotFound("/api/missing/sync/ws");
+
+    const missingUpgrade = await harness.fetch(apiPath("/api/sync/ws"));
+    const wrongMethod = await harness.fetch(apiPath("/api/sync/ws"), {
+      method: "POST",
+    });
+
+    expect(missingUpgrade.status).toBe(426);
+    expect(wrongMethod.status).toBe(405);
+  });
+
+  it("sends the same stale cursor changes over the sync WebSocket as HTTP sync", async () => {
+    await postMutation("mutation-1", { title: "First", done: false });
+    await postMutation("mutation-2", { title: "Second", done: true });
+    const cursor = taskSeedRecords.length + 1;
+    const httpSync = await getJson<SyncResponse>(`/api/sync?after=${cursor}`);
+    const socket = await openSyncSocket();
+
+    socket.send(
+      JSON.stringify({
+        type: "hello",
+        cursor,
+        schemaUpdatedAt: null,
+      }),
+    );
+    const message = await readSyncSocketMessage(socket);
+
+    expect(message).toEqual({
+      type: "sync",
+      payload: httpSync,
+    });
+
+    socket.close();
+  });
+
+  it("omits schema from sync WebSocket messages when the client schema timestamp is current", async () => {
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    socket.send(
+      JSON.stringify({
+        type: "hello",
+        cursor: 0,
+        schemaUpdatedAt: schemaResponse.updatedAt,
+      }),
+    );
+    const message = await readSyncSocketMessage(socket);
+
+    expect(message.type).toBe("sync");
+    if (message.type === "sync") {
+      expect(message.payload.schema).toBeUndefined();
+      expect(message.payload.schemaUpdatedAt).toBeUndefined();
+      expect(message.payload.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
+    }
+
+    socket.close();
+  });
+
+  it("sends an error and closes malformed sync WebSocket clients", async () => {
+    const socket = await openSyncSocket();
+
+    socket.send("not-json");
+    const message = await readSyncSocketMessage(socket);
+
+    expect(message).toEqual({
+      type: "error",
+      message: "Malformed sync socket message.",
+    });
   });
 
   it("rejects invalid sync cursors", async () => {
@@ -2396,6 +2477,55 @@ async function postActionForEntity(actionId: string, entity: string, action: str
     actionId,
     entity,
     action,
+  });
+}
+
+async function openSyncSocket(path = "/api/sync/ws", schemaKey = currentSchemaKey) {
+  const response = await harness.fetch(apiPath(path, schemaKey), {
+    headers: { Upgrade: "websocket" },
+  });
+
+  expect(response.status).toBe(101);
+  expect(response.webSocket).toBeTruthy();
+
+  const socket = response.webSocket;
+
+  if (!socket) {
+    throw new Error("WebSocket upgrade response did not include a client socket.");
+  }
+
+  socket.accept();
+
+  return socket;
+}
+
+function readSyncSocketMessage(socket: Awaited<ReturnType<typeof openSyncSocket>>) {
+  return new Promise<SyncSocketServerMessage>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("Timed out waiting for sync WebSocket message."));
+    }, 1000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.removeEventListener("message", onMessage);
+      socket.removeEventListener("error", onError);
+    };
+    const onMessage = (event: WebSocketEventMap["message"]) => {
+      cleanup();
+      if (typeof event.data !== "string") {
+        reject(new Error("Sync WebSocket message was not text."));
+        return;
+      }
+
+      resolve(JSON.parse(event.data) as SyncSocketServerMessage);
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Sync WebSocket emitted an error."));
+    };
+
+    socket.addEventListener("message", onMessage);
+    socket.addEventListener("error", onError);
   });
 }
 
