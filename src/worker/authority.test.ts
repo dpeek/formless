@@ -14,6 +14,8 @@ import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/sch
 import {
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
+  siteSeedRecords,
+  siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
@@ -33,6 +35,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await resetSchemaApp("tasks");
   await resetSchemaApp("rates");
+  await resetSchemaApp("site");
   currentSchemaKey = "tasks";
 });
 
@@ -63,6 +66,22 @@ describe("authority", () => {
       records: rateCardSeedRecords,
       cursor: rateCardSeedRecords.length,
     });
+  });
+
+  it("returns the site source schema from the site bootstrap path", async () => {
+    useSchemaApp("site");
+
+    const body = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(body).toEqual({
+      schema: siteSourceSchema,
+      schemaUpdatedAt: expect.any(String),
+      records: siteSeedRecords,
+      cursor: siteSeedRecords.length,
+    });
+    expect(new Set(body.records.map((record) => record.entity))).toEqual(
+      new Set(["contentItem", "contentPlacement", "mediaAsset", "navItem", "navSection", "person"]),
+    );
   });
 
   it("returns source seed changes when sync initializes fresh storage", async () => {

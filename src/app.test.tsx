@@ -28,6 +28,8 @@ import type { EntitySchema } from "./shared/schema.ts";
 import {
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
+  siteSeedRecords,
+  siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema as appSchema,
 } from "./test/schema-apps.ts";
@@ -52,6 +54,8 @@ describe("App smoke routes", () => {
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/rates"');
     expect(html).toContain("Rates");
+    expect(html).toContain('href="/site"');
+    expect(html).toContain("Site");
     expect(html).toContain('href="/tasks/schema"');
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Tasks...");
@@ -65,10 +69,27 @@ describe("App smoke routes", () => {
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/rates"');
     expect(html).toContain("Rates");
+    expect(html).toContain('href="/site"');
+    expect(html).toContain("Site");
     expect(html).toContain('href="/rates/schema"');
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Rates...");
     expect(html).not.toContain("Create Resource");
+  });
+
+  it('renders the "/site" route with site navigation', () => {
+    const html = renderRoute("/site");
+
+    expect(html).toContain('href="/tasks"');
+    expect(html).toContain("Tasks");
+    expect(html).toContain('href="/rates"');
+    expect(html).toContain("Rates");
+    expect(html).toContain('href="/site"');
+    expect(html).toContain("Site");
+    expect(html).toContain('href="/site/schema"');
+    expect(html).toContain("Schema");
+    expect(html).toContain("Loading Site...");
+    expect(html).not.toContain("Create Content item");
   });
 
   it('renders the "/tasks/schema" route', () => {
@@ -100,6 +121,23 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;rate&quot;");
     expect(html).toContain("&quot;resource&quot;");
     expect(html).not.toContain("<code>tasks</code>");
+  });
+
+  it('renders the "/site/schema" route', () => {
+    applyBootstrapResponse(bootstrap([], siteSourceSchema), "site");
+    const html = renderRoute("/site/schema");
+
+    expect(html).toContain('href="/site/schema"');
+    expect(html).toContain("Site Schema");
+    expect(html).toContain("<code>site</code>");
+    expect(html).toContain('aria-label="Site route reset controls"');
+    expect(html).toContain("Save schema");
+    expect(html).toContain("Reset source schema");
+    expect(html).toContain("Reset seed data");
+    expect(html).toContain("&quot;contentItem&quot;");
+    expect(html).toContain("&quot;contentPlacement&quot;");
+    expect(html).not.toContain("<code>tasks</code>");
+    expect(html).not.toContain("<code>rates</code>");
   });
 });
 
@@ -219,6 +257,24 @@ describe("generated collection home", () => {
     expect(html).toMatch(/aria-label="Completed count"[^>]*>1</);
     expect(html).toMatch(/aria-label="Overdue count"[^>]*>1</);
     expect(html).toMatch(/aria-label="Clear completed target count"[^>]*>1</);
+  });
+
+  it("renders seeded site content from the site route", () => {
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute("/site");
+
+    expect(html).toContain("<h1");
+    expect(html).toContain("Content");
+    expect(html).toContain("Create Content item");
+    expect(html).toContain("Home");
+    expect(html).toContain("Estii");
+    expect(html).toContain("Formless");
+    expect(html).toContain("Draft notes on generated editorial tools");
+    expect(html).toMatch(/aria-label="All count"[^>]*>13</);
+    expect(html).toMatch(/aria-label="Draft count"[^>]*>1</);
+    expect(html).toMatch(/aria-label="Published count"[^>]*>12</);
+    expect(html).toMatch(/aria-label="Projects count"[^>]*>3</);
+    expect(html).toMatch(/aria-label="Featured count"[^>]*>6</);
   });
 
   it("renders only primary rate-card collection navigation", () => {

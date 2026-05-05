@@ -1,7 +1,7 @@
 # PRD 03: Personal site content authoring
 
 Status: ready
-Current chunk: PS-02 source site schema and seed records
+Current chunk: PS-03 editorial workspaces
 Last updated: 2026-05-05
 
 ## Goal
@@ -655,7 +655,7 @@ Rules:
 | ID    | Status  | Depends on | Main files                                                       | Acceptance                                                                        |
 | ----- | ------- | ---------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | PS-01 | shipped | none       | `src/shared/*`, `src/app/generated/*`, tests                     | Text formats and multiline/markdown-style editors parse and work in generated UI. |
-| PS-02 | pending | PS-01      | `schema/apps/site/*`, app registries, route tests                | Site source schema and seed records parse, bootstrap, and expose `/site` routes.  |
+| PS-02 | shipped | PS-01      | `schema/apps/site/*`, app registries, route tests                | Site source schema and seed records parse, bootstrap, and expose `/site` routes.  |
 | PS-03 | pending | PS-02      | `schema/apps/site/schema.json`, `src/client/views.ts`, app tests | Content, composition, navigation, media, and people workspaces are usable.        |
 | PS-04 | pending | PS-03      | generated UI, client validation helpers, tests                   | Editorial publish-readiness warnings identify incomplete records.                 |
 | PS-05 | pending | PS-04      | tests and browser smoke                                          | Full admin/editorial smoke passes and docs promotion notes are ready.             |
@@ -715,41 +715,62 @@ Acceptance checks:
 - [x] `bun run test` passes.
 - [x] `bun run check` passes.
 
-## Current chunk
-
 ### PS-02 source site schema and seed records
 
-Goal: add a checked-in personal site source app.
+Status: shipped 2026-05-05.
+
+Outcome:
+
+- Added `schema/apps/site/schema.json`.
+- Added `schema/apps/site/seed-records.json`.
+- Site schema has `contentItem`, `mediaAsset`, `person`, `navSection`, `navItem`, and `contentPlacement`.
+- Site seed has 32 source-owned `StoredRecord`-style records.
+- Added `site` to schema app metadata and worker source app registry.
+- `/site` and `/site/schema` are generated from `schemaApps`.
+- Worker source app loading validates seed ids, entities, field values, and references against the parsed source schema.
+- `/api/site/bootstrap` returns the site source schema and seed records.
+- `/site` currently opens the minimal generated content collection. Richer editorial workspaces remain PS-03.
+
+Evidence:
+
+- Source schema parser coverage: `src/shared/schema.test.ts`.
+- Shared app registry coverage: `src/shared/schema-apps.test.ts`.
+- Worker source registry coverage: `src/worker/schema-apps.test.ts`.
+- Worker bootstrap coverage: `src/worker/authority.test.ts`.
+- Route and generated content coverage: `src/app.test.tsx`.
+- Live bootstrap smoke: `https://paper.formless.local/api/site/bootstrap` returned status `200`, 6 entities, 32 records, and `rec_site_content_home`.
+- `bun run test` passed.
+- `bun run check` passed.
 
 Tasks:
 
-- [ ] Add `schema/apps/site/schema.json`.
-- [ ] Add `schema/apps/site/seed-records.json`.
-- [ ] Add `site` to `src/shared/schema-apps.ts`.
-- [ ] Add parsed site source app to `src/worker/schema-apps.ts`.
-- [ ] Add `site` to `SchemaKey` and route metadata.
-- [ ] Confirm `src/app.tsx` renders `/site` and `/site/schema` from the registry.
-- [ ] Add parser tests for all site entities.
-- [ ] Add source registry tests for site schema and seeds.
-- [ ] Add route tests for `/site` and `/site/schema`.
-- [ ] Keep seed records close to `StoredRecord`.
+- [x] Add `schema/apps/site/schema.json`.
+- [x] Add `schema/apps/site/seed-records.json`.
+- [x] Add `site` to `src/shared/schema-apps.ts`.
+- [x] Add parsed site source app to `src/worker/schema-apps.ts`.
+- [x] Add `site` to `SchemaKey` and route metadata.
+- [x] Confirm `src/app.tsx` renders `/site` and `/site/schema` from the registry.
+- [x] Add parser tests for all site entities.
+- [x] Add source registry tests for site schema and seeds.
+- [x] Add route tests for `/site` and `/site/schema`.
+- [x] Keep seed records close to `StoredRecord`.
 
 Acceptance checks:
 
-- [ ] Site schema parses.
-- [ ] Site seed records parse against the source schema.
-- [ ] `/api/site/bootstrap` returns the site schema and seed records.
-- [ ] `/site` opens the site authoring app.
-- [ ] `/site/schema` opens the site schema editor.
-- [ ] `contentItem` supports generic kinds.
-- [ ] `contentPlacement` supports page composition.
-- [ ] `navSection` and `navItem` support header/footer navigation.
-- [ ] `mediaAsset` requires alt text.
-- [ ] `person` supports author/profile data.
-- [ ] `bun run test` passes.
-- [ ] `bun run check` passes.
+- [x] Site schema parses.
+- [x] Site seed records parse against the source schema.
+- [x] `/api/site/bootstrap` returns the site schema and seed records.
+- [x] `/site` opens the site authoring app.
+- [x] `/site/schema` opens the site schema editor.
+- [x] `contentItem` supports generic kinds.
+- [x] `contentPlacement` supports page composition.
+- [x] `navSection` and `navItem` support header/footer navigation.
+- [x] `mediaAsset` requires alt text.
+- [x] `person` supports author/profile data.
+- [x] `bun run test` passes.
+- [x] `bun run check` passes.
 
-## Later chunks
+## Current chunk
 
 ### PS-03 editorial workspaces
 
@@ -757,9 +778,9 @@ Goal: make the source schema pleasant to edit in the generated app.
 
 Tasks:
 
-- [ ] Add `contentHome` collection view.
+- [ ] Expand `contentHome` beyond the PS-02 minimal route view.
 - [ ] Add `contentTable` table view.
-- [ ] Add `contentCreate` create view.
+- [ ] Expand `contentCreate` for editorial fields.
 - [ ] Add `contentCompositionHome` scoped collection view.
 - [ ] Add `contentPlacementTable` table view.
 - [ ] Add `contentPlacementCreate` create view with context default.
@@ -784,6 +805,8 @@ Acceptance checks:
 - [ ] Site route stays isolated from `/tasks` and `/rates`.
 - [ ] `bun run test` passes.
 - [ ] `bun run check` passes.
+
+## Later chunks
 
 ### PS-04 editorial readiness checks
 

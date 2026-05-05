@@ -1,0 +1,468 @@
+[
+  {
+    "id": "rec_site_media_avatar",
+    "entity": "mediaAsset",
+    "values": {
+      "label": "Site owner portrait",
+      "kind": "image",
+      "key": "site-owner-portrait",
+      "alt": "Portrait of the site owner",
+      "credit": "Source placeholder",
+      "width": 1200,
+      "height": 1200
+    },
+    "createdAt": "2026-05-05T00:00:01.000Z"
+  },
+  {
+    "id": "rec_site_person_owner",
+    "entity": "person",
+    "values": {
+      "name": "Site owner",
+      "role": "Product engineer",
+      "bio": "Builds small, durable software systems for content-heavy products.",
+      "avatar": "rec_site_media_avatar",
+      "href": "/resume",
+      "email": "hello@example.com"
+    },
+    "createdAt": "2026-05-05T00:00:02.000Z"
+  },
+  {
+    "id": "rec_site_content_profile_intro",
+    "entity": "contentItem",
+    "values": {
+      "kind": "profile",
+      "title": "Intro",
+      "subtitle": "Independent product engineer",
+      "body": "I design and build schema-backed software for teams that need their tools to keep up with the work.",
+      "status": "published",
+      "featured": true,
+      "order": 0,
+      "templateKey": "profile-intro",
+      "primaryMedia": "rec_site_media_avatar",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:03.000Z"
+  },
+  {
+    "id": "rec_site_content_home",
+    "entity": "contentItem",
+    "values": {
+      "kind": "page",
+      "title": "Home",
+      "subtitle": "Selected writing and projects",
+      "body": "A concise personal site for current work, writing, and project notes.",
+      "slug": "home",
+      "status": "published",
+      "featured": true,
+      "publishedAt": "2026-05-05",
+      "order": 0,
+      "templateKey": "home",
+      "primaryMedia": "rec_site_media_avatar",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:04.000Z"
+  },
+  {
+    "id": "rec_site_content_blog",
+    "entity": "contentItem",
+    "values": {
+      "kind": "page",
+      "title": "Blog",
+      "subtitle": "Notes on product engineering",
+      "slug": "blog",
+      "status": "published",
+      "featured": false,
+      "publishedAt": "2026-05-05",
+      "order": 1,
+      "templateKey": "post-index",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:05.000Z"
+  },
+  {
+    "id": "rec_site_content_resume",
+    "entity": "contentItem",
+    "values": {
+      "kind": "page",
+      "title": "Resume",
+      "subtitle": "Experience, selected work, and operating notes",
+      "body": "A practical summary of roles, projects, and strengths.",
+      "slug": "resume",
+      "status": "published",
+      "featured": false,
+      "publishedAt": "2026-05-05",
+      "order": 2,
+      "templateKey": "resume",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:06.000Z"
+  },
+  {
+    "id": "rec_site_content_projects",
+    "entity": "contentItem",
+    "values": {
+      "kind": "page",
+      "title": "Projects",
+      "subtitle": "Current and recent product work",
+      "slug": "projects",
+      "status": "published",
+      "featured": false,
+      "publishedAt": "2026-05-05",
+      "order": 3,
+      "templateKey": "project-index",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:07.000Z"
+  },
+  {
+    "id": "rec_site_content_project_estii",
+    "entity": "contentItem",
+    "values": {
+      "kind": "project",
+      "title": "Estii",
+      "subtitle": "Commercial planning and rate-card workflows",
+      "body": "Estii helps teams turn operational assumptions into clear, reusable pricing structures.",
+      "slug": "projects/estii",
+      "status": "published",
+      "featured": true,
+      "publishedAt": "2026-05-05",
+      "order": 0,
+      "templateKey": "project",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:08.000Z"
+  },
+  {
+    "id": "rec_site_content_project_opensurf",
+    "entity": "contentItem",
+    "values": {
+      "kind": "project",
+      "title": "OpenSurf",
+      "subtitle": "Shared vocabulary for surf data and sessions",
+      "body": "OpenSurf explores portable data models for sessions, spots, boards, and conditions.",
+      "slug": "projects/opensurf",
+      "status": "published",
+      "featured": true,
+      "publishedAt": "2026-05-05",
+      "order": 1,
+      "templateKey": "project",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:09.000Z"
+  },
+  {
+    "id": "rec_site_content_project_formless",
+    "entity": "contentItem",
+    "values": {
+      "kind": "project",
+      "title": "Formless",
+      "subtitle": "Schema-backed application authoring",
+      "body": "Formless makes app schema describe enough behavior to produce useful generated software.",
+      "slug": "projects/formless",
+      "status": "published",
+      "featured": true,
+      "publishedAt": "2026-05-05",
+      "order": 2,
+      "templateKey": "project",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:10.000Z"
+  },
+  {
+    "id": "rec_site_content_post_shipped_schema",
+    "entity": "contentItem",
+    "values": {
+      "kind": "post",
+      "title": "Shipping schema-backed authoring",
+      "subtitle": "Why the content model starts flat",
+      "body": "The first useful content app should keep records flat and move composition into relationships and views.",
+      "slug": "blog/shipping-schema-backed-authoring",
+      "status": "published",
+      "featured": true,
+      "publishedAt": "2026-05-05",
+      "order": 0,
+      "templateKey": "post",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:11.000Z"
+  },
+  {
+    "id": "rec_site_content_post_draft_notes",
+    "entity": "contentItem",
+    "values": {
+      "kind": "post",
+      "title": "Draft notes on generated editorial tools",
+      "subtitle": "Working notes before publishing",
+      "body": "Draft thoughts on where generic generated admin surfaces are helpful and where authoring affordances need more shape.",
+      "slug": "blog/generated-editorial-tools",
+      "status": "draft",
+      "featured": false,
+      "order": 1,
+      "templateKey": "post",
+      "author": "rec_site_person_owner"
+    },
+    "createdAt": "2026-05-05T00:00:12.000Z"
+  },
+  {
+    "id": "rec_site_content_link_github",
+    "entity": "contentItem",
+    "values": {
+      "kind": "link",
+      "title": "GitHub",
+      "href": "https://github.com/example",
+      "icon": "github",
+      "status": "published",
+      "featured": false,
+      "order": 0
+    },
+    "createdAt": "2026-05-05T00:00:13.000Z"
+  },
+  {
+    "id": "rec_site_content_link_linkedin",
+    "entity": "contentItem",
+    "values": {
+      "kind": "link",
+      "title": "LinkedIn",
+      "href": "https://linkedin.com/in/example",
+      "icon": "linkedin",
+      "status": "published",
+      "featured": false,
+      "order": 1
+    },
+    "createdAt": "2026-05-05T00:00:14.000Z"
+  },
+  {
+    "id": "rec_site_content_copyright",
+    "entity": "contentItem",
+    "values": {
+      "kind": "profile",
+      "title": "Copyright",
+      "body": "Copyright 2026 Site owner. All rights reserved.",
+      "status": "published",
+      "featured": false,
+      "order": 99,
+      "templateKey": "copyright"
+    },
+    "createdAt": "2026-05-05T00:00:15.000Z"
+  },
+  {
+    "id": "rec_site_nav_header",
+    "entity": "navSection",
+    "values": {
+      "area": "header",
+      "label": "Header",
+      "order": 0,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:16.000Z"
+  },
+  {
+    "id": "rec_site_nav_footer_main",
+    "entity": "navSection",
+    "values": {
+      "area": "footer",
+      "label": "Explore",
+      "order": 0,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:17.000Z"
+  },
+  {
+    "id": "rec_site_nav_footer_social",
+    "entity": "navSection",
+    "values": {
+      "area": "footer",
+      "label": "Social",
+      "order": 1,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:18.000Z"
+  },
+  {
+    "id": "rec_site_nav_header_home",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_header",
+      "item": "rec_site_content_home",
+      "label": "Home",
+      "order": 0,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:19.000Z"
+  },
+  {
+    "id": "rec_site_nav_header_blog",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_header",
+      "item": "rec_site_content_blog",
+      "label": "Blog",
+      "order": 1,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:20.000Z"
+  },
+  {
+    "id": "rec_site_nav_header_projects",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_header",
+      "item": "rec_site_content_projects",
+      "label": "Projects",
+      "order": 2,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:21.000Z"
+  },
+  {
+    "id": "rec_site_nav_header_resume",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_header",
+      "item": "rec_site_content_resume",
+      "label": "Resume",
+      "order": 3,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:22.000Z"
+  },
+  {
+    "id": "rec_site_nav_footer_projects",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_footer_main",
+      "item": "rec_site_content_projects",
+      "label": "Projects",
+      "order": 0,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:23.000Z"
+  },
+  {
+    "id": "rec_site_nav_footer_resume",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_footer_main",
+      "item": "rec_site_content_resume",
+      "label": "Resume",
+      "order": 1,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:24.000Z"
+  },
+  {
+    "id": "rec_site_nav_footer_github",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_footer_social",
+      "item": "rec_site_content_link_github",
+      "label": "GitHub",
+      "icon": "github",
+      "order": 0,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:25.000Z"
+  },
+  {
+    "id": "rec_site_nav_footer_linkedin",
+    "entity": "navItem",
+    "values": {
+      "section": "rec_site_nav_footer_social",
+      "item": "rec_site_content_link_linkedin",
+      "label": "LinkedIn",
+      "icon": "linkedin",
+      "order": 1,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:26.000Z"
+  },
+  {
+    "id": "rec_site_place_home_hero",
+    "entity": "contentPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "slot": "main",
+      "kind": "hero",
+      "item": "rec_site_content_profile_intro",
+      "media": "rec_site_media_avatar",
+      "title": "Schema-backed software for content-heavy products",
+      "subtitle": "Selected writing, projects, and durable systems work.",
+      "order": 0,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:27.000Z"
+  },
+  {
+    "id": "rec_site_place_home_recent_posts",
+    "entity": "contentPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "slot": "main",
+      "kind": "contentList",
+      "title": "Recent posts",
+      "queryKey": "publishedPosts",
+      "limit": 3,
+      "order": 1,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:28.000Z"
+  },
+  {
+    "id": "rec_site_place_home_projects",
+    "entity": "contentPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "slot": "main",
+      "kind": "contentGrid",
+      "title": "Featured projects",
+      "queryKey": "featuredProjects",
+      "limit": 3,
+      "order": 2,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:29.000Z"
+  },
+  {
+    "id": "rec_site_place_post_body",
+    "entity": "contentPlacement",
+    "values": {
+      "parent": "rec_site_content_post_shipped_schema",
+      "slot": "main",
+      "kind": "markdown",
+      "item": "rec_site_content_post_shipped_schema",
+      "title": "Body",
+      "order": 0,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:30.000Z"
+  },
+  {
+    "id": "rec_site_place_post_author",
+    "entity": "contentPlacement",
+    "values": {
+      "parent": "rec_site_content_post_shipped_schema",
+      "slot": "meta",
+      "kind": "author",
+      "item": "rec_site_content_profile_intro",
+      "title": "Author",
+      "order": 1,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:31.000Z"
+  },
+  {
+    "id": "rec_site_place_post_related",
+    "entity": "contentPlacement",
+    "values": {
+      "parent": "rec_site_content_post_shipped_schema",
+      "slot": "footer",
+      "kind": "contentList",
+      "title": "More posts",
+      "queryKey": "publishedPosts",
+      "limit": 3,
+      "order": 2,
+      "visible": true
+    },
+    "createdAt": "2026-05-05T00:00:32.000Z"
+  }
+]

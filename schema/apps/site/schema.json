@@ -1,0 +1,868 @@
+{
+  "version": 1,
+  "entities": {
+    "contentItem": {
+      "label": "Content item",
+      "fields": {
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "label": "Kind",
+          "values": {
+            "page": {
+              "label": "Page"
+            },
+            "post": {
+              "label": "Post"
+            },
+            "project": {
+              "label": "Project"
+            },
+            "link": {
+              "label": "Link"
+            },
+            "block": {
+              "label": "Block"
+            },
+            "profile": {
+              "label": "Profile"
+            }
+          }
+        },
+        "title": {
+          "type": "text",
+          "required": true,
+          "label": "Title"
+        },
+        "subtitle": {
+          "type": "text",
+          "required": false,
+          "label": "Subtitle",
+          "format": "longText"
+        },
+        "body": {
+          "type": "text",
+          "required": false,
+          "label": "Body",
+          "format": "markdown"
+        },
+        "slug": {
+          "type": "text",
+          "required": false,
+          "label": "Slug",
+          "format": "slug"
+        },
+        "href": {
+          "type": "text",
+          "required": false,
+          "label": "Link",
+          "format": "href"
+        },
+        "icon": {
+          "type": "text",
+          "required": false,
+          "label": "Icon",
+          "format": "icon"
+        },
+        "color": {
+          "type": "text",
+          "required": false,
+          "label": "Color",
+          "format": "color"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "draft",
+          "values": {
+            "draft": {
+              "label": "Draft"
+            },
+            "published": {
+              "label": "Published"
+            },
+            "archived": {
+              "label": "Archived"
+            }
+          }
+        },
+        "featured": {
+          "type": "boolean",
+          "required": true,
+          "label": "Featured",
+          "default": false
+        },
+        "publishedAt": {
+          "type": "date",
+          "required": false,
+          "label": "Published at"
+        },
+        "order": {
+          "type": "number",
+          "required": false,
+          "label": "Order",
+          "integer": true,
+          "min": 0
+        },
+        "templateKey": {
+          "type": "text",
+          "required": false,
+          "label": "Template key",
+          "format": "slug"
+        },
+        "primaryMedia": {
+          "type": "reference",
+          "required": false,
+          "label": "Primary media",
+          "to": "mediaAsset",
+          "displayField": "label"
+        },
+        "author": {
+          "type": "reference",
+          "required": false,
+          "label": "Author",
+          "to": "person",
+          "displayField": "name"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "mediaAsset": {
+      "label": "Media asset",
+      "fields": {
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        },
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "label": "Kind",
+          "values": {
+            "image": {
+              "label": "Image"
+            },
+            "video": {
+              "label": "Video"
+            },
+            "file": {
+              "label": "File"
+            }
+          }
+        },
+        "key": {
+          "type": "text",
+          "required": true,
+          "label": "Key",
+          "format": "slug"
+        },
+        "alt": {
+          "type": "text",
+          "required": true,
+          "label": "Alt text",
+          "format": "longText"
+        },
+        "href": {
+          "type": "text",
+          "required": false,
+          "label": "Link",
+          "format": "href"
+        },
+        "credit": {
+          "type": "text",
+          "required": false,
+          "label": "Credit"
+        },
+        "width": {
+          "type": "number",
+          "required": false,
+          "label": "Width",
+          "integer": true,
+          "min": 0
+        },
+        "height": {
+          "type": "number",
+          "required": false,
+          "label": "Height",
+          "integer": true,
+          "min": 0
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "person": {
+      "label": "Person",
+      "fields": {
+        "name": {
+          "type": "text",
+          "required": true,
+          "label": "Name"
+        },
+        "role": {
+          "type": "text",
+          "required": false,
+          "label": "Role"
+        },
+        "bio": {
+          "type": "text",
+          "required": false,
+          "label": "Bio",
+          "format": "markdown"
+        },
+        "avatar": {
+          "type": "reference",
+          "required": false,
+          "label": "Avatar",
+          "to": "mediaAsset",
+          "displayField": "label"
+        },
+        "href": {
+          "type": "text",
+          "required": false,
+          "label": "Link",
+          "format": "href"
+        },
+        "email": {
+          "type": "text",
+          "required": false,
+          "label": "Email"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "navSection": {
+      "label": "Navigation section",
+      "fields": {
+        "area": {
+          "type": "enum",
+          "required": true,
+          "label": "Area",
+          "values": {
+            "header": {
+              "label": "Header"
+            },
+            "footer": {
+              "label": "Footer"
+            }
+          }
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        },
+        "order": {
+          "type": "number",
+          "required": true,
+          "label": "Order",
+          "default": 0,
+          "integer": true,
+          "min": 0
+        },
+        "visible": {
+          "type": "boolean",
+          "required": true,
+          "label": "Visible",
+          "default": true
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "navItem": {
+      "label": "Navigation item",
+      "fields": {
+        "section": {
+          "type": "reference",
+          "required": true,
+          "label": "Section",
+          "to": "navSection",
+          "displayField": "label"
+        },
+        "item": {
+          "type": "reference",
+          "required": false,
+          "label": "Content item",
+          "to": "contentItem",
+          "displayField": "title"
+        },
+        "label": {
+          "type": "text",
+          "required": false,
+          "label": "Label"
+        },
+        "href": {
+          "type": "text",
+          "required": false,
+          "label": "Link",
+          "format": "href"
+        },
+        "icon": {
+          "type": "text",
+          "required": false,
+          "label": "Icon",
+          "format": "icon"
+        },
+        "order": {
+          "type": "number",
+          "required": true,
+          "label": "Order",
+          "default": 0,
+          "integer": true,
+          "min": 0
+        },
+        "visible": {
+          "type": "boolean",
+          "required": true,
+          "label": "Visible",
+          "default": true
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "contentPlacement": {
+      "label": "Content placement",
+      "fields": {
+        "parent": {
+          "type": "reference",
+          "required": true,
+          "label": "Parent content",
+          "to": "contentItem",
+          "displayField": "title"
+        },
+        "slot": {
+          "type": "enum",
+          "required": true,
+          "label": "Slot",
+          "values": {
+            "main": {
+              "label": "Main"
+            },
+            "aside": {
+              "label": "Aside"
+            },
+            "footer": {
+              "label": "Footer"
+            },
+            "meta": {
+              "label": "Meta"
+            }
+          }
+        },
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "label": "Kind",
+          "values": {
+            "hero": {
+              "label": "Hero"
+            },
+            "markdown": {
+              "label": "Markdown"
+            },
+            "contentCard": {
+              "label": "Content card"
+            },
+            "contentList": {
+              "label": "Content list"
+            },
+            "contentGrid": {
+              "label": "Content grid"
+            },
+            "media": {
+              "label": "Media"
+            },
+            "cta": {
+              "label": "Call to action"
+            },
+            "subscribe": {
+              "label": "Subscribe"
+            },
+            "author": {
+              "label": "Author"
+            },
+            "nav": {
+              "label": "Navigation"
+            }
+          }
+        },
+        "item": {
+          "type": "reference",
+          "required": false,
+          "label": "Content item",
+          "to": "contentItem",
+          "displayField": "title"
+        },
+        "media": {
+          "type": "reference",
+          "required": false,
+          "label": "Media",
+          "to": "mediaAsset",
+          "displayField": "label"
+        },
+        "title": {
+          "type": "text",
+          "required": false,
+          "label": "Title"
+        },
+        "subtitle": {
+          "type": "text",
+          "required": false,
+          "label": "Subtitle",
+          "format": "longText"
+        },
+        "queryKey": {
+          "type": "text",
+          "required": false,
+          "label": "Query key"
+        },
+        "limit": {
+          "type": "number",
+          "required": false,
+          "label": "Limit",
+          "integer": true,
+          "min": 0
+        },
+        "color": {
+          "type": "text",
+          "required": false,
+          "label": "Color",
+          "format": "color"
+        },
+        "order": {
+          "type": "number",
+          "required": true,
+          "label": "Order",
+          "default": 0,
+          "integer": true,
+          "min": 0
+        },
+        "visible": {
+          "type": "boolean",
+          "required": true,
+          "label": "Visible",
+          "default": true
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": true
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "queries": {
+    "contentAll": {
+      "label": "All",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "contentDraft": {
+      "label": "Draft",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "draft"
+      }
+    },
+    "contentPublished": {
+      "label": "Published",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "status"
+        },
+        "op": "eq",
+        "value": "published"
+      }
+    },
+    "contentPages": {
+      "label": "Pages",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "kind"
+        },
+        "op": "eq",
+        "value": "page"
+      }
+    },
+    "contentPosts": {
+      "label": "Posts",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "kind"
+        },
+        "op": "eq",
+        "value": "post"
+      }
+    },
+    "contentProjects": {
+      "label": "Projects",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "kind"
+        },
+        "op": "eq",
+        "value": "project"
+      }
+    },
+    "contentLinks": {
+      "label": "Links",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "kind"
+        },
+        "op": "eq",
+        "value": "link"
+      }
+    },
+    "contentBlocks": {
+      "label": "Blocks",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "kind"
+        },
+        "op": "eq",
+        "value": "block"
+      }
+    },
+    "featuredContent": {
+      "label": "Featured",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "featured"
+        },
+        "op": "eq",
+        "value": true
+      }
+    },
+    "publishedPosts": {
+      "label": "Published posts",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "and",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "kind"
+            },
+            "op": "eq",
+            "value": "post"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "status"
+            },
+            "op": "eq",
+            "value": "published"
+          }
+        ]
+      }
+    },
+    "featuredProjects": {
+      "label": "Featured projects",
+      "entity": "contentItem",
+      "expression": {
+        "kind": "and",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "kind"
+            },
+            "op": "eq",
+            "value": "project"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "featured"
+            },
+            "op": "eq",
+            "value": true
+          }
+        ]
+      }
+    },
+    "mediaAll": {
+      "label": "All",
+      "entity": "mediaAsset",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "peopleAll": {
+      "label": "All",
+      "entity": "person",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "navSectionsAll": {
+      "label": "All",
+      "entity": "navSection",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "navItemsForSelectedSection": {
+      "label": "Selected section",
+      "entity": "navItem",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "section"
+        },
+        "op": "eq",
+        "value": {
+          "kind": "context",
+          "name": "section"
+        }
+      }
+    },
+    "placementsForSelectedContent": {
+      "label": "Selected content",
+      "entity": "contentPlacement",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "parent"
+        },
+        "op": "eq",
+        "value": {
+          "kind": "context",
+          "name": "content"
+        }
+      }
+    }
+  },
+  "itemViews": {
+    "contentListItem": {
+      "entity": "contentItem",
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "kind": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "featured": {
+          "editor": "boolean",
+          "commit": "immediate"
+        }
+      }
+    }
+  },
+  "tableViews": {},
+  "views": {
+    "contentHome": {
+      "type": "collection",
+      "label": "Content",
+      "entity": "contentItem",
+      "navigation": {
+        "primary": true
+      },
+      "queries": [
+        {
+          "query": "contentAll",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contentDraft",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contentPublished",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contentPages",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contentPosts",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contentProjects",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contentLinks",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "contentBlocks",
+          "count": {
+            "type": "count"
+          }
+        },
+        {
+          "query": "featuredContent",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "contentAll",
+      "result": {
+        "type": "list",
+        "itemView": "contentListItem"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "contentCreate"
+        }
+      ]
+    },
+    "contentCreate": {
+      "type": "create",
+      "entity": "contentItem",
+      "fields": {
+        "kind": {
+          "editor": "enum"
+        },
+        "title": {
+          "editor": "text"
+        },
+        "subtitle": {
+          "editor": "textarea"
+        },
+        "status": {
+          "editor": "enum"
+        },
+        "featured": {
+          "editor": "boolean"
+        },
+        "slug": {
+          "editor": "slug"
+        },
+        "href": {
+          "editor": "href"
+        },
+        "templateKey": {
+          "editor": "slug"
+        },
+        "author": {
+          "editor": "reference"
+        },
+        "primaryMedia": {
+          "editor": "reference"
+        }
+      }
+    }
+  }
+}

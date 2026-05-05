@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/rates/schema.json";
+import rawSiteSchema from "../../schema/apps/site/schema.json";
 import { parseAppSchema } from "./schema.ts";
 
 describe("schema text fields", () => {
@@ -1789,6 +1790,161 @@ describe("rate-card sample schema", () => {
         { type: "create", createView: "resourceCreate" },
         { type: "entityAction", action: "regenerateMissingRates" },
       ],
+    });
+  });
+});
+
+describe("personal site sample schema", () => {
+  it("parses the generic content model, relationships, and source app view", () => {
+    const schema = parseAppSchema(rawSiteSchema);
+
+    expect(Object.keys(schema.entities)).toEqual([
+      "contentItem",
+      "mediaAsset",
+      "person",
+      "navSection",
+      "navItem",
+      "contentPlacement",
+    ]);
+    expect(schema.entities.contentItem?.fields.kind).toEqual({
+      type: "enum",
+      required: true,
+      label: "Kind",
+      values: {
+        page: { label: "Page" },
+        post: { label: "Post" },
+        project: { label: "Project" },
+        link: { label: "Link" },
+        block: { label: "Block" },
+        profile: { label: "Profile" },
+      },
+    });
+    expect(schema.entities.contentItem?.fields.body).toEqual({
+      type: "text",
+      required: false,
+      label: "Body",
+      format: "markdown",
+    });
+    expect(schema.entities.contentItem?.fields.slug).toMatchObject({
+      type: "text",
+      format: "slug",
+    });
+    expect(schema.entities.contentItem?.fields.href).toMatchObject({
+      type: "text",
+      format: "href",
+    });
+    expect(schema.entities.contentItem?.fields.primaryMedia).toEqual({
+      type: "reference",
+      required: false,
+      label: "Primary media",
+      to: "mediaAsset",
+      displayField: "label",
+    });
+    expect(schema.entities.contentItem?.fields.author).toEqual({
+      type: "reference",
+      required: false,
+      label: "Author",
+      to: "person",
+      displayField: "name",
+    });
+    expect(schema.entities.mediaAsset?.fields.alt).toEqual({
+      type: "text",
+      required: true,
+      label: "Alt text",
+      format: "longText",
+    });
+    expect(schema.entities.person?.fields.bio).toEqual({
+      type: "text",
+      required: false,
+      label: "Bio",
+      format: "markdown",
+    });
+    expect(schema.entities.navSection?.fields.area).toMatchObject({
+      type: "enum",
+      required: true,
+      values: {
+        header: { label: "Header" },
+        footer: { label: "Footer" },
+      },
+    });
+    expect(schema.entities.navItem?.fields.section).toMatchObject({
+      type: "reference",
+      required: true,
+      to: "navSection",
+      displayField: "label",
+    });
+    expect(schema.entities.navItem?.fields.item).toMatchObject({
+      type: "reference",
+      required: false,
+      to: "contentItem",
+      displayField: "title",
+    });
+    expect(schema.entities.contentPlacement?.fields.parent).toMatchObject({
+      type: "reference",
+      required: true,
+      to: "contentItem",
+      displayField: "title",
+    });
+    expect(schema.entities.contentPlacement?.fields.kind).toMatchObject({
+      type: "enum",
+      required: true,
+      values: {
+        hero: { label: "Hero" },
+        markdown: { label: "Markdown" },
+        contentCard: { label: "Content card" },
+        contentList: { label: "Content list" },
+        contentGrid: { label: "Content grid" },
+        media: { label: "Media" },
+        cta: { label: "Call to action" },
+        subscribe: { label: "Subscribe" },
+        author: { label: "Author" },
+        nav: { label: "Navigation" },
+      },
+    });
+    expect(schema.entities.contentPlacement?.fields.queryKey).toMatchObject({
+      type: "text",
+      required: false,
+    });
+    expect(Object.keys(schema.queries)).toEqual([
+      "contentAll",
+      "contentDraft",
+      "contentPublished",
+      "contentPages",
+      "contentPosts",
+      "contentProjects",
+      "contentLinks",
+      "contentBlocks",
+      "featuredContent",
+      "publishedPosts",
+      "featuredProjects",
+      "mediaAll",
+      "peopleAll",
+      "navSectionsAll",
+      "navItemsForSelectedSection",
+      "placementsForSelectedContent",
+    ]);
+    expect(schema.queries.publishedPosts?.expression).toMatchObject({
+      kind: "and",
+      expressions: [
+        { ref: { kind: "value", name: "kind" }, op: "eq", value: "post" },
+        { ref: { kind: "value", name: "status" }, op: "eq", value: "published" },
+      ],
+    });
+    expect(schema.queries.navItemsForSelectedSection?.expression).toMatchObject({
+      ref: { kind: "value", name: "section" },
+      value: { kind: "context", name: "section" },
+    });
+    expect(schema.queries.placementsForSelectedContent?.expression).toMatchObject({
+      ref: { kind: "value", name: "parent" },
+      value: { kind: "context", name: "content" },
+    });
+    expect(schema.views.contentHome).toMatchObject({
+      type: "collection",
+      label: "Content",
+      entity: "contentItem",
+      navigation: { primary: true },
+      result: { type: "list", itemView: "contentListItem" },
+      actions: [{ type: "create", createView: "contentCreate" }],
     });
   });
 });

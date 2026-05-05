@@ -9,9 +9,13 @@ import {
 
 describe("schema app definitions", () => {
   it("declares the first route-backed schema apps in order", () => {
-    expect(schemaApps.map((app) => app.key)).toEqual(["tasks", "rates"]);
-    expect(schemaApps.map((app) => app.route)).toEqual(["/tasks", "/rates"]);
-    expect(schemaApps.map((app) => app.schemaRoute)).toEqual(["/tasks/schema", "/rates/schema"]);
+    expect(schemaApps.map((app) => app.key)).toEqual(["tasks", "rates", "site"]);
+    expect(schemaApps.map((app) => app.route)).toEqual(["/tasks", "/rates", "/site"]);
+    expect(schemaApps.map((app) => app.schemaRoute)).toEqual([
+      "/tasks/schema",
+      "/rates/schema",
+      "/site/schema",
+    ]);
   });
 
   it("looks up app definitions by schema key and route", () => {
@@ -19,8 +23,11 @@ describe("schema app definitions", () => {
     expect(isSchemaKey("missing")).toBe(false);
     expect(getSchemaAppDefinition("tasks").label).toBe("Tasks");
     expect(findSchemaAppDefinition("rates")?.label).toBe("Rates");
+    expect(findSchemaAppDefinition("site")?.label).toBe("Site");
     expect(findSchemaAppDefinition("missing")).toBeUndefined();
+    expect(findSchemaAppDefinitionByRoute("/site")?.key).toBe("site");
     expect(findSchemaAppDefinitionByRoute("/rates/schema")?.key).toBe("rates");
+    expect(findSchemaAppDefinitionByRoute("/site/schema")?.key).toBe("site");
     expect(findSchemaAppDefinitionByRoute("/missing")).toBeUndefined();
   });
 });

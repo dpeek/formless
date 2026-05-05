@@ -1,7 +1,10 @@
 import rawRateSeedRecords from "../../schema/apps/rates/seed-records.json";
 import rawRateSourceSchema from "../../schema/apps/rates/schema.json";
+import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
+import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import rawTaskSeedRecords from "../../schema/apps/tasks/seed-records.json";
 import rawTaskSourceSchema from "../../schema/apps/tasks/schema.json";
+import { validateAuthorityFieldValue } from "../shared/field-types.ts";
 import {
   findSchemaAppDefinition,
   schemaAppDefinitions,
@@ -17,16 +20,25 @@ export type WorkerSchemaAppDefinition = SchemaAppDefinition & {
   seedRecords: StoredRecord[];
 };
 
+const taskSourceSchema = parseAppSchema(rawTaskSourceSchema);
+const rateSourceSchema = parseAppSchema(rawRateSourceSchema);
+const siteSourceSchema = parseAppSchema(rawSiteSourceSchema);
+
 export const workerSchemaAppDefinitions = {
   tasks: {
     ...schemaAppDefinitions.tasks,
-    sourceSchema: parseAppSchema(rawTaskSourceSchema),
-    seedRecords: parseSeedRecords(rawTaskSeedRecords, "tasks seed records"),
+    sourceSchema: taskSourceSchema,
+    seedRecords: parseSeedRecords(rawTaskSeedRecords, taskSourceSchema, "tasks seed records"),
   },
   rates: {
     ...schemaAppDefinitions.rates,
-    sourceSchema: parseAppSchema(rawRateSourceSchema),
-    seedRecords: parseSeedRecords(rawRateSeedRecords, "rates seed records"),
+    sourceSchema: rateSourceSchema,
+    seedRecords: parseSeedRecords(rawRateSeedRecords, rateSourceSchema, "rates seed records"),
+  },
+  site: {
+    ...schemaAppDefinitions.site,
+    sourceSchema: siteSourceSchema,
+    seedRecords: parseSeedRecords(rawSiteSeedRecords, siteSourceSchema, "site seed records"),
   },
 } as const satisfies Record<SchemaKey, WorkerSchemaAppDefinition>;
 
@@ -44,12 +56,15 @@ export function findWorkerSchemaAppDefinition(key: string): WorkerSchemaAppDefin
   return app ? getWorkerSchemaAppDefinition(app.key) : undefined;
 }
 
-function parseSeedRecords(value: unknown, label: string): StoredRecord[] {
+function parseSeedRecords(value: unknown, schema: AppSchema, label: string): StoredRecord[] {
   if (!Array.isArray(value)) {
     throw new Error(`Seed fixture "${label}" must be an array.`);
   }
 
-  return value.map((record, index) => parseSeedRecord(record, `${label}[${index}]`));
+  const records = value.map((record, index) => parseSeedRecord(record, `${label}[${index}]`));
+  validateSeedRecords(records, schema, label);
+
+  return records;
 }
 
 function parseSeedRecord(value: unknown, label: string): StoredRecord {
@@ -83,6 +98,69 @@ function parseSeedRecord(value: unknown, label: string): StoredRecord {
     values: value.values,
     createdAt: value.createdAt,
   };
+}
+
+function validateSeedRecords(records: StoredRecord[], schema: AppSchema, label: string) {
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of records) {
+    if (recordsById.has(record.id)) {
+      throw new Error(`Seed fixture "${label}" includes duplicate id "${record.id}".`);
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  for (const [index, record] of records.entries()) {
+    const recordLabel = `${label}[${index}]`;
+    const entity = schema.entities[record.entity];
+
+    if (!entity) {
+      throw new Error(
+        `Seed fixture "${recordLabel}" references unknown entity "${record.entity}".`,
+      );
+    }
+
+    for (const fieldName of Object.keys(record.values)) {
+      if (!Object.hasOwn(entity.fields, fieldName)) {
+        throw new Error(
+          `Seed fixture "${recordLabel}" values include unknown field "${record.entity}.${fieldName}".`,
+        );
+      }
+    }
+
+    for (const [fieldName, field] of Object.entries(entity.fields)) {
+      const value = record.values[fieldName];
+      const fieldWasProvided = value !== undefined;
+
+      try {
+        validateAuthorityFieldValue(fieldName, field, value, fieldWasProvided);
+      } catch (error) {
+        throw new Error(
+          `Seed fixture "${recordLabel}" has invalid field "${record.entity}.${fieldName}": ${
+            error instanceof Error ? error.message : "Field value is invalid."
+          }`,
+        );
+      }
+
+      if (field.type !== "reference" || value === undefined) {
+        continue;
+      }
+
+      if (typeof value !== "string") {
+        throw new Error(
+          `Seed fixture "${recordLabel}" field "${record.entity}.${fieldName}" must be a reference ID.`,
+        );
+      }
+
+      const referencedRecord = recordsById.get(value);
+      if (!referencedRecord || referencedRecord.entity !== field.to) {
+        throw new Error(
+          `Seed fixture "${recordLabel}" field "${record.entity}.${fieldName}" references missing ${field.to} record "${value}".`,
+        );
+      }
+    }
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

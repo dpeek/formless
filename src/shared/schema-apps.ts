@@ -1,4 +1,4 @@
-export type SchemaKey = "tasks" | "rates";
+export type SchemaKey = "tasks" | "rates" | "site";
 
 export const defaultSchemaKey = "tasks" satisfies SchemaKey;
 
@@ -25,11 +25,19 @@ export const schemaAppDefinitions = {
     schemaRoute: "/rates/schema",
     seedChangeMutationPrefix: "seed-rate-card",
   },
+  site: {
+    key: "site",
+    label: "Site",
+    route: "/site",
+    schemaRoute: "/site/schema",
+    seedChangeMutationPrefix: "seed-site",
+  },
 } as const satisfies Record<SchemaKey, SchemaAppDefinition>;
 
 export const schemaApps = [
   schemaAppDefinitions.tasks,
   schemaAppDefinitions.rates,
+  schemaAppDefinitions.site,
 ] as const satisfies readonly SchemaAppDefinition[];
 
 export function isSchemaKey(value: string): value is SchemaKey {
