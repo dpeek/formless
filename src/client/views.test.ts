@@ -8,6 +8,8 @@ import {
   selectCollectionModels,
   selectPrimaryCollectionModels,
   selectRelatedCollectionModels,
+  type HomeActionConfig,
+  type HomeViewModel,
 } from "./views.ts";
 import type { AppSchema } from "../shared/schema.ts";
 
@@ -74,6 +76,58 @@ describe("home view model collections", () => {
       actionName: "clearCompletedTasks",
       count: { type: "count" },
       targetQuery: appSchema.queries.taskCompleted?.expression,
+    });
+  });
+
+  it("characterizes the task primary home model contract", () => {
+    const model = selectPrimaryCollectionModels(appSchema)[0];
+
+    if (!model) {
+      throw new Error("Missing task home model.");
+    }
+
+    expect(summarizeHomeModel(model)).toEqual({
+      viewName: "taskHome",
+      label: "Tasks",
+      entityName: "task",
+      navigationPrimary: true,
+      context: null,
+      queries: [
+        { queryName: "taskAll", label: "All", count: "count", expressionKind: "all" },
+        { queryName: "taskActive", label: "Active", count: "count", expressionKind: "where" },
+        {
+          queryName: "taskCompleted",
+          label: "Completed",
+          count: "count",
+          expressionKind: "where",
+        },
+        { queryName: "taskOverdue", label: "Overdue", count: "count", expressionKind: "and" },
+      ],
+      defaultQueryName: "taskAll",
+      result: {
+        type: "list",
+        itemViewName: "taskListItem",
+        fields: ["title", "done", "dueDate", "estimate", "priority"],
+      },
+      actions: [
+        {
+          type: "create",
+          label: "Create Task",
+          entityName: "task",
+          fields: ["title", "dueDate", "estimate", "priority"],
+          defaults: [],
+          enabled: true,
+        },
+        {
+          type: "entity-action",
+          label: "Clear completed",
+          entityName: "task",
+          actionName: "clearCompletedTasks",
+          actionKind: "clear-completed",
+          targetQueryKind: "where",
+          count: "count",
+        },
+      ],
     });
   });
 
@@ -326,6 +380,83 @@ describe("home view model collections", () => {
     expect(action?.type === "entity-action" ? action.targetQuery : undefined).toBeUndefined();
   });
 
+  it("characterizes the rate-card primary home model contract", () => {
+    const model = selectPrimaryCollectionModels(rateCardSchema)[0];
+
+    if (!model) {
+      throw new Error("Missing rate-card home model.");
+    }
+
+    expect(summarizeHomeModel(model)).toEqual({
+      viewName: "rateHome",
+      label: "Rates",
+      entityName: "rate",
+      navigationPrimary: true,
+      context: {
+        name: "card",
+        entityName: "card",
+        queryName: "cardAll",
+        labelField: "name",
+        relationshipName: "cardRates",
+        relatedCollection: {
+          relationshipName: "cardRates",
+          label: "Rates",
+          entityName: "rate",
+          referenceFieldName: "card",
+        },
+        createAction: {
+          type: "create",
+          label: "Create Rate card",
+          entityName: "card",
+          fields: ["name"],
+          defaults: [],
+          enabled: true,
+        },
+        itemViewName: "rateCardContextItem",
+        recordFields: ["marginMin", "marginMed", "marginMax"],
+      },
+      queries: [
+        {
+          queryName: "ratesForSelectedCard",
+          label: "Selected card",
+          count: "count",
+          expressionKind: "where",
+        },
+      ],
+      defaultQueryName: "ratesForSelectedCard",
+      result: {
+        type: "table",
+        tableViewName: "rateTable",
+        columns: [
+          "referenceField:resource.name",
+          "field:cost",
+          "field:costUnit",
+          "field:price",
+          "field:currency",
+        ],
+      },
+      actions: [
+        {
+          type: "create",
+          label: "Create Resource",
+          entityName: "resource",
+          fields: ["name"],
+          defaults: [],
+          enabled: true,
+        },
+        {
+          type: "entity-action",
+          label: "Regenerate missing rates",
+          entityName: "rate",
+          actionName: "regenerateMissingRates",
+          actionKind: "create-missing-join-records",
+          targetQueryKind: null,
+          count: null,
+        },
+      ],
+    });
+  });
+
   it("selects the site editorial workspaces as primary collection models", () => {
     const models = selectPrimaryCollectionModels(siteSourceSchema);
 
@@ -339,6 +470,200 @@ describe("home view model collections", () => {
     expect(
       models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
     ).toEqual(["contentTable", "contentPlacementTable", "mediaTable"]);
+  });
+
+  it("characterizes the site primary home model contracts", () => {
+    const models = selectPrimaryCollectionModels(siteSourceSchema);
+
+    expect(models.map(summarizeHomeModel)).toEqual([
+      {
+        viewName: "contentHome",
+        label: "Content",
+        entityName: "contentItem",
+        navigationPrimary: true,
+        context: null,
+        queries: [
+          { queryName: "contentAll", label: "All", count: "count", expressionKind: "all" },
+          { queryName: "contentDraft", label: "Draft", count: "count", expressionKind: "where" },
+          {
+            queryName: "contentPublished",
+            label: "Published",
+            count: "count",
+            expressionKind: "where",
+          },
+          { queryName: "contentPages", label: "Pages", count: "count", expressionKind: "where" },
+          { queryName: "contentPosts", label: "Posts", count: "count", expressionKind: "where" },
+          {
+            queryName: "contentProjects",
+            label: "Projects",
+            count: "count",
+            expressionKind: "where",
+          },
+          { queryName: "contentLinks", label: "Links", count: "count", expressionKind: "where" },
+          {
+            queryName: "contentBlocks",
+            label: "Blocks",
+            count: "count",
+            expressionKind: "where",
+          },
+          {
+            queryName: "contentGroups",
+            label: "Groups",
+            count: "count",
+            expressionKind: "where",
+          },
+          {
+            queryName: "featuredContent",
+            label: "Featured",
+            count: "count",
+            expressionKind: "where",
+          },
+        ],
+        defaultQueryName: "contentAll",
+        result: {
+          type: "table",
+          tableViewName: "contentTable",
+          columns: [
+            "field:kind",
+            "field:title",
+            "field:label",
+            "field:body",
+            "field:status",
+            "field:featured",
+            "field:slug",
+            "field:href",
+            "field:publishedAt",
+            "field:order",
+          ],
+        },
+        actions: [
+          {
+            type: "create",
+            label: "Create Content item",
+            entityName: "contentItem",
+            fields: [
+              "kind",
+              "title",
+              "label",
+              "subtitle",
+              "body",
+              "status",
+              "featured",
+              "publishedAt",
+              "order",
+              "slug",
+              "href",
+              "icon",
+              "color",
+              "templateKey",
+              "primaryMedia",
+            ],
+            defaults: [],
+            enabled: true,
+          },
+        ],
+      },
+      {
+        viewName: "contentCompositionHome",
+        label: "Blocks",
+        entityName: "contentPlacement",
+        navigationPrimary: true,
+        context: {
+          name: "content",
+          entityName: "contentItem",
+          queryName: "contentAll",
+          labelField: "title",
+          relationshipName: "contentPlacements",
+          relatedCollection: {
+            relationshipName: "contentPlacements",
+            label: "Placements",
+            entityName: "contentPlacement",
+            referenceFieldName: "parent",
+          },
+          createAction: null,
+          itemViewName: "contentContextItem",
+          recordFields: ["kind", "status", "featured"],
+        },
+        queries: [
+          {
+            queryName: "placementsForSelectedContent",
+            label: "Selected content",
+            count: "count",
+            expressionKind: "where",
+          },
+        ],
+        defaultQueryName: "placementsForSelectedContent",
+        result: {
+          type: "table",
+          tableViewName: "contentPlacementTable",
+          columns: [
+            "field:slot",
+            "field:kind",
+            "field:item",
+            "field:media",
+            "field:title",
+            "field:queryKey",
+            "field:limit",
+            "field:order",
+            "field:visible",
+          ],
+        },
+        actions: [
+          {
+            type: "create",
+            label: "Create Block placement",
+            entityName: "contentPlacement",
+            fields: [
+              "slot",
+              "kind",
+              "item",
+              "media",
+              "title",
+              "subtitle",
+              "queryKey",
+              "limit",
+              "color",
+              "order",
+              "visible",
+            ],
+            defaults: ["parent"],
+            enabled: true,
+          },
+        ],
+      },
+      {
+        viewName: "mediaHome",
+        label: "Media",
+        entityName: "mediaAsset",
+        navigationPrimary: true,
+        context: null,
+        queries: [{ queryName: "mediaAll", label: "All", count: "count", expressionKind: "all" }],
+        defaultQueryName: "mediaAll",
+        result: {
+          type: "table",
+          tableViewName: "mediaTable",
+          columns: [
+            "field:label",
+            "field:kind",
+            "field:key",
+            "field:alt",
+            "field:href",
+            "field:width",
+            "field:height",
+          ],
+        },
+        actions: [
+          {
+            type: "create",
+            label: "Create Media asset",
+            entityName: "mediaAsset",
+            fields: ["label", "kind", "key", "alt", "href", "credit", "width", "height"],
+            defaults: [],
+            enabled: true,
+          },
+        ],
+      },
+    ]);
   });
 
   it("resolves site content table columns and expanded create fields", () => {
@@ -463,3 +788,77 @@ describe("home view model collections", () => {
     ]);
   });
 });
+
+function summarizeHomeModel(model: HomeViewModel) {
+  return {
+    viewName: model.viewName,
+    label: model.label,
+    entityName: model.entityName,
+    navigationPrimary: model.navigation.primary,
+    context: model.context
+      ? {
+          name: model.context.name,
+          entityName: model.context.entityName,
+          queryName: model.context.queryName,
+          labelField: model.context.labelField,
+          relationshipName: model.context.relationshipName ?? null,
+          relatedCollection: model.context.relatedCollection
+            ? {
+                relationshipName: model.context.relatedCollection.relationshipName,
+                label: model.context.relatedCollection.label,
+                entityName: model.context.relatedCollection.entityName,
+                referenceFieldName: model.context.relatedCollection.referenceFieldName,
+              }
+            : null,
+          createAction: model.context.createAction
+            ? summarizeHomeAction(model.context.createAction)
+            : null,
+          itemViewName: model.context.itemViewName ?? null,
+          recordFields: model.context.recordFields?.map((field) => field.fieldName) ?? [],
+        }
+      : null,
+    queries: model.queryTabs.map((tab) => ({
+      queryName: tab.queryName,
+      label: tab.label,
+      count: tab.count?.type ?? null,
+      expressionKind: tab.query.kind,
+    })),
+    defaultQueryName: model.defaultQueryName,
+    result:
+      model.result.type === "list"
+        ? {
+            type: "list",
+            itemViewName: model.result.itemViewName,
+            fields: model.result.recordFields.map((field) => field.fieldName),
+          }
+        : {
+            type: "table",
+            tableViewName: model.result.tableViewName,
+            columns: model.result.columns.map((column) => column.key),
+          },
+    actions: model.actions.map(summarizeHomeAction),
+  };
+}
+
+function summarizeHomeAction(action: HomeActionConfig) {
+  if (action.type === "create") {
+    return {
+      type: action.type,
+      label: action.label,
+      entityName: action.entityName,
+      fields: action.fields.map((field) => field.fieldName),
+      defaults: action.defaults.map((defaultValue) => defaultValue.fieldName),
+      enabled: action.enabled,
+    };
+  }
+
+  return {
+    type: action.type,
+    label: action.label,
+    entityName: action.entityName,
+    actionName: action.actionName,
+    actionKind: action.action.kind,
+    targetQueryKind: action.targetQuery?.kind ?? null,
+    count: action.count?.type ?? null,
+  };
+}

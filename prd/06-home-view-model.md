@@ -1,6 +1,6 @@
 # PRD 06: Home view model module
 
-Status: draft
+Status: active
 Current chunk: none
 Last updated: 2026-05-06
 
@@ -117,13 +117,13 @@ Likely changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on    | Main files                                                    | Acceptance                                                                                                |
-| ------ | ------ | ------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| HVM-01 | draft  | PRD 04 REL-06 | tests                                                         | Existing task, rate, and site home model behavior is characterized.                                       |
-| HVM-02 | draft  | HVM-01        | `src/client/views.ts`                                         | Home collection model exposes context, query, action, and result facts with less renderer reconstruction. |
-| HVM-03 | draft  | HVM-02        | `src/app/generated/collection.tsx`, `src/app/routes/home.tsx` | Generated collection rendering consumes the deeper model without behavior changes.                        |
-| HVM-04 | draft  | HVM-03        | tests, Browser Use if behavior changes                        | Tasks, rates, and site home flows still render and update counts.                                         |
-| HVM-05 | draft  | HVM-04        | `prd/06-home-view-model.md`                                   | PRD status and promote notes reflect shipped behavior.                                                    |
+| ID     | Status  | Depends on    | Main files                                                    | Acceptance                                                                                                |
+| ------ | ------- | ------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| HVM-01 | shipped | PRD 04 REL-06 | tests                                                         | Existing task, rate, and site home model behavior is characterized.                                       |
+| HVM-02 | draft   | HVM-01        | `src/client/views.ts`                                         | Home collection model exposes context, query, action, and result facts with less renderer reconstruction. |
+| HVM-03 | draft   | HVM-02        | `src/app/generated/collection.tsx`, `src/app/routes/home.tsx` | Generated collection rendering consumes the deeper model without behavior changes.                        |
+| HVM-04 | draft   | HVM-03        | tests, Browser Use if behavior changes                        | Tasks, rates, and site home flows still render and update counts.                                         |
+| HVM-05 | draft   | HVM-04        | `prd/06-home-view-model.md`                                   | PRD status and promote notes reflect shipped behavior.                                                    |
 
 ## Non-goals
 
@@ -162,12 +162,21 @@ Recommended order:
 
 ## Promote after ship
 
+- HVM-01: no global doc promotion; characterization tests only.
 - `doc/current.md`: note that generated home workspaces use a deeper home view model module; relationship-backed context, counts, actions, and results are selected before rendering.
 - `doc/roadmap.md`: no change unless screen schema becomes first-release scope.
 
 ## PRD status notes
 
 - PRD drafted 2026-05-06 from architecture review.
-- No code shipped yet.
+- HVM-01 shipped 2026-05-06.
+- HVM-01 added client view-model characterization tests for task, rate-card, and site primary home models.
+- HVM-01 tests cover query tabs, count declarations, context relationship facts, related collection facts, result fields/columns, create defaults, and entity actions.
+- HVM-01 changed no runtime behavior, source schemas, storage, sync, or generated UI.
+- Evidence: `bun run test src/client/views.test.ts` passed 2026-05-06.
+- Evidence: `bun run test` passed 2026-05-06.
+- Evidence: `bun run check` passed 2026-05-06.
+- No new decisions in HVM-01; HVM-D1 through HVM-D6 stand.
+- No blockers.
 - Blocks none.
 - Depends on PRD 04 REL-06 for stable relationship-flow smoke evidence.
