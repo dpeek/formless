@@ -616,6 +616,45 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="900"');
   });
 
+  it("characterizes current rate table display before computed and aggregate read models", () => {
+    const rateModel = selectRateHomeModel();
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          resourceRecord("resource-2", "Engineer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-2", "card-1", 600),
+          rateCardRateRecord("rate-3", "resource-1", "card-2", 900),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: null,
+      today: "2026-05-01",
+    });
+
+    expect(html).toMatch(/aria-label="Default Rates count"[^>]*>2</);
+    expect(html).toMatch(/aria-label="Backup Rates count"[^>]*>1</);
+    expect(html).toContain('aria-label="Cost"');
+    expect(html).toContain('value="325"');
+    expect(html).toContain('value="450"');
+    expect(html).toContain('aria-label="Price"');
+    expect(html).toContain('value="475"');
+    expect(html).toContain('value="600"');
+    expect(html).toContain("USD");
+    expect(html.match(/\/ day/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    expect(html).not.toContain('value="750"');
+    expect(html).not.toContain("Margin");
+    expect(html).not.toContain("Cost total");
+    expect(html).not.toContain("Price total");
+    expect(html).not.toContain("Average margin");
+  });
+
   it("updates relationship counts after local record merges", () => {
     const rateModel = selectRateHomeModel();
 

@@ -14,7 +14,10 @@ import {
 } from "./store.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
-import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
+import {
+  rateSourceSchema as rateCardSchema,
+  taskSourceSchema as appSchema,
+} from "../test/schema-apps.ts";
 
 beforeEach(() => {
   resetClientStore();
@@ -362,6 +365,34 @@ describe("client store selectors", () => {
     expect(selector(getClientStoreSnapshot())).toBe(1);
   });
 
+  it("counts source rate-card records through the selected-card query context", () => {
+    const query = rateCardSchema.queries.ratesForSelectedCard?.expression;
+
+    if (!query) {
+      throw new Error("Missing ratesForSelectedCard query.");
+    }
+
+    const context = { today: "2026-05-01", values: { card: "card-1" } };
+    const selector = createEntityRecordCountMatchingQuerySelector("rate", query, context);
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          rateRecord("rate-1", "card-1"),
+          rateRecord("rate-2", "card-1"),
+          rateRecord("rate-3", "card-2"),
+        ],
+        rateCardSchema,
+      ),
+    );
+
+    expect(selector(getClientStoreSnapshot())).toBe(2);
+
+    context.values.card = "card-2";
+
+    expect(selector(getClientStoreSnapshot())).toBe(1);
+  });
+
   it("keeps tombstoned context and child records out of scoped options", () => {
     const cardSelector = createEntityRecordOptionsMatchingQuerySelector(
       "card",
@@ -410,9 +441,9 @@ const cardScopedRateQuery = {
   value: { kind: "context", name: "card" },
 } as const;
 
-function bootstrap(records: StoredRecord[]): BootstrapResponse {
+function bootstrap(records: StoredRecord[], schema: AppSchema = appSchema): BootstrapResponse {
   return {
-    schema: appSchema,
+    schema,
     schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
     records,
     cursor: 1,

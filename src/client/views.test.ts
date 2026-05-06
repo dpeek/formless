@@ -299,6 +299,85 @@ describe("home view model collections", () => {
     });
   });
 
+  it("characterizes the current rate-card collection before read-model slots", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    if (!rateModel || rateModel.result.type !== "table") {
+      throw new Error("Missing rate table model.");
+    }
+
+    expect(rateModel.queryTabs).toMatchObject([
+      {
+        queryName: "ratesForSelectedCard",
+        label: "Selected card",
+        count: { type: "count" },
+        query: {
+          kind: "where",
+          ref: { kind: "value", name: "card" },
+          op: "eq",
+          value: { kind: "context", name: "card" },
+        },
+      },
+    ]);
+    expect(
+      rateModel.result.columns.map((column) => ({
+        type: column.type,
+        key: column.key,
+        label: column.label,
+        display: column.display,
+        suffix: column.suffix ?? null,
+        format: column.format,
+      })),
+    ).toEqual([
+      {
+        type: "referenceField",
+        key: "referenceField:resource.name",
+        label: "Role",
+        display: "editor",
+        suffix: null,
+        format: "plain",
+      },
+      {
+        type: "field",
+        key: "field:cost",
+        label: "Cost",
+        display: "editor",
+        suffix: "/ day",
+        format: "number",
+      },
+      {
+        type: "field",
+        key: "field:costUnit",
+        label: "Cost unit",
+        display: "hidden",
+        suffix: null,
+        format: "plain",
+      },
+      {
+        type: "field",
+        key: "field:price",
+        label: "Price",
+        display: "editor",
+        suffix: "/ day",
+        format: "number",
+      },
+      {
+        type: "field",
+        key: "field:currency",
+        label: "Currency",
+        display: "readOnly",
+        suffix: null,
+        format: "plain",
+      },
+    ]);
+    expect(rateModel.result.columns.map((column) => column.type as string)).not.toContain(
+      "computed",
+    );
+    expect("summary" in rateModel.collection).toBe(false);
+  });
+
   it("applies field type default commit policies to table columns", () => {
     const taskHome = appSchema.views.taskHome as Extract<
       AppSchema["views"][string],

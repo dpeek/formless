@@ -2038,6 +2038,22 @@ describe("rate-card sample schema", () => {
       ],
     });
   });
+
+  it("characterizes the current absence of read-model declarations", () => {
+    const schema = parseAppSchema(rawRateCardSchema);
+
+    expect("readModels" in rawRateCardSchema).toBe(false);
+    expect("readModels" in schema).toBe(false);
+    expect(() =>
+      parseAppSchema({
+        ...rawRateCardSchema,
+        readModels: {
+          computedValues: {},
+          aggregates: {},
+        },
+      }),
+    ).toThrow('Schema has unsupported key "readModels".');
+  });
 });
 
 describe("personal site sample schema", () => {

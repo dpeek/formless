@@ -1,7 +1,7 @@
 # PRD 12: Computed and aggregate read model
 
-Status: draft
-Current chunk: CR-01 read-model characterization
+Status: in progress
+Current chunk: CR-02 numeric expression evaluator
 Last updated: 2026-05-06
 
 ## Goal
@@ -253,30 +253,33 @@ Notes:
 
 ## Chunks
 
-| ID    | Status | Depends on   | Main files                                                      | Acceptance                                                                                                      |
-| ----- | ------ | ------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| CR-01 | draft  | none         | tests, PRD                                                      | Current rate table display, query count, context query, and missing derived values are characterized.           |
-| CR-02 | draft  | CR-01        | `src/shared/read-model.ts`, tests                               | Numeric expression evaluator supports fields, literals, arithmetic, invalid math, and deterministic formatting. |
-| CR-03 | draft  | CR-02        | schema types/parser, schema tests                               | Optional read-model declarations parse, validate references, reject bad shapes, and stringify.                  |
-| CR-04 | draft  | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
-| CR-05 | draft  | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
-| CR-06 | draft  | CR-04, CR-05 | `schema/apps/rates/schema.json`, app tests                      | Rate-card source schema shows margin and totals without storage or write changes.                               |
-| CR-07 | draft  | CR-06        | Browser smoke, `prd/12-computed-read-model.md`                  | Rates smoke passes; PRD status, decisions, blockers, and promote notes are current.                             |
+| ID    | Status  | Depends on   | Main files                                                      | Acceptance                                                                                                      |
+| ----- | ------- | ------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| CR-01 | shipped | none         | tests, PRD                                                      | Current rate table display, query count, context query, and missing derived values are characterized.           |
+| CR-02 | draft   | CR-01        | `src/shared/read-model.ts`, tests                               | Numeric expression evaluator supports fields, literals, arithmetic, invalid math, and deterministic formatting. |
+| CR-03 | draft   | CR-02        | schema types/parser, schema tests                               | Optional read-model declarations parse, validate references, reject bad shapes, and stringify.                  |
+| CR-04 | draft   | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
+| CR-05 | draft   | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
+| CR-06 | draft   | CR-04, CR-05 | `schema/apps/rates/schema.json`, app tests                      | Rate-card source schema shows margin and totals without storage or write changes.                               |
+| CR-07 | draft   | CR-06        | Browser smoke, `prd/12-computed-read-model.md`                  | Rates smoke passes; PRD status, decisions, blockers, and promote notes are current.                             |
 
 ## Chunk details
 
 ### CR-01 read-model characterization
 
-Characterize current behavior before adding schema surface.
+Outcome:
 
-Acceptance:
-
-- Rate table stored cost and price display behavior is characterized.
-- Rate table number suffix and format behavior is characterized.
-- Rate context query behavior is characterized.
-- Query count badge behavior is characterized.
-- Current absence of computed/aggregate read-model declarations is documented in tests.
+- Rate table stored cost and price display behavior is characterized in `src/app.test.tsx`.
+- Rate table number suffix and format behavior is characterized in `src/app.test.tsx` and `src/client/views.test.ts`.
+- Rate context query behavior is characterized in `src/client/store.test.ts`.
+- Query count badge behavior is characterized in `src/app.test.tsx`.
+- Current absence of computed/aggregate read-model declarations is documented in `src/shared/schema.test.ts` and `src/client/views.test.ts`.
 - No runtime behavior change.
+
+Evidence:
+
+- `./tmp/test.txt`: 22 files passed, 407 tests passed.
+- `./tmp/check.txt`: formatting, lint, and type checks passed for 151 files.
 
 ### CR-02 numeric expression evaluator
 
@@ -454,6 +457,10 @@ Recommended order:
 
 ## Promote after ship
 
+CR-01:
+
+- No global-doc promotion. Characterization tests only.
+
 When this PRD ships, update `doc/current.md`:
 
 - Schema can declare read-model computed values and aggregates.
@@ -474,5 +481,5 @@ When this PRD ships, update `doc/roadmap.md` only if derived display values rema
 
 - PRD drafted 2026-05-06 from roadmap rate-card derived display need and declarative runtime exploration.
 - Scope is intentionally narrower than a full compute engine.
-- No implementation chunks started.
+- CR-01 shipped 2026-05-06 with characterization tests only.
 - Open schema naming blocker before CR-03.
