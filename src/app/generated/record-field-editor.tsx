@@ -7,6 +7,7 @@ import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
 import { MarkdownEditor } from "@formless/ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
+import { FormattedNumberInput } from "@formless/ui/number-input";
 import { Textarea } from "@formless/ui/textarea";
 import { AutosizeTextInput } from "@formless/ui/text-input";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
@@ -16,7 +17,12 @@ import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
-import { fieldValueToInputValue, inputValueToFieldValue } from "./format.ts";
+import {
+  decodeNumberEditorInputValue,
+  encodeNumberEditorInputValue,
+  fieldValueToInputValue,
+  inputValueToFieldValue,
+} from "./format.ts";
 import { useSchemaKey } from "./schema-app-context.tsx";
 
 export function RecordFieldEditor({
@@ -37,16 +43,19 @@ export function RecordFieldEditor({
   const schemaKey = useSchemaKey();
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
   const adapter = selectGeneratedFieldEditorAdapter(field, editor);
+  const numberFormat = fieldConfig.format ?? "plain";
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const labelClass = showLabel ? "text-xs font-medium text-slate-600" : "sr-only";
   const recordValue = useRecordField(recordId, fieldName);
-  const [draft, setDraft] = useState(() => fieldValueToInputValue(field, recordValue));
+  const [draft, setDraft] = useState(() =>
+    fieldValueToEditorInputValue(field, recordValue, numberFormat),
+  );
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(fieldValueToInputValue(field, recordValue));
-  }, [field, recordValue]);
+    setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
+  }, [field, numberFormat, recordValue]);
 
   async function commit(value: FieldValue) {
     if (!canPatch || isPending) {
@@ -67,7 +76,7 @@ export function RecordFieldEditor({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Update failed.";
 
-      setDraft(fieldValueToInputValue(field, recordValue));
+      setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
       setError(message);
       setSyncStatus({
         state: "error",
@@ -185,6 +194,7 @@ export function RecordFieldEditor({
   const isMultilineTextEditor = control.kind === "textarea" && !isRichMarkdownEditor;
   const isColorEditor = adapter.kind === "text" && adapter.editor === "color";
   const isDateEditor = control.kind === "input" && control.inputType === "date";
+  const isNumberEditor = adapter.kind === "number";
   const isAutosizeTextEditor =
     adapter.kind === "text" &&
     adapter.editor === "text" &&
@@ -236,8 +246,7 @@ export function RecordFieldEditor({
       className={
         density === "compact"
           ? "w-full min-w-0 space-y-1"
-          : control.kind === "input" &&
-              (control.inputType === "date" || control.inputType === "number")
+          : isDateEditor || isNumberEditor
             ? "min-w-36 flex-none space-y-1"
             : "min-w-52 flex-1 space-y-1"
       }
@@ -342,6 +351,34 @@ export function RecordFieldEditor({
             required={adapter.required}
             value={draft}
           />
+        ) : isNumberEditor ? (
+          <FormattedNumberInput
+            aria-invalid={error !== null ? true : undefined}
+            aria-label={label}
+            className={
+              density === "compact"
+                ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+                : "w-full rounded border border-slate-300 px-3 py-2"
+            }
+            commitOnBlur={commitPolicy === "field-commit"}
+            decode={(value) => decodeNumberEditorInputValue(value, numberFormat)}
+            disabled={!canPatch || isPending}
+            encode={(value) => encodeNumberEditorInputValue(value, numberFormat)}
+            onInvalidCommit={(message) => {
+              setError(message);
+            }}
+            onValueChange={setDraft}
+            onValueCommit={(value) => {
+              setError(null);
+              void commit(value);
+            }}
+            onValueRevert={() => {
+              setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
+            }}
+            required={adapter.required}
+            value={draft}
+            {...adapter.inputAttributes}
+          />
         ) : (
           <Input
             aria-label={label}
@@ -380,6 +417,18 @@ function isTitleLikeTextField(fieldName: string, field: FieldSchema) {
     normalizedLabel === "title" ||
     normalizedLabel === "name"
   );
+}
+
+function fieldValueToEditorInputValue(
+  field: FieldSchema,
+  value: FieldValue | undefined,
+  format: "plain" | "number" | "currency" | "percent",
+) {
+  if (field.type === "number" && typeof value === "number") {
+    return encodeNumberEditorInputValue(value, format);
+  }
+
+  return fieldValueToInputValue(field, value);
 }
 
 function RecordReferenceEditor({

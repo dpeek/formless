@@ -12,6 +12,8 @@ import type {
 } from "../../client/views.ts";
 import {
   createInputValueToFieldValue,
+  decodeNumberEditorInputValue,
+  encodeNumberEditorInputValue,
   fieldValueToInputValue,
   formatAggregateDisplayValue,
   formatComputedDisplayValue,
@@ -62,9 +64,12 @@ describe("generated field format helpers", () => {
     expect(inputValueToFieldValue(fields.dueDate, "2026-05-06")).toBe("2026-05-06");
     expect(inputValueToFieldValue(fields.estimate, "")).toBe("");
     expect(inputValueToFieldValue(fields.estimate, "1.5")).toBe(1.5);
+    expect(inputValueToFieldValue(fields.estimate, "1.2k")).toBe(1200);
     expect(inputValueToFieldValue(fields.priority, "high")).toBe("high");
     expect(inputValueToFieldValue(fields.resource, "rec_resource_1")).toBe("rec_resource_1");
     expect(numberInputValueToFieldValue("0")).toBe(0);
+    expect(numberInputValueToFieldValue("1.2k")).toBe(1200);
+    expect(Number.isNaN(numberInputValueToFieldValue("not numeric"))).toBe(true);
   });
 
   it("converts current create form input values", () => {
@@ -74,6 +79,29 @@ describe("generated field format helpers", () => {
     expect(createInputValueToFieldValue(fields.title, undefined, false)).toBe("");
     expect(createInputValueToFieldValue(fields.estimate, "", true)).toBe("");
     expect(createInputValueToFieldValue(fields.estimate, "1.5", true)).toBe(1.5);
+    expect(createInputValueToFieldValue(fields.estimate, "1.2k", true)).toBe(1200);
+  });
+
+  it("encodes and decodes formatted number editor values", () => {
+    expect(encodeNumberEditorInputValue(1200, "number")).toBe("1200");
+    expect(encodeNumberEditorInputValue(475, "currency")).toBe("$475.00");
+    expect(encodeNumberEditorInputValue(0.125, "percent")).toBe("12.5%");
+    expect(decodeNumberEditorInputValue("1.2k", "number")).toEqual({
+      kind: "valid",
+      value: 1200,
+    });
+    expect(decodeNumberEditorInputValue("$1.2k", "currency")).toEqual({
+      kind: "valid",
+      value: 1200,
+    });
+    expect(decodeNumberEditorInputValue("12.5%", "percent")).toEqual({
+      kind: "valid",
+      value: 0.125,
+    });
+    expect(decodeNumberEditorInputValue("not numeric", "number")).toEqual({
+      kind: "invalid",
+      message: "Enter a finite number.",
+    });
   });
 
   it("derives current number input attributes from number field schema", () => {

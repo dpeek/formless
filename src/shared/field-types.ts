@@ -7,11 +7,16 @@ export type AuthorityFieldValueResult = { kind: "set"; value: FieldValue } | { k
 export type FieldDisplayOptions = { format?: TableColumnFormat };
 export type FieldEditorControl =
   | { kind: "checkbox" }
+  | { kind: "formattedNumber" }
   | { kind: "input"; inputType: "date" | "number" | "text" }
   | { kind: "reference" }
   | { kind: "select" }
   | { kind: "textarea" };
 export type FieldInputAttributes = { max?: number; min?: number; step?: "1" | "any" };
+export type NumberInputValueParseResult =
+  | { kind: "empty" }
+  | { kind: "valid"; value: number }
+  | { kind: "invalid" };
 
 export type FieldTypeBehavior<TField extends FieldSchema = FieldSchema> = {
   type: TField["type"];
@@ -109,7 +114,7 @@ export const fieldTypeBehaviors = {
     createDefaultValue: (field) => field.default,
     hasCreateDefault: (field) => typeof field.default === "number",
     createInputValueToFieldValue: (_field, value) => numberInputValueToFieldValue(value ?? ""),
-    editorControl: () => ({ kind: "input", inputType: "number" }),
+    editorControl: () => ({ kind: "formattedNumber" }),
     fieldValueToInputValue: (_field, value) => (typeof value === "number" ? String(value) : ""),
     formatDisplayValue: (_field, value, options) => formatNumberDisplayValue(value, options),
     inputAttributes: numberInputAttributes,
@@ -338,7 +343,42 @@ function numberInputAttributes(field: Extract<FieldSchema, { type: "number" }>) 
 }
 
 export function numberInputValueToFieldValue(value: string): FieldValue {
-  return value === "" ? "" : Number(value);
+  const result = parseNumberInputValue(value);
+
+  if (result.kind === "empty") {
+    return "";
+  }
+
+  if (result.kind === "valid") {
+    return result.value;
+  }
+
+  return Number.NaN;
+}
+
+export function parseNumberInputValue(value: string): NumberInputValueParseResult {
+  const input = value.trim();
+
+  if (input === "") {
+    return { kind: "empty" };
+  }
+
+  const normalizedInput = input.replace(/,/g, "");
+  const match = /^([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)([kmb])?$/i.exec(
+    normalizedInput,
+  );
+
+  if (!match) {
+    return { kind: "invalid" };
+  }
+
+  const number = Number(match[1]);
+  const suffix = match[2]?.toLowerCase();
+  const multiplier =
+    suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : suffix === "b" ? 1_000_000_000 : 1;
+  const parsed = number * multiplier;
+
+  return Number.isFinite(parsed) ? { kind: "valid", value: parsed } : { kind: "invalid" };
 }
 
 function validateDateAuthorityValue(

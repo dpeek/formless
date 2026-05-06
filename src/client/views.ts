@@ -31,6 +31,7 @@ export type RecordFieldConfig = {
   editor: FieldEditor;
   commit: FieldCommitPolicy;
   label?: string;
+  format?: TableColumnFormat;
 };
 
 export type TableColumnBaseConfig = {

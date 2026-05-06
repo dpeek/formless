@@ -37,6 +37,7 @@ export * from "./markdown.js";
 export * from "./menubar.js";
 export * from "./native-select.js";
 export * from "./navigation-menu.js";
+export * from "./number-input.js";
 export * from "./pagination.js";
 export * from "./popover.js";
 export * from "./progress.js";

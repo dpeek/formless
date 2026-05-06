@@ -14,6 +14,7 @@ import {
   formatPlainNumber,
   inputValueToFieldValue as inputValueToFieldValuePrimitive,
   numberInputValueToFieldValue as numberInputValueToFieldValuePrimitive,
+  parseNumberInputValue,
 } from "../../shared/field-types.ts";
 
 const readModelNumberField = {
@@ -78,4 +79,45 @@ export function numberInputValueToFieldValue(value: string): FieldValue {
 
 export function numberInputAttributes(field: FieldSchema) {
   return fieldInputAttributes(field);
+}
+
+export function encodeNumberEditorInputValue(value: number | "", format: TableColumnFormat) {
+  if (value === "") {
+    return "";
+  }
+
+  if (format === "currency") {
+    return `$${value.toFixed(2)}`;
+  }
+
+  if (format === "percent") {
+    return `${formatPlainNumber(value * 100)}%`;
+  }
+
+  return formatPlainNumber(value);
+}
+
+export function decodeNumberEditorInputValue(value: string, format: TableColumnFormat) {
+  const input = value.trim();
+
+  if (input === "") {
+    return { kind: "valid" as const, value: "" as const };
+  }
+
+  const numberInput =
+    format === "currency"
+      ? input.replace(/[$]/g, "")
+      : format === "percent"
+        ? input.replace(/%$/, "")
+        : input;
+  const result = parseNumberInputValue(numberInput.trim());
+
+  if (result.kind === "valid") {
+    return {
+      kind: "valid" as const,
+      value: format === "percent" ? result.value / 100 : result.value,
+    };
+  }
+
+  return { kind: "invalid" as const, message: "Enter a finite number." };
 }

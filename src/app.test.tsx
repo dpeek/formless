@@ -368,7 +368,7 @@ describe("generated collection home", () => {
     expect(html).toContain('type="date"');
     expect(html).toContain("2026-05-01");
     expect(html).toContain('aria-label="Due date"');
-    expect(html).toContain('type="number"');
+    expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('aria-label="Estimate"');
     expect(html).not.toContain(record.createdAt);
   });
@@ -1080,7 +1080,7 @@ describe("generated forms and records", () => {
     expect(html).not.toContain("Cost unit");
     expect(html).toContain("USD");
     expect(html).toContain("/ day");
-    expect(html).toContain('type="number"');
+    expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('value="325"');
     expect(html).toContain('value="475"');
   });
@@ -1270,14 +1270,72 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(createHtml).toContain('name="estimate"');
-    expect(createHtml).toContain('type="number"');
+    expect(createHtml).toMatch(inputWithNameAndType("estimate", "hidden"));
+    expect(createHtml).toMatch(inputWithAriaLabelAndType("Estimate", "text"));
+    expect(createHtml).toContain('data-web-formatted-number-input="true"');
     expect(createHtml).toContain('min="0"');
     expect(createHtml).toContain('max="10"');
     expect(createHtml).toContain('step="1"');
     expect(rowHtml).toContain('aria-label="Estimate"');
-    expect(rowHtml).toContain('type="number"');
+    expect(rowHtml).toContain('data-web-formatted-number-input="true"');
+    expect(rowHtml).toMatch(inputWithAriaLabelAndType("Estimate", "text"));
     expect(rowHtml).toContain('value="3"');
+  });
+
+  it("renders formatted number table editors from column format metadata", () => {
+    const entity: EntitySchema = {
+      label: "Metric",
+      fields: {
+        price: { type: "number", required: true, label: "Price" },
+        margin: { type: "number", required: true, label: "Margin" },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    };
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:price",
+        fieldName: "price",
+        field: entity.fields.price,
+        editor: "number",
+        commit: "field-commit",
+        label: "Price",
+        display: "editor",
+        format: "currency",
+      },
+      {
+        type: "field",
+        key: "field:margin",
+        fieldName: "margin",
+        field: entity.fields.margin,
+        editor: "number",
+        commit: "field-commit",
+        label: "Margin",
+        display: "editor",
+        format: "percent",
+      },
+    ];
+    const record: StoredRecord = {
+      id: "metric-1",
+      entity: "metric",
+      values: { price: 475, margin: 0.125 },
+      createdAt: "2026-04-29T00:00:01.000Z",
+    };
+
+    applyBootstrapResponse(bootstrap([record]));
+    const html = renderToStaticMarkup(
+      <RecordTable columns={columns} entity={entity} entityName="metric" query={{ kind: "all" }} />,
+    );
+
+    expect(html.match(/data-web-formatted-number-input="true"/g)?.length).toBe(2);
+    expect(html).toMatch(inputWithAriaLabelAndType("Price", "text"));
+    expect(html).toMatch(inputWithAriaLabelAndType("Margin", "text"));
+    expect(html).toContain('value="$475.00"');
+    expect(html).toContain('value="12.5%"');
   });
 
   it("renders reference create controls with target display labels", () => {
@@ -1320,7 +1378,9 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithNameAndType("icon", "text"));
     expect(html).toMatch(inputWithNameAndType("publishedAt", "date"));
     expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "2026-05-06"));
-    expect(html).toMatch(inputWithNameAndType("count", "number"));
+    expect(html).toMatch(inputWithNameAndType("count", "hidden"));
+    expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
+    expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain("Draft");
     expect(html).toContain("Published");
     expect(html).toContain("Designer");
@@ -1356,7 +1416,8 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithAriaLabelAndType("Icon", "text"));
     expect(html).toMatch(inputWithAriaLabelAndType("Published at", "date"));
     expect(html).toContain('value="2026-05-06"');
-    expect(html).toMatch(inputWithAriaLabelAndType("Count", "number"));
+    expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
+    expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('value="1200"');
     expect(html).toContain("Published");
     expect(html).toContain("Designer");
@@ -1533,8 +1594,9 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('name="title"');
     expect(createHtml).toContain('name="dueDate"');
     expect(createHtml).toContain('aria-label="Select date"');
-    expect(createHtml).toContain('name="estimate"');
-    expect(createHtml).toContain('type="number"');
+    expect(createHtml).toMatch(inputWithNameAndType("estimate", "hidden"));
+    expect(createHtml).toMatch(inputWithAriaLabelAndType("Estimate", "text"));
+    expect(createHtml).toContain('data-web-formatted-number-input="true"');
     expect(createHtml).toContain('min="0"');
     expect(createHtml).toContain('step="1"');
     expect(createHtml).toContain('name="priority"');
@@ -1575,7 +1637,7 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain("checked");
     expect(editHtml).toContain('type="date"');
     expect(editHtml).toContain('value="2026-05-06"');
-    expect(editHtml).toContain('type="number"');
+    expect(editHtml).toContain('data-web-formatted-number-input="true"');
     expect(editHtml).toContain('value="2"');
     expect(editHtml).toContain("High");
   });
@@ -1669,8 +1731,9 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('type="checkbox"');
     expect(createHtml).toContain('name="publishedAt"');
     expect(createHtml).toContain('aria-label="Select date"');
-    expect(createHtml).toContain('name="order"');
-    expect(createHtml).toContain('type="number"');
+    expect(createHtml).toMatch(inputWithNameAndType("order", "hidden"));
+    expect(createHtml).toMatch(inputWithAriaLabelAndType("Order", "text"));
+    expect(createHtml).toContain('data-web-formatted-number-input="true"');
     expect(createHtml).toContain('min="0"');
     expect(createHtml).toContain('step="1"');
     expect(createHtml).toContain('name="color"');
@@ -1709,7 +1772,7 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('aria-label="Published at"');
     expect(editHtml).toContain('type="date"');
     expect(editHtml).toContain('aria-label="Order"');
-    expect(editHtml).toContain('type="number"');
+    expect(editHtml).toContain('data-web-formatted-number-input="true"');
     expect(editHtml).toContain("Published");
   });
 

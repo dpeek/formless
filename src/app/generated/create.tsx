@@ -16,6 +16,7 @@ import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
 import { MarkdownEditor } from "@formless/ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
+import { FormattedNumberInput } from "@formless/ui/number-input";
 import { Textarea } from "@formless/ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
@@ -25,7 +26,12 @@ import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
-import { createInputValueToFieldValue } from "./format.ts";
+import {
+  createInputValueToFieldValue,
+  decodeNumberEditorInputValue,
+  encodeNumberEditorInputValue,
+  numberInputValueToFieldValue,
+} from "./format.ts";
 import { useSchemaKey } from "./schema-app-context.tsx";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
@@ -253,16 +259,16 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
     );
   }
 
-  if (adapter.control.kind === "input" && adapter.control.inputType === "number") {
+  if (adapter.kind === "number") {
     return (
       <Field>
         <Label>{label}</Label>
-        <Input
+        <CreateNumberField
           defaultValue={adapter.createDefaultValue}
-          name={fieldName}
+          fieldName={fieldName}
+          inputAttributes={adapter.inputAttributes}
+          label={label}
           required={adapter.required}
-          {...adapter.inputAttributes}
-          type="number"
         />
       </Field>
     );
@@ -407,6 +413,60 @@ function CreateColorField({
       />
     </>
   );
+}
+
+function CreateNumberField({
+  defaultValue,
+  fieldName,
+  inputAttributes,
+  label,
+  required,
+}: {
+  defaultValue: string | undefined;
+  fieldName: string;
+  inputAttributes: Record<string, number | string | undefined>;
+  label: string;
+  required: boolean;
+}) {
+  const resetValue = encodeNumberCreateDefaultValue(defaultValue);
+  const [value, setValue] = useState(resetValue);
+  const fieldRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const form = fieldRef.current?.closest("form");
+
+    if (!form) {
+      return;
+    }
+
+    const handleReset = () => setValue(resetValue);
+    form.addEventListener("reset", handleReset);
+
+    return () => form.removeEventListener("reset", handleReset);
+  }, [resetValue]);
+
+  return (
+    <span className="block" ref={fieldRef}>
+      <FormattedNumberInput
+        aria-label={label}
+        decode={(inputValue) => decodeNumberEditorInputValue(inputValue, "plain")}
+        encode={(inputValue) => encodeNumberEditorInputValue(inputValue, "plain")}
+        name={fieldName}
+        onValueChange={setValue}
+        required={required}
+        value={value}
+        {...inputAttributes}
+      />
+    </span>
+  );
+}
+
+function encodeNumberCreateDefaultValue(value: string | undefined) {
+  const fieldValue = numberInputValueToFieldValue(value ?? "");
+
+  return typeof fieldValue === "number" && Number.isFinite(fieldValue)
+    ? encodeNumberEditorInputValue(fieldValue, "plain")
+    : "";
 }
 
 function ReferenceCreateField({

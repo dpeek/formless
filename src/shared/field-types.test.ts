@@ -116,15 +116,19 @@ describe("field type behavior", () => {
     expect(createInputValueToFieldValue(fields.dueDate, "May 06, 2026", true)).toBe("May 06, 2026");
     expect(inputValueToFieldValue(fields.estimate, "")).toBe("");
     expect(inputValueToFieldValue(fields.estimate, "1.5")).toBe(1.5);
+    expect(inputValueToFieldValue(fields.estimate, "1.2k")).toBe(1200);
     expect(inputValueToFieldValue(fields.priority, "high")).toBe("high");
     expect(inputValueToFieldValue(fields.resource, "rec_resource_1")).toBe("rec_resource_1");
     expect(createInputValueToFieldValue(fields.done, undefined, false)).toBe(false);
     expect(createInputValueToFieldValue(fields.done, "on", true)).toBe(true);
     expect(createInputValueToFieldValue(fields.estimate, "", true)).toBe("");
     expect(createInputValueToFieldValue(fields.estimate, "1.5", true)).toBe(1.5);
+    expect(createInputValueToFieldValue(fields.estimate, "1.2k", true)).toBe(1200);
     expect(createInputValueToFieldValue(fields.title, undefined, false)).toBe("");
     expect(numberInputValueToFieldValue("0")).toBe(0);
-    expect(Number.isNaN(numberInputValueToFieldValue("1.2k"))).toBe(true);
+    expect(numberInputValueToFieldValue("1.2k")).toBe(1200);
+    expect(numberInputValueToFieldValue("1.5m")).toBe(1500000);
+    expect(Number.isNaN(numberInputValueToFieldValue("not numeric"))).toBe(true);
   });
 
   it("centralizes generated editor control metadata without React", () => {
@@ -136,8 +140,7 @@ describe("field type behavior", () => {
       inputType: "date",
     });
     expect(fieldEditorControl(fields.estimate, "number")).toEqual({
-      kind: "input",
-      inputType: "number",
+      kind: "formattedNumber",
     });
     expect(fieldEditorControl(fields.priority, "enum")).toEqual({ kind: "select" });
     expect(fieldEditorControl(fields.resource, "reference")).toEqual({ kind: "reference" });

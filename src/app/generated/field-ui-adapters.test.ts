@@ -46,7 +46,7 @@ describe("generated field UI adapters", () => {
     });
     expect(selectGeneratedFieldEditorAdapter(fields.estimate, "number")).toMatchObject({
       kind: "number",
-      control: { kind: "input", inputType: "number" },
+      control: { kind: "formattedNumber" },
       createDefaultValue: "2",
       inputAttributes: { max: 10, min: 0, step: "1" },
     });

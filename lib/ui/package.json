@@ -48,6 +48,7 @@
     "./menubar": "./src/menubar.tsx",
     "./native-select": "./src/native-select.tsx",
     "./navigation-menu": "./src/navigation-menu.tsx",
+    "./number-input": "./src/number-input.tsx",
     "./pagination": "./src/pagination.tsx",
     "./popover": "./src/popover.tsx",
     "./progress": "./src/progress.tsx",
