@@ -37,7 +37,10 @@ import type {
   SyncResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
-import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
+import {
+  rateSourceSchema as rateCardSchema,
+  taskSourceSchema as appSchema,
+} from "../test/schema-apps.ts";
 
 beforeEach(async () => {
   await deleteClientDb("tasks");
@@ -511,6 +514,52 @@ describe("client sync", () => {
     expect(storeSnapshot.cursor).toBe(2);
   });
 
+  it("submits rate-card actions to the rates API and merges created rates", async () => {
+    const createdRate = rateRecord("rate-1", "resource-1", "card-1");
+
+    await saveBootstrapResponse("rates", {
+      schema: rateCardSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [],
+      cursor: 0,
+    });
+    await refreshClientStoreFromDb("rates");
+
+    const response = await submitAction(
+      "rates",
+      "rate",
+      "regenerateMissingRates",
+      async (input, init) => {
+        const action = parseActionRequestBody(init?.body);
+
+        expect(input).toBe("/api/rates/actions");
+        expect(init?.method).toBe("POST");
+        expect(action).toMatchObject({
+          entity: "rate",
+          action: "regenerateMissingRates",
+        });
+        expect(action).not.toHaveProperty("input");
+
+        return Response.json({
+          actionId: action.actionId,
+          changes: [actionChange(1, createdRate, action.actionId)],
+          cursor: 1,
+        } satisfies ActionResponse);
+      },
+    );
+
+    const taskSnapshot = await readLocalSnapshot("tasks");
+    const rateSnapshot = await readLocalSnapshot("rates");
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(response.changes[0]?.payload).toEqual(createdRate);
+    expect(taskSnapshot.records).toEqual([]);
+    expect(rateSnapshot.records).toEqual([createdRate]);
+    expect(storeSnapshot.recordsById[createdRate.id]).toEqual(createdRate);
+    expect(storeSnapshot.recordIdsByEntity.rate).toEqual([createdRate.id]);
+    expect(storeSnapshot.cursor).toBe(1);
+  });
+
   it("keeps tombstoned records in IndexedDB while hiding them from active selectors", async () => {
     const tombstone = {
       ...record("record-1", "Done", true),
@@ -916,6 +965,23 @@ function record(id: string, title: string, done = false): StoredRecord {
     id,
     entity: "task",
     values: { title, done },
+    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function rateRecord(id: string, resourceId: string, cardId: string): StoredRecord {
+  return {
+    id,
+    entity: "rate",
+    values: {
+      resource: resourceId,
+      card: cardId,
+      cost: 0,
+      costUnit: "day",
+      price: 0,
+      priceSet: true,
+      currency: "usd",
+    },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
   };
 }

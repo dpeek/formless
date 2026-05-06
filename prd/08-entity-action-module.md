@@ -1,7 +1,7 @@
 # PRD 08: Entity action module
 
 Status: in progress
-Current chunk: EA-04 shipped
+Current chunk: EA-05 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -136,7 +136,7 @@ Likely changed files:
 | EA-02 | shipped | EA-01      | `src/shared/schema-actions.ts`, `src/shared/schema-types.ts` | Action kind schema parsing and capabilities are represented through a deeper action module. |
 | EA-03 | shipped | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
 | EA-04 | shipped | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
-| EA-05 | draft   | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
+| EA-05 | shipped | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
 | EA-06 | draft   | EA-05      | `prd/08-entity-action-module.md`                             | PRD status and promote notes reflect shipped behavior.                                      |
 
 ## Non-goals
@@ -179,6 +179,7 @@ Recommended order:
 - EA-02: promote that schema action parsing now dispatches through `entityActionKindModules`, and action kind capabilities expose after-create hook eligibility.
 - EA-03: promote that worker action request input validation, execution dispatch, and create-after-create hook execution now dispatch through action kind runtime modules.
 - EA-04: promote that generated action target count and affected-count success facts are selected through `entityActionUiModules`, and `src/app/generated/actions.tsx` consumes `action.ui`.
+- EA-05: no global doc promotion. Verification only.
 
 ## Evidence
 
@@ -186,6 +187,7 @@ Recommended order:
 - 2026-05-06 EA-02: `bun run test -- src/shared/schema.test.ts`; `bun run check`.
 - 2026-05-06 EA-03: `bun run test -- src/worker/authority.test.ts`; `bun run check`.
 - 2026-05-06 EA-04: `bun run test -- src/client/views.test.ts src/app.test.tsx`; `bun run check`.
+- 2026-05-06 EA-05: `bun run test -- src/client/sync.test.ts`; `bun run test -- src/client/sync.test.ts src/worker/authority.test.ts src/client/views.test.ts src/app.test.tsx`; `bun run check`.
 
 ## PRD status notes
 
@@ -217,5 +219,10 @@ Recommended order:
 - EA-04 makes `src/app/generated/actions.tsx` consume `action.ui` instead of `targetQuery` and action count fields.
 - EA-04 keeps generated action button markup and count behavior equivalent.
 - Browser Use not run; generated action behavior stayed covered by app render tests.
+- EA-05 shipped 2026-05-06.
+- EA-05 added client sync coverage for submitting the rate-card `regenerateMissingRates` action through `/api/rates/actions`.
+- EA-05 keeps existing task action client sync coverage for `clearCompletedTasks`.
+- EA-05 action-flow checks passed for client sync, authority, view model, and app render tests.
+- Browser Use not run; test-only change with no app behavior change.
 - No blockers.
-- Next ready chunk: EA-05.
+- Next ready chunk: EA-06.
