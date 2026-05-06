@@ -54,9 +54,7 @@ export function RecordFieldEditor({
     fieldValueToEditorInputValue(field, recordValue, numberFormat),
   );
   const [unitDraft, setUnitDraft] = useState(() =>
-    valueUnitConfig
-      ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue)
-      : "",
+    valueUnitConfig ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue) : "",
   );
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,9 +65,7 @@ export function RecordFieldEditor({
 
   useEffect(() => {
     setUnitDraft(
-      valueUnitConfig
-        ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue)
-        : "",
+      valueUnitConfig ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue) : "",
     );
   }, [unitRecordValue, valueUnitConfig]);
 
@@ -108,9 +104,7 @@ export function RecordFieldEditor({
 
       setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
       setUnitDraft(
-        valueUnitConfig
-          ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue)
-          : "",
+        valueUnitConfig ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue) : "",
       );
       setError(message);
       setSyncStatus({
@@ -439,7 +433,9 @@ export function RecordFieldEditor({
             onUnitChange={setUnitDraft}
             onUnitCommit={(unit) => {
               setError(null);
-              void commitPatch(valueUnitPatch(fieldName, draft, numberFormat, valueUnitConfig, unit));
+              void commitPatch(
+                valueUnitPatch(fieldName, draft, numberFormat, valueUnitConfig, unit),
+              );
             }}
             options={enumValueUnitOptions(valueUnitConfig.unitField)}
             unit={unitDraft}

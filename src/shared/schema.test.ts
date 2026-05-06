@@ -2209,7 +2209,12 @@ describe("rate-card sample schema", () => {
       },
       { type: "field", field: "cost", valueUnit: { unitField: "costUnit" } },
       { type: "field", field: "costUnit" },
-      { type: "field", field: "price", valueUnit: { unitField: "currency" } },
+      {
+        type: "field",
+        field: "price",
+        format: "currency",
+        valueUnit: { unitField: "currency" },
+      },
       {
         type: "computed",
         computedValue: "rateMargin",

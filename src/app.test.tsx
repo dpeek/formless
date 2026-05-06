@@ -615,8 +615,8 @@ describe("generated collection home", () => {
     expect(html).toContain("USD");
     expect(html).toContain("/ day");
     expect(html).toContain('value="325"');
-    expect(html).toContain('value="475"');
-    expect(html).not.toContain('value="900"');
+    expect(html).toContain('value="$475.00"');
+    expect(html).not.toContain('value="$900.00"');
   });
 
   it("renders source rate-card margin and aggregate summaries", () => {
@@ -870,9 +870,9 @@ describe("generated collection home", () => {
 
     expect(html).toContain('data-slot="table"');
     expect(html).toContain('value="750"');
-    expect(html).toContain('value="900"');
+    expect(html).toContain('value="$900.00"');
     expect(html).not.toContain('value="325"');
-    expect(html).not.toContain('value="475"');
+    expect(html).not.toContain('value="$475.00"');
   });
 
   it("renders seeded rate-card rows under the selected card", () => {
@@ -889,10 +889,10 @@ describe("generated collection home", () => {
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Designer");
     expect(html).toContain("Developer");
-    expect(html).toContain('value="825"');
-    expect(html).toContain('value="975"');
-    expect(html).not.toContain('value="990"');
-    expect(html).not.toContain('value="1170"');
+    expect(html).toContain('value="$825.00"');
+    expect(html).toContain('value="$975.00"');
+    expect(html).not.toContain('value="$990.00"');
+    expect(html).not.toContain('value="$1170.00"');
   });
 
   it("keeps the resource create action enabled without a selected card", () => {
@@ -1086,7 +1086,7 @@ describe("generated forms and records", () => {
     expect(html).toContain("/ day");
     expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('value="325"');
-    expect(html).toContain('value="475"');
+    expect(html).toContain('value="$475.00"');
   });
 
   it("renders shared resource label updates across rate cards without duplicating resources", () => {
@@ -1153,7 +1153,7 @@ describe("generated forms and records", () => {
 
     expect(html).toContain('data-slot="table"');
     expect(html).toContain('aria-label="Role unavailable"');
-    expect(html).toContain('value="475"');
+    expect(html).toContain('value="$475.00"');
   });
 
   it("renders read-only table cells with display formatting", () => {
@@ -1685,7 +1685,7 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('aria-label="Cost"');
     expect(editHtml).toContain('value="325"');
     expect(editHtml).toContain('aria-label="Price"');
-    expect(editHtml).toContain('value="475"');
+    expect(editHtml).toContain('value="$475.00"');
     expect(editHtml).toContain("USD");
     expect(editHtml).toContain('aria-label="Cost unit"');
     expect(editHtml).toContain('aria-label="Price unit"');

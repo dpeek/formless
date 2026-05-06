@@ -543,7 +543,7 @@
           "align": "end",
           "width": "sm",
           "suffix": "/ day",
-          "format": "number",
+          "format": "currency",
           "valueUnit": {
             "unitField": "currency"
           }

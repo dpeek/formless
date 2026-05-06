@@ -318,7 +318,7 @@ describe("home view model collections", () => {
       "plain",
       "number",
       "plain",
-      "number",
+      "currency",
       "percent",
       "plain",
     ]);
@@ -394,7 +394,7 @@ describe("home view model collections", () => {
         label: "Price",
         display: "editor",
         suffix: "/ day",
-        format: "number",
+        format: "currency",
       },
       {
         type: "computed",
@@ -549,7 +549,7 @@ describe("home view model collections", () => {
     ).toMatchObject({
       editor: "number",
       suffix: "/ day",
-      format: "number",
+      format: "currency",
       display: "editor",
       valueUnit: {
         unitFieldName: "currency",

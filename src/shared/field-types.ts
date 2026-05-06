@@ -364,9 +364,7 @@ export function parseNumberInputValue(value: string): NumberInputValueParseResul
   }
 
   const normalizedInput = input.replace(/,/g, "");
-  const match = /^([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)([kmb])?$/i.exec(
-    normalizedInput,
-  );
+  const match = /^([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)([kmb])?$/i.exec(normalizedInput);
 
   if (!match) {
     return { kind: "invalid" };

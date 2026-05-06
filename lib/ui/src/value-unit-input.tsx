@@ -13,10 +13,7 @@ export type ValueUnitInputOption = {
   label: string;
 };
 
-export type ValueUnitInputProps = Omit<
-  React.ComponentProps<"div">,
-  "onChange" | "value"
-> & {
+export type ValueUnitInputProps = Omit<React.ComponentProps<"div">, "onChange" | "value"> & {
   commitOnBlur?: boolean;
   decode: (value: string) => FormattedNumberInputDecodeResult;
   disabled?: boolean;
@@ -99,7 +96,9 @@ function ValueUnitInput({
         value={unit}
       >
         {!unitRequired || unit === "" ? <NativeSelectOption value="" /> : null}
-        {unknownUnit ? <NativeSelectOption value={unknownUnit}>{unknownUnit}</NativeSelectOption> : null}
+        {unknownUnit ? (
+          <NativeSelectOption value={unknownUnit}>{unknownUnit}</NativeSelectOption>
+        ) : null}
         {options.map((option) => (
           <NativeSelectOption key={option.value} value={option.value}>
             {option.label}
