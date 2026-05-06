@@ -574,9 +574,9 @@ Evidence:
 
 ## Blockers
 
-| ID     | Status | Blocks | Notes                                                                                             |
-| ------ | ------ | ------ | ------------------------------------------------------------------------------------------------- |
-| STR-B1 | closed | STR-01 | PRD 04 REL-04 shipped before this PRD was drafted.                                                |
+| ID     | Status | Blocks | Notes                                                                                              |
+| ------ | ------ | ------ | -------------------------------------------------------------------------------------------------- |
+| STR-B1 | closed | STR-01 | PRD 04 REL-04 shipped before this PRD was drafted.                                                 |
 | STR-B2 | closed | STR-06 | Closed 2026-05-06. Node REPL browser control was exposed in this session and browser smoke passed. |
 
 ## Cross-PRD dependencies

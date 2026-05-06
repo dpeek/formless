@@ -704,7 +704,7 @@ async function start(): Promise<number> {
     testStatus: "pending",
     url,
   });
-  const checkCode = await runWithTee("vp", ["check"], paths.checkLog);
+  const checkCode = await runWithTee("vp", ["check", "--fix"], paths.checkLog);
   if (checkCode !== 0) {
     writeState({
       checkStatus: "fail",
