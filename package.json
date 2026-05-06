@@ -9,6 +9,7 @@
   "scripts": {
     "start": "bun run scripts/agent-dev.ts start",
     "stop": "bun run scripts/agent-dev.ts stop",
+    "ralph": "bun run scripts/ralph-loop.ts",
     "check": "vp check --fix",
     "test": "vp test --reporter=agent",
     "dev": "vp dev",
