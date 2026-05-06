@@ -19,12 +19,14 @@ import type {
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import {
-  createRecordsForAction,
+  createRecordsForActionOutcome,
   type CreateMutationCausedRecordWriter,
   getActionResponseById,
   getActiveRecordsByEntity,
   getStoredRecord,
-  tombstoneRecordsForAction,
+  replayedWrite,
+  tombstoneRecordsForActionOutcome,
+  type WriteOutcome,
 } from "./storage.ts";
 
 export function executeEntityAction(
@@ -32,9 +34,17 @@ export function executeEntityAction(
   request: ActionRequest,
   schema: AppSchema,
 ): ActionResponse {
+  return executeEntityActionOutcome(storage, request, schema).response;
+}
+
+export function executeEntityActionOutcome(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  schema: AppSchema,
+): WriteOutcome<ActionResponse> {
   const replay = getActionResponseById(storage, request.actionId);
   if (replay) {
-    return replay;
+    return replayedWrite(replay);
   }
 
   const action = schema.entities[request.entity]?.actions?.[request.action];
@@ -48,7 +58,7 @@ export function executeEntityAction(
   if (action?.kind === "create-missing-join-records") {
     const values = selectMissingJoinRecordValues(storage, request, schema, action);
 
-    return createRecordsForAction(
+    return createRecordsForActionOutcome(
       storage,
       request.actionId,
       request.entity,
@@ -63,7 +73,7 @@ export function executeEntityAction(
   if (action?.kind === "create-selected-join-record") {
     const values = selectSelectedJoinRecordValues(storage, request, schema, action);
 
-    return createRecordsForAction(
+    return createRecordsForActionOutcome(
       storage,
       request.actionId,
       request.entity,
@@ -411,8 +421,8 @@ function executeActionEffect(
   storage: DurableObjectStorage,
   request: ActionRequest,
   records: StoredRecord[],
-): ActionResponse {
-  return tombstoneRecordsForAction(
+): WriteOutcome<ActionResponse> {
+  return tombstoneRecordsForActionOutcome(
     storage,
     request.actionId,
     request.entity,

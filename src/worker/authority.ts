@@ -19,22 +19,24 @@ import type {
 } from "../shared/protocol.ts";
 import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
 import {
-  createStoredRecord,
+  createStoredRecordOutcome,
+  mapWriteOutcome,
   ensureStorageTables,
-  getActionResponseById,
   getBootstrapRecords,
   getChangesAfter,
   getCurrentCursor,
   getMutationResponseById,
   getStoredRecord,
   initializeStorageFromSource,
-  patchStoredRecord,
-  resetStorageSchemaToSource,
-  resetStorageToSourceSeed,
+  patchStoredRecordOutcome,
+  replayedWrite,
+  resetStorageSchemaToSourceOutcome,
+  resetStorageToSourceSeedOutcome,
   type StorageSource,
-  writeActiveSchema,
+  type WriteOutcome,
+  writeActiveSchemaOutcome,
 } from "./storage.ts";
-import { executeCreateAfterCreateHooks, executeEntityAction } from "./actions.ts";
+import { executeCreateAfterCreateHooks, executeEntityActionOutcome } from "./actions.ts";
 import {
   assertExistingRecordsSatisfyUniqueConstraints,
   assertUniqueConstraints,
@@ -84,7 +86,7 @@ export class FormlessAuthority extends DurableObject<Env> {
         const currentSchema = initializeStorageFromSource(this.ctx.storage, source).schema;
         const records = getBootstrapRecords(this.ctx.storage);
         const nextSchema = validateSchemaUpdate(await readJson(request), currentSchema, records);
-        const response = writes.committed(() => writeActiveSchema(this.ctx.storage, nextSchema));
+        const response = writes.apply(() => writeActiveSchemaOutcome(this.ctx.storage, nextSchema));
 
         return jsonResponse(response);
       }
@@ -116,18 +118,15 @@ export class FormlessAuthority extends DurableObject<Env> {
           this.ctx.storage,
         );
 
-        if (validatedMutation.replay) {
-          return jsonResponse(validatedMutation.replay);
+        if ("outcome" in validatedMutation) {
+          return jsonResponse(writes.apply(() => validatedMutation.outcome));
         }
 
         const mutation = validatedMutation.mutation;
-        if (!mutation) {
-          throw new Error("Validated mutation was missing.");
-        }
 
         if (mutation.op === "create") {
-          const response = writes.committed(() =>
-            createStoredRecord(
+          const response = writes.apply(() =>
+            createStoredRecordOutcome(
               this.ctx.storage,
               mutation,
               (context) => {
@@ -147,8 +146,8 @@ export class FormlessAuthority extends DurableObject<Env> {
           return jsonResponse(response);
         }
 
-        const response = writes.committed(() =>
-          patchStoredRecord(
+        const response = writes.apply(() =>
+          patchStoredRecordOutcome(
             this.ctx.storage,
             mutation,
             "recordValues" in mutation ? mutation.recordValues : undefined,
@@ -164,39 +163,31 @@ export class FormlessAuthority extends DurableObject<Env> {
       if (request.method === "POST" && route.path === "/actions") {
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const action = validateActionRequest(await readJson(request), schema);
-        const replay = getActionResponseById(this.ctx.storage, action.actionId);
-
-        if (replay) {
-          return jsonResponse(replay);
-        }
-
-        const response = writes.committed(() =>
-          executeEntityAction(this.ctx.storage, action, schema),
+        const response = writes.apply(() =>
+          executeEntityActionOutcome(this.ctx.storage, action, schema),
         );
 
         return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/reset/schema") {
-        const response = writes.committed(() => {
-          const { schema, updatedAt } = resetStorageSchemaToSource(
-            this.ctx.storage,
-            source,
-            validateSourceSchemaReset,
-          );
-
-          return bootstrapResponse(this.ctx.storage, schema, updatedAt);
-        });
+        const response = writes.apply(() =>
+          mapWriteOutcome(
+            resetStorageSchemaToSourceOutcome(this.ctx.storage, source, validateSourceSchemaReset),
+            ({ schema, updatedAt }) => bootstrapResponse(this.ctx.storage, schema, updatedAt),
+          ),
+        );
 
         return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/reset/seed") {
-        const response = writes.committed(() => {
-          const { schema, updatedAt } = resetStorageToSourceSeed(this.ctx.storage, source);
-
-          return bootstrapResponse(this.ctx.storage, schema, updatedAt);
-        });
+        const response = writes.apply(() =>
+          mapWriteOutcome(
+            resetStorageToSourceSeedOutcome(this.ctx.storage, source),
+            ({ schema, updatedAt }) => bootstrapResponse(this.ctx.storage, schema, updatedAt),
+          ),
+        );
 
         return jsonResponse(response);
       }
@@ -268,12 +259,14 @@ class AuthorityWriteModule {
     this.webSockets = webSockets;
   }
 
-  committed<T>(write: () => T): T {
-    const response = write();
+  apply<T>(write: () => WriteOutcome<T>): T {
+    const outcome = write();
 
-    this.notifyCommittedWrite();
+    if (outcome.kind === "committed") {
+      this.notifyCommittedWrite();
+    }
 
-    return response;
+    return outcome.response;
   }
 
   private notifyCommittedWrite() {
@@ -550,14 +543,19 @@ function parseCursor(value: string | null) {
   return cursor;
 }
 
+type ValidatedMutation =
+  | {
+      mutation: Mutation | (PatchMutation & { recordValues: RecordValues });
+    }
+  | {
+      outcome: WriteOutcome<MutationResponse>;
+    };
+
 function validateMutation(
   value: unknown,
   schema: AppSchema,
   storage: DurableObjectStorage,
-): {
-  mutation?: Mutation | (PatchMutation & { recordValues: RecordValues });
-  replay?: MutationResponse;
-} {
+): ValidatedMutation {
   if (!isRecord(value)) {
     throw new BadRequestError("Mutation must be an object.");
   }
@@ -581,7 +579,7 @@ function validateMutation(
 
   const replay = getMutationResponseById(storage, value.mutationId);
   if (replay) {
-    return { replay };
+    return { outcome: replayedWrite(replay) };
   }
 
   if (value.op === "create" && !entity.mutations.create.enabled) {

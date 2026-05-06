@@ -48,6 +48,16 @@ export type StoredSchema = {
   updatedAt: string;
 };
 
+export type WriteOutcome<T> =
+  | {
+      kind: "committed";
+      response: T;
+    }
+  | {
+      kind: "replay";
+      response: T;
+    };
+
 export type StorageResetSeed = {
   schema: AppSchema;
   records?: StoredRecord[];
@@ -83,6 +93,24 @@ type ApplyCreateMutationSideEffects = (context: {
   record: StoredRecord;
   createRecords: CreateMutationCausedRecordWriter;
 }) => void;
+
+export function committedWrite<T>(response: T): WriteOutcome<T> {
+  return { kind: "committed", response };
+}
+
+export function replayedWrite<T>(response: T): WriteOutcome<T> {
+  return { kind: "replay", response };
+}
+
+export function mapWriteOutcome<T, U>(
+  outcome: WriteOutcome<T>,
+  mapResponse: (response: T) => U,
+): WriteOutcome<U> {
+  return {
+    kind: outcome.kind,
+    response: mapResponse(outcome.response),
+  };
+}
 
 export function ensureStorageTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
@@ -151,6 +179,13 @@ export function initializeStorageFromSource(
 }
 
 export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSchema): StoredSchema {
+  return writeOutcomeResponse(writeActiveSchemaOutcome(storage, schema));
+}
+
+export function writeActiveSchemaOutcome(
+  storage: DurableObjectStorage,
+  schema: AppSchema,
+): WriteOutcome<StoredSchema> {
   const updatedAt = nowIsoString();
 
   storage.sql.exec(
@@ -165,7 +200,7 @@ export function writeActiveSchema(storage: DurableObjectStorage, schema: AppSche
     updatedAt,
   );
 
-  return { schema, updatedAt };
+  return committedWrite({ schema, updatedAt });
 }
 
 export function resetStorageSchemaToSource(
@@ -173,17 +208,25 @@ export function resetStorageSchemaToSource(
   source: StorageSource,
   validate: StorageSchemaResetValidator,
 ): StoredSchema {
+  return writeOutcomeResponse(resetStorageSchemaToSourceOutcome(storage, source, validate));
+}
+
+export function resetStorageSchemaToSourceOutcome(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+  validate: StorageSchemaResetValidator,
+): WriteOutcome<StoredSchema> {
   return storage.transactionSync(() => {
     const current = readStoredSchema(storage);
 
     if (!current) {
-      return writeSourceData(storage, source);
+      return committedWrite(writeSourceData(storage, source));
     }
 
     const records = getBootstrapRecords(storage);
     validate(current.schema, source.schema, records);
 
-    return writeActiveSchema(storage, source.schema);
+    return writeActiveSchemaOutcome(storage, source.schema);
   });
 }
 
@@ -191,10 +234,17 @@ export function resetStorageToSourceSeed(
   storage: DurableObjectStorage,
   source: StorageSource,
 ): StoredSchema {
+  return writeOutcomeResponse(resetStorageToSourceSeedOutcome(storage, source));
+}
+
+export function resetStorageToSourceSeedOutcome(
+  storage: DurableObjectStorage,
+  source: StorageSource,
+): WriteOutcome<StoredSchema> {
   return storage.transactionSync(() => {
     clearStorage(storage);
 
-    return writeSourceData(storage, source);
+    return committedWrite(writeSourceData(storage, source));
   });
 }
 
@@ -310,11 +360,22 @@ export function createStoredRecord(
   applySideEffects?: ApplyCreateMutationSideEffects,
   validateConstraints?: RecordConstraintValidator,
 ): MutationResponse {
+  return writeOutcomeResponse(
+    createStoredRecordOutcome(storage, mutation, applySideEffects, validateConstraints),
+  );
+}
+
+export function createStoredRecordOutcome(
+  storage: DurableObjectStorage,
+  mutation: CreateMutation,
+  applySideEffects?: ApplyCreateMutationSideEffects,
+  validateConstraints?: RecordConstraintValidator,
+): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
     const existingResponse = getMutationResponseById(storage, mutation.mutationId);
 
     if (existingResponse) {
-      return existingResponse;
+      return replayedWrite(existingResponse);
     }
 
     const createdAt = nowIsoString();
@@ -348,12 +409,12 @@ export function createStoredRecord(
     const changes = findChangesByMutationId(storage, mutation.mutationId);
     const cursor = changes.at(-1)?.seq ?? getCurrentCursor(storage);
 
-    return {
+    return committedWrite({
       record,
       changes,
       cursor,
       mutationId: mutation.mutationId,
-    };
+    });
   });
 }
 
@@ -363,11 +424,22 @@ export function patchStoredRecord(
   values?: RecordValues,
   validateConstraints?: RecordConstraintValidator,
 ): MutationResponse {
+  return writeOutcomeResponse(
+    patchStoredRecordOutcome(storage, mutation, values, validateConstraints),
+  );
+}
+
+export function patchStoredRecordOutcome(
+  storage: DurableObjectStorage,
+  mutation: PatchMutation,
+  values?: RecordValues,
+  validateConstraints?: RecordConstraintValidator,
+): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
     const existingResponse = getMutationResponseById(storage, mutation.mutationId);
 
     if (existingResponse) {
-      return existingResponse;
+      return replayedWrite(existingResponse);
     }
 
     const existingRecord = getStoredRecord(storage, mutation.recordId);
@@ -413,12 +485,12 @@ export function patchStoredRecord(
       throw new Error(`Could not read patch change for record "${record.id}".`);
     }
 
-    return {
+    return committedWrite({
       record,
       changes: [change],
       cursor: getCurrentCursor(storage),
       mutationId: mutation.mutationId,
-    };
+    });
   });
 }
 
@@ -429,15 +501,27 @@ export function tombstoneRecordsForAction(
   action: string,
   recordsToTombstone: StoredRecord[],
 ): ActionResponse {
+  return writeOutcomeResponse(
+    tombstoneRecordsForActionOutcome(storage, actionId, entity, action, recordsToTombstone),
+  );
+}
+
+export function tombstoneRecordsForActionOutcome(
+  storage: DurableObjectStorage,
+  actionId: string,
+  entity: string,
+  action: string,
+  recordsToTombstone: StoredRecord[],
+): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
     const existingExecution = findActionExecution(storage, actionId);
 
     if (existingExecution) {
-      return {
+      return replayedWrite({
         actionId,
         changes: findChangesByMutationId(storage, actionId),
         cursor: existingExecution.cursor,
-      };
+      });
     }
 
     const deletedAt = nowIsoString();
@@ -492,11 +576,11 @@ export function tombstoneRecordsForAction(
       deletedAt,
     );
 
-    return {
+    return committedWrite({
       actionId,
       changes,
       cursor,
-    };
+    });
   });
 }
 
@@ -508,15 +592,35 @@ export function createRecordsForAction(
   recordValuesToCreate: RecordValues[],
   validateConstraints?: RecordConstraintValidator,
 ): ActionResponse {
+  return writeOutcomeResponse(
+    createRecordsForActionOutcome(
+      storage,
+      actionId,
+      entity,
+      action,
+      recordValuesToCreate,
+      validateConstraints,
+    ),
+  );
+}
+
+export function createRecordsForActionOutcome(
+  storage: DurableObjectStorage,
+  actionId: string,
+  entity: string,
+  action: string,
+  recordValuesToCreate: RecordValues[],
+  validateConstraints?: RecordConstraintValidator,
+): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
     const existingExecution = findActionExecution(storage, actionId);
 
     if (existingExecution) {
-      return {
+      return replayedWrite({
         actionId,
         changes: findChangesByMutationId(storage, actionId),
         cursor: existingExecution.cursor,
-      };
+      });
     }
 
     const createdAt = nowIsoString();
@@ -576,11 +680,11 @@ export function createRecordsForAction(
       createdAt,
     );
 
-    return {
+    return committedWrite({
       actionId,
       changes,
       cursor,
-    };
+    });
   });
 }
 
@@ -749,6 +853,10 @@ function findLatestChangeForRecord(
     .next();
 
   return row.done ? undefined : changeFromRow(row.value);
+}
+
+function writeOutcomeResponse<T>(outcome: WriteOutcome<T>): T {
+  return outcome.response;
 }
 
 function findActionExecution(
