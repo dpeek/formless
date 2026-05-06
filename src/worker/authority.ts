@@ -425,11 +425,74 @@ function validateActionRequest(value: unknown, schema: AppSchema): ActionRequest
     );
   }
 
+  const input = validateActionInput(value.action, action.kind, value.input);
+
   return {
     actionId: value.actionId,
     entity: value.entity,
     action: value.action,
+    ...(input === undefined ? {} : { input }),
   };
+}
+
+function validateActionInput(
+  actionName: string,
+  actionKind: NonNullable<EntitySchema["actions"]>[string]["kind"],
+  value: unknown,
+): ActionRequest["input"] | undefined {
+  if (actionKind === "create-selected-join-record") {
+    if (!isRecord(value)) {
+      throw new BadRequestError(
+        `Action "${actionName}" requires input with fromRecordId and toRecordId.`,
+      );
+    }
+
+    if (typeof value.fromRecordId !== "string" || value.fromRecordId.trim() === "") {
+      throw new BadRequestError(`Action "${actionName}" input fromRecordId must be non-empty.`);
+    }
+
+    if (typeof value.toRecordId !== "string" || value.toRecordId.trim() === "") {
+      throw new BadRequestError(`Action "${actionName}" input toRecordId must be non-empty.`);
+    }
+
+    return {
+      fromRecordId: value.fromRecordId,
+      toRecordId: value.toRecordId,
+    };
+  }
+
+  if (actionKind === "remove-selected-join-records") {
+    if (!isRecord(value) || !Array.isArray(value.recordIds)) {
+      throw new BadRequestError(`Action "${actionName}" requires input with recordIds.`);
+    }
+
+    if (value.recordIds.length === 0) {
+      throw new BadRequestError(`Action "${actionName}" input recordIds must not be empty.`);
+    }
+
+    const seen = new Set<string>();
+    const recordIds = value.recordIds.map((recordId, index) => {
+      if (typeof recordId !== "string" || recordId.trim() === "") {
+        throw new BadRequestError(
+          `Action "${actionName}" input recordIds[${index}] must be non-empty.`,
+        );
+      }
+
+      if (seen.has(recordId)) {
+        throw new BadRequestError(
+          `Action "${actionName}" input recordIds must not contain duplicates.`,
+        );
+      }
+
+      seen.add(recordId);
+
+      return recordId;
+    });
+
+    return { recordIds };
+  }
+
+  return undefined;
 }
 
 async function readJson(request: Request): Promise<unknown> {

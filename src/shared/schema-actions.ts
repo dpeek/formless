@@ -6,17 +6,21 @@ import type {
   ClearCompletedEntityActionSchema,
   CollectionQuerySchema,
   CreateMissingJoinRecordsEntityActionSchema,
+  CreateSelectedJoinRecordEntityActionSchema,
   EntityActionJoinSchema,
   EntityActionJoinSourceSchema,
   EntityActionSchema,
   EntityActionTargetSchema,
   EntitySchema,
+  RelationshipSchema,
+  RemoveSelectedJoinRecordsEntityActionSchema,
 } from "./schema-types.ts";
 
 export function parseEntityActionsForEntities(
   entities: Record<string, EntitySchema>,
   actionInputsByEntity: Record<string, unknown>,
   queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): Record<string, EntitySchema> {
   const parsedEntities = Object.fromEntries(
     Object.entries(entities).map(([entityName, entity]) => {
@@ -25,6 +29,7 @@ export function parseEntityActionsForEntities(
         actionInputsByEntity[entityName],
         entity,
         queries,
+        relationships,
       );
 
       return [entityName, actions ? { ...entity, actions } : entity];
@@ -41,6 +46,7 @@ function parseEntityActions(
   value: unknown,
   entity: EntitySchema,
   queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): Record<string, EntityActionSchema> | undefined {
   if (value === undefined) {
     return undefined;
@@ -56,7 +62,10 @@ function parseEntityActions(
         throw new Error(`Entity "${entityName}" action names must be non-empty.`);
       }
 
-      return [actionName, parseEntityAction(entityName, actionName, action, entity, queries)];
+      return [
+        actionName,
+        parseEntityAction(entityName, actionName, action, entity, queries, relationships),
+      ];
     }),
   );
 
@@ -69,6 +78,7 @@ function parseEntityAction(
   value: unknown,
   entity: EntitySchema,
   queries: Record<string, CollectionQuerySchema>,
+  relationships: Record<string, RelationshipSchema> | undefined,
 ): EntityActionSchema {
   if (!isRecord(value)) {
     throw new Error(`Entity action "${entityName}.${actionName}" must be an object.`);
@@ -92,6 +102,20 @@ function parseEntityAction(
       entity,
       queries,
     );
+  }
+
+  if (value.kind === "create-selected-join-record") {
+    return parseCreateSelectedJoinRecordEntityAction(
+      entityName,
+      actionName,
+      value,
+      entity,
+      relationships,
+    );
+  }
+
+  if (value.kind === "remove-selected-join-records") {
+    return parseRemoveSelectedJoinRecordsEntityAction(entityName, actionName, value, relationships);
   }
 
   throw new Error(
@@ -157,6 +181,63 @@ function parseCreateMissingJoinRecordsEntityAction(
     label: value.label as string,
     kind: "create-missing-join-records",
     join,
+  };
+}
+
+function parseCreateSelectedJoinRecordEntityAction(
+  entityName: string,
+  actionName: string,
+  value: Record<string, unknown>,
+  entity: EntitySchema,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): CreateSelectedJoinRecordEntityActionSchema {
+  assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
+    "label",
+    "kind",
+    "relationship",
+  ]);
+
+  const relationshipName = parseRequiredNonEmptyString(
+    `Entity action "${entityName}.${actionName}" relationship`,
+    value.relationship,
+  );
+  const relationship = requireManyToManyActionRelationship(
+    entityName,
+    actionName,
+    relationshipName,
+    relationships,
+  );
+  validateCreateSelectedJoinRecordDefaults(entityName, actionName, entity, relationship);
+
+  return {
+    label: value.label as string,
+    kind: "create-selected-join-record",
+    relationship: relationshipName,
+  };
+}
+
+function parseRemoveSelectedJoinRecordsEntityAction(
+  entityName: string,
+  actionName: string,
+  value: Record<string, unknown>,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): RemoveSelectedJoinRecordsEntityActionSchema {
+  assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
+    "label",
+    "kind",
+    "relationship",
+  ]);
+
+  const relationshipName = parseRequiredNonEmptyString(
+    `Entity action "${entityName}.${actionName}" relationship`,
+    value.relationship,
+  );
+  requireManyToManyActionRelationship(entityName, actionName, relationshipName, relationships);
+
+  return {
+    label: value.label as string,
+    kind: "remove-selected-join-records",
+    relationship: relationshipName,
   };
 }
 
@@ -263,6 +344,66 @@ function validateCreateMissingJoinRecordDefaults(
       `Entity action "${entityName}.${actionName}" kind "create-missing-join-records" requires field "${fieldName}" to have a default.`,
     );
   }
+}
+
+function validateCreateSelectedJoinRecordDefaults(
+  entityName: string,
+  actionName: string,
+  entity: EntitySchema,
+  relationship: Extract<RelationshipSchema, { kind: "manyToMany" }>,
+) {
+  validateJoinRecordDefaults(entityName, actionName, entity, [
+    relationship.through.fromField,
+    relationship.through.toField,
+  ]);
+}
+
+function validateJoinRecordDefaults(
+  entityName: string,
+  actionName: string,
+  entity: EntitySchema,
+  joinFieldNames: string[],
+) {
+  const joinFields = new Set(joinFieldNames);
+
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    if (joinFields.has(fieldName) || !field.required || fieldHasCreateDefault(field)) {
+      continue;
+    }
+
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" kind "create-selected-join-record" requires field "${fieldName}" to have a default.`,
+    );
+  }
+}
+
+function requireManyToManyActionRelationship(
+  entityName: string,
+  actionName: string,
+  relationshipName: string,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): Extract<RelationshipSchema, { kind: "manyToMany" }> {
+  const relationship = relationships?.[relationshipName];
+
+  if (!relationship) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" references unknown relationship "${relationshipName}".`,
+    );
+  }
+
+  if (relationship.kind !== "manyToMany") {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" relationship "${relationshipName}" must be manyToMany.`,
+    );
+  }
+
+  if (relationship.through.entity !== entityName) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" relationship "${relationshipName}" uses through entity "${relationship.through.entity}", not "${entityName}".`,
+    );
+  }
+
+  return relationship;
 }
 
 function validateCreateAfterCreateHooks(entities: Record<string, EntitySchema>) {

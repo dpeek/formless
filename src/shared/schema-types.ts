@@ -315,9 +315,23 @@ export type CreateMissingJoinRecordsEntityActionSchema = {
   join: EntityActionJoinSchema;
 };
 
+export type CreateSelectedJoinRecordEntityActionSchema = {
+  label: string;
+  kind: "create-selected-join-record";
+  relationship: string;
+};
+
+export type RemoveSelectedJoinRecordsEntityActionSchema = {
+  label: string;
+  kind: "remove-selected-join-records";
+  relationship: string;
+};
+
 export type EntityActionSchema =
   | ClearCompletedEntityActionSchema
-  | CreateMissingJoinRecordsEntityActionSchema;
+  | CreateMissingJoinRecordsEntityActionSchema
+  | CreateSelectedJoinRecordEntityActionSchema
+  | RemoveSelectedJoinRecordsEntityActionSchema;
 
 export type UniqueConstraintSchema = {
   kind: "unique";

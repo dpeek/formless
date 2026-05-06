@@ -34,13 +34,14 @@ export function parseAppSchema(value: unknown): AppSchema {
     throw new Error("Schema must define at least one entity.");
   }
 
+  const relationships = parseRelationships(value.relationships, parsedEntities.entities);
   const queries = parseCollectionQueries(value.queries, parsedEntities.entities);
   const entities = parseEntityActionsForEntities(
     parsedEntities.entities,
     parsedEntities.actionInputsByEntity,
     queries,
+    relationships,
   );
-  const relationships = parseRelationships(value.relationships, entities);
   const itemViews = parseItemViews(value.itemViews, entities);
   const tableViews = parseTableViews(value.tableViews, entities, itemViews);
   const views = parseViews(value.views, entities, queries, itemViews, tableViews, relationships);

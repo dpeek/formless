@@ -1,6 +1,8 @@
 import type {
   ActionRequest,
   ActionResponse,
+  CreateSelectedJoinRecordActionInput,
+  RemoveSelectedJoinRecordsActionInput,
   CreateMutation,
   RecordValues,
   StoredRecord,
@@ -12,13 +14,16 @@ import type {
   AppSchema,
   EntityActionSchema,
   EntitySchema,
+  ManyToManyRelationshipSchema,
 } from "../shared/schema.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
+import { BadRequestError } from "./errors.ts";
 import {
   createRecordsForAction,
   type CreateMutationCausedRecordWriter,
   getActionResponseById,
   getActiveRecordsByEntity,
+  getStoredRecord,
   tombstoneRecordsForAction,
 } from "./storage.ts";
 
@@ -53,6 +58,27 @@ export function executeEntityAction(
         assertUniqueConstraints(storage, schema, entity, recordValues, options);
       },
     );
+  }
+
+  if (action?.kind === "create-selected-join-record") {
+    const values = selectSelectedJoinRecordValues(storage, request, schema, action);
+
+    return createRecordsForAction(
+      storage,
+      request.actionId,
+      request.entity,
+      request.action,
+      [values],
+      (entity, recordValues, options) => {
+        assertUniqueConstraints(storage, schema, entity, recordValues, options);
+      },
+    );
+  }
+
+  if (action?.kind === "remove-selected-join-records") {
+    const records = selectSelectedJoinRecords(storage, request, schema, action);
+
+    return executeActionEffect(storage, request, records);
   }
 
   throw new Error(`Unsupported action "${request.action}".`);
@@ -156,7 +182,15 @@ export function selectMissingJoinRecordValues(
       }
 
       existingPairs.add(pairKey);
-      values.push(createJoinRecordValues(entity, action, leftRecord.id, rightRecord.id));
+      values.push(
+        createJoinRecordValues(
+          entity,
+          action.join.left.field,
+          action.join.right.field,
+          leftRecord.id,
+          rightRecord.id,
+        ),
+      );
     }
   }
 
@@ -181,19 +215,20 @@ function createJoinPairKey(leftRecordId: string, rightRecordId: string) {
 
 function createJoinRecordValues(
   entity: EntitySchema,
-  action: Extract<EntityActionSchema, { kind: "create-missing-join-records" }>,
+  leftField: string,
+  rightField: string,
   leftRecordId: string,
   rightRecordId: string,
 ): RecordValues {
   const values: RecordValues = {};
 
   for (const [fieldName, field] of Object.entries(entity.fields)) {
-    if (fieldName === action.join.left.field) {
+    if (fieldName === leftField) {
       values[fieldName] = leftRecordId;
       continue;
     }
 
-    if (fieldName === action.join.right.field) {
+    if (fieldName === rightField) {
       values[fieldName] = rightRecordId;
       continue;
     }
@@ -205,6 +240,171 @@ function createJoinRecordValues(
   }
 
   return values;
+}
+
+function selectSelectedJoinRecordValues(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  schema: AppSchema,
+  action: Extract<EntityActionSchema, { kind: "create-selected-join-record" }>,
+): RecordValues {
+  const entity = schema.entities[request.entity];
+
+  if (!entity) {
+    throw new Error(`Missing entity "${request.entity}".`);
+  }
+
+  const relationship = getManyToManyActionRelationship(schema, request, action.relationship);
+  const input = requireCreateSelectedJoinRecordInput(request);
+  const fromRecord = requireActiveEndpointRecord(
+    storage,
+    request,
+    relationship.from.entity,
+    input.fromRecordId,
+  );
+  const toRecord = requireActiveEndpointRecord(
+    storage,
+    request,
+    relationship.to.entity,
+    input.toRecordId,
+  );
+
+  return createJoinRecordValues(
+    entity,
+    relationship.through.fromField,
+    relationship.through.toField,
+    fromRecord.id,
+    toRecord.id,
+  );
+}
+
+function selectSelectedJoinRecords(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  schema: AppSchema,
+  action: Extract<EntityActionSchema, { kind: "remove-selected-join-records" }>,
+): StoredRecord[] {
+  const relationship = getManyToManyActionRelationship(schema, request, action.relationship);
+  const input = requireRemoveSelectedJoinRecordsInput(request);
+  const records: StoredRecord[] = [];
+
+  for (const recordId of input.recordIds) {
+    const record = getStoredRecord(storage, recordId);
+
+    if (!record) {
+      throw new BadRequestError(
+        `Action "${request.action}" references unknown join record "${recordId}".`,
+      );
+    }
+
+    if (record.entity !== relationship.through.entity) {
+      throw new BadRequestError(
+        `Action "${request.action}" join record "${recordId}" must belong to entity "${relationship.through.entity}".`,
+      );
+    }
+
+    if (record.deletedAt) {
+      throw new BadRequestError(
+        `Action "${request.action}" cannot remove tombstoned join record "${recordId}".`,
+      );
+    }
+
+    records.push(record);
+  }
+
+  return records;
+}
+
+function getManyToManyActionRelationship(
+  schema: AppSchema,
+  request: ActionRequest,
+  relationshipName: string,
+): ManyToManyRelationshipSchema {
+  const relationship = schema.relationships?.[relationshipName];
+
+  if (!relationship) {
+    throw new Error(
+      `Action "${request.action}" references unknown relationship "${relationshipName}".`,
+    );
+  }
+
+  if (relationship.kind !== "manyToMany") {
+    throw new Error(
+      `Action "${request.action}" relationship "${relationshipName}" must be manyToMany.`,
+    );
+  }
+
+  if (relationship.through.entity !== request.entity) {
+    throw new Error(
+      `Action "${request.action}" relationship "${relationshipName}" uses through entity "${relationship.through.entity}", not "${request.entity}".`,
+    );
+  }
+
+  return relationship;
+}
+
+function requireCreateSelectedJoinRecordInput(
+  request: ActionRequest,
+): CreateSelectedJoinRecordActionInput {
+  const input = request.input;
+
+  if (
+    !input ||
+    !("fromRecordId" in input) ||
+    !("toRecordId" in input) ||
+    typeof input.fromRecordId !== "string" ||
+    typeof input.toRecordId !== "string"
+  ) {
+    throw new BadRequestError(
+      `Action "${request.action}" requires input with fromRecordId and toRecordId.`,
+    );
+  }
+
+  return {
+    fromRecordId: input.fromRecordId,
+    toRecordId: input.toRecordId,
+  };
+}
+
+function requireRemoveSelectedJoinRecordsInput(
+  request: ActionRequest,
+): RemoveSelectedJoinRecordsActionInput {
+  const input = request.input;
+
+  if (!input || !("recordIds" in input) || !Array.isArray(input.recordIds)) {
+    throw new BadRequestError(`Action "${request.action}" requires input with recordIds.`);
+  }
+
+  return { recordIds: input.recordIds };
+}
+
+function requireActiveEndpointRecord(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  entityName: string,
+  recordId: string,
+): StoredRecord {
+  const record = getStoredRecord(storage, recordId);
+
+  if (!record) {
+    throw new BadRequestError(
+      `Action "${request.action}" references unknown ${entityName} record "${recordId}".`,
+    );
+  }
+
+  if (record.entity !== entityName) {
+    throw new BadRequestError(
+      `Action "${request.action}" endpoint "${recordId}" must reference a ${entityName} record.`,
+    );
+  }
+
+  if (record.deletedAt) {
+    throw new BadRequestError(
+      `Action "${request.action}" cannot reference tombstoned ${entityName} record "${recordId}".`,
+    );
+  }
+
+  return record;
 }
 
 function executeActionEffect(

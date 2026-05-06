@@ -29,10 +29,24 @@ export type PatchMutation = {
 
 export type Mutation = CreateMutation | PatchMutation;
 
+export type CreateSelectedJoinRecordActionInput = {
+  fromRecordId: string;
+  toRecordId: string;
+};
+
+export type RemoveSelectedJoinRecordsActionInput = {
+  recordIds: string[];
+};
+
+export type ActionRequestInput =
+  | CreateSelectedJoinRecordActionInput
+  | RemoveSelectedJoinRecordsActionInput;
+
 export type ActionRequest = {
   actionId: string;
   entity: EntityName;
   action: string;
+  input?: ActionRequestInput;
 };
 
 export type ChangeRow = {

@@ -2701,6 +2701,124 @@ describe("schema entity actions", () => {
     expect(schema.entities.rate?.actions?.regenerateMissingRates).toEqual(rateJoinAction());
   });
 
+  it("accepts selected join actions over many-to-many relationships", () => {
+    const entities = scopedRateEntitiesWithUniqueRatePair();
+    const schema = parseAppSchema(
+      rateRelationshipSchema({
+        entities: {
+          ...entities,
+          rate: {
+            ...entities.rate,
+            actions: selectedJoinActions(),
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.rate?.actions?.addSelectedRate).toEqual({
+      label: "Add selected rate",
+      kind: "create-selected-join-record",
+      relationship: "cardResources",
+    });
+    expect(schema.entities.rate?.actions?.removeSelectedRates).toEqual({
+      label: "Remove selected rates",
+      kind: "remove-selected-join-records",
+      relationship: "cardResources",
+    });
+  });
+
+  it("rejects selected join actions that do not match a many-to-many through entity", () => {
+    const entities = scopedRateEntitiesWithUniqueRatePair();
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              actions: {
+                addSelectedRate: {
+                  label: "Add selected rate",
+                  kind: "create-selected-join-record",
+                  relationship: "missing",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown relationship "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              actions: {
+                addSelectedRate: {
+                  label: "Add selected rate",
+                  kind: "create-selected-join-record",
+                  relationship: "cardRates",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('relationship "cardRates" must be manyToMany');
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          entities: {
+            ...entities,
+            card: {
+              ...entities.card,
+              actions: {
+                addSelectedRate: {
+                  label: "Add selected rate",
+                  kind: "create-selected-join-record",
+                  relationship: "cardResources",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('relationship "cardResources" uses through entity "rate", not "card"');
+  });
+
+  it("rejects selected join creation without required defaults", () => {
+    const entities = scopedRateEntitiesWithUniqueRatePair();
+
+    expect(() =>
+      parseAppSchema(
+        rateRelationshipSchema({
+          entities: {
+            ...entities,
+            rate: {
+              ...entities.rate,
+              fields: {
+                ...entities.rate.fields,
+                cost: { type: "number", required: true, label: "Cost", min: 0 },
+              },
+              actions: {
+                addSelectedRate: {
+                  label: "Add selected rate",
+                  kind: "create-selected-join-record",
+                  relationship: "cardResources",
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('requires field "cost" to have a default');
+  });
+
   it("accepts create afterCreate hooks that reference create-missing-join-records actions", () => {
     const entities = scopedRateEntities();
     const schema = parseAppSchema(
@@ -3413,6 +3531,21 @@ function rateJoinAction() {
     join: {
       left: { field: "resource", query: "resourceAll" },
       right: { field: "card", query: "cardAll" },
+    },
+  };
+}
+
+function selectedJoinActions() {
+  return {
+    addSelectedRate: {
+      label: "Add selected rate",
+      kind: "create-selected-join-record",
+      relationship: "cardResources",
+    },
+    removeSelectedRates: {
+      label: "Remove selected rates",
+      kind: "remove-selected-join-records",
+      relationship: "cardResources",
     },
   };
 }

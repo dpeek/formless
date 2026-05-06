@@ -1,7 +1,7 @@
 # PRD 04: Relationship model
 
 Status: ready
-Current chunk: REL-05 many-to-many join helpers
+Current chunk: REL-06 relationship flow smoke
 Last updated: 2026-05-06
 
 ## Goal
@@ -415,8 +415,8 @@ First-class support needed:
 | REL-02 | shipped | REL-01     | `schema/apps/rates/schema.json`, `schema/apps/site/schema.json`, source schema tests    | Rates and site source schemas name their existing relationships.            |
 | REL-03 | shipped | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
 | REL-04 | shipped | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
-| REL-05 | ready   | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
-| REL-06 | planned | REL-05     | Browser Use, source schemas, PRD promote notes                                          | Relationship flows are smoke-tested in rates and site apps.                 |
+| REL-05 | shipped | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
+| REL-06 | ready   | REL-05     | Browser Use, source schemas, PRD promote notes                                          | Relationship flows are smoke-tested in rates and site apps.                 |
 
 ## Chunk details
 
@@ -560,6 +560,7 @@ Acceptance:
 - `doc/current.md`: list source app relationships after REL-02 ships. REL-02 shipped facts: rates source names `rateCard`, `cardRates`, `rateResource`, `resourceRates`, `cardResources`, and `resourceCards`; site source names `contentPrimaryMedia`, `mediaPrimaryContentItems`, `placementParent`, `contentPlacements`, `placementItem`, `itemPlacements`, `placementMedia`, and `mediaPlacements`; queries, views, records, and storage shape are unchanged.
 - `doc/current.md`: list relationship-backed collection context validation after REL-03 ships. REL-03 shipped facts: collection contexts can set `relationship` to a `toMany` relationship; parser validates the relationship from entity, target entity, context query field, and context create default field; `rateHome` uses `cardRates`; `contentCompositionHome` uses `contentPlacements`; client view models expose relationship name and metadata.
 - `doc/current.md`: describe relationship-backed generated related collections after REL-04 ships. REL-04 shipped facts: client view models can select `toMany` related collection models; scoped context tabs render derived inverse-reference counts from local records; `cardRates` and `contentPlacements` counts render without storing parent-side values; related create defaults continue to hide the parent reference and resolve it from selected context; no storage, sync, seed, or authority behavior changed.
+- `doc/current.md`: describe REL-05 many-to-many join helpers. REL-05 shipped facts: entity actions support `create-selected-join-record` and `remove-selected-join-records`; selected join creation names a `manyToMany` relationship, uses its through entity fields, defaults remaining required fields, rejects missing or tombstoned endpoints, and relies on existing unique constraints for duplicate active pair rejection; selected join removal tombstones explicit active join records; `create-missing-join-records` remains for matrix regeneration and afterCreate hooks.
 - `doc/roadmap.md`: add first-release relationship scope only if this PRD becomes release-blocking.
 
 ## PRD status notes
@@ -618,3 +619,20 @@ Acceptance:
 - No new decisions in REL-04; REL-D4 and REL-D8 stand.
 - No blockers.
 - Done pass 2026-05-06: REL-04 stopped cleanly; tests and check pass; no blockers.
+- REL-05 shipped 2026-05-06.
+- REL-05 added `create-selected-join-record` and `remove-selected-join-records` entity action kinds.
+- REL-05 action requests can carry selected join input: `fromRecordId` and `toRecordId` for create; `recordIds` for remove.
+- REL-05 selected create actions reference a `manyToMany` relationship and use its through entity fields.
+- REL-05 selected create defaults non-endpoint required fields through existing field defaults.
+- REL-05 rejects missing endpoints, wrong-entity endpoints, and tombstoned endpoints.
+- REL-05 duplicate active join pairs remain rejected by existing unique constraints.
+- REL-05 selected remove tombstones explicit active join records through action changes.
+- REL-05 allows recreating a join pair after the previous join record is tombstoned.
+- REL-05 preserved `create-missing-join-records` and rate-card afterCreate matrix regeneration.
+- REL-05 changed no source schemas, seed records, stored record shape, generated UI, or sync response format; action requests gained optional input.
+- REL-05 tests cover schema parsing, selected join create, duplicate rejection, selected join removal, missing endpoints, tombstoned endpoints, and matrix regeneration.
+- `bun run test` passed 2026-05-06.
+- `bun run check` passed 2026-05-06.
+- No new decisions in REL-05; REL-D5 and REL-D7 stand.
+- No blockers.
+- Done pass 2026-05-06: REL-05 stopped cleanly; tests and check pass; no blockers.

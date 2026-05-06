@@ -581,6 +581,137 @@ describe("authority", () => {
     });
   });
 
+  it("creates and removes selected many-to-many join records through relationship actions", async () => {
+    useSchemaApp("rates");
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: rateCardSchemaWithSelectedJoinActions(),
+    });
+
+    const resource = await postMutationForEntity("mutation-selected-resource", "resource", {
+      name: "Producer",
+    });
+    const card = await postMutationForEntity("mutation-selected-card", "card", {
+      name: "Enterprise",
+    });
+    const actionInput = {
+      input: {
+        fromRecordId: card.record.id,
+        toRecordId: resource.record.id,
+      },
+    };
+    const created = await postActionForEntity(
+      "action-add-selected-rate",
+      "rate",
+      "addSelectedRate",
+      actionInput,
+    );
+    const replay = await postActionForEntity(
+      "action-add-selected-rate",
+      "rate",
+      "addSelectedRate",
+      actionInput,
+    );
+
+    expect(created.changes).toHaveLength(1);
+    expect(created.changes[0]?.op).toBe("action");
+    expect(created.changes[0]?.payload.values).toEqual({
+      resource: resource.record.id,
+      card: card.record.id,
+      cost: 0,
+      costUnit: "day",
+      price: 0,
+      priceSet: true,
+      currency: "usd",
+    });
+    expect(replay).toEqual(created);
+
+    const createdRateId = created.changes[0]?.recordId;
+    if (!createdRateId) {
+      throw new Error("Selected join action did not create a rate.");
+    }
+
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-add-selected-rate-duplicate",
+        entity: "rate",
+        action: "addSelectedRate",
+        ...actionInput,
+      },
+      'Unique constraint "rate.uniqueRatePair" would be violated.',
+    );
+
+    const removed = await postActionForEntity(
+      "action-remove-selected-rate",
+      "rate",
+      "removeSelectedRates",
+      { input: { recordIds: [createdRateId] } },
+    );
+    const recreated = await postActionForEntity(
+      "action-add-selected-rate-again",
+      "rate",
+      "addSelectedRate",
+      actionInput,
+    );
+
+    expect(removed.changes).toHaveLength(1);
+    expect(removed.changes[0]?.payload).toMatchObject({
+      id: createdRateId,
+      deletedAt: expect.any(String),
+    });
+    expect(recreated.changes).toHaveLength(1);
+    expect(recreated.changes[0]?.payload.values).toEqual(created.changes[0]?.payload.values);
+  });
+
+  it("rejects selected join creation with missing or tombstoned endpoints", async () => {
+    useSchemaApp("rates");
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: rateCardSchemaWithSelectedJoinActions(),
+    });
+
+    const resource = await postMutationForEntity("mutation-selected-resource", "resource", {
+      name: "Producer",
+    });
+
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-add-selected-rate-missing",
+        entity: "rate",
+        action: "addSelectedRate",
+        input: {
+          fromRecordId: "missing-card",
+          toRecordId: resource.record.id,
+        },
+      },
+      'references unknown card record "missing-card"',
+    );
+
+    useSchemaApp("tasks");
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithSelectedTaskProjectJoinAction(),
+    });
+    const project = await postMutationForEntity("mutation-project", "project", {
+      name: "Website",
+    });
+    const seedCompleted = getSeedCompletedTask();
+
+    await postAction("action-clear-completed", "clearCompletedTasks");
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-add-tombstoned-task-project",
+        entity: "assignment",
+        action: "addSelectedProject",
+        input: {
+          fromRecordId: seedCompleted.id,
+          toRecordId: project.record.id,
+        },
+      },
+      `cannot reference tombstoned task record "${seedCompleted.id}"`,
+    );
+  });
+
   it("runs rate-card afterCreate hooks for card creates through mutation changes", async () => {
     useSchemaApp("rates");
     await createRateResources(5);
@@ -2119,6 +2250,101 @@ function rateCardSchemaWithoutAfterCreateHooks(): AppSchema {
   };
 }
 
+function rateCardSchemaWithSelectedJoinActions(): AppSchema {
+  const schema = rateCardSchemaWithoutAfterCreateHooks();
+  const rate = schema.entities.rate;
+
+  if (!rate) {
+    throw new Error("Rate-card schema must include a rate entity.");
+  }
+
+  return {
+    ...schema,
+    entities: {
+      ...schema.entities,
+      rate: {
+        ...rate,
+        actions: {
+          ...rate.actions,
+          addSelectedRate: {
+            label: "Add selected rate",
+            kind: "create-selected-join-record",
+            relationship: "cardResources",
+          },
+          removeSelectedRates: {
+            label: "Remove selected rates",
+            kind: "remove-selected-join-records",
+            relationship: "cardResources",
+          },
+        },
+      },
+    },
+  } satisfies AppSchema;
+}
+
+function schemaWithSelectedTaskProjectJoinAction(): AppSchema {
+  return {
+    ...appSchema,
+    entities: {
+      ...appSchema.entities,
+      project: {
+        label: "Project",
+        fields: {
+          name: { type: "text", required: true, label: "Name" },
+        },
+        mutations: defaultMutations(),
+      },
+      assignment: {
+        label: "Assignment",
+        fields: {
+          task: {
+            type: "reference",
+            required: true,
+            label: "Task",
+            to: "task",
+            displayField: "title",
+          },
+          project: {
+            type: "reference",
+            required: true,
+            label: "Project",
+            to: "project",
+            displayField: "name",
+          },
+        },
+        mutations: defaultMutations(),
+        constraints: {
+          uniqueAssignmentPair: {
+            kind: "unique",
+            fields: ["task", "project"],
+          },
+        },
+        actions: {
+          addSelectedProject: {
+            label: "Add selected project",
+            kind: "create-selected-join-record",
+            relationship: "taskProjects",
+          },
+        },
+      },
+    },
+    relationships: {
+      taskProjects: {
+        kind: "manyToMany",
+        label: "Projects",
+        from: { entity: "task" },
+        to: { entity: "project" },
+        through: {
+          entity: "assignment",
+          fromField: "task",
+          toField: "project",
+          uniqueConstraint: "uniqueAssignmentPair",
+        },
+      },
+    },
+  } satisfies AppSchema;
+}
+
 function expectUniqueIds(records: Array<{ id: string }>) {
   expect(new Set(records.map((record) => record.id)).size).toBe(records.length);
 }
@@ -2662,11 +2888,17 @@ async function postAction(actionId: string, action: string) {
   return postActionForEntity(actionId, "task", action);
 }
 
-async function postActionForEntity(actionId: string, entity: string, action: string) {
+async function postActionForEntity(
+  actionId: string,
+  entity: string,
+  action: string,
+  extra: Record<string, unknown> = {},
+) {
   return postJson<ActionResponse>("/api/actions", {
     actionId,
     entity,
     action,
+    ...extra,
   });
 }
 
