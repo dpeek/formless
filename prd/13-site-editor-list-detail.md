@@ -1,7 +1,7 @@
 # PRD 13: Site editor list/detail
 
-Status: ready
-Current chunk: SED-05
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-06
 
 ## Goal
@@ -253,7 +253,7 @@ Notes:
 | SED-02 | shipped | SED-01     | schema types/parser, view model, tests    | Collection context presentation parses, defaults to tabs, exposes render-ready facts, and rejects bad values.                        |
 | SED-03 | shipped | SED-02     | generated collection/screen UI, app tests | `listDetail` context presentation renders a selectable list plus selected-record detail without changing tab presentation behavior.  |
 | SED-04 | shipped | SED-03     | Site source schema, view tests, app tests | Site source schema defines primary Pages, Header, and Footer screens that use list/detail root selection.                            |
-| SED-05 | ready   | SED-04     | browser smoke, PRD                        | `/site`, `/pages`, and representative public page routes smoke pass; PRD status, decisions, blockers, and promote notes are current. |
+| SED-05 | shipped | SED-04     | browser smoke, PRD                        | `/site`, `/pages`, and representative public page routes smoke pass; PRD status, decisions, blockers, and promote notes are current. |
 
 ## Chunk details
 
@@ -398,6 +398,28 @@ Acceptance:
 - `/site` route tests show Pages/Header/Footer primary screen labels.
 
 ### SED-05 closeout
+
+Status: shipped 2026-05-06.
+
+Outcome:
+
+- `/site` browser smoke verifies Pages, Header, and Footer are the primary Site editor surfaces.
+- `/pages` browser smoke redirects to `/pages/home` and renders the public Home page.
+- `/pages/home` browser smoke renders the public Home page directly.
+- Public site rendering stayed unchanged by this closeout chunk.
+- PRD status is `shipped`.
+- Chunk table marks SED-01 through SED-05 shipped.
+- Blockers are clear.
+- Promote notes are ready for a docs/steward pass.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `27 passed (27)`, `480 passed (480)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
+- Browser smoke: `bun browser --ignore-https-errors batch --bail "open https://13-site-editor-list-detail.formless.local/site" "wait 1000" "get text body"` returned the Site editor with `Pages`, `Header`, `Footer`, page root list, Home detail fields, placement rows, and `Create Block placement`.
+- Browser smoke: `bun browser --ignore-https-errors batch --bail "open https://13-site-editor-list-detail.formless.local/pages" "wait 1000" "get text body"` redirected to `/pages/home` and returned the public Home page with header navigation, hero, recent posts, featured projects, and footer.
+- Browser smoke: `bun browser --ignore-https-errors batch --bail "open https://13-site-editor-list-detail.formless.local/pages/home" "wait 1000" "get text body"` returned the public Home page with header navigation, hero, recent posts, featured projects, and footer.
 
 Acceptance:
 
@@ -551,3 +573,4 @@ When this PRD ships, update `doc/roadmap.md` only if the first-release target sh
 - SED-02 shipped 2026-05-06. Next ready chunk is SED-03 generated list/detail renderer.
 - SED-03 shipped 2026-05-06. Next ready chunk is SED-04 Site source schema.
 - SED-04 shipped 2026-05-06. Next ready chunk is SED-05 closeout smoke.
+- SED-05 shipped 2026-05-06. PRD 13 is complete and ready for docs/steward promotion.
