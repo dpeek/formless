@@ -114,23 +114,6 @@ function selectRateHomeModel() {
   return model;
 }
 
-function taskSchemaWithScreens(): AppSchema {
-  return {
-    ...appSchema,
-    screens: {
-      taskHome: {
-        type: "workspace",
-        label: "Tasks",
-        navigation: { primary: true },
-        layout: {
-          type: "stack",
-          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
-        },
-      },
-    },
-  };
-}
-
 describe("App smoke routes", () => {
   it('renders the "/tasks" route with task navigation', () => {
     const html = renderRoute("/tasks");
@@ -188,6 +171,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset source schema");
     expect(html).toContain("Reset seed data");
+    expect(html).toContain("&quot;screens&quot;");
     expect(html).toContain("&quot;task&quot;");
     expect(html).not.toContain("<code>rates</code>");
   });
@@ -203,6 +187,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset source schema");
     expect(html).toContain("Reset seed data");
+    expect(html).toContain("&quot;rateSetup&quot;");
     expect(html).toContain("&quot;rate&quot;");
     expect(html).toContain("&quot;resource&quot;");
     expect(html).not.toContain("<code>tasks</code>");
@@ -398,8 +383,8 @@ describe("generated collection home", () => {
     expect(html).not.toContain('aria-label="Collection summary"');
   });
 
-  it("renders an explicit one-section task screen with the existing home layout", () => {
-    applyBootstrapResponse(bootstrap([], taskSchemaWithScreens()));
+  it("renders the source one-section task screen with the existing home layout", () => {
+    applyBootstrapResponse(bootstrap([], appSchema));
     const html = renderRoute("/tasks");
 
     expect(html).toContain("<h1");

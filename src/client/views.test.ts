@@ -1176,8 +1176,7 @@ describe("home view model collections", () => {
   });
 
   it("selects screen models in schema order and filters primary screens", () => {
-    const schema = rateSchemaWithScreens();
-    const models = selectScreenModels(schema);
+    const models = selectScreenModels(rateCardSchema);
 
     expect(models.map(summarizeScreenModel)).toEqual([
       {
@@ -1193,7 +1192,7 @@ describe("home view model collections", () => {
         primary: false,
         layoutType: "stack",
         sections: [
-          { id: "cards", label: "Cards", viewName: "cardHome", entityName: "card" },
+          { id: "cards", label: "Rate cards", viewName: "cardHome", entityName: "card" },
           {
             id: "resources",
             label: "Resources",
@@ -1203,13 +1202,13 @@ describe("home view model collections", () => {
         ],
       },
     ]);
-    expect(selectPrimaryScreenModels(schema).map((model) => model.screenName)).toEqual([
+    expect(selectPrimaryScreenModels(rateCardSchema).map((model) => model.screenName)).toEqual([
       "rateHome",
     ]);
   });
 
   it("exposes render-ready collection facts on screen sections", () => {
-    const setupScreen = selectScreenModels(rateSchemaWithScreens()).find(
+    const setupScreen = selectScreenModels(rateCardSchema).find(
       (model) => model.screenName === "rateSetup",
     );
     const cardsSection = setupScreen?.layout.sections[0];
@@ -1218,7 +1217,7 @@ describe("home view model collections", () => {
     expect(cardsSection).toMatchObject({
       id: "cards",
       type: "collection",
-      label: "Cards",
+      label: "Rate cards",
       viewName: "cardHome",
       collection: {
         entityName: "card",
@@ -1478,54 +1477,6 @@ function summarizeScreenModel(model: HomeScreenModel) {
       viewName: section.viewName,
       entityName: section.collection.entityName,
     })),
-  };
-}
-
-function rateSchemaWithScreens(): AppSchema {
-  return {
-    ...rateCardSchema,
-    screens: {
-      rateHome: {
-        type: "workspace",
-        label: "Rates",
-        navigation: {
-          primary: true,
-        },
-        layout: {
-          type: "stack",
-          sections: [
-            {
-              id: "rates",
-              type: "collection",
-              view: "rateHome",
-            },
-          ],
-        },
-      },
-      rateSetup: {
-        type: "workspace",
-        label: "Rate setup",
-        navigation: {
-          primary: false,
-        },
-        layout: {
-          type: "stack",
-          sections: [
-            {
-              id: "cards",
-              type: "collection",
-              label: "Cards",
-              view: "cardHome",
-            },
-            {
-              id: "resources",
-              type: "collection",
-              view: "resourceHome",
-            },
-          ],
-        },
-      },
-    },
   };
 }
 

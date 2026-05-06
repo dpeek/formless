@@ -1,7 +1,7 @@
 # PRD 10: Declarative screen runtime
 
 Status: active
-Current chunk: SCR-05 source schema migration
+Current chunk: SCR-06 stack layout
 Last updated: 2026-05-06
 
 ## Goal
@@ -249,7 +249,7 @@ Notes:
 | SCR-02 | shipped | SCR-01     | `src/shared/schema-types.ts`, `src/shared/schema-screens.ts`, `src/shared/schema.ts` | Optional `screens` parses, validates references, rejects bad layouts, and preserves schemas without screens.              |
 | SCR-03 | shipped | SCR-02     | `src/client/views.ts` or `src/client/screens.ts`                                     | Screen model selection returns primary screen models and legacy fallback models with render-ready collection sections.    |
 | SCR-04 | shipped | SCR-03     | `src/app/routes/home.tsx`, `src/app/generated/screen.tsx`                            | Home route renders through screen models with no behavior change for one-section task and rate screens.                   |
-| SCR-05 | draft   | SCR-04     | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json`, tests              | Task and rate source schemas define explicit screens; reset/bootstrap/schema editor flows keep working.                   |
+| SCR-05 | shipped | SCR-04     | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json`, tests              | Task and rate source schemas define explicit screens; reset/bootstrap/schema editor flows keep working.                   |
 | SCR-06 | draft   | SCR-05     | `src/app/generated/screen.tsx`, `src/app/routes/home.tsx`, tests                     | Stack layout renders multiple collection sections with independent query and context state.                               |
 | SCR-07 | draft   | SCR-06     | `src/client/views.ts`, `src/app/routes/home.tsx`, source schemas                     | Primary app workspace selection uses screen navigation when screens exist; collection navigation remains legacy fallback. |
 | SCR-08 | draft   | SCR-07     | tests, `bun browser` smoke, `prd/10-declarative-screen-runtime.md`                   | Tasks and Rates pass app smoke; PRD status, decisions, blockers, and promote notes are current.                           |
@@ -472,4 +472,13 @@ Recommended order:
 - SCR-04 smoke: `bun browser` covered `/tasks` and `/rates` through `http://127.0.0.1:4580`.
 - SCR-04 note: no storage, sync, authority, or protocol files changed.
 - SCR-04 promote: `doc/current.md` should note home routes render through screen models.
+- SCR-05 shipped 2026-05-06.
+- SCR-05 evidence: `schema/apps/tasks/schema.json` defines primary `taskHome` workspace screen with a `tasks` collection section for `taskHome`.
+- SCR-05 evidence: `schema/apps/rates/schema.json` defines primary `rateHome` workspace screen and non-primary `rateSetup` workspace sections for `cardHome` and `resourceHome`.
+- SCR-05 evidence: `src/client/schema.test.ts` covers parsed Tasks and Rates source screens.
+- SCR-05 evidence: `src/client/views.test.ts` selects screen models from the migrated Rates source schema.
+- SCR-05 evidence: `src/app.test.tsx` shows schema editor routes render source schemas containing screens.
+- SCR-05 evidence: `src/worker/authority.test.ts` covers saving a compatible schema containing screens and reset schema restoring source screens.
+- SCR-05 note: legacy collection navigation remains in Rates source views and still parses as compatibility data.
+- SCR-05 promote: `doc/current.md` should note Tasks and Rates source schemas define screens.
 - No blockers.

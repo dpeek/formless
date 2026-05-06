@@ -748,5 +748,46 @@
         }
       }
     }
+  },
+  "screens": {
+    "rateHome": {
+      "type": "workspace",
+      "label": "Rates",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "rates",
+            "type": "collection",
+            "view": "rateHome"
+          }
+        ]
+      }
+    },
+    "rateSetup": {
+      "type": "workspace",
+      "label": "Rate setup",
+      "navigation": {
+        "primary": false
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "cards",
+            "type": "collection",
+            "view": "cardHome"
+          },
+          {
+            "id": "resources",
+            "type": "collection",
+            "view": "resourceHome"
+          }
+        ]
+      }
+    }
   }
 }

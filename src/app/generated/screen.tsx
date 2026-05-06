@@ -1,7 +1,4 @@
-import type {
-  HomeScreenCollectionSectionModel,
-  HomeScreenModel,
-} from "../../client/views.ts";
+import type { HomeScreenCollectionSectionModel, HomeScreenModel } from "../../client/views.ts";
 import { HomeCollection } from "./collection.tsx";
 
 export type HomeScreenSectionSelection = {

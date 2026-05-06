@@ -21,10 +21,7 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   const activeSchema = useSchema();
   const schema = activeSchemaKey === null || activeSchemaKey === schemaKey ? activeSchema : null;
   const app = getSchemaAppDefinition(schemaKey);
-  const screenModels = useMemo(
-    () => (schema ? selectPrimaryScreenModels(schema) : []),
-    [schema],
-  );
+  const screenModels = useMemo(() => (schema ? selectPrimaryScreenModels(schema) : []), [schema]);
   const [selectionState, setSelectionState] = useState(createHomeRouteSelectionState);
   const selectedScreenName = selectionState.selectedScreenName;
   const homeScreen =

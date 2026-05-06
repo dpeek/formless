@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { taskSourceSchema } from "../test/schema-apps.ts";
+import { rateSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 
 describe("task source schema", () => {
   it("imports and parses the checked-in schema", () => {
@@ -71,5 +71,47 @@ describe("task source schema", () => {
     expect(
       clearCompleted?.kind === "clear-completed" ? clearCompleted.target.query : undefined,
     ).toBe("taskCompleted");
+  });
+
+  it("contains an explicit primary task source screen", () => {
+    expect(taskSourceSchema.screens).toEqual({
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+        },
+      },
+    });
+  });
+});
+
+describe("rate source schema", () => {
+  it("contains explicit rates and setup source screens", () => {
+    expect(rateSourceSchema.screens).toEqual({
+      rateHome: {
+        type: "workspace",
+        label: "Rates",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "rates", type: "collection", view: "rateHome" }],
+        },
+      },
+      rateSetup: {
+        type: "workspace",
+        label: "Rate setup",
+        navigation: { primary: false },
+        layout: {
+          type: "stack",
+          sections: [
+            { id: "cards", type: "collection", view: "cardHome" },
+            { id: "resources", type: "collection", view: "resourceHome" },
+          ],
+        },
+      },
+    });
   });
 });

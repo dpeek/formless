@@ -208,21 +208,18 @@ describe("authority", () => {
 
   it("persists compatible schema updates and returns them from bootstrap", async () => {
     const nextSchema = {
-      version: 1,
+      ...appSchema,
       entities: {
+        ...appSchema.entities,
         task: {
+          ...appSchema.entities.task,
           label: "Planner task",
           fields: {
             ...appSchema.entities.task.fields,
             notes: { type: "text", required: false },
           },
-          mutations: defaultMutations(),
         },
       },
-      queries: defaultQueries(),
-      itemViews: defaultItemViews(),
-      tableViews: {},
-      views: defaultViews(),
     } satisfies AppSchema;
 
     const update = await postJson<SchemaUpdateResponse>("/api/schema", { schema: nextSchema });
@@ -235,6 +232,7 @@ describe("authority", () => {
     expect(schemaResponse.updatedAt).toBe(update.updatedAt);
     expect(bootstrap.schema).toEqual(nextSchema);
     expect(bootstrap.schemaUpdatedAt).toBe(update.updatedAt);
+    expect(update.schema.screens).toEqual(appSchema.screens);
   });
 
   it("accepts compatible schema updates that change query labels and expressions", async () => {
@@ -401,6 +399,7 @@ describe("authority", () => {
 
     expect(beforeReset.schema.entities.task?.label).toBe("Planner task");
     expect(reset.schema).toEqual(appSchema);
+    expect(reset.schema.screens).toEqual(appSchema.screens);
     expect(reset.records).toEqual([...taskSeedRecords, created.record]);
     expect(reset.cursor).toBe(beforeReset.cursor);
   });
