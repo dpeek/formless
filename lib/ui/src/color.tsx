@@ -47,9 +47,12 @@ interface ColorPickerProps {
   error?: string;
   className?: string;
   alpha?: boolean;
+  disabled?: boolean;
   hideInputValidation?: boolean;
+  name?: string;
   pickerValue?: string;
   placeholder?: string;
+  required?: boolean;
 }
 
 interface ColorValues {
@@ -70,9 +73,12 @@ export function ColorInput({
   error,
   className,
   alpha = false,
+  disabled = false,
   hideInputValidation = false,
+  name,
   pickerValue,
   placeholder,
+  required = false,
 }: ColorPickerProps) {
   const resolvedLabel = label ?? ariaLabel ?? "Color";
   const resolvedPickerValue = toPickerHexColor(pickerValue ?? value, "#000000");
@@ -324,12 +330,13 @@ export function ColorInput({
     <div className={cn("space-y-2", className)}>
       {label ? <Label>{label}</Label> : null}
       <Popover onOpenChange={handlePopoverChange}>
-        <InputGroup className="w-full">
+        <InputGroup className="w-full" data-disabled={disabled ? true : undefined}>
           <InputGroupAddon align="inline-start">
             <PopoverTrigger
               render={
                 <InputGroupButton
                   aria-label={`Choose ${resolvedLabel}`}
+                  disabled={disabled}
                   size="icon-xs"
                   variant="ghost"
                 >
@@ -342,9 +349,13 @@ export function ColorInput({
             aria-invalid={inputError ? true : undefined}
             aria-label={resolvedLabel}
             className="uppercase"
+            disabled={disabled}
+            name={name}
             onBlur={onBlur}
             onChange={(e) => handleHexChange(e.target.value)}
             placeholder={inputPlaceholder}
+            required={required}
+            type="text"
             value={getCurrentHexValue()}
           />
           {isLoading ? (
@@ -361,7 +372,7 @@ export function ColorInput({
                 size="icon"
                 className="absolute -top-1.5 -left-1 z-10 flex h-7 w-7 items-center gap-1 bg-transparent hover:bg-transparent"
                 onClick={handleEyeDropper}
-                disabled={!isEyeDropperAvailable()}
+                disabled={disabled || !isEyeDropperAvailable()}
               >
                 <PipetteIcon className="h-3 w-3" />
               </Button>
@@ -381,7 +392,10 @@ export function ColorInput({
             </div>
             <div className="flex gap-2">
               <Select value={colorFormat} onValueChange={(format) => setColorFormat(format!)}>
-                <SelectTrigger className="h-7! w-[4.8rem]! rounded-sm px-2 py-1 text-sm!">
+                <SelectTrigger
+                  className="h-7! w-[4.8rem]! rounded-sm px-2 py-1 text-sm!"
+                  disabled={disabled}
+                >
                   <SelectValue placeholder="Color" />
                 </SelectTrigger>
                 <SelectContent className="min-w-20">

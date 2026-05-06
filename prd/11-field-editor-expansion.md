@@ -1,7 +1,7 @@
 # PRD 11: Field editor expansion
 
 Status: active
-Current chunk: FE-03 color editor
+Current chunk: FE-04 markdown editor
 Last updated: 2026-05-06
 
 ## Goal
@@ -223,6 +223,7 @@ Patch scalar fields together through generic mutation paths.
 | FE-D7 | Fix ISO date editor semantics before expanding date behavior.  | Field validation expects `YYYY-MM-DD`; editor UI must preserve that contract.           | `src/shared/field-types.ts`, `lib/ui/src/date.tsx`                     |
 | FE-D8 | Model value/unit as view/editor composition first.             | It proves ergonomics without committing to composite stored values.                     | `schema/apps/rates/schema.json`                                        |
 | FE-D9 | Use `bun browser` for visible editor behavior changes.         | This PRD changes interactive controls, not just parser behavior.                        | `doc/current.md` checks section                                        |
+| FE-D10 | Keep color validation editor-side first.                       | `color` remains a text-backed editor hint, so invalid stored strings must stay visible. | `lib/ui/src/color.tsx`, `src/app/generated/record-field-display.tsx`   |
 
 ## Chunks
 
@@ -230,7 +231,7 @@ Patch scalar fields together through generic mutation paths.
 | ----- | ------- | ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | FE-01 | shipped | none       | tests, PRD                                                             | Current editor support, date value shape, markdown/color fallbacks, and number behavior are characterized. |
 | FE-02 | shipped | FE-01      | `lib/ui/src/date.tsx`, generated create/editor code                    | Date create and inline editors preserve `YYYY-MM-DD` field values.                                         |
-| FE-03 | draft   | FE-01      | `src/app/generated/*`, `lib/ui/src/color.tsx`, tests                   | `editor: "color"` uses `ColorInput`, commits text values, and displays swatches.                           |
+| FE-03 | shipped | FE-01      | `src/app/generated/*`, `lib/ui/src/color.tsx`, tests                   | `editor: "color"` uses `ColorInput`, commits text values, and displays swatches.                           |
 | FE-04 | draft   | FE-01      | `src/app/generated/*`, `lib/ui/src/markdown.tsx`, tests                | `editor: "markdown"` uses rich markdown editing where appropriate and keeps string storage.                |
 | FE-05 | draft   | FE-01      | `lib/ui/src/input.tsx`, `lib/ui/src/text-input.tsx`, generated editors | Autosizing editable text is available and used for title-like compact text fields.                         |
 | FE-06 | draft   | FE-05      | `lib/ui/src/number-input.tsx`, field behavior/display tests            | Number editors can use encode/decode formatting while storing finite numbers.                              |
@@ -291,20 +292,29 @@ Promotion:
 
 ### FE-03 color editor
 
-Status: draft.
+Status: shipped 2026-05-06.
 
-Tasks:
+Outcomes:
 
-- Wire `editor: "color"` to `ColorInput`.
-- Keep stored value as text.
-- Add color swatch display for read-only and compact table contexts.
-- Decide whether invalid color strings fall back to text input or show editor-side error.
+- Shared `ColorInput` accepts generated form/editor props for disabled, required, name, and text input type.
+- Generated create forms render `editor: "color"` through `ColorInput`.
+- Create color fields keep a hidden flat text input named for the field, so generic create mutation payloads stay unchanged.
+- Generated inline editors render `editor: "color"` through `ColorInput`.
+- Inline color edits still patch the single text field through generic patch mutation.
+- Read-only color table cells render a swatch for valid hex strings.
+- Invalid existing color strings render as text without applying invalid CSS color styles.
 
-Acceptance:
+Evidence:
 
-- Site `color` fields can be edited through color UI.
-- Empty optional colors can still be omitted.
-- Invalid existing stored strings do not crash generated UI.
+- `./tmp/test.txt`: 23 files, 410 tests passed.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 152 files.
+- `bun browser` at `http://127.0.0.1:4181/site`: Site create dialog exposed `Choose Color`; visible color input was `type="text"`; hidden submitted input was `type="hidden"` and `name="color"`; filling `#336699` mirrored hidden `color` value to `#336699`; page errors empty.
+
+Promotion:
+
+- Generated color editors use shared `ColorInput` in create and inline patch flows.
+- Generated read-only color display shows swatches for valid hex strings.
+- Color values remain flat text fields.
 
 ### FE-04 markdown editor
 
@@ -427,7 +437,6 @@ Acceptance:
 | ID    | Question                                                                 | Default for implementation                                                   |
 | ----- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | FE-O1 | Should `markdown` render rich editor in compact table cells?             | Use textarea or dialog in compact cells; use rich editor in larger surfaces. |
-| FE-O2 | Should `color` enforce valid hex in authority?                           | No. Keep format as editor hint first; show editor-side validation.           |
 | FE-O3 | Should `slug` normalize on edit?                                         | No automatic authority normalization; editor may offer slug-friendly input.  |
 | FE-O4 | Should value/unit metadata live on table columns or generic view fields? | Start where the first use appears, likely table column/editor metadata.      |
 | FE-O5 | Should percent/currency become field types?                              | No. Keep as number editor/display options until semantics harden.            |
@@ -510,4 +519,7 @@ When this PRD ships, update `doc/roadmap.md` only if richer field/editor support
 - FE-02 shipped 2026-05-06.
 - FE-02 changed generated date create and inline editor behavior only.
 - FE-02 kept date storage as `YYYY-MM-DD` strings.
+- FE-03 shipped 2026-05-06.
+- FE-03 changed generated color create, inline edit, and read-only display behavior only.
+- FE-03 kept color storage as flat text strings.
 - No blockers beyond open design choices for value/unit metadata and compact markdown editing.

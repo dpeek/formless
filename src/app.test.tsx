@@ -1179,6 +1179,43 @@ describe("generated forms and records", () => {
     expect(after).not.toContain("31.58%");
   });
 
+  it("renders read-only color fields with swatches and tolerates invalid strings", () => {
+    const entity = fieldEditorCharacterizationEntity();
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:color",
+        fieldName: "color",
+        field: entity.fields.color,
+        editor: "color",
+        commit: "field-commit",
+        label: "Color",
+        display: "readOnly",
+        format: "plain",
+      },
+    ];
+    const invalidColorRecord: StoredRecord = {
+      ...fieldEditorCharacterizationRecord(),
+      id: "record-editor-case-2",
+      values: { color: "not-a-color" },
+    };
+
+    applyBootstrapResponse(bootstrap([fieldEditorCharacterizationRecord(), invalidColorRecord]));
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={entity}
+        entityName="editorCase"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Color color swatch"');
+    expect(html).toContain("#336699");
+    expect(html).toContain("not-a-color");
+    expect(html).not.toContain('style="background-color:not-a-color"');
+  });
+
   it("renders number create controls and inline editors with numeric constraints", () => {
     const task = taskEntityWithEstimateNumber();
     const action = createAction(task, ["estimate"]);
@@ -1244,7 +1281,9 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithNameAndType("title", "text"));
     expect(html).toMatch(textareaWithName("summary"));
     expect(html).toMatch(textareaWithName("body"));
-    expect(html).toMatch(inputWithNameAndType("color", "text"));
+    expect(html).toMatch(inputWithNameAndType("color", "hidden"));
+    expect(html).toContain('aria-label="Choose Color"');
+    expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
     expect(html).toMatch(inputWithNameAndType("href", "text"));
     expect(html).toMatch(inputWithNameAndType("slug", "text"));
     expect(html).toMatch(inputWithNameAndType("icon", "text"));
@@ -1277,6 +1316,7 @@ describe("generated forms and records", () => {
     expect(html).toMatch(textareaWithAriaLabel("Body"));
     expect(html).toContain("# Heading");
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
+    expect(html).toContain('aria-label="Choose Color"');
     expect(html).toContain('value="#336699"');
     expect(html).toMatch(inputWithAriaLabelAndType("Link", "text"));
     expect(html).toMatch(inputWithAriaLabelAndType("Slug", "text"));
@@ -1567,6 +1607,8 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('type="number"');
     expect(createHtml).toContain('min="0"');
     expect(createHtml).toContain('step="1"');
+    expect(createHtml).toContain('name="color"');
+    expect(createHtml).toContain('aria-label="Choose Color"');
     expect(createHtml).toContain('name="assetKey"');
     expect(createHtml).toContain('name="alt"');
     expect(createHtml).toContain('name="width"');

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DateInput } from "@formless/ui/date";
 import { Button } from "@formless/ui/button";
 import { Checkbox } from "@formless/ui/checkbox";
+import { ColorInput } from "@formless/ui/color";
 import {
   Dialog,
   DialogClose,
@@ -224,6 +225,20 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
     );
   }
 
+  if (adapter.kind === "text" && adapter.editor === "color") {
+    return (
+      <Field>
+        <Label>{label}</Label>
+        <CreateColorField
+          defaultValue={adapter.createDefaultValue}
+          fieldName={fieldName}
+          label={label}
+          required={adapter.required}
+        />
+      </Field>
+    );
+  }
+
   if (adapter.control.kind === "input" && adapter.control.inputType === "number") {
     return (
       <Field>
@@ -295,6 +310,48 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
         type={adapter.control.kind === "input" ? adapter.control.inputType : "text"}
       />
     </Field>
+  );
+}
+
+function CreateColorField({
+  defaultValue,
+  fieldName,
+  label,
+  required,
+}: {
+  defaultValue: string | undefined;
+  fieldName: string;
+  label: string;
+  required: boolean;
+}) {
+  const resetValue = defaultValue ?? "";
+  const [value, setValue] = useState(resetValue);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const form = hiddenInputRef.current?.form;
+
+    if (!form) {
+      return;
+    }
+
+    const handleReset = () => setValue(resetValue);
+    form.addEventListener("reset", handleReset);
+
+    return () => form.removeEventListener("reset", handleReset);
+  }, [resetValue]);
+
+  return (
+    <>
+      <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
+      <ColorInput
+        ariaLabel={label}
+        onBlur={() => undefined}
+        onChange={setValue}
+        required={required}
+        value={value}
+      />
+    </>
   );
 }
 
