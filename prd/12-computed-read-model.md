@@ -1,7 +1,7 @@
 # PRD 12: Computed and aggregate read model
 
-Status: in progress
-Current chunk: CR-07 closeout
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-06
 
 ## Goal
@@ -266,7 +266,7 @@ Notes:
 | CR-04 | shipped | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
 | CR-05 | shipped | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
 | CR-06 | shipped | CR-04, CR-05 | `schema/apps/rates/schema.json`, app tests                      | Rate-card source schema shows margin and totals without storage or write changes.                               |
-| CR-07 | draft   | CR-06        | Browser smoke, `prd/12-computed-read-model.md`                  | Rates smoke passes; PRD status, decisions, blockers, and promote notes are current.                             |
+| CR-07 | shipped | CR-06        | Browser smoke, `prd/12-computed-read-model.md`                  | Rates smoke passes; PRD status, decisions, blockers, and promote notes are current.                             |
 
 ## Chunk details
 
@@ -394,16 +394,24 @@ Evidence:
 
 ### CR-07 closeout
 
-Verify behavior and update this PRD.
+Outcome:
 
-Acceptance:
-
-- `./tmp/test.txt` shows passing tests after `bun start`.
-- `./tmp/check.txt` shows passing checks after `bun start`.
-- `bun browser` smoke covers `/rates`.
-- `tmp/state.txt` has no unresolved issues.
+- `bun start` reports dev ready, tests pass, and checks pass.
+- `/rates` browser smoke renders the rate-card workspace.
+- `/rates` browser smoke renders the `Margin` computed table column.
+- `/rates` browser smoke renders `Cost total`, `Price total`, and `Average margin` aggregate summaries.
+- `tmp/state.txt` is not present in this workspace; harness state is tracked in `./tmp/agent-dev.json`.
+- No blockers remain open.
 - Promote notes are ready for a docs/steward pass.
 - PRD status reflects shipped chunks, blockers, and decisions.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: 23 files passed, 437 tests passed.
+- `./tmp/check.txt`: formatting, lint, and type checks passed for 154 files.
+- `bun browser --session cr-07-rates --ignore-https-errors open https://12-computed-read-model.formless.local/rates`
+- `bun browser --session cr-07-rates snapshot --selector 'main' --max-output 30000`: `/rates` rendered the `Margin` column, rate rows, and `Collection summary` with `Cost total`, `Price total`, and `Average margin`.
 
 ## Non-goals
 
@@ -542,6 +550,11 @@ CR-06:
 - Rate-card `rateHome` renders cost total, price total, and average margin summary slots.
 - Rate-card stored records stay flat; no authority write, storage, sync, mutation, or action code changed.
 
+CR-07:
+
+- `/rates` browser smoke verifies rate-card read-model output renders after `bun start`.
+- PRD 12 is shipped and ready for docs/steward promotion.
+
 When this PRD ships, update `doc/current.md`:
 
 - Schema can declare read-model computed values and aggregates.
@@ -568,3 +581,4 @@ When this PRD ships, update `doc/roadmap.md` only if derived display values rema
 - CR-04 shipped 2026-05-06 with schema-backed computed table columns and generated table rendering.
 - CR-05 shipped 2026-05-06 with aggregate summary slots, client aggregate selectors, and generated collection rendering.
 - CR-06 shipped 2026-05-06 with rate-card source schema margin and aggregate totals.
+- CR-07 shipped 2026-05-06 with `/rates` browser smoke and PRD closeout.
