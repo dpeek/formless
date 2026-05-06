@@ -635,6 +635,23 @@ describe("generated collection home", () => {
     expect(html).toMatch(/aria-label="Featured count"[^>]*>7</);
   });
 
+  it("characterizes the current site route as raw Blocks first with collection-tab navigation", () => {
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute("/site");
+
+    expect(html).toContain("<h1");
+    expect(html).toContain(">Blocks</h1>");
+    expect(html).toContain('aria-label="Collections"');
+    expect(html).toContain('data-slot="tabs-list"');
+    expect(html).toContain('data-slot="tabs-trigger"');
+    expect(html).toContain("Blocks");
+    expect(html).toContain("Placements");
+    expect(html).toContain("Create Block");
+    expect(html).toContain('data-slot="table"');
+    expect(html).not.toContain('aria-label="Screens"');
+    expect(html).not.toContain("Create Block placement");
+  });
+
   it("updates site content query counts after local record merges", () => {
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const before = renderRoute("/site");
@@ -721,6 +738,8 @@ describe("generated collection home", () => {
     });
 
     expect(html).toContain('aria-label="Block records"');
+    expect(html).toContain('data-slot="tabs-list"');
+    expect(html).toContain('data-slot="tabs-trigger"');
     expect(html).toContain("Home");
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
     expect(html).toContain("Create Block placement");

@@ -1,7 +1,7 @@
 # PRD 13: Site editor list/detail
 
 Status: ready
-Current chunk: SED-01
+Current chunk: SED-02
 Last updated: 2026-05-06
 
 ## Goal
@@ -234,30 +234,47 @@ Notes:
 
 ## Decisions
 
-| ID     | Decision                                                      | Reason                                                               | Evidence                                            |
-| ------ | ------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------- |
-| SED-D1 | Keep `block` and `blockPlacement` flat.                       | Flat records are a core runtime bet and the public tree already projects nesting. | `doc/overview.md`, `src/site/tree.ts`               |
-| SED-D2 | Add list/detail as a generic context presentation.            | Pages, Header, Footer need the same selection pattern without a Site-only fork. | `src/app/generated/collection.tsx`, `src/client/views.ts` |
-| SED-D3 | Default context presentation stays tabs.                      | Existing Tasks, Rates, and saved active schemas must not change silently. | `prd/10-declarative-screen-runtime.md`              |
-| SED-D4 | Put Site top-level authoring in screens, not entity splits.   | PRD 10 already owns route-level workspace composition.               | `schema/apps/site/schema.json`, `prd/10-declarative-screen-runtime.md` |
-| SED-D5 | Header and Footer are selected root groups.                   | Current seeds already model them as reusable group blocks.           | `schema/apps/site/seed-records.json`                |
-| SED-D6 | Header nav uses link blocks, not page blocks.                 | Placing pages under Header creates page/header/page recursion risk.  | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx` |
-| SED-D7 | Defer scoped create forms.                                    | Create views only support context defaults today, not literal `type` defaults. | `src/shared/schema-views.ts`, `src/app/generated/create.tsx` |
-| SED-D8 | Keep raw admin views available but non-primary.               | Debug access stays possible while the authoring surface gets simpler. | `schema/apps/site/schema.json`                      |
+| ID     | Decision                                                    | Reason                                                                            | Evidence                                                               |
+| ------ | ----------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| SED-D1 | Keep `block` and `blockPlacement` flat.                     | Flat records are a core runtime bet and the public tree already projects nesting. | `doc/overview.md`, `src/site/tree.ts`                                  |
+| SED-D2 | Add list/detail as a generic context presentation.          | Pages, Header, Footer need the same selection pattern without a Site-only fork.   | `src/app/generated/collection.tsx`, `src/client/views.ts`              |
+| SED-D3 | Default context presentation stays tabs.                    | Existing Tasks, Rates, and saved active schemas must not change silently.         | `prd/10-declarative-screen-runtime.md`                                 |
+| SED-D4 | Put Site top-level authoring in screens, not entity splits. | PRD 10 already owns route-level workspace composition.                            | `schema/apps/site/schema.json`, `prd/10-declarative-screen-runtime.md` |
+| SED-D5 | Header and Footer are selected root groups.                 | Current seeds already model them as reusable group blocks.                        | `schema/apps/site/seed-records.json`                                   |
+| SED-D6 | Header nav uses link blocks, not page blocks.               | Placing pages under Header creates page/header/page recursion risk.               | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`               |
+| SED-D7 | Defer scoped create forms.                                  | Create views only support context defaults today, not literal `type` defaults.    | `src/shared/schema-views.ts`, `src/app/generated/create.tsx`           |
+| SED-D8 | Keep raw admin views available but non-primary.             | Debug access stays possible while the authoring surface gets simpler.             | `schema/apps/site/schema.json`                                         |
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files | Acceptance |
-| ------ | ------ | ---------- | ---------- | ---------- |
-| SED-01 | ready  | none       | tests, PRD | Current Site admin surfaces, context tab behavior, and public route behavior are characterized. |
-| SED-02 | ready  | SED-01     | schema types/parser, view model, tests | Collection context presentation parses, defaults to tabs, exposes render-ready facts, and rejects bad values. |
-| SED-03 | ready  | SED-02     | generated collection/screen UI, app tests | `listDetail` context presentation renders a selectable list plus selected-record detail without changing tab presentation behavior. |
-| SED-04 | ready  | SED-03     | Site source schema, view tests, app tests | Site source schema defines primary Pages, Header, and Footer screens that use list/detail root selection. |
-| SED-05 | ready  | SED-04     | browser smoke, PRD | `/site`, `/pages`, and representative public page routes smoke pass; PRD status, decisions, blockers, and promote notes are current. |
+| ID     | Status  | Depends on | Main files                                | Acceptance                                                                                                                           |
+| ------ | ------- | ---------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| SED-01 | shipped | none       | tests, PRD                                | Current Site admin surfaces, context tab behavior, and public route behavior are characterized.                                      |
+| SED-02 | ready   | SED-01     | schema types/parser, view model, tests    | Collection context presentation parses, defaults to tabs, exposes render-ready facts, and rejects bad values.                        |
+| SED-03 | ready   | SED-02     | generated collection/screen UI, app tests | `listDetail` context presentation renders a selectable list plus selected-record detail without changing tab presentation behavior.  |
+| SED-04 | ready   | SED-03     | Site source schema, view tests, app tests | Site source schema defines primary Pages, Header, and Footer screens that use list/detail root selection.                            |
+| SED-05 | ready   | SED-04     | browser smoke, PRD                        | `/site`, `/pages`, and representative public page routes smoke pass; PRD status, decisions, blockers, and promote notes are current. |
 
 ## Chunk details
 
 ### SED-01 characterization
+
+Status: shipped 2026-05-06.
+
+Outcome:
+
+- `/site` default admin surface is characterized as raw Blocks first.
+- Current Site primary collection navigation is characterized as collection tabs for Blocks and Placements.
+- Current Site placement editing is characterized as a tabbed block context selector.
+- Current public page route and renderer coverage remains in place.
+- Current all-fields Site block create baseline remains covered.
+- No runtime behavior changed.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `27 passed (27)`, `473 passed (473)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
 
 Acceptance:
 
@@ -354,29 +371,29 @@ Acceptance:
 
 ## Open questions
 
-| ID     | Question | Default for implementation |
-| ------ | -------- | -------------------------- |
-| SED-O1 | Should context presentation live on collection context or screen section? | Put it on collection context so the renderer can stay generic and view-owned. |
-| SED-O2 | Should Header/Footer one-item contexts hide the list column? | Keep the generic list/detail layout first; polish only if it feels noisy in smoke. |
-| SED-O3 | Should raw Blocks be reachable through a non-primary screen? | Keep raw views in schema, but do not expose them as primary Site tabs. |
-| SED-O4 | Should Pages include posts/projects with slugs? | No. Pages means `block.type = page` for this PRD. Posts/projects can get their own authoring surface later. |
-| SED-O5 | Should Header links reference page records instead of hrefs? | No. Keep links as link blocks with `href` to avoid recursion. |
+| ID     | Question                                                                  | Default for implementation                                                                                  |
+| ------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| SED-O1 | Should context presentation live on collection context or screen section? | Put it on collection context so the renderer can stay generic and view-owned.                               |
+| SED-O2 | Should Header/Footer one-item contexts hide the list column?              | Keep the generic list/detail layout first; polish only if it feels noisy in smoke.                          |
+| SED-O3 | Should raw Blocks be reachable through a non-primary screen?              | Keep raw views in schema, but do not expose them as primary Site tabs.                                      |
+| SED-O4 | Should Pages include posts/projects with slugs?                           | No. Pages means `block.type = page` for this PRD. Posts/projects can get their own authoring surface later. |
+| SED-O5 | Should Header links reference page records instead of hrefs?              | No. Keep links as link blocks with `href` to avoid recursion.                                               |
 
 ## Blockers
 
-| ID     | Status | Blocks | Notes |
-| ------ | ------ | ------ | ----- |
+| ID     | Status | Blocks | Notes                                                                                       |
+| ------ | ------ | ------ | ------------------------------------------------------------------------------------------- |
 | SED-B1 | open   | SED-04 | Need SED-02/SED-03 generic list/detail support before the Site schema can adopt it cleanly. |
 
 ## Cross-PRD dependencies
 
-| Dependency | Direction | Notes |
-| ---------- | --------- | ----- |
-| PRD 06 home view model module | satisfied | `src/client/views.ts` is the existing model seam for generated collection facts. |
-| PRD 09 site tree renderer | upstream | This PRD must preserve public tree and renderer behavior. |
-| PRD 10 declarative screen runtime | upstream | Site Pages/Header/Footer should be modeled as screens. |
-| PRD 11 field editor expansion | parallel input | This PRD should avoid changing field editor semantics. |
-| Future scoped create PRD | downstream | Needs literal create defaults and type-scoped fields after this PRD simplifies root selection. |
+| Dependency                        | Direction      | Notes                                                                                          |
+| --------------------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| PRD 06 home view model module     | satisfied      | `src/client/views.ts` is the existing model seam for generated collection facts.               |
+| PRD 09 site tree renderer         | upstream       | This PRD must preserve public tree and renderer behavior.                                      |
+| PRD 10 declarative screen runtime | upstream       | Site Pages/Header/Footer should be modeled as screens.                                         |
+| PRD 11 field editor expansion     | parallel input | This PRD should avoid changing field editor semantics.                                         |
+| Future scoped create PRD          | downstream     | Needs literal create defaults and type-scoped fields after this PRD simplifies root selection. |
 
 ## Parallel shipping
 
