@@ -11,7 +11,7 @@ import {
   AlertDialogTrigger,
 } from "@formless/ui/alert-dialog";
 import { Button } from "@formless/ui/button";
-import { resetSeedData, resetSourceSchema } from "../client/sync.ts";
+import { resetSeedData } from "../client/sync.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../shared/schema-apps.ts";
 
@@ -22,57 +22,33 @@ type ResetStatus = {
 
 type DevActionsProps = {
   schemaKey: SchemaKey;
-  onResetSchema?: (response: BootstrapResponse) => void;
-  onResetSeedData?: (response: BootstrapResponse) => void;
+  onResetSourceData?: (response: BootstrapResponse) => void;
 };
 
-export function DevActions({ schemaKey, onResetSchema, onResetSeedData }: DevActionsProps) {
+export function DevActions({ schemaKey, onResetSourceData }: DevActionsProps) {
   const app = getSchemaAppDefinition(schemaKey);
-  const [schemaResetStatus, setSchemaResetStatus] = useState<ResetStatus>({
-    pending: false,
-    error: null,
-  });
-  const [seedDialogOpen, setSeedDialogOpen] = useState(false);
-  const [seedResetStatus, setSeedResetStatus] = useState<ResetStatus>({
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [resetStatus, setResetStatus] = useState<ResetStatus>({
     pending: false,
     error: null,
   });
 
-  async function resetSchema() {
-    if (schemaResetStatus.pending || seedResetStatus.pending) {
+  async function resetSourceData() {
+    if (resetStatus.pending) {
       return;
     }
 
-    setSchemaResetStatus({ pending: true, error: null });
-
-    try {
-      const response = await resetSourceSchema(schemaKey);
-      onResetSchema?.(response);
-      setSchemaResetStatus({ pending: false, error: null });
-    } catch (error) {
-      setSchemaResetStatus({
-        pending: false,
-        error: error instanceof Error ? error.message : "Schema reset failed.",
-      });
-    }
-  }
-
-  async function resetLocalData() {
-    if (schemaResetStatus.pending || seedResetStatus.pending) {
-      return;
-    }
-
-    setSeedDialogOpen(false);
-    setSeedResetStatus({ pending: true, error: null });
+    setDialogOpen(false);
+    setResetStatus({ pending: true, error: null });
 
     try {
       const response = await resetSeedData(schemaKey);
-      onResetSeedData?.(response);
-      setSeedResetStatus({ pending: false, error: null });
+      onResetSourceData?.(response);
+      setResetStatus({ pending: false, error: null });
     } catch (error) {
-      setSeedResetStatus({
+      setResetStatus({
         pending: false,
-        error: error instanceof Error ? error.message : "Seed reset failed.",
+        error: error instanceof Error ? error.message : "Source reset failed.",
       });
     }
   }
@@ -83,53 +59,35 @@ export function DevActions({ schemaKey, onResetSchema, onResetSeedData }: DevAct
       className="rounded border border-slate-200 p-3"
     >
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          disabled={schemaResetStatus.pending || seedResetStatus.pending}
-          onClick={() => void resetSchema()}
-          type="button"
-          variant="outline"
-        >
-          {schemaResetStatus.pending ? "Resetting schema..." : "Reset source schema"}
-        </Button>
-        <AlertDialog open={seedDialogOpen} onOpenChange={setSeedDialogOpen}>
+        <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <AlertDialogTrigger
-            render={
-              <Button
-                disabled={schemaResetStatus.pending || seedResetStatus.pending}
-                type="button"
-                variant="destructive"
-              />
-            }
+            render={<Button disabled={resetStatus.pending} type="button" variant="destructive" />}
           >
-            {seedResetStatus.pending ? "Resetting seed data..." : "Reset seed data"}
+            {resetStatus.pending ? "Resetting..." : "Reset schema and seed data"}
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Reset {app.label} seed data?</AlertDialogTitle>
+              <AlertDialogTitle>Reset {app.label} schema and seed data?</AlertDialogTitle>
               <AlertDialogDescription>
-                This clears records for <code>{app.key}</code> and restores source seed records.
+                This clears records for <code>{app.key}</code> and restores the source schema and
+                source seed records.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => void resetLocalData()}
+                onClick={() => void resetSourceData()}
                 type="button"
                 variant="destructive"
               >
-                Reset seed data
+                Reset
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </div>
 
-      {schemaResetStatus.error ? (
-        <p className="mt-2 text-sm text-red-700">{schemaResetStatus.error}</p>
-      ) : null}
-      {seedResetStatus.error ? (
-        <p className="mt-2 text-sm text-red-700">{seedResetStatus.error}</p>
-      ) : null}
+      {resetStatus.error ? <p className="mt-2 text-sm text-red-700">{resetStatus.error}</p> : null}
     </section>
   );
 }

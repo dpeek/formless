@@ -2726,6 +2726,8 @@ describe("personal site sample schema", () => {
       label: "Alt text",
       format: "longText",
     });
+    expect(schema.entities.block?.fields).not.toHaveProperty("featured");
+    expect(schema.entities.block?.fields).not.toHaveProperty("order");
     expect(schema.entities.blockPlacement?.fields.parent).toMatchObject({
       type: "reference",
       required: true,
@@ -2788,15 +2790,21 @@ describe("personal site sample schema", () => {
       "blockImages",
       "blockVideos",
       "blockFiles",
-      "featuredBlocks",
       "publishedPosts",
-      "featuredProjects",
+      "publishedProjects",
       "placementsForSelectedBlock",
     ]);
     expect(schema.queries.publishedPosts?.expression).toMatchObject({
       kind: "and",
       expressions: [
         { ref: { kind: "value", name: "type" }, op: "eq", value: "post" },
+        { ref: { kind: "value", name: "status" }, op: "eq", value: "published" },
+      ],
+    });
+    expect(schema.queries.publishedProjects?.expression).toMatchObject({
+      kind: "and",
+      expressions: [
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "project" },
         { ref: { kind: "value", name: "status" }, op: "eq", value: "published" },
       ],
     });

@@ -896,9 +896,9 @@ describe("home view model collections", () => {
       models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
     ).toEqual(["blockPlacementTable", "blockPlacementTable", "blockPlacementTable"]);
     expect(requiredCollectionModel(siteSourceSchema, "blockHome").navigation.primary).toBe(false);
-    expect(requiredCollectionModel(siteSourceSchema, "blockCompositionHome").navigation.primary).toBe(
-      false,
-    );
+    expect(
+      requiredCollectionModel(siteSourceSchema, "blockCompositionHome").navigation.primary,
+    ).toBe(false);
   });
 
   it("characterizes the site root authoring model contracts", () => {
@@ -931,9 +931,7 @@ describe("home view model collections", () => {
             "body",
             "slug",
             "status",
-            "featured",
             "publishedAt",
-            "order",
             "templateKey",
           ],
         },
@@ -995,9 +993,7 @@ describe("home view model collections", () => {
             "body",
             "slug",
             "status",
-            "featured",
             "publishedAt",
-            "order",
             "templateKey",
           ],
         },
@@ -1059,9 +1055,7 @@ describe("home view model collections", () => {
             "body",
             "slug",
             "status",
-            "featured",
             "publishedAt",
-            "order",
             "templateKey",
           ],
         },
@@ -1118,9 +1112,8 @@ describe("home view model collections", () => {
       "blockImages",
       "blockVideos",
       "blockFiles",
-      "featuredBlocks",
       "publishedPosts",
-      "featuredProjects",
+      "publishedProjects",
     ]);
     expect(
       contentModel?.result.type === "table"
@@ -1132,11 +1125,9 @@ describe("home view model collections", () => {
       "field:label",
       "field:body",
       "field:status",
-      "field:featured",
       "field:slug",
       "field:href",
       "field:publishedAt",
-      "field:order",
       "field:templateKey",
       "field:assetKey",
       "field:alt",
@@ -1152,11 +1143,9 @@ describe("home view model collections", () => {
       "text",
       "markdown",
       "enum",
-      "boolean",
       "slug",
       "href",
       "date",
-      "number",
       "slug",
       "slug",
       "textarea",
@@ -1171,9 +1160,7 @@ describe("home view model collections", () => {
       "subtitle",
       "body",
       "status",
-      "featured",
       "publishedAt",
-      "order",
       "slug",
       "href",
       "icon",
@@ -1248,7 +1235,7 @@ describe("home view model collections", () => {
         },
       },
       itemViewName: "blockContextItem",
-      recordFields: [{ fieldName: "type" }, { fieldName: "status" }, { fieldName: "featured" }],
+      recordFields: [{ fieldName: "type" }, { fieldName: "status" }],
     });
     expect(compositionModel?.actions[0]).toMatchObject({
       type: "create",
@@ -1378,9 +1365,9 @@ describe("home view model collections", () => {
     expect(screenModels.map((model) => model.screenName)).toEqual(
       collectionModels.map((model) => model.viewName),
     );
-    expect(selectPrimaryScreenModels(schemaWithoutScreens).map((model) => model.screenName)).toEqual(
-      ["pageCompositionHome", "headerCompositionHome", "footerCompositionHome"],
-    );
+    expect(
+      selectPrimaryScreenModels(schemaWithoutScreens).map((model) => model.screenName),
+    ).toEqual(["pageCompositionHome", "headerCompositionHome", "footerCompositionHome"]);
     expect(screenModels.map(summarizeScreenModel)).toEqual([
       {
         screenName: "pageCompositionHome",

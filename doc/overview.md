@@ -8,9 +8,12 @@ The schema defines:
 
 - entities
 - fields
+- relationships
 - mutations
 - queries
+- read models
 - views
+- screens
 - actions
 
 The runtime gives that schema:
@@ -31,6 +34,8 @@ Formless should make the schema describe enough behavior to build a usable app s
 - Schema is runtime data.
 - Records stay flat.
 - Views compose records into workspaces.
+- Screens compose views into app routes.
+- Read models compute display-only values from flat records.
 - Generic mutations handle ordinary edits.
 - Named actions handle commands.
 - The browser is local-first, but not authoritative.

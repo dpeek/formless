@@ -1,7 +1,7 @@
 # PRD 11: Field editor expansion
 
 Status: complete
-Current chunk: FE-09 shipped
+Current chunk: FE-10 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -240,6 +240,7 @@ Patch scalar fields together through generic mutation paths.
 | FE-07 | shipped | FE-06      | schema view types/parser, generated table/editor code                  | View-declared value/unit editor patches multiple flat scalar fields.                                       |
 | FE-08 | shipped | FE-07      | source schemas, app tests, `bun browser`                               | Rates and site authoring smoke pass with richer editors and no storage shape change.                       |
 | FE-09 | shipped | FE-08      | `prd/11-field-editor-expansion.md`                                     | PRD status, shipped outcomes, blockers, and promote notes are current.                                     |
+| FE-10 | shipped | FE-08      | `src/app/generated/table.tsx`, generated table tests, `bun browser`    | Compact value/unit table columns reserve enough width for formatted rate values.                           |
 
 ## Chunk details
 
@@ -490,6 +491,27 @@ Evidence:
 Promotion:
 
 - No new global doc promotion beyond existing `Promote after ship` bullets.
+
+### FE-10 rate value/unit table width follow-up
+
+Status: shipped 2026-05-06.
+
+Outcomes:
+
+- Compact table columns with editable `valueUnit` fields reserve wider cells.
+- Rate table cost and price editors show full seeded values instead of clipping.
+- Rate records, rate schema, and value/unit stored shape are unchanged.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: dev ready, tests pass, check pass.
+- `./tmp/test.txt`: latest rerun passed `src/app.test.tsx` with 81 tests; generated table regression passed in watcher output.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 163 files.
+- `bun browser` at `https://formless.local/rates`: first costs rendered `550`, `650`, `500`, `425`, `700`; first prices rendered `$825.00`, `$975.00`, `$750.00`, `$640.00`, `$1050.00`; input `clientWidth` equaled `scrollWidth`; document horizontal overflow was false; browser errors empty.
+
+Promotion:
+
+- No new global doc promotion.
 
 ## Non-goals
 

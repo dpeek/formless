@@ -7,7 +7,6 @@
       "title": "Site owner portrait",
       "label": "Site owner portrait",
       "status": "published",
-      "featured": false,
       "assetKey": "site-owner-portrait",
       "alt": "Portrait of the site owner",
       "width": 1200,
@@ -23,7 +22,6 @@
       "title": "Intro video",
       "label": "Intro video",
       "status": "published",
-      "featured": false,
       "href": "https://example.com/intro.mp4",
       "assetKey": "site-intro-video",
       "alt": "Short introduction video for the site owner",
@@ -41,8 +39,6 @@
       "subtitle": "Independent product engineer",
       "body": "I design and build schema-backed software for teams that need their tools to keep up with the work.",
       "status": "published",
-      "featured": true,
-      "order": 0,
       "templateKey": "profile-intro"
     },
     "createdAt": "2026-05-05T00:00:03.000Z"
@@ -57,9 +53,7 @@
       "body": "A concise personal site for current work, writing, and project notes.",
       "slug": "home",
       "status": "published",
-      "featured": true,
       "publishedAt": "2026-05-05",
-      "order": 0,
       "templateKey": "home"
     },
     "createdAt": "2026-05-05T00:00:04.000Z"
@@ -73,9 +67,7 @@
       "subtitle": "Notes on product engineering",
       "slug": "blog",
       "status": "published",
-      "featured": false,
       "publishedAt": "2026-05-05",
-      "order": 1,
       "templateKey": "post-index"
     },
     "createdAt": "2026-05-05T00:00:05.000Z"
@@ -90,9 +82,7 @@
       "body": "A practical summary of roles, projects, and strengths.",
       "slug": "resume",
       "status": "published",
-      "featured": false,
       "publishedAt": "2026-05-05",
-      "order": 2,
       "templateKey": "resume"
     },
     "createdAt": "2026-05-05T00:00:06.000Z"
@@ -106,9 +96,7 @@
       "subtitle": "Current and recent product work",
       "slug": "projects",
       "status": "published",
-      "featured": false,
       "publishedAt": "2026-05-05",
-      "order": 3,
       "templateKey": "project-index"
     },
     "createdAt": "2026-05-05T00:00:07.000Z"
@@ -123,9 +111,7 @@
       "body": "Estii helps teams turn operational assumptions into clear, reusable pricing structures.",
       "slug": "projects/estii",
       "status": "published",
-      "featured": true,
       "publishedAt": "2026-05-05",
-      "order": 0,
       "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:08.000Z"
@@ -140,9 +126,7 @@
       "body": "OpenSurf explores portable data models for sessions, spots, boards, and conditions.",
       "slug": "projects/opensurf",
       "status": "published",
-      "featured": true,
       "publishedAt": "2026-05-05",
-      "order": 1,
       "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:09.000Z"
@@ -157,9 +141,7 @@
       "body": "Formless makes app schema describe enough behavior to produce useful generated software.",
       "slug": "projects/formless",
       "status": "published",
-      "featured": true,
       "publishedAt": "2026-05-05",
-      "order": 2,
       "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:10.000Z"
@@ -174,9 +156,7 @@
       "body": "The first useful content app should keep records flat and move composition into relationships and views.",
       "slug": "blog/shipping-schema-backed-authoring",
       "status": "published",
-      "featured": true,
       "publishedAt": "2026-05-05",
-      "order": 0,
       "templateKey": "post"
     },
     "createdAt": "2026-05-05T00:00:11.000Z"
@@ -191,8 +171,6 @@
       "body": "Draft thoughts on where generic generated admin surfaces are helpful and where authoring affordances need more shape.",
       "slug": "blog/generated-editorial-tools",
       "status": "draft",
-      "featured": false,
-      "order": 1,
       "templateKey": "post"
     },
     "createdAt": "2026-05-05T00:00:12.000Z"
@@ -204,9 +182,7 @@
       "type": "link",
       "title": "Home",
       "href": "/pages/home",
-      "status": "published",
-      "featured": false,
-      "order": 0
+      "status": "published"
     },
     "createdAt": "2026-05-05T00:00:12.100Z"
   },
@@ -217,9 +193,7 @@
       "type": "link",
       "title": "Blog",
       "href": "/pages/blog",
-      "status": "published",
-      "featured": false,
-      "order": 1
+      "status": "published"
     },
     "createdAt": "2026-05-05T00:00:12.200Z"
   },
@@ -230,9 +204,7 @@
       "type": "link",
       "title": "Projects",
       "href": "/pages/projects",
-      "status": "published",
-      "featured": false,
-      "order": 2
+      "status": "published"
     },
     "createdAt": "2026-05-05T00:00:12.300Z"
   },
@@ -243,9 +215,7 @@
       "type": "link",
       "title": "Resume",
       "href": "/pages/resume",
-      "status": "published",
-      "featured": false,
-      "order": 3
+      "status": "published"
     },
     "createdAt": "2026-05-05T00:00:12.400Z"
   },
@@ -257,9 +227,7 @@
       "title": "GitHub",
       "href": "https://github.com/example",
       "icon": "github",
-      "status": "published",
-      "featured": false,
-      "order": 0
+      "status": "published"
     },
     "createdAt": "2026-05-05T00:00:13.000Z"
   },
@@ -271,9 +239,7 @@
       "title": "LinkedIn",
       "href": "https://linkedin.com/in/example",
       "icon": "linkedin",
-      "status": "published",
-      "featured": false,
-      "order": 1
+      "status": "published"
     },
     "createdAt": "2026-05-05T00:00:14.000Z"
   },
@@ -285,8 +251,6 @@
       "title": "Copyright",
       "body": "Copyright 2026 Site owner. All rights reserved.",
       "status": "published",
-      "featured": false,
-      "order": 99,
       "templateKey": "copyright"
     },
     "createdAt": "2026-05-05T00:00:15.000Z"
@@ -299,8 +263,6 @@
       "title": "Header",
       "label": "Header",
       "status": "published",
-      "featured": false,
-      "order": 0,
       "templateKey": "header"
     },
     "createdAt": "2026-05-05T00:00:16.000Z"
@@ -313,8 +275,6 @@
       "title": "Footer",
       "label": "Footer",
       "status": "published",
-      "featured": false,
-      "order": 2,
       "templateKey": "footer"
     },
     "createdAt": "2026-05-05T00:00:16.500Z"
@@ -327,8 +287,6 @@
       "title": "Explore",
       "label": "Explore",
       "status": "published",
-      "featured": false,
-      "order": 0,
       "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:17.000Z"
@@ -341,8 +299,6 @@
       "title": "Social",
       "label": "Social",
       "status": "published",
-      "featured": false,
-      "order": 1,
       "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:18.000Z"
@@ -357,8 +313,6 @@
       "subtitle": "Selected writing, projects, and durable systems work.",
       "body": "I design and build schema-backed software for teams that need their tools to keep up with the work.",
       "status": "published",
-      "featured": true,
-      "order": 0,
       "templateKey": "home-hero"
     },
     "createdAt": "2026-05-05T00:00:18.100Z"
@@ -370,8 +324,6 @@
       "type": "contentList",
       "title": "Recent posts",
       "status": "published",
-      "featured": false,
-      "order": 1,
       "templateKey": "publishedPosts",
       "limit": 3
     },
@@ -384,9 +336,7 @@
       "type": "contentGrid",
       "title": "Featured projects",
       "status": "published",
-      "featured": false,
-      "order": 2,
-      "templateKey": "featuredProjects",
+      "templateKey": "publishedProjects",
       "limit": 3
     },
     "createdAt": "2026-05-05T00:00:18.300Z"
@@ -399,8 +349,6 @@
       "title": "Body",
       "body": "The first useful content app should keep records flat and move composition into relationships and views.",
       "status": "published",
-      "featured": false,
-      "order": 0,
       "templateKey": "post-body"
     },
     "createdAt": "2026-05-05T00:00:18.400Z"
@@ -412,8 +360,6 @@
       "type": "contentList",
       "title": "More posts",
       "status": "published",
-      "featured": false,
-      "order": 2,
       "templateKey": "publishedPosts",
       "limit": 3
     },

@@ -9,7 +9,6 @@ describe("record readiness warnings", () => {
         type: "post",
         title: "Draft",
         status: "draft",
-        featured: false,
       }),
     );
 
@@ -22,7 +21,6 @@ describe("record readiness warnings", () => {
         type: "post",
         title: "Published without metadata",
         status: "published",
-        featured: false,
       }),
     );
 
@@ -40,7 +38,6 @@ describe("record readiness warnings", () => {
         title: "Project",
         slug: "projects/project",
         status: "published",
-        featured: true,
       }),
     );
 
@@ -82,7 +79,6 @@ describe("record readiness warnings", () => {
           title: "Example",
           href: "https://example.com",
           status: "published",
-          featured: false,
         }),
       },
     );
@@ -97,7 +93,6 @@ describe("record readiness warnings", () => {
         title: "Hero",
         assetKey: "hero",
         status: "published",
-        featured: false,
       }),
     );
 
@@ -115,7 +110,6 @@ describe("record readiness warnings", () => {
         type: "contentList",
         title: "Recent posts",
         status: "published",
-        featured: false,
       }),
     );
 

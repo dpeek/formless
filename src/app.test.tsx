@@ -153,10 +153,12 @@ describe("App smoke routes", () => {
     expect(html).toContain("Rates");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expect(html).toContain('href="/tasks/schema"');
+    expect(html).toContain('aria-label="Tasks content"');
+    expect(html).toContain("Home");
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Tasks...");
     expect(html).not.toContain("Create Task");
+    expect(html).not.toContain('href="/tasks/schema"');
   });
 
   it('renders the "/rates" route with rate navigation', () => {
@@ -168,10 +170,12 @@ describe("App smoke routes", () => {
     expect(html).toContain("Rates");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expect(html).toContain('href="/rates/schema"');
+    expect(html).toContain('aria-label="Rates content"');
+    expect(html).toContain("Home");
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Rates...");
     expect(html).not.toContain("Create Resource");
+    expect(html).not.toContain('href="/rates/schema"');
   });
 
   it('renders the "/site" route with site navigation', () => {
@@ -183,23 +187,25 @@ describe("App smoke routes", () => {
     expect(html).toContain("Rates");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expect(html).toContain('href="/site/schema"');
+    expect(html).toContain('aria-label="Site content"');
+    expect(html).toContain("Home");
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Site...");
     expect(html).not.toContain("Create Content item");
+    expect(html).not.toContain('href="/site/schema"');
   });
 
   it('renders the "/tasks/schema" route', () => {
     applyBootstrapResponse(bootstrap([], appSchema), "tasks");
     const html = renderRoute("/tasks/schema");
 
-    expect(html).toContain('href="/tasks/schema"');
+    expect(html).toContain('aria-label="Tasks content"');
     expect(html).toContain("Tasks Schema");
     expect(html).toContain("<code>tasks</code>");
     expect(html).toContain('aria-label="Tasks route reset controls"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Reset source schema");
-    expect(html).toContain("Reset seed data");
+    expect(html).toContain("Reset schema and seed data");
+    expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;screens&quot;");
     expect(html).toContain("&quot;task&quot;");
     expect(html).not.toContain("<code>rates</code>");
@@ -209,13 +215,13 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap([], rateCardSchema), "rates");
     const html = renderRoute("/rates/schema");
 
-    expect(html).toContain('href="/rates/schema"');
+    expect(html).toContain('aria-label="Rates content"');
     expect(html).toContain("Rates Schema");
     expect(html).toContain("<code>rates</code>");
     expect(html).toContain('aria-label="Rates route reset controls"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Reset source schema");
-    expect(html).toContain("Reset seed data");
+    expect(html).toContain("Reset schema and seed data");
+    expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;rateSetup&quot;");
     expect(html).toContain("&quot;rate&quot;");
     expect(html).toContain("&quot;resource&quot;");
@@ -226,13 +232,13 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap([], siteSourceSchema), "site");
     const html = renderRoute("/site/schema");
 
-    expect(html).toContain('href="/site/schema"');
+    expect(html).toContain('aria-label="Site content"');
     expect(html).toContain("Site Schema");
     expect(html).toContain("<code>site</code>");
     expect(html).toContain('aria-label="Site route reset controls"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Reset source schema");
-    expect(html).toContain("Reset seed data");
+    expect(html).toContain("Reset schema and seed data");
+    expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;sitePages&quot;");
     expect(html).toContain("&quot;siteHeader&quot;");
     expect(html).toContain("&quot;siteFooter&quot;");
@@ -673,8 +679,6 @@ describe("generated collection home", () => {
           type: "page",
           title: "Unannounced page",
           status: "published",
-          featured: true,
-          order: 4,
           slug: "unannounced",
           templateKey: "standard",
         }),
@@ -701,7 +705,6 @@ describe("generated collection home", () => {
         type: "post",
         title: "Published without metadata",
         status: "published",
-        featured: false,
       },
       createdAt: "2026-05-05T00:00:00.000Z",
     };
@@ -2034,9 +2037,7 @@ describe("generated forms and records", () => {
     formData.set("subtitle", "Regression coverage");
     formData.set("body", "## Note\n\nCreate and edit stay wired.");
     formData.set("status", "published");
-    formData.set("featured", "on");
     formData.set("publishedAt", "2026-05-06");
-    formData.set("order", "4");
     formData.set("slug", "blog/field-behavior-note");
     formData.set("href", "https://example.com/field-behavior");
     formData.set("icon", "note");
@@ -2065,12 +2066,11 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain("Post");
     expect(createHtml).toMatch(inputWithNameAndType("body", "hidden"));
     expect(createHtml).toContain('data-web-markdown-editor="plate"');
-    expect(createHtml).toContain('name="featured"');
-    expect(createHtml).toContain('type="checkbox"');
+    expect(createHtml).not.toContain('name="featured"');
     expect(createHtml).toContain('name="publishedAt"');
     expect(createHtml).toContain('aria-label="Select date"');
-    expect(createHtml).toMatch(inputWithNameAndType("order", "hidden"));
-    expect(createHtml).toMatch(inputWithAriaLabelAndType("Order", "text"));
+    expect(createHtml).not.toMatch(inputWithNameAndType("order", "hidden"));
+    expect(createHtml).not.toMatch(inputWithAriaLabelAndType("Order", "text"));
     expect(createHtml).toContain('data-web-formatted-number-input="true"');
     expect(createHtml).toContain('min="0"');
     expect(createHtml).toContain('step="1"');
@@ -2088,9 +2088,7 @@ describe("generated forms and records", () => {
       subtitle: "Regression coverage",
       body: "## Note\n\nCreate and edit stay wired.",
       status: "published",
-      featured: true,
       publishedAt: "2026-05-06",
-      order: 4,
       slug: "blog/field-behavior-note",
       href: "https://example.com/field-behavior",
       icon: "note",
@@ -2105,11 +2103,10 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain("Shipping schema-backed authoring");
     expect(editHtml).toContain('aria-label="Body"');
     expect(editHtml).toContain("<textarea");
-    expect(editHtml).toContain('aria-label="Featured"');
-    expect(editHtml).toContain('type="checkbox"');
+    expect(editHtml).not.toContain('aria-label="Featured"');
     expect(editHtml).toContain('aria-label="Published at"');
     expect(editHtml).toContain('type="date"');
-    expect(editHtml).toContain('aria-label="Order"');
+    expect(editHtml).not.toContain('aria-label="Order"');
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
     expect(editHtml).toContain("Published");
   });

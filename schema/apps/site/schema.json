@@ -122,23 +122,10 @@
             }
           }
         },
-        "featured": {
-          "type": "boolean",
-          "required": true,
-          "label": "Featured",
-          "default": false
-        },
         "publishedAt": {
           "type": "date",
           "required": false,
           "label": "Published at"
-        },
-        "order": {
-          "type": "number",
-          "required": false,
-          "label": "Order",
-          "integer": true,
-          "min": 0
         },
         "templateKey": {
           "type": "text",
@@ -496,19 +483,6 @@
         "value": "file"
       }
     },
-    "featuredBlocks": {
-      "label": "Featured",
-      "entity": "block",
-      "expression": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "featured"
-        },
-        "op": "eq",
-        "value": true
-      }
-    },
     "publishedPosts": {
       "label": "Published posts",
       "entity": "block",
@@ -536,8 +510,8 @@
         ]
       }
     },
-    "featuredProjects": {
-      "label": "Featured projects",
+    "publishedProjects": {
+      "label": "Published projects",
       "entity": "block",
       "expression": {
         "kind": "and",
@@ -555,10 +529,10 @@
             "kind": "where",
             "ref": {
               "kind": "value",
-              "name": "featured"
+              "name": "status"
             },
             "op": "eq",
-            "value": true
+            "value": "published"
           }
         ]
       }
@@ -595,10 +569,6 @@
         "status": {
           "editor": "enum",
           "commit": "immediate"
-        },
-        "featured": {
-          "editor": "boolean",
-          "commit": "immediate"
         }
       }
     },
@@ -611,10 +581,6 @@
         },
         "status": {
           "editor": "enum",
-          "commit": "immediate"
-        },
-        "featured": {
-          "editor": "boolean",
           "commit": "immediate"
         }
       }
@@ -646,16 +612,8 @@
           "editor": "enum",
           "commit": "immediate"
         },
-        "featured": {
-          "editor": "boolean",
-          "commit": "immediate"
-        },
         "publishedAt": {
           "editor": "date",
-          "commit": "field-commit"
-        },
-        "order": {
-          "editor": "number",
           "commit": "field-commit"
         },
         "templateKey": {
@@ -706,13 +664,6 @@
         },
         {
           "type": "field",
-          "field": "featured",
-          "editor": "boolean",
-          "commit": "immediate",
-          "width": "xs"
-        },
-        {
-          "type": "field",
           "field": "slug",
           "editor": "slug",
           "commit": "field-commit",
@@ -731,15 +682,6 @@
           "editor": "date",
           "commit": "field-commit",
           "width": "sm"
-        },
-        {
-          "type": "field",
-          "field": "order",
-          "editor": "number",
-          "commit": "field-commit",
-          "align": "end",
-          "width": "xs",
-          "format": "number"
         },
         {
           "type": "field",
@@ -917,19 +859,13 @@
           }
         },
         {
-          "query": "featuredBlocks",
-          "count": {
-            "type": "count"
-          }
-        },
-        {
           "query": "publishedPosts",
           "count": {
             "type": "count"
           }
         },
         {
-          "query": "featuredProjects",
+          "query": "publishedProjects",
           "count": {
             "type": "count"
           }
@@ -1077,14 +1013,8 @@
         "status": {
           "editor": "enum"
         },
-        "featured": {
-          "editor": "boolean"
-        },
         "publishedAt": {
           "editor": "date"
-        },
-        "order": {
-          "editor": "number"
         },
         "slug": {
           "editor": "slug"

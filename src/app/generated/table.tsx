@@ -369,11 +369,11 @@ function ReferencedRecordEditorDialog({
 }
 
 function tableHeadClass(column: TableColumnConfig) {
-  return `${tableAlignClass(column.align)} ${tableWidthClass(column.width)} h-8 px-1.5`;
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} h-8 px-1.5`;
 }
 
 function tableCellClass(column: TableColumnConfig) {
-  return `${tableAlignClass(column.align)} ${tableWidthClass(column.width)} px-1.5 py-1`;
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} px-1.5 py-1`;
 }
 
 function tableAlignClass(align: TableColumnConfig["align"]) {
@@ -388,7 +388,18 @@ function tableAlignClass(align: TableColumnConfig["align"]) {
   return "text-start";
 }
 
-function tableWidthClass(width: TableColumnConfig["width"]) {
+function tableWidthClass(column: TableColumnConfig) {
+  const width = column.width;
+
+  if (
+    column.type === "field" &&
+    column.valueUnit !== undefined &&
+    column.display !== "readOnly" &&
+    width === "sm"
+  ) {
+    return "w-52 min-w-52 max-w-60";
+  }
+
   if (width === "xs") {
     return "w-20 min-w-20 max-w-24";
   }

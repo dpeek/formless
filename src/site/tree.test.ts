@@ -113,9 +113,9 @@ describe("site page tree projection", () => {
       "Draft notes on generated editorial tools",
     );
 
-    const featuredProjects = childForPlacement(tree.page, "main", "rec_site_place_home_projects");
-    expect(featuredProjects.query?.key).toBe("featuredProjects");
-    expect(featuredProjects.query?.items.map((item) => item.title)).toEqual([
+    const projectList = childForPlacement(tree.page, "main", "rec_site_place_home_projects");
+    expect(projectList.query?.key).toBe("publishedProjects");
+    expect(projectList.query?.items.map((item) => item.title)).toEqual([
       "Estii",
       "OpenSurf",
       "Formless",
@@ -258,7 +258,6 @@ describe("site page tree projection", () => {
       title: "Draft only",
       slug: "draft-only",
       status: "draft",
-      featured: false,
     });
     const result = buildSitePageTree(
       siteSourceSchema,

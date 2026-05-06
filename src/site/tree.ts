@@ -380,9 +380,7 @@ function compareQueryBlocks(a: StoredRecord, b: StoredRecord): number {
     return 1;
   }
 
-  return (
-    compareNumbers(numberValue(a.values.order), numberValue(b.values.order)) || compareRecords(a, b)
-  );
+  return compareRecords(a, b);
 }
 
 function compareRecords(a: StoredRecord, b: StoredRecord): number {

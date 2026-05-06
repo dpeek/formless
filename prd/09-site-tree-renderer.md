@@ -135,7 +135,6 @@ Fields:
 - `icon`: text, optional.
 - `color`: text, optional.
 - `status`: enum, required.
-- `featured`: boolean, required.
 - `publishedAt`: date, optional.
 - `templateKey`: text, optional.
 - `assetKey`: text, optional.
@@ -254,7 +253,7 @@ GET /api/site/tree/:slug
 - The query key must point to a schema query on `block`.
 - Query results are filtered through public visibility.
 - `limit` can live in explicit fields if added, or in text-backed `meta` if implementation chooses that path.
-- Result order uses `publishedAt` or stable `order` where available, with deterministic fallback.
+- Result order uses `publishedAt`, then stable record creation order or id.
 - The first version does not need a general query traversal engine.
 
 ### Safety
@@ -359,21 +358,22 @@ The exact slot names can change during implementation. The important rule is tha
 
 ## Decisions
 
-| ID      | Decision                                                | Reason                                                              | Evidence                                               |
-| ------- | ------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------ |
-| STR-D1  | Rename `contentItem` to `block`.                        | Every renderable site record is a block.                            | `schema/apps/site/schema.json`                         |
-| STR-D2  | Rename `contentPlacement` to `blockPlacement`.          | The row places one child block under one parent block.              | `contentPlacement.parent`, `contentPlacement.item`     |
-| STR-D3  | Fold `mediaAsset` into `block`.                         | Images, videos, and files are renderable blocks too.                | Current `mediaAsset` is only used by site content.     |
-| STR-D4  | Use `block.type` as the renderer discriminator.         | `kind = block` becomes meaningless once everything is a block.      | User direction 2026-05-06.                             |
-| STR-D5  | Use text-backed named slots on `blockPlacement`.        | Templates can look up named slots without schema enum churn.        | User direction 2026-05-06.                             |
-| STR-D6  | Keep stored composition flat.                           | Flat records are a project rule.                                    | `doc/overview.md`, `prd/03-personal-site-authoring.md` |
-| STR-D7  | Add a projection layer before adding a renderer.        | The frontend needs filtered nested data, not raw bootstrap records. | Current `/api/site/bootstrap` shape                    |
-| STR-D8  | Keep the first renderer site-specific.                  | A general layout DSL is outside current release scope.              | `doc/roadmap.md`                                       |
-| STR-D9  | Defer true JSON stored values unless explicitly scoped. | `RecordValues` currently stores string, boolean, and number values. | `src/shared/protocol.ts`                               |
-| STR-D10 | Do not wait for REL-05.                                 | The page tree uses one-to-many containment, not many-to-many joins. | `prd/04-relationships.md`                              |
-| STR-D11 | Put page shell composition in source seeds.             | The source app should prove the tree shape without local fixtures.  | `schema/apps/site/seed-records.json`                   |
-| STR-D12 | Hide the seeded related-post placement for now.         | Query exclusion is not available, so visible self-query recurses.   | `rec_site_place_post_related.visible = false`          |
-| STR-D13 | Use `/pages/*` for public site rendering.               | `/site` remains generated admin and site slugs can contain slashes. | `src/app.tsx`, `src/app/routes/site-page.tsx`          |
+| ID      | Decision                                                | Reason                                                                                             | Evidence                                               |
+| ------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| STR-D1  | Rename `contentItem` to `block`.                        | Every renderable site record is a block.                                                           | `schema/apps/site/schema.json`                         |
+| STR-D2  | Rename `contentPlacement` to `blockPlacement`.          | The row places one child block under one parent block.                                             | `contentPlacement.parent`, `contentPlacement.item`     |
+| STR-D3  | Fold `mediaAsset` into `block`.                         | Images, videos, and files are renderable blocks too.                                               | Current `mediaAsset` is only used by site content.     |
+| STR-D4  | Use `block.type` as the renderer discriminator.         | `kind = block` becomes meaningless once everything is a block.                                     | User direction 2026-05-06.                             |
+| STR-D5  | Use text-backed named slots on `blockPlacement`.        | Templates can look up named slots without schema enum churn.                                       | User direction 2026-05-06.                             |
+| STR-D6  | Keep stored composition flat.                           | Flat records are a project rule.                                                                   | `doc/overview.md`, `prd/03-personal-site-authoring.md` |
+| STR-D7  | Add a projection layer before adding a renderer.        | The frontend needs filtered nested data, not raw bootstrap records.                                | Current `/api/site/bootstrap` shape                    |
+| STR-D8  | Keep the first renderer site-specific.                  | A general layout DSL is outside current release scope.                                             | `doc/roadmap.md`                                       |
+| STR-D9  | Defer true JSON stored values unless explicitly scoped. | `RecordValues` currently stores string, boolean, and number values.                                | `src/shared/protocol.ts`                               |
+| STR-D10 | Do not wait for REL-05.                                 | The page tree uses one-to-many containment, not many-to-many joins.                                | `prd/04-relationships.md`                              |
+| STR-D11 | Put page shell composition in source seeds.             | The source app should prove the tree shape without local fixtures.                                 | `schema/apps/site/seed-records.json`                   |
+| STR-D12 | Hide the seeded related-post placement for now.         | Query exclusion is not available, so visible self-query recurses.                                  | `rec_site_place_post_related.visible = false`          |
+| STR-D13 | Use `/pages/*` for public site rendering.               | `/site` remains generated admin and site slugs can contain slashes.                                | `src/app.tsx`, `src/app/routes/site-page.tsx`          |
+| STR-D14 | Keep ordering and curation off `block`.                 | Composition order lives on placements; public query lists use published date plus stable fallback. | `schema/apps/site/schema.json`, `src/site/tree.ts`     |
 
 ## Chunks
 
@@ -611,6 +611,13 @@ Promoted 2026-05-06:
 - `doc/roadmap.md` includes public site rendering as first-release scope.
 - `doc/roadmap.md` keeps the first public renderer site-specific and keeps the general layout DSL out of first release.
 
+Maintenance 2026-05-06:
+
+- Site `block` fields no longer include `featured` or `order`.
+- Site source seeds no longer store `featured` or `order` on `block` records.
+- `blockPlacement.order` remains the placement sibling ordering field.
+- Query-backed project lists use `publishedProjects` instead of `featuredProjects`.
+
 ## PRD status notes
 
 - PRD drafted 2026-05-06.
@@ -655,3 +662,8 @@ Promoted 2026-05-06:
 - `./tmp/test.txt` shows 22 test files and 403 tests passing.
 - `./tmp/check.txt` shows formatting, lint, and type checks passing.
 - Shipped facts were promoted to `doc/current.md` and `doc/roadmap.md`.
+- Maintenance 2026-05-06 removed `featured` and `order` fields from site blocks while keeping `blockPlacement.order`.
+- Maintenance checks 2026-05-06: `./tmp/agent-dev.json` shows dev ready, tests pass, and checks pass.
+- Maintenance checks 2026-05-06: `./tmp/test.txt` shows 27 files and 480 tests passing.
+- Maintenance checks 2026-05-06: `./tmp/check.txt` shows formatting, lint, and type checks passing.
+- Maintenance browser smoke 2026-05-06: reset Site seed to source, `/site` no longer showed block-level Featured or Order fields, and `/pages/home` rendered.

@@ -128,7 +128,6 @@ describe("authority", () => {
       title: "Draft page",
       slug: "draft-page",
       status: "draft",
-      featured: false,
     });
 
     const response = await harness.fetch(apiPath("/api/tree/draft-page"));

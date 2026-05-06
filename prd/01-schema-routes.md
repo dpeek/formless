@@ -2,7 +2,7 @@
 
 Status: shipped
 Current chunk: none
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 ## Goal
 
@@ -48,15 +48,17 @@ The result should feel like two schema-backed apps, not one global app whose sch
 
 ## Decisions
 
-| ID    | Decision                                                      | Reason                                                                                            | Evidence                                                         |
-| ----- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| SR-D1 | Use separate schema instances keyed by `tasks` and `rates`.   | Schema artifact names are app-local. Merging would force global collision naming.                 | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json` |
-| SR-D2 | Do not merge task and rate-card schemas into one `AppSchema`. | The current parser and view model treat one active schema as the app boundary.                    | `src/shared/schema.ts`, `src/client/views.ts`                    |
-| SR-D3 | Use path-keyed APIs.                                          | The schema key is part of resource identity and is visible in tests/browser tools.                | `src/client/sync.ts`, `src/worker/authority.ts`                  |
-| SR-D4 | Use one Durable Object instance per schema key.               | Existing storage can remain unkeyed inside each app instance.                                     | `src/worker/index.ts`, `src/worker/storage.ts`                   |
-| SR-D5 | Use one IndexedDB database per schema key.                    | Reset and browser debugging are simpler than storing multiple schemas in one local DB.            | `src/client/db.ts`                                               |
-| SR-D6 | Split reset schema from reset seed data.                      | Schema reset should preserve records. Seed reset should restore source schema and source records. | `src/worker/storage.ts`, `src/app/dev-actions.tsx`               |
-| SR-D7 | Fresh bootstrap should initialize source seed records.        | Opening `/tasks` or `/rates` should work without a manual dev reset.                              | `schema/apps/*/seed-records.json`, `src/worker/storage.ts`       |
+| ID    | Decision                                                                                     | Reason                                                                                                               | Evidence                                                         |
+| ----- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| SR-D1 | Use separate schema instances keyed by `tasks` and `rates`.                                  | Schema artifact names are app-local. Merging would force global collision naming.                                    | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json` |
+| SR-D2 | Do not merge task and rate-card schemas into one `AppSchema`.                                | The current parser and view model treat one active schema as the app boundary.                                       | `src/shared/schema.ts`, `src/client/views.ts`                    |
+| SR-D3 | Use path-keyed APIs.                                                                         | The schema key is part of resource identity and is visible in tests/browser tools.                                   | `src/client/sync.ts`, `src/worker/authority.ts`                  |
+| SR-D4 | Use one Durable Object instance per schema key.                                              | Existing storage can remain unkeyed inside each app instance.                                                        | `src/worker/index.ts`, `src/worker/storage.ts`                   |
+| SR-D5 | Use one IndexedDB database per schema key.                                                   | Reset and browser debugging are simpler than storing multiple schemas in one local DB.                               | `src/client/db.ts`                                               |
+| SR-D6 | Split reset schema from reset seed data.                                                     | Schema reset should preserve records. Seed reset should restore source schema and source records.                    | `src/worker/storage.ts`, `src/app/dev-actions.tsx`               |
+| SR-D7 | Fresh bootstrap should initialize source seed records.                                       | Opening `/tasks` or `/rates` should work without a manual dev reset.                                                 | `schema/apps/*/seed-records.json`, `src/worker/storage.ts`       |
+| SR-D8 | Put app selection in sidebar and Home/Schema selection in content tabs.                      | Schema is part of the selected app workspace, not a peer app route.                                                  | `src/app.tsx`, `src/app.test.tsx`                                |
+| SR-D9 | Keep backend reset endpoints separate but expose one full source reset control in schema UI. | The seed reset path restores source schema plus source records, so one destructive UI action matches source restore. | `src/app/dev-actions.tsx`, `src/app/routes/schema.tsx`           |
 
 ## Non-goals
 
@@ -282,6 +284,14 @@ Evidence:
 - `bun run test` passed.
 - `bun run check` passed.
 
+## Maintenance notes
+
+- 2026-05-06: Route shell uses `@formless/ui/sidebar` for schema-app selection.
+- 2026-05-06: `Home` and `Schema` are content tabs for the active app route.
+- 2026-05-06: Schema route reset UI exposes one combined `Reset schema and seed data` control.
+- 2026-05-06 evidence: `src/app.test.tsx` covers sidebar app links, content tabs, and the single reset control.
+- 2026-05-06 evidence: `./tmp/agent-dev.json` shows tests pass and checks pass after `bun start`.
+
 ## Later chunks
 
 None.
@@ -325,6 +335,9 @@ When this PRD ships, update `doc/current.md`:
 - Client DBs are schema-keyed.
 - Client broadcast channels are schema-keyed.
 - Global `/api/dev/reset` is gone.
+- App selection is in the shared sidebar shell.
+- Active app content has `Home` and `Schema` tabs.
+- Schema route reset UI has one combined schema-and-seed reset control.
 
 When this PRD ships, update `doc/roadmap.md`:
 
