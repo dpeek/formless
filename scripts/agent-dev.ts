@@ -22,143 +22,50 @@ const ansiPattern = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`,
 const paths = {
   checkLog: path.join(tmpDir, "check.txt"),
   devLog: path.join(tmpDir, "dev.txt"),
-  devPid: path.join(tmpDir, "dev.pid"),
   installLog: path.join(tmpDir, "install.txt"),
   manifest: path.join(tmpDir, "agent-dev.json"),
-  state: path.join(tmpDir, "state.txt"),
   supervisorLog: path.join(tmpDir, "supervisor.txt"),
-  supervisorPid: path.join(tmpDir, "supervisor.pid"),
   testLog: path.join(tmpDir, "test.txt"),
+};
+
+const legacyPaths = {
+  devPid: path.join(tmpDir, "dev.pid"),
+  state: path.join(tmpDir, "state.txt"),
+  supervisorPid: path.join(tmpDir, "supervisor.pid"),
   testPid: path.join(tmpDir, "test.pid"),
 };
 
-const sessionWords = [
-  "amber",
-  "anchor",
-  "apex",
-  "atlas",
-  "autumn",
-  "baker",
-  "basil",
-  "beacon",
-  "birch",
-  "bloom",
-  "bolt",
-  "breeze",
-  "brick",
-  "cable",
-  "canyon",
-  "cedar",
-  "cherry",
-  "cinder",
-  "civic",
-  "cloud",
-  "cobalt",
-  "comet",
-  "copper",
-  "cotton",
-  "crystal",
-  "delta",
-  "denim",
-  "dune",
-  "echo",
-  "ember",
-  "fable",
-  "field",
-  "flint",
-  "forest",
-  "forge",
-  "frost",
-  "garden",
-  "ginger",
-  "glade",
-  "granite",
-  "harbor",
-  "hazel",
-  "helium",
-  "hollow",
-  "indigo",
-  "island",
-  "jade",
-  "jasmine",
-  "kernel",
-  "lagoon",
-  "lantern",
-  "laurel",
-  "linen",
-  "lotus",
-  "magnet",
-  "maple",
-  "marble",
-  "meadow",
-  "meteor",
-  "mint",
-  "mirror",
-  "mist",
-  "nectar",
-  "nickel",
-  "nova",
-  "olive",
-  "onyx",
-  "orbit",
-  "orchid",
-  "paper",
-  "pearl",
-  "pepper",
-  "pilot",
-  "pixel",
-  "plaza",
-  "quartz",
-  "ribbon",
-  "river",
-  "rocket",
-  "saffron",
-  "shadow",
-  "signal",
-  "silver",
-  "slate",
-  "solar",
-  "spruce",
-  "stone",
-  "summit",
-  "sunset",
-  "tempo",
-  "timber",
-  "topaz",
-  "tundra",
-  "velvet",
-  "violet",
-  "voyage",
-  "willow",
-  "window",
-  "winter",
-  "zephyr",
-];
+const logFiles = {
+  check: "./tmp/check.txt",
+  dev: "./tmp/dev.txt",
+  install: "./tmp/install.txt",
+  supervisor: "./tmp/supervisor.txt",
+  test: "./tmp/test.txt",
+} as const;
 
 type CheckStatus = "idle" | "running" | "pass" | "fail";
 type DevStatus = "starting" | "ready" | "fail" | "stopped";
 type SupervisorStatus = "starting" | "running" | "stopping" | "stopped" | "fail";
 type TestStatus = "pending" | "pass" | "fail" | "stopped";
 
+type AgentLogFiles = typeof logFiles;
+
 type AgentState = {
   checkStatus: CheckStatus;
+  devPid: number | null;
   devStatus: DevStatus;
-  host: string;
-  session: string;
+  host: string | null;
+  logs: AgentLogFiles;
+  startedAt: string;
+  supervisorPid: number | null;
   supervisorStatus: SupervisorStatus;
+  testPid: number | null;
   testStatus: TestStatus;
-  url: string;
+  updatedAt: string;
+  url: string | null;
 };
 
-type Manifest = {
-  devPid: number | null;
-  host: string;
-  session: string;
-  startedAt: string;
-  supervisorPid: number;
-  testPid: number | null;
-  url: string;
-};
+type Manifest = AgentState;
 
 type KillTarget = {
   kind: "dev" | "supervisor" | "test";
@@ -169,75 +76,11 @@ function ensureTmp(): void {
   mkdirSync(tmpDir, { recursive: true });
 }
 
-function sessionUrl(session: string): { host: string; url: string } {
-  const host = `${session}.formless.local`;
-  return { host, url: `https://${host}` };
-}
-
-function pickSessionName(): string {
-  if (sessionWords.length !== 100) {
-    throw new Error(`Expected 100 session words, found ${sessionWords.length}`);
-  }
-
-  const values = new Uint32Array(1);
-  crypto.getRandomValues(values);
-  return sessionWords[values[0] % sessionWords.length];
-}
-
 function atomicWriteFile(filePath: string, content: string): void {
   ensureTmp();
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   writeFileSync(tempPath, content);
   renameSync(tempPath, filePath);
-}
-
-function writePid(filePath: string, pid: number | null): void {
-  if (pid === null) {
-    removeFile(filePath);
-    return;
-  }
-
-  atomicWriteFile(filePath, `${pid}\n`);
-}
-
-function readPid(filePath: string): number | null {
-  try {
-    const parsed = Number(readFileSync(filePath, "utf8").trim());
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeManifest(manifest: Manifest): void {
-  atomicWriteFile(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
-}
-
-function readManifest(): Manifest | null {
-  try {
-    const parsed = JSON.parse(readFileSync(paths.manifest, "utf8")) as Partial<Manifest>;
-    if (
-      typeof parsed.session === "string" &&
-      typeof parsed.host === "string" &&
-      typeof parsed.url === "string" &&
-      typeof parsed.startedAt === "string" &&
-      typeof parsed.supervisorPid === "number"
-    ) {
-      return {
-        devPid: typeof parsed.devPid === "number" ? parsed.devPid : null,
-        host: parsed.host,
-        session: parsed.session,
-        startedAt: parsed.startedAt,
-        supervisorPid: parsed.supervisorPid,
-        testPid: typeof parsed.testPid === "number" ? parsed.testPid : null,
-        url: parsed.url,
-      };
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 function removeFile(filePath: string): void {
@@ -248,20 +91,102 @@ function removeFile(filePath: string): void {
   }
 }
 
-function writeState(state: AgentState): void {
-  atomicWriteFile(
-    paths.state,
-    [
-      `Server ${state.url}`,
-      `Dev ${state.devStatus} ./tmp/dev.txt`,
-      `Tests ${state.testStatus} ./tmp/test.txt`,
-      `Check ${state.checkStatus} ./tmp/check.txt`,
-      `Updated ${new Date().toISOString()}`,
-      `Session ${state.session}`,
-      `Supervisor ${state.supervisorStatus} ./tmp/supervisor.txt`,
-      "",
-    ].join("\n"),
-  );
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function statusOr<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
+}
+
+function hostFromUrl(url: string | null): string | null {
+  if (url === null) {
+    return null;
+  }
+
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
+}
+
+function createAgentState(patch: Partial<AgentState> = {}): AgentState {
+  const startedAt = patch.startedAt ?? new Date().toISOString();
+  const logs = { ...logFiles, ...patch.logs };
+  return {
+    checkStatus: "idle",
+    devPid: null,
+    devStatus: "stopped",
+    host: null,
+    startedAt,
+    supervisorPid: null,
+    supervisorStatus: "stopped",
+    testPid: null,
+    testStatus: "stopped",
+    updatedAt: new Date().toISOString(),
+    url: null,
+    ...patch,
+    logs,
+  };
+}
+
+function writeManifest(manifest: Manifest): void {
+  atomicWriteFile(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+function readManifest(): Manifest | null {
+  try {
+    const parsed = JSON.parse(readFileSync(paths.manifest, "utf8")) as Record<string, unknown>;
+    const url = stringOrNull(parsed.url);
+    const host = stringOrNull(parsed.host) ?? hostFromUrl(url);
+    const startedAt = stringOrNull(parsed.startedAt);
+    const devPid = numberOrNull(parsed.devPid);
+    const supervisorPid = numberOrNull(parsed.supervisorPid);
+    const testPid = numberOrNull(parsed.testPid);
+
+    if (startedAt === null && devPid === null && supervisorPid === null && testPid === null) {
+      return null;
+    }
+
+    return createAgentState({
+      checkStatus: statusOr(
+        parsed.checkStatus,
+        ["idle", "running", "pass", "fail"] as const,
+        inferCheckStatus(readLog(paths.checkLog), "idle"),
+      ),
+      devPid,
+      devStatus: statusOr(
+        parsed.devStatus,
+        ["starting", "ready", "fail", "stopped"] as const,
+        inferDevStatus(readLog(paths.devLog), "starting"),
+      ),
+      host,
+      startedAt: startedAt ?? new Date().toISOString(),
+      supervisorPid,
+      supervisorStatus: statusOr(
+        parsed.supervisorStatus,
+        ["starting", "running", "stopping", "stopped", "fail"] as const,
+        supervisorPid === null ? "stopped" : "running",
+      ),
+      testPid,
+      testStatus: statusOr(
+        parsed.testStatus,
+        ["pending", "pass", "fail", "stopped"] as const,
+        inferTestStatus(readLog(paths.testLog), "pending"),
+      ),
+      updatedAt: stringOrNull(parsed.updatedAt) ?? new Date().toISOString(),
+      url,
+    });
+  } catch {
+    return null;
+  }
 }
 
 function note(message: string): void {
@@ -320,7 +245,7 @@ function commandTextMatches(
     return (
       command.includes("portless run") ||
       command.includes("vp dev") ||
-      (manifest !== null && command.includes(manifest.host))
+      (manifest?.host !== null && manifest?.host !== undefined && command.includes(manifest.host))
     );
   }
 
@@ -351,7 +276,7 @@ function orphanKind(command: string): KillTarget["kind"] | null {
     return "supervisor";
   }
 
-  if (command.includes("portless run") && command.includes(".formless.local")) {
+  if (command.includes("portless run") && command.includes("vp dev")) {
     return "dev";
   }
 
@@ -431,18 +356,18 @@ function signalProcess(pid: number, signal: NodeJS.Signals): void {
   }
 }
 
-function cleanupTrackingFiles(): void {
-  removeFile(paths.devPid);
-  removeFile(paths.manifest);
-  removeFile(paths.supervisorPid);
-  removeFile(paths.testPid);
+function cleanupLegacyTrackingFiles(): void {
+  removeFile(legacyPaths.devPid);
+  removeFile(legacyPaths.state);
+  removeFile(legacyPaths.supervisorPid);
+  removeFile(legacyPaths.testPid);
 }
 
 function trackedTargets(manifest: Manifest | null): KillTarget[] {
   return [
-    { kind: "dev", pid: manifest?.devPid ?? readPid(paths.devPid) },
-    { kind: "test", pid: manifest?.testPid ?? readPid(paths.testPid) },
-    { kind: "supervisor", pid: manifest?.supervisorPid ?? readPid(paths.supervisorPid) },
+    { kind: "dev", pid: manifest?.devPid ?? null },
+    { kind: "test", pid: manifest?.testPid ?? null },
+    { kind: "supervisor", pid: manifest?.supervisorPid ?? null },
   ];
 }
 
@@ -474,11 +399,31 @@ async function killTrackedProcesses(): Promise<void> {
     await killProcessGroup(target.pid);
   }
 
-  cleanupTrackingFiles();
+  cleanupLegacyTrackingFiles();
 }
 
 function stripAnsi(input: string): string {
   return input.replace(ansiPattern, "");
+}
+
+function portlessUrlFromOutput(output: string): { host: string; url: string } | null {
+  const clean = stripAnsi(output);
+  const urlMatches = [
+    ...clean.matchAll(/\bhttps?:\/\/(?:[a-z0-9-]+\.)*formless\.local(?::\d+)?(?:\/[^\s)]*)?/gi),
+  ];
+  const rawUrl = urlMatches.at(-1)?.[0]?.replace(/[),.]+$/, "");
+  if (rawUrl !== undefined) {
+    try {
+      const parsed = new URL(rawUrl);
+      return { host: parsed.host, url: parsed.origin };
+    } catch {
+      // Fall through to bare-host parsing.
+    }
+  }
+
+  const hostMatches = [...clean.matchAll(/\b((?:[a-z0-9-]+\.)*formless\.local)\b/gi)];
+  const host = hostMatches.at(-1)?.[1];
+  return host === undefined ? null : { host, url: `https://${host}` };
 }
 
 function limitBuffer(input: string): string {
@@ -502,12 +447,7 @@ function inferDevStatus(log: string, current: DevStatus): DevStatus {
       return "fail";
     }
 
-    if (
-      line.includes(".formless.local") ||
-      line.includes("ready in") ||
-      line.includes("local:") ||
-      line.includes("network:")
-    ) {
+    if (line.includes("ready in") || line.includes("local:") || line.includes("network:")) {
       return "ready";
     }
   }
@@ -548,7 +488,10 @@ function inferTestStatus(log: string, current: TestStatus): TestStatus {
 function inferCheckStatus(log: string, current: CheckStatus): CheckStatus {
   const clean = stripAnsi(log).toLowerCase();
 
-  if (clean.includes("correctly formatted") && clean.includes("found no warnings")) {
+  if (
+    (clean.includes("correctly formatted") || clean.includes("formatting completed")) &&
+    clean.includes("found no warnings")
+  ) {
     return "pass";
   }
 
@@ -571,19 +514,19 @@ function readLog(filePath: string): string {
   }
 }
 
-function stateFromCurrentLogs(manifest: Manifest | null, checkStatus: CheckStatus): AgentState {
-  const fallbackSession = manifest?.session ?? "none";
-  const fallbackUrl = manifest?.url ?? "stopped";
-  const fallbackHost = manifest?.host ?? "none";
-  return {
+function stateFromCurrentLogs(manifest: Manifest | null, checkStatus: CheckStatus): Manifest {
+  return createAgentState({
     checkStatus,
     devStatus: inferDevStatus(readLog(paths.devLog), manifest === null ? "stopped" : "starting"),
-    host: fallbackHost,
-    session: fallbackSession,
+    devPid: manifest?.devPid ?? null,
+    host: manifest?.host ?? null,
+    startedAt: manifest?.startedAt ?? new Date().toISOString(),
+    supervisorPid: manifest?.supervisorPid ?? null,
     supervisorStatus: manifest === null ? "stopped" : "running",
+    testPid: manifest?.testPid ?? null,
     testStatus: inferTestStatus(readLog(paths.testLog), manifest === null ? "stopped" : "pending"),
-    url: fallbackUrl,
-  };
+    url: manifest?.url ?? null,
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -648,78 +591,85 @@ async function runWithTee(command: string, args: string[], logFile: string): Pro
   });
 }
 
-async function waitForSupervisor(session: string, supervisorPid: number): Promise<boolean> {
+async function waitForSupervisor(supervisorPid: number): Promise<Manifest | null> {
+  let latest: Manifest | null = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const manifest = readManifest();
-    if (manifest?.session === session && manifest.supervisorPid === supervisorPid) {
-      return true;
+    if (manifest?.supervisorPid === supervisorPid) {
+      latest = manifest;
+      if (
+        (manifest.url !== null && manifest.devStatus === "ready") ||
+        manifest.devStatus === "fail"
+      ) {
+        return manifest;
+      }
     }
 
     if (!isAlive(supervisorPid)) {
-      return false;
+      return latest;
     }
 
     await sleep(100);
   }
 
-  return false;
+  return latest;
 }
 
 async function start(): Promise<number> {
   ensureTmp();
   await killTrackedProcesses();
+  cleanupLegacyTrackingFiles();
 
-  const session = pickSessionName();
-  const { host, url } = sessionUrl(session);
-  writeState({
-    checkStatus: "idle",
-    devStatus: "starting",
-    host,
-    session,
-    supervisorStatus: "starting",
-    testStatus: "pending",
-    url,
-  });
+  const startedAt = new Date().toISOString();
+  writeManifest(
+    createAgentState({
+      checkStatus: "idle",
+      devStatus: "starting",
+      startedAt,
+      supervisorStatus: "starting",
+      testStatus: "pending",
+    }),
+  );
 
   const installCode = await runWithTee(process.execPath, ["install"], paths.installLog);
   if (installCode !== 0) {
-    writeState({
-      checkStatus: "idle",
-      devStatus: "fail",
-      host,
-      session,
-      supervisorStatus: "fail",
-      testStatus: "fail",
-      url,
-    });
+    writeManifest(
+      createAgentState({
+        checkStatus: "idle",
+        devStatus: "fail",
+        startedAt,
+        supervisorStatus: "fail",
+        testStatus: "fail",
+      }),
+    );
     return installCode;
   }
 
-  writeState({
-    checkStatus: "running",
-    devStatus: "starting",
-    host,
-    session,
-    supervisorStatus: "starting",
-    testStatus: "pending",
-    url,
-  });
+  writeManifest(
+    createAgentState({
+      checkStatus: "running",
+      devStatus: "starting",
+      startedAt,
+      supervisorStatus: "starting",
+      testStatus: "pending",
+    }),
+  );
   const checkCode = await runWithTee("vp", ["check", "--fix"], paths.checkLog);
   if (checkCode !== 0) {
-    writeState({
-      checkStatus: "fail",
-      devStatus: "fail",
-      host,
-      session,
-      supervisorStatus: "fail",
-      testStatus: "fail",
-      url,
-    });
+    writeManifest(
+      createAgentState({
+        checkStatus: "fail",
+        devStatus: "fail",
+        startedAt,
+        supervisorStatus: "fail",
+        testStatus: "fail",
+      }),
+    );
     return checkCode;
   }
 
   const supervisorLog = openSync(paths.supervisorLog, "a");
-  const supervisor = spawn(process.execPath, [scriptPath, "supervise", session], {
+  const supervisor = spawn(process.execPath, [scriptPath, "supervise", startedAt], {
     cwd: rootDir,
     detached: true,
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
@@ -728,60 +678,79 @@ async function start(): Promise<number> {
   closeSync(supervisorLog);
 
   if (typeof supervisor.pid !== "number") {
-    writeState({
-      checkStatus: "idle",
-      devStatus: "fail",
-      host,
-      session,
-      supervisorStatus: "fail",
-      testStatus: "fail",
-      url,
-    });
+    writeManifest(
+      createAgentState({
+        checkStatus: "pass",
+        devStatus: "fail",
+        startedAt,
+        supervisorStatus: "fail",
+        testStatus: "fail",
+      }),
+    );
     return 1;
   }
 
-  writePid(paths.supervisorPid, supervisor.pid);
+  writeManifest(
+    createAgentState({
+      checkStatus: "pass",
+      devStatus: "starting",
+      startedAt,
+      supervisorPid: supervisor.pid,
+      supervisorStatus: "starting",
+      testStatus: "pending",
+    }),
+  );
   supervisor.unref();
 
-  const ready = await waitForSupervisor(session, supervisor.pid);
-  if (!ready) {
-    writeState({
-      checkStatus: "idle",
-      devStatus: "fail",
-      host,
-      session,
-      supervisorStatus: "fail",
-      testStatus: "fail",
-      url,
-    });
+  const ready = await waitForSupervisor(supervisor.pid);
+  if (ready === null || ready.url === null || ready.devStatus === "fail") {
+    writeManifest(
+      createAgentState({
+        checkStatus: "pass",
+        devStatus: "fail",
+        devPid: ready?.devPid ?? null,
+        host: ready?.host ?? null,
+        startedAt,
+        supervisorPid: ready?.supervisorPid ?? supervisor.pid,
+        supervisorStatus: "fail",
+        testPid: ready?.testPid ?? null,
+        testStatus: ready?.testStatus ?? "pending",
+        url: ready?.url ?? null,
+      }),
+    );
     return 1;
   }
 
-  process.stdout.write(`Server ${url}\nState ./tmp/state.txt\n`);
+  process.stdout.write(`Server ${ready.url}\nState ./tmp/agent-dev.json\n`);
   return 0;
 }
 
 async function stop(): Promise<number> {
   ensureTmp();
   const manifest = readManifest();
-  writeState(stateFromCurrentLogs(manifest, "running"));
+  writeManifest(stateFromCurrentLogs(manifest, "running"));
 
   const checkCode = await runWithTee("vp", ["check"], paths.checkLog);
   if (checkCode !== 0) {
-    writeState(stateFromCurrentLogs(manifest, "fail"));
+    writeManifest(stateFromCurrentLogs(manifest, "fail"));
     return checkCode;
   }
 
   await killTrackedProcesses();
-  writeState({
-    checkStatus: "pass",
-    devStatus: "stopped",
-    host: manifest?.host ?? "none",
-    session: manifest?.session ?? "none",
-    supervisorStatus: "stopped",
-    testStatus: "stopped",
-    url: manifest?.url ?? "stopped",
-  });
+  writeManifest(
+    createAgentState({
+      checkStatus: "pass",
+      devPid: null,
+      devStatus: "stopped",
+      host: manifest?.host ?? null,
+      startedAt: manifest?.startedAt ?? new Date().toISOString(),
+      supervisorPid: null,
+      supervisorStatus: "stopped",
+      testPid: null,
+      testStatus: "stopped",
+      url: manifest?.url ?? null,
+    }),
+  );
   process.stdout.write("Stopped agent dev processes.\n");
   return 0;
 }
@@ -810,49 +779,62 @@ function appendProcessOutput(
   });
 }
 
-async function supervise(session: string): Promise<number> {
+async function supervise(startedAt = new Date().toISOString()): Promise<number> {
   ensureTmp();
-  const { host, url } = sessionUrl(session);
   let devLogBuffer = "";
   let testLogBuffer = "";
   let state: AgentState = {
     checkStatus: inferCheckStatus(readLog(paths.checkLog), "idle"),
+    devPid: null,
     devStatus: "starting",
-    host,
-    session,
+    host: null,
+    logs: logFiles,
+    startedAt,
+    supervisorPid: process.pid,
     supervisorStatus: "running",
+    testPid: null,
     testStatus: "pending",
-    url,
+    updatedAt: new Date().toISOString(),
+    url: null,
   };
 
   const updateState = (patch: Partial<AgentState> = {}): void => {
-    state = { ...state, ...patch };
-    writeState(state);
+    state = {
+      ...state,
+      ...patch,
+      logs: { ...logFiles, ...patch.logs },
+      updatedAt: new Date().toISOString(),
+    };
+    writeManifest(state);
   };
 
-  note(`Supervisor starting for ${url}`);
+  note("Supervisor starting");
   updateState();
 
-  const dev = spawnDetached("portless", ["run", "--name", host, "vp", "dev"]);
+  const dev = spawnDetached("portless", ["run", "vp", "dev"]);
   const test = spawnDetached("vp", ["test", "--watch", "--reporter=agent"]);
-  const manifest: Manifest = {
+  const manifest = createAgentState({
+    checkStatus: state.checkStatus,
     devPid: typeof dev.pid === "number" ? dev.pid : null,
-    host,
-    session,
-    startedAt: new Date().toISOString(),
+    devStatus: "starting",
+    startedAt,
     supervisorPid: process.pid,
+    supervisorStatus: "running",
     testPid: typeof test.pid === "number" ? test.pid : null,
-    url,
-  };
+    testStatus: "pending",
+  });
 
-  writeManifest(manifest);
-  writePid(paths.devPid, manifest.devPid);
-  writePid(paths.supervisorPid, process.pid);
-  writePid(paths.testPid, manifest.testPid);
+  state = manifest;
+  writeManifest(state);
+  cleanupLegacyTrackingFiles();
 
   appendProcessOutput(dev, paths.devLog, (text) => {
     devLogBuffer = limitBuffer(devLogBuffer + text);
-    updateState({ devStatus: inferDevStatus(devLogBuffer, state.devStatus) });
+    const portlessUrl = portlessUrlFromOutput(devLogBuffer);
+    updateState({
+      ...portlessUrl,
+      devStatus: inferDevStatus(devLogBuffer, state.devStatus),
+    });
   });
   appendProcessOutput(test, paths.testLog, (text) => {
     testLogBuffer = limitBuffer(testLogBuffer + text);
@@ -885,8 +867,15 @@ async function supervise(session: string): Promise<number> {
     if (typeof test.pid === "number") {
       await killProcessGroup(test.pid);
     }
-    cleanupTrackingFiles();
-    updateState({ devStatus: "stopped", supervisorStatus: "stopped", testStatus: "stopped" });
+    cleanupLegacyTrackingFiles();
+    updateState({
+      devPid: null,
+      devStatus: "stopped",
+      supervisorPid: null,
+      supervisorStatus: "stopped",
+      testPid: null,
+      testStatus: "stopped",
+    });
     process.exit(exitCode);
   };
 
@@ -923,13 +912,7 @@ async function main(): Promise<number> {
   }
 
   if (command === "supervise") {
-    const session = process.argv[3];
-    if (typeof session !== "string" || session.length === 0) {
-      process.stderr.write("Usage: bun run scripts/agent-dev.ts supervise <session>\n");
-      return 1;
-    }
-
-    return supervise(session);
+    return supervise(process.argv[3]);
   }
 
   process.stderr.write("Usage: bun start | bun stop\n");

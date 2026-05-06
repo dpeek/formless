@@ -119,7 +119,11 @@ Last updated: 2026-05-06
 ## Checks
 
 - Agent dev command: `bun start`.
-- Dev state: `./tmp/state.txt`.
+- Dev state and process IDs: `./tmp/agent-dev.json`.
+- Dev URL: `url` in `./tmp/agent-dev.json`.
+- Dev URL source: portless stdout in `./tmp/dev.txt`.
+- Agent dev pid files are not used.
+- Stdout logs stay as `./tmp/*.txt`.
 - Test output: `./tmp/test.txt`.
 - Check output: `./tmp/check.txt`.
 - Unit/runtime watcher: `vp test --watch --reporter=agent`, started by `bun start`.
