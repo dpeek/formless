@@ -311,6 +311,37 @@ describe("generated collection home", () => {
     expect(html).toMatch(/aria-label="Featured count"[^>]*>6</);
   });
 
+  it("updates site content query counts after local record merges", () => {
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const before = renderRoute("/site");
+
+    applyRecordMerge(
+      [
+        siteContentRecord("rec_site_content_project_unannounced", {
+          kind: "project",
+          title: "Unannounced project",
+          status: "draft",
+          featured: true,
+          order: 3,
+          templateKey: "project",
+        }),
+      ],
+      2,
+      "site",
+    );
+    const after = renderRoute("/site");
+
+    expect(before).toMatch(/aria-label="All count"[^>]*>16</);
+    expect(before).toMatch(/aria-label="Draft count"[^>]*>1</);
+    expect(before).toMatch(/aria-label="Projects count"[^>]*>3</);
+    expect(before).toMatch(/aria-label="Featured count"[^>]*>6</);
+    expect(after).toMatch(/aria-label="All count"[^>]*>17</);
+    expect(after).toMatch(/aria-label="Draft count"[^>]*>2</);
+    expect(after).toMatch(/aria-label="Projects count"[^>]*>4</);
+    expect(after).toMatch(/aria-label="Featured count"[^>]*>7</);
+    expect(after).toContain("Unannounced project");
+  });
+
   it("surfaces site readiness warnings without disabling generated editors", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "contentHome",
@@ -1544,6 +1575,15 @@ function rateCardRateRecord(
       currency: "usd",
     },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function siteContentRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity: "contentItem",
+    values,
+    createdAt: "2026-05-05T00:00:40.000Z",
   };
 }
 
