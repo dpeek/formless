@@ -150,6 +150,43 @@ describe("home view model collections", () => {
     expect(model?.queryTabs.map((tab) => tab.label)).toEqual(["Everything"]);
   });
 
+  it("exposes render-ready collection facts behind the home collection model", () => {
+    const model = selectPrimaryCollectionModels(rateCardSchema)[0];
+
+    expect(model?.collection).toMatchObject({
+      entityName: "rate",
+      queries: {
+        defaultQueryName: "ratesForSelectedCard",
+        defaultTab: {
+          queryName: "ratesForSelectedCard",
+          query: rateCardSchema.queries.ratesForSelectedCard?.expression,
+          count: { type: "count" },
+        },
+      },
+      context: {
+        name: "card",
+        entityName: "card",
+        relatedCollection: {
+          relationshipName: "cardRates",
+          entityName: "rate",
+          referenceFieldName: "card",
+        },
+      },
+      result: {
+        type: "table",
+        tableViewName: "rateTable",
+      },
+      actions: [
+        { type: "create", entityName: "resource" },
+        { type: "entity-action", actionName: "regenerateMissingRates" },
+      ],
+    });
+    expect(model?.collection.context).toBe(model?.context);
+    expect(model?.collection.queries.tabs).toBe(model?.queryTabs);
+    expect(model?.collection.result).toBe(model?.result);
+    expect(model?.collection.actions).toBe(model?.actions);
+  });
+
   it("selects every collection model in schema order", () => {
     const models = selectCollectionModels(rateCardSchema);
 
@@ -312,14 +349,13 @@ describe("home view model collections", () => {
       queryName: "cardAll",
       query: rateCardSchema.queries.cardAll?.expression,
       labelField: "name",
-      relationshipName: "cardRates",
-      relationship: {
-        kind: "toMany",
-        from: { entity: "card" },
-        to: { entity: "rate", field: "card" },
-      },
       relatedCollection: {
         relationshipName: "cardRates",
+        relationship: {
+          kind: "toMany",
+          from: { entity: "card" },
+          to: { entity: "rate", field: "card" },
+        },
         label: "Rates",
         entityName: "rate",
         referenceFieldName: "card",
@@ -397,7 +433,6 @@ describe("home view model collections", () => {
         entityName: "card",
         queryName: "cardAll",
         labelField: "name",
-        relationshipName: "cardRates",
         relatedCollection: {
           relationshipName: "cardRates",
           label: "Rates",
@@ -573,7 +608,6 @@ describe("home view model collections", () => {
           entityName: "contentItem",
           queryName: "contentAll",
           labelField: "title",
-          relationshipName: "contentPlacements",
           relatedCollection: {
             relationshipName: "contentPlacements",
             label: "Placements",
@@ -746,11 +780,13 @@ describe("home view model collections", () => {
       queryName: "contentAll",
       query: siteSourceSchema.queries.contentAll?.expression,
       labelField: "title",
-      relationshipName: "contentPlacements",
-      relationship: {
-        kind: "toMany",
-        from: { entity: "contentItem" },
-        to: { entity: "contentPlacement", field: "parent" },
+      relatedCollection: {
+        relationshipName: "contentPlacements",
+        relationship: {
+          kind: "toMany",
+          from: { entity: "contentItem" },
+          to: { entity: "contentPlacement", field: "parent" },
+        },
       },
       itemViewName: "contentContextItem",
       recordFields: [{ fieldName: "kind" }, { fieldName: "status" }, { fieldName: "featured" }],
@@ -790,53 +826,54 @@ describe("home view model collections", () => {
 });
 
 function summarizeHomeModel(model: HomeViewModel) {
+  const collection = model.collection;
+
   return {
     viewName: model.viewName,
     label: model.label,
-    entityName: model.entityName,
+    entityName: collection.entityName,
     navigationPrimary: model.navigation.primary,
-    context: model.context
+    context: collection.context
       ? {
-          name: model.context.name,
-          entityName: model.context.entityName,
-          queryName: model.context.queryName,
-          labelField: model.context.labelField,
-          relationshipName: model.context.relationshipName ?? null,
-          relatedCollection: model.context.relatedCollection
+          name: collection.context.name,
+          entityName: collection.context.entityName,
+          queryName: collection.context.queryName,
+          labelField: collection.context.labelField,
+          relatedCollection: collection.context.relatedCollection
             ? {
-                relationshipName: model.context.relatedCollection.relationshipName,
-                label: model.context.relatedCollection.label,
-                entityName: model.context.relatedCollection.entityName,
-                referenceFieldName: model.context.relatedCollection.referenceFieldName,
+                relationshipName: collection.context.relatedCollection.relationshipName,
+                label: collection.context.relatedCollection.label,
+                entityName: collection.context.relatedCollection.entityName,
+                referenceFieldName: collection.context.relatedCollection.referenceFieldName,
               }
             : null,
-          createAction: model.context.createAction
-            ? summarizeHomeAction(model.context.createAction)
+          createAction: collection.context.createAction
+            ? summarizeHomeAction(collection.context.createAction)
             : null,
-          itemViewName: model.context.itemViewName ?? null,
-          recordFields: model.context.recordFields?.map((field) => field.fieldName) ?? [],
+          itemViewName: collection.context.itemViewName ?? null,
+          recordFields: collection.context.recordFields?.map((field) => field.fieldName) ?? [],
         }
       : null,
-    queries: model.queryTabs.map((tab) => ({
+    queries: collection.queries.tabs.map((tab) => ({
       queryName: tab.queryName,
       label: tab.label,
       count: tab.count?.type ?? null,
       expressionKind: tab.query.kind,
     })),
-    defaultQueryName: model.defaultQueryName,
+    defaultQueryName: collection.queries.defaultQueryName,
     result:
-      model.result.type === "list"
+      collection.result.type === "list"
         ? {
             type: "list",
-            itemViewName: model.result.itemViewName,
-            fields: model.result.recordFields.map((field) => field.fieldName),
+            itemViewName: collection.result.itemViewName,
+            fields: collection.result.recordFields.map((field) => field.fieldName),
           }
         : {
             type: "table",
-            tableViewName: model.result.tableViewName,
-            columns: model.result.columns.map((column) => column.key),
+            tableViewName: collection.result.tableViewName,
+            columns: collection.result.columns.map((column) => column.key),
           },
-    actions: model.actions.map(summarizeHomeAction),
+    actions: collection.actions.map(summarizeHomeAction),
   };
 }
 

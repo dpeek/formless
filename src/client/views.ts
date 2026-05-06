@@ -80,6 +80,12 @@ export type HomeQueryTabConfig = {
   count?: CountDisplaySchema;
 };
 
+export type HomeQueriesConfig = {
+  tabs: HomeQueryTabConfig[];
+  defaultQueryName: string;
+  defaultTab: HomeQueryTabConfig;
+};
+
 export type HomeResultConfig =
   | {
       type: "list";
@@ -99,8 +105,6 @@ export type HomeContextConfig = {
   queryName: string;
   query: QueryExpression;
   labelField: string;
-  relationshipName?: string;
-  relationship?: ToManyRelationshipSchema;
   relatedCollection?: RelatedCollectionConfig;
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
   itemViewName?: string;
@@ -116,12 +120,22 @@ export type RelatedCollectionConfig = {
   referenceFieldName: string;
 };
 
+export type HomeCollectionConfig = {
+  entityName: string;
+  entity: EntitySchema;
+  context?: HomeContextConfig;
+  queries: HomeQueriesConfig;
+  result: HomeResultConfig;
+  actions: HomeActionConfig[];
+};
+
 export type HomeViewModel = {
   viewName: string;
   label: string;
+  navigation: CollectionNavigationSchema;
+  collection: HomeCollectionConfig;
   entityName: string;
   entity: EntitySchema;
-  navigation: CollectionNavigationSchema;
   context?: HomeContextConfig;
   queryTabs: HomeQueryTabConfig[];
   defaultQueryName: string;
@@ -166,21 +180,44 @@ export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
       throw new Error(`Missing entity "${collectionView.entity}".`);
     }
 
+    const collection = selectHomeCollection(schema, viewEntries, collectionView, entity);
+
     return {
       viewName,
       label: collectionView.label,
-      entityName: collectionView.entity,
-      entity,
       navigation: {
         primary: collectionView.navigation?.primary ?? true,
       },
-      context: selectContext(schema, viewEntries, collectionView),
-      queryTabs: selectQueryTabs(schema, collectionView),
-      defaultQueryName: collectionView.defaultQuery,
-      result: selectResult(schema, collectionView, entity),
-      actions: selectHomeActions(schema, viewEntries, collectionView, entity),
+      collection,
+      entityName: collection.entityName,
+      entity: collection.entity,
+      ...(collection.context === undefined ? {} : { context: collection.context }),
+      queryTabs: collection.queries.tabs,
+      defaultQueryName: collection.queries.defaultQueryName,
+      result: collection.result,
+      actions: collection.actions,
     };
   });
+}
+
+function selectHomeCollection(
+  schema: AppSchema,
+  viewEntries: Array<[string, ViewSchema]>,
+  collectionView: CollectionViewSchema,
+  entity: EntitySchema,
+): HomeCollectionConfig {
+  const queries = selectQueries(schema, collectionView);
+
+  return {
+    entityName: collectionView.entity,
+    entity,
+    ...(collectionView.context === undefined
+      ? {}
+      : { context: selectContext(schema, viewEntries, collectionView) }),
+    queries,
+    result: selectResult(schema, collectionView, entity),
+    actions: selectHomeActions(schema, viewEntries, collectionView, entity),
+  };
 }
 
 export function selectRelatedCollectionModels(
@@ -192,23 +229,29 @@ export function selectRelatedCollectionModels(
       return [];
     }
 
-    const entity = schema.entities[relationship.to.entity];
-
-    if (!entity) {
-      throw new Error(`Missing related entity "${relationship.to.entity}".`);
-    }
-
-    return [
-      {
-        relationshipName,
-        relationship,
-        label: relationship.label ?? entity.label,
-        entityName: relationship.to.entity,
-        entity,
-        referenceFieldName: relationship.to.field,
-      },
-    ];
+    return [selectRelatedCollection(schema, relationshipName, relationship)];
   });
+}
+
+function selectRelatedCollection(
+  schema: AppSchema,
+  relationshipName: string,
+  relationship: ToManyRelationshipSchema,
+): RelatedCollectionConfig {
+  const entity = schema.entities[relationship.to.entity];
+
+  if (!entity) {
+    throw new Error(`Missing related entity "${relationship.to.entity}".`);
+  }
+
+  return {
+    relationshipName,
+    relationship,
+    label: relationship.label ?? entity.label,
+    entityName: relationship.to.entity,
+    entity,
+    referenceFieldName: relationship.to.field,
+  };
 }
 
 function selectContext(
@@ -226,11 +269,9 @@ function selectContext(
   const relationship =
     relationshipName === undefined ? undefined : selectToManyRelationship(schema, relationshipName);
   const relatedCollection =
-    relationshipName === undefined
+    relationshipName === undefined || relationship === undefined
       ? undefined
-      : selectRelatedCollectionModels(schema, collectionView.context.entity).find(
-          (collection) => collection.relationshipName === relationshipName,
-        );
+      : selectRelatedCollection(schema, relationshipName, relationship);
 
   if (!contextEntity) {
     throw new Error(`Missing context entity "${collectionView.context.entity}".`);
@@ -266,7 +307,6 @@ function selectContext(
     queryName: collectionView.context.query,
     query: contextQuery.expression,
     labelField: collectionView.context.labelField,
-    ...(relationshipName === undefined ? {} : { relationshipName, relationship }),
     ...(relatedCollection === undefined ? {} : { relatedCollection }),
     ...(createAction === undefined ? {} : { createAction }),
     ...(itemViewName === undefined
@@ -310,6 +350,21 @@ function selectQueryTabs(
       ...(slot.count === undefined ? {} : { count: slot.count }),
     };
   });
+}
+
+function selectQueries(schema: AppSchema, collectionView: CollectionViewSchema): HomeQueriesConfig {
+  const tabs = selectQueryTabs(schema, collectionView);
+  const defaultTab = tabs.find((tab) => tab.queryName === collectionView.defaultQuery);
+
+  if (!defaultTab) {
+    throw new Error(`Missing default query "${collectionView.defaultQuery}".`);
+  }
+
+  return {
+    tabs,
+    defaultQueryName: collectionView.defaultQuery,
+    defaultTab,
+  };
 }
 
 function selectResult(
