@@ -12,7 +12,7 @@ import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
-import { fieldValueToInputValue, inputValueToFieldValue, numberInputAttributes } from "./format.ts";
+import { fieldValueToInputValue, inputValueToFieldValue } from "./format.ts";
 import { useSchemaKey } from "./schema-app-context.tsx";
 
 export function RecordFieldEditor({
@@ -137,12 +137,12 @@ export function RecordFieldEditor({
               const value = event.currentTarget.value;
 
               setDraft(value);
-              void commit(value);
+              void commit(inputValueToFieldValue(field, value));
             }}
-            required={adapter.field.required}
+            required={adapter.required}
             value={draft}
           >
-            {!adapter.field.required || draft === "" ? <NativeSelectOption value="" /> : null}
+            {!adapter.required || draft === "" ? <NativeSelectOption value="" /> : null}
             {unknownValue ? (
               <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
             ) : null}
@@ -175,8 +175,8 @@ export function RecordFieldEditor({
     );
   }
 
-  const isMultilineTextEditor =
-    adapter.kind === "text" && (adapter.editor === "textarea" || adapter.editor === "markdown");
+  const control = adapter.control;
+  const isMultilineTextEditor = control.kind === "textarea";
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -203,7 +203,8 @@ export function RecordFieldEditor({
       className={
         density === "compact"
           ? "w-full min-w-0 space-y-1"
-          : adapter.kind === "date" || adapter.kind === "number"
+          : control.kind === "input" &&
+              (control.inputType === "date" || control.inputType === "number")
             ? "min-w-36 flex-none space-y-1"
             : "min-w-52 flex-1 space-y-1"
       }
@@ -221,12 +222,12 @@ export function RecordFieldEditor({
             disabled={!canPatch || isPending}
             onBlur={(event) => {
               if (commitPolicy === "field-commit") {
-                void commit(event.currentTarget.value);
+                void commit(inputValueToFieldValue(field, event.currentTarget.value));
               }
             }}
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={handleTextareaKeyDown}
-            required={field.required}
+            required={adapter.required}
             value={draft}
           />
         ) : (
@@ -245,9 +246,9 @@ export function RecordFieldEditor({
             }}
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={handleInputKeyDown}
-            required={field.required}
-            {...numberInputAttributes(field)}
-            type={adapter.kind === "date" ? "date" : adapter.kind === "number" ? "number" : "text"}
+            required={adapter.required}
+            {...adapter.inputAttributes}
+            type={control.kind === "input" ? control.inputType : "text"}
             value={draft}
           />
         )}
@@ -301,7 +302,7 @@ function RecordReferenceEditor({
             const value = event.currentTarget.value;
 
             onDraftChange(value);
-            void onCommit(value);
+            void onCommit(inputValueToFieldValue(field, value));
           }}
           required={field.required}
           value={draft}

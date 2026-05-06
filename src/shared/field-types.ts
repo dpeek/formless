@@ -5,6 +5,12 @@ import type { FieldCommitPolicy, FieldEditor, FieldSchema, TableColumnFormat } f
 
 export type AuthorityFieldValueResult = { kind: "set"; value: FieldValue } | { kind: "omit" };
 export type FieldDisplayOptions = { format?: TableColumnFormat };
+export type FieldEditorControl =
+  | { kind: "checkbox" }
+  | { kind: "input"; inputType: "date" | "number" | "text" }
+  | { kind: "reference" }
+  | { kind: "select" }
+  | { kind: "textarea" };
 export type FieldInputAttributes = { max?: number; min?: number; step?: "1" | "any" };
 
 export type FieldTypeBehavior<TField extends FieldSchema = FieldSchema> = {
@@ -21,6 +27,7 @@ export type FieldTypeBehavior<TField extends FieldSchema = FieldSchema> = {
     value: string | undefined,
     provided: boolean,
   ) => FieldValue;
+  editorControl: (field: TField, editor: FieldEditor) => FieldEditorControl;
   fieldValueToInputValue: (field: TField, value: FieldValue | undefined) => string;
   formatDisplayValue: (field: TField, value: FieldValue, options?: FieldDisplayOptions) => string;
   inputAttributes: (field: TField) => FieldInputAttributes;
@@ -45,6 +52,7 @@ export const fieldTypeBehaviors = {
     createDefaultValue: () => undefined,
     hasCreateDefault: () => false,
     createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    editorControl: textEditorControl,
     fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: formatStringDisplayValue,
     inputAttributes: emptyInputAttributes,
@@ -63,6 +71,7 @@ export const fieldTypeBehaviors = {
     createDefaultValue: (field) => field.default,
     hasCreateDefault: (field) => typeof field.default === "boolean",
     createInputValueToFieldValue: (_field, _value, provided) => provided,
+    editorControl: () => ({ kind: "checkbox" }),
     fieldValueToInputValue: () => "",
     formatDisplayValue: (_field, value) =>
       value === true ? "Yes" : value === false ? "No" : String(value),
@@ -81,6 +90,7 @@ export const fieldTypeBehaviors = {
     createDefaultValue: () => undefined,
     hasCreateDefault: () => false,
     createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    editorControl: () => ({ kind: "input", inputType: "date" }),
     fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: formatStringDisplayValue,
     inputAttributes: emptyInputAttributes,
@@ -99,6 +109,7 @@ export const fieldTypeBehaviors = {
     createDefaultValue: (field) => field.default,
     hasCreateDefault: (field) => typeof field.default === "number",
     createInputValueToFieldValue: (_field, value) => numberInputValueToFieldValue(value ?? ""),
+    editorControl: () => ({ kind: "input", inputType: "number" }),
     fieldValueToInputValue: (_field, value) => (typeof value === "number" ? String(value) : ""),
     formatDisplayValue: (_field, value, options) => formatNumberDisplayValue(value, options),
     inputAttributes: numberInputAttributes,
@@ -116,6 +127,7 @@ export const fieldTypeBehaviors = {
     createDefaultValue: (field) => field.default,
     hasCreateDefault: (field) => typeof field.default === "string",
     createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    editorControl: () => ({ kind: "select" }),
     fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: (field, value) =>
       typeof value === "string" ? (field.values[value]?.label ?? value) : String(value),
@@ -134,6 +146,7 @@ export const fieldTypeBehaviors = {
     createDefaultValue: () => undefined,
     hasCreateDefault: () => false,
     createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    editorControl: () => ({ kind: "reference" }),
     fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: formatStringDisplayValue,
     inputAttributes: emptyInputAttributes,
@@ -190,6 +203,16 @@ export function createInputValueToFieldValue(
   provided: boolean,
 ) {
   return getFieldTypeBehavior(field).createInputValueToFieldValue(field, value, provided);
+}
+
+export function fieldEditorControl(field: FieldSchema, editor: FieldEditor) {
+  const behavior = getFieldTypeBehavior(field);
+
+  if (!behavior.editors.includes(editor)) {
+    throw new Error(`Editor "${editor}" is not valid for field type "${field.type}".`);
+  }
+
+  return behavior.editorControl(field, editor);
 }
 
 export function fieldValueToInputValue(field: FieldSchema, value: FieldValue | undefined) {
@@ -257,6 +280,17 @@ function stringFieldValueToInputValue(_field: FieldSchema, value: FieldValue | u
 
 function stringInputValueToFieldValue(_field: FieldSchema, value: string): FieldValue {
   return value;
+}
+
+function textEditorControl(
+  _field: Extract<FieldSchema, { type: "text" }>,
+  editor: FieldEditor,
+): FieldEditorControl {
+  if (editor === "textarea" || editor === "markdown") {
+    return { kind: "textarea" };
+  }
+
+  return { kind: "input", inputType: "text" };
 }
 
 function formatStringDisplayValue(_field: FieldSchema, value: FieldValue) {

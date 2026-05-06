@@ -205,32 +205,30 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
   if (adapter.kind === "boolean") {
     return (
       <Field orientation="horizontal">
-        <Checkbox defaultChecked={adapter.field.default ?? false} name={fieldName} />
+        <Checkbox defaultChecked={adapter.createDefaultChecked} name={fieldName} />
         <Label>{label}</Label>
       </Field>
     );
   }
 
-  if (adapter.kind === "date") {
+  if (adapter.control.kind === "input" && adapter.control.inputType === "date") {
     return (
       <Field>
         <Label>{label}</Label>
-        <DateInput name={fieldName} required={adapter.field.required} />
+        <DateInput name={fieldName} required={adapter.required} />
       </Field>
     );
   }
 
-  if (adapter.kind === "number") {
+  if (adapter.control.kind === "input" && adapter.control.inputType === "number") {
     return (
       <Field>
         <Label>{label}</Label>
         <Input
-          defaultValue={adapter.field.default}
-          max={adapter.field.max}
-          min={adapter.field.min}
+          defaultValue={adapter.createDefaultValue}
           name={fieldName}
-          required={adapter.field.required}
-          step={adapter.field.integer ? "1" : "any"}
+          required={adapter.required}
+          {...adapter.inputAttributes}
           type="number"
         />
       </Field>
@@ -243,11 +241,11 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
         <Label>{label}</Label>
         <NativeSelect
           className="w-full"
-          defaultValue={adapter.field.default ?? (adapter.field.required ? undefined : "")}
+          defaultValue={adapter.createDefaultValue}
           name={fieldName}
-          required={adapter.field.required}
+          required={adapter.required}
         >
-          {adapter.field.required ? null : <NativeSelectOption value="" />}
+          {adapter.required ? null : <NativeSelectOption value="" />}
           {Object.entries(adapter.field.values).map(([value, option]) => (
             <NativeSelectOption key={value} value={value}>
               {option.label}
@@ -259,14 +257,26 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
   }
 
   if (adapter.kind === "reference") {
-    return <ReferenceCreateField field={adapter.field} fieldName={fieldName} label={label} />;
+    return (
+      <ReferenceCreateField
+        defaultValue={adapter.createDefaultValue}
+        field={adapter.field}
+        fieldName={fieldName}
+        label={label}
+        required={adapter.required}
+      />
+    );
   }
 
-  if (adapter.kind === "text" && (adapter.editor === "textarea" || adapter.editor === "markdown")) {
+  if (adapter.control.kind === "textarea") {
     return (
       <Field>
         <Label>{label}</Label>
-        <Textarea name={fieldName} required={field.required} />
+        <Textarea
+          defaultValue={adapter.createDefaultValue}
+          name={fieldName}
+          required={adapter.required}
+        />
       </Field>
     );
   }
@@ -274,19 +284,28 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
   return (
     <Field>
       <Label>{label}</Label>
-      <Input name={fieldName} required={field.required} />
+      <Input
+        defaultValue={adapter.createDefaultValue}
+        name={fieldName}
+        required={adapter.required}
+        type={adapter.control.kind === "input" ? adapter.control.inputType : "text"}
+      />
     </Field>
   );
 }
 
 function ReferenceCreateField({
+  defaultValue,
   field,
   fieldName,
   label,
+  required,
 }: {
+  defaultValue: string | undefined;
   field: Extract<FieldSchema, { type: "reference" }>;
   fieldName: string;
   label: string;
+  required: boolean;
 }) {
   const options = useReferenceOptions(field.to, field.displayField);
 
@@ -295,11 +314,11 @@ function ReferenceCreateField({
       <Label>{label}</Label>
       <NativeSelect
         className="w-full"
-        defaultValue={field.required ? undefined : ""}
+        defaultValue={defaultValue}
         name={fieldName}
-        required={field.required}
+        required={required}
       >
-        {field.required ? null : <NativeSelectOption value="" />}
+        {required ? null : <NativeSelectOption value="" />}
         {options.map((option) => (
           <NativeSelectOption key={option.id} value={option.id}>
             {option.label}

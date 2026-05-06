@@ -1,7 +1,7 @@
 # PRD 07: Field behavior module
 
 Status: active
-Current chunk: FB-03 ready
+Current chunk: FB-04 ready
 Last updated: 2026-05-06
 
 ## Goal
@@ -133,7 +133,7 @@ Likely changed files:
 | ----- | ------- | ---------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | FB-01 | shipped | none       | tests                                                       | Current field parse, validation, create, patch, and display behavior is characterized. |
 | FB-02 | shipped | FB-01      | `src/shared/field-types.ts`, `src/app/generated/format.ts`  | Scalar value conversion and display behavior move behind field behavior helpers.       |
-| FB-03 | draft   | FB-02      | `src/app/generated/field-ui-adapters.ts`, generated editors | Generated create and inline editors consume field behavior facts with equivalent UI.   |
+| FB-03 | shipped | FB-02      | `src/app/generated/field-ui-adapters.ts`, generated editors | Generated create and inline editors consume field behavior facts with equivalent UI.   |
 | FB-04 | draft   | FB-03      | tests, Browser Use if UI behavior changes                   | Tasks, rates, and site create/edit flows still pass.                                   |
 | FB-05 | draft   | FB-04      | `prd/07-field-behavior-module.md`                           | PRD status and promote notes reflect shipped behavior.                                 |
 
@@ -169,6 +169,7 @@ Recommended order:
 
 - FB-01: no global doc promotion. Test-only characterization; runtime behavior unchanged.
 - FB-02: `doc/current.md`: note that `src/shared/field-types.ts` owns scalar validation, default, create input conversion, inline input conversion, number input attributes, and display helpers; generated format/create/editor paths call those helpers.
+- FB-03: `doc/current.md`: note that `src/shared/field-types.ts` owns generated editor control metadata, and `src/app/generated/field-ui-adapters.ts` exposes control/default/required/input-attribute facts for create and inline editors.
 - `doc/roadmap.md`: no change unless a new release-scope field type is added.
 
 ## PRD status notes
@@ -183,4 +184,10 @@ Recommended order:
 - Field behavior now exposes scalar create input conversion, inline input conversion, input attributes, and display formatting helpers in `src/shared/field-types.ts`.
 - Generated format/create/editor code delegates scalar conversion and display to field behavior helpers.
 - FB-02 evidence: `bun run test src/shared/field-types.test.ts src/app/generated/format.test.ts src/app.test.tsx`; `bun run test`; `bun run check`.
+- FB-03 shipped 2026-05-06.
+- Field behavior now exposes generated editor control metadata in `src/shared/field-types.ts`.
+- Generated field UI adapters now expose control, create default, required, and input-attribute facts for create and inline editors.
+- Generated create and inline editors consume adapter facts and field behavior conversion helpers with equivalent UI.
+- FB-03 evidence: `bun run test src/shared/field-types.test.ts src/app/generated/field-ui-adapters.test.ts src/app/generated/format.test.ts src/app.test.tsx`; `bun run check`; `bun run test src/client/sync.test.ts`; `bun run test`.
+- Browser Use not run; no intended app behavior change.
 - No blockers.

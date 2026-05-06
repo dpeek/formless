@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   createInputValueToFieldValue,
+  fieldEditorControl,
   fieldInputAttributes,
   fieldCreateDefaultValue,
   fieldHasCreateDefault,
@@ -122,6 +123,25 @@ describe("field type behavior", () => {
     expect(createInputValueToFieldValue(fields.estimate, "1.5", true)).toBe(1.5);
     expect(createInputValueToFieldValue(fields.title, undefined, false)).toBe("");
     expect(numberInputValueToFieldValue("0")).toBe(0);
+  });
+
+  it("centralizes generated editor control metadata without React", () => {
+    expect(fieldEditorControl(fields.title, "text")).toEqual({ kind: "input", inputType: "text" });
+    expect(fieldEditorControl(fields.title, "markdown")).toEqual({ kind: "textarea" });
+    expect(fieldEditorControl(fields.done, "boolean")).toEqual({ kind: "checkbox" });
+    expect(fieldEditorControl(fields.dueDate, "date")).toEqual({
+      kind: "input",
+      inputType: "date",
+    });
+    expect(fieldEditorControl(fields.estimate, "number")).toEqual({
+      kind: "input",
+      inputType: "number",
+    });
+    expect(fieldEditorControl(fields.priority, "enum")).toEqual({ kind: "select" });
+    expect(fieldEditorControl(fields.resource, "reference")).toEqual({ kind: "reference" });
+    expect(() => fieldEditorControl(fields.estimate, "text")).toThrow(
+      'Editor "text" is not valid for field type "number".',
+    );
   });
 
   it("centralizes scalar input attributes without React", () => {
