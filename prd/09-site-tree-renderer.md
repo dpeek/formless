@@ -1,7 +1,7 @@
 # PRD 05: Block tree projection and renderer
 
 Status: in progress
-Current chunk: STR-05 first custom renderer
+Current chunk: STR-06 browser smoke and promotion notes
 Last updated: 2026-05-06
 
 ## Goal
@@ -373,6 +373,7 @@ The exact slot names can change during implementation. The important rule is tha
 | STR-D10 | Do not wait for REL-05.                                 | The page tree uses one-to-many containment, not many-to-many joins. | `prd/04-relationships.md`                              |
 | STR-D11 | Put page shell composition in source seeds.             | The source app should prove the tree shape without local fixtures.  | `schema/apps/site/seed-records.json`                   |
 | STR-D12 | Hide the seeded related-post placement for now.         | Query exclusion is not available, so visible self-query recurses.   | `rec_site_place_post_related.visible = false`          |
+| STR-D13 | Use `/pages/*` for public site rendering.               | `/site` remains generated admin and site slugs can contain slashes. | `src/app.tsx`, `src/app/routes/site-page.tsx`          |
 
 ## Chunks
 
@@ -382,7 +383,7 @@ The exact slot names can change during implementation. The important rule is tha
 | STR-02 | shipped | STR-01         | `src/site/tree.ts`, `src/site/tree.test.ts`, site fixtures                          | Flat block records project into a public nested tree with warnings.                |
 | STR-03 | shipped | STR-02         | `src/worker/authority.ts`, `src/worker/index.ts`, `src/shared/protocol.ts`, tests   | `GET /api/site/tree/:slug` returns filtered tree data for published pages.         |
 | STR-04 | shipped | STR-03         | `schema/apps/site/seed-records.json`, source tests                                  | Seeds express Header, Home, nested footer sections, media blocks, and page blocks. |
-| STR-05 | planned | STR-04         | `src/app.tsx`, `src/app/routes/site-page.tsx`, `src/app/site-renderer/*`, app tests | Public site routes render the tree without changing `/site` admin.                 |
+| STR-05 | shipped | STR-04         | `src/app.tsx`, `src/app/routes/site-page.tsx`, `src/app/site-renderer/*`, app tests | Public site routes render the tree without changing `/site` admin.                 |
 | STR-06 | planned | STR-05         | Browser Use, PRD promote notes                                                      | Browser smoke covers rendered home, nested header/footer, media, and admin.        |
 
 ## Chunk details
@@ -491,29 +492,33 @@ Evidence:
 
 ### STR-05 first custom renderer
 
-Goal: render the public site tree with local React components.
+Outcome:
 
-Tasks:
-
-- Add public site routes outside the generated admin route.
-- Keep `/site` as the admin route.
-- Pick a public route shape, likely `/pages/:slug` while admin still owns `/site`.
-- Fetch the site tree from the new endpoint.
-- Render a loading state and 404 state.
-- Add block renderers for the first supported block types.
-- Render slots by name.
-- Render links from `href` or `slug`.
-- Render media blocks without requiring real image storage.
-- Add app tests for home, header links, footer sections, list/grid content, media blocks, and 404.
-
-Acceptance:
-
-- Rendered Home shows header navigation, hero content, recent posts, featured projects, media where present, and footer links.
+- Shipped 2026-05-06.
+- Added public site routes at `/pages` and `/pages/*`.
+- `/pages` redirects to `/pages/home`.
+- `/pages/*` fetches `/api/site/tree/:slug`.
+- Public site routes hide generated admin navigation.
 - `/site` still opens the generated admin app.
 - `/site/schema` still opens the schema editor.
-- Unknown block types do not crash rendering.
-- `bun run test` passes.
-- `bun run check` passes.
+- Added loading, 404, and error states for public site pages.
+- Added a site-specific renderer under `src/app/site-renderer/`.
+- Renderer supports header, main, footer, media, and link slots.
+- Renderer supports `group`, `hero`, `markdown`, `link`, `contentList`, `contentGrid`, `image`, `video`, `cta`, `post`, `project`, and `profile` blocks.
+- Media blocks render from `href` when present and from public metadata placeholders otherwise.
+- Query-backed list and grid blocks render public query results from the projected tree.
+- Unknown block types render nothing.
+- Rendered Home shows header navigation, hero content, recent posts, featured projects, media metadata, and nested footer links.
+- Browser Use smoke was not run in STR-05 because the required Node REPL browser-control tool was unavailable in this session; STR-06 still owns browser smoke.
+
+Evidence:
+
+- App route shell: `src/app.tsx`.
+- Public route state and fetch code: `src/app/routes/site-page.tsx`.
+- Public renderer: `src/app/site-renderer/renderer.tsx`.
+- App and renderer tests: `src/app.test.tsx`.
+- `bun run test` passed 2026-05-06: 22 files, 403 tests.
+- `bun run check` passed 2026-05-06: no warnings, lint errors, or type errors.
 
 ### STR-06 browser smoke and promotion notes
 
@@ -555,7 +560,7 @@ Acceptance:
 | ID     | Question                                                                 | Default for implementation                                                      |
 | ------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | STR-O1 | Should `meta` be a text-backed JSON field or a true JSON field type?     | Use explicit fields first; add text-backed JSON only if needed.                 |
-| STR-O2 | What public route should render site pages while `/site` is admin?       | Use `/pages/:slug` until a broader route ownership decision exists.             |
+| STR-O2 | What public route should render site pages while `/site` is admin?       | Resolved by STR-D13: use `/pages/*`.                                            |
 | STR-O3 | Should Home render at `/`?                                               | Not in the first chunk; `/` currently redirects to the default schema app.      |
 | STR-O4 | Should tree output include raw records or projected public fields?       | Use projected public fields and include warnings for missing data.              |
 | STR-O5 | Should query-backed lists include nested placement trees per result?     | Include block nodes with their own placements, subject to cycle and depth caps. |
@@ -565,9 +570,10 @@ Acceptance:
 
 ## Blockers
 
-| ID     | Status | Blocks | Notes                                              |
-| ------ | ------ | ------ | -------------------------------------------------- |
-| STR-B1 | closed | STR-01 | PRD 04 REL-04 shipped before this PRD was drafted. |
+| ID     | Status | Blocks | Notes                                                                                                 |
+| ------ | ------ | ------ | ----------------------------------------------------------------------------------------------------- |
+| STR-B1 | closed | STR-01 | PRD 04 REL-04 shipped before this PRD was drafted.                                                    |
+| STR-B2 | open   | STR-06 | Browser Use skill is installed, but the required Node REPL `js` tool was not exposed in this session. |
 
 ## Cross-PRD dependencies
 
@@ -618,13 +624,25 @@ When STR-04 ships, update `doc/current.md`:
 - Hero media examples are image and video blocks.
 - The related-post placement is hidden until query-backed related posts can exclude the current post.
 
+When STR-05 ships, update `doc/current.md`:
+
+- Site renderer route exists at `/pages/*`.
+- `/pages` redirects to `/pages/home`.
+- Site renderer route source: `src/app/routes/site-page.tsx`.
+- Site renderer components source: `src/app/site-renderer/renderer.tsx`.
+- Public site routes fetch `/api/site/tree/:slug`.
+- Public site routes do not show generated admin navigation.
+- `/site` and `/site/schema` remain generated admin routes.
+- Unknown public block types render nothing.
+
 When this PRD ships, update `doc/current.md`:
 
 - Site public tree projection exists.
 - Site tree projection source: `src/site/tree.ts`.
-- Site public tree endpoint exists at the chosen route.
+- Site public tree endpoint exists at `/api/site/tree/:slug`.
 - Public tree output excludes drafts, archived blocks, invisible placements, and tombstoned records.
-- Site renderer route exists at the chosen public route.
+- Site renderer route exists at `/pages/*`.
+- `/pages` redirects to `/pages/home`.
 - `/site` and `/site/schema` remain generated admin routes.
 - Header and footer can be nested blocks/groups through `blockPlacement.parent`.
 
@@ -660,4 +678,10 @@ When this PRD ships, update `doc/roadmap.md` only if public site rendering becom
 - STR-04 added a Footer root group and nested footer section placements.
 - STR-04 added an intro video media block and hero media placement.
 - STR-04 kept stored records flat and did not change generated admin views.
-- No blockers.
+- STR-05 shipped 2026-05-06.
+- STR-05 added the public renderer route at `/pages/*` and redirect at `/pages`.
+- STR-05 kept `/site` and `/site/schema` as generated admin routes.
+- STR-05 reads the projected public tree from `/api/site/tree/:slug`.
+- STR-05 added a site-specific renderer and did not change generated admin renderer components.
+- STR-05 Browser Use smoke was deferred to STR-06 because the required Node REPL browser-control tool was unavailable.
+- STR-06 remains planned.

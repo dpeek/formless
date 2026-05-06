@@ -9,12 +9,15 @@ import {
   resolveCreateValues,
 } from "./app/generated/create.tsx";
 import { RecordTable } from "./app/generated/table.tsx";
+import { SitePageRouteView } from "./app/routes/site-page.tsx";
+import { SitePageRenderer } from "./app/site-renderer/renderer.tsx";
 import {
   applyBootstrapResponse,
   applyRecordMerge,
   getClientStoreSnapshot,
   resetClientStore,
 } from "./client/store.ts";
+import { buildSitePageTree } from "./site/tree.ts";
 import {
   selectCollectionModels,
   selectPrimaryCollectionModels,
@@ -26,6 +29,7 @@ import {
   type TableColumnConfig,
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
+import type { SitePageTree } from "./shared/protocol.ts";
 import type { AppSchema, EntitySchema } from "./shared/schema.ts";
 import {
   rateSeedRecords as rateCardSeedRecords,
@@ -42,6 +46,22 @@ function renderRoute(path: string) {
       <App />
     </Router>,
   );
+}
+
+function renderSitePage(slug = "home", records = siteSeedRecords) {
+  return renderToStaticMarkup(<SitePageRenderer tree={sitePageTree(slug, records)} />);
+}
+
+function sitePageTree(slug = "home", records = siteSeedRecords): SitePageTree {
+  const projection = buildSitePageTree(siteSourceSchema, records, slug, {
+    generatedAt: "2026-05-06T00:00:00.000Z",
+  });
+
+  if (!projection.tree) {
+    throw new Error(`Missing site page tree for "${slug}".`);
+  }
+
+  return projection.tree;
 }
 
 beforeEach(() => {
@@ -176,6 +196,111 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;blockPlacement&quot;");
     expect(html).not.toContain("<code>tasks</code>");
     expect(html).not.toContain("<code>rates</code>");
+  });
+
+  it('renders the "/pages/home" public site route outside generated admin navigation', () => {
+    const html = renderRoute("/pages/home");
+
+    expect(html).toContain("Loading site page...");
+    expect(html).toContain("Loading home.");
+    expect(html).not.toContain('href="/tasks"');
+    expect(html).not.toContain('href="/site/schema"');
+  });
+});
+
+describe("public site renderer", () => {
+  it("renders the Home page tree with header navigation and hero content", () => {
+    const html = renderSitePage("home");
+
+    expect(html).toContain('href="/pages/home"');
+    expect(html).toContain("Formless");
+    expect(html).toContain("Home");
+    expect(html).toContain('href="/pages/blog"');
+    expect(html).toContain("Blog");
+    expect(html).toContain('href="/pages/projects"');
+    expect(html).toContain("Projects");
+    expect(html).toContain('href="/pages/resume"');
+    expect(html).toContain("Resume");
+    expect(html).toContain("Schema-backed software for content-heavy products");
+    expect(html).toContain("Selected writing, projects, and durable systems work.");
+  });
+
+  it("renders content list and grid query results without draft blocks", () => {
+    const html = renderSitePage("home");
+
+    expect(html).toContain("Recent posts");
+    expect(html).toContain("Shipping schema-backed authoring");
+    expect(html).toContain("Why the content model starts flat");
+    expect(html).toContain("Featured projects");
+    expect(html).toContain("Estii");
+    expect(html).toContain("OpenSurf");
+    expect(html).toContain("Schema-backed application authoring");
+    expect(html).not.toContain("Draft notes on generated editorial tools");
+  });
+
+  it("renders media blocks from public metadata without requiring stored assets", () => {
+    const html = renderSitePage("home");
+
+    expect(html).toContain("Site owner portrait");
+    expect(html).toContain("site-owner-portrait");
+    expect(html).toContain("Intro video");
+    expect(html).toContain("site-intro-video");
+    expect(html).toContain('src="https://example.com/intro.mp4"');
+  });
+
+  it("renders nested footer sections and external footer links", () => {
+    const html = renderSitePage("home");
+
+    expect(html).toContain("Explore");
+    expect(html).toContain("Social");
+    expect(html).toContain('href="https://github.com/example"');
+    expect(html).toContain("GitHub");
+    expect(html).toContain('href="https://linkedin.com/in/example"');
+    expect(html).toContain("LinkedIn");
+  });
+
+  it("renders a 404 state for missing public site pages", () => {
+    const html = renderToStaticMarkup(
+      <SitePageRouteView state={{ status: "not-found", slug: "missing" }} />,
+    );
+
+    expect(html).toContain("Page not found");
+    expect(html).toContain("No published site page exists for");
+    expect(html).toContain("<code>missing</code>");
+    expect(html).toContain('href="/pages/home"');
+  });
+
+  it("does not render unknown block types", () => {
+    const tree = sitePageTree("home");
+    const unknownBlock = {
+      id: "rec_site_block_unknown",
+      type: "mystery",
+      title: "Unsupported block should be hidden",
+      placements: [],
+    };
+
+    const html = renderToStaticMarkup(
+      <SitePageRenderer
+        tree={{
+          ...tree,
+          page: {
+            ...tree.page,
+            placements: [
+              ...tree.page.placements,
+              {
+                id: "rec_site_place_unknown",
+                slot: "main",
+                order: 99,
+                visible: true,
+                block: unknownBlock,
+              },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(html).not.toContain("Unsupported block should be hidden");
   });
 });
 
