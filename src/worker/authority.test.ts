@@ -712,6 +712,128 @@ describe("authority", () => {
     );
   });
 
+  it("rejects selected join action input validation without committing or broadcasting", async () => {
+    useSchemaApp("rates");
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: rateCardSchemaWithSelectedJoinActions(),
+    });
+
+    const before = await getJson<BootstrapResponse>("/api/bootstrap");
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, before.cursor, schemaResponse.updatedAt);
+
+      const capture = captureSyncSocketMessages(socket);
+      await expectError(
+        "/api/actions",
+        {
+          actionId: "action-add-selected-rate-invalid-input",
+          entity: "rate",
+          action: "addSelectedRate",
+        },
+        'Action "addSelectedRate" requires input with fromRecordId and toRecordId.',
+      );
+      await expectNoCapturedMessages(capture);
+      capture.stop();
+    } finally {
+      socket.close();
+    }
+
+    const afterInvalid = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(afterInvalid.cursor).toBe(before.cursor);
+    expect(afterInvalid.records).toEqual(before.records);
+
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-add-selected-rate-blank-input",
+        entity: "rate",
+        action: "addSelectedRate",
+        input: {
+          fromRecordId: " ",
+          toRecordId: "resource-1",
+        },
+      },
+      'Action "addSelectedRate" input fromRecordId must be non-empty.',
+    );
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-remove-selected-rate-missing-input",
+        entity: "rate",
+        action: "removeSelectedRates",
+      },
+      'Action "removeSelectedRates" requires input with recordIds.',
+    );
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-remove-selected-rate-empty-input",
+        entity: "rate",
+        action: "removeSelectedRates",
+        input: { recordIds: [] },
+      },
+      'Action "removeSelectedRates" input recordIds must not be empty.',
+    );
+
+    const resource = await postMutationForEntity("mutation-selected-resource", "resource", {
+      name: "Producer",
+    });
+    const card = await postMutationForEntity("mutation-selected-card", "card", {
+      name: "Enterprise",
+    });
+    const created = await postActionForEntity(
+      "action-add-selected-rate-invalid-input",
+      "rate",
+      "addSelectedRate",
+      {
+        input: {
+          fromRecordId: card.record.id,
+          toRecordId: resource.record.id,
+        },
+      },
+    );
+    const createdRateId = created.changes[0]?.recordId;
+
+    if (!createdRateId) {
+      throw new Error("Selected join action did not create a rate.");
+    }
+
+    await expectError(
+      "/api/actions",
+      {
+        actionId: "action-remove-selected-rate-duplicate-input",
+        entity: "rate",
+        action: "removeSelectedRates",
+        input: { recordIds: [createdRateId, createdRateId] },
+      },
+      'Action "removeSelectedRates" input recordIds must not contain duplicates.',
+    );
+
+    const removed = await postActionForEntity(
+      "action-remove-selected-rate-duplicate-input",
+      "rate",
+      "removeSelectedRates",
+      { input: { recordIds: [createdRateId] } },
+    );
+
+    expect(created.changes).toHaveLength(1);
+    expect(created.changes[0]?.payload.values).toEqual({
+      resource: resource.record.id,
+      card: card.record.id,
+      cost: 0,
+      costUnit: "day",
+      price: 0,
+      priceSet: true,
+      currency: "usd",
+    });
+    expect(removed.changes).toHaveLength(1);
+    expect(removed.changes[0]?.recordId).toBe(createdRateId);
+  });
+
   it("runs rate-card afterCreate hooks for card creates through mutation changes", async () => {
     useSchemaApp("rates");
     await createRateResources(5);

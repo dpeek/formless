@@ -2602,6 +2602,85 @@ describe("schema entity actions", () => {
     });
   });
 
+  it("rejects invalid action names, labels, kinds, and unsupported keys", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                "": {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                  target: { query: "taskCompleted" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("action names must be non-empty");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  label: "",
+                  kind: "clear-completed",
+                  target: { query: "taskCompleted" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("label must be a non-empty string");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  label: "Clear completed",
+                  kind: "archive",
+                  target: { query: "taskCompleted" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('has unsupported kind "archive"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  label: "Clear completed",
+                  kind: "clear-completed",
+                  target: { query: "taskCompleted" },
+                  debug: true,
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('has unsupported key "debug"');
+  });
+
   it("rejects missing, unknown, and cross-entity target queries", () => {
     expect(() =>
       parseAppSchema(

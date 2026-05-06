@@ -1,7 +1,7 @@
 # PRD 08: Entity action module
 
 Status: draft
-Current chunk: none
+Current chunk: EA-01 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -128,14 +128,14 @@ Likely changed files:
 
 ## Chunks
 
-| ID    | Status | Depends on | Main files                                                   | Acceptance                                                                                  |
-| ----- | ------ | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| EA-01 | draft  | none       | tests                                                        | Current action parse, validation, execution, replay, and UI behavior is characterized.      |
-| EA-02 | draft  | EA-01      | `src/shared/schema-actions.ts`, `src/shared/schema-types.ts` | Action kind schema parsing and capabilities are represented through a deeper action module. |
-| EA-03 | draft  | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
-| EA-04 | draft  | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
-| EA-05 | draft  | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
-| EA-06 | draft  | EA-05      | `prd/08-entity-action-module.md`                             | PRD status and promote notes reflect shipped behavior.                                      |
+| ID    | Status  | Depends on | Main files                                                   | Acceptance                                                                                  |
+| ----- | ------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| EA-01 | shipped | none       | tests                                                        | Current action parse, validation, execution, replay, and UI behavior is characterized.      |
+| EA-02 | draft   | EA-01      | `src/shared/schema-actions.ts`, `src/shared/schema-types.ts` | Action kind schema parsing and capabilities are represented through a deeper action module. |
+| EA-03 | draft   | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
+| EA-04 | draft   | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
+| EA-05 | draft   | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
+| EA-06 | draft   | EA-05      | `prd/08-entity-action-module.md`                             | PRD status and promote notes reflect shipped behavior.                                      |
 
 ## Non-goals
 
@@ -173,9 +173,22 @@ Recommended order:
 
 - `doc/current.md`: note that action kind behavior is selected through a deeper action module; schema parsing, input validation, execution, and generated UI facts are concentrated by action kind.
 - `doc/roadmap.md`: no change unless new release-scope action behavior is added.
+- EA-01: no global doc promotion. Tests only characterize existing action behavior.
+
+## Evidence
+
+- 2026-05-06 EA-01: `bun run test -- src/shared/schema.test.ts src/worker/authority.test.ts`.
 
 ## PRD status notes
 
 - PRD drafted 2026-05-06 from architecture review.
-- No code shipped yet.
+- EA-01 shipped 2026-05-06.
+- EA-01 added parser characterization for invalid action names, labels, kinds, and unsupported keys in `src/shared/schema.test.ts`.
+- EA-01 added authority characterization for selected join action input validation in `src/worker/authority.test.ts`.
+- EA-01 proves failed selected join input validation does not commit and does not broadcast.
+- Existing tests characterize clear-completed execution/replay, create-missing join execution/replay, selected join execution, generated action model facts, and action button rendering/counts.
+- EA-01 changed no runtime behavior, schema syntax, storage, sync, or generated UI.
+- Browser Use not run; test-only change with no app behavior change.
+- No new decisions; EA-D1 through EA-D6 stand.
 - No blockers.
+- Next ready chunk: EA-02.
