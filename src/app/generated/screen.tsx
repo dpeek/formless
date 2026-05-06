@@ -41,14 +41,16 @@ export function HomeScreen({
   return (
     <div className="space-y-8">
       {sections.map((section) => (
-        <HomeScreenCollectionSection
-          getSectionSelection={getSectionSelection}
-          key={section.id}
-          onSelectContext={onSelectContext}
-          onSelectQuery={onSelectQuery}
-          section={section}
-          today={today}
-        />
+        <section aria-label={section.label} className="space-y-4" key={section.id}>
+          <h2 className="text-lg font-semibold">{section.label}</h2>
+          <HomeScreenCollectionSection
+            getSectionSelection={getSectionSelection}
+            onSelectContext={onSelectContext}
+            onSelectQuery={onSelectQuery}
+            section={section}
+            today={today}
+          />
+        </section>
       ))}
     </div>
   );

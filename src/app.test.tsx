@@ -8,6 +8,7 @@ import {
   GeneratedCreateForm,
   resolveCreateValues,
 } from "./app/generated/create.tsx";
+import { HomeScreen } from "./app/generated/screen.tsx";
 import { RecordTable } from "./app/generated/table.tsx";
 import { SitePageRouteView } from "./app/routes/site-page.tsx";
 import { SitePageRenderer } from "./app/site-renderer/renderer.tsx";
@@ -30,8 +31,10 @@ import { buildSitePageTree } from "./site/tree.ts";
 import {
   selectCollectionModels,
   selectPrimaryCollectionModels,
+  selectScreenModels,
   type CreateFieldConfig,
   type HomeActionConfig,
+  type HomeScreenModel,
   type HomeQueryTabConfig,
   type HomeViewModel,
   type RecordFieldConfig,
@@ -97,6 +100,32 @@ function renderGeneratedHomeCollection(
       onSelectQuery={() => {}}
       selectedContextRecordId={selectedContextRecordId}
       selectedQuery={selectedQuery}
+      today={today}
+    />,
+  );
+}
+
+function renderGeneratedHomeScreen(
+  screen: HomeScreenModel,
+  {
+    selectedContextRecordIdsBySection = {},
+    selectedQueryNamesBySection = {},
+    today,
+  }: {
+    selectedContextRecordIdsBySection?: Record<string, string | null>;
+    selectedQueryNamesBySection?: Record<string, string | null>;
+    today: string;
+  },
+) {
+  return renderToStaticMarkup(
+    <HomeScreen
+      getSectionSelection={(section) => ({
+        selectedContextRecordId: selectedContextRecordIdsBySection[section.id] ?? null,
+        selectedQueryName: selectedQueryNamesBySection[section.id] ?? null,
+      })}
+      onSelectContext={() => {}}
+      onSelectQuery={() => {}}
+      screen={screen}
       today={today}
     />,
   );
@@ -398,6 +427,85 @@ describe("generated collection home", () => {
     expect(html).toContain("Clear completed");
     expect(html).not.toContain('aria-label="Screens"');
     expect(html).not.toContain('aria-label="Collections"');
+  });
+
+  it("renders one-section screens with the same markup as the collection renderer", () => {
+    const screen = requiredScreenModel(appSchema, "taskHome");
+    const collection = selectPrimaryCollectionModels(appSchema)[0];
+
+    if (!collection) {
+      throw new Error("Missing task collection model.");
+    }
+
+    applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema));
+
+    expect(renderGeneratedHomeScreen(screen, { today: "2026-05-02" })).toBe(
+      renderGeneratedHomeCollection(collection, { today: "2026-05-02" }),
+    );
+  });
+
+  it("renders synthetic stack sections in order with independent selected queries", () => {
+    const schema = taskStackScreenSchema();
+    const screen = requiredScreenModel(schema, "taskStack");
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          taskRecord("record-1", "Needs active work", false, "2026-05-10"),
+          taskRecord("record-2", "Finished shipped work", true, "2026-05-01"),
+        ],
+        schema,
+      ),
+    );
+
+    const html = renderGeneratedHomeScreen(screen, {
+      selectedQueryNamesBySection: {
+        open: "taskActive",
+        done: "taskCompleted",
+      },
+      today: "2026-05-02",
+    });
+    const openSection = sliceSectionHtml(html, "Open work", "Done work");
+    const doneSection = sliceSectionHtml(html, "Done work");
+
+    expect(html.indexOf(">Open work</h2>")).toBeLessThan(html.indexOf(">Done work</h2>"));
+    expect(openSection).toContain("Needs active work");
+    expect(openSection).not.toContain("Finished shipped work");
+    expect(doneSection).toContain("Finished shipped work");
+    expect(doneSection).not.toContain("Needs active work");
+  });
+
+  it("renders synthetic stack sections with independent selected context records", () => {
+    const schema = rateStackScreenSchema();
+    const screen = requiredScreenModel(schema, "rateStack");
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-1", "card-2", 900),
+        ],
+        schema,
+      ),
+    );
+
+    const html = renderGeneratedHomeScreen(screen, {
+      selectedContextRecordIdsBySection: {
+        defaultCard: "card-1",
+        backupCard: "card-2",
+      },
+      today: "2026-05-02",
+    });
+    const defaultSection = sliceSectionHtml(html, "Default card rates", "Backup card rates");
+    const backupSection = sliceSectionHtml(html, "Backup card rates");
+
+    expect(defaultSection).toContain('value="475"');
+    expect(defaultSection).not.toContain('value="900"');
+    expect(backupSection).toContain('value="900"');
+    expect(backupSection).not.toContain('value="475"');
   });
 
   it("labels generated action rows from the active entity", () => {
@@ -2104,6 +2212,101 @@ function requiredCollectionModel(schema: AppSchema, viewName: string) {
   }
 
   return model;
+}
+
+function requiredScreenModel(schema: AppSchema, screenName: string) {
+  const model = selectScreenModels(schema).find((candidate) => candidate.screenName === screenName);
+
+  if (!model) {
+    throw new Error(`Missing screen model ${screenName}.`);
+  }
+
+  return model;
+}
+
+function sliceSectionHtml(html: string, label: string, nextLabel?: string) {
+  const startMarker = `>${label}</h2>`;
+  const start = html.indexOf(startMarker);
+
+  if (start === -1) {
+    throw new Error(`Missing section heading ${label}.`);
+  }
+
+  if (!nextLabel) {
+    return html.slice(start);
+  }
+
+  const end = html.indexOf(`>${nextLabel}</h2>`, start + startMarker.length);
+
+  if (end === -1) {
+    throw new Error(`Missing next section heading ${nextLabel}.`);
+  }
+
+  return html.slice(start, end);
+}
+
+function taskStackScreenSchema(): AppSchema {
+  return {
+    ...appSchema,
+    screens: {
+      taskStack: {
+        type: "workspace",
+        label: "Task stack",
+        navigation: {
+          primary: true,
+        },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "open",
+              type: "collection",
+              label: "Open work",
+              view: "taskHome",
+            },
+            {
+              id: "done",
+              type: "collection",
+              label: "Done work",
+              view: "taskHome",
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
+function rateStackScreenSchema(): AppSchema {
+  return {
+    ...rateCardSchema,
+    screens: {
+      rateStack: {
+        type: "workspace",
+        label: "Rate stack",
+        navigation: {
+          primary: true,
+        },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "defaultCard",
+              type: "collection",
+              label: "Default card rates",
+              view: "rateHome",
+            },
+            {
+              id: "backupCard",
+              type: "collection",
+              label: "Backup card rates",
+              view: "rateHome",
+            },
+          ],
+        },
+      },
+    },
+  };
 }
 
 function scopedRateCreateAction(): Extract<HomeActionConfig, { type: "create" }> {

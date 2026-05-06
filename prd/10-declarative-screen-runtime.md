@@ -1,7 +1,7 @@
 # PRD 10: Declarative screen runtime
 
 Status: active
-Current chunk: SCR-06 stack layout
+Current chunk: SCR-07 navigation ownership
 Last updated: 2026-05-06
 
 ## Goal
@@ -240,6 +240,7 @@ Notes:
 | SCR-D6 | Preserve collection navigation as the fallback for schemas without screens. | Runtime-edited schemas may not have the new top-level key yet.           | `src/app/routes/schema.tsx`                   |
 | SCR-D7 | Keep screen behavior client-side only.                                      | Screens compose existing runtime data; authority invariants do not move. | `doc/current.md`                              |
 | SCR-D8 | Prove with Tasks and Rates first.                                           | The exploration explicitly avoids modeling Estii first.                  | `doc/explorations/declarative-app-runtime.md` |
+| SCR-D9 | Keep one-section screens unwrapped.                                         | Existing home spacing should remain visually equivalent.                 | `src/app/generated/screen.tsx`, `src/app.test.tsx` |
 
 ## Chunks
 
@@ -250,7 +251,7 @@ Notes:
 | SCR-03 | shipped | SCR-02     | `src/client/views.ts` or `src/client/screens.ts`                                     | Screen model selection returns primary screen models and legacy fallback models with render-ready collection sections.    |
 | SCR-04 | shipped | SCR-03     | `src/app/routes/home.tsx`, `src/app/generated/screen.tsx`                            | Home route renders through screen models with no behavior change for one-section task and rate screens.                   |
 | SCR-05 | shipped | SCR-04     | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json`, tests              | Task and rate source schemas define explicit screens; reset/bootstrap/schema editor flows keep working.                   |
-| SCR-06 | draft   | SCR-05     | `src/app/generated/screen.tsx`, `src/app/routes/home.tsx`, tests                     | Stack layout renders multiple collection sections with independent query and context state.                               |
+| SCR-06 | shipped | SCR-05     | `src/app/generated/screen.tsx`, `src/app/routes/home.tsx`, tests                     | Stack layout renders multiple collection sections with independent query and context state.                               |
 | SCR-07 | draft   | SCR-06     | `src/client/views.ts`, `src/app/routes/home.tsx`, source schemas                     | Primary app workspace selection uses screen navigation when screens exist; collection navigation remains legacy fallback. |
 | SCR-08 | draft   | SCR-07     | tests, `bun browser` smoke, `prd/10-declarative-screen-runtime.md`                   | Tasks and Rates pass app smoke; PRD status, decisions, blockers, and promote notes are current.                           |
 
@@ -481,4 +482,12 @@ Recommended order:
 - SCR-05 evidence: `src/worker/authority.test.ts` covers saving a compatible schema containing screens and reset schema restoring source screens.
 - SCR-05 note: legacy collection navigation remains in Rates source views and still parses as compatibility data.
 - SCR-05 promote: `doc/current.md` should note Tasks and Rates source schemas define screens.
+- SCR-06 shipped 2026-05-06.
+- SCR-06 evidence: `src/app/generated/screen.tsx` renders section headings only for multi-section stack screens and leaves one-section screens unwrapped.
+- SCR-06 evidence: `src/app.test.tsx` covers one-section screen markup equivalence, synthetic stack section order, independent selected query state, and independent selected context state.
+- SCR-06 evidence: `./tmp/state.txt` shows tests pass and check idle after `bun start`.
+- SCR-06 evidence: `./tmp/test.txt` shows the SCR-06 app test rerun passed with 65 tests.
+- SCR-06 evidence: `./tmp/check.txt` shows formatting, lint, and type checks pass.
+- SCR-06 smoke: `bun browser` covered `/tasks` and `/rates` through `http://127.0.0.1:4370`.
+- SCR-06 promote: `doc/current.md` should note workspace screens support stack layout over collection sections.
 - No blockers.
