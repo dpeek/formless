@@ -152,6 +152,27 @@ function ScopedHomeCollection({
     }
   }, [activeContextRecordId, onSelectContext, selectedContextRecordId]);
 
+  if (context.presentation === "listDetail") {
+    return (
+      <ListDetailScopedHomeCollection
+        actions={actions}
+        activeContextRecordId={activeContextRecordId}
+        context={context}
+        contextOptions={contextOptions}
+        entity={entity}
+        entityName={entityName}
+        onSelectContext={onSelectContext}
+        onSelectQuery={onSelectQuery}
+        queryContext={queryContext}
+        queryTabs={queryTabs}
+        result={result}
+        selectedQuery={selectedQuery}
+        summary={summary ?? []}
+        today={today}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <ContextSelector
@@ -210,6 +231,217 @@ function ScopedHomeCollection({
         />
       ) : null}
     </div>
+  );
+}
+
+function ListDetailScopedHomeCollection({
+  actions,
+  activeContextRecordId,
+  context,
+  contextOptions,
+  entity,
+  entityName,
+  onSelectContext,
+  onSelectQuery,
+  queryContext,
+  queryTabs,
+  result,
+  selectedQuery,
+  summary,
+  today,
+}: {
+  actions: HomeCollectionConfig["actions"];
+  activeContextRecordId: string | null;
+  context: HomeContextConfig;
+  contextOptions: Array<{ id: string; label: string }>;
+  entity: EntitySchema;
+  entityName: string;
+  onSelectContext?: (recordId: string | null) => void;
+  onSelectQuery: (queryName: string) => void;
+  queryContext?: QueryEvaluationContext;
+  queryTabs: HomeQueryTabConfig[];
+  result: HomeResultConfig;
+  selectedQuery: HomeQueryTabConfig;
+  summary: HomeSummarySlotConfig[];
+  today: string;
+}) {
+  const activeOption = contextOptions.find((option) => option.id === activeContextRecordId);
+
+  return (
+    <section
+      aria-label={`${context.entity.label} list detail`}
+      className="grid gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)]"
+    >
+      <ContextListDetailSelector
+        context={context}
+        onSelectContext={onSelectContext}
+        options={contextOptions}
+        selectedContextRecordId={activeContextRecordId}
+      />
+
+      <div className="min-w-0 space-y-6">
+        {activeContextRecordId && queryContext ? (
+          <>
+            <section
+              aria-label={`${activeOption?.label ?? context.entity.label} detail`}
+              className="space-y-3 border-b border-slate-200 pb-4"
+            >
+              <h2 className="text-base font-semibold">
+                {activeOption?.label ?? context.entity.label}
+              </h2>
+              <ContextRecordEditor context={context} recordId={activeContextRecordId} />
+            </section>
+
+            {queryTabs.length <= 1 ? null : (
+              <Tabs
+                onValueChange={(value) => {
+                  if (typeof value === "string") {
+                    onSelectQuery(value);
+                  }
+                }}
+                value={selectedQuery.queryName}
+              >
+                <TabsList aria-label={`${entity.label} queries`} variant="line">
+                  {queryTabs.map((queryTab) => (
+                    <HomeQueryTabTrigger
+                      entityName={entityName}
+                      key={queryTab.queryName}
+                      queryContext={queryContext}
+                      queryTab={queryTab}
+                    />
+                  ))}
+                </TabsList>
+              </Tabs>
+            )}
+
+            <CollectionSummary
+              entityName={entityName}
+              queryContext={queryContext}
+              selectedQuery={selectedQuery}
+              summary={summary}
+            />
+
+            <CollectionResult
+              entity={entity}
+              entityName={entityName}
+              query={selectedQuery.query}
+              queryContext={queryContext}
+              result={result}
+            />
+          </>
+        ) : contextOptions.length === 0 ? null : (
+          <p className="text-sm text-slate-600">
+            No {context.entity.label.toLowerCase()} selected.
+          </p>
+        )}
+
+        {actions.length > 0 ? (
+          <HomeActionRow
+            actions={actions}
+            ariaLabel={`${entity.label} actions`}
+            queryContext={queryContext ?? { today }}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ContextListDetailSelector({
+  context,
+  onSelectContext,
+  options,
+  selectedContextRecordId,
+}: {
+  context: HomeContextConfig;
+  onSelectContext?: (recordId: string | null) => void;
+  options: Array<{ id: string; label: string }>;
+  selectedContextRecordId: string | null;
+}) {
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
+  return (
+    <aside className="min-w-0 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-medium text-slate-900">{context.entity.label}</h2>
+        {context.createAction ? (
+          <Button
+            aria-label={`Create ${context.entity.label}`}
+            disabled={!context.createAction.enabled}
+            onClick={() => setCreateDialogOpen(true)}
+            size="icon-sm"
+            type="button"
+            variant="outline"
+          >
+            +
+          </Button>
+        ) : null}
+      </div>
+
+      {options.length === 0 ? (
+        <p className="text-sm text-slate-600">
+          No {context.entity.label.toLowerCase()} records yet.
+        </p>
+      ) : (
+        <ul aria-label={`${context.entity.label} records`} className="space-y-1">
+          {options.map((option) => (
+            <li key={option.id}>
+              <ContextListDetailOptionButton
+                context={context}
+                onSelectContext={onSelectContext}
+                option={option}
+                selected={option.id === selectedContextRecordId}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {context.createAction && createDialogOpen ? (
+        <GeneratedCreateDialog
+          action={context.createAction}
+          onOpenChange={(open) => setCreateDialogOpen(open)}
+          onSuccess={(recordId) => {
+            onSelectContext?.(recordId);
+            setCreateDialogOpen(false);
+          }}
+          open={true}
+        />
+      ) : null}
+    </aside>
+  );
+}
+
+function ContextListDetailOptionButton({
+  context,
+  onSelectContext,
+  option,
+  selected,
+}: {
+  context: HomeContextConfig;
+  onSelectContext?: (recordId: string | null) => void;
+  option: { id: string; label: string };
+  selected: boolean;
+}) {
+  const selectedClassName = selected
+    ? "border-slate-900 bg-slate-50 text-slate-950"
+    : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50";
+
+  return (
+    <button
+      aria-current={selected ? "true" : undefined}
+      className={`flex w-full items-center justify-between gap-2 rounded border px-2 py-2 text-left text-sm transition-colors ${selectedClassName}`}
+      onClick={() => onSelectContext?.(option.id)}
+      type="button"
+    >
+      <span className="truncate">{option.label}</span>
+      {context.relatedCollection ? (
+        <RelatedCollectionCountBadge
+          option={option}
+          relatedCollection={context.relatedCollection}
+        />
+      ) : null}
+    </button>
   );
 }
 

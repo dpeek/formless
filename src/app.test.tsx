@@ -836,6 +836,115 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="$900.00"');
   });
 
+  it("renders list/detail context presentation with selected context fields and rows", () => {
+    const schema = rateCardSchemaWithListDetailContext();
+    const rateModel = requiredCollectionModel(schema, "rateHome");
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-1", "card-2", 900),
+        ],
+        schema,
+      ),
+    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-2",
+      today: "2026-05-01",
+    });
+
+    expect(html).toContain('aria-label="Rate card list detail"');
+    expect(html).toContain('aria-label="Rate card records"');
+    expect(html).not.toContain('data-slot="tabs-list"');
+    expect(html).toContain('aria-current="true"');
+    expect(html).toContain('aria-label="Backup detail"');
+    expect(html).toMatch(/aria-label="Default Rates count"[^>]*>1</);
+    expect(html).toMatch(/aria-label="Backup Rates count"[^>]*>1</);
+    expect(html).toContain('aria-label="Create Rate card"');
+    expect(html).toContain('aria-label="Minimum margin"');
+    expect(html).toContain('aria-label="Medium margin"');
+    expect(html).toContain('aria-label="Maximum margin"');
+    expect(html).toContain('value="0.4"');
+    expect(html).toContain('value="0.5"');
+    expect(html).toContain('value="0.6"');
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('value="$900.00"');
+    expect(html).not.toContain('value="$475.00"');
+  });
+
+  it("changes list/detail result rows when the selected context changes", () => {
+    const schema = rateCardSchemaWithListDetailContext();
+    const rateModel = requiredCollectionModel(schema, "rateHome");
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-1", "card-2", 900),
+        ],
+        schema,
+      ),
+    );
+    const defaultHtml = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-1",
+      today: "2026-05-01",
+    });
+    const backupHtml = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-2",
+      today: "2026-05-01",
+    });
+
+    expect(defaultHtml).toContain('aria-label="Default detail"');
+    expect(defaultHtml).toContain('value="$475.00"');
+    expect(defaultHtml).not.toContain('value="$900.00"');
+    expect(backupHtml).toContain('aria-label="Backup detail"');
+    expect(backupHtml).toContain('value="$900.00"');
+    expect(backupHtml).not.toContain('value="$475.00"');
+  });
+
+  it("keeps list/detail query counts and scoped create actions tied to context", () => {
+    const schema = rateCardSchemaWithListDetailQueryTabsAndScopedRateCreate();
+    const rateModel = requiredCollectionModel(schema, "rateHome");
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+        ],
+        schema,
+      ),
+    );
+    const selectedHtml = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-1",
+      today: "2026-05-01",
+    });
+
+    expect(selectedHtml).toContain('data-slot="tabs-list"');
+    expect(selectedHtml).toMatch(/aria-label="Selected card count"[^>]*>1</);
+    expect(selectedHtml).toMatch(/aria-label="Selected card again count"[^>]*>1</);
+    expect(selectedHtml).toMatch(/<button[^>]*>Create Rate<\/button>/);
+    expect(selectedHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
+
+    applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")], schema));
+    const emptyHtml = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: null,
+      today: "2026-05-01",
+    });
+
+    expect(emptyHtml).toContain("No rate card records yet.");
+    expect(emptyHtml).toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
+    expect(emptyHtml).not.toContain('data-slot="table"');
+  });
+
   it("renders source rate-card margin and aggregate summaries", () => {
     const rateModel = selectRateHomeModel();
 
@@ -2685,6 +2794,97 @@ function rateCardSchemaWithAggregateSummarySlots(): AppSchema {
             format: "percent",
           },
         ],
+      },
+    },
+  };
+}
+
+function rateCardSchemaWithListDetailContext(): AppSchema {
+  const rateHome = rateCardSchema.views.rateHome;
+
+  if (rateHome?.type !== "collection" || !rateHome.context) {
+    throw new Error("Missing rate home context.");
+  }
+
+  return {
+    ...rateCardSchema,
+    views: {
+      ...rateCardSchema.views,
+      rateHome: {
+        ...rateHome,
+        context: {
+          ...rateHome.context,
+          presentation: "listDetail",
+        },
+      },
+    },
+  };
+}
+
+function rateCardSchemaWithListDetailQueryTabsAndScopedRateCreate(): AppSchema {
+  const base = rateCardSchemaWithListDetailContext();
+  const rateHome = base.views.rateHome;
+  const rateCreate = base.views.rateCreate;
+  const selectedCardQuery = base.queries.ratesForSelectedCard;
+
+  if (rateHome?.type !== "collection") {
+    throw new Error("Missing rate home collection.");
+  }
+
+  if (rateCreate?.type !== "create") {
+    throw new Error("Missing rate create view.");
+  }
+
+  if (!selectedCardQuery) {
+    throw new Error("Missing selected-card rate query.");
+  }
+
+  const { cost, costUnit, price, resource } = rateCreate.fields;
+
+  if (!cost || !costUnit || !price || !resource) {
+    throw new Error("Missing rate create fields.");
+  }
+
+  return {
+    ...base,
+    queries: {
+      ...base.queries,
+      ratesForSelectedCardAgain: {
+        ...selectedCardQuery,
+        label: "Selected card again",
+      },
+    },
+    views: {
+      ...base.views,
+      rateHome: {
+        ...rateHome,
+        queries: [
+          ...rateHome.queries,
+          {
+            query: "ratesForSelectedCardAgain",
+            count: { type: "count" },
+          },
+        ],
+        actions: [
+          {
+            type: "create",
+            createView: "rateCreateForCard",
+            label: "Create Rate",
+          },
+        ],
+      },
+      rateCreateForCard: {
+        type: "create",
+        entity: "rate",
+        fields: {
+          resource,
+          cost,
+          costUnit,
+          price,
+        },
+        defaults: {
+          card: { kind: "context", name: "card" },
+        },
       },
     },
   };
