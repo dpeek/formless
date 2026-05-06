@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { buildSitePageTree } from "../site/tree.ts";
 import {
   isValidStoredFieldValue as isValidStoredFieldValueForType,
   shouldValidateExistingFieldValue,
@@ -11,6 +12,7 @@ import type {
   MutationResponse,
   PatchMutation,
   RecordValues,
+  SitePageTreeResponse,
   SyncResponse,
   SyncSocketAttachment,
   SyncSocketServerMessage,
@@ -83,6 +85,24 @@ export class FormlessAuthority extends DurableObject<Env> {
         const { schema, updatedAt } = initializeStorageFromSource(this.ctx.storage, source);
 
         return jsonResponse({ schema, updatedAt });
+      }
+
+      if (request.method === "GET" && isSiteTreePath(route.path)) {
+        if (route.app.key !== "site") {
+          throw new BadRequestError("Site page trees are only available for the site schema.");
+        }
+
+        const slug = parseSiteTreeSlug(route.path);
+        const { schema } = initializeStorageFromSource(this.ctx.storage, source);
+        const projection = buildSitePageTree(schema, getBootstrapRecords(this.ctx.storage), slug);
+
+        if (!projection.tree) {
+          return jsonResponse({ error: "Site page not found." }, 404);
+        }
+
+        const response: SitePageTreeResponse = projection.tree;
+
+        return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/schema") {
@@ -441,6 +461,32 @@ function parseCursor(value: string | null) {
   }
 
   return cursor;
+}
+
+function isSiteTreePath(path: string): boolean {
+  return path === "/tree" || path.startsWith("/tree/");
+}
+
+function parseSiteTreeSlug(path: string): string {
+  if (!path.startsWith("/tree/")) {
+    throw new BadRequestError("Site tree slug must be non-empty.");
+  }
+
+  try {
+    const slug = decodeURIComponent(path.slice("/tree/".length)).trim();
+
+    if (slug === "") {
+      throw new BadRequestError("Site tree slug must be non-empty.");
+    }
+
+    return slug;
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      throw error;
+    }
+
+    throw new BadRequestError("Site tree slug must be valid URL path text.");
+  }
 }
 
 type ValidatedMutation =

@@ -1,61 +1,22 @@
 import { matchesQuery } from "../shared/query.ts";
-import type { FieldValue, StoredRecord } from "../shared/protocol.ts";
+import type {
+  FieldValue,
+  SiteBlockNode,
+  SitePageTreeProjection,
+  SitePlacementNode,
+  SiteTreeWarning,
+  StoredRecord,
+} from "../shared/protocol.ts";
 import type { AppSchema, CollectionQuerySchema } from "../shared/schema.ts";
 
-export type SitePageTreeProjection = {
-  tree: SitePageTree | null;
-  meta: SiteTreeMeta;
-};
-
-export type SitePageTree = {
-  page: SiteBlockNode;
-  meta: SiteTreeMeta;
-};
-
-export type SiteTreeMeta = {
-  slug: string;
-  generatedAt: string;
-  warnings: SiteTreeWarning[];
-};
-
-export type SiteBlockNode = {
-  id: string;
-  type: string;
-  title: string;
-  label?: string;
-  subtitle?: string;
-  body?: string;
-  slug?: string;
-  href?: string;
-  icon?: string;
-  color?: string;
-  templateKey?: string;
-  assetKey?: string;
-  alt?: string;
-  width?: number;
-  height?: number;
-  placements: SitePlacementNode[];
-  query?: {
-    key: string;
-    items: SiteBlockNode[];
-  };
-};
-
-export type SitePlacementNode = {
-  id: string;
-  slot: string;
-  order: number;
-  visible: boolean;
-  variant?: string;
-  label?: string;
-  block: SiteBlockNode;
-};
-
-export type SiteTreeWarning = {
-  code: string;
-  recordId: string;
-  message: string;
-};
+export type {
+  SiteBlockNode,
+  SitePageTree,
+  SitePageTreeProjection,
+  SitePlacementNode,
+  SiteTreeMeta,
+  SiteTreeWarning,
+} from "../shared/protocol.ts";
 
 export type BuildSitePageTreeOptions = {
   generatedAt?: string;

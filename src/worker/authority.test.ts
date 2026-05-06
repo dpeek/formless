@@ -6,6 +6,8 @@ import type {
   MutationResponse,
   SchemaResponse,
   SchemaUpdateResponse,
+  SiteBlockNode,
+  SitePageTreeResponse,
   SyncResponse,
   SyncSocketServerMessage,
 } from "../shared/protocol.ts";
@@ -82,6 +84,73 @@ describe("authority", () => {
     expect(new Set(body.records.map((record) => record.entity))).toEqual(
       new Set(["block", "blockPlacement"]),
     );
+  });
+
+  it("returns a public page tree for a published site page", async () => {
+    useSchemaApp("site");
+
+    const body = await getJson<SitePageTreeResponse>("/api/tree/home");
+    const blockIds = collectSiteTreeBlockIds(body.page);
+    const recentPosts = body.page.placements.find(
+      (placement) => placement.id === "rec_site_place_home_recent_posts",
+    )?.block;
+
+    expect(body.page).toMatchObject({
+      id: "rec_site_content_home",
+      type: "page",
+      title: "Home",
+      slug: "home",
+    });
+    expect(body.meta).toEqual({
+      slug: "home",
+      generatedAt: expect.any(String),
+      warnings: [
+        {
+          code: "cycle",
+          recordId: "rec_site_content_post_shipped_schema",
+          message:
+            'Skipped cyclic query item "rec_site_content_post_shipped_schema" for block "rec_site_block_post_related_posts".',
+        },
+      ],
+    });
+    expect(body.page.placements.map((placement) => placement.id)).toEqual([
+      "rec_site_place_home_hero",
+      "rec_site_place_home_recent_posts",
+      "rec_site_place_home_projects",
+    ]);
+    expect(recentPosts?.query?.items.map((item) => item.id)).toEqual([
+      "rec_site_content_post_shipped_schema",
+    ]);
+    expect(blockIds).not.toContain("rec_site_content_post_draft_notes");
+    expect(body).not.toHaveProperty("schema");
+    expect(body).not.toHaveProperty("records");
+  });
+
+  it("returns 404 for a draft-only site page slug", async () => {
+    useSchemaApp("site");
+    await postMutationForEntity("mutation-site-draft-page", "block", {
+      type: "page",
+      title: "Draft page",
+      slug: "draft-page",
+      status: "draft",
+      featured: false,
+    });
+
+    const response = await harness.fetch(apiPath("/api/tree/draft-page"));
+
+    expect(response.status).toBe(404);
+    expect((await response.json()) as { error: string }).toEqual({
+      error: "Site page not found.",
+    });
+  });
+
+  it("rejects page tree requests for non-site schema keys", async () => {
+    const response = await harness.fetch(apiPath("/api/tree/home"));
+
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: string }).toEqual({
+      error: "Site page trees are only available for the site schema.",
+    });
   });
 
   it("returns source seed changes when sync initializes fresh storage", async () => {
@@ -3334,6 +3403,14 @@ function captureSyncSocketMessages(socket: Awaited<ReturnType<typeof openSyncSoc
 async function expectNoCapturedMessages(capture: ReturnType<typeof captureSyncSocketMessages>) {
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(capture.messages).toEqual([]);
+}
+
+function collectSiteTreeBlockIds(root: SiteBlockNode): string[] {
+  return [
+    root.id,
+    ...root.placements.flatMap((placement) => collectSiteTreeBlockIds(placement.block)),
+    ...(root.query?.items.flatMap((item) => collectSiteTreeBlockIds(item)) ?? []),
+  ];
 }
 
 async function getJson<T>(path: string) {

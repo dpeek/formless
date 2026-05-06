@@ -1,7 +1,7 @@
 # PRD 05: Block tree projection and renderer
 
 Status: in progress
-Current chunk: STR-03 public page tree endpoint
+Current chunk: STR-04 nested source seed shape
 Last updated: 2026-05-06
 
 ## Goal
@@ -378,7 +378,7 @@ The exact slot names can change during implementation. The important rule is tha
 | ------ | ------- | -------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | STR-01 | shipped | PRD 03, REL-04 | `schema/apps/site/*`, `src/client/readiness.ts`, source/view/app tests              | Site source model uses `block` and `blockPlacement`; media is a block.             |
 | STR-02 | shipped | STR-01         | `src/site/tree.ts`, `src/site/tree.test.ts`, site fixtures                          | Flat block records project into a public nested tree with warnings.                |
-| STR-03 | planned | STR-02         | `src/worker/authority.ts`, `src/worker/index.ts`, `src/shared/protocol.ts`, tests   | `GET /api/site/tree/:slug` returns filtered tree data for published pages.         |
+| STR-03 | shipped | STR-02         | `src/worker/authority.ts`, `src/worker/index.ts`, `src/shared/protocol.ts`, tests   | `GET /api/site/tree/:slug` returns filtered tree data for published pages.         |
 | STR-04 | planned | STR-03         | `schema/apps/site/seed-records.json`, source tests                                  | Seeds express Header, Home, nested footer sections, media blocks, and page blocks. |
 | STR-05 | planned | STR-04         | `src/app.tsx`, `src/app/routes/site-page.tsx`, `src/app/site-renderer/*`, app tests | Public site routes render the tree without changing `/site` admin.                 |
 | STR-06 | planned | STR-05         | Browser Use, PRD promote notes                                                      | Browser smoke covers rendered home, nested header/footer, media, and admin.        |
@@ -440,27 +440,27 @@ Evidence:
 
 ### STR-03 public page tree endpoint
 
-Goal: expose the read model without exposing admin bootstrap data.
+Outcome:
 
-Tasks:
+- Shipped 2026-05-06.
+- Added `GET /api/site/tree/:slug`.
+- The endpoint initializes the active site schema and seed records before projecting.
+- The endpoint calls `buildSitePageTree` with active records and active schema.
+- The endpoint returns projected tree data, not bootstrap records or schema.
+- Missing or draft-only page slugs return 404.
+- Non-site tree routes return 400.
+- Site tree response types live in `src/shared/protocol.ts`.
+- Existing sync, mutation, schema, reset, and bootstrap routes are unchanged.
+- Browser Use not run because STR-03 changed API behavior only, not rendered app behavior.
 
-- Add a route for `GET /api/site/tree/:slug`.
-- Initialize site storage from source before projecting.
-- Call the STR-02 tree builder with active records and active schema.
-- Return 404 when no published page matches the slug.
-- Return 400 for unsupported schema keys if the route is accidentally called for non-site apps.
-- Add response protocol types.
-- Add authority/worker tests.
-- Keep existing sync, mutation, schema, and reset routes unchanged.
+Evidence:
 
-Acceptance:
-
-- `GET /api/site/tree/home` returns the Home tree.
-- A draft-only slug returns 404.
-- Returned JSON excludes draft blocks.
-- Existing `/api/site/bootstrap` behavior stays unchanged.
-- `bun run test` passes.
-- `bun run check` passes.
+- Authority route: `src/worker/authority.ts`.
+- Protocol response types: `src/shared/protocol.ts`.
+- Tree builder still lives in `src/site/tree.ts`.
+- Worker harness tests: `src/worker/authority.test.ts`.
+- `bun run test` passed 2026-05-06: 22 files, 396 tests.
+- `bun run check` passed 2026-05-06: no warnings, lint errors, or type errors.
 
 ### STR-04 nested source seed shape
 
@@ -599,6 +599,16 @@ When STR-01 ships, update `doc/current.md`:
 - Block placements use parent block, child block, named slot, order, and visibility.
 - Site admin route still works at `/site`.
 
+When STR-03 ships, update `doc/current.md`:
+
+- Site public tree endpoint exists at `/api/site/tree/:slug`.
+- Endpoint source: `src/worker/authority.ts`.
+- Tree projection source: `src/site/tree.ts`.
+- Tree response types: `src/shared/protocol.ts`.
+- Endpoint returns projected public tree data and does not include bootstrap schema or raw records.
+- Draft-only page slugs return 404.
+- Non-site tree routes return 400.
+
 When this PRD ships, update `doc/current.md`:
 
 - Site public tree projection exists.
@@ -631,4 +641,8 @@ When this PRD ships, update `doc/roadmap.md` only if public site rendering becom
 - STR-02 added no HTTP route, protocol response, source seed, generated UI, or renderer changes.
 - STR-02 kept stored records flat and composes the nested tree in `src/site/tree.ts`.
 - STR-02 tests fixture the nested header/footer shell locally because STR-04 owns the source seed shape.
+- STR-03 shipped 2026-05-06.
+- STR-03 added the public tree endpoint and shared response types.
+- STR-03 kept stored records flat and composes the public tree at read time.
+- STR-03 did not change source seeds, generated admin UI, sync, mutations, schema edits, or reset behavior.
 - No blockers.
