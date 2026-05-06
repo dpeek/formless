@@ -11,10 +11,7 @@ type LoopOptions = {
   dangerous: boolean;
   dryRun: boolean;
   maxIterations: number | null;
-  model: string;
   prdPath: string;
-  reasoningEffort: string;
-  serviceTier: string;
   worktree: boolean;
   worktreeDir: string | null;
 };
@@ -35,9 +32,6 @@ function usage(): string {
     "",
     "Options:",
     "  --max <n>              Maximum Codex iterations. Defaults to open chunks + 1.",
-    "  --model <slug>         Codex model. Default: gpt-5.5.",
-    "  --reasoning <effort>   Reasoning effort. Default: xhigh.",
-    "  --service-tier <tier>  Codex service tier. Default: fast.",
     "  --worktree            Create or reuse a sibling git worktree for the PRD loop.",
     "  --worktree-dir <dir>  Worktree directory. Default: ../formless-<prd-slug>.",
     "  --branch <name>       Worktree branch. Default: codex/<prd-slug>.",
@@ -48,7 +42,7 @@ function usage(): string {
     "  -h, --help             Show this help.",
     "",
     "Example:",
-    "  bun ralph-loop ./prd/08-entity-action-module.md --worktree --max 6",
+    "  bun ralph ./prd/08-entity-action-module.md --worktree --max 6",
   ].join("\n");
 }
 
@@ -60,10 +54,7 @@ function parseArgs(args: string[]): LoopOptions | "help" {
     dangerous: false,
     dryRun: false,
     maxIterations: null,
-    model: "gpt-5.5",
     prdPath: "",
-    reasoningEffort: "xhigh",
-    serviceTier: "fast",
     worktree: false,
     worktreeDir: null,
   };
@@ -110,24 +101,6 @@ function parseArgs(args: string[]): LoopOptions | "help" {
 
     if (arg === "--max") {
       options.maxIterations = parsePositiveInteger(nextValue(args, index, arg), arg);
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--model") {
-      options.model = nextValue(args, index, arg);
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--reasoning") {
-      options.reasoningEffort = nextValue(args, index, arg);
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--service-tier") {
-      options.serviceTier = nextValue(args, index, arg);
       index += 1;
       continue;
     }
@@ -457,23 +430,7 @@ function codexArgs(
     ? ["--dangerously-bypass-approvals-and-sandbox"]
     : ["--full-auto"];
 
-  return [
-    "exec",
-    "-C",
-    workspaceRoot,
-    "-m",
-    options.model,
-    "-c",
-    `model_reasoning_effort="${options.reasoningEffort}"`,
-    "-c",
-    `service_tier="${options.serviceTier}"`,
-    "--color",
-    "never",
-    "-o",
-    outputPath,
-    ...modeArgs,
-    prompt,
-  ];
+  return ["exec", "-C", workspaceRoot, "--color", "never", "-o", outputPath, ...modeArgs, prompt];
 }
 
 async function runWithTee(
@@ -567,7 +524,7 @@ async function runLoop(options: LoopOptions): Promise<number> {
     [
       `Ralph loop PRD ${prdDisplayPath}`,
       `Workspace ${workspace.rootDir}`,
-      `Model ${options.model}, reasoning ${options.reasoningEffort}, service tier ${options.serviceTier}`,
+      "Codex agent config from config.toml",
       `Max iterations ${maxIterations}`,
       `Logs ${displayPath(runDir)}`,
       "",

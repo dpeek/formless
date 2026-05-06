@@ -1,0 +1,7 @@
+model = "gpt-5.5"
+model_reasoning_effort = "xhigh"
+personality = "pragmatic"
+service_tier = "fast"
+[features]
+fast_mode = true
+personality = true
