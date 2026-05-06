@@ -1,7 +1,7 @@
 # PRD 10: Declarative screen runtime
 
-Status: active
-Current chunk: SCR-08 closeout
+Status: complete
+Current chunk: complete
 Last updated: 2026-05-06
 
 ## Goal
@@ -253,7 +253,7 @@ Notes:
 | SCR-05 | shipped | SCR-04     | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json`, tests              | Task and rate source schemas define explicit screens; reset/bootstrap/schema editor flows keep working.                   |
 | SCR-06 | shipped | SCR-05     | `src/app/generated/screen.tsx`, `src/app/routes/home.tsx`, tests                     | Stack layout renders multiple collection sections with independent query and context state.                               |
 | SCR-07 | shipped | SCR-06     | `src/client/views.ts`, `src/app/routes/home.tsx`, source schemas                     | Primary app workspace selection uses screen navigation when screens exist; collection navigation remains legacy fallback. |
-| SCR-08 | draft   | SCR-07     | tests, `bun browser` smoke, `prd/10-declarative-screen-runtime.md`                   | Tasks and Rates pass app smoke; PRD status, decisions, blockers, and promote notes are current.                           |
+| SCR-08 | shipped | SCR-07     | tests, `bun browser` smoke, `prd/10-declarative-screen-runtime.md`                   | Tasks and Rates pass app smoke; PRD status, decisions, blockers, and promote notes are current.                           |
 
 ## Chunk details
 
@@ -443,7 +443,7 @@ Recommended order:
 - SCR-05: `doc/current.md` should note Tasks and Rates source schemas define screens.
 - SCR-06: `doc/current.md` should note workspace screens support stack layout over collection sections.
 - SCR-07: `doc/current.md` should note screen navigation owns primary route workspace selection when `screens` exists.
-- SCR-08: `doc/roadmap.md` should mention screen schema only if it remains first-release scope after ship.
+- SCR-08: docs/steward pass should promote shipped screen runtime facts into `doc/current.md` and keep `doc/roadmap.md` aligned with first-release screen scope.
 
 ## PRD status notes
 
@@ -500,4 +500,14 @@ Recommended order:
 - SCR-07 evidence: `./tmp/check.txt` shows formatting, lint, and type checks pass.
 - SCR-07 smoke: `bun browser` covered `/tasks` and `/rates` through `http://127.0.0.1:4582`.
 - SCR-07 promote: `doc/current.md` should note screen navigation owns primary route workspace selection when `screens` exists.
+- SCR-08 shipped 2026-05-06.
+- SCR-08 evidence: `./tmp/agent-dev.json` shows dev ready, tests pass, and checks pass after `bun start`; this repo loop does not generate `./tmp/state.txt`.
+- SCR-08 evidence: `./tmp/test.txt` shows 22 test files and 421 tests passed.
+- SCR-08 evidence: `./tmp/check.txt` shows formatting, lint, and type checks pass.
+- SCR-08 smoke: `bun browser` covered `/tasks` and `/rates` through `http://127.0.0.1:4369`.
+- SCR-08 smoke: `/tasks` rendered the Tasks screen, query tabs, seeded task records, and task actions.
+- SCR-08 smoke: `/rates` rendered the Rates screen, context tabs, rate table rows, and rate actions.
+- SCR-08 note: no runtime code, source schema, storage, sync, authority, mutation, action, or protocol files changed.
+- SCR-08 promote: docs/steward pass should promote shipped screen runtime facts into `doc/current.md` and keep `doc/roadmap.md` aligned with first-release screen scope.
+- PRD complete 2026-05-06.
 - No blockers.
