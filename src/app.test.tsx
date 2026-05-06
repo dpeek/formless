@@ -19,10 +19,12 @@ import {
 } from "./client/store.ts";
 import {
   createHomeRouteSelectionState,
-  selectHomeRouteContextRecordId,
-  withHomeRouteSelectedContextRecordId,
-  withHomeRouteSelectedQueryName,
-  withHomeRouteSelectedViewName,
+  homeRouteSectionSelectionKey,
+  selectHomeRouteSectionContextRecordId,
+  selectHomeRouteSectionQueryName,
+  withHomeRouteSelectedScreenName,
+  withHomeRouteSelectedSectionContextRecordId,
+  withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
 import { buildSitePageTree } from "./site/tree.ts";
 import {
@@ -110,6 +112,23 @@ function selectRateHomeModel() {
   }
 
   return model;
+}
+
+function taskSchemaWithScreens(): AppSchema {
+  return {
+    ...appSchema,
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+        },
+      },
+    },
+  };
 }
 
 describe("App smoke routes", () => {
@@ -314,40 +333,53 @@ describe("public site renderer", () => {
 
 describe("generated collection home", () => {
   it("characterizes home route query state as schema-key local", () => {
-    const currentRouteState = withHomeRouteSelectedContextRecordId(
-      withHomeRouteSelectedQueryName(
-        withHomeRouteSelectedViewName(createHomeRouteSelectionState(), "taskHome"),
+    const currentRouteState = withHomeRouteSelectedSectionContextRecordId(
+      withHomeRouteSelectedSectionQueryName(
+        withHomeRouteSelectedScreenName(createHomeRouteSelectionState(), "taskHome"),
+        "taskHome",
+        "tasks",
         "taskCompleted",
       ),
       "taskHome",
+      "tasks",
       "record-1",
     );
     const nextRouteState = createHomeRouteSelectionState();
+    const tasksSectionKey = homeRouteSectionSelectionKey("taskHome", "tasks");
 
     expect(currentRouteState).toEqual({
-      selectedViewName: "taskHome",
-      selectedQueryName: "taskCompleted",
-      selectedContextIdsByView: {
-        taskHome: "record-1",
+      selectedScreenName: "taskHome",
+      selectedQueryNamesBySection: {
+        [tasksSectionKey]: "taskCompleted",
+      },
+      selectedContextIdsBySection: {
+        [tasksSectionKey]: "record-1",
       },
     });
     expect(nextRouteState).toEqual({
-      selectedViewName: null,
-      selectedQueryName: null,
-      selectedContextIdsByView: {},
+      selectedScreenName: null,
+      selectedQueryNamesBySection: {},
+      selectedContextIdsBySection: {},
     });
   });
 
-  it("characterizes context state as collection-view local", () => {
-    const state = withHomeRouteSelectedContextRecordId(
-      withHomeRouteSelectedContextRecordId(createHomeRouteSelectionState(), "rateHome", "card-1"),
-      "cardHome",
+  it("characterizes context state as screen-section local", () => {
+    const state = withHomeRouteSelectedSectionContextRecordId(
+      withHomeRouteSelectedSectionContextRecordId(
+        createHomeRouteSelectionState(),
+        "rateHome",
+        "rates",
+        "card-1",
+      ),
+      "rateSetup",
+      "rates",
       "card-2",
     );
 
-    expect(selectHomeRouteContextRecordId(state, "rateHome")).toBe("card-1");
-    expect(selectHomeRouteContextRecordId(state, "cardHome")).toBe("card-2");
-    expect(selectHomeRouteContextRecordId(state, "resourceHome")).toBeNull();
+    expect(selectHomeRouteSectionContextRecordId(state, "rateHome", "rates")).toBe("card-1");
+    expect(selectHomeRouteSectionContextRecordId(state, "rateSetup", "rates")).toBe("card-2");
+    expect(selectHomeRouteSectionContextRecordId(state, "rateSetup", "resources")).toBeNull();
+    expect(selectHomeRouteSectionQueryName(state, "rateHome", "rates")).toBeNull();
   });
 
   it("renders Tasks as the collection title with query tabs and actions", () => {
@@ -364,6 +396,23 @@ describe("generated collection home", () => {
     expect(html).toContain("Create Task");
     expect(html).toContain("Clear completed");
     expect(html).not.toContain('aria-label="Collection summary"');
+  });
+
+  it("renders an explicit one-section task screen with the existing home layout", () => {
+    applyBootstrapResponse(bootstrap([], taskSchemaWithScreens()));
+    const html = renderRoute("/tasks");
+
+    expect(html).toContain("<h1");
+    expect(html).toContain("Tasks");
+    expect(html).toContain("All");
+    expect(html).toContain("Active");
+    expect(html).toContain("Completed");
+    expect(html).toContain("Overdue");
+    expect(html).toContain('aria-label="Task actions"');
+    expect(html).toContain("Create Task");
+    expect(html).toContain("Clear completed");
+    expect(html).not.toContain('aria-label="Screens"');
+    expect(html).not.toContain('aria-label="Collections"');
   });
 
   it("labels generated action rows from the active entity", () => {

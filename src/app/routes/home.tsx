@@ -9,11 +9,11 @@ import {
 } from "../../client/store.ts";
 import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
 import { bootstrapClient, startPushSync } from "../../client/sync.ts";
-import { selectPrimaryCollectionModels } from "../../client/views.ts";
+import { selectPrimaryScreenModels } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
-import { HomeCollection } from "../generated/collection.tsx";
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
+import { HomeScreen } from "../generated/screen.tsx";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
 export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
@@ -21,17 +21,14 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   const activeSchema = useSchema();
   const schema = activeSchemaKey === null || activeSchemaKey === schemaKey ? activeSchema : null;
   const app = getSchemaAppDefinition(schemaKey);
-  const collectionModels = useMemo(
-    () => (schema ? selectPrimaryCollectionModels(schema) : []),
+  const screenModels = useMemo(
+    () => (schema ? selectPrimaryScreenModels(schema) : []),
     [schema],
   );
   const [selectionState, setSelectionState] = useState(createHomeRouteSelectionState);
-  const selectedViewName = selectionState.selectedViewName;
-  const selectedQueryName = selectionState.selectedQueryName;
-  const homeModel =
-    collectionModels.find((model) => model.viewName === selectedViewName) ?? collectionModels[0];
-  const homeCollection = homeModel?.collection;
-  const queryTabs = homeCollection?.queries.tabs ?? [];
+  const selectedScreenName = selectionState.selectedScreenName;
+  const homeScreen =
+    screenModels.find((model) => model.screenName === selectedScreenName) ?? screenModels[0];
   const today = useTodayDateString();
 
   useEffect(() => {
@@ -79,25 +76,15 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   }, [app.label, schemaKey]);
 
   useEffect(() => {
-    const selectedViewExists = collectionModels.some(
-      (model) => model.viewName === selectedViewName,
+    const selectedScreenExists = screenModels.some(
+      (model) => model.screenName === selectedScreenName,
     );
-    const defaultViewName = collectionModels[0]?.viewName ?? null;
+    const defaultScreenName = screenModels[0]?.screenName ?? null;
 
-    if (!selectedViewExists && selectedViewName !== defaultViewName) {
-      setSelectionState((current) => withHomeRouteSelectedViewName(current, defaultViewName));
+    if (!selectedScreenExists && selectedScreenName !== defaultScreenName) {
+      setSelectionState((current) => withHomeRouteSelectedScreenName(current, defaultScreenName));
     }
-  }, [collectionModels, selectedViewName]);
-
-  useEffect(() => {
-    const selectedQueryExists = queryTabs.some((tab) => tab.queryName === selectedQueryName);
-    const defaultQueryName =
-      homeCollection?.queries.defaultQueryName ?? queryTabs[0]?.queryName ?? null;
-
-    if (!selectedQueryExists && selectedQueryName !== defaultQueryName) {
-      setSelectionState((current) => withHomeRouteSelectedQueryName(current, defaultQueryName));
-    }
-  }, [homeCollection?.queries.defaultQueryName, queryTabs, selectedQueryName]);
+  }, [screenModels, selectedScreenName]);
 
   if (!schema) {
     return (
@@ -111,7 +98,7 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
     );
   }
 
-  if (!homeModel) {
+  if (!homeScreen) {
     return (
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
@@ -121,44 +108,25 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
     );
   }
 
-  const { entity } = homeModel.collection;
-  const selectedQuery =
-    queryTabs.find((tab) => tab.queryName === selectedQueryName) ??
-    homeModel.collection.queries.defaultTab;
-  const selectedContextRecordId = selectHomeRouteContextRecordId(
-    selectionState,
-    homeModel.viewName,
-  );
-
-  if (queryTabs.length === 0) {
-    return (
-      <section className="mx-auto max-w-3xl space-y-4">
-        <h1 className="text-2xl font-semibold">{homeModel.label}</h1>
-        <p>No queries are defined for {entity.label}.</p>
-        <DeveloperStatusLine schemaVersion={schema.version} />
-      </section>
-    );
-  }
-
   return (
     <section className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">{homeModel.label}</h1>
+        <h1 className="text-2xl font-semibold">{homeScreen.label}</h1>
         <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
 
-      {collectionModels.length <= 1 ? null : (
+      {screenModels.length <= 1 ? null : (
         <Tabs
           onValueChange={(value) => {
             if (typeof value === "string") {
-              setSelectionState((current) => withHomeRouteSelectedViewName(current, value));
+              setSelectionState((current) => withHomeRouteSelectedScreenName(current, value));
             }
           }}
-          value={homeModel.viewName}
+          value={homeScreen.screenName}
         >
-          <TabsList aria-label="Collections" variant="line">
-            {collectionModels.map((model) => (
-              <TabsTrigger key={model.viewName} value={model.viewName}>
+          <TabsList aria-label={schema.screens ? "Screens" : "Collections"} variant="line">
+            {screenModels.map((model) => (
+              <TabsTrigger key={model.screenName} value={model.screenName}>
                 {model.label}
               </TabsTrigger>
             ))}
@@ -167,18 +135,40 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
       )}
 
       <SchemaAppProvider schemaKey={schemaKey}>
-        <HomeCollection
-          collection={homeModel.collection}
-          onSelectContext={(recordId) =>
+        <HomeScreen
+          getSectionSelection={(section) => ({
+            selectedContextRecordId: selectHomeRouteSectionContextRecordId(
+              selectionState,
+              homeScreen.screenName,
+              section.id,
+            ),
+            selectedQueryName: selectHomeRouteSectionQueryName(
+              selectionState,
+              homeScreen.screenName,
+              section.id,
+            ),
+          })}
+          onSelectContext={(section, recordId) =>
             setSelectionState((current) =>
-              withHomeRouteSelectedContextRecordId(current, homeModel.viewName, recordId),
+              withHomeRouteSelectedSectionContextRecordId(
+                current,
+                homeScreen.screenName,
+                section.id,
+                recordId,
+              ),
             )
           }
-          onSelectQuery={(queryName) =>
-            setSelectionState((current) => withHomeRouteSelectedQueryName(current, queryName))
+          onSelectQuery={(section, queryName) =>
+            setSelectionState((current) =>
+              withHomeRouteSelectedSectionQueryName(
+                current,
+                homeScreen.screenName,
+                section.id,
+                queryName,
+              ),
+            )
           }
-          selectedContextRecordId={selectedContextRecordId}
-          selectedQuery={selectedQuery}
+          screen={homeScreen}
           today={today}
         />
       </SchemaAppProvider>
@@ -187,56 +177,88 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
 }
 
 export type HomeRouteSelectionState = {
-  selectedViewName: string | null;
-  selectedQueryName: string | null;
-  selectedContextIdsByView: Record<string, string | null>;
+  selectedScreenName: string | null;
+  selectedQueryNamesBySection: Record<string, string | null>;
+  selectedContextIdsBySection: Record<string, string | null>;
 };
 
 export function createHomeRouteSelectionState(): HomeRouteSelectionState {
   return {
-    selectedViewName: null,
-    selectedQueryName: null,
-    selectedContextIdsByView: {},
+    selectedScreenName: null,
+    selectedQueryNamesBySection: {},
+    selectedContextIdsBySection: {},
   };
 }
 
-export function withHomeRouteSelectedViewName(
+export function withHomeRouteSelectedScreenName(
   current: HomeRouteSelectionState,
-  selectedViewName: string | null,
+  selectedScreenName: string | null,
 ): HomeRouteSelectionState {
-  return current.selectedViewName === selectedViewName ? current : { ...current, selectedViewName };
+  return current.selectedScreenName === selectedScreenName
+    ? current
+    : { ...current, selectedScreenName };
 }
 
-export function withHomeRouteSelectedQueryName(
+export function withHomeRouteSelectedSectionQueryName(
   current: HomeRouteSelectionState,
+  screenName: string,
+  sectionId: string,
   selectedQueryName: string | null,
 ): HomeRouteSelectionState {
-  return current.selectedQueryName === selectedQueryName
-    ? current
-    : { ...current, selectedQueryName };
-}
+  const sectionKey = homeRouteSectionSelectionKey(screenName, sectionId);
 
-export function withHomeRouteSelectedContextRecordId(
-  current: HomeRouteSelectionState,
-  viewName: string,
-  recordId: string | null,
-): HomeRouteSelectionState {
-  return current.selectedContextIdsByView[viewName] === recordId
+  return current.selectedQueryNamesBySection[sectionKey] === selectedQueryName
     ? current
     : {
         ...current,
-        selectedContextIdsByView: {
-          ...current.selectedContextIdsByView,
-          [viewName]: recordId,
+        selectedQueryNamesBySection: {
+          ...current.selectedQueryNamesBySection,
+          [sectionKey]: selectedQueryName,
         },
       };
 }
 
-export function selectHomeRouteContextRecordId(
+export function withHomeRouteSelectedSectionContextRecordId(
   current: HomeRouteSelectionState,
-  viewName: string,
+  screenName: string,
+  sectionId: string,
+  recordId: string | null,
+): HomeRouteSelectionState {
+  const sectionKey = homeRouteSectionSelectionKey(screenName, sectionId);
+
+  return current.selectedContextIdsBySection[sectionKey] === recordId
+    ? current
+    : {
+        ...current,
+        selectedContextIdsBySection: {
+          ...current.selectedContextIdsBySection,
+          [sectionKey]: recordId,
+        },
+      };
+}
+
+export function selectHomeRouteSectionQueryName(
+  current: HomeRouteSelectionState,
+  screenName: string,
+  sectionId: string,
 ): string | null {
-  return current.selectedContextIdsByView[viewName] ?? null;
+  const sectionKey = homeRouteSectionSelectionKey(screenName, sectionId);
+
+  return current.selectedQueryNamesBySection[sectionKey] ?? null;
+}
+
+export function selectHomeRouteSectionContextRecordId(
+  current: HomeRouteSelectionState,
+  screenName: string,
+  sectionId: string,
+): string | null {
+  const sectionKey = homeRouteSectionSelectionKey(screenName, sectionId);
+
+  return current.selectedContextIdsBySection[sectionKey] ?? null;
+}
+
+export function homeRouteSectionSelectionKey(screenName: string, sectionId: string): string {
+  return JSON.stringify([screenName, sectionId]);
 }
 
 function SchemaLoadingMessage({ appLabel }: { appLabel: string }) {
