@@ -238,6 +238,21 @@ describe("MarkdownEditor", () => {
     expect(markup).not.toContain('data-web-markdown-source="textarea"');
   });
 
+  it("can render an accessible read-only editor surface", () => {
+    const markup = renderToStaticMarkup(
+      <MarkdownEditor
+        aria-label="Notes"
+        onChange={() => undefined}
+        readOnly
+        value="Read-only notes"
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Notes"');
+    expect(markup).toContain('aria-readonly="true"');
+    expect(markup).toContain('contentEditable="false"');
+  });
+
   it("can initialize the editor with headings constrained to h2+", () => {
     const markup = renderToStaticMarkup(
       <MarkdownEditor

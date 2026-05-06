@@ -14,6 +14,7 @@ import {
 import { Field, FieldSet } from "@formless/ui/field";
 import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
+import { MarkdownEditor } from "@formless/ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import { Textarea } from "@formless/ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
@@ -239,6 +240,19 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
     );
   }
 
+  if (adapter.kind === "text" && adapter.editor === "markdown") {
+    return (
+      <Field>
+        <Label>{label}</Label>
+        <CreateMarkdownField
+          defaultValue={adapter.createDefaultValue}
+          fieldName={fieldName}
+          label={label}
+        />
+      </Field>
+    );
+  }
+
   if (adapter.control.kind === "input" && adapter.control.inputType === "number") {
     return (
       <Field>
@@ -310,6 +324,46 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
         type={adapter.control.kind === "input" ? adapter.control.inputType : "text"}
       />
     </Field>
+  );
+}
+
+function CreateMarkdownField({
+  defaultValue,
+  fieldName,
+  label,
+}: {
+  defaultValue: string | undefined;
+  fieldName: string;
+  label: string;
+}) {
+  const resetValue = defaultValue ?? "";
+  const [value, setValue] = useState(resetValue);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const form = hiddenInputRef.current?.form;
+
+    if (!form) {
+      return;
+    }
+
+    const handleReset = () => setValue(resetValue);
+    form.addEventListener("reset", handleReset);
+
+    return () => form.removeEventListener("reset", handleReset);
+  }, [resetValue]);
+
+  return (
+    <>
+      <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
+      <MarkdownEditor
+        aria-label={label}
+        className="min-h-40 rounded border border-slate-300 bg-white px-3 py-2 text-sm"
+        onChange={setValue}
+        placeholder={label}
+        value={value}
+      />
+    </>
   );
 }
 

@@ -5,6 +5,7 @@ import { DateInput } from "@formless/ui/date";
 import { Field, FieldError } from "@formless/ui/field";
 import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
+import { MarkdownEditor } from "@formless/ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import { Textarea } from "@formless/ui/textarea";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
@@ -178,7 +179,9 @@ export function RecordFieldEditor({
   }
 
   const control = adapter.control;
-  const isMultilineTextEditor = control.kind === "textarea";
+  const isMarkdownEditor = adapter.kind === "text" && adapter.editor === "markdown";
+  const isRichMarkdownEditor = isMarkdownEditor && density !== "compact";
+  const isMultilineTextEditor = control.kind === "textarea" && !isRichMarkdownEditor;
   const isColorEditor = adapter.kind === "text" && adapter.editor === "color";
   const isDateEditor = control.kind === "input" && control.inputType === "date";
 
@@ -202,6 +205,25 @@ export function RecordFieldEditor({
     }
   }
 
+  function handleMarkdownBlur(event: React.FocusEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget;
+
+    if (nextTarget && event.currentTarget.contains(nextTarget as Node)) {
+      return;
+    }
+
+    if (commitPolicy === "field-commit") {
+      void commit(inputValueToFieldValue(field, draft));
+    }
+  }
+
+  function handleMarkdownKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setDraft(fieldValueToInputValue(field, recordValue));
+    }
+  }
+
   return (
     <div
       className={
@@ -215,7 +237,19 @@ export function RecordFieldEditor({
     >
       <Field>
         <Label className={labelClass}>{label}</Label>
-        {isMultilineTextEditor ? (
+        {isRichMarkdownEditor ? (
+          <MarkdownEditor
+            aria-invalid={error !== null}
+            aria-label={label}
+            className="min-h-40 rounded border border-slate-300 bg-white px-3 py-2 text-sm"
+            onBlur={handleMarkdownBlur}
+            onChange={setDraft}
+            onKeyDown={handleMarkdownKeyDown}
+            placeholder={label}
+            readOnly={!canPatch || isPending}
+            value={draft}
+          />
+        ) : isMultilineTextEditor ? (
           <Textarea
             aria-label={label}
             className={

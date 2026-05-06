@@ -938,7 +938,7 @@ describe("generated forms and records", () => {
     expect(html).toContain("Stream");
   });
 
-  it("renders markdown create controls as multiline textareas", () => {
+  it("renders markdown create controls as rich editors with hidden string inputs", () => {
     const task = taskEntityWithMarkdownBody();
     const action: Extract<HomeActionConfig, { type: "create" }> = {
       type: "create",
@@ -959,12 +959,13 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
 
-    expect(html).toContain("<textarea");
-    expect(html).toContain('name="body"');
+    expect(html).toMatch(inputWithNameAndType("body", "hidden"));
+    expect(html).toContain('data-web-markdown-editor="plate"');
+    expect(html).toContain('aria-label="Body"');
     expect(html).toContain("Body");
   });
 
-  it("renders markdown inline editors as multiline textareas", () => {
+  it("renders markdown inline editors as rich editors outside compact contexts", () => {
     const task = taskEntityWithMarkdownBody();
     const recordFields: RecordFieldConfig[] = [
       {
@@ -985,10 +986,43 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("<textarea");
+    expect(html).toContain('data-web-markdown-editor="plate"');
     expect(html).toContain('aria-label="Body"');
-    expect(html).toContain("## Draft");
+    expect(html).toContain("<h2");
+    expect(html).toContain("Draft");
     expect(html).not.toContain('type="text"');
+  });
+
+  it("renders read-only markdown table columns with the shared renderer", () => {
+    const task = taskEntityWithMarkdownBody();
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:body",
+        fieldName: "body",
+        field: task.fields.body,
+        editor: "markdown",
+        commit: "field-commit",
+        label: "Body",
+        display: "readOnly",
+        format: "plain",
+      },
+    ];
+
+    applyBootstrapResponse(bootstrap([markdownRecord("## Draft\n\nLong body")]));
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain('data-web-markdown-renderer="plate"');
+    expect(html).toContain("<h2");
+    expect(html).toContain("Draft");
+    expect(html).not.toContain("<textarea");
   });
 
   it("renders enum inline editors with labels and raw unknown values", () => {
@@ -1280,7 +1314,8 @@ describe("generated forms and records", () => {
 
     expect(html).toMatch(inputWithNameAndType("title", "text"));
     expect(html).toMatch(textareaWithName("summary"));
-    expect(html).toMatch(textareaWithName("body"));
+    expect(html).toMatch(inputWithNameAndType("body", "hidden"));
+    expect(html).toContain('data-web-markdown-editor="plate"');
     expect(html).toMatch(inputWithNameAndType("color", "hidden"));
     expect(html).toContain('aria-label="Choose Color"');
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
@@ -1313,8 +1348,9 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
     expect(html).toContain('value="Plain title"');
     expect(html).toMatch(textareaWithAriaLabel("Summary"));
-    expect(html).toMatch(textareaWithAriaLabel("Body"));
-    expect(html).toContain("# Heading");
+    expect(html).toContain('data-web-markdown-editor="plate"');
+    expect(html).toContain('aria-label="Body"');
+    expect(html).toContain("Heading");
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
     expect(html).toContain('aria-label="Choose Color"');
     expect(html).toContain('value="#336699"');
@@ -1597,8 +1633,8 @@ describe("generated forms and records", () => {
 
     expect(createHtml).toContain('name="type"');
     expect(createHtml).toContain("Post");
-    expect(createHtml).toContain('name="body"');
-    expect(createHtml).toContain("<textarea");
+    expect(createHtml).toMatch(inputWithNameAndType("body", "hidden"));
+    expect(createHtml).toContain('data-web-markdown-editor="plate"');
     expect(createHtml).toContain('name="featured"');
     expect(createHtml).toContain('type="checkbox"');
     expect(createHtml).toContain('name="publishedAt"');

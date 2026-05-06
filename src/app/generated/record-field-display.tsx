@@ -1,4 +1,5 @@
 import { isHexColor, toPickerHexColor } from "@formless/ui/color-utils";
+import { MarkdownRenderer } from "@formless/ui/markdown";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
 import type {
   FieldTableColumnConfig,
@@ -31,9 +32,41 @@ export function RecordFieldDisplay({
     return <RecordColorDisplay column={column} recordValue={recordValue} />;
   }
 
+  if (isMarkdownDisplayColumn(column)) {
+    return <RecordMarkdownDisplay column={column} recordValue={recordValue} />;
+  }
+
   return (
     <>
       <span>{formatFieldDisplayValue(column, recordValue)}</span>
+      {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+    </>
+  );
+}
+
+function RecordMarkdownDisplay({
+  column,
+  recordValue,
+}: {
+  column: TableColumnConfig;
+  recordValue: FieldValue | undefined;
+}) {
+  if (typeof recordValue !== "string" || recordValue === "") {
+    return (
+      <>
+        <span>{formatFieldDisplayValue(column, recordValue)}</span>
+        {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <MarkdownRenderer
+        className="min-w-0 flex-1 text-xs [&>:first-child]:mt-0 [&>:last-child]:mb-0"
+        content={recordValue}
+        minHeadingLevel={2}
+      />
       {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
     </>
   );
@@ -80,6 +113,14 @@ function ColorDisplaySwatch({ color, label }: { color: string; label: string }) 
 function isColorDisplayColumn(column: TableColumnConfig) {
   return (
     column.field.type === "text" && (column.editor === "color" || column.field.format === "color")
+  );
+}
+
+function isMarkdownDisplayColumn(column: TableColumnConfig) {
+  return (
+    column.display === "readOnly" &&
+    column.field.type === "text" &&
+    (column.editor === "markdown" || column.field.format === "markdown")
   );
 }
 

@@ -23,17 +23,25 @@ export type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
 
 export function MarkdownEditor({
   "aria-invalid": ariaInvalid,
+  "aria-label": ariaLabel,
   className,
   minHeadingLevel,
   onChange,
+  onBlur,
+  onKeyDown,
   placeholder,
+  readOnly,
   value,
 }: {
   "aria-invalid"?: boolean;
+  "aria-label"?: string;
   className?: string;
   minHeadingLevel?: MarkdownHeadingLevel;
   onChange: (nextMarkdown: string) => void;
+  onBlur?: React.FocusEventHandler<HTMLDivElement>;
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   placeholder?: string;
+  readOnly?: boolean;
   value: string;
 }) {
   const onChangeRef = useRef(onChange);
@@ -83,6 +91,7 @@ export function MarkdownEditor({
   return (
     <Plate
       editor={editor}
+      readOnly={readOnly}
       onValueChange={({ value }) => {
         if (suppressChangeRef.current) {
           return;
@@ -104,12 +113,16 @@ export function MarkdownEditor({
       }}
     >
       <PlateContent
+        aria-label={ariaLabel}
         aria-invalid={ariaInvalid || undefined}
+        aria-readonly={readOnly || undefined}
         className={cn(
           "graph-markdown graph-markdown-editor prose max-w-none dark:prose-invert",
           className,
         )}
         data-web-markdown-editor="plate"
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
       />
       <MarkdownFloatingToolbar />

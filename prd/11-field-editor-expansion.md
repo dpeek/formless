@@ -1,7 +1,7 @@
 # PRD 11: Field editor expansion
 
 Status: active
-Current chunk: FE-04 markdown editor
+Current chunk: FE-05 autosizing text editors
 Last updated: 2026-05-06
 
 ## Goal
@@ -212,18 +212,19 @@ Patch scalar fields together through generic mutation paths.
 
 ## Decisions
 
-| ID    | Decision                                                       | Reason                                                                                  | Evidence                                                               |
-| ----- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| FE-D1 | Improve editors before adding stored field types.              | Current schemas already declare rich hints that render too plainly.                     | `src/shared/schema-types.ts`, `schema/apps/site/`                      |
-| FE-D2 | Keep stored records flat.                                      | Flat records are a core runtime bet and match rate-card join records.                   | `doc/overview.md`, `doc/current.md`                                    |
-| FE-D3 | Keep text formats as string-backed editor hints.               | PRD 03 and PRD 07 already chose this boundary.                                          | `prd/03-personal-site-authoring.md`, `prd/07-field-behavior-module.md` |
-| FE-D4 | Move reusable input chrome into `lib/ui`.                      | Generated UI should consume shared primitives instead of owning generic input behavior. | `lib/ui/README.md`                                                     |
-| FE-D5 | Port generic Estii input patterns, not Estii domain semantics. | Work units, resources, and estimates are product concepts, not UI primitives.           | `/Users/dpeek/code/estii/packages/app/src/input/amount.tsx`            |
-| FE-D6 | Keep React components out of shared field behavior.            | Field behavior must stay usable by parser, authority, and tests.                        | `src/shared/field-types.ts`                                            |
-| FE-D7 | Fix ISO date editor semantics before expanding date behavior.  | Field validation expects `YYYY-MM-DD`; editor UI must preserve that contract.           | `src/shared/field-types.ts`, `lib/ui/src/date.tsx`                     |
-| FE-D8 | Model value/unit as view/editor composition first.             | It proves ergonomics without committing to composite stored values.                     | `schema/apps/rates/schema.json`                                        |
-| FE-D9 | Use `bun browser` for visible editor behavior changes.         | This PRD changes interactive controls, not just parser behavior.                        | `doc/current.md` checks section                                        |
+| ID     | Decision                                                       | Reason                                                                                  | Evidence                                                               |
+| ------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| FE-D1  | Improve editors before adding stored field types.              | Current schemas already declare rich hints that render too plainly.                     | `src/shared/schema-types.ts`, `schema/apps/site/`                      |
+| FE-D2  | Keep stored records flat.                                      | Flat records are a core runtime bet and match rate-card join records.                   | `doc/overview.md`, `doc/current.md`                                    |
+| FE-D3  | Keep text formats as string-backed editor hints.               | PRD 03 and PRD 07 already chose this boundary.                                          | `prd/03-personal-site-authoring.md`, `prd/07-field-behavior-module.md` |
+| FE-D4  | Move reusable input chrome into `lib/ui`.                      | Generated UI should consume shared primitives instead of owning generic input behavior. | `lib/ui/README.md`                                                     |
+| FE-D5  | Port generic Estii input patterns, not Estii domain semantics. | Work units, resources, and estimates are product concepts, not UI primitives.           | `/Users/dpeek/code/estii/packages/app/src/input/amount.tsx`            |
+| FE-D6  | Keep React components out of shared field behavior.            | Field behavior must stay usable by parser, authority, and tests.                        | `src/shared/field-types.ts`                                            |
+| FE-D7  | Fix ISO date editor semantics before expanding date behavior.  | Field validation expects `YYYY-MM-DD`; editor UI must preserve that contract.           | `src/shared/field-types.ts`, `lib/ui/src/date.tsx`                     |
+| FE-D8  | Model value/unit as view/editor composition first.             | It proves ergonomics without committing to composite stored values.                     | `schema/apps/rates/schema.json`                                        |
+| FE-D9  | Use `bun browser` for visible editor behavior changes.         | This PRD changes interactive controls, not just parser behavior.                        | `doc/current.md` checks section                                        |
 | FE-D10 | Keep color validation editor-side first.                       | `color` remains a text-backed editor hint, so invalid stored strings must stay visible. | `lib/ui/src/color.tsx`, `src/app/generated/record-field-display.tsx`   |
+| FE-D11 | Keep compact markdown table cells textarea-backed.             | Table cells need predictable compact editing; rich editing fits create and wide inline. | `src/app/generated/record-field-editor.tsx`, `src/app.test.tsx`        |
 
 ## Chunks
 
@@ -232,7 +233,7 @@ Patch scalar fields together through generic mutation paths.
 | FE-01 | shipped | none       | tests, PRD                                                             | Current editor support, date value shape, markdown/color fallbacks, and number behavior are characterized. |
 | FE-02 | shipped | FE-01      | `lib/ui/src/date.tsx`, generated create/editor code                    | Date create and inline editors preserve `YYYY-MM-DD` field values.                                         |
 | FE-03 | shipped | FE-01      | `src/app/generated/*`, `lib/ui/src/color.tsx`, tests                   | `editor: "color"` uses `ColorInput`, commits text values, and displays swatches.                           |
-| FE-04 | draft   | FE-01      | `src/app/generated/*`, `lib/ui/src/markdown.tsx`, tests                | `editor: "markdown"` uses rich markdown editing where appropriate and keeps string storage.                |
+| FE-04 | shipped | FE-01      | `src/app/generated/*`, `lib/ui/src/markdown.tsx`, tests                | `editor: "markdown"` uses rich markdown editing where appropriate and keeps string storage.                |
 | FE-05 | draft   | FE-01      | `lib/ui/src/input.tsx`, `lib/ui/src/text-input.tsx`, generated editors | Autosizing editable text is available and used for title-like compact text fields.                         |
 | FE-06 | draft   | FE-05      | `lib/ui/src/number-input.tsx`, field behavior/display tests            | Number editors can use encode/decode formatting while storing finite numbers.                              |
 | FE-07 | draft   | FE-06      | schema view types/parser, generated table/editor code                  | View-declared value/unit editor patches multiple flat scalar fields.                                       |
@@ -318,20 +319,32 @@ Promotion:
 
 ### FE-04 markdown editor
 
-Status: draft.
+Status: shipped 2026-05-06.
 
-Tasks:
+Outcomes:
 
-- Wire `editor: "markdown"` to `MarkdownEditor` in create and large inline contexts.
-- Keep compact table contexts readable and usable.
-- Add read-only markdown rendering where view/display metadata asks for it.
-- Preserve plain markdown string storage.
+- Shared `MarkdownEditor` now accepts aria label, blur, keydown, and read-only props.
+- Generated create forms render `editor: "markdown"` through `MarkdownEditor`.
+- Create markdown fields keep a hidden flat text input named for the field, so generic create mutation payloads stay unchanged.
+- Generated default-density inline markdown editors render through `MarkdownEditor`.
+- Inline markdown edits still patch the single text field through generic patch mutation on blur.
+- Escape reverts inline markdown draft state to the stored value.
+- Compact table markdown cells stay textarea-backed.
+- Read-only markdown table cells render through shared `MarkdownRenderer` when the field/editor asks for markdown display.
 
-Acceptance:
+Evidence:
 
-- Site `body` fields edit through rich markdown UI where appropriate.
-- Markdown strings still submit through generic create and patch mutations.
-- Browser smoke covers create/edit rendering.
+- `./tmp/state.txt`: dev ready, tests pass, check idle.
+- `./tmp/test.txt`: watcher reruns passed for `src/app.test.tsx` with 63 tests and `lib/ui/src/markdown.test.tsx` with 22 tests.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 152 files.
+- `bun browser` at `http://127.0.0.1:4022/site`: Site create dialog exposed one `data-web-markdown-editor="plate"` editor and one hidden `name="body"` input; compact table body editors remained textarea-backed; hidden body value updated from rich editor input; page errors empty.
+
+Promotion:
+
+- Generated markdown editors use shared `MarkdownEditor` in create and default-density inline patch flows.
+- Compact table markdown editors stay textarea-backed.
+- Generated read-only markdown display can use shared `MarkdownRenderer`.
+- Markdown values remain flat text fields.
 
 ### FE-05 autosizing text editors
 
@@ -447,7 +460,7 @@ Acceptance:
 | ID    | Status | Blocks | Notes                                                                                  |
 | ----- | ------ | ------ | -------------------------------------------------------------------------------------- |
 | FE-B1 | open   | FE-07  | Value/unit editor schema needs a small design before implementation.                   |
-| FE-B2 | open   | FE-04  | Compact markdown editing needs a UX decision: textarea, dialog, or rich inline editor. |
+| FE-B2 | closed | FE-04  | FE-04 keeps compact markdown table cells textarea-backed and uses rich editors in larger surfaces. |
 
 ## Cross-PRD dependencies
 
@@ -502,6 +515,7 @@ When this PRD ships, update `doc/current.md`:
 
 - Field behavior still owns scalar validation, default, conversion, display, and editor metadata.
 - Generated field editors use shared UI primitives for markdown and color editor hints.
+- Generated read-only markdown display can use the shared markdown renderer.
 - Generated text editors can render title-like autosizing editable text.
 - Generated number editors can use formatted number input while storing numbers.
 - Generated date editors preserve `YYYY-MM-DD` field values.
@@ -522,4 +536,8 @@ When this PRD ships, update `doc/roadmap.md` only if richer field/editor support
 - FE-03 shipped 2026-05-06.
 - FE-03 changed generated color create, inline edit, and read-only display behavior only.
 - FE-03 kept color storage as flat text strings.
-- No blockers beyond open design choices for value/unit metadata and compact markdown editing.
+- FE-04 shipped 2026-05-06.
+- FE-04 changed generated markdown create, default inline edit, and read-only display behavior only.
+- FE-04 kept markdown storage as flat text strings.
+- Compact markdown table editors remain textarea-backed.
+- No blockers beyond open design choices for value/unit metadata.
