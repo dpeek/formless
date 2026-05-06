@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  createInputValueToFieldValue,
+  fieldInputAttributes,
   fieldCreateDefaultValue,
   fieldHasCreateDefault,
+  fieldValueToInputValue,
   formatFieldDisplayPrimitive,
   getFieldTypeBehavior,
+  inputValueToFieldValue,
   isValidStoredFieldValue,
+  numberInputValueToFieldValue,
   shouldValidateExistingFieldValue,
   validateAuthorityFieldValue,
 } from "./field-types.ts";
@@ -90,9 +95,47 @@ describe("field type behavior", () => {
     expect(formatFieldDisplayPrimitive(fields.done, true)).toBe("Yes");
     expect(formatFieldDisplayPrimitive(fields.done, false)).toBe("No");
     expect(formatFieldDisplayPrimitive(fields.estimate, 1.5)).toBe("1.5");
+    expect(formatFieldDisplayPrimitive(fields.estimate, 1.5, { format: "number" })).toBe("1.5");
+    expect(formatFieldDisplayPrimitive(fields.estimate, 1.5, { format: "currency" })).toBe("$1.50");
+    expect(formatFieldDisplayPrimitive(fields.estimate, 0.125, { format: "percent" })).toBe(
+      "12.5%",
+    );
     expect(formatFieldDisplayPrimitive(fields.priority, "high")).toBe("High");
     expect(formatFieldDisplayPrimitive(fields.priority, "stale")).toBe("stale");
     expect(formatFieldDisplayPrimitive(fields.resource, "rec_resource_1")).toBe("rec_resource_1");
+  });
+
+  it("centralizes scalar input conversion without React", () => {
+    expect(fieldValueToInputValue(fields.title, "Task")).toBe("Task");
+    expect(fieldValueToInputValue(fields.estimate, 1.5)).toBe("1.5");
+    expect(fieldValueToInputValue(fields.done, true)).toBe("");
+    expect(fieldValueToInputValue(fields.title, undefined)).toBe("");
+    expect(inputValueToFieldValue(fields.title, "Task")).toBe("Task");
+    expect(inputValueToFieldValue(fields.dueDate, "2026-05-06")).toBe("2026-05-06");
+    expect(inputValueToFieldValue(fields.estimate, "")).toBe("");
+    expect(inputValueToFieldValue(fields.estimate, "1.5")).toBe(1.5);
+    expect(inputValueToFieldValue(fields.priority, "high")).toBe("high");
+    expect(inputValueToFieldValue(fields.resource, "rec_resource_1")).toBe("rec_resource_1");
+    expect(createInputValueToFieldValue(fields.done, undefined, false)).toBe(false);
+    expect(createInputValueToFieldValue(fields.done, "on", true)).toBe(true);
+    expect(createInputValueToFieldValue(fields.estimate, "", true)).toBe("");
+    expect(createInputValueToFieldValue(fields.estimate, "1.5", true)).toBe(1.5);
+    expect(createInputValueToFieldValue(fields.title, undefined, false)).toBe("");
+    expect(numberInputValueToFieldValue("0")).toBe(0);
+  });
+
+  it("centralizes scalar input attributes without React", () => {
+    expect(fieldInputAttributes(fields.estimate)).toEqual({
+      max: undefined,
+      min: 0,
+      step: "1",
+    });
+    expect(fieldInputAttributes({ type: "number", required: false })).toEqual({
+      max: undefined,
+      min: undefined,
+      step: "any",
+    });
+    expect(fieldInputAttributes(fields.title)).toEqual({});
   });
 
   it("validates authority values while preserving current empty and default semantics", () => {

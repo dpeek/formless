@@ -1,9 +1,11 @@
 import { isDateString } from "./date.ts";
 import type { FieldValue, RecordValues } from "./protocol.ts";
 import type { QueryOperator } from "./query.ts";
-import type { FieldCommitPolicy, FieldEditor, FieldSchema } from "./schema.ts";
+import type { FieldCommitPolicy, FieldEditor, FieldSchema, TableColumnFormat } from "./schema.ts";
 
 export type AuthorityFieldValueResult = { kind: "set"; value: FieldValue } | { kind: "omit" };
+export type FieldDisplayOptions = { format?: TableColumnFormat };
+export type FieldInputAttributes = { max?: number; min?: number; step?: "1" | "any" };
 
 export type FieldTypeBehavior<TField extends FieldSchema = FieldSchema> = {
   type: TField["type"];
@@ -14,7 +16,15 @@ export type FieldTypeBehavior<TField extends FieldSchema = FieldSchema> = {
   validatesExistingStoredValues: boolean;
   createDefaultValue: (field: TField) => FieldValue | undefined;
   hasCreateDefault: (field: TField) => boolean;
-  formatDisplayValue: (field: TField, value: FieldValue) => string;
+  createInputValueToFieldValue: (
+    field: TField,
+    value: string | undefined,
+    provided: boolean,
+  ) => FieldValue;
+  fieldValueToInputValue: (field: TField, value: FieldValue | undefined) => string;
+  formatDisplayValue: (field: TField, value: FieldValue, options?: FieldDisplayOptions) => string;
+  inputAttributes: (field: TField) => FieldInputAttributes;
+  inputValueToFieldValue: (field: TField, value: string) => FieldValue;
   validateAuthorityValue: (
     fieldName: string,
     field: TField,
@@ -34,7 +44,11 @@ export const fieldTypeBehaviors = {
     validatesExistingStoredValues: false,
     createDefaultValue: () => undefined,
     hasCreateDefault: () => false,
+    createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: formatStringDisplayValue,
+    inputAttributes: emptyInputAttributes,
+    inputValueToFieldValue: stringInputValueToFieldValue,
     validateAuthorityValue: validateStringAuthorityValue,
     isValidStoredValue: (value, field) =>
       typeof value === "string" && (!field.required || value.trim() !== ""),
@@ -48,8 +62,12 @@ export const fieldTypeBehaviors = {
     validatesExistingStoredValues: false,
     createDefaultValue: (field) => field.default,
     hasCreateDefault: (field) => typeof field.default === "boolean",
+    createInputValueToFieldValue: (_field, _value, provided) => provided,
+    fieldValueToInputValue: () => "",
     formatDisplayValue: (_field, value) =>
       value === true ? "Yes" : value === false ? "No" : String(value),
+    inputAttributes: emptyInputAttributes,
+    inputValueToFieldValue: stringInputValueToFieldValue,
     validateAuthorityValue: validateBooleanAuthorityValue,
     isValidStoredValue: (value) => typeof value === "boolean",
   },
@@ -62,7 +80,11 @@ export const fieldTypeBehaviors = {
     validatesExistingStoredValues: false,
     createDefaultValue: () => undefined,
     hasCreateDefault: () => false,
+    createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: formatStringDisplayValue,
+    inputAttributes: emptyInputAttributes,
+    inputValueToFieldValue: stringInputValueToFieldValue,
     validateAuthorityValue: validateDateAuthorityValue,
     isValidStoredValue: (value, field) =>
       typeof value === "string" && (!field.required || value.trim() !== "") && isDateString(value),
@@ -76,7 +98,11 @@ export const fieldTypeBehaviors = {
     validatesExistingStoredValues: true,
     createDefaultValue: (field) => field.default,
     hasCreateDefault: (field) => typeof field.default === "number",
-    formatDisplayValue: (_field, value) => String(value),
+    createInputValueToFieldValue: (_field, value) => numberInputValueToFieldValue(value ?? ""),
+    fieldValueToInputValue: (_field, value) => (typeof value === "number" ? String(value) : ""),
+    formatDisplayValue: (_field, value, options) => formatNumberDisplayValue(value, options),
+    inputAttributes: numberInputAttributes,
+    inputValueToFieldValue: (_field, value) => numberInputValueToFieldValue(value),
     validateAuthorityValue: validateNumberAuthorityValue,
     isValidStoredValue: isValidNumberFieldValue,
   },
@@ -89,8 +115,12 @@ export const fieldTypeBehaviors = {
     validatesExistingStoredValues: false,
     createDefaultValue: (field) => field.default,
     hasCreateDefault: (field) => typeof field.default === "string",
+    createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: (field, value) =>
       typeof value === "string" ? (field.values[value]?.label ?? value) : String(value),
+    inputAttributes: emptyInputAttributes,
+    inputValueToFieldValue: stringInputValueToFieldValue,
     validateAuthorityValue: validateEnumAuthorityValue,
     isValidStoredValue: (value) => typeof value === "string" && value !== "",
   },
@@ -103,7 +133,11 @@ export const fieldTypeBehaviors = {
     validatesExistingStoredValues: true,
     createDefaultValue: () => undefined,
     hasCreateDefault: () => false,
+    createInputValueToFieldValue: stringCreateInputValueToFieldValue,
+    fieldValueToInputValue: stringFieldValueToInputValue,
     formatDisplayValue: formatStringDisplayValue,
+    inputAttributes: emptyInputAttributes,
+    inputValueToFieldValue: stringInputValueToFieldValue,
     validateAuthorityValue: validateReferenceAuthorityValue,
     isValidStoredValue: (value) => typeof value === "string" && value.trim() !== "",
   },
@@ -150,8 +184,32 @@ export function fieldCreateDefaultValue(field: FieldSchema) {
   return getFieldTypeBehavior(field).createDefaultValue(field);
 }
 
-export function formatFieldDisplayPrimitive(field: FieldSchema, value: FieldValue) {
-  return getFieldTypeBehavior(field).formatDisplayValue(field, value);
+export function createInputValueToFieldValue(
+  field: FieldSchema,
+  value: string | undefined,
+  provided: boolean,
+) {
+  return getFieldTypeBehavior(field).createInputValueToFieldValue(field, value, provided);
+}
+
+export function fieldValueToInputValue(field: FieldSchema, value: FieldValue | undefined) {
+  return getFieldTypeBehavior(field).fieldValueToInputValue(field, value);
+}
+
+export function formatFieldDisplayPrimitive(
+  field: FieldSchema,
+  value: FieldValue,
+  options?: FieldDisplayOptions,
+) {
+  return getFieldTypeBehavior(field).formatDisplayValue(field, value, options);
+}
+
+export function inputValueToFieldValue(field: FieldSchema, value: string) {
+  return getFieldTypeBehavior(field).inputValueToFieldValue(field, value);
+}
+
+export function fieldInputAttributes(field: FieldSchema) {
+  return getFieldTypeBehavior(field).inputAttributes(field);
 }
 
 export function shouldValidateExistingFieldValue(field: FieldSchema) {
@@ -186,8 +244,67 @@ function validateStringAuthorityValue(
   return validateTextLikeAuthorityValue(fieldName, field, value, undefined);
 }
 
+function stringCreateInputValueToFieldValue(
+  _field: FieldSchema,
+  value: string | undefined,
+): FieldValue {
+  return value ?? "";
+}
+
+function stringFieldValueToInputValue(_field: FieldSchema, value: FieldValue | undefined) {
+  return typeof value === "string" ? value : "";
+}
+
+function stringInputValueToFieldValue(_field: FieldSchema, value: string): FieldValue {
+  return value;
+}
+
 function formatStringDisplayValue(_field: FieldSchema, value: FieldValue) {
   return String(value);
+}
+
+function formatNumberDisplayValue(value: FieldValue, options?: FieldDisplayOptions) {
+  if (typeof value !== "number") {
+    return String(value);
+  }
+
+  if (options?.format === "currency") {
+    return `$${value.toFixed(2)}`;
+  }
+
+  if (options?.format === "percent") {
+    return `${formatPlainNumber(value * 100)}%`;
+  }
+
+  if (options?.format === "number") {
+    return formatPlainNumber(value);
+  }
+
+  return String(value);
+}
+
+export function formatPlainNumber(value: number) {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function emptyInputAttributes() {
+  return {};
+}
+
+function numberInputAttributes(field: Extract<FieldSchema, { type: "number" }>) {
+  return {
+    max: field.max,
+    min: field.min,
+    step: field.integer ? "1" : "any",
+  } satisfies FieldInputAttributes;
+}
+
+export function numberInputValueToFieldValue(value: string): FieldValue {
+  return value === "" ? "" : Number(value);
 }
 
 function validateDateAuthorityValue(

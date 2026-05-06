@@ -23,7 +23,7 @@ import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
-import { numberInputValueToFieldValue } from "./format.ts";
+import { createInputValueToFieldValue } from "./format.ts";
 import { useSchemaKey } from "./schema-app-context.tsx";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
@@ -338,19 +338,12 @@ function getVisibleCreateValues(formData: FormData, fields: CreateFieldConfig[])
   const values: RecordValues = {};
 
   for (const { field, fieldName } of fields) {
-    if (field.type === "boolean") {
-      values[fieldName] = formData.has(fieldName);
-      continue;
-    }
-
-    if (field.type === "number") {
-      const value = formData.get(fieldName);
-      values[fieldName] = typeof value === "string" ? numberInputValueToFieldValue(value) : "";
-      continue;
-    }
-
     const value = formData.get(fieldName);
-    values[fieldName] = typeof value === "string" ? value : "";
+    values[fieldName] = createInputValueToFieldValue(
+      field,
+      typeof value === "string" ? value : undefined,
+      formData.has(fieldName),
+    );
   }
 
   return values;

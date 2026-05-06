@@ -36,13 +36,13 @@ export function RecordFieldEditor({
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const labelClass = showLabel ? "text-xs font-medium text-slate-600" : "sr-only";
   const recordValue = useRecordField(recordId, fieldName);
-  const [draft, setDraft] = useState(() => fieldValueToInputValue(recordValue));
+  const [draft, setDraft] = useState(() => fieldValueToInputValue(field, recordValue));
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(fieldValueToInputValue(recordValue));
-  }, [recordValue]);
+    setDraft(fieldValueToInputValue(field, recordValue));
+  }, [field, recordValue]);
 
   async function commit(value: FieldValue) {
     if (!canPatch || isPending) {
@@ -63,7 +63,7 @@ export function RecordFieldEditor({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Update failed.";
 
-      setDraft(fieldValueToInputValue(recordValue));
+      setDraft(fieldValueToInputValue(field, recordValue));
       setError(message);
       setSyncStatus({
         state: "error",
@@ -187,14 +187,14 @@ export function RecordFieldEditor({
 
     if (event.key === "Escape") {
       event.preventDefault();
-      setDraft(fieldValueToInputValue(recordValue));
+      setDraft(fieldValueToInputValue(field, recordValue));
     }
   }
 
   function handleTextareaKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      setDraft(fieldValueToInputValue(recordValue));
+      setDraft(fieldValueToInputValue(field, recordValue));
     }
   }
 

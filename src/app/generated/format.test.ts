@@ -7,6 +7,7 @@ import type {
 } from "../../shared/schema.ts";
 import type { TableColumnConfig } from "../../client/views.ts";
 import {
+  createInputValueToFieldValue,
   fieldValueToInputValue,
   formatFieldDisplayValue,
   inputValueToFieldValue,
@@ -33,10 +34,10 @@ describe("generated field format helpers", () => {
   });
 
   it("converts current inline editor values for patch mutations", () => {
-    expect(fieldValueToInputValue("Alpha")).toBe("Alpha");
-    expect(fieldValueToInputValue(1.5)).toBe("1.5");
-    expect(fieldValueToInputValue(true)).toBe("");
-    expect(fieldValueToInputValue(undefined)).toBe("");
+    expect(fieldValueToInputValue(fields.title, "Alpha")).toBe("Alpha");
+    expect(fieldValueToInputValue(fields.estimate, 1.5)).toBe("1.5");
+    expect(fieldValueToInputValue(fields.done, true)).toBe("");
+    expect(fieldValueToInputValue(fields.title, undefined)).toBe("");
     expect(inputValueToFieldValue(fields.title, "Alpha")).toBe("Alpha");
     expect(inputValueToFieldValue(fields.dueDate, "2026-05-06")).toBe("2026-05-06");
     expect(inputValueToFieldValue(fields.estimate, "")).toBe("");
@@ -44,6 +45,15 @@ describe("generated field format helpers", () => {
     expect(inputValueToFieldValue(fields.priority, "high")).toBe("high");
     expect(inputValueToFieldValue(fields.resource, "rec_resource_1")).toBe("rec_resource_1");
     expect(numberInputValueToFieldValue("0")).toBe(0);
+  });
+
+  it("converts current create form input values", () => {
+    expect(createInputValueToFieldValue(fields.done, undefined, false)).toBe(false);
+    expect(createInputValueToFieldValue(fields.done, "on", true)).toBe(true);
+    expect(createInputValueToFieldValue(fields.title, "Alpha", true)).toBe("Alpha");
+    expect(createInputValueToFieldValue(fields.title, undefined, false)).toBe("");
+    expect(createInputValueToFieldValue(fields.estimate, "", true)).toBe("");
+    expect(createInputValueToFieldValue(fields.estimate, "1.5", true)).toBe(1.5);
   });
 
   it("derives current number input attributes from number field schema", () => {
