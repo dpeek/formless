@@ -1,7 +1,7 @@
 # PRD 07: Field behavior module
 
-Status: draft
-Current chunk: none
+Status: active
+Current chunk: FB-02 ready
 Last updated: 2026-05-06
 
 ## Goal
@@ -128,13 +128,13 @@ Likely changed files:
 
 ## Chunks
 
-| ID    | Status | Depends on | Main files                                                  | Acceptance                                                                             |
-| ----- | ------ | ---------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| FB-01 | draft  | none       | tests                                                       | Current field parse, validation, create, patch, and display behavior is characterized. |
-| FB-02 | draft  | FB-01      | `src/shared/field-types.ts`, `src/app/generated/format.ts`  | Scalar value conversion and display behavior move behind field behavior helpers.       |
-| FB-03 | draft  | FB-02      | `src/app/generated/field-ui-adapters.ts`, generated editors | Generated create and inline editors consume field behavior facts with equivalent UI.   |
-| FB-04 | draft  | FB-03      | tests, Browser Use if UI behavior changes                   | Tasks, rates, and site create/edit flows still pass.                                   |
-| FB-05 | draft  | FB-04      | `prd/07-field-behavior-module.md`                           | PRD status and promote notes reflect shipped behavior.                                 |
+| ID    | Status  | Depends on | Main files                                                  | Acceptance                                                                             |
+| ----- | ------- | ---------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| FB-01 | shipped | none       | tests                                                       | Current field parse, validation, create, patch, and display behavior is characterized. |
+| FB-02 | draft   | FB-01      | `src/shared/field-types.ts`, `src/app/generated/format.ts`  | Scalar value conversion and display behavior move behind field behavior helpers.       |
+| FB-03 | draft   | FB-02      | `src/app/generated/field-ui-adapters.ts`, generated editors | Generated create and inline editors consume field behavior facts with equivalent UI.   |
+| FB-04 | draft   | FB-03      | tests, Browser Use if UI behavior changes                   | Tasks, rates, and site create/edit flows still pass.                                   |
+| FB-05 | draft   | FB-04      | `prd/07-field-behavior-module.md`                           | PRD status and promote notes reflect shipped behavior.                                 |
 
 ## Non-goals
 
@@ -166,11 +166,16 @@ Recommended order:
 
 ## Promote after ship
 
+- FB-01: no global doc promotion. Test-only characterization; runtime behavior unchanged.
 - `doc/current.md`: note that field type behavior owns scalar validation, default, conversion, and display helpers; generated UI consumes those helpers.
 - `doc/roadmap.md`: no change unless a new release-scope field type is added.
 
 ## PRD status notes
 
 - PRD drafted 2026-05-06 from architecture review.
-- No code shipped yet.
+- FB-01 shipped 2026-05-06.
+- Existing parse and authority validation characterization remains in `src/shared/schema.test.ts` and `src/shared/field-types.test.ts`.
+- Added create value characterization in `src/app.test.tsx`.
+- Added patch input conversion, number input attribute, and display formatting characterization in `src/app/generated/format.test.ts`.
+- Evidence: `bun run test src/app/generated/format.test.ts src/app.test.tsx`; `bun run test`; `bun run check`.
 - No blockers.

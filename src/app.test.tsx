@@ -1160,6 +1160,46 @@ describe("generated forms and records", () => {
     });
   });
 
+  it("resolves current visible create values by field type", () => {
+    const entity = fieldBehaviorEntity();
+    const action = createAction(entity, [
+      "title",
+      "done",
+      "dueDate",
+      "estimate",
+      "priority",
+      "resource",
+    ]);
+    const formData = new FormData();
+
+    formData.set("title", "Write field tests");
+    formData.set("dueDate", "2026-05-06");
+    formData.set("estimate", "1.5");
+    formData.set("priority", "high");
+    formData.set("resource", "rec_resource_1");
+
+    expect(resolveCreateValues(formData, action)).toEqual({
+      title: "Write field tests",
+      done: false,
+      dueDate: "2026-05-06",
+      estimate: 1.5,
+      priority: "high",
+      resource: "rec_resource_1",
+    });
+
+    formData.set("done", "on");
+    formData.set("estimate", "");
+
+    expect(resolveCreateValues(formData, action)).toEqual({
+      title: "Write field tests",
+      done: true,
+      dueDate: "2026-05-06",
+      estimate: "",
+      priority: "high",
+      resource: "rec_resource_1",
+    });
+  });
+
   it("still resolves scoped create defaults for views that use them", () => {
     const action = scopedRateCreateAction();
     const formData = new FormData();
@@ -1547,6 +1587,39 @@ function taskEntityWithEstimateNumber(): EntitySchema {
         min: 0,
         max: 10,
         integer: true,
+      },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
+  };
+}
+
+function fieldBehaviorEntity(): EntitySchema {
+  return {
+    label: "Field behavior",
+    fields: {
+      title: { type: "text", required: true, label: "Title" },
+      done: { type: "boolean", required: true, label: "Done", default: false },
+      dueDate: { type: "date", required: false, label: "Due date" },
+      estimate: { type: "number", required: false, label: "Estimate" },
+      priority: {
+        type: "enum",
+        required: false,
+        label: "Priority",
+        values: {
+          low: { label: "Low" },
+          high: { label: "High" },
+        },
+      },
+      resource: {
+        type: "reference",
+        required: false,
+        label: "Resource",
+        to: "resource",
+        displayField: "name",
       },
     },
     mutations: {
