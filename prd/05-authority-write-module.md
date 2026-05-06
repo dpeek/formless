@@ -1,7 +1,7 @@
 # PRD 05: Authority write module
 
 Status: in progress
-Current chunk: AW-03 shipped
+Current chunk: AW-04 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -119,17 +119,18 @@ Likely changed files:
 
 ## Decisions
 
-| ID    | Decision                                                      | Reason                                                              | Evidence                                                |
-| ----- | ------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
-| AW-D1 | Keep HTTP as the write interface.                             | WebSocket push sync is notification only.                           | `doc/roadmap.md`, `prd/02-websocket-push-sync.md`       |
-| AW-D2 | Keep storage shape unchanged.                                 | This PRD improves locality only.                                    | `src/worker/storage.ts`                                 |
-| AW-D3 | Move committed-write notification behind the write module.    | Push-sync notification is a write invariant, not route boilerplate. | `src/worker/authority.ts`                               |
-| AW-D4 | Keep request parsing close to the authority route for now.    | The route still owns HTTP shape and status codes.                   | `src/worker/authority.ts`                               |
-| AW-D5 | Keep entity action internals outside this PRD.                | PRD 08 owns action-kind depth.                                      | `prd/08-entity-action-module.md`                        |
-| AW-D6 | Preserve mutation and action replay behavior exactly.         | Replay is an authority idempotency invariant.                       | `src/worker/storage.ts`, `src/worker/authority.test.ts` |
-| AW-D7 | Test committed write outcomes, not private helper call order. | The interface is the test surface.                                  | `src/worker/authority.test.ts`                          |
-| AW-D8 | Route committed writes through `AuthorityWriteModule`.        | Notification belongs to committed-write handling.                   | `src/worker/authority.ts`                               |
-| AW-D9 | Storage writes return committed or replay outcomes.           | The authority write module can notify from the storage outcome.     | `src/worker/storage.ts`, `src/worker/actions.ts`        |
+| ID     | Decision                                                      | Reason                                                              | Evidence                                                |
+| ------ | ------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
+| AW-D1  | Keep HTTP as the write interface.                             | WebSocket push sync is notification only.                           | `doc/roadmap.md`, `prd/02-websocket-push-sync.md`       |
+| AW-D2  | Keep storage shape unchanged.                                 | This PRD improves locality only.                                    | `src/worker/storage.ts`                                 |
+| AW-D3  | Move committed-write notification behind the write module.    | Push-sync notification is a write invariant, not route boilerplate. | `src/worker/authority.ts`                               |
+| AW-D4  | Keep request parsing close to the authority route for now.    | The route still owns HTTP shape and status codes.                   | `src/worker/authority.ts`                               |
+| AW-D5  | Keep entity action internals outside this PRD.                | PRD 08 owns action-kind depth.                                      | `prd/08-entity-action-module.md`                        |
+| AW-D6  | Preserve mutation and action replay behavior exactly.         | Replay is an authority idempotency invariant.                       | `src/worker/storage.ts`, `src/worker/authority.test.ts` |
+| AW-D7  | Test committed write outcomes, not private helper call order. | The interface is the test surface.                                  | `src/worker/authority.test.ts`                          |
+| AW-D8  | Route committed writes through `AuthorityWriteModule`.        | Notification belongs to committed-write handling.                   | `src/worker/authority.ts`                               |
+| AW-D9  | Storage writes return committed or replay outcomes.           | The authority write module can notify from the storage outcome.     | `src/worker/storage.ts`, `src/worker/actions.ts`        |
+| AW-D10 | Cover write notification through socket-visible behavior.     | Broadcast behavior is a runtime contract, not branch order.         | `src/worker/authority.test.ts`                          |
 
 ## Chunks
 
@@ -138,7 +139,7 @@ Likely changed files:
 | AW-01 | shipped | none       | tests                                            | Current committed, failed, and replayed write behavior is characterized.                                     |
 | AW-02 | shipped | AW-01      | `src/worker/authority.ts`                        | Route write branches delegate committed-write notification.                                                  |
 | AW-03 | shipped | AW-02      | `src/worker/storage.ts`, `src/worker/actions.ts` | Mutation, action, schema, and reset writes share one outcome path where useful.                              |
-| AW-04 | draft   | AW-03      | tests                                            | Authority tests prove no broadcast on failed validation or replay, and broadcast after each committed write. |
+| AW-04 | shipped | AW-03      | tests                                            | Authority tests prove no broadcast on failed validation or replay, and broadcast after each committed write. |
 | AW-05 | draft   | AW-04      | `prd/05-authority-write-module.md`               | PRD status and promote notes reflect shipped behavior.                                                       |
 
 ## Non-goals
@@ -175,6 +176,7 @@ Recommended order:
 - AW-01: no global doc promotion. Tests only characterize existing write behavior.
 - AW-02: promote that `src/worker/authority.ts` routes committed schema, mutation, action, and reset writes through `AuthorityWriteModule.committed`; action replay returns before notification.
 - AW-03: promote that `src/worker/storage.ts` exposes committed/replay write outcomes; `src/worker/actions.ts` returns action outcomes; `AuthorityWriteModule.apply` notifies only committed outcomes.
+- AW-04: no global doc promotion. Tests prove committed write broadcasts, failed validation no-broadcast, mutation replay no-broadcast, and action replay no-broadcast.
 
 ## Evidence
 
@@ -187,6 +189,9 @@ Recommended order:
 - 2026-05-06 AW-03: `bun run test -- src/worker/authority.test.ts`.
 - 2026-05-06 AW-03: `bun run test -- src/worker/storage.test.ts`.
 - 2026-05-06 AW-03: `bun run test`.
+- 2026-05-06 AW-04: `bun run test -- src/worker/authority.test.ts`.
+- 2026-05-06 AW-04: `bun run check`.
+- 2026-05-06 AW-04: `bun run test`.
 
 ## PRD status notes
 
@@ -194,4 +199,5 @@ Recommended order:
 - AW-01 shipped 2026-05-06: added authority tests for caused-record create broadcasts, reset schema/seed broadcasts, failed schema/action validation without broadcasts, and existing mutation replay no-broadcast coverage.
 - AW-02 shipped 2026-05-06: added `AuthorityWriteModule.committed` in `src/worker/authority.ts`; schema, create, patch, action, reset schema, and reset seed branches delegate committed-write notification; mutation and action replay return before notification.
 - AW-03 shipped 2026-05-06: added storage `WriteOutcome` helpers; schema, mutation, action, and reset write branches now pass committed/replay outcomes through `AuthorityWriteModule.apply`; action replay is handled through the shared outcome path.
+- AW-04 shipped 2026-05-06: extended authority WebSocket tests for committed no-op actions, mutation constraint failure no-broadcast, and action replay no-broadcast.
 - No blockers.

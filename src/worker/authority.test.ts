@@ -1111,6 +1111,17 @@ describe("authority", () => {
           cursor: action.cursor,
         },
       });
+
+      const noOpActionMessage = readSyncSocketMessage(socket);
+      const noOpAction = await postAction("action-broadcast-no-op-clear", "clearCompletedTasks");
+
+      await expect(noOpActionMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: noOpAction.changes,
+          cursor: noOpAction.cursor,
+        },
+      });
     } finally {
       socket.close();
     }
@@ -1194,12 +1205,21 @@ describe("authority", () => {
     }
   });
 
-  it("does not broadcast failed mutation validation or mutation replay", async () => {
+  it("does not broadcast failed mutation validation, constraint failures, or mutation replay", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskConstraints({
+        uniqueTitle: { kind: "unique", fields: ["title"] },
+      }),
+    });
+    const existing = await postMutation("mutation-constraint-source", {
+      title: "Constraint source",
+      done: false,
+    });
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const socket = await openSyncSocket();
 
     try {
-      await primeSyncSocket(socket, taskSeedRecords.length, schemaResponse.updatedAt);
+      await primeSyncSocket(socket, existing.cursor, schemaResponse.updatedAt);
 
       const invalidCapture = captureSyncSocketMessages(socket);
       const invalid = await harness.fetch(apiPath("/api/mutations"), {
@@ -1216,6 +1236,25 @@ describe("authority", () => {
       expect(invalid.status).toBe(400);
       await expectNoCapturedMessages(invalidCapture);
       invalidCapture.stop();
+
+      const constraintCapture = captureSyncSocketMessages(socket);
+      const constraintFailure = await harness.fetch(apiPath("/api/mutations"), {
+        body: JSON.stringify({
+          mutationId: "mutation-constraint-no-broadcast",
+          entity: "task",
+          op: "create",
+          values: { title: "Constraint source", done: false },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      expect(constraintFailure.status).toBe(400);
+      expect((await constraintFailure.json()) as { error: string }).toEqual({
+        error: 'Unique constraint "task.uniqueTitle" would be violated.',
+      });
+      await expectNoCapturedMessages(constraintCapture);
+      constraintCapture.stop();
 
       const createMessage = readSyncSocketMessage(socket);
       const mutation = {
@@ -1236,12 +1275,49 @@ describe("authority", () => {
 
       const replayCapture = captureSyncSocketMessages(socket);
       const replay = await postJson<MutationResponse>("/api/mutations", mutation);
-      const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length}`);
+      const sync = await getJson<SyncResponse>(`/api/sync?after=${existing.cursor}`);
 
       expect(replay).toEqual(created);
       expect(
         sync.changes.filter((change) => change.mutationId === mutation.mutationId),
       ).toHaveLength(1);
+      await expectNoCapturedMessages(replayCapture);
+      replayCapture.stop();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("does not broadcast action replay", async () => {
+    const completed = await postMutation("mutation-action-replay-source", {
+      title: "Action replay source",
+      done: true,
+    });
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, completed.cursor, schemaResponse.updatedAt);
+
+      const actionMessage = readSyncSocketMessage(socket);
+      const action = await postAction("action-replay-no-broadcast", "clearCompletedTasks");
+
+      await expect(actionMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: action.changes,
+          cursor: action.cursor,
+        },
+      });
+
+      const replayCapture = captureSyncSocketMessages(socket);
+      const replay = await postAction("action-replay-no-broadcast", "clearCompletedTasks");
+      const sync = await getJson<SyncResponse>(`/api/sync?after=${completed.cursor}`);
+
+      expect(replay).toEqual(action);
+      expect(sync.changes.filter((change) => change.mutationId === action.actionId)).toEqual(
+        action.changes,
+      );
       await expectNoCapturedMessages(replayCapture);
       replayCapture.stop();
     } finally {
