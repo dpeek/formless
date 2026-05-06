@@ -230,6 +230,7 @@ describe("home view model collections", () => {
       "field:cost",
       "field:costUnit",
       "field:price",
+      "computed:rateMargin",
       "field:currency",
     ]);
   });
@@ -252,14 +253,16 @@ describe("home view model collections", () => {
       "Cost",
       "Cost unit",
       "Price",
+      "Margin",
       "Currency",
     ]);
-    expect(tableColumnEditors(columns)).toEqual(["text", "number", "enum", "number", "enum"]);
+    expect(tableColumnEditors(columns)).toEqual(["text", "number", "enum", "number", null, "enum"]);
     expect(tableColumnCommits(columns)).toEqual([
       "field-commit",
       "field-commit",
       "immediate",
       "field-commit",
+      null,
       "immediate",
     ]);
     expect(columns.map((column) => column.align ?? "start")).toEqual([
@@ -267,22 +270,39 @@ describe("home view model collections", () => {
       "end",
       "start",
       "end",
+      "end",
       "start",
     ]);
-    expect(columns.map((column) => column.width ?? "none")).toEqual(["lg", "sm", "xs", "sm", "xs"]);
+    expect(columns.map((column) => column.width ?? "none")).toEqual([
+      "lg",
+      "sm",
+      "xs",
+      "sm",
+      "sm",
+      "xs",
+    ]);
     expect(columns.map((column) => column.display)).toEqual([
       "editor",
       "editor",
       "hidden",
       "editor",
       "readOnly",
+      "readOnly",
     ]);
-    expect(columns.map((column) => column.suffix ?? "")).toEqual(["", "/ day", "", "/ day", ""]);
+    expect(columns.map((column) => column.suffix ?? "")).toEqual([
+      "",
+      "/ day",
+      "",
+      "/ day",
+      "",
+      "",
+    ]);
     expect(columns.map((column) => column.format)).toEqual([
       "plain",
       "number",
       "plain",
       "number",
+      "percent",
       "plain",
     ]);
     expect(columns[0]).toMatchObject({
@@ -295,7 +315,7 @@ describe("home view model collections", () => {
     });
   });
 
-  it("characterizes the current rate-card collection before read-model slots", () => {
+  it("resolves the source rate-card read-model slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
@@ -360,6 +380,14 @@ describe("home view model collections", () => {
         format: "number",
       },
       {
+        type: "computed",
+        key: "computed:rateMargin",
+        label: "Margin",
+        display: "readOnly",
+        suffix: null,
+        format: "percent",
+      },
+      {
         type: "field",
         key: "field:currency",
         label: "Currency",
@@ -368,10 +396,31 @@ describe("home view model collections", () => {
         format: "plain",
       },
     ]);
-    expect(rateModel.result.columns.map((column) => column.type as string)).not.toContain(
-      "computed",
-    );
-    expect("summary" in rateModel.collection).toBe(false);
+    expect(rateModel.collection.summary).toMatchObject([
+      {
+        type: "aggregate",
+        key: "aggregate:selectedCardCostTotal",
+        aggregateName: "selectedCardCostTotal",
+        label: "Cost total",
+        suffix: "/ day",
+        format: "currency",
+      },
+      {
+        type: "aggregate",
+        key: "aggregate:selectedCardPriceTotal",
+        aggregateName: "selectedCardPriceTotal",
+        label: "Price total",
+        suffix: "/ day",
+        format: "currency",
+      },
+      {
+        type: "aggregate",
+        key: "aggregate:selectedCardAverageMargin",
+        aggregateName: "selectedCardAverageMargin",
+        label: "Average margin",
+        format: "percent",
+      },
+    ]);
   });
 
   it("resolves read-only computed table columns", () => {
@@ -438,7 +487,7 @@ describe("home view model collections", () => {
 
   it("keeps summary absent when a collection has no summary slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
+      (model) => model.viewName === "resourceHome",
     );
 
     expect("summary" in (rateModel?.collection ?? {})).toBe(false);
@@ -616,6 +665,7 @@ describe("home view model collections", () => {
           "field:cost",
           "field:costUnit",
           "field:price",
+          "computed:rateMargin",
           "field:currency",
         ],
       },
@@ -989,6 +1039,7 @@ function rateCardSchemaWithComputedMarginColumn(): AppSchema {
           expression: rateMarginExpression(),
         },
       },
+      aggregates: rateCardSchema.readModels?.aggregates ?? {},
     },
     tableViews: {
       ...rateCardSchema.tableViews,

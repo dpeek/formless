@@ -2169,12 +2169,47 @@ describe("rate-card sample schema", () => {
       { type: "field", field: "cost" },
       { type: "field", field: "costUnit" },
       { type: "field", field: "price" },
+      {
+        type: "computed",
+        computedValue: "rateMargin",
+        label: "Margin",
+        align: "end",
+        width: "sm",
+        display: "readOnly",
+        format: "percent",
+      },
       { type: "field", field: "currency" },
     ]);
     expect(schema.tableViews.rateTable?.columns[0]).toMatchObject({
       type: "referenceField",
       referenceField: "resource",
       field: "name",
+    });
+    expect(schema.readModels).toEqual({
+      computedValues: {
+        rateMargin: {
+          entity: "rate",
+          type: "number",
+          expression: rateMarginExpression(),
+        },
+      },
+      aggregates: {
+        selectedCardCostTotal: {
+          query: "ratesForSelectedCard",
+          function: "sum",
+          value: { kind: "field", field: "cost" },
+        },
+        selectedCardPriceTotal: {
+          query: "ratesForSelectedCard",
+          function: "sum",
+          value: { kind: "field", field: "price" },
+        },
+        selectedCardAverageMargin: {
+          query: "ratesForSelectedCard",
+          function: "average",
+          value: { kind: "computed", computedValue: "rateMargin" },
+        },
+      },
     });
     expect(schema.views.resourceHome).toMatchObject({
       type: "collection",
@@ -2192,6 +2227,28 @@ describe("rate-card sample schema", () => {
         relationship: "cardRates",
       },
       result: { type: "table", tableView: "rateTable" },
+      summary: [
+        {
+          type: "aggregate",
+          aggregate: "selectedCardCostTotal",
+          label: "Cost total",
+          suffix: "/ day",
+          format: "currency",
+        },
+        {
+          type: "aggregate",
+          aggregate: "selectedCardPriceTotal",
+          label: "Price total",
+          suffix: "/ day",
+          format: "currency",
+        },
+        {
+          type: "aggregate",
+          aggregate: "selectedCardAverageMargin",
+          label: "Average margin",
+          format: "percent",
+        },
+      ],
       actions: [
         { type: "create", createView: "resourceCreate" },
         { type: "entityAction", action: "regenerateMissingRates" },
@@ -2200,13 +2257,14 @@ describe("rate-card sample schema", () => {
   });
 
   it("keeps read-model declarations optional", () => {
-    const schema = parseAppSchema(rawRateCardSchema);
+    const rawSchemaWithoutReadModels = baseSchema();
+    const schema = parseAppSchema(rawSchemaWithoutReadModels);
 
-    expect("readModels" in rawRateCardSchema).toBe(false);
+    expect("readModels" in rawSchemaWithoutReadModels).toBe(false);
     expect("readModels" in schema).toBe(false);
     expect(
       parseAppSchema({
-        ...rawRateCardSchema,
+        ...rawSchemaWithoutReadModels,
         readModels: { computedValues: {}, aggregates: {} },
       }).readModels,
     ).toEqual({ computedValues: {}, aggregates: {} });

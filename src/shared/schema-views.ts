@@ -484,7 +484,16 @@ export function parseViews(
   const views = Object.fromEntries(
     Object.entries(value).map(([viewName, view]) => [
       viewName,
-      parseView(viewName, view, entities, queries, itemViews, tableViews, relationships, readModels),
+      parseView(
+        viewName,
+        view,
+        entities,
+        queries,
+        itemViews,
+        tableViews,
+        relationships,
+        readModels,
+      ),
     ]),
   );
 

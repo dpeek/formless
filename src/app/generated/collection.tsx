@@ -402,9 +402,7 @@ function CollectionSummary({
   selectedQuery: HomeQueryTabConfig;
   summary: HomeSummarySlotConfig[];
 }) {
-  const visibleSummary = summary.filter(
-    (slot) => slot.aggregate.query === selectedQuery.queryName,
-  );
+  const visibleSummary = summary.filter((slot) => slot.aggregate.query === selectedQuery.queryName);
 
   if (!queryContext || visibleSummary.length === 0) {
     return null;
@@ -456,7 +454,9 @@ function AggregateSummarySlot({
       <div className="text-xs font-medium text-slate-500">{slot.label}</div>
       <div className="mt-1 flex min-h-6 items-baseline gap-1 text-sm font-semibold text-slate-900">
         <span>{displayValue}</span>
-        {slot.suffix ? <span className="text-xs font-normal text-slate-500">{slot.suffix}</span> : null}
+        {slot.suffix ? (
+          <span className="text-xs font-normal text-slate-500">{slot.suffix}</span>
+        ) : null}
       </div>
     </div>
   );

@@ -617,7 +617,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="900"');
   });
 
-  it("characterizes current rate table display before computed and aggregate read models", () => {
+  it("renders source rate-card margin and aggregate summaries", () => {
     const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(
@@ -647,13 +647,23 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Price"');
     expect(html).toContain('value="475"');
     expect(html).toContain('value="600"');
+    expect(html).toContain("Margin");
+    expect(html).toContain("31.58%");
+    expect(html).toContain("25%");
+    expect(html).toContain('aria-label="Collection summary"');
+    expect(html).toContain('aria-label="Cost total summary"');
+    expect(html).toContain("Cost total");
+    expect(html).toContain("$775.00");
+    expect(html).toContain('aria-label="Price total summary"');
+    expect(html).toContain("Price total");
+    expect(html).toContain("$1075.00");
+    expect(html).toContain('aria-label="Average margin summary"');
+    expect(html).toContain("Average margin");
+    expect(html).toContain("28.29%");
     expect(html).toContain("USD");
     expect(html.match(/\/ day/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
     expect(html).not.toContain('value="750"');
-    expect(html).not.toContain("Margin");
-    expect(html).not.toContain("Cost total");
-    expect(html).not.toContain("Price total");
-    expect(html).not.toContain("Average margin");
+    expect(html).not.toContain("$900.00");
   });
 
   it("renders aggregate collection summaries over the active context", () => {
@@ -707,7 +717,10 @@ describe("generated collection home", () => {
     }
 
     applyBootstrapResponse(
-      bootstrap([cardRecord("card-1", "Default"), resourceRecord("resource-1", "Designer")], schema),
+      bootstrap(
+        [cardRecord("card-1", "Default"), resourceRecord("resource-1", "Designer")],
+        schema,
+      ),
     );
     const html = renderGeneratedHomeCollection(rateModel, {
       selectedContextRecordId: "card-1",
@@ -1915,6 +1928,7 @@ function rateCardSchemaWithComputedMarginColumn(): AppSchema {
           expression: rateMarginExpression(),
         },
       },
+      aggregates: rateCardSchema.readModels?.aggregates ?? {},
     },
     tableViews: {
       ...rateCardSchema.tableViews,

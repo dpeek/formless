@@ -361,6 +361,60 @@
       }
     }
   },
+  "readModels": {
+    "computedValues": {
+      "rateMargin": {
+        "entity": "rate",
+        "type": "number",
+        "expression": {
+          "kind": "binary",
+          "op": "divide",
+          "left": {
+            "kind": "binary",
+            "op": "subtract",
+            "left": {
+              "kind": "field",
+              "field": "price"
+            },
+            "right": {
+              "kind": "field",
+              "field": "cost"
+            }
+          },
+          "right": {
+            "kind": "field",
+            "field": "price"
+          }
+        }
+      }
+    },
+    "aggregates": {
+      "selectedCardCostTotal": {
+        "query": "ratesForSelectedCard",
+        "function": "sum",
+        "value": {
+          "kind": "field",
+          "field": "cost"
+        }
+      },
+      "selectedCardPriceTotal": {
+        "query": "ratesForSelectedCard",
+        "function": "sum",
+        "value": {
+          "kind": "field",
+          "field": "price"
+        }
+      },
+      "selectedCardAverageMargin": {
+        "query": "ratesForSelectedCard",
+        "function": "average",
+        "value": {
+          "kind": "computed",
+          "computedValue": "rateMargin"
+        }
+      }
+    }
+  },
   "itemViews": {
     "resourceListItem": {
       "entity": "resource",
@@ -489,6 +543,15 @@
           "format": "number"
         },
         {
+          "type": "computed",
+          "computedValue": "rateMargin",
+          "label": "Margin",
+          "align": "end",
+          "width": "sm",
+          "display": "readOnly",
+          "format": "percent"
+        },
+        {
           "type": "field",
           "field": "currency",
           "editor": "enum",
@@ -579,6 +642,28 @@
         }
       ],
       "defaultQuery": "ratesForSelectedCard",
+      "summary": [
+        {
+          "type": "aggregate",
+          "aggregate": "selectedCardCostTotal",
+          "label": "Cost total",
+          "suffix": "/ day",
+          "format": "currency"
+        },
+        {
+          "type": "aggregate",
+          "aggregate": "selectedCardPriceTotal",
+          "label": "Price total",
+          "suffix": "/ day",
+          "format": "currency"
+        },
+        {
+          "type": "aggregate",
+          "aggregate": "selectedCardAverageMargin",
+          "label": "Average margin",
+          "format": "percent"
+        }
+      ],
       "result": {
         "type": "table",
         "tableView": "rateTable"

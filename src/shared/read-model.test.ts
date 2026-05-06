@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { evaluateAggregate, evaluateNumericExpression, formatReadModelNumber } from "./read-model.ts";
+import {
+  evaluateAggregate,
+  evaluateNumericExpression,
+  formatReadModelNumber,
+} from "./read-model.ts";
 import type { StoredRecord } from "./protocol.ts";
 import type { NumericExpression } from "./read-model.ts";
 
