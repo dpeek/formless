@@ -21,6 +21,7 @@ import type {
   CollectionQuerySchema,
   CollectionResultSchema,
   CollectionSummarySlotSchema,
+  CollectionTableFooterSlotSchema,
   CollectionViewQuerySlotSchema,
   CollectionViewSchema,
   ComputedValueSchema,
@@ -777,7 +778,15 @@ function parseCollectionView(
     );
   }
 
-  const result = parseCollectionResult(viewName, value.entity, value.result, itemViews, tableViews);
+  const result = parseCollectionResult(
+    viewName,
+    value.entity,
+    value.result,
+    itemViews,
+    tableViews,
+    querySlots,
+    readModels?.aggregates ?? {},
+  );
   const actions = parseCollectionActionSlots(viewName, value.entity, entity, value.actions);
   const summary = parseCollectionSummarySlots(
     viewName,
@@ -1181,6 +1190,8 @@ function parseCollectionResult(
   value: unknown,
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
+  querySlots: CollectionViewQuerySlotSchema[],
+  aggregates: Record<string, AggregateSchema>,
 ): CollectionResultSchema {
   if (!isRecord(value)) {
     throw new Error(`Collection view "${viewName}" result must be an object.`);
@@ -1213,7 +1224,12 @@ function parseCollectionResult(
   }
 
   if (value.type === "table") {
-    assertExactKeys(`Collection view "${viewName}" result`, value, ["type", "tableView"]);
+    assertExactKeys(
+      `Collection view "${viewName}" result`,
+      value,
+      ["type", "tableView"],
+      ["footer"],
+    );
 
     if (typeof value.tableView !== "string" || value.tableView.trim() === "") {
       throw new Error(`Collection view "${viewName}" result tableView must be a non-empty string.`);
@@ -1232,13 +1248,134 @@ function parseCollectionResult(
       );
     }
 
+    const footer = parseCollectionTableFooterSlots(
+      viewName,
+      entityName,
+      value.footer,
+      tableView,
+      querySlots,
+      aggregates,
+    );
+
     return {
       type: "table",
       tableView: value.tableView,
+      ...(footer === undefined ? {} : { footer }),
     };
   }
 
   throw new Error(`Collection view "${viewName}" result type must be "list" or "table".`);
+}
+
+function parseCollectionTableFooterSlots(
+  viewName: string,
+  entityName: string,
+  value: unknown,
+  tableView: TableViewSchema,
+  querySlots: CollectionViewQuerySlotSchema[],
+  aggregates: Record<string, AggregateSchema>,
+): CollectionTableFooterSlotSchema[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Collection view "${viewName}" result footer must be an array.`);
+  }
+
+  const slots = value.map((slot, index) =>
+    parseCollectionTableFooterSlot(
+      viewName,
+      entityName,
+      index,
+      slot,
+      tableView,
+      querySlots,
+      aggregates,
+    ),
+  );
+  const seenColumns = new Set<string>();
+
+  for (const slot of slots) {
+    if (seenColumns.has(slot.column)) {
+      throw new Error(
+        `Collection view "${viewName}" result footer column "${slot.column}" must be unique.`,
+      );
+    }
+
+    seenColumns.add(slot.column);
+  }
+
+  return slots.length > 0 ? slots : undefined;
+}
+
+function parseCollectionTableFooterSlot(
+  viewName: string,
+  entityName: string,
+  index: number,
+  value: unknown,
+  tableView: TableViewSchema,
+  querySlots: CollectionViewQuerySlotSchema[],
+  aggregates: Record<string, AggregateSchema>,
+): CollectionTableFooterSlotSchema {
+  const context = `Collection view "${viewName}" result footer slot ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["type", "column", "aggregate"], ["label", "suffix", "format"]);
+
+  if (value.type !== "aggregate") {
+    throw new Error(`${context} type must be "aggregate".`);
+  }
+
+  const column = parseRequiredNonEmptyString(`${context} column`, value.column);
+  const tableColumn = tableView.columns.find(
+    (candidate) => tableFooterColumnName(candidate) === column,
+  );
+
+  if (!tableColumn || tableColumn.display === "hidden") {
+    throw new Error(`${context} references unknown visible table column "${column}".`);
+  }
+
+  const aggregateName = parseRequiredNonEmptyString(`${context} aggregate`, value.aggregate);
+  const aggregate = aggregates[aggregateName];
+
+  if (!aggregate) {
+    throw new Error(`${context} references unknown aggregate "${aggregateName}".`);
+  }
+
+  if (!querySlots.some((slot) => slot.query === aggregate.query)) {
+    throw new Error(
+      `${context} aggregate "${aggregateName}" query "${aggregate.query}" must be one of its query slots for entity "${entityName}".`,
+    );
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
+  const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
+
+  return {
+    type: "aggregate",
+    column,
+    aggregate: aggregateName,
+    ...(label === undefined ? {} : { label }),
+    ...(suffix === undefined ? {} : { suffix }),
+    ...(format === undefined ? {} : { format }),
+  };
+}
+
+function tableFooterColumnName(column: TableColumnSchema) {
+  if (column.type === "field") {
+    return column.field;
+  }
+
+  if (column.type === "computed") {
+    return column.computedValue;
+  }
+
+  return `${column.referenceField}.${column.field}`;
 }
 
 function parseCollectionActionSlots(

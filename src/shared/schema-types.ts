@@ -216,7 +216,17 @@ export type CollectionResultSchema =
   | {
       type: "table";
       tableView: string;
+      footer?: CollectionTableFooterSlotSchema[];
     };
+
+export type CollectionTableFooterSlotSchema = {
+  type: "aggregate";
+  column: string;
+  aggregate: string;
+  label?: string;
+  suffix?: string;
+  format?: TableColumnFormat;
+};
 
 export type CollectionNavigationSchema = {
   primary: boolean;

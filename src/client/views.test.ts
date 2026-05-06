@@ -181,20 +181,26 @@ describe("home view model collections", () => {
         name: "card",
         entityName: "card",
         presentation: "tabs",
-        relatedCollection: {
-          relationshipName: "cardRates",
-          entityName: "rate",
-          referenceFieldName: "card",
-        },
       },
       result: {
         type: "table",
         tableViewName: "rateTable",
+        footer: [
+          {
+            columnKey: "field:cost",
+            aggregateName: "selectedCardAverageCost",
+          },
+          {
+            columnKey: "field:price",
+            aggregateName: "selectedCardAveragePrice",
+          },
+          {
+            columnKey: "computed:rateMargin",
+            aggregateName: "selectedCardAverageMargin",
+          },
+        ],
       },
-      actions: [
-        { type: "create", entityName: "resource" },
-        { type: "entity-action", actionName: "regenerateMissingRates" },
-      ],
+      actions: [{ type: "create", entityName: "resource" }],
     });
     expect(model?.collection.context).toBe(model?.context);
     expect(model?.collection.queries.tabs).toBe(model?.queryTabs);
@@ -264,7 +270,6 @@ describe("home view model collections", () => {
       "field:costUnit",
       "field:price",
       "computed:rateMargin",
-      "field:currency",
     ]);
     expect(
       models[2]?.result.type === "table"
@@ -278,10 +283,7 @@ describe("home view model collections", () => {
       models[2]?.result.type === "table"
         ? findFieldTableColumn(models[2].result.columns, "price")?.valueUnit
         : undefined,
-    ).toMatchObject({
-      unitFieldName: "currency",
-      unitField: rateCardSchema.entities.rate?.fields.currency,
-    });
+    ).toBeUndefined();
   });
 
   it("selects primary rate screens without collection navigation hints", () => {
@@ -374,16 +376,14 @@ describe("home view model collections", () => {
       "Cost unit",
       "Price",
       "Margin",
-      "Currency",
     ]);
-    expect(tableColumnEditors(columns)).toEqual(["text", "number", "enum", "number", null, "enum"]);
+    expect(tableColumnEditors(columns)).toEqual(["text", "number", "enum", "number", null]);
     expect(tableColumnCommits(columns)).toEqual([
       "field-commit",
       "field-commit",
       "immediate",
       "field-commit",
       null,
-      "immediate",
     ]);
     expect(columns.map((column) => column.align ?? "start")).toEqual([
       "start",
@@ -391,39 +391,22 @@ describe("home view model collections", () => {
       "start",
       "end",
       "end",
-      "start",
     ]);
-    expect(columns.map((column) => column.width ?? "none")).toEqual([
-      "lg",
-      "sm",
-      "xs",
-      "sm",
-      "sm",
-      "xs",
-    ]);
+    expect(columns.map((column) => column.width ?? "none")).toEqual(["lg", "sm", "xs", "sm", "sm"]);
     expect(columns.map((column) => column.display)).toEqual([
       "editor",
       "editor",
       "hidden",
       "editor",
       "readOnly",
-      "hidden",
     ]);
-    expect(columns.map((column) => column.suffix ?? "")).toEqual([
-      "",
-      "/ day",
-      "",
-      "/ day",
-      "",
-      "",
-    ]);
+    expect(columns.map((column) => column.suffix ?? "")).toEqual(["", "", "", "/ day", ""]);
     expect(columns.map((column) => column.format)).toEqual([
       "plain",
       "number",
       "plain",
       "currency",
       "percent",
-      "plain",
     ]);
     expect(columns[0]).toMatchObject({
       type: "referenceField",
@@ -480,7 +463,7 @@ describe("home view model collections", () => {
         key: "field:cost",
         label: "Cost",
         display: "editor",
-        suffix: "/ day",
+        suffix: null,
         format: "number",
       },
       {
@@ -507,35 +490,30 @@ describe("home view model collections", () => {
         suffix: null,
         format: "percent",
       },
-      {
-        type: "field",
-        key: "field:currency",
-        label: "Currency",
-        display: "hidden",
-        suffix: null,
-        format: "plain",
-      },
     ]);
-    expect(rateModel.collection.summary).toMatchObject([
+    expect(rateModel.result.type === "table" ? rateModel.result.footer : []).toMatchObject([
       {
         type: "aggregate",
-        key: "aggregate:selectedCardCostTotal",
-        aggregateName: "selectedCardCostTotal",
-        label: "Cost total",
+        key: "aggregate:selectedCardAverageCost",
+        columnKey: "field:cost",
+        aggregateName: "selectedCardAverageCost",
+        label: "Average cost",
         suffix: "/ day",
         format: "currency",
       },
       {
         type: "aggregate",
-        key: "aggregate:selectedCardPriceTotal",
-        aggregateName: "selectedCardPriceTotal",
-        label: "Price total",
+        key: "aggregate:selectedCardAveragePrice",
+        columnKey: "field:price",
+        aggregateName: "selectedCardAveragePrice",
+        label: "Average price",
         suffix: "/ day",
         format: "currency",
       },
       {
         type: "aggregate",
         key: "aggregate:selectedCardAverageMargin",
+        columnKey: "computed:rateMargin",
         aggregateName: "selectedCardAverageMargin",
         label: "Average margin",
         format: "percent",
@@ -613,7 +591,7 @@ describe("home view model collections", () => {
     expect("summary" in (rateModel?.collection ?? {})).toBe(false);
   });
 
-  it("characterizes paired rate value/unit editing over flat scalar fields", () => {
+  it("characterizes rate value/unit editing over flat scalar fields", () => {
     const rate = rateCardSchema.entities.rate;
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
@@ -633,7 +611,6 @@ describe("home view model collections", () => {
       columns.find((column) => column.type === "field" && column.fieldName === "cost"),
     ).toMatchObject({
       editor: "number",
-      suffix: "/ day",
       format: "number",
       display: "editor",
       valueUnit: {
@@ -641,6 +618,9 @@ describe("home view model collections", () => {
         unitField: rate.fields.costUnit,
       },
     });
+    expect(
+      columns.find((column) => column.type === "field" && column.fieldName === "cost")?.suffix,
+    ).toBeUndefined();
     expect(
       columns.find((column) => column.type === "field" && column.fieldName === "costUnit"),
     ).toMatchObject({
@@ -654,17 +634,11 @@ describe("home view model collections", () => {
       suffix: "/ day",
       format: "currency",
       display: "editor",
-      valueUnit: {
-        unitFieldName: "currency",
-        unitField: rate.fields.currency,
-      },
     });
+    expect(findFieldTableColumn(columns, "price")?.valueUnit).toBeUndefined();
     expect(
       columns.find((column) => column.type === "field" && column.fieldName === "currency"),
-    ).toMatchObject({
-      editor: "enum",
-      display: "hidden",
-    });
+    ).toBeUndefined();
     expect(typeof seedRate.values.cost).toBe("number");
     expect(typeof seedRate.values.costUnit).toBe("string");
     expect(typeof seedRate.values.price).toBe("number");
@@ -723,17 +697,6 @@ describe("home view model collections", () => {
       query: rateCardSchema.queries.cardAll?.expression,
       labelField: "name",
       presentation: "tabs",
-      relatedCollection: {
-        relationshipName: "cardRates",
-        relationship: {
-          kind: "toMany",
-          from: { entity: "card" },
-          to: { entity: "rate", field: "card" },
-        },
-        label: "Rates",
-        entityName: "rate",
-        referenceFieldName: "card",
-      },
       itemViewName: "rateCardContextItem",
       recordFields: [
         { fieldName: "marginMin" },
@@ -753,6 +716,7 @@ describe("home view model collections", () => {
       queryName: "ratesForSelectedCard",
       query: rateCardSchema.queries.ratesForSelectedCard?.expression,
     });
+    expect(rateModel?.context?.relatedCollection).toBeUndefined();
   });
 
   it("resolves the rate-home resource create action from the create view entity", () => {
@@ -770,27 +734,13 @@ describe("home view model collections", () => {
     });
   });
 
-  it("resolves the rate-card regenerate action without a target query", () => {
+  it("omits the source rate-card regenerate action from the primary view", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
     );
-    const action = rateModel?.actions.find((candidate) => candidate.type === "entity-action");
 
-    expect(rateModel?.actions.map((candidate) => candidate.label)).toEqual([
-      "Create Resource",
-      "Regenerate missing rates",
-    ]);
-    expect(action).toMatchObject({
-      type: "entity-action",
-      actionName: "regenerateMissingRates",
-      action: {
-        kind: "create-missing-join-records",
-      },
-      ui: {
-        showAffectedCountOnSuccess: false,
-      },
-    });
-    expect(action?.type === "entity-action" ? action.ui.targetCount : undefined).toBeUndefined();
+    expect(rateModel?.actions.map((candidate) => candidate.label)).toEqual(["Create Resource"]);
+    expect(rateModel?.actions.some((candidate) => candidate.type === "entity-action")).toBe(false);
   });
 
   it("characterizes the rate-card primary home model contract", () => {
@@ -811,12 +761,7 @@ describe("home view model collections", () => {
         queryName: "cardAll",
         labelField: "name",
         presentation: "tabs",
-        relatedCollection: {
-          relationshipName: "cardRates",
-          label: "Rates",
-          entityName: "rate",
-          referenceFieldName: "card",
-        },
+        relatedCollection: null,
         createAction: {
           type: "create",
           label: "Create Rate card",
@@ -846,7 +791,23 @@ describe("home view model collections", () => {
           "field:costUnit",
           "field:price",
           "computed:rateMargin",
-          "field:currency",
+        ],
+        footer: [
+          {
+            columnKey: "field:cost",
+            aggregateName: "selectedCardAverageCost",
+            label: "Average cost",
+          },
+          {
+            columnKey: "field:price",
+            aggregateName: "selectedCardAveragePrice",
+            label: "Average price",
+          },
+          {
+            columnKey: "computed:rateMargin",
+            aggregateName: "selectedCardAverageMargin",
+            label: "Average margin",
+          },
         ],
       },
       actions: [
@@ -857,16 +818,6 @@ describe("home view model collections", () => {
           fields: ["name"],
           defaults: [],
           enabled: true,
-        },
-        {
-          type: "entity-action",
-          label: "Regenerate missing rates",
-          entityName: "rate",
-          actionName: "regenerateMissingRates",
-          actionKind: "create-missing-join-records",
-          showAffectedCountOnSuccess: false,
-          targetCountQueryKind: null,
-          targetCountDisplay: null,
         },
       ],
     });
@@ -1509,6 +1460,10 @@ function rateCardSchemaWithAggregateSummarySlots(): AppSchema {
       ...rateCardSchema.views,
       rateHome: {
         ...rateHome,
+        result:
+          rateHome.result.type === "table"
+            ? { type: "table", tableView: rateHome.result.tableView }
+            : rateHome.result,
         summary: [
           {
             type: "aggregate",
@@ -1606,6 +1561,11 @@ function summarizeHomeModel(model: HomeViewModel) {
             type: "table",
             tableViewName: collection.result.tableViewName,
             columns: collection.result.columns.map((column) => column.key),
+            footer: collection.result.footer?.map((slot) => ({
+              columnKey: slot.columnKey,
+              aggregateName: slot.aggregateName,
+              label: slot.label,
+            })),
           },
     actions: collection.actions.map(summarizeHomeAction),
   };

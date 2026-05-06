@@ -97,6 +97,7 @@ export function HomeCollection({
         entity={entity}
         entityName={entityName}
         query={selectedQuery.query}
+        queryName={selectedQuery.queryName}
         queryContext={queryContext}
         result={result}
       />
@@ -217,6 +218,7 @@ function ScopedHomeCollection({
             entity={entity}
             entityName={entityName}
             query={selectedQuery.query}
+            queryName={selectedQuery.queryName}
             queryContext={queryContext}
             result={result}
           />
@@ -325,6 +327,7 @@ function ListDetailScopedHomeCollection({
               entity={entity}
               entityName={entityName}
               query={selectedQuery.query}
+              queryName={selectedQuery.queryName}
               queryContext={queryContext}
               result={result}
             />
@@ -698,12 +701,14 @@ function CollectionResult({
   entity,
   entityName,
   query,
+  queryName,
   queryContext,
   result,
 }: {
   entity: EntitySchema;
   entityName: string;
   query: HomeQueryTabConfig["query"];
+  queryName: string;
   queryContext?: QueryEvaluationContext;
   result: HomeResultConfig;
 }) {
@@ -713,7 +718,9 @@ function CollectionResult({
         columns={result.columns}
         entity={entity}
         entityName={entityName}
+        footer={result.footer ?? []}
         query={query}
+        queryName={queryName}
         queryContext={queryContext}
       />
     );

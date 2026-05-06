@@ -9,8 +9,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@formless/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@formless/ui/table";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@formless/ui/table";
+import {
+  useAggregateValueMatchingQuery,
   useEntityRecordIdsMatchingQuery,
   useRecord,
   useRecordField,
@@ -22,11 +31,12 @@ import type {
   HomeQueryTabConfig,
   ReferenceFieldTableColumnConfig,
   TableColumnConfig,
+  TableFooterSlotConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { evaluateNumericExpression } from "../../shared/read-model.ts";
-import { formatComputedDisplayValue } from "./format.ts";
+import { formatAggregateDisplayValue, formatComputedDisplayValue } from "./format.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
@@ -35,18 +45,25 @@ export function RecordTable({
   columns,
   entity,
   entityName,
+  footer = [],
   query,
+  queryName,
   queryContext,
 }: {
   columns: TableColumnConfig[];
   entity: EntitySchema;
   entityName: string;
+  footer?: TableFooterSlotConfig[];
   query: HomeQueryTabConfig["query"];
+  queryName?: string;
   queryContext?: QueryEvaluationContext;
 }) {
   const canPatch = entity.mutations.patch.enabled;
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const visibleColumns = columns.filter((column) => column.display !== "hidden");
+  const visibleFooter = footer.filter(
+    (slot) => queryName === undefined || slot.aggregate.query === queryName,
+  );
 
   return (
     <section className="space-y-3">
@@ -86,9 +103,109 @@ export function RecordTable({
               </Fragment>
             ))}
           </TableBody>
+          {visibleFooter.length > 0 ? (
+            <RecordTableFooter
+              columns={visibleColumns}
+              entityName={entityName}
+              footer={visibleFooter}
+              query={query}
+              queryContext={queryContext}
+            />
+          ) : null}
         </Table>
       )}
     </section>
+  );
+}
+
+function RecordTableFooter({
+  columns,
+  entityName,
+  footer,
+  query,
+  queryContext,
+}: {
+  columns: TableColumnConfig[];
+  entityName: string;
+  footer: TableFooterSlotConfig[];
+  query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
+}) {
+  return (
+    <TableFooter>
+      <TableRow>
+        {columns.map((column) => (
+          <TableCell className={tableCellClass(column)} key={column.key}>
+            <RecordTableFooterCell
+              column={column}
+              entityName={entityName}
+              footer={footer}
+              query={query}
+              queryContext={queryContext}
+            />
+          </TableCell>
+        ))}
+      </TableRow>
+    </TableFooter>
+  );
+}
+
+function RecordTableFooterCell({
+  column,
+  entityName,
+  footer,
+  query,
+  queryContext,
+}: {
+  column: TableColumnConfig;
+  entityName: string;
+  footer: TableFooterSlotConfig[];
+  query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
+}) {
+  const slot = footer.find((candidate) => candidate.columnKey === column.key);
+
+  if (!slot) {
+    return <span aria-hidden="true">&nbsp;</span>;
+  }
+
+  return (
+    <div className={`flex min-h-6 items-center gap-1 ${tableCellJustifyClass(column)}`}>
+      <AggregateFooterValue
+        entityName={entityName}
+        query={query}
+        queryContext={queryContext}
+        slot={slot}
+      />
+    </div>
+  );
+}
+
+function AggregateFooterValue({
+  entityName,
+  query,
+  queryContext,
+  slot,
+}: {
+  entityName: string;
+  query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
+  slot: TableFooterSlotConfig;
+}) {
+  const value = useAggregateValueMatchingQuery(
+    entityName,
+    query,
+    slot.aggregate,
+    slot.computedValues,
+    queryContext,
+  );
+  const displayValue = formatAggregateDisplayValue(slot, value);
+
+  return (
+    <span aria-label={slot.label} className="inline-flex items-baseline gap-1">
+      <span>{displayValue}</span>
+      {slot.suffix ? <span className="text-slate-500">{slot.suffix}</span> : null}
+    </span>
   );
 }
 
@@ -125,12 +242,7 @@ function RecordTableCell({
   entityName: string;
   recordId: string;
 }) {
-  const justifyClass =
-    column.align === "end"
-      ? "justify-end"
-      : column.align === "center"
-        ? "justify-center"
-        : "justify-start";
+  const justifyClass = tableCellJustifyClass(column);
 
   if (column.type === "referenceField") {
     return (
@@ -174,6 +286,14 @@ function RecordTableCell({
       <ReferencedRecordEditButton column={column} sourceRecordId={recordId} />
     </div>
   );
+}
+
+function tableCellJustifyClass(column: TableColumnConfig) {
+  return column.align === "end"
+    ? "justify-end"
+    : column.align === "center"
+      ? "justify-center"
+      : "justify-start";
 }
 
 function ComputedTableCell({

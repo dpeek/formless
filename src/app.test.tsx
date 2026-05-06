@@ -794,7 +794,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain("Rates");
     expect(html).toContain("Create Resource");
-    expect(html).toContain("Regenerate missing rates");
+    expect(html).not.toContain("Regenerate missing rates");
     expect(html).not.toMatch(/<button[^>]*>Create Rate<\/button>/);
   });
 
@@ -822,11 +822,11 @@ describe("generated collection home", () => {
     expect(html).toContain("<select");
     expect(html).toContain("Default");
     expect(html).toContain("Backup");
-    expect(html).toMatch(/aria-label="Default Rates count"[^>]*>1</);
-    expect(html).toMatch(/aria-label="Backup Rates count"[^>]*>1</);
+    expect(html).not.toContain('aria-label="Default Rates count"');
+    expect(html).not.toContain('aria-label="Backup Rates count"');
     expect(html).toContain('aria-label="Create Rate card"');
     expect(html).toMatch(/<button[^>]*>Create Resource<\/button>/);
-    expect(html).toContain("Regenerate missing rates");
+    expect(html).not.toContain("Regenerate missing rates");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("<th");
     expect(html).toContain("Role");
@@ -834,13 +834,13 @@ describe("generated collection home", () => {
     expect(html).toContain('value="Designer"');
     expect(html).not.toContain("Edit shared");
     expect(html).not.toContain('aria-label="Edit shared resource"');
-    expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(2);
+    expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(1);
     expect(html).toContain('aria-label="Cost"');
     expect(html).toContain('aria-label="Cost unit"');
-    expect(html).toContain('aria-label="Price unit"');
+    expect(html).not.toContain('aria-label="Price unit"');
     expect(html).not.toContain('aria-label="Currency"');
-    expect(html).toContain("USD");
-    expect(html).toContain("/ day");
+    expect(html).not.toContain("USD");
+    expect(html.match(/\/ day/g)?.length ?? 0).toBe(3);
     expect(html).toContain('value="325"');
     expect(html).toContain('value="$475.00"');
     expect(html).not.toContain('value="$900.00"');
@@ -955,7 +955,7 @@ describe("generated collection home", () => {
     expect(emptyHtml).not.toContain('data-slot="table"');
   });
 
-  it("renders source rate-card margin and aggregate summaries", () => {
+  it("renders source rate-card margin and footer aggregates", () => {
     const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(
@@ -977,8 +977,8 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(html).toMatch(/aria-label="Default Rates count"[^>]*>2</);
-    expect(html).toMatch(/aria-label="Backup Rates count"[^>]*>1</);
+    expect(html).not.toContain('aria-label="Default Rates count"');
+    expect(html).not.toContain('aria-label="Backup Rates count"');
     expect(html).toContain('aria-label="Cost"');
     expect(html).toContain('value="325"');
     expect(html).toContain('value="450"');
@@ -988,17 +988,15 @@ describe("generated collection home", () => {
     expect(html).toContain("Margin");
     expect(html).toContain("31.58%");
     expect(html).toContain("25%");
-    expect(html).toContain('aria-label="Collection summary"');
-    expect(html).toContain('aria-label="Cost total summary"');
-    expect(html).toContain("Cost total");
-    expect(html).toContain("$775.00");
-    expect(html).toContain('aria-label="Price total summary"');
-    expect(html).toContain("Price total");
-    expect(html).toContain("$1075.00");
-    expect(html).toContain('aria-label="Average margin summary"');
-    expect(html).toContain("Average margin");
+    expect(html).not.toContain('aria-label="Collection summary"');
+    expect(html).toContain('data-slot="table-footer"');
+    expect(html).toContain('aria-label="Average cost"');
+    expect(html).toContain("$387.50");
+    expect(html).toContain('aria-label="Average price"');
+    expect(html).toContain("$537.50");
+    expect(html).toContain('aria-label="Average margin"');
     expect(html).toContain("28.29%");
-    expect(html).toContain("USD");
+    expect(html).not.toContain("USD");
     expect(html.match(/\/ day/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
     expect(html).not.toContain('value="750"');
     expect(html).not.toContain("$900.00");
@@ -1124,12 +1122,13 @@ describe("generated collection home", () => {
   });
 
   it("updates relationship counts after local record merges", () => {
-    const rateModel = selectRateHomeModel();
+    const schema = rateCardSchemaWithRelatedContext();
+    const rateModel = requiredCollectionModel(schema, "rateHome");
 
     applyBootstrapResponse(
       bootstrap(
         [cardRecord("card-1", "Default"), resourceRecord("resource-1", "Designer")],
-        rateCardSchema,
+        schema,
       ),
     );
     const before = renderGeneratedHomeCollection(rateModel, {
@@ -1414,12 +1413,12 @@ describe("generated forms and records", () => {
     expect(html).toContain('value="Designer"');
     expect(html).not.toContain("Edit shared");
     expect(html).not.toContain('aria-label="Edit shared resource"');
-    expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(2);
+    expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(1);
     expect(html).toContain('aria-label="Cost"');
     expect(html).toContain('aria-label="Cost unit"');
-    expect(html).toContain('aria-label="Price unit"');
-    expect(html).toContain("USD");
-    expect(html).toContain("/ day");
+    expect(html).not.toContain('aria-label="Price unit"');
+    expect(html).not.toContain("USD");
+    expect(html.match(/\/ day/g)?.length ?? 0).toBe(1);
     expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('value="325"');
     expect(html).toContain('value="$475.00"');
@@ -2022,10 +2021,10 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('value="325"');
     expect(editHtml).toContain('aria-label="Price"');
     expect(editHtml).toContain('value="$475.00"');
-    expect(editHtml).toContain("USD");
+    expect(editHtml).not.toContain("USD");
     expect(editHtml).toContain('aria-label="Cost unit"');
-    expect(editHtml).toContain('aria-label="Price unit"');
-    expect(editHtml).toContain("/ day");
+    expect(editHtml).not.toContain('aria-label="Price unit"');
+    expect(editHtml.match(/\/ day/g)?.length ?? 0).toBe(1);
   });
 
   it("keeps source site create and edit flows wired through field behavior", () => {
@@ -2783,6 +2782,10 @@ function rateCardSchemaWithAggregateSummarySlots(): AppSchema {
       ...rateCardSchema.views,
       rateHome: {
         ...rateHome,
+        result:
+          rateHome.result.type === "table"
+            ? { type: "table", tableView: rateHome.result.tableView }
+            : rateHome.result,
         summary: [
           {
             type: "aggregate",
@@ -2804,6 +2807,29 @@ function rateCardSchemaWithAggregateSummarySlots(): AppSchema {
 }
 
 function rateCardSchemaWithListDetailContext(): AppSchema {
+  const base = rateCardSchemaWithRelatedContext();
+  const rateHome = base.views.rateHome;
+
+  if (rateHome?.type !== "collection" || !rateHome.context) {
+    throw new Error("Missing rate home context.");
+  }
+
+  return {
+    ...base,
+    views: {
+      ...base.views,
+      rateHome: {
+        ...rateHome,
+        context: {
+          ...rateHome.context,
+          presentation: "listDetail",
+        },
+      },
+    },
+  };
+}
+
+function rateCardSchemaWithRelatedContext(): AppSchema {
   const rateHome = rateCardSchema.views.rateHome;
 
   if (rateHome?.type !== "collection" || !rateHome.context) {
@@ -2818,7 +2844,7 @@ function rateCardSchemaWithListDetailContext(): AppSchema {
         ...rateHome,
         context: {
           ...rateHome.context,
-          presentation: "listDetail",
+          relationship: "cardRates",
         },
       },
     },

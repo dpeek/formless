@@ -1168,6 +1168,130 @@ describe("schema table views", () => {
     ).toThrow('aggregate "cardCount" query "cardAll" must be one of its query slots');
   });
 
+  it("parses and validates collection table footer aggregate slots", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        readModels: scopedRateReadModels(),
+        views: scopedRateViews({
+          result: {
+            type: "table",
+            tableView: "rateTable",
+            footer: [
+              {
+                type: "aggregate",
+                column: "cost",
+                aggregate: "selectedCardCostTotal",
+                label: "Average cost",
+                suffix: "/ day",
+                format: "currency",
+              },
+              {
+                type: "aggregate",
+                column: "rateMargin",
+                aggregate: "selectedCardAverageMargin",
+                label: "Average margin",
+                format: "percent",
+              },
+            ],
+          },
+        }),
+        tableViews: {
+          rateTable: {
+            ...scopedRateTableViews().rateTable,
+            columns: [
+              ...scopedRateTableViews().rateTable.columns,
+              {
+                type: "computed",
+                computedValue: "rateMargin",
+                label: "Margin",
+                align: "end",
+                width: "sm",
+                format: "percent",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(schema.views.rateHome).toMatchObject({
+      type: "collection",
+      result: {
+        type: "table",
+        tableView: "rateTable",
+        footer: [
+          {
+            type: "aggregate",
+            column: "cost",
+            aggregate: "selectedCardCostTotal",
+            label: "Average cost",
+            suffix: "/ day",
+            format: "currency",
+          },
+          {
+            type: "aggregate",
+            column: "rateMargin",
+            aggregate: "selectedCardAverageMargin",
+            label: "Average margin",
+            format: "percent",
+          },
+        ],
+      },
+    });
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: scopedRateReadModels(),
+          views: scopedRateViews({
+            result: {
+              type: "table",
+              tableView: "rateTable",
+              footer: [
+                { type: "aggregate", column: "missing", aggregate: "selectedCardCostTotal" },
+              ],
+            },
+          }),
+        }),
+      ),
+    ).toThrow('references unknown visible table column "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: scopedRateReadModels(),
+          views: scopedRateViews({
+            result: {
+              type: "table",
+              tableView: "rateTable",
+              footer: [
+                { type: "aggregate", column: "currency", aggregate: "selectedCardCostTotal" },
+              ],
+            },
+          }),
+        }),
+      ),
+    ).toThrow('references unknown visible table column "currency"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: scopedRateReadModels(),
+          views: scopedRateViews({
+            result: {
+              type: "table",
+              tableView: "rateTable",
+              footer: [
+                { type: "aggregate", column: "cost", aggregate: "selectedCardCostTotal" },
+                { type: "aggregate", column: "cost", aggregate: "selectedCardAverageMargin" },
+              ],
+            },
+          }),
+        }),
+      ),
+    ).toThrow('result footer column "cost" must be unique');
+  });
+
   it("parses and validates referenced-record field columns", () => {
     const schema = parseAppSchema(
       scopedRateSchema({
@@ -2377,7 +2501,6 @@ describe("rate-card sample schema", () => {
         type: "field",
         field: "price",
         format: "currency",
-        valueUnit: { unitField: "currency" },
       },
       {
         type: "computed",
@@ -2388,7 +2511,6 @@ describe("rate-card sample schema", () => {
         display: "readOnly",
         format: "percent",
       },
-      { type: "field", field: "currency", display: "hidden" },
     ]);
     expect(schema.tableViews.rateTable?.columns[0]).toMatchObject({
       type: "referenceField",
@@ -2404,14 +2526,14 @@ describe("rate-card sample schema", () => {
         },
       },
       aggregates: {
-        selectedCardCostTotal: {
+        selectedCardAverageCost: {
           query: "ratesForSelectedCard",
-          function: "sum",
+          function: "average",
           value: { kind: "field", field: "cost" },
         },
-        selectedCardPriceTotal: {
+        selectedCardAveragePrice: {
           query: "ratesForSelectedCard",
-          function: "sum",
+          function: "average",
           value: { kind: "field", field: "price" },
         },
         selectedCardAverageMargin: {
@@ -2431,35 +2553,37 @@ describe("rate-card sample schema", () => {
       type: "collection",
       context: {
         itemView: "rateCardContextItem",
-        relationship: "cardRates",
       },
-      result: { type: "table", tableView: "rateTable" },
-      summary: [
-        {
-          type: "aggregate",
-          aggregate: "selectedCardCostTotal",
-          label: "Cost total",
-          suffix: "/ day",
-          format: "currency",
-        },
-        {
-          type: "aggregate",
-          aggregate: "selectedCardPriceTotal",
-          label: "Price total",
-          suffix: "/ day",
-          format: "currency",
-        },
-        {
-          type: "aggregate",
-          aggregate: "selectedCardAverageMargin",
-          label: "Average margin",
-          format: "percent",
-        },
-      ],
-      actions: [
-        { type: "create", createView: "resourceCreate" },
-        { type: "entityAction", action: "regenerateMissingRates" },
-      ],
+      result: {
+        type: "table",
+        tableView: "rateTable",
+        footer: [
+          {
+            type: "aggregate",
+            column: "cost",
+            aggregate: "selectedCardAverageCost",
+            label: "Average cost",
+            suffix: "/ day",
+            format: "currency",
+          },
+          {
+            type: "aggregate",
+            column: "price",
+            aggregate: "selectedCardAveragePrice",
+            label: "Average price",
+            suffix: "/ day",
+            format: "currency",
+          },
+          {
+            type: "aggregate",
+            column: "rateMargin",
+            aggregate: "selectedCardAverageMargin",
+            label: "Average margin",
+            format: "percent",
+          },
+        ],
+      },
+      actions: [{ type: "create", createView: "resourceCreate" }],
     });
     expect(
       ["resourceHome", "cardHome", "rateHome"].map((viewName) => {

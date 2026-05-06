@@ -1,8 +1,8 @@
 # PRD 11: Field editor expansion
 
 Status: complete
-Current chunk: FE-10 shipped
-Last updated: 2026-05-06
+Current chunk: FE-12 shipped
+Last updated: 2026-05-07
 
 ## Goal
 
@@ -241,6 +241,8 @@ Patch scalar fields together through generic mutation paths.
 | FE-08 | shipped | FE-07      | source schemas, app tests, `bun browser`                               | Rates and site authoring smoke pass with richer editors and no storage shape change.                       |
 | FE-09 | shipped | FE-08      | `prd/11-field-editor-expansion.md`                                     | PRD status, shipped outcomes, blockers, and promote notes are current.                                     |
 | FE-10 | shipped | FE-08      | `src/app/generated/table.tsx`, generated table tests, `bun browser`    | Compact value/unit table columns reserve enough width for formatted rate values.                           |
+| FE-11 | shipped | FE-10      | `schema/apps/rates/schema.json`, generated app/view/schema tests       | Rate-card primary view removes the regenerate button, table currency selector, and duplicate cost suffix.  |
+| FE-12 | shipped | FE-11      | `schema/apps/rates/schema.json`, generated app/view/schema tests       | Rate-card primary card tabs do not show related-rate count badges.                                         |
 
 ## Chunk details
 
@@ -513,6 +515,57 @@ Promotion:
 
 - No new global doc promotion.
 
+### FE-11 rate-card primary view polish
+
+Status: shipped 2026-05-07.
+
+Outcomes:
+
+- Rate-card primary view still exposes `Create Resource`.
+- Rate-card primary view no longer exposes `Regenerate missing rates`.
+- `rate.regenerateMissingRates` remains a schema action for create after-effects.
+- Rate table cost still pairs with `costUnit`.
+- Rate table cost no longer shows the static `/ day` suffix beside the unit selector.
+- Rate table price still uses currency formatting.
+- Rate table price no longer pairs with the `currency` unit selector.
+- Rate table no longer includes a hidden currency column.
+- Rate records stay flat and still store `currency`.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: dev ready, tests pass, check pass.
+- `./tmp/test.txt`: latest watcher rerun passed `src/client/views.test.ts` with 31 tests; full agent state reports `testStatus: "pass"`.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 164 files.
+- `bun browser --ignore-https-errors batch --bail "open https://formless.local/rates" "wait 1000" "get text body"` showed `Create Resource`; did not show `Regenerate missing rates` or `USD`; cost rows showed the unit options; price rows still showed `/ day`.
+
+Promotion:
+
+- Rate-card primary view exposes Create Resource only.
+- Rate-card cost editor uses a `costUnit` value/unit selector without a duplicate static `/ day` suffix.
+- Rate-card price editor uses currency formatting without showing a currency selector in the table.
+- Rate-card stored records stay flat and keep `currency`.
+
+### FE-12 rate-card tab count removal
+
+Status: shipped 2026-05-07.
+
+Outcomes:
+
+- Rate-card primary card tabs render card names without related-rate count badges.
+- `cardRates` remains a relationship for schemas and fixtures that opt into relationship-backed counts.
+- Source rate-card table footer aggregates and primary actions remain unchanged.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: dev ready, tests pass, check pass.
+- `./tmp/test.txt`: watcher reruns passed `src/app.test.tsx`, `src/client/views.test.ts`, and `src/shared/schema.test.ts`; full agent state reports `testStatus: "pass"`.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 164 files.
+- `bun browser` at `https://formless.local/rates` after source schema and seed reset showed `Default`, `Premium`, and `Create Resource`; no `Rates count` aria badges were present.
+
+Promotion:
+
+- Rate-card primary card tabs do not show related-rate count badges.
+
 ## Non-goals
 
 - Do not add nested stored field values.
@@ -600,8 +653,10 @@ When this PRD ships, update `doc/current.md`:
 - Generated text editors can render title-like autosizing editable text.
 - Generated number editors can use formatted number input while storing numbers.
 - Generated date editors preserve `YYYY-MM-DD` field values.
-- Rate-card value/unit editing stays flat and patches scalar fields.
+- Rate-card cost value/unit editing stays flat and patches scalar fields.
 - Rate-card price editor uses currency formatting while `price` and `currency` stay separate flat fields.
+- Rate-card primary view hides the currency selector and hidden currency column from the table.
+- Rate-card primary card tabs do not show related-rate count badges.
 - Shared UI input primitives live under `lib/ui/src/`.
 
 When this PRD ships, update `doc/roadmap.md` only if richer field/editor support is release scope.
@@ -645,4 +700,16 @@ When this PRD ships, update `doc/roadmap.md` only if richer field/editor support
 - FE-09 kept promote notes limited to shipped field editor behavior.
 - Browser smoke not run; PRD-only change with no app behavior change.
 - No blockers.
+- FE-10 shipped 2026-05-06.
+- FE-10 widened compact value/unit table columns.
+- FE-10 browser smoke passed for `/rates`.
+- FE-11 shipped 2026-05-07.
+- FE-11 removed the source rate-card primary-view regenerate button.
+- FE-11 removed the source rate-card table price/currency unit pairing and hidden currency column.
+- FE-11 removed the source rate-card table cost `/ day` suffix while keeping `costUnit`.
+- FE-11 kept `currency` as a stored flat field.
+- FE-11 browser smoke passed for `/rates`.
+- FE-12 shipped 2026-05-07.
+- FE-12 removed related-rate count badges from source rate-card primary tabs.
+- FE-12 kept the generic relationship-backed count badge path covered by explicit fixtures.
 - PRD complete; no next ready chunk.

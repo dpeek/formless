@@ -3,6 +3,7 @@ import type {
   AggregateSchema,
   CollectionContextPresentation,
   CollectionNavigationSchema,
+  CollectionTableFooterSlotSchema,
   CollectionSummarySlotSchema,
   CollectionViewSchema,
   ComputedValueSchema,
@@ -119,6 +120,10 @@ export type HomeSummarySlotConfig = {
   format: TableColumnFormat;
 };
 
+export type TableFooterSlotConfig = HomeSummarySlotConfig & {
+  columnKey: string;
+};
+
 export type HomeResultConfig =
   | {
       type: "list";
@@ -129,6 +134,7 @@ export type HomeResultConfig =
       type: "table";
       tableViewName: string;
       columns: TableColumnConfig[];
+      footer?: TableFooterSlotConfig[];
     };
 
 export type HomeContextConfig = {
@@ -560,11 +566,14 @@ function selectResult(
     if (!tableView) {
       throw new Error(`Missing table view "${collectionView.result.tableView}".`);
     }
+    const columns = selectTableColumns(schema, tableView, entity);
+    const footer = selectTableFooterSlots(schema, collectionView.result.footer ?? [], columns);
 
     return {
       type: "table",
       tableViewName: collectionView.result.tableView,
-      columns: selectTableColumns(schema, tableView, entity),
+      columns,
+      ...(footer.length === 0 ? {} : { footer }),
     };
   }
 
@@ -579,6 +588,25 @@ function selectResult(
     itemViewName: collectionView.result.itemView,
     recordFields: selectRecordFields(itemView, entity),
   };
+}
+
+function selectTableFooterSlots(
+  schema: AppSchema,
+  slots: CollectionTableFooterSlotSchema[],
+  columns: TableColumnConfig[],
+): TableFooterSlotConfig[] {
+  return slots.map((slot) => {
+    const column = columns.find((candidate) => tableFooterColumnName(candidate) === slot.column);
+
+    if (!column) {
+      throw new Error(`Missing table footer column "${slot.column}".`);
+    }
+
+    return {
+      ...selectAggregateSlot(schema, slot),
+      columnKey: column.key,
+    };
+  });
 }
 
 function selectHomeActions(
@@ -625,16 +653,27 @@ function selectSummarySlot(
   collectionView: CollectionViewSchema,
   slot: CollectionSummarySlotSchema,
 ): HomeSummarySlotConfig {
+  const summarySlot = selectAggregateSlot(schema, slot);
+
+  if (
+    !collectionView.queries.some((querySlot) => querySlot.query === summarySlot.aggregate.query)
+  ) {
+    throw new Error(
+      `Aggregate "${summarySlot.aggregateName}" query "${summarySlot.aggregate.query}" must belong to collection "${collectionView.label}".`,
+    );
+  }
+
+  return summarySlot;
+}
+
+function selectAggregateSlot(
+  schema: AppSchema,
+  slot: CollectionSummarySlotSchema | CollectionTableFooterSlotSchema,
+): HomeSummarySlotConfig {
   const aggregate = schema.readModels?.aggregates?.[slot.aggregate];
 
   if (!aggregate) {
     throw new Error(`Missing aggregate "${slot.aggregate}".`);
-  }
-
-  if (!collectionView.queries.some((querySlot) => querySlot.query === aggregate.query)) {
-    throw new Error(
-      `Aggregate "${slot.aggregate}" query "${aggregate.query}" must belong to collection "${collectionView.label}".`,
-    );
   }
 
   return {
@@ -845,6 +884,18 @@ function selectTableColumns(
       ...(valueUnit === undefined ? {} : { valueUnit }),
     };
   });
+}
+
+function tableFooterColumnName(column: TableColumnConfig) {
+  if (column.type === "field") {
+    return column.fieldName;
+  }
+
+  if (column.type === "computed") {
+    return column.computedValueName;
+  }
+
+  return `${column.sourceReferenceFieldName}.${column.fieldName}`;
 }
 
 function selectValueUnitField(

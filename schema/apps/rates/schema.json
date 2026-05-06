@@ -158,12 +158,6 @@
             "day": {
               "label": "Day"
             },
-            "week": {
-              "label": "Week"
-            },
-            "month": {
-              "label": "Month"
-            },
             "year": {
               "label": "Year"
             }
@@ -389,17 +383,17 @@
       }
     },
     "aggregates": {
-      "selectedCardCostTotal": {
+      "selectedCardAverageCost": {
         "query": "ratesForSelectedCard",
-        "function": "sum",
+        "function": "average",
         "value": {
           "kind": "field",
           "field": "cost"
         }
       },
-      "selectedCardPriceTotal": {
+      "selectedCardAveragePrice": {
         "query": "ratesForSelectedCard",
-        "function": "sum",
+        "function": "average",
         "value": {
           "kind": "field",
           "field": "price"
@@ -521,7 +515,6 @@
           "commit": "field-commit",
           "align": "end",
           "width": "sm",
-          "suffix": "/ day",
           "format": "number",
           "valueUnit": {
             "unitField": "costUnit"
@@ -543,10 +536,7 @@
           "align": "end",
           "width": "sm",
           "suffix": "/ day",
-          "format": "currency",
-          "valueUnit": {
-            "unitField": "currency"
-          }
+          "format": "currency"
         },
         {
           "type": "computed",
@@ -556,14 +546,6 @@
           "width": "sm",
           "display": "readOnly",
           "format": "percent"
-        },
-        {
-          "type": "field",
-          "field": "currency",
-          "editor": "enum",
-          "commit": "immediate",
-          "width": "xs",
-          "display": "hidden"
         }
       ]
     }
@@ -626,7 +608,6 @@
         "entity": "card",
         "query": "cardAll",
         "labelField": "name",
-        "relationship": "cardRates",
         "createView": "cardCreate",
         "itemView": "rateCardContextItem"
       },
@@ -639,40 +620,39 @@
         }
       ],
       "defaultQuery": "ratesForSelectedCard",
-      "summary": [
-        {
-          "type": "aggregate",
-          "aggregate": "selectedCardCostTotal",
-          "label": "Cost total",
-          "suffix": "/ day",
-          "format": "currency"
-        },
-        {
-          "type": "aggregate",
-          "aggregate": "selectedCardPriceTotal",
-          "label": "Price total",
-          "suffix": "/ day",
-          "format": "currency"
-        },
-        {
-          "type": "aggregate",
-          "aggregate": "selectedCardAverageMargin",
-          "label": "Average margin",
-          "format": "percent"
-        }
-      ],
       "result": {
         "type": "table",
-        "tableView": "rateTable"
+        "tableView": "rateTable",
+        "footer": [
+          {
+            "type": "aggregate",
+            "column": "cost",
+            "aggregate": "selectedCardAverageCost",
+            "label": "Average cost",
+            "suffix": "/ day",
+            "format": "currency"
+          },
+          {
+            "type": "aggregate",
+            "column": "price",
+            "aggregate": "selectedCardAveragePrice",
+            "label": "Average price",
+            "suffix": "/ day",
+            "format": "currency"
+          },
+          {
+            "type": "aggregate",
+            "column": "rateMargin",
+            "aggregate": "selectedCardAverageMargin",
+            "label": "Average margin",
+            "format": "percent"
+          }
+        ]
       },
       "actions": [
         {
           "type": "create",
           "createView": "resourceCreate"
-        },
-        {
-          "type": "entityAction",
-          "action": "regenerateMissingRates"
         }
       ]
     },

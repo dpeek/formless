@@ -1,8 +1,8 @@
 # PRD 12: Computed and aggregate read model
 
 Status: shipped
-Current chunk: complete
-Last updated: 2026-05-06
+Current chunk: CR-08 shipped
+Last updated: 2026-05-07
 
 ## Goal
 
@@ -240,21 +240,22 @@ Notes:
 
 ## Decisions
 
-| ID     | Decision                                                      | Reason                                                                 | Evidence                                                         |
-| ------ | ------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| CR-D1  | Keep computed values read-only and display-time first.        | Flat stored records and generic writes are core runtime bets.          | `doc/overview.md`, `doc/current.md`                              |
-| CR-D2  | Do not add a full computed graph engine.                      | The first release needs simple derived display, not dependency graphs. | `doc/roadmap.md`                                                 |
-| CR-D3  | Start with numeric same-record expressions.                   | Rate margins and markups prove value without cross-record traversal.   | `schema/apps/rates/schema.json`                                  |
-| CR-D4  | Start aggregates over existing query outputs.                 | Queries already define collection membership and context behavior.     | `src/shared/query.ts`, `src/client/store.ts`                     |
-| CR-D5  | Render through table and collection summary surfaces first.   | PRD 10 owns screen composition; this PRD should not compete with it.   | `prd/10-declarative-screen-runtime.md`                           |
-| CR-D6  | Keep React out of the read-model evaluator.                   | The evaluator should be testable and reusable by view models.          | `src/shared/query.ts`, `src/shared/field-types.ts`               |
-| CR-D7  | Treat invalid runtime arithmetic as empty display output.     | Existing records may have zeros or missing optional values.            | `src/app/generated/record-field-display.tsx`                     |
-| CR-D8  | Use existing number formatting options where possible.        | Table columns already support number, currency, and percent display.   | `src/app/generated/format.ts`, `src/shared/schema-types.ts`      |
-| CR-D9  | Return `number \| undefined` from numeric read-model eval.    | It gives generated UI a narrow empty-output signal without throwing.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts`      |
-| CR-D10 | Use `readModels.computedValues` and `readModels.aggregates`.  | It keeps derived read declarations separate from stored entity fields. | `prd/12-computed-read-model.md`                                  |
-| CR-D11 | Computed table columns are render-only, never editor-backed.  | Computed values must not enter generic patch paths.                    | `src/client/views.ts`, `src/app/generated/table.tsx`             |
-| CR-D12 | Summary slots render for the active query tab only.           | Query-scoped aggregate definitions should follow active collection UI. | `src/shared/schema-views.ts`, `src/app/generated/collection.tsx` |
-| CR-D13 | Empty count and sum render zero; empty average/min/max empty. | Totals stay useful while undefined reducers avoid misleading values.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts`      |
+| ID     | Decision                                                        | Reason                                                                 | Evidence                                                         |
+| ------ | --------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| CR-D1  | Keep computed values read-only and display-time first.          | Flat stored records and generic writes are core runtime bets.          | `doc/overview.md`, `doc/current.md`                              |
+| CR-D2  | Do not add a full computed graph engine.                        | The first release needs simple derived display, not dependency graphs. | `doc/roadmap.md`                                                 |
+| CR-D3  | Start with numeric same-record expressions.                     | Rate margins and markups prove value without cross-record traversal.   | `schema/apps/rates/schema.json`                                  |
+| CR-D4  | Start aggregates over existing query outputs.                   | Queries already define collection membership and context behavior.     | `src/shared/query.ts`, `src/client/store.ts`                     |
+| CR-D5  | Render through table and collection summary surfaces first.     | PRD 10 owns screen composition; this PRD should not compete with it.   | `prd/10-declarative-screen-runtime.md`                           |
+| CR-D6  | Keep React out of the read-model evaluator.                     | The evaluator should be testable and reusable by view models.          | `src/shared/query.ts`, `src/shared/field-types.ts`               |
+| CR-D7  | Treat invalid runtime arithmetic as empty display output.       | Existing records may have zeros or missing optional values.            | `src/app/generated/record-field-display.tsx`                     |
+| CR-D8  | Use existing number formatting options where possible.          | Table columns already support number, currency, and percent display.   | `src/app/generated/format.ts`, `src/shared/schema-types.ts`      |
+| CR-D9  | Return `number \| undefined` from numeric read-model eval.      | It gives generated UI a narrow empty-output signal without throwing.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts`      |
+| CR-D10 | Use `readModels.computedValues` and `readModels.aggregates`.    | It keeps derived read declarations separate from stored entity fields. | `prd/12-computed-read-model.md`                                  |
+| CR-D11 | Computed table columns are render-only, never editor-backed.    | Computed values must not enter generic patch paths.                    | `src/client/views.ts`, `src/app/generated/table.tsx`             |
+| CR-D12 | Summary slots render for the active query tab only.             | Query-scoped aggregate definitions should follow active collection UI. | `src/shared/schema-views.ts`, `src/app/generated/collection.tsx` |
+| CR-D13 | Empty count and sum render zero; empty average/min/max empty.   | Totals stay useful while undefined reducers avoid misleading values.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts`      |
+| CR-D14 | Table footer aggregate slots align read-model output by column. | Rate-card averages belong in the table flow, not in detached cards.    | `src/shared/schema-views.ts`, `src/app/generated/table.tsx`      |
 
 ## Chunks
 
@@ -267,6 +268,7 @@ Notes:
 | CR-05 | shipped | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
 | CR-06 | shipped | CR-04, CR-05 | `schema/apps/rates/schema.json`, app tests                      | Rate-card source schema shows margin and totals without storage or write changes.                               |
 | CR-07 | shipped | CR-06        | Browser smoke, `prd/12-computed-read-model.md`                  | Rates smoke passes; PRD status, decisions, blockers, and promote notes are current.                             |
+| CR-08 | shipped | CR-05        | schema result parser, view model, generated table, rate schema  | Rate-card averages render in the table footer under cost, price, and margin columns.                            |
 
 ## Chunk details
 
@@ -413,6 +415,30 @@ Evidence:
 - `bun browser --session cr-07-rates --ignore-https-errors open https://12-computed-read-model.formless.local/rates`
 - `bun browser --session cr-07-rates snapshot --selector 'main' --max-output 30000`: `/rates` rendered the `Margin` column, rate rows, and `Collection summary` with `Cost total`, `Price total`, and `Average margin`.
 
+### CR-08 table footer aggregates
+
+Outcome:
+
+- Table collection results can declare `footer` aggregate slots.
+- Footer slots validate the referenced aggregate.
+- Footer slots validate the aggregate query against the collection query slots.
+- Footer slots validate a visible table column target.
+- View models expose footer slots with render-ready table column keys.
+- Generated tables render aggregate footer values under their target columns.
+- Generated tables render footer slots only for the active query tab.
+- Rate-card source schema now declares average cost, average price, and average margin aggregates.
+- Rate-card source schema renders those averages in the `rateTable` footer.
+- Rate-card source schema no longer renders detached rate aggregate summary cards.
+- Rate records stay flat; no authority write, storage, sync, mutation, or action code changed.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: dev ready, tests pass, check pass.
+- `./tmp/test.txt`: latest watcher reruns passed `src/app.test.tsx` and `src/client/views.test.ts`; full agent state reports `testStatus: "pass"`.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 164 files.
+- `bun browser eval "fetch(\"/api/rates/reset/seed\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: \"{}\" }).then((response) => response.status)"`: reset source rate schema and seed data.
+- `bun browser batch --bail "reload" "wait 1000" "get text body"`: `/rates` rendered no collection summary cards, no `Cost total`, and footer values `$565.00 / day`, `$848.00 / day`, and `33.39%`.
+
 ## Non-goals
 
 - Do not store computed values on records.
@@ -555,6 +581,16 @@ CR-07:
 - `/rates` browser smoke verifies rate-card read-model output renders after `bun start`.
 - PRD 12 is shipped and ready for docs/steward promotion.
 
+CR-08:
+
+- Table collection results can declare aggregate footer slots.
+- Table footer aggregate slots reference `readModels.aggregates`.
+- Table footer aggregate slots render through `src/app/generated/table.tsx`.
+- Table footer aggregate slots render only for the active query tab.
+- Rate-card source schema declares average cost, average price, and average margin aggregates.
+- Rate-card `rateTable` renders those averages in the table footer.
+- Rate-card detached aggregate summary cards are no longer used in the primary view.
+
 When this PRD ships, update `doc/current.md`:
 
 - Schema can declare read-model computed values and aggregates.
@@ -562,7 +598,8 @@ When this PRD ships, update `doc/current.md`:
 - Aggregates are read-only display values over query results.
 - Generated tables can render computed columns.
 - Generated collections can render aggregate summary slots.
-- Rate-card source schema uses read-model output for margin and totals.
+- Generated tables can render aggregate footer slots.
+- Rate-card source schema uses read-model output for margin and averages.
 - Stored records, authority writes, sync, and mutation paths remain unchanged.
 - Read-model evaluator lives under shared runtime code and has tests.
 
@@ -582,3 +619,6 @@ When this PRD ships, update `doc/roadmap.md` only if derived display values rema
 - CR-05 shipped 2026-05-06 with aggregate summary slots, client aggregate selectors, and generated collection rendering.
 - CR-06 shipped 2026-05-06 with rate-card source schema margin and aggregate totals.
 - CR-07 shipped 2026-05-06 with `/rates` browser smoke and PRD closeout.
+- CR-08 shipped 2026-05-07 with aggregate table footer slots.
+- CR-08 moved rate-card average cost, price, and margin output into the table footer.
+- CR-08 removed rate-card detached aggregate summary cards from the primary view.
