@@ -9,11 +9,13 @@ import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { formatFieldDisplayValue } from "./format.ts";
 
+type DisplayTableColumnConfig = FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
+
 export function RecordFieldDisplay({
   column,
   recordId,
 }: {
-  column: FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
+  column: DisplayTableColumnConfig;
   recordId: string;
 }) {
   const recordValue = useRecordField(recordId, column.fieldName);
@@ -48,7 +50,7 @@ function RecordMarkdownDisplay({
   column,
   recordValue,
 }: {
-  column: TableColumnConfig;
+  column: DisplayTableColumnConfig;
   recordValue: FieldValue | undefined;
 }) {
   if (typeof recordValue !== "string" || recordValue === "") {
@@ -76,7 +78,7 @@ function RecordColorDisplay({
   column,
   recordValue,
 }: {
-  column: TableColumnConfig;
+  column: DisplayTableColumnConfig;
   recordValue: FieldValue | undefined;
 }) {
   const displayValue = formatFieldDisplayValue(column, recordValue);
@@ -110,13 +112,13 @@ function ColorDisplaySwatch({ color, label }: { color: string; label: string }) 
   );
 }
 
-function isColorDisplayColumn(column: TableColumnConfig) {
+function isColorDisplayColumn(column: DisplayTableColumnConfig) {
   return (
     column.field.type === "text" && (column.editor === "color" || column.field.format === "color")
   );
 }
 
-function isMarkdownDisplayColumn(column: TableColumnConfig) {
+function isMarkdownDisplayColumn(column: DisplayTableColumnConfig) {
   return (
     column.display === "readOnly" &&
     column.field.type === "text" &&

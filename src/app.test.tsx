@@ -514,10 +514,10 @@ describe("generated collection home", () => {
     const defaultSection = sliceSectionHtml(html, "Default card rates", "Backup card rates");
     const backupSection = sliceSectionHtml(html, "Backup card rates");
 
-    expect(defaultSection).toContain('value="475"');
-    expect(defaultSection).not.toContain('value="900"');
-    expect(backupSection).toContain('value="900"');
-    expect(backupSection).not.toContain('value="475"');
+    expect(defaultSection).toContain('value="$475.00"');
+    expect(defaultSection).not.toContain('value="$900.00"');
+    expect(backupSection).toContain('value="$900.00"');
+    expect(backupSection).not.toContain('value="$475.00"');
   });
 
   it("labels generated action rows from the active entity", () => {
@@ -845,8 +845,8 @@ describe("generated collection home", () => {
     expect(html).toContain('value="325"');
     expect(html).toContain('value="450"');
     expect(html).toContain('aria-label="Price"');
-    expect(html).toContain('value="475"');
-    expect(html).toContain('value="600"');
+    expect(html).toContain('value="$475.00"');
+    expect(html).toContain('value="$600.00"');
     expect(html).toContain("Margin");
     expect(html).toContain("31.58%");
     expect(html).toContain("25%");

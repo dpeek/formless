@@ -11,6 +11,7 @@ import {
   selectPrimaryScreenModels,
   selectRelatedCollectionModels,
   selectScreenModels,
+  type FieldTableColumnConfig,
   type HomeActionConfig,
   type HomeScreenModel,
   type HomeViewModel,
@@ -239,7 +240,7 @@ describe("home view model collections", () => {
     ]);
     expect(
       models[2]?.result.type === "table"
-        ? models[2].result.columns.find((column) => column.fieldName === "cost")?.valueUnit
+        ? findFieldTableColumn(models[2].result.columns, "cost")?.valueUnit
         : undefined,
     ).toMatchObject({
       unitFieldName: "costUnit",
@@ -247,7 +248,7 @@ describe("home view model collections", () => {
     });
     expect(
       models[2]?.result.type === "table"
-        ? models[2].result.columns.find((column) => column.fieldName === "price")?.valueUnit
+        ? findFieldTableColumn(models[2].result.columns, "price")?.valueUnit
         : undefined,
     ).toMatchObject({
       unitFieldName: "currency",
@@ -1132,7 +1133,9 @@ describe("home view model collections", () => {
     const tableEditors =
       contentModel?.result.type === "table"
         ? Object.fromEntries(
-            contentModel.result.columns.map((column) => [column.fieldName, column.editor]),
+            contentModel.result.columns
+              .filter((column) => column.type !== "computed")
+              .map((column) => [column.fieldName, column.editor]),
           )
         : {};
 
@@ -1423,6 +1426,13 @@ function tableColumnEditors(columns: TableColumnConfig[]) {
 
 function tableColumnCommits(columns: TableColumnConfig[]) {
   return columns.map((column) => (column.type === "computed" ? null : column.commit));
+}
+
+function findFieldTableColumn(columns: TableColumnConfig[], fieldName: string) {
+  return columns.find(
+    (column): column is FieldTableColumnConfig =>
+      column.type === "field" && column.fieldName === fieldName,
+  );
 }
 
 function summarizeHomeModel(model: HomeViewModel) {
