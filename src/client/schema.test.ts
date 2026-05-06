@@ -89,6 +89,16 @@ describe("task source schema", () => {
 });
 
 describe("rate source schema", () => {
+  it("keeps primary route ownership out of rate collection views", () => {
+    const collectionNavigation = ["resourceHome", "cardHome", "rateHome"].map((viewName) => {
+      const view = rateSourceSchema.views[viewName];
+
+      return view?.type === "collection" ? view.navigation : "missing";
+    });
+
+    expect(collectionNavigation).toEqual([undefined, undefined, undefined]);
+  });
+
   it("contains explicit rates and setup source screens", () => {
     expect(rateSourceSchema.screens).toEqual({
       rateHome: {

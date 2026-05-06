@@ -2371,15 +2371,12 @@ describe("rate-card sample schema", () => {
     });
     expect(schema.views.resourceHome).toMatchObject({
       type: "collection",
-      navigation: { primary: false },
     });
     expect(schema.views.cardHome).toMatchObject({
       type: "collection",
-      navigation: { primary: false },
     });
     expect(schema.views.rateHome).toMatchObject({
       type: "collection",
-      navigation: { primary: true },
       context: {
         itemView: "rateCardContextItem",
         relationship: "cardRates",
@@ -2412,6 +2409,13 @@ describe("rate-card sample schema", () => {
         { type: "entityAction", action: "regenerateMissingRates" },
       ],
     });
+    expect(
+      ["resourceHome", "cardHome", "rateHome"].map((viewName) => {
+        const view = schema.views[viewName];
+
+        return view?.type === "collection" ? view.navigation : "missing";
+      }),
+    ).toEqual([undefined, undefined, undefined]);
   });
 
   it("keeps read-model declarations optional", () => {

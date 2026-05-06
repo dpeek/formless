@@ -429,6 +429,18 @@ describe("generated collection home", () => {
     expect(html).not.toContain('aria-label="Collections"');
   });
 
+  it("renders primary screen tabs and hides non-primary screens", () => {
+    applyBootstrapResponse(bootstrap([], taskNavigationScreenSchema()));
+    const html = renderRoute("/tasks");
+
+    expect(html).toContain('aria-label="Screens"');
+    expect(html).not.toContain('aria-label="Collections"');
+    expect(html).toContain("Task home");
+    expect(html).toContain("Task review");
+    expect(html).not.toContain("Hidden setup");
+    expect(html).toContain("Create Task");
+  });
+
   it("renders one-section screens with the same markup as the collection renderer", () => {
     const screen = requiredScreenModel(appSchema, "taskHome");
     const collection = selectPrimaryCollectionModels(appSchema)[0];
@@ -2268,6 +2280,80 @@ function taskStackScreenSchema(): AppSchema {
               id: "done",
               type: "collection",
               label: "Done work",
+              view: "taskHome",
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
+function taskNavigationScreenSchema(): AppSchema {
+  const taskHome = appSchema.views.taskHome;
+
+  if (taskHome?.type !== "collection") {
+    throw new Error("Missing task home collection view.");
+  }
+
+  return {
+    ...appSchema,
+    views: {
+      ...appSchema.views,
+      taskHome: {
+        ...taskHome,
+        navigation: {
+          primary: false,
+        },
+      },
+    },
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Task home",
+        navigation: {
+          primary: true,
+        },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "tasks",
+              type: "collection",
+              view: "taskHome",
+            },
+          ],
+        },
+      },
+      taskReview: {
+        type: "workspace",
+        label: "Task review",
+        navigation: {
+          primary: true,
+        },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "review",
+              type: "collection",
+              view: "taskHome",
+            },
+          ],
+        },
+      },
+      taskSetup: {
+        type: "workspace",
+        label: "Hidden setup",
+        navigation: {
+          primary: false,
+        },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "setup",
+              type: "collection",
               view: "taskHome",
             },
           ],

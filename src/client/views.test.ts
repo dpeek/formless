@@ -164,7 +164,7 @@ describe("home view model collections", () => {
   });
 
   it("exposes render-ready collection facts behind the home collection model", () => {
-    const model = selectPrimaryCollectionModels(rateCardSchema)[0];
+    const model = requiredCollectionModel(rateCardSchema, "rateHome");
 
     expect(model?.collection).toMatchObject({
       entityName: "rate",
@@ -205,7 +205,7 @@ describe("home view model collections", () => {
 
     expect(models.map((model) => model.viewName)).toEqual(["resourceHome", "cardHome", "rateHome"]);
     expect(models.map((model) => model.label)).toEqual(["Resources", "Rate cards", "Rates"]);
-    expect(models.map((model) => model.navigation.primary)).toEqual([false, false, true]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true]);
     expect(models.map((model) => model.actions[0]?.label)).toEqual([
       "Create Resource",
       "Create Rate card",
@@ -255,24 +255,36 @@ describe("home view model collections", () => {
     });
   });
 
-  it("selects only primary collection models for home navigation", () => {
-    const models = selectPrimaryCollectionModels(rateCardSchema);
+  it("selects primary rate screens without collection navigation hints", () => {
+    const collectionNavigation = ["resourceHome", "cardHome", "rateHome"].map((viewName) => {
+      const view = rateCardSchema.views[viewName];
 
-    expect(models.map((model) => model.viewName)).toEqual(["rateHome"]);
-    expect(selectPrimaryCollectionModels(rateCardSchema)[0]?.viewName).toBe("rateHome");
+      return view?.type === "collection" ? view.navigation : "missing";
+    });
+
+    expect(collectionNavigation).toEqual([undefined, undefined, undefined]);
+    expect(selectPrimaryCollectionModels(rateCardSchema).map((model) => model.viewName)).toEqual([
+      "resourceHome",
+      "cardHome",
+      "rateHome",
+    ]);
+    expect(selectPrimaryScreenModels(rateCardSchema).map((model) => model.screenName)).toEqual([
+      "rateHome",
+    ]);
   });
 
-  it("characterizes the rate-card non-primary collection model contracts", () => {
-    const models = selectCollectionModels(rateCardSchema).filter(
-      (model) => !model.navigation.primary,
-    );
+  it("characterizes the rate-card setup collection model contracts", () => {
+    const models = [
+      requiredCollectionModel(rateCardSchema, "resourceHome"),
+      requiredCollectionModel(rateCardSchema, "cardHome"),
+    ];
 
     expect(models.map(summarizeHomeModel)).toEqual([
       {
         viewName: "resourceHome",
         label: "Resources",
         entityName: "resource",
-        navigationPrimary: false,
+        navigationPrimary: true,
         context: null,
         queries: [
           { queryName: "resourceAll", label: "All", count: "count", expressionKind: "all" },
@@ -298,7 +310,7 @@ describe("home view model collections", () => {
         viewName: "cardHome",
         label: "Rate cards",
         entityName: "card",
-        navigationPrimary: false,
+        navigationPrimary: true,
         context: null,
         queries: [{ queryName: "cardAll", label: "All", count: "count", expressionKind: "all" }],
         defaultQueryName: "cardAll",
@@ -752,7 +764,7 @@ describe("home view model collections", () => {
   });
 
   it("characterizes the rate-card primary home model contract", () => {
-    const model = selectPrimaryCollectionModels(rateCardSchema)[0];
+    const model = requiredCollectionModel(rateCardSchema, "rateHome");
 
     if (!model) {
       throw new Error("Missing rate-card home model.");
@@ -1463,6 +1475,16 @@ function summarizeHomeModel(model: HomeViewModel) {
           },
     actions: collection.actions.map(summarizeHomeAction),
   };
+}
+
+function requiredCollectionModel(schema: AppSchema, viewName: string) {
+  const model = selectCollectionModels(schema).find((candidate) => candidate.viewName === viewName);
+
+  if (!model) {
+    throw new Error(`Missing collection model ${viewName}.`);
+  }
+
+  return model;
 }
 
 function summarizeScreenModel(model: HomeScreenModel) {

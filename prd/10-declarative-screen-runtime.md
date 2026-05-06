@@ -1,7 +1,7 @@
 # PRD 10: Declarative screen runtime
 
 Status: active
-Current chunk: SCR-07 navigation ownership
+Current chunk: SCR-08 closeout
 Last updated: 2026-05-06
 
 ## Goal
@@ -230,16 +230,16 @@ Notes:
 
 ## Decisions
 
-| ID     | Decision                                                                    | Reason                                                                   | Evidence                                      |
-| ------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------- |
-| SCR-D1 | Add optional top-level `screens`.                                           | Existing schemas and saved active schemas must keep parsing.             | `src/shared/schema.ts`                        |
-| SCR-D2 | Keep app routes in the schema app registry.                                 | Current release scope keeps direct routes `/tasks` and `/rates`.         | `doc/roadmap.md`, `src/shared/schema-apps.ts` |
-| SCR-D3 | Let screens reference existing collection views.                            | Views stay reusable; screens compose them.                               | `doc/explorations/declarative-app-runtime.md` |
-| SCR-D4 | Add only `stack` layout in this PRD.                                        | It proves section composition without becoming a full layout DSL.        | `doc/explorations/declarative-app-runtime.md` |
-| SCR-D5 | Move primary navigation ownership to screens when screens exist.            | Collection views should not be route entry points forever.               | `src/client/views.ts`                         |
-| SCR-D6 | Preserve collection navigation as the fallback for schemas without screens. | Runtime-edited schemas may not have the new top-level key yet.           | `src/app/routes/schema.tsx`                   |
-| SCR-D7 | Keep screen behavior client-side only.                                      | Screens compose existing runtime data; authority invariants do not move. | `doc/current.md`                              |
-| SCR-D8 | Prove with Tasks and Rates first.                                           | The exploration explicitly avoids modeling Estii first.                  | `doc/explorations/declarative-app-runtime.md` |
+| ID     | Decision                                                                    | Reason                                                                   | Evidence                                           |
+| ------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
+| SCR-D1 | Add optional top-level `screens`.                                           | Existing schemas and saved active schemas must keep parsing.             | `src/shared/schema.ts`                             |
+| SCR-D2 | Keep app routes in the schema app registry.                                 | Current release scope keeps direct routes `/tasks` and `/rates`.         | `doc/roadmap.md`, `src/shared/schema-apps.ts`      |
+| SCR-D3 | Let screens reference existing collection views.                            | Views stay reusable; screens compose them.                               | `doc/explorations/declarative-app-runtime.md`      |
+| SCR-D4 | Add only `stack` layout in this PRD.                                        | It proves section composition without becoming a full layout DSL.        | `doc/explorations/declarative-app-runtime.md`      |
+| SCR-D5 | Move primary navigation ownership to screens when screens exist.            | Collection views should not be route entry points forever.               | `src/client/views.ts`, `src/app/routes/home.tsx`   |
+| SCR-D6 | Preserve collection navigation as the fallback for schemas without screens. | Runtime-edited schemas may not have the new top-level key yet.           | `src/app/routes/schema.tsx`                        |
+| SCR-D7 | Keep screen behavior client-side only.                                      | Screens compose existing runtime data; authority invariants do not move. | `doc/current.md`                                   |
+| SCR-D8 | Prove with Tasks and Rates first.                                           | The exploration explicitly avoids modeling Estii first.                  | `doc/explorations/declarative-app-runtime.md`      |
 | SCR-D9 | Keep one-section screens unwrapped.                                         | Existing home spacing should remain visually equivalent.                 | `src/app/generated/screen.tsx`, `src/app.test.tsx` |
 
 ## Chunks
@@ -252,7 +252,7 @@ Notes:
 | SCR-04 | shipped | SCR-03     | `src/app/routes/home.tsx`, `src/app/generated/screen.tsx`                            | Home route renders through screen models with no behavior change for one-section task and rate screens.                   |
 | SCR-05 | shipped | SCR-04     | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json`, tests              | Task and rate source schemas define explicit screens; reset/bootstrap/schema editor flows keep working.                   |
 | SCR-06 | shipped | SCR-05     | `src/app/generated/screen.tsx`, `src/app/routes/home.tsx`, tests                     | Stack layout renders multiple collection sections with independent query and context state.                               |
-| SCR-07 | draft   | SCR-06     | `src/client/views.ts`, `src/app/routes/home.tsx`, source schemas                     | Primary app workspace selection uses screen navigation when screens exist; collection navigation remains legacy fallback. |
+| SCR-07 | shipped | SCR-06     | `src/client/views.ts`, `src/app/routes/home.tsx`, source schemas                     | Primary app workspace selection uses screen navigation when screens exist; collection navigation remains legacy fallback. |
 | SCR-08 | draft   | SCR-07     | tests, `bun browser` smoke, `prd/10-declarative-screen-runtime.md`                   | Tasks and Rates pass app smoke; PRD status, decisions, blockers, and promote notes are current.                           |
 
 ## Chunk details
@@ -490,4 +490,14 @@ Recommended order:
 - SCR-06 evidence: `./tmp/check.txt` shows formatting, lint, and type checks pass.
 - SCR-06 smoke: `bun browser` covered `/tasks` and `/rates` through `http://127.0.0.1:4370`.
 - SCR-06 promote: `doc/current.md` should note workspace screens support stack layout over collection sections.
+- SCR-07 shipped 2026-05-06.
+- SCR-07 evidence: `schema/apps/rates/schema.json` no longer carries collection `navigation` hints on `resourceHome`, `cardHome`, or `rateHome`.
+- SCR-07 evidence: `src/client/schema.test.ts` and `src/shared/schema.test.ts` cover rate source collection views without route navigation hints.
+- SCR-07 evidence: `src/client/views.test.ts` shows primary rate screen selection returns `rateHome` while rate collection views default to primary collection models.
+- SCR-07 evidence: `src/app.test.tsx` covers primary screen tabs, hidden non-primary screens, and rendering despite a collection view marked non-primary.
+- SCR-07 evidence: `./tmp/agent-dev.json` shows tests pass and checks pass after `bun start`; `./tmp/state.txt` was not generated by this repo loop.
+- SCR-07 evidence: `./tmp/test.txt` shows 22 test files and 421 tests passed.
+- SCR-07 evidence: `./tmp/check.txt` shows formatting, lint, and type checks pass.
+- SCR-07 smoke: `bun browser` covered `/tasks` and `/rates` through `http://127.0.0.1:4582`.
+- SCR-07 promote: `doc/current.md` should note screen navigation owns primary route workspace selection when `screens` exists.
 - No blockers.
