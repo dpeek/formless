@@ -1,4 +1,5 @@
 import type { QueryExpression } from "./query.ts";
+import type { NumericExpression } from "./read-model.ts";
 
 export type TextFieldSchema = {
   type: "text";
@@ -141,6 +142,35 @@ export type CollectionQuerySchema = {
   label: string;
   entity: string;
   expression: QueryExpression;
+};
+
+export type ComputedValueSchema = {
+  entity: string;
+  type: "number";
+  expression: NumericExpression;
+};
+
+export type AggregateFunction = "count" | "sum" | "average" | "min" | "max";
+
+export type AggregateValueSchema =
+  | {
+      kind: "field";
+      field: string;
+    }
+  | {
+      kind: "computed";
+      computedValue: string;
+    };
+
+export type AggregateSchema = {
+  query: string;
+  function: AggregateFunction;
+  value?: AggregateValueSchema;
+};
+
+export type ReadModelSchema = {
+  computedValues?: Record<string, ComputedValueSchema>;
+  aggregates?: Record<string, AggregateSchema>;
 };
 
 export type ItemViewSchema = {
@@ -363,6 +393,7 @@ export type AppSchema = {
   entities: Record<string, EntitySchema>;
   relationships?: Record<string, RelationshipSchema>;
   queries: Record<string, CollectionQuerySchema>;
+  readModels?: ReadModelSchema;
   itemViews: Record<string, ItemViewSchema>;
   tableViews: Record<string, TableViewSchema>;
   views: Record<string, ViewSchema>;

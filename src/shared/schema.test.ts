@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/rates/schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
-import { parseAppSchema } from "./schema.ts";
+import { parseAppSchema, stringifySchema } from "./schema.ts";
 
 describe("schema text fields", () => {
   it("parses text formats and text-compatible generated editors", () => {
@@ -2039,20 +2039,199 @@ describe("rate-card sample schema", () => {
     });
   });
 
-  it("characterizes the current absence of read-model declarations", () => {
+  it("keeps read-model declarations optional", () => {
     const schema = parseAppSchema(rawRateCardSchema);
 
     expect("readModels" in rawRateCardSchema).toBe(false);
     expect("readModels" in schema).toBe(false);
-    expect(() =>
+    expect(
       parseAppSchema({
         ...rawRateCardSchema,
-        readModels: {
-          computedValues: {},
-          aggregates: {},
-        },
+        readModels: { computedValues: {}, aggregates: {} },
+      }).readModels,
+    ).toEqual({ computedValues: {}, aggregates: {} });
+  });
+});
+
+describe("schema read models", () => {
+  it("parses numeric computed values, aggregates, and stringify output", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        readModels: scopedRateReadModels(),
       }),
-    ).toThrow('Schema has unsupported key "readModels".');
+    );
+
+    expect(schema.readModels?.computedValues?.rateMargin).toEqual({
+      entity: "rate",
+      type: "number",
+      expression: rateMarginExpression(),
+    });
+    expect(schema.readModels?.aggregates).toEqual({
+      selectedCardCostTotal: {
+        query: "ratesForSelectedCard",
+        function: "sum",
+        value: { kind: "field", field: "cost" },
+      },
+      selectedCardAverageMargin: {
+        query: "ratesForSelectedCard",
+        function: "average",
+        value: { kind: "computed", computedValue: "rateMargin" },
+      },
+      selectedCardMinCost: {
+        query: "ratesForSelectedCard",
+        function: "min",
+        value: { kind: "field", field: "cost" },
+      },
+      selectedCardMaxPrice: {
+        query: "ratesForSelectedCard",
+        function: "max",
+        value: { kind: "field", field: "price" },
+      },
+      selectedCardRateCount: {
+        query: "ratesForSelectedCard",
+        function: "count",
+      },
+    });
+    expect(JSON.parse(stringifySchema(schema)).readModels).toEqual(schema.readModels);
+  });
+
+  it("rejects computed values with bad field references", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            computedValues: {
+              rateMargin: {
+                entity: "rate",
+                type: "number",
+                expression: { kind: "field", field: "missing" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            computedValues: {
+              rateMargin: {
+                entity: "rate",
+                type: "number",
+                expression: { kind: "field", field: "currency" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('field "rate.currency" must be a number field');
+  });
+
+  it("rejects malformed numeric computed expressions", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            computedValues: {
+              rateMargin: {
+                entity: "rate",
+                type: "text",
+                expression: rateMarginExpression(),
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('Computed value "rateMargin" type must be "number"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            computedValues: {
+              rateMargin: {
+                entity: "rate",
+                type: "number",
+                expression: {
+                  kind: "binary",
+                  op: "modulo",
+                  left: { kind: "field", field: "price" },
+                  right: { kind: "field", field: "cost" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('op must be "add", "subtract", "multiply", or "divide"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            computedValues: {
+              rateMargin: {
+                entity: "rate",
+                type: "number",
+                expression: { kind: "literal", value: Infinity },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("literal value must be finite");
+  });
+
+  it("validates aggregate query and value references", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            aggregates: {
+              selectedCardCostTotal: {
+                query: "missing",
+                function: "sum",
+                value: { kind: "field", field: "cost" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown query "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            aggregates: {
+              selectedCardCostTotal: {
+                query: "ratesForSelectedCard",
+                function: "sum",
+                value: { kind: "field", field: "missing" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            aggregates: {
+              selectedCardAverageMargin: {
+                query: "ratesForSelectedCard",
+                function: "average",
+                value: { kind: "computed", computedValue: "missing" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown computed value "missing"');
   });
 });
 
@@ -3550,6 +3729,58 @@ function scopedRateViews(rateHomeOverrides: Record<string, unknown> = {}) {
         name: { editor: "text" },
       },
     },
+  };
+}
+
+function scopedRateReadModels() {
+  return {
+    computedValues: {
+      rateMargin: {
+        entity: "rate",
+        type: "number",
+        expression: rateMarginExpression(),
+      },
+    },
+    aggregates: {
+      selectedCardCostTotal: {
+        query: "ratesForSelectedCard",
+        function: "sum",
+        value: { kind: "field", field: "cost" },
+      },
+      selectedCardAverageMargin: {
+        query: "ratesForSelectedCard",
+        function: "average",
+        value: { kind: "computed", computedValue: "rateMargin" },
+      },
+      selectedCardMinCost: {
+        query: "ratesForSelectedCard",
+        function: "min",
+        value: { kind: "field", field: "cost" },
+      },
+      selectedCardMaxPrice: {
+        query: "ratesForSelectedCard",
+        function: "max",
+        value: { kind: "field", field: "price" },
+      },
+      selectedCardRateCount: {
+        query: "ratesForSelectedCard",
+        function: "count",
+      },
+    },
+  };
+}
+
+function rateMarginExpression() {
+  return {
+    kind: "binary",
+    op: "divide",
+    left: {
+      kind: "binary",
+      op: "subtract",
+      left: { kind: "field", field: "price" },
+      right: { kind: "field", field: "cost" },
+    },
+    right: { kind: "field", field: "price" },
   };
 }
 

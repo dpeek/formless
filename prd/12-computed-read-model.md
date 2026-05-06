@@ -1,7 +1,7 @@
 # PRD 12: Computed and aggregate read model
 
 Status: in progress
-Current chunk: CR-03 parser and schema surface
+Current chunk: CR-04 computed table columns
 Last updated: 2026-05-06
 
 ## Goal
@@ -251,6 +251,7 @@ Notes:
 | CR-D7 | Treat invalid runtime arithmetic as empty display output.   | Existing records may have zeros or missing optional values.            | `src/app/generated/record-field-display.tsx`                |
 | CR-D8 | Use existing number formatting options where possible.      | Table columns already support number, currency, and percent display.   | `src/app/generated/format.ts`, `src/shared/schema-types.ts` |
 | CR-D9 | Return `number \| undefined` from numeric read-model eval.  | It gives generated UI a narrow empty-output signal without throwing.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts` |
+| CR-D10 | Use `readModels.computedValues` and `readModels.aggregates`. | It keeps derived read declarations separate from stored entity fields. | `prd/12-computed-read-model.md`                             |
 
 ## Chunks
 
@@ -258,7 +259,7 @@ Notes:
 | ----- | ------- | ------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | CR-01 | shipped | none         | tests, PRD                                                      | Current rate table display, query count, context query, and missing derived values are characterized.           |
 | CR-02 | shipped | CR-01        | `src/shared/read-model.ts`, tests                               | Numeric expression evaluator supports fields, literals, arithmetic, invalid math, and deterministic formatting. |
-| CR-03 | draft   | CR-02        | schema types/parser, schema tests                               | Optional read-model declarations parse, validate references, reject bad shapes, and stringify.                  |
+| CR-03 | shipped | CR-02        | schema types/parser, schema tests                               | Optional read-model declarations parse, validate references, reject bad shapes, and stringify.                  |
 | CR-04 | draft   | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
 | CR-05 | draft   | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
 | CR-06 | draft   | CR-04, CR-05 | `schema/apps/rates/schema.json`, app tests                      | Rate-card source schema shows margin and totals without storage or write changes.                               |
@@ -303,19 +304,23 @@ Evidence:
 
 ### CR-03 parser and schema surface
 
-Add optional read-model declarations and parser validation.
+Outcome:
 
-Acceptance:
+- `AppSchema` includes optional `readModels`.
+- `readModels.computedValues` and `readModels.aggregates` parse.
+- Schemas without `readModels` still parse unchanged.
+- Numeric computed values validate same-record number field references.
+- Computed values reject missing fields, non-number fields, unsupported types, bad operators, and non-finite literals.
+- Aggregates validate query references.
+- Aggregate values validate number field refs and computed value refs.
+- Aggregate parser accepts count, sum, average, min, and max.
+- Count aggregates parse without value refs.
+- `stringifySchema` preserves parsed read-model declarations.
 
-- `AppSchema` includes optional read-model declarations.
-- A schema with no read-model declarations still parses.
-- A numeric computed value over same-record fields parses.
-- A computed value referencing a missing field fails.
-- A computed value referencing a non-number field fails.
-- An aggregate over a query parses.
-- An aggregate referencing a missing query fails.
-- An aggregate value referencing a missing field or computed value fails.
-- `stringifySchema` includes parsed read-model declarations.
+Evidence:
+
+- `./tmp/test.txt`: `src/shared/schema.test.ts` passed, 65 tests passed.
+- `./tmp/check.txt`: formatting, lint, and type checks passed for 153 files.
 
 ### CR-04 computed table columns
 
@@ -406,7 +411,7 @@ Acceptance:
 
 | ID    | Status | Blocks | Notes                                                                 |
 | ----- | ------ | ------ | --------------------------------------------------------------------- |
-| CR-B1 | open   | CR-03  | Final schema key names should be chosen before parser implementation. |
+| CR-B1 | closed | none   | Chosen shape is `readModels.computedValues` and `readModels.aggregates`. |
 
 ## Cross-PRD dependencies
 
@@ -473,6 +478,14 @@ CR-02:
 - Numeric evaluator has no React dependency.
 - Invalid numeric evaluation returns empty output through `undefined`.
 
+CR-03:
+
+- App schemas can optionally declare `readModels.computedValues` and `readModels.aggregates`.
+- Read-model parser lives at `src/shared/schema-read-models.ts`.
+- `AppSchema.readModels` preserves parsed read-model declarations.
+- Parser validates numeric computed field refs and aggregate query/value refs.
+- `stringifySchema` preserves read-model declarations.
+
 When this PRD ships, update `doc/current.md`:
 
 - Schema can declare read-model computed values and aggregates.
@@ -495,4 +508,4 @@ When this PRD ships, update `doc/roadmap.md` only if derived display values rema
 - Scope is intentionally narrower than a full compute engine.
 - CR-01 shipped 2026-05-06 with characterization tests only.
 - CR-02 shipped 2026-05-06 with shared numeric expression evaluator and tests.
-- Open schema naming blocker before CR-03.
+- CR-03 shipped 2026-05-06 with parser and schema tests.

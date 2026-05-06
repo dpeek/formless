@@ -1,6 +1,7 @@
 import { parseEntityActionsForEntities } from "./schema-actions.ts";
 import { parseEntities } from "./schema-fields.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
+import { parseReadModels } from "./schema-read-models.ts";
 import { parseRelationships } from "./schema-relationships.ts";
 import {
   parseCollectionQueries,
@@ -21,7 +22,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     "Schema",
     value,
     ["version", "entities", "queries", "itemViews", "tableViews", "views"],
-    ["relationships"],
+    ["relationships", "readModels"],
   );
 
   const version = value.version;
@@ -42,6 +43,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     queries,
     relationships,
   );
+  const readModels = parseReadModels(value.readModels, entities, queries);
   const itemViews = parseItemViews(value.itemViews, entities);
   const tableViews = parseTableViews(value.tableViews, entities, itemViews);
   const views = parseViews(value.views, entities, queries, itemViews, tableViews, relationships);
@@ -51,6 +53,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     entities,
     ...(relationships === undefined ? {} : { relationships }),
     queries,
+    ...(readModels === undefined ? {} : { readModels }),
     itemViews,
     tableViews,
     views,
