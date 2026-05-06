@@ -233,6 +233,9 @@ describe("App smoke routes", () => {
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset source schema");
     expect(html).toContain("Reset seed data");
+    expect(html).toContain("&quot;sitePages&quot;");
+    expect(html).toContain("&quot;siteHeader&quot;");
+    expect(html).toContain("&quot;siteFooter&quot;");
     expect(html).toContain("&quot;block&quot;");
     expect(html).toContain("&quot;blockPlacement&quot;");
     expect(html).not.toContain("<code>tasks</code>");
@@ -524,7 +527,7 @@ describe("generated collection home", () => {
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site");
 
-    expect(html).toContain('aria-label="Block actions"');
+    expect(html).toContain('aria-label="Block placement actions"');
     expect(html).not.toContain('aria-label="Task actions"');
   });
 
@@ -615,56 +618,65 @@ describe("generated collection home", () => {
     const html = renderRoute("/site");
 
     expect(html).toContain("<h1");
-    expect(html).toContain("Blocks");
-    expect(html).toContain('aria-label="Collections"');
+    expect(html).toContain(">Pages</h1>");
+    expect(html).toContain('aria-label="Screens"');
+    expect(html).toContain("Header");
+    expect(html).toContain("Footer");
+    expect(html).toContain('aria-label="Block list detail"');
+    expect(html).toContain('aria-label="Block records"');
+    expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain("Placements");
-    expect(html).not.toContain("Media");
-    expect(html).toContain("Create Block");
+    expect(html).toContain("Create Block placement");
+    expect(html).not.toContain("Create Block<");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Body");
     expect(html).toContain("<textarea");
     expect(html).toContain('aria-label="Body"');
     expect(html).toContain("Home");
-    expect(html).toContain("Estii");
-    expect(html).toContain("Formless");
-    expect(html).toContain("Draft notes on generated editorial tools");
-    expect(html).toMatch(/aria-label="All count"[^>]*>28</);
-    expect(html).toMatch(/aria-label="Draft count"[^>]*>1</);
-    expect(html).toMatch(/aria-label="Published count"[^>]*>27</);
-    expect(html).toMatch(/aria-label="Projects count"[^>]*>3</);
-    expect(html).toMatch(/aria-label="Featured count"[^>]*>7</);
+    expect(html).toContain("Blog");
+    expect(html).toContain("Resume");
+    expect(html).toContain("Projects");
+    expect(html).toContain("A concise personal site for current work");
+    expect(html).toContain('value="Header"');
+    expect(html).toContain('value="Footer"');
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
   });
 
-  it("characterizes the current site route as raw Blocks first with collection-tab navigation", () => {
+  it("renders the site route as Pages first with screen navigation", () => {
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site");
 
     expect(html).toContain("<h1");
-    expect(html).toContain(">Blocks</h1>");
-    expect(html).toContain('aria-label="Collections"');
+    expect(html).toContain(">Pages</h1>");
+    expect(html).toContain('aria-label="Screens"');
     expect(html).toContain('data-slot="tabs-list"');
     expect(html).toContain('data-slot="tabs-trigger"');
-    expect(html).toContain("Blocks");
+    expect(html).toContain("Pages");
+    expect(html).toContain("Header");
+    expect(html).toContain("Footer");
+    expect(html).toContain('aria-label="Block list detail"');
+    expect(html).toContain("Home");
     expect(html).toContain("Placements");
-    expect(html).toContain("Create Block");
+    expect(html).toContain("Create Block placement");
     expect(html).toContain('data-slot="table"');
-    expect(html).not.toContain('aria-label="Screens"');
-    expect(html).not.toContain("Create Block placement");
+    expect(html).not.toContain('aria-label="Collections"');
+    expect(html).not.toContain(">Blocks</h1>");
   });
 
-  it("updates site content query counts after local record merges", () => {
+  it("updates site page root selection after local record merges", () => {
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const before = renderRoute("/site");
 
     applyRecordMerge(
       [
-        siteBlockRecord("rec_site_content_project_unannounced", {
-          type: "project",
-          title: "Unannounced project",
-          status: "draft",
+        siteBlockRecord("rec_site_content_page_unannounced", {
+          type: "page",
+          title: "Unannounced page",
+          status: "published",
           featured: true,
-          order: 3,
-          templateKey: "project",
+          order: 4,
+          slug: "unannounced",
+          templateKey: "standard",
         }),
       ],
       2,
@@ -672,15 +684,10 @@ describe("generated collection home", () => {
     );
     const after = renderRoute("/site");
 
-    expect(before).toMatch(/aria-label="All count"[^>]*>28</);
-    expect(before).toMatch(/aria-label="Draft count"[^>]*>1</);
-    expect(before).toMatch(/aria-label="Projects count"[^>]*>3</);
-    expect(before).toMatch(/aria-label="Featured count"[^>]*>7</);
-    expect(after).toMatch(/aria-label="All count"[^>]*>29</);
-    expect(after).toMatch(/aria-label="Draft count"[^>]*>2</);
-    expect(after).toMatch(/aria-label="Projects count"[^>]*>4</);
-    expect(after).toMatch(/aria-label="Featured count"[^>]*>8</);
-    expect(after).toContain("Unannounced project");
+    expect(before).not.toContain("Unannounced page");
+    expect(after).toContain("Unannounced page");
+    expect(after).toContain('aria-label="Block records"');
+    expect(after).toMatch(/aria-label="Unannounced page Placements count"[^>]*>0</);
   });
 
   it("surfaces site readiness warnings without disabling generated editors", () => {

@@ -1,7 +1,7 @@
 # PRD 13: Site editor list/detail
 
 Status: ready
-Current chunk: SED-04
+Current chunk: SED-05
 Last updated: 2026-05-06
 
 ## Goal
@@ -252,7 +252,7 @@ Notes:
 | SED-01 | shipped | none       | tests, PRD                                | Current Site admin surfaces, context tab behavior, and public route behavior are characterized.                                      |
 | SED-02 | shipped | SED-01     | schema types/parser, view model, tests    | Collection context presentation parses, defaults to tabs, exposes render-ready facts, and rejects bad values.                        |
 | SED-03 | shipped | SED-02     | generated collection/screen UI, app tests | `listDetail` context presentation renders a selectable list plus selected-record detail without changing tab presentation behavior.  |
-| SED-04 | ready   | SED-03     | Site source schema, view tests, app tests | Site source schema defines primary Pages, Header, and Footer screens that use list/detail root selection.                            |
+| SED-04 | shipped | SED-03     | Site source schema, view tests, app tests | Site source schema defines primary Pages, Header, and Footer screens that use list/detail root selection.                            |
 | SED-05 | ready   | SED-04     | browser smoke, PRD                        | `/site`, `/pages`, and representative public page routes smoke pass; PRD status, decisions, blockers, and promote notes are current. |
 
 ## Chunk details
@@ -362,6 +362,26 @@ Acceptance:
 
 ### SED-04 Site source schema
 
+Status: shipped 2026-05-06.
+
+Outcome:
+
+- Site source schema defines `sitePages`, `siteHeader`, and `siteFooter` primary screens.
+- Pages uses `pageCompositionHome` with `blockPages` root context and `listDetail` presentation.
+- Header uses `headerCompositionHome` with `blockHeaderRoot` root context and `listDetail` presentation.
+- Footer uses `footerCompositionHome` with `blockFooterRoot` root context and `listDetail` presentation.
+- Header and Footer root queries select `block.type = group` plus `templateKey = header/footer`.
+- Root detail editing uses `blockRootDetail`.
+- Raw `blockHome` and `blockCompositionHome` stay in the schema with `navigation.primary = false`.
+- Public tree and renderer code were not changed.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest rerun `src/app.test.tsx`, `81 passed (81)`; managed state reports tests pass.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
+- Browser smoke: `bun browser --ignore-https-errors batch --bail "open https://13-site-editor-list-detail.formless.local/site" "wait 1000" "get text body"` returned the Site editor with `Pages`, `Header`, `Footer`, page root list, Home detail fields, placement rows, and `Create Block placement`.
+
 Acceptance:
 
 - Site source schema defines `screens`.
@@ -422,9 +442,9 @@ Acceptance:
 
 ## Blockers
 
-| ID     | Status | Blocks | Notes                                                                                                 |
-| ------ | ------ | ------ | ----------------------------------------------------------------------------------------------------- |
-| SED-B1 | closed | SED-04 | SED-03 shipped generic list/detail renderer; Site schema can adopt it cleanly.                        |
+| ID     | Status | Blocks | Notes                                                                          |
+| ------ | ------ | ------ | ------------------------------------------------------------------------------ |
+| SED-B1 | closed | SED-04 | SED-03 shipped generic list/detail renderer; Site schema can adopt it cleanly. |
 
 ## Cross-PRD dependencies
 
@@ -530,3 +550,4 @@ When this PRD ships, update `doc/roadmap.md` only if the first-release target sh
 - Technical constraint: create views support context defaults but not literal `type` defaults today.
 - SED-02 shipped 2026-05-06. Next ready chunk is SED-03 generated list/detail renderer.
 - SED-03 shipped 2026-05-06. Next ready chunk is SED-04 Site source schema.
+- SED-04 shipped 2026-05-06. Next ready chunk is SED-05 closeout smoke.

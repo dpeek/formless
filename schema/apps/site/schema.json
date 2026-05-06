@@ -351,6 +351,60 @@
         "value": "page"
       }
     },
+    "blockHeaderRoot": {
+      "label": "Header",
+      "entity": "block",
+      "expression": {
+        "kind": "and",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "type"
+            },
+            "op": "eq",
+            "value": "group"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "templateKey"
+            },
+            "op": "eq",
+            "value": "header"
+          }
+        ]
+      }
+    },
+    "blockFooterRoot": {
+      "label": "Footer",
+      "entity": "block",
+      "expression": {
+        "kind": "and",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "type"
+            },
+            "op": "eq",
+            "value": "group"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "templateKey"
+            },
+            "op": "eq",
+            "value": "footer"
+          }
+        ]
+      }
+    },
     "blockPosts": {
       "label": "Posts",
       "entity": "block",
@@ -564,6 +618,51 @@
           "commit": "immediate"
         }
       }
+    },
+    "blockRootDetail": {
+      "entity": "block",
+      "fields": {
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "subtitle": {
+          "editor": "textarea",
+          "commit": "field-commit"
+        },
+        "body": {
+          "editor": "markdown",
+          "commit": "field-commit"
+        },
+        "slug": {
+          "editor": "slug",
+          "commit": "field-commit"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "featured": {
+          "editor": "boolean",
+          "commit": "immediate"
+        },
+        "publishedAt": {
+          "editor": "date",
+          "commit": "field-commit"
+        },
+        "order": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "templateKey": {
+          "editor": "slug",
+          "commit": "field-commit"
+        }
+      }
     }
   },
   "tableViews": {
@@ -748,7 +847,7 @@
       "label": "Blocks",
       "entity": "block",
       "navigation": {
-        "primary": true
+        "primary": false
       },
       "queries": [
         {
@@ -848,6 +947,114 @@
         }
       ]
     },
+    "pageCompositionHome": {
+      "type": "collection",
+      "label": "Pages",
+      "entity": "blockPlacement",
+      "navigation": {
+        "primary": true
+      },
+      "context": {
+        "name": "block",
+        "entity": "block",
+        "query": "blockPages",
+        "labelField": "title",
+        "relationship": "blockPlacements",
+        "itemView": "blockRootDetail",
+        "presentation": "listDetail"
+      },
+      "queries": [
+        {
+          "query": "placementsForSelectedBlock",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "placementsForSelectedBlock",
+      "result": {
+        "type": "table",
+        "tableView": "blockPlacementTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "blockPlacementCreate"
+        }
+      ]
+    },
+    "headerCompositionHome": {
+      "type": "collection",
+      "label": "Header",
+      "entity": "blockPlacement",
+      "navigation": {
+        "primary": true
+      },
+      "context": {
+        "name": "block",
+        "entity": "block",
+        "query": "blockHeaderRoot",
+        "labelField": "title",
+        "relationship": "blockPlacements",
+        "itemView": "blockRootDetail",
+        "presentation": "listDetail"
+      },
+      "queries": [
+        {
+          "query": "placementsForSelectedBlock",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "placementsForSelectedBlock",
+      "result": {
+        "type": "table",
+        "tableView": "blockPlacementTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "blockPlacementCreate"
+        }
+      ]
+    },
+    "footerCompositionHome": {
+      "type": "collection",
+      "label": "Footer",
+      "entity": "blockPlacement",
+      "navigation": {
+        "primary": true
+      },
+      "context": {
+        "name": "block",
+        "entity": "block",
+        "query": "blockFooterRoot",
+        "labelField": "title",
+        "relationship": "blockPlacements",
+        "itemView": "blockRootDetail",
+        "presentation": "listDetail"
+      },
+      "queries": [
+        {
+          "query": "placementsForSelectedBlock",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "placementsForSelectedBlock",
+      "result": {
+        "type": "table",
+        "tableView": "blockPlacementTable"
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "blockPlacementCreate"
+        }
+      ]
+    },
     "blockCreate": {
       "type": "create",
       "entity": "block",
@@ -916,7 +1123,7 @@
       "label": "Placements",
       "entity": "blockPlacement",
       "navigation": {
-        "primary": true
+        "primary": false
       },
       "context": {
         "name": "block",
@@ -974,6 +1181,59 @@
           "kind": "context",
           "name": "block"
         }
+      }
+    }
+  },
+  "screens": {
+    "sitePages": {
+      "type": "workspace",
+      "label": "Pages",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "pages",
+            "type": "collection",
+            "view": "pageCompositionHome"
+          }
+        ]
+      }
+    },
+    "siteHeader": {
+      "type": "workspace",
+      "label": "Header",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "header",
+            "type": "collection",
+            "view": "headerCompositionHome"
+          }
+        ]
+      }
+    },
+    "siteFooter": {
+      "type": "workspace",
+      "label": "Footer",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "footer",
+            "type": "collection",
+            "view": "footerCompositionHome"
+          }
+        ]
       }
     }
   }

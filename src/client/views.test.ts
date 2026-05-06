@@ -872,153 +872,50 @@ describe("home view model collections", () => {
     });
   });
 
-  it("selects the site editorial workspaces as primary collection models", () => {
+  it("selects the site root authoring collections as primary collection models", () => {
     const models = selectPrimaryCollectionModels(siteSourceSchema);
 
-    expect(models.map((model) => model.viewName)).toEqual(["blockHome", "blockCompositionHome"]);
-    expect(models.map((model) => model.label)).toEqual(["Blocks", "Placements"]);
-    expect(models.map((model) => model.navigation.primary)).toEqual([true, true]);
+    expect(models.map((model) => model.viewName)).toEqual([
+      "pageCompositionHome",
+      "headerCompositionHome",
+      "footerCompositionHome",
+    ]);
+    expect(models.map((model) => model.label)).toEqual(["Pages", "Header", "Footer"]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true]);
+    expect(models.map((model) => model.context?.queryName)).toEqual([
+      "blockPages",
+      "blockHeaderRoot",
+      "blockFooterRoot",
+    ]);
+    expect(models.map((model) => model.context?.presentation)).toEqual([
+      "listDetail",
+      "listDetail",
+      "listDetail",
+    ]);
     expect(
       models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
-    ).toEqual(["blockTable", "blockPlacementTable"]);
+    ).toEqual(["blockPlacementTable", "blockPlacementTable", "blockPlacementTable"]);
+    expect(requiredCollectionModel(siteSourceSchema, "blockHome").navigation.primary).toBe(false);
+    expect(requiredCollectionModel(siteSourceSchema, "blockCompositionHome").navigation.primary).toBe(
+      false,
+    );
   });
 
-  it("characterizes the site primary home model contracts", () => {
+  it("characterizes the site root authoring model contracts", () => {
     const models = selectPrimaryCollectionModels(siteSourceSchema);
 
     expect(models.map(summarizeHomeModel)).toEqual([
       {
-        viewName: "blockHome",
-        label: "Blocks",
-        entityName: "block",
-        navigationPrimary: true,
-        context: null,
-        queries: [
-          { queryName: "blockAll", label: "All", count: "count", expressionKind: "all" },
-          { queryName: "blockDraft", label: "Draft", count: "count", expressionKind: "where" },
-          {
-            queryName: "blockPublished",
-            label: "Published",
-            count: "count",
-            expressionKind: "where",
-          },
-          { queryName: "blockPages", label: "Pages", count: "count", expressionKind: "where" },
-          { queryName: "blockPosts", label: "Posts", count: "count", expressionKind: "where" },
-          {
-            queryName: "blockProjects",
-            label: "Projects",
-            count: "count",
-            expressionKind: "where",
-          },
-          { queryName: "blockLinks", label: "Links", count: "count", expressionKind: "where" },
-          {
-            queryName: "blockGroups",
-            label: "Groups",
-            count: "count",
-            expressionKind: "where",
-          },
-          {
-            queryName: "blockImages",
-            label: "Images",
-            count: "count",
-            expressionKind: "where",
-          },
-          {
-            queryName: "blockVideos",
-            label: "Videos",
-            count: "count",
-            expressionKind: "where",
-          },
-          {
-            queryName: "blockFiles",
-            label: "Files",
-            count: "count",
-            expressionKind: "where",
-          },
-          {
-            queryName: "featuredBlocks",
-            label: "Featured",
-            count: "count",
-            expressionKind: "where",
-          },
-          {
-            queryName: "publishedPosts",
-            label: "Published posts",
-            count: "count",
-            expressionKind: "and",
-          },
-          {
-            queryName: "featuredProjects",
-            label: "Featured projects",
-            count: "count",
-            expressionKind: "and",
-          },
-        ],
-        defaultQueryName: "blockAll",
-        result: {
-          type: "table",
-          tableViewName: "blockTable",
-          columns: [
-            "field:type",
-            "field:title",
-            "field:label",
-            "field:body",
-            "field:status",
-            "field:featured",
-            "field:slug",
-            "field:href",
-            "field:publishedAt",
-            "field:order",
-            "field:templateKey",
-            "field:assetKey",
-            "field:alt",
-            "field:width",
-            "field:height",
-            "field:limit",
-          ],
-        },
-        actions: [
-          {
-            type: "create",
-            label: "Create Block",
-            entityName: "block",
-            fields: [
-              "type",
-              "title",
-              "label",
-              "subtitle",
-              "body",
-              "status",
-              "featured",
-              "publishedAt",
-              "order",
-              "slug",
-              "href",
-              "icon",
-              "color",
-              "templateKey",
-              "assetKey",
-              "alt",
-              "width",
-              "height",
-              "limit",
-            ],
-            defaults: [],
-            enabled: true,
-          },
-        ],
-      },
-      {
-        viewName: "blockCompositionHome",
-        label: "Placements",
+        viewName: "pageCompositionHome",
+        label: "Pages",
         entityName: "blockPlacement",
         navigationPrimary: true,
         context: {
           name: "block",
           entityName: "block",
-          queryName: "blockAll",
+          queryName: "blockPages",
           labelField: "title",
-          presentation: "tabs",
+          presentation: "listDetail",
           relatedCollection: {
             relationshipName: "blockPlacements",
             label: "Placements",
@@ -1026,8 +923,147 @@ describe("home view model collections", () => {
             referenceFieldName: "parent",
           },
           createAction: null,
-          itemViewName: "blockContextItem",
-          recordFields: ["type", "status", "featured"],
+          itemViewName: "blockRootDetail",
+          recordFields: [
+            "title",
+            "label",
+            "subtitle",
+            "body",
+            "slug",
+            "status",
+            "featured",
+            "publishedAt",
+            "order",
+            "templateKey",
+          ],
+        },
+        queries: [
+          {
+            queryName: "placementsForSelectedBlock",
+            label: "Selected block",
+            count: "count",
+            expressionKind: "where",
+          },
+        ],
+        defaultQueryName: "placementsForSelectedBlock",
+        result: {
+          type: "table",
+          tableViewName: "blockPlacementTable",
+          columns: [
+            "field:slot",
+            "field:block",
+            "field:label",
+            "field:variant",
+            "field:order",
+            "field:visible",
+          ],
+        },
+        actions: [
+          {
+            type: "create",
+            label: "Create Block placement",
+            entityName: "blockPlacement",
+            fields: ["slot", "block", "label", "variant", "order", "visible"],
+            defaults: ["parent"],
+            enabled: true,
+          },
+        ],
+      },
+      {
+        viewName: "headerCompositionHome",
+        label: "Header",
+        entityName: "blockPlacement",
+        navigationPrimary: true,
+        context: {
+          name: "block",
+          entityName: "block",
+          queryName: "blockHeaderRoot",
+          labelField: "title",
+          presentation: "listDetail",
+          relatedCollection: {
+            relationshipName: "blockPlacements",
+            label: "Placements",
+            entityName: "blockPlacement",
+            referenceFieldName: "parent",
+          },
+          createAction: null,
+          itemViewName: "blockRootDetail",
+          recordFields: [
+            "title",
+            "label",
+            "subtitle",
+            "body",
+            "slug",
+            "status",
+            "featured",
+            "publishedAt",
+            "order",
+            "templateKey",
+          ],
+        },
+        queries: [
+          {
+            queryName: "placementsForSelectedBlock",
+            label: "Selected block",
+            count: "count",
+            expressionKind: "where",
+          },
+        ],
+        defaultQueryName: "placementsForSelectedBlock",
+        result: {
+          type: "table",
+          tableViewName: "blockPlacementTable",
+          columns: [
+            "field:slot",
+            "field:block",
+            "field:label",
+            "field:variant",
+            "field:order",
+            "field:visible",
+          ],
+        },
+        actions: [
+          {
+            type: "create",
+            label: "Create Block placement",
+            entityName: "blockPlacement",
+            fields: ["slot", "block", "label", "variant", "order", "visible"],
+            defaults: ["parent"],
+            enabled: true,
+          },
+        ],
+      },
+      {
+        viewName: "footerCompositionHome",
+        label: "Footer",
+        entityName: "blockPlacement",
+        navigationPrimary: true,
+        context: {
+          name: "block",
+          entityName: "block",
+          queryName: "blockFooterRoot",
+          labelField: "title",
+          presentation: "listDetail",
+          relatedCollection: {
+            relationshipName: "blockPlacements",
+            label: "Placements",
+            entityName: "blockPlacement",
+            referenceFieldName: "parent",
+          },
+          createAction: null,
+          itemViewName: "blockRootDetail",
+          recordFields: [
+            "title",
+            "label",
+            "subtitle",
+            "body",
+            "slug",
+            "status",
+            "featured",
+            "publishedAt",
+            "order",
+            "templateKey",
+          ],
         },
         queries: [
           {
@@ -1285,37 +1321,105 @@ describe("home view model collections", () => {
     });
   });
 
-  it("builds legacy screen models from primary collection models when screens are absent", () => {
-    const collectionModels = selectPrimaryCollectionModels(siteSourceSchema);
-    const screenModels = selectScreenModels(siteSourceSchema);
+  it("selects site Pages, Header, and Footer as primary screen models", () => {
+    const models = selectPrimaryScreenModels(siteSourceSchema);
 
-    expect(screenModels.map((model) => model.screenName)).toEqual(
-      collectionModels.map((model) => model.viewName),
-    );
-    expect(selectPrimaryScreenModels(siteSourceSchema).map((model) => model.screenName)).toEqual([
-      "blockHome",
-      "blockCompositionHome",
-    ]);
-    expect(screenModels.map(summarizeScreenModel)).toEqual([
+    expect(models.map(summarizeScreenModel)).toEqual([
       {
-        screenName: "blockHome",
-        label: "Blocks",
-        primary: true,
-        layoutType: "stack",
-        sections: [
-          { id: "blockHome", label: "Blocks", viewName: "blockHome", entityName: "block" },
-        ],
-      },
-      {
-        screenName: "blockCompositionHome",
-        label: "Placements",
+        screenName: "sitePages",
+        label: "Pages",
         primary: true,
         layoutType: "stack",
         sections: [
           {
-            id: "blockCompositionHome",
-            label: "Placements",
-            viewName: "blockCompositionHome",
+            id: "pages",
+            label: "Pages",
+            viewName: "pageCompositionHome",
+            entityName: "blockPlacement",
+          },
+        ],
+      },
+      {
+        screenName: "siteHeader",
+        label: "Header",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          {
+            id: "header",
+            label: "Header",
+            viewName: "headerCompositionHome",
+            entityName: "blockPlacement",
+          },
+        ],
+      },
+      {
+        screenName: "siteFooter",
+        label: "Footer",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          {
+            id: "footer",
+            label: "Footer",
+            viewName: "footerCompositionHome",
+            entityName: "blockPlacement",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("builds legacy screen models from primary collection models when screens are absent", () => {
+    const schemaWithoutScreens: AppSchema = { ...siteSourceSchema, screens: undefined };
+    const collectionModels = selectPrimaryCollectionModels(schemaWithoutScreens);
+    const screenModels = selectScreenModels(schemaWithoutScreens);
+
+    expect(screenModels.map((model) => model.screenName)).toEqual(
+      collectionModels.map((model) => model.viewName),
+    );
+    expect(selectPrimaryScreenModels(schemaWithoutScreens).map((model) => model.screenName)).toEqual(
+      ["pageCompositionHome", "headerCompositionHome", "footerCompositionHome"],
+    );
+    expect(screenModels.map(summarizeScreenModel)).toEqual([
+      {
+        screenName: "pageCompositionHome",
+        label: "Pages",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          {
+            id: "pageCompositionHome",
+            label: "Pages",
+            viewName: "pageCompositionHome",
+            entityName: "blockPlacement",
+          },
+        ],
+      },
+      {
+        screenName: "headerCompositionHome",
+        label: "Header",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          {
+            id: "headerCompositionHome",
+            label: "Header",
+            viewName: "headerCompositionHome",
+            entityName: "blockPlacement",
+          },
+        ],
+      },
+      {
+        screenName: "footerCompositionHome",
+        label: "Footer",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          {
+            id: "footerCompositionHome",
+            label: "Footer",
+            viewName: "footerCompositionHome",
             entityName: "blockPlacement",
           },
         ],

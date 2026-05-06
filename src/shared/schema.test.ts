@@ -2779,6 +2779,8 @@ describe("personal site sample schema", () => {
       "blockDraft",
       "blockPublished",
       "blockPages",
+      "blockHeaderRoot",
+      "blockFooterRoot",
       "blockPosts",
       "blockProjects",
       "blockLinks",
@@ -2802,12 +2804,26 @@ describe("personal site sample schema", () => {
       ref: { kind: "value", name: "parent" },
       value: { kind: "context", name: "block" },
     });
+    expect(schema.queries.blockHeaderRoot?.expression).toMatchObject({
+      kind: "and",
+      expressions: [
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "group" },
+        { ref: { kind: "value", name: "templateKey" }, op: "eq", value: "header" },
+      ],
+    });
+    expect(schema.queries.blockFooterRoot?.expression).toMatchObject({
+      kind: "and",
+      expressions: [
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "group" },
+        { ref: { kind: "value", name: "templateKey" }, op: "eq", value: "footer" },
+      ],
+    });
     expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
     expect(schema.views.blockHome).toMatchObject({
       type: "collection",
       label: "Blocks",
       entity: "block",
-      navigation: { primary: true },
+      navigation: { primary: false },
       result: { type: "table", tableView: "blockTable" },
       actions: [{ type: "create", createView: "blockCreate" }],
     });
@@ -2824,7 +2840,7 @@ describe("personal site sample schema", () => {
       type: "collection",
       label: "Placements",
       entity: "blockPlacement",
-      navigation: { primary: true },
+      navigation: { primary: false },
       context: {
         name: "block",
         entity: "block",
@@ -2836,11 +2852,74 @@ describe("personal site sample schema", () => {
       result: { type: "table", tableView: "blockPlacementTable" },
       actions: [{ type: "create", createView: "blockPlacementCreate" }],
     });
+    expect(schema.views.pageCompositionHome).toMatchObject({
+      type: "collection",
+      label: "Pages",
+      entity: "blockPlacement",
+      navigation: { primary: true },
+      context: {
+        name: "block",
+        entity: "block",
+        query: "blockPages",
+        labelField: "title",
+        relationship: "blockPlacements",
+        itemView: "blockRootDetail",
+        presentation: "listDetail",
+      },
+      result: { type: "table", tableView: "blockPlacementTable" },
+      actions: [{ type: "create", createView: "blockPlacementCreate" }],
+    });
+    expect(schema.views.headerCompositionHome).toMatchObject({
+      type: "collection",
+      label: "Header",
+      entity: "blockPlacement",
+      navigation: { primary: true },
+      context: {
+        query: "blockHeaderRoot",
+        presentation: "listDetail",
+      },
+    });
+    expect(schema.views.footerCompositionHome).toMatchObject({
+      type: "collection",
+      label: "Footer",
+      entity: "blockPlacement",
+      navigation: { primary: true },
+      context: {
+        query: "blockFooterRoot",
+        presentation: "listDetail",
+      },
+    });
     expect(schema.views.blockPlacementCreate).toMatchObject({
       type: "create",
       entity: "blockPlacement",
       defaults: {
         parent: { kind: "context", name: "block" },
+      },
+    });
+    expect(schema.screens).toMatchObject({
+      sitePages: {
+        type: "workspace",
+        label: "Pages",
+        navigation: { primary: true },
+        layout: {
+          sections: [{ id: "pages", type: "collection", view: "pageCompositionHome" }],
+        },
+      },
+      siteHeader: {
+        type: "workspace",
+        label: "Header",
+        navigation: { primary: true },
+        layout: {
+          sections: [{ id: "header", type: "collection", view: "headerCompositionHome" }],
+        },
+      },
+      siteFooter: {
+        type: "workspace",
+        label: "Footer",
+        navigation: { primary: true },
+        layout: {
+          sections: [{ id: "footer", type: "collection", view: "footerCompositionHome" }],
+        },
       },
     });
   });
