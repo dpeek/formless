@@ -1,7 +1,7 @@
 # PRD 12: Computed and aggregate read model
 
 Status: in progress
-Current chunk: CR-04 computed table columns
+Current chunk: CR-05 aggregate summary slots
 Last updated: 2026-05-06
 
 ## Goal
@@ -240,18 +240,19 @@ Notes:
 
 ## Decisions
 
-| ID    | Decision                                                    | Reason                                                                 | Evidence                                                    |
-| ----- | ----------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
-| CR-D1 | Keep computed values read-only and display-time first.      | Flat stored records and generic writes are core runtime bets.          | `doc/overview.md`, `doc/current.md`                         |
-| CR-D2 | Do not add a full computed graph engine.                    | The first release needs simple derived display, not dependency graphs. | `doc/roadmap.md`                                            |
-| CR-D3 | Start with numeric same-record expressions.                 | Rate margins and markups prove value without cross-record traversal.   | `schema/apps/rates/schema.json`                             |
-| CR-D4 | Start aggregates over existing query outputs.               | Queries already define collection membership and context behavior.     | `src/shared/query.ts`, `src/client/store.ts`                |
-| CR-D5 | Render through table and collection summary surfaces first. | PRD 10 owns screen composition; this PRD should not compete with it.   | `prd/10-declarative-screen-runtime.md`                      |
-| CR-D6 | Keep React out of the read-model evaluator.                 | The evaluator should be testable and reusable by view models.          | `src/shared/query.ts`, `src/shared/field-types.ts`          |
-| CR-D7 | Treat invalid runtime arithmetic as empty display output.   | Existing records may have zeros or missing optional values.            | `src/app/generated/record-field-display.tsx`                |
-| CR-D8 | Use existing number formatting options where possible.      | Table columns already support number, currency, and percent display.   | `src/app/generated/format.ts`, `src/shared/schema-types.ts` |
-| CR-D9 | Return `number \| undefined` from numeric read-model eval.  | It gives generated UI a narrow empty-output signal without throwing.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts` |
+| ID     | Decision                                                     | Reason                                                                 | Evidence                                                    |
+| ------ | ------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
+| CR-D1  | Keep computed values read-only and display-time first.       | Flat stored records and generic writes are core runtime bets.          | `doc/overview.md`, `doc/current.md`                         |
+| CR-D2  | Do not add a full computed graph engine.                     | The first release needs simple derived display, not dependency graphs. | `doc/roadmap.md`                                            |
+| CR-D3  | Start with numeric same-record expressions.                  | Rate margins and markups prove value without cross-record traversal.   | `schema/apps/rates/schema.json`                             |
+| CR-D4  | Start aggregates over existing query outputs.                | Queries already define collection membership and context behavior.     | `src/shared/query.ts`, `src/client/store.ts`                |
+| CR-D5  | Render through table and collection summary surfaces first.  | PRD 10 owns screen composition; this PRD should not compete with it.   | `prd/10-declarative-screen-runtime.md`                      |
+| CR-D6  | Keep React out of the read-model evaluator.                  | The evaluator should be testable and reusable by view models.          | `src/shared/query.ts`, `src/shared/field-types.ts`          |
+| CR-D7  | Treat invalid runtime arithmetic as empty display output.    | Existing records may have zeros or missing optional values.            | `src/app/generated/record-field-display.tsx`                |
+| CR-D8  | Use existing number formatting options where possible.       | Table columns already support number, currency, and percent display.   | `src/app/generated/format.ts`, `src/shared/schema-types.ts` |
+| CR-D9  | Return `number \| undefined` from numeric read-model eval.   | It gives generated UI a narrow empty-output signal without throwing.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts` |
 | CR-D10 | Use `readModels.computedValues` and `readModels.aggregates`. | It keeps derived read declarations separate from stored entity fields. | `prd/12-computed-read-model.md`                             |
+| CR-D11 | Computed table columns are render-only, never editor-backed. | Computed values must not enter generic patch paths.                    | `src/client/views.ts`, `src/app/generated/table.tsx`        |
 
 ## Chunks
 
@@ -260,7 +261,7 @@ Notes:
 | CR-01 | shipped | none         | tests, PRD                                                      | Current rate table display, query count, context query, and missing derived values are characterized.           |
 | CR-02 | shipped | CR-01        | `src/shared/read-model.ts`, tests                               | Numeric expression evaluator supports fields, literals, arithmetic, invalid math, and deterministic formatting. |
 | CR-03 | shipped | CR-02        | schema types/parser, schema tests                               | Optional read-model declarations parse, validate references, reject bad shapes, and stringify.                  |
-| CR-04 | draft   | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
+| CR-04 | shipped | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
 | CR-05 | draft   | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
 | CR-06 | draft   | CR-04, CR-05 | `schema/apps/rates/schema.json`, app tests                      | Rate-card source schema shows margin and totals without storage or write changes.                               |
 | CR-07 | draft   | CR-06        | Browser smoke, `prd/12-computed-read-model.md`                  | Rates smoke passes; PRD status, decisions, blockers, and promote notes are current.                             |
@@ -324,16 +325,24 @@ Evidence:
 
 ### CR-04 computed table columns
 
-Render record-level computed values in existing generated tables.
-
-Acceptance:
+Outcome:
 
 - Table views accept a `computed` column type.
-- Computed columns are read-only.
-- Computed columns expose label, width, alignment, suffix, and format to the renderer.
-- Computed values update when a record patch changes source fields.
-- Existing field and reference-field columns keep behavior.
-- View model tests do not duplicate parser validation.
+- Computed table columns validate against `readModels.computedValues`.
+- Computed table columns must reference a computed value for the table entity.
+- Computed table columns can carry label, width, alignment, suffix, and format.
+- Computed table columns default to `readOnly`; `editor` display is rejected.
+- View models expose computed columns without editor or commit config.
+- Generated tables evaluate numeric computed expressions against the current record.
+- Computed table cells reuse existing number, currency, and percent formatting.
+- Computed cells update after source record patches through the client store.
+- Existing field and reference-field table behavior remains covered.
+
+Evidence:
+
+- `./tmp/test.txt`: 23 files passed, 423 tests passed.
+- `./tmp/check.txt`: formatting, lint, and type checks passed for 154 files.
+- `bun browser --session cr-04-rates --ignore-https-errors open https://12-computed-read-model.formless.local/rates` and `snapshot -i`: `/rates` rendered the rate table.
 
 ### CR-05 aggregate summary slots
 
@@ -409,8 +418,8 @@ Acceptance:
 
 ## Blockers
 
-| ID    | Status | Blocks | Notes                                                                 |
-| ----- | ------ | ------ | --------------------------------------------------------------------- |
+| ID    | Status | Blocks | Notes                                                                    |
+| ----- | ------ | ------ | ------------------------------------------------------------------------ |
 | CR-B1 | closed | none   | Chosen shape is `readModels.computedValues` and `readModels.aggregates`. |
 
 ## Cross-PRD dependencies
@@ -486,6 +495,14 @@ CR-03:
 - Parser validates numeric computed field refs and aggregate query/value refs.
 - `stringifySchema` preserves read-model declarations.
 
+CR-04:
+
+- Table views can declare read-only computed columns with `type: "computed"`.
+- Computed table columns reference `readModels.computedValues`.
+- Computed table cells render through `src/app/generated/table.tsx`.
+- Computed table cells reuse generated number formatting from `src/app/generated/format.ts`.
+- Computed table output updates when source record values change in the client store.
+
 When this PRD ships, update `doc/current.md`:
 
 - Schema can declare read-model computed values and aggregates.
@@ -509,3 +526,4 @@ When this PRD ships, update `doc/roadmap.md` only if derived display values rema
 - CR-01 shipped 2026-05-06 with characterization tests only.
 - CR-02 shipped 2026-05-06 with shared numeric expression evaluator and tests.
 - CR-03 shipped 2026-05-06 with parser and schema tests.
+- CR-04 shipped 2026-05-06 with schema-backed computed table columns and generated table rendering.

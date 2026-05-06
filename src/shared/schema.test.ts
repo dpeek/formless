@@ -967,6 +967,94 @@ describe("schema table views", () => {
     ).toThrow('referenceItemView "rateListItem" must use entity "resource"');
   });
 
+  it("parses and validates computed table columns", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        readModels: scopedRateReadModels(),
+        tableViews: {
+          rateTable: {
+            entity: "rate",
+            columns: [
+              {
+                type: "computed",
+                computedValue: "rateMargin",
+                label: "Margin",
+                align: "end",
+                width: "sm",
+                display: "readOnly",
+                suffix: "margin",
+                format: "percent",
+              },
+            ],
+          },
+        },
+        views: scopedRateViews({
+          result: { type: "table", tableView: "rateTable" },
+        }),
+      }),
+    );
+
+    expect(schema.tableViews.rateTable?.columns[0]).toEqual({
+      type: "computed",
+      computedValue: "rateMargin",
+      label: "Margin",
+      align: "end",
+      width: "sm",
+      display: "readOnly",
+      suffix: "margin",
+      format: "percent",
+    });
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [{ type: "computed", computedValue: "missing" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown computed value "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: scopedRateReadModels(),
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [{ type: "computed", computedValue: "rateMargin", display: "editor" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("computed columns must be read-only or hidden");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            computedValues: {
+              cardMargin: {
+                entity: "card",
+                type: "number",
+                expression: { kind: "field", field: "marginMin" },
+              },
+            },
+          },
+          tableViews: {
+            rateTable: {
+              entity: "rate",
+              columns: [{ type: "computed", computedValue: "cardMargin" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('computed value "cardMargin" must use entity "rate"');
+  });
+
   it("parses and validates referenced-record field columns", () => {
     const schema = parseAppSchema(
       scopedRateSchema({

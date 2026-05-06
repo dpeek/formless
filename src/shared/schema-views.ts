@@ -20,6 +20,7 @@ import type {
   CollectionResultSchema,
   CollectionViewQuerySlotSchema,
   CollectionViewSchema,
+  ComputedValueSchema,
   CountDisplaySchema,
   CreateDefaultValueSchema,
   CreateViewFieldSchema,
@@ -30,6 +31,7 @@ import type {
   FieldSchema,
   ItemViewSchema,
   RelationshipSchema,
+  ReadModelSchema,
   TableColumnAlign,
   TableColumnDisplay,
   TableColumnFormat,
@@ -147,6 +149,7 @@ export function parseTableViews(
   value: unknown,
   entities: Record<string, EntitySchema>,
   itemViews: Record<string, ItemViewSchema>,
+  readModels?: ReadModelSchema,
 ): Record<string, TableViewSchema> {
   if (!isRecord(value)) {
     throw new Error("Schema tableViews must be an object.");
@@ -158,7 +161,10 @@ export function parseTableViews(
         throw new Error("Table view names must be non-empty.");
       }
 
-      return [tableViewName, parseTableView(tableViewName, tableView, entities, itemViews)];
+      return [
+        tableViewName,
+        parseTableView(tableViewName, tableView, entities, itemViews, readModels),
+      ];
     }),
   );
 }
@@ -168,6 +174,7 @@ function parseTableView(
   value: unknown,
   entities: Record<string, EntitySchema>,
   itemViews: Record<string, ItemViewSchema>,
+  readModels?: ReadModelSchema,
 ): TableViewSchema {
   if (!isRecord(value)) {
     throw new Error(`Table view "${tableViewName}" must be an object.`);
@@ -192,6 +199,7 @@ function parseTableView(
     entity,
     itemViews,
     entities,
+    readModels?.computedValues ?? {},
   );
 
   return {
@@ -207,13 +215,23 @@ function parseTableColumns(
   entity: EntitySchema,
   itemViews: Record<string, ItemViewSchema>,
   entities: Record<string, EntitySchema>,
+  computedValues: Record<string, ComputedValueSchema>,
 ): TableColumnSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Table view "${tableViewName}" columns must be a non-empty array.`);
   }
 
   return value.map((column, index) =>
-    parseTableColumn(tableViewName, entityName, index, column, entity, itemViews, entities),
+    parseTableColumn(
+      tableViewName,
+      entityName,
+      index,
+      column,
+      entity,
+      itemViews,
+      entities,
+      computedValues,
+    ),
   );
 }
 
@@ -225,6 +243,7 @@ function parseTableColumn(
   entity: EntitySchema,
   itemViews: Record<string, ItemViewSchema>,
   entities: Record<string, EntitySchema>,
+  computedValues: Record<string, ComputedValueSchema>,
 ): TableColumnSchema {
   const context = `Table view "${tableViewName}" column ${index}`;
 
@@ -234,6 +253,10 @@ function parseTableColumn(
 
   if (value.type === "referenceField") {
     return parseReferenceFieldTableColumn(context, value, entityName, entity, entities);
+  }
+
+  if (value.type === "computed") {
+    return parseComputedTableColumn(context, value, entityName, computedValues);
   }
 
   return parseFieldTableColumn(context, value, entityName, entity, itemViews);
@@ -382,6 +405,59 @@ function parseReferenceFieldTableColumn(
     ...(label === undefined ? {} : { label }),
     ...(editor === undefined ? {} : { editor }),
     ...(commit === undefined ? {} : { commit }),
+    ...(align === undefined ? {} : { align }),
+    ...(width === undefined ? {} : { width }),
+    ...(display === undefined ? {} : { display }),
+    ...(suffix === undefined ? {} : { suffix }),
+    ...(format === undefined ? {} : { format }),
+  };
+}
+
+function parseComputedTableColumn(
+  context: string,
+  value: Record<string, unknown>,
+  entityName: string,
+  computedValues: Record<string, ComputedValueSchema>,
+): TableColumnSchema {
+  assertExactKeys(
+    context,
+    value,
+    ["type", "computedValue"],
+    ["label", "align", "width", "display", "suffix", "format"],
+  );
+
+  const computedValueName = parseRequiredNonEmptyString(
+    `${context} computedValue`,
+    value.computedValue,
+  );
+  const computedValue = computedValues[computedValueName];
+
+  if (!computedValue) {
+    throw new Error(`${context} references unknown computed value "${computedValueName}".`);
+  }
+
+  if (computedValue.entity !== entityName) {
+    throw new Error(
+      `${context} computed value "${computedValueName}" must use entity "${entityName}".`,
+    );
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
+  const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
+  const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
+
+  if (display === "editor") {
+    throw new Error(`${context} computed columns must be read-only or hidden.`);
+  }
+
+  const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
+  const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
+
+  return {
+    type: "computed",
+    computedValue: computedValueName,
+    ...(label === undefined ? {} : { label }),
     ...(align === undefined ? {} : { align }),
     ...(width === undefined ? {} : { width }),
     ...(display === undefined ? {} : { display }),

@@ -1,4 +1,8 @@
-import type { TableColumnConfig } from "../../client/views.ts";
+import type {
+  ComputedTableColumnConfig,
+  FieldTableColumnConfig,
+  ReferenceFieldTableColumnConfig,
+} from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import {
@@ -11,12 +15,31 @@ import {
   numberInputValueToFieldValue as numberInputValueToFieldValuePrimitive,
 } from "../../shared/field-types.ts";
 
-export function formatFieldDisplayValue(column: TableColumnConfig, value: FieldValue | undefined) {
+const readModelNumberField = {
+  type: "number",
+  required: false,
+} satisfies FieldSchema;
+
+export function formatFieldDisplayValue(
+  column: FieldTableColumnConfig | ReferenceFieldTableColumnConfig,
+  value: FieldValue | undefined,
+) {
   if (value === undefined || value === "") {
     return "";
   }
 
   return formatFieldDisplayPrimitive(column.field, value, { format: column.format });
+}
+
+export function formatComputedDisplayValue(
+  column: ComputedTableColumnConfig,
+  value: number | undefined,
+) {
+  if (value === undefined) {
+    return "";
+  }
+
+  return formatFieldDisplayPrimitive(readModelNumberField, value, { format: column.format });
 }
 
 export { formatPlainNumber };

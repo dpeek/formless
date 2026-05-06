@@ -17,6 +17,7 @@ import {
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
 import type {
+  ComputedTableColumnConfig,
   FieldTableColumnConfig,
   HomeQueryTabConfig,
   ReferenceFieldTableColumnConfig,
@@ -24,6 +25,8 @@ import type {
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
+import { evaluateNumericExpression } from "../../shared/read-model.ts";
+import { formatComputedDisplayValue } from "./format.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
@@ -139,6 +142,14 @@ function RecordTableCell({
     );
   }
 
+  if (column.type === "computed") {
+    return (
+      <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
+        <ComputedTableCell column={column} recordId={recordId} />
+      </div>
+    );
+  }
+
   if (column.display === "readOnly") {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
@@ -162,6 +173,26 @@ function RecordTableCell({
       ) : null}
       <ReferencedRecordEditButton column={column} sourceRecordId={recordId} />
     </div>
+  );
+}
+
+function ComputedTableCell({
+  column,
+  recordId,
+}: {
+  column: ComputedTableColumnConfig;
+  recordId: string;
+}) {
+  const record = useRecord(recordId);
+  const value = record
+    ? evaluateNumericExpression(column.computedValue.expression, record)
+    : undefined;
+
+  return (
+    <>
+      <span>{formatComputedDisplayValue(column, value)}</span>
+      {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+    </>
   );
 }
 

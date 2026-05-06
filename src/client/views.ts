@@ -2,6 +2,7 @@ import type {
   AppSchema,
   CollectionNavigationSchema,
   CollectionViewSchema,
+  ComputedValueSchema,
   CountDisplaySchema,
   CreateDefaultValueSchema,
   CreateViewSchema,
@@ -59,7 +60,16 @@ export type ReferenceFieldTableColumnConfig = RecordFieldConfig &
     referencedEntity: EntitySchema;
   };
 
-export type TableColumnConfig = FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
+export type ComputedTableColumnConfig = TableColumnBaseConfig & {
+  type: "computed";
+  computedValueName: string;
+  computedValue: ComputedValueSchema;
+};
+
+export type TableColumnConfig =
+  | FieldTableColumnConfig
+  | ReferenceFieldTableColumnConfig
+  | ComputedTableColumnConfig;
 
 export type CreateFieldConfig = {
   fieldName: string;
@@ -595,6 +605,33 @@ function selectTableColumns(
   entity: EntitySchema,
 ): TableColumnConfig[] {
   return view.columns.map((column) => {
+    if (column.type === "computed") {
+      const computedValue = schema.readModels?.computedValues?.[column.computedValue];
+
+      if (!computedValue) {
+        throw new Error(`Missing computed value "${column.computedValue}".`);
+      }
+
+      if (computedValue.entity !== view.entity) {
+        throw new Error(
+          `Computed value "${column.computedValue}" must use table entity "${view.entity}".`,
+        );
+      }
+
+      return {
+        type: "computed",
+        key: `computed:${column.computedValue}`,
+        computedValueName: column.computedValue,
+        computedValue,
+        label: column.label ?? humanizeFieldName(column.computedValue),
+        ...(column.align === undefined ? {} : { align: column.align }),
+        ...(column.width === undefined ? {} : { width: column.width }),
+        display: column.display === "hidden" ? "hidden" : "readOnly",
+        ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
+        format: column.format ?? "plain",
+      };
+    }
+
     if (column.type === "referenceField") {
       const sourceReferenceField = entity.fields[column.referenceField] as FieldSchema;
 

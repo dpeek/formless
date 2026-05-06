@@ -1,5 +1,8 @@
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
-import type { TableColumnConfig } from "../../client/views.ts";
+import type {
+  FieldTableColumnConfig,
+  ReferenceFieldTableColumnConfig,
+} from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { formatFieldDisplayValue } from "./format.ts";
@@ -8,7 +11,7 @@ export function RecordFieldDisplay({
   column,
   recordId,
 }: {
-  column: TableColumnConfig;
+  column: FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
   recordId: string;
 }) {
   const recordValue = useRecordField(recordId, column.fieldName);

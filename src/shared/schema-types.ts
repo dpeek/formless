@@ -126,7 +126,21 @@ export type ReferenceFieldTableColumnSchema = {
   format?: TableColumnFormat;
 };
 
-export type TableColumnSchema = FieldTableColumnSchema | ReferenceFieldTableColumnSchema;
+export type ComputedTableColumnSchema = {
+  type: "computed";
+  computedValue: string;
+  label?: string;
+  align?: TableColumnAlign;
+  width?: TableColumnWidth;
+  display?: TableColumnDisplay;
+  suffix?: string;
+  format?: TableColumnFormat;
+};
+
+export type TableColumnSchema =
+  | FieldTableColumnSchema
+  | ReferenceFieldTableColumnSchema
+  | ComputedTableColumnSchema;
 
 export type TableViewSchema = {
   entity: string;

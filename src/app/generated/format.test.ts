@@ -5,10 +5,11 @@ import type {
   FieldSchema,
   TableColumnFormat,
 } from "../../shared/schema.ts";
-import type { TableColumnConfig } from "../../client/views.ts";
+import type { ComputedTableColumnConfig, FieldTableColumnConfig } from "../../client/views.ts";
 import {
   createInputValueToFieldValue,
   fieldValueToInputValue,
+  formatComputedDisplayValue,
   formatFieldDisplayValue,
   inputValueToFieldValue,
   numberInputAttributes,
@@ -31,6 +32,13 @@ describe("generated field format helpers", () => {
     expect(formatFieldDisplayValue(fieldColumn(fields.resource), "rec_resource_1")).toBe(
       "rec_resource_1",
     );
+  });
+
+  it("formats computed number values for generated table cells", () => {
+    expect(formatComputedDisplayValue(computedColumn(), undefined)).toBe("");
+    expect(formatComputedDisplayValue(computedColumn("number"), 1.5)).toBe("1.5");
+    expect(formatComputedDisplayValue(computedColumn("currency"), 1.5)).toBe("$1.50");
+    expect(formatComputedDisplayValue(computedColumn("percent"), 0.125)).toBe("12.5%");
   });
 
   it("converts current inline editor values for patch mutations", () => {
@@ -87,7 +95,10 @@ const fields = {
   resource: { type: "reference", required: true, to: "resource", displayField: "name" },
 } satisfies Record<string, FieldSchema>;
 
-function fieldColumn(field: FieldSchema, format: TableColumnFormat = "plain"): TableColumnConfig {
+function fieldColumn(
+  field: FieldSchema,
+  format: TableColumnFormat = "plain",
+): FieldTableColumnConfig {
   return {
     type: "field",
     key: "value",
@@ -96,6 +107,22 @@ function fieldColumn(field: FieldSchema, format: TableColumnFormat = "plain"): T
     field,
     editor: defaultEditorFor(field),
     commit: defaultCommitFor(field),
+    display: "readOnly",
+    format,
+  };
+}
+
+function computedColumn(format: TableColumnFormat = "plain"): ComputedTableColumnConfig {
+  return {
+    type: "computed",
+    key: "computed:value",
+    label: "Value",
+    computedValueName: "value",
+    computedValue: {
+      entity: "task",
+      type: "number",
+      expression: { kind: "field", field: "estimate" },
+    },
     display: "readOnly",
     format,
   };

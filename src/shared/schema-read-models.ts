@@ -16,11 +16,14 @@ import type {
   ReadModelSchema,
 } from "./schema-types.ts";
 
-const numericExpressionOperators = ["add", "subtract", "multiply", "divide"] satisfies
-  NumericExpressionOperator[];
+const numericExpressionOperators = [
+  "add",
+  "subtract",
+  "multiply",
+  "divide",
+] satisfies NumericExpressionOperator[];
 
-const aggregateFunctions = ["count", "sum", "average", "min", "max"] satisfies
-  AggregateFunction[];
+const aggregateFunctions = ["count", "sum", "average", "min", "max"] satisfies AggregateFunction[];
 
 export function parseReadModels(
   value: unknown,
@@ -64,10 +67,7 @@ function parseComputedValues(
         throw new Error("Computed value names must be non-empty.");
       }
 
-      return [
-        computedValueName,
-        parseComputedValue(computedValueName, computedValue, entities),
-      ];
+      return [computedValueName, parseComputedValue(computedValueName, computedValue, entities)];
     }),
   );
 }

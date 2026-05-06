@@ -31,6 +31,7 @@ import {
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { SitePageTree } from "./shared/protocol.ts";
 import type { AppSchema, EntitySchema } from "./shared/schema.ts";
+import type { NumericExpression } from "./shared/read-model.ts";
 import {
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
@@ -1025,6 +1026,30 @@ describe("generated forms and records", () => {
     expect(html).not.toContain('type="number"');
   });
 
+  it("renders computed table cells and updates after source record patches", () => {
+    const schema = rateCardSchemaWithComputedMarginColumn();
+    const rate = schema.entities.rate;
+    const columns = tableColumnsFor(schema, "rateHome");
+
+    applyBootstrapResponse(
+      bootstrap([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], schema),
+    );
+    const before = renderToStaticMarkup(
+      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+    );
+
+    applyRecordMerge([rateCardRateRecordWithCost("rate-1", "resource-1", "card-1", 250, 500)], 2);
+    const after = renderToStaticMarkup(
+      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+    );
+
+    expect(before).toContain("Margin");
+    expect(before).toContain("31.58%");
+    expect(after).toContain("Margin");
+    expect(after).toContain("50%");
+    expect(after).not.toContain("31.58%");
+  });
+
   it("renders number create controls and inline editors with numeric constraints", () => {
     const task = taskEntityWithEstimateNumber();
     const action = createAction(task, ["estimate"]);
@@ -1735,19 +1760,77 @@ function rateCardRateRecord(
   card: string,
   price: number,
 ): StoredRecord {
+  return rateCardRateRecordWithCost(id, resource, card, price - 150, price);
+}
+
+function rateCardRateRecordWithCost(
+  id: string,
+  resource: string,
+  card: string,
+  cost: number,
+  price: number,
+): StoredRecord {
   return {
     id,
     entity: "rate",
     values: {
       resource,
       card,
-      cost: price - 150,
+      cost,
       costUnit: "day",
       price,
       priceSet: true,
       currency: "usd",
     },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function rateCardSchemaWithComputedMarginColumn(): AppSchema {
+  const rateTable = rateCardSchema.tableViews.rateTable;
+
+  return {
+    ...rateCardSchema,
+    readModels: {
+      computedValues: {
+        rateMargin: {
+          entity: "rate",
+          type: "number",
+          expression: rateMarginExpression(),
+        },
+      },
+    },
+    tableViews: {
+      ...rateCardSchema.tableViews,
+      rateTable: {
+        ...rateTable,
+        columns: [
+          ...rateTable.columns,
+          {
+            type: "computed",
+            computedValue: "rateMargin",
+            label: "Margin",
+            align: "end",
+            width: "sm",
+            format: "percent",
+          },
+        ],
+      },
+    },
+  };
+}
+
+function rateMarginExpression(): NumericExpression {
+  return {
+    kind: "binary",
+    op: "divide",
+    left: {
+      kind: "binary",
+      op: "subtract",
+      left: { kind: "field", field: "price" },
+      right: { kind: "field", field: "cost" },
+    },
+    right: { kind: "field", field: "price" },
   };
 }
 

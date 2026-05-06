@@ -10,8 +10,10 @@ import {
   selectRelatedCollectionModels,
   type HomeActionConfig,
   type HomeViewModel,
+  type TableColumnConfig,
 } from "./views.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import type { NumericExpression } from "../shared/read-model.ts";
 
 describe("home view model collections", () => {
   it("selects the task collection and resolves query tabs in schema order", () => {
@@ -252,14 +254,8 @@ describe("home view model collections", () => {
       "Price",
       "Currency",
     ]);
-    expect(columns.map((column) => column.editor)).toEqual([
-      "text",
-      "number",
-      "enum",
-      "number",
-      "enum",
-    ]);
-    expect(columns.map((column) => column.commit)).toEqual([
+    expect(tableColumnEditors(columns)).toEqual(["text", "number", "enum", "number", "enum"]);
+    expect(tableColumnCommits(columns)).toEqual([
       "field-commit",
       "field-commit",
       "immediate",
@@ -378,6 +374,32 @@ describe("home view model collections", () => {
     expect("summary" in rateModel.collection).toBe(false);
   });
 
+  it("resolves read-only computed table columns", () => {
+    const schema = rateCardSchemaWithComputedMarginColumn();
+    const rateModel = selectCollectionModels(schema).find((model) => model.viewName === "rateHome");
+
+    if (!rateModel || rateModel.result.type !== "table") {
+      throw new Error("Missing rate table model.");
+    }
+
+    const computedColumn = rateModel.result.columns.at(-1);
+
+    expect(computedColumn).toMatchObject({
+      type: "computed",
+      key: "computed:rateMargin",
+      computedValueName: "rateMargin",
+      computedValue: schema.readModels?.computedValues?.rateMargin,
+      label: "Margin",
+      align: "end",
+      width: "sm",
+      display: "readOnly",
+      suffix: "margin",
+      format: "percent",
+    });
+    expect(computedColumn && "editor" in computedColumn).toBe(false);
+    expect(computedColumn && "commit" in computedColumn).toBe(false);
+  });
+
   it("applies field type default commit policies to table columns", () => {
     const taskHome = appSchema.views.taskHome as Extract<
       AppSchema["views"][string],
@@ -408,14 +430,8 @@ describe("home view model collections", () => {
     const model = selectPrimaryCollectionModels(schema)[0];
     const columns = model?.result.type === "table" ? model.result.columns : [];
 
-    expect(columns.map((column) => column.editor)).toEqual([
-      "text",
-      "boolean",
-      "date",
-      "number",
-      "enum",
-    ]);
-    expect(columns.map((column) => column.commit)).toEqual([
+    expect(tableColumnEditors(columns)).toEqual(["text", "boolean", "date", "number", "enum"]);
+    expect(tableColumnCommits(columns)).toEqual([
       "field-commit",
       "immediate",
       "field-commit",
@@ -818,9 +834,7 @@ describe("home view model collections", () => {
       "field:limit",
     ]);
     expect(
-      contentModel?.result.type === "table"
-        ? contentModel.result.columns.map((column) => column.editor)
-        : [],
+      contentModel?.result.type === "table" ? tableColumnEditors(contentModel.result.columns) : [],
     ).toEqual([
       "enum",
       "text",
@@ -917,6 +931,63 @@ describe("home view model collections", () => {
     ]);
   });
 });
+
+function rateCardSchemaWithComputedMarginColumn(): AppSchema {
+  const rateTable = rateCardSchema.tableViews.rateTable;
+
+  return {
+    ...rateCardSchema,
+    readModels: {
+      computedValues: {
+        rateMargin: {
+          entity: "rate",
+          type: "number",
+          expression: rateMarginExpression(),
+        },
+      },
+    },
+    tableViews: {
+      ...rateCardSchema.tableViews,
+      rateTable: {
+        ...rateTable,
+        columns: [
+          ...rateTable.columns,
+          {
+            type: "computed",
+            computedValue: "rateMargin",
+            label: "Margin",
+            align: "end",
+            width: "sm",
+            suffix: "margin",
+            format: "percent",
+          },
+        ],
+      },
+    },
+  };
+}
+
+function rateMarginExpression(): NumericExpression {
+  return {
+    kind: "binary",
+    op: "divide",
+    left: {
+      kind: "binary",
+      op: "subtract",
+      left: { kind: "field", field: "price" },
+      right: { kind: "field", field: "cost" },
+    },
+    right: { kind: "field", field: "price" },
+  };
+}
+
+function tableColumnEditors(columns: TableColumnConfig[]) {
+  return columns.map((column) => (column.type === "computed" ? null : column.editor));
+}
+
+function tableColumnCommits(columns: TableColumnConfig[]) {
+  return columns.map((column) => (column.type === "computed" ? null : column.commit));
+}
 
 function summarizeHomeModel(model: HomeViewModel) {
   const collection = model.collection;
