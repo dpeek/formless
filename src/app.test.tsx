@@ -20,6 +20,8 @@ import {
   selectPrimaryCollectionModels,
   type CreateFieldConfig,
   type HomeActionConfig,
+  type HomeQueryTabConfig,
+  type HomeViewModel,
   type RecordFieldConfig,
   type TableColumnConfig,
 } from "./client/views.ts";
@@ -45,6 +47,42 @@ function renderRoute(path: string) {
 beforeEach(() => {
   resetClientStore();
 });
+
+function renderGeneratedHomeCollection(
+  model: HomeViewModel,
+  {
+    selectedContextRecordId,
+    selectedQuery = model.collection.queries.defaultTab,
+    today,
+  }: {
+    selectedContextRecordId?: string | null;
+    selectedQuery?: HomeQueryTabConfig;
+    today: string;
+  },
+) {
+  return renderToStaticMarkup(
+    <HomeCollection
+      collection={model.collection}
+      onSelectContext={() => {}}
+      onSelectQuery={() => {}}
+      selectedContextRecordId={selectedContextRecordId}
+      selectedQuery={selectedQuery}
+      today={today}
+    />,
+  );
+}
+
+function selectRateHomeModel() {
+  const model = selectCollectionModels(rateCardSchema).find(
+    (candidate) => candidate.viewName === "rateHome",
+  );
+
+  if (!model) {
+    throw new Error("Missing rate home model.");
+  }
+
+  return model;
+}
 
 describe("App smoke routes", () => {
   it('renders the "/tasks" route with task navigation', () => {
@@ -232,31 +270,12 @@ describe("generated collection home", () => {
   it("renders seeded task records with useful query and action counts", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 
+    if (!model) {
+      throw new Error("Missing task home model.");
+    }
+
     applyBootstrapResponse(bootstrap(taskSeedRecords));
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={model?.actions ?? []}
-        entity={model?.entity ?? appSchema.entities.task}
-        entityName="task"
-        onSelectQuery={() => {}}
-        queryTabs={model?.queryTabs ?? []}
-        result={
-          model?.result ?? {
-            type: "list",
-            itemViewName: "taskListItem",
-            recordFields: [],
-          }
-        }
-        selectedQuery={
-          model?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-02"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(model, { today: "2026-05-02" });
 
     expect(html).toContain("Review overdue proposal");
     expect(html).toContain("Plan today&#x27;s delivery");
@@ -341,21 +360,10 @@ describe("generated collection home", () => {
     }
 
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={compositionModel.actions}
-        context={compositionModel.context}
-        entity={compositionModel.entity}
-        entityName={compositionModel.entityName}
-        onSelectContext={() => {}}
-        onSelectQuery={() => {}}
-        queryTabs={compositionModel.queryTabs}
-        result={compositionModel.result}
-        selectedContextRecordId="rec_site_content_home"
-        selectedQuery={compositionModel.queryTabs[0]}
-        today="2026-05-05"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(compositionModel, {
+      selectedContextRecordId: "rec_site_content_home",
+      today: "2026-05-05",
+    });
 
     expect(html).toContain('aria-label="Content item records"');
     expect(html).toContain("Home");
@@ -379,21 +387,10 @@ describe("generated collection home", () => {
     }
 
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={blocksModel.actions}
-        context={blocksModel.context}
-        entity={blocksModel.entity}
-        entityName={blocksModel.entityName}
-        onSelectContext={() => {}}
-        onSelectQuery={() => {}}
-        queryTabs={blocksModel.queryTabs}
-        result={blocksModel.result}
-        selectedContextRecordId="rec_site_content_group_header"
-        selectedQuery={blocksModel.queryTabs[0]}
-        today="2026-05-05"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(blocksModel, {
+      selectedContextRecordId: "rec_site_content_group_header",
+      today: "2026-05-05",
+    });
 
     expect(html).toContain('aria-label="Content item records"');
     expect(html).toContain("Header");
@@ -418,9 +415,7 @@ describe("generated collection home", () => {
   });
 
   it("renders the scoped rate-card collection with a card selector", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
+    const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(
       bootstrap(
@@ -434,32 +429,10 @@ describe("generated collection home", () => {
         rateCardSchema,
       ),
     );
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId={null}
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-01"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: null,
+      today: "2026-05-01",
+    });
 
     expect(html).toContain('aria-label="Rate card records"');
     expect(html).not.toContain("<select");
@@ -488,9 +461,7 @@ describe("generated collection home", () => {
   });
 
   it("updates relationship counts after local record merges", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
+    const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(
       bootstrap(
@@ -498,99 +469,31 @@ describe("generated collection home", () => {
         rateCardSchema,
       ),
     );
-    const before = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId="card-1"
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-01"
-      />,
-    );
+    const before = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-1",
+      today: "2026-05-01",
+    });
 
     applyRecordMerge([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], 2);
-    const after = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId="card-1"
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-01"
-      />,
-    );
+    const after = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-1",
+      today: "2026-05-01",
+    });
 
     expect(before).toMatch(/aria-label="Default Rates count"[^>]*>0</);
     expect(after).toMatch(/aria-label="Default Rates count"[^>]*>1</);
   });
 
   it("renders selected card context fields from the context item view", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
+    const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(
       bootstrap([cardRecord("card-1", "Default"), cardRecord("card-2", "Backup")], rateCardSchema),
     );
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId="card-2"
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-01"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-2",
+      today: "2026-05-01",
+    });
 
     expect(html).not.toContain('aria-label="Name"');
     expect(html).not.toContain('aria-label="Default"');
@@ -604,37 +507,13 @@ describe("generated collection home", () => {
   });
 
   it("does not render context item fields when no context record is selected", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
+    const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(bootstrap([], rateCardSchema));
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId={null}
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-01"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: null,
+      today: "2026-05-01",
+    });
 
     expect(html).toContain("No rate card records yet.");
     expect(html).not.toContain('aria-label="Minimum margin"');
@@ -643,9 +522,7 @@ describe("generated collection home", () => {
   });
 
   it("changes visible table rows when the selected card changes", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
+    const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(
       bootstrap(
@@ -659,32 +536,10 @@ describe("generated collection home", () => {
         rateCardSchema,
       ),
     );
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId="card-2"
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-01"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-2",
+      today: "2026-05-01",
+    });
 
     expect(html).toContain('data-slot="table"');
     expect(html).toContain('value="750"');
@@ -694,37 +549,13 @@ describe("generated collection home", () => {
   });
 
   it("renders seeded rate-card rows under the selected card", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
+    const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema));
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId={null}
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-02"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: null,
+      today: "2026-05-02",
+    });
 
     expect(html).toContain("Default");
     expect(html).toContain("Premium");
@@ -738,37 +569,13 @@ describe("generated collection home", () => {
   });
 
   it("keeps the resource create action enabled without a selected card", () => {
-    const rateModel = selectCollectionModels(rateCardSchema).find(
-      (model) => model.viewName === "rateHome",
-    );
+    const rateModel = selectRateHomeModel();
 
     applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")], rateCardSchema));
-    const html = renderToStaticMarkup(
-      <HomeCollection
-        actions={rateModel?.actions ?? []}
-        context={rateModel?.context}
-        entity={rateModel?.entity ?? rateCardSchema.entities.rate}
-        entityName="rate"
-        onSelectQuery={() => {}}
-        queryTabs={rateModel?.queryTabs ?? []}
-        result={
-          rateModel?.result ?? {
-            type: "list",
-            itemViewName: "rateListItem",
-            recordFields: [],
-          }
-        }
-        selectedContextRecordId={null}
-        selectedQuery={
-          rateModel?.queryTabs[0] ?? {
-            queryName: "missing",
-            label: "Missing",
-            query: { kind: "all" },
-          }
-        }
-        today="2026-05-01"
-      />,
-    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: null,
+      today: "2026-05-01",
+    });
 
     expect(html).toContain("No rate card records yet.");
     expect(html).toContain(">Create Resource</button>");

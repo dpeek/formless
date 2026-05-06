@@ -28,7 +28,8 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   const [selectedViewName, setSelectedViewName] = useState<string | null>(null);
   const homeModel =
     collectionModels.find((model) => model.viewName === selectedViewName) ?? collectionModels[0];
-  const queryTabs = homeModel?.queryTabs ?? [];
+  const homeCollection = homeModel?.collection;
+  const queryTabs = homeCollection?.queries.tabs ?? [];
   const today = useTodayDateString();
   const [selectedQueryName, setSelectedQueryName] = useState<string | null>(null);
   const [selectedContextIdsByView, setSelectedContextIdsByView] = useState<
@@ -94,12 +95,13 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
 
   useEffect(() => {
     const selectedQueryExists = queryTabs.some((tab) => tab.queryName === selectedQueryName);
-    const defaultQueryName = homeModel?.defaultQueryName ?? queryTabs[0]?.queryName ?? null;
+    const defaultQueryName =
+      homeCollection?.queries.defaultQueryName ?? queryTabs[0]?.queryName ?? null;
 
     if (!selectedQueryExists && selectedQueryName !== defaultQueryName) {
       setSelectedQueryName(defaultQueryName);
     }
-  }, [homeModel?.defaultQueryName, queryTabs, selectedQueryName]);
+  }, [homeCollection?.queries.defaultQueryName, queryTabs, selectedQueryName]);
 
   if (!schema) {
     return (
@@ -123,12 +125,13 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
     );
   }
 
-  const { actions, entityName, entity, result } = homeModel;
+  const { entity } = homeModel.collection;
   const selectedQuery =
-    queryTabs.find((tab) => tab.queryName === selectedQueryName) ?? queryTabs[0];
+    queryTabs.find((tab) => tab.queryName === selectedQueryName) ??
+    homeModel.collection.queries.defaultTab;
   const selectedContextRecordId = selectedContextIdsByView[homeModel.viewName] ?? null;
 
-  if (!selectedQuery) {
+  if (queryTabs.length === 0) {
     return (
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">{homeModel.label}</h1>
@@ -166,10 +169,7 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
 
       <SchemaAppProvider schemaKey={schemaKey}>
         <HomeCollection
-          actions={actions}
-          context={homeModel.context}
-          entity={entity}
-          entityName={entityName}
+          collection={homeModel.collection}
           onSelectContext={(recordId) =>
             setSelectedContextIdsByView((current) =>
               current[homeModel.viewName] === recordId
@@ -178,8 +178,6 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
             )
           }
           onSelectQuery={setSelectedQueryName}
-          queryTabs={queryTabs}
-          result={result}
           selectedContextRecordId={selectedContextRecordId}
           selectedQuery={selectedQuery}
           today={today}

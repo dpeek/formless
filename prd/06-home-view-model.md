@@ -121,7 +121,7 @@ Likely changed files:
 | ------ | ------- | ------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | HVM-01 | shipped | PRD 04 REL-06 | tests                                                         | Existing task, rate, and site home model behavior is characterized.                                       |
 | HVM-02 | shipped | HVM-01        | `src/client/views.ts`                                         | Home collection model exposes context, query, action, and result facts with less renderer reconstruction. |
-| HVM-03 | draft   | HVM-02        | `src/app/generated/collection.tsx`, `src/app/routes/home.tsx` | Generated collection rendering consumes the deeper model without behavior changes.                        |
+| HVM-03 | shipped | HVM-02        | `src/app/generated/collection.tsx`, `src/app/routes/home.tsx` | Generated collection rendering consumes the deeper model without behavior changes.                        |
 | HVM-04 | draft   | HVM-03        | tests, Browser Use if behavior changes                        | Tasks, rates, and site home flows still render and update counts.                                         |
 | HVM-05 | draft   | HVM-04        | `prd/06-home-view-model.md`                                   | PRD status and promote notes reflect shipped behavior.                                                    |
 
@@ -164,6 +164,7 @@ Recommended order:
 
 - HVM-01: no global doc promotion; characterization tests only.
 - HVM-02: generated home workspaces expose nested collection facts in `HomeViewModel.collection`; current renderer aliases remain until HVM-03.
+- HVM-03: generated home route and collection renderer consume `HomeViewModel.collection` directly; top-level aliases remain for compatibility.
 - `doc/current.md`: note that generated home workspaces use a deeper home view model module; relationship-backed context, counts, actions, and results are selected before rendering.
 - `doc/roadmap.md`: no change unless screen schema becomes first-release scope.
 
@@ -191,4 +192,14 @@ Recommended order:
 - Evidence: `bun run test` passed 2026-05-06.
 - Evidence: `bun run check` passed 2026-05-06.
 - No blockers.
-- Next ready chunk: HVM-03.
+- After HVM-02, next ready chunk was HVM-03.
+- HVM-03 shipped 2026-05-06.
+- HVM-03 changed `HomeCollection` to receive `HomeCollectionConfig` from `HomeViewModel.collection`.
+- HVM-03 changed the home route to select query tabs, default query, result, context, and actions through `homeModel.collection`.
+- HVM-03 updated generated collection tests to render through `model.collection`.
+- HVM-03 changed no schema syntax, storage, sync, authority code, or generated visual behavior.
+- Evidence: `bun run test src/app.test.tsx src/client/views.test.ts` passed 2026-05-06.
+- Evidence: `bun run test` passed 2026-05-06.
+- Evidence: `bun run check` passed 2026-05-06.
+- No blockers.
+- Next ready chunk: HVM-04.

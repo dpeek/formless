@@ -10,7 +10,7 @@ import {
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
 import type {
-  HomeActionConfig,
+  HomeCollectionConfig,
   HomeContextConfig,
   HomeQueryTabConfig,
   HomeResultConfig,
@@ -26,41 +26,30 @@ import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTable } from "./table.tsx";
 
 export function HomeCollection({
-  actions,
-  context,
-  entity,
-  entityName,
+  collection,
   onSelectContext,
   onSelectQuery,
-  queryTabs,
-  result,
   selectedContextRecordId,
   selectedQuery,
   today,
 }: {
-  actions: HomeActionConfig[];
-  context?: HomeContextConfig;
-  entity: EntitySchema;
-  entityName: string;
+  collection: HomeCollectionConfig;
   onSelectContext?: (recordId: string | null) => void;
   onSelectQuery: (queryName: string) => void;
-  queryTabs: HomeQueryTabConfig[];
-  result: HomeResultConfig;
   selectedContextRecordId?: string | null;
   selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
+  const { actions, context, entity, entityName, queries, result } = collection;
+  const queryTabs = queries.tabs;
+
   if (context) {
     return (
       <ScopedHomeCollection
-        actions={actions}
+        collection={collection}
         context={context}
-        entity={entity}
-        entityName={entityName}
         onSelectContext={onSelectContext}
         onSelectQuery={onSelectQuery}
-        queryTabs={queryTabs}
-        result={result}
         selectedContextRecordId={selectedContextRecordId ?? null}
         selectedQuery={selectedQuery}
         today={today}
@@ -114,30 +103,24 @@ export function HomeCollection({
 }
 
 function ScopedHomeCollection({
-  actions,
+  collection,
   context,
-  entity,
-  entityName,
   onSelectContext,
   onSelectQuery,
-  queryTabs,
-  result,
   selectedContextRecordId,
   selectedQuery,
   today,
 }: {
-  actions: HomeActionConfig[];
+  collection: HomeCollectionConfig;
   context: HomeContextConfig;
-  entity: EntitySchema;
-  entityName: string;
   onSelectContext?: (recordId: string | null) => void;
   onSelectQuery: (queryName: string) => void;
-  queryTabs: HomeQueryTabConfig[];
-  result: HomeResultConfig;
   selectedContextRecordId: string | null;
   selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
+  const { actions, entity, entityName, queries, result } = collection;
+  const queryTabs = queries.tabs;
   const contextOptions = useEntityRecordOptionsMatchingQuery(
     context.entityName,
     context.query,
