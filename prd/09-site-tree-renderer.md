@@ -1,7 +1,7 @@
 # PRD 05: Block tree projection and renderer
 
 Status: in progress
-Current chunk: STR-02 site tree read model
+Current chunk: STR-03 public page tree endpoint
 Last updated: 2026-05-06
 
 ## Goal
@@ -377,7 +377,7 @@ The exact slot names can change during implementation. The important rule is tha
 | ID     | Status  | Depends on     | Main files                                                                          | Acceptance                                                                         |
 | ------ | ------- | -------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | STR-01 | shipped | PRD 03, REL-04 | `schema/apps/site/*`, `src/client/readiness.ts`, source/view/app tests              | Site source model uses `block` and `blockPlacement`; media is a block.             |
-| STR-02 | planned | STR-01         | `src/site/tree.ts`, `src/site/tree.test.ts`, site fixtures                          | Flat block records project into a public nested tree with warnings.                |
+| STR-02 | shipped | STR-01         | `src/site/tree.ts`, `src/site/tree.test.ts`, site fixtures                          | Flat block records project into a public nested tree with warnings.                |
 | STR-03 | planned | STR-02         | `src/worker/authority.ts`, `src/worker/index.ts`, `src/shared/protocol.ts`, tests   | `GET /api/site/tree/:slug` returns filtered tree data for published pages.         |
 | STR-04 | planned | STR-03         | `schema/apps/site/seed-records.json`, source tests                                  | Seeds express Header, Home, nested footer sections, media blocks, and page blocks. |
 | STR-05 | planned | STR-04         | `src/app.tsx`, `src/app/routes/site-page.tsx`, `src/app/site-renderer/*`, app tests | Public site routes render the tree without changing `/site` admin.                 |
@@ -415,33 +415,28 @@ Evidence:
 
 ### STR-02 site tree read model
 
-Goal: make the projection pure and testable.
+Outcome:
 
-Tasks:
+- Shipped 2026-05-06.
+- Added public site tree types and pure builder in `src/site/tree.ts`.
+- Builder accepts schema, flat records, slug, and options.
+- Builder returns `SitePageTreeProjection` with `tree` or `null` plus shared metadata.
+- Root lookup uses published `block` records where `type = page` and `slug` matches.
+- Placement children resolve through `blockPlacement.parent` and `blockPlacement.block`.
+- Placement order is deterministic by slot, order, createdAt, then id.
+- Public output filters tombstones, non-published blocks, and invisible placements.
+- Query-backed `contentList` and `contentGrid` blocks use `block.templateKey`.
+- Query results run through schema queries on `block`, public filtering, deterministic ordering, and `limit`.
+- Cycle detection, max-depth protection, missing child warnings, bad query warnings, and skipped root warnings are covered.
+- Tests use current site seed records plus local fixture overlays for header/footer shell records that STR-04 will move into source seeds.
+- Browser Use not run because STR-02 changed no app route or rendered browser behavior.
 
-- Add public site tree types.
-- Add a pure tree builder that accepts schema, records, slug, and options.
-- Index blocks and placements.
-- Resolve the root published page block by slug.
-- Resolve placement children by `parent`.
-- Sort placements deterministically.
-- Resolve query-backed list/grid items.
-- Filter drafts, archived blocks, invisible placements, and tombstones.
-- Add cycle detection.
-- Add max-depth protection.
-- Add warnings for missing references, bad query keys, cycles, and skipped roots.
-- Add tests using current site seed records.
+Evidence:
 
-Acceptance:
-
-- Home projects to a tree with header, hero, recent posts, featured projects, and footer.
-- Draft posts do not appear in public query results.
-- Invisible placements do not appear.
-- Missing child block references produce warnings.
-- Cycles produce warnings and stop recursion.
-- `image` blocks project width, height, alt, and asset key.
-- `bun run test` passes.
-- `bun run check` passes.
+- Tree builder: `src/site/tree.ts`.
+- Tree tests: `src/site/tree.test.ts`.
+- `bun run test` passed 2026-05-06: 22 files, 390 tests.
+- `bun run check` passed 2026-05-06: no warnings, lint errors, or type errors.
 
 ### STR-03 public page tree endpoint
 
@@ -632,4 +627,8 @@ When this PRD ships, update `doc/roadmap.md` only if public site rendering becom
 - STR-01 kept stored records flat.
 - Browser Use smoke was attempted for STR-01 but blocked by missing IAB session metadata.
 - HTTP dev smoke confirmed the site bootstrap serves the renamed block schema and seed records.
+- STR-02 shipped 2026-05-06.
+- STR-02 added no HTTP route, protocol response, source seed, generated UI, or renderer changes.
+- STR-02 kept stored records flat and composes the nested tree in `src/site/tree.ts`.
+- STR-02 tests fixture the nested header/footer shell locally because STR-04 owns the source seed shape.
 - No blockers.
