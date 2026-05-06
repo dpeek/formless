@@ -1,6 +1,6 @@
 # PRD 06: Home view model module
 
-Status: active
+Status: shipped
 Current chunk: none
 Last updated: 2026-05-06
 
@@ -123,7 +123,7 @@ Likely changed files:
 | HVM-02 | shipped | HVM-01        | `src/client/views.ts`                                         | Home collection model exposes context, query, action, and result facts with less renderer reconstruction. |
 | HVM-03 | shipped | HVM-02        | `src/app/generated/collection.tsx`, `src/app/routes/home.tsx` | Generated collection rendering consumes the deeper model without behavior changes.                        |
 | HVM-04 | shipped | HVM-03        | tests, Browser Use if behavior changes                        | Tasks, rates, and site home flows still render and update counts.                                         |
-| HVM-05 | draft   | HVM-04        | `prd/06-home-view-model.md`                                   | PRD status and promote notes reflect shipped behavior.                                                    |
+| HVM-05 | shipped | HVM-04        | `prd/06-home-view-model.md`                                   | PRD status and promote notes reflect shipped behavior.                                                    |
 
 ## Non-goals
 
@@ -166,6 +166,7 @@ Recommended order:
 - HVM-02: generated home workspaces expose nested collection facts in `HomeViewModel.collection`; current renderer aliases remain until HVM-03.
 - HVM-03: generated home route and collection renderer consume `HomeViewModel.collection` directly; top-level aliases remain for compatibility.
 - HVM-04: no global doc promotion; flow/count coverage only.
+- HVM-05: PRD complete; no runtime promotion beyond the shipped home view model facts below.
 - `doc/current.md`: note that generated home workspaces use a deeper home view model module; relationship-backed context, counts, actions, and results are selected before rendering.
 - `doc/roadmap.md`: no change unless screen schema becomes first-release scope.
 
@@ -214,3 +215,11 @@ Recommended order:
 - Evidence: `bun run check` passed 2026-05-06.
 - No blockers.
 - Next ready chunk: HVM-05.
+- HVM-05 shipped 2026-05-06.
+- HVM-05 marked this PRD shipped and kept global promotion notes in this PRD for a docs/steward pass.
+- HVM-05 changed no runtime behavior, schema syntax, storage, sync, authority code, or generated UI.
+- Browser Use not run; app behavior did not change.
+- Evidence: `bun run check` passed 2026-05-06.
+- No new decisions; HVM-D1 through HVM-D6 stand.
+- No blockers.
+- PRD complete.
