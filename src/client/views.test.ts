@@ -8,8 +8,11 @@ import {
 import {
   selectCollectionModels,
   selectPrimaryCollectionModels,
+  selectPrimaryScreenModels,
   selectRelatedCollectionModels,
+  selectScreenModels,
   type HomeActionConfig,
+  type HomeScreenModel,
   type HomeViewModel,
   type TableColumnConfig,
 } from "./views.ts";
@@ -1172,6 +1175,108 @@ describe("home view model collections", () => {
     });
   });
 
+  it("selects screen models in schema order and filters primary screens", () => {
+    const schema = rateSchemaWithScreens();
+    const models = selectScreenModels(schema);
+
+    expect(models.map(summarizeScreenModel)).toEqual([
+      {
+        screenName: "rateHome",
+        label: "Rates",
+        primary: true,
+        layoutType: "stack",
+        sections: [{ id: "rates", label: "Rates", viewName: "rateHome", entityName: "rate" }],
+      },
+      {
+        screenName: "rateSetup",
+        label: "Rate setup",
+        primary: false,
+        layoutType: "stack",
+        sections: [
+          { id: "cards", label: "Cards", viewName: "cardHome", entityName: "card" },
+          {
+            id: "resources",
+            label: "Resources",
+            viewName: "resourceHome",
+            entityName: "resource",
+          },
+        ],
+      },
+    ]);
+    expect(selectPrimaryScreenModels(schema).map((model) => model.screenName)).toEqual([
+      "rateHome",
+    ]);
+  });
+
+  it("exposes render-ready collection facts on screen sections", () => {
+    const setupScreen = selectScreenModels(rateSchemaWithScreens()).find(
+      (model) => model.screenName === "rateSetup",
+    );
+    const cardsSection = setupScreen?.layout.sections[0];
+    const resourcesSection = setupScreen?.layout.sections[1];
+
+    expect(cardsSection).toMatchObject({
+      id: "cards",
+      type: "collection",
+      label: "Cards",
+      viewName: "cardHome",
+      collection: {
+        entityName: "card",
+        queries: { defaultQueryName: "cardAll" },
+        result: { type: "list", itemViewName: "cardListItem" },
+      },
+    });
+    expect(resourcesSection).toMatchObject({
+      id: "resources",
+      type: "collection",
+      label: "Resources",
+      viewName: "resourceHome",
+      collection: {
+        entityName: "resource",
+        queries: { defaultQueryName: "resourceAll" },
+        actions: [{ type: "create", entityName: "resource" }],
+      },
+    });
+  });
+
+  it("builds legacy screen models from primary collection models when screens are absent", () => {
+    const collectionModels = selectPrimaryCollectionModels(siteSourceSchema);
+    const screenModels = selectScreenModels(siteSourceSchema);
+
+    expect(screenModels.map((model) => model.screenName)).toEqual(
+      collectionModels.map((model) => model.viewName),
+    );
+    expect(selectPrimaryScreenModels(siteSourceSchema).map((model) => model.screenName)).toEqual([
+      "blockHome",
+      "blockCompositionHome",
+    ]);
+    expect(screenModels.map(summarizeScreenModel)).toEqual([
+      {
+        screenName: "blockHome",
+        label: "Blocks",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          { id: "blockHome", label: "Blocks", viewName: "blockHome", entityName: "block" },
+        ],
+      },
+      {
+        screenName: "blockCompositionHome",
+        label: "Placements",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          {
+            id: "blockCompositionHome",
+            label: "Placements",
+            viewName: "blockCompositionHome",
+            entityName: "blockPlacement",
+          },
+        ],
+      },
+    ]);
+  });
+
   it("selects relationship-backed related collections for an entity", () => {
     expect(selectRelatedCollectionModels(rateCardSchema, "card")).toMatchObject([
       {
@@ -1358,6 +1463,69 @@ function summarizeHomeModel(model: HomeViewModel) {
             columns: collection.result.columns.map((column) => column.key),
           },
     actions: collection.actions.map(summarizeHomeAction),
+  };
+}
+
+function summarizeScreenModel(model: HomeScreenModel) {
+  return {
+    screenName: model.screenName,
+    label: model.label,
+    primary: model.navigation.primary,
+    layoutType: model.layout.type,
+    sections: model.layout.sections.map((section) => ({
+      id: section.id,
+      label: section.label,
+      viewName: section.viewName,
+      entityName: section.collection.entityName,
+    })),
+  };
+}
+
+function rateSchemaWithScreens(): AppSchema {
+  return {
+    ...rateCardSchema,
+    screens: {
+      rateHome: {
+        type: "workspace",
+        label: "Rates",
+        navigation: {
+          primary: true,
+        },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "rates",
+              type: "collection",
+              view: "rateHome",
+            },
+          ],
+        },
+      },
+      rateSetup: {
+        type: "workspace",
+        label: "Rate setup",
+        navigation: {
+          primary: false,
+        },
+        layout: {
+          type: "stack",
+          sections: [
+            {
+              id: "cards",
+              type: "collection",
+              label: "Cards",
+              view: "cardHome",
+            },
+            {
+              id: "resources",
+              type: "collection",
+              view: "resourceHome",
+            },
+          ],
+        },
+      },
+    },
   };
 }
 

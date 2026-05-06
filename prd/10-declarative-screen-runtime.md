@@ -1,7 +1,7 @@
 # PRD 10: Declarative screen runtime
 
 Status: active
-Current chunk: SCR-03 screen model
+Current chunk: SCR-04 route integration
 Last updated: 2026-05-06
 
 ## Goal
@@ -247,7 +247,7 @@ Notes:
 | ------ | ------- | ---------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | SCR-01 | shipped | none       | tests                                                                                | Current task and rate home route, collection selection, query state, context state, and counts are characterized.         |
 | SCR-02 | shipped | SCR-01     | `src/shared/schema-types.ts`, `src/shared/schema-screens.ts`, `src/shared/schema.ts` | Optional `screens` parses, validates references, rejects bad layouts, and preserves schemas without screens.              |
-| SCR-03 | draft   | SCR-02     | `src/client/views.ts` or `src/client/screens.ts`                                     | Screen model selection returns primary screen models and legacy fallback models with render-ready collection sections.    |
+| SCR-03 | shipped | SCR-02     | `src/client/views.ts` or `src/client/screens.ts`                                     | Screen model selection returns primary screen models and legacy fallback models with render-ready collection sections.    |
 | SCR-04 | draft   | SCR-03     | `src/app/routes/home.tsx`, `src/app/generated/screen.tsx`                            | Home route renders through screen models with no behavior change for one-section task and rate screens.                   |
 | SCR-05 | draft   | SCR-04     | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json`, tests              | Task and rate source schemas define explicit screens; reset/bootstrap/schema editor flows keep working.                   |
 | SCR-06 | draft   | SCR-05     | `src/app/generated/screen.tsx`, `src/app/routes/home.tsx`, tests                     | Stack layout renders multiple collection sections with independent query and context state.                               |
@@ -458,4 +458,10 @@ Recommended order:
 - SCR-02 evidence: `src/shared/schema.test.ts` covers one-section screen parsing, stringify output, duplicate section ids, missing view references, create-view references, no-primary-screen failure, and legacy schemas without `screens`.
 - SCR-02 note: `src/shared/schema-views.ts` keeps primary collection validation for legacy schemas and lets screen primary validation replace it when `screens` exists.
 - SCR-02 promote: `doc/current.md` should note optional top-level `screens` parse.
+- SCR-03 shipped 2026-05-06.
+- SCR-03 evidence: `src/client/views.ts` adds `HomeScreenModel`, `selectScreenModels`, and `selectPrimaryScreenModels`.
+- SCR-03 evidence: screen collection sections expose `HomeCollectionConfig` from existing collection models.
+- SCR-03 evidence: `src/client/views.test.ts` covers screen order, primary screen filtering, render-ready collection section facts, and legacy fallback screens from primary collection models.
+- SCR-03 note: schemas without `screens` produce one-section stack screens named after each primary collection view.
+- SCR-03 promote: `doc/current.md` should note generated screen models select screen sections before rendering.
 - No blockers.

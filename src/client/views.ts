@@ -14,6 +14,8 @@ import type {
   FieldEditor,
   FieldSchema,
   ItemViewSchema,
+  ScreenNavigationSchema,
+  ScreenSchema,
   ToManyRelationshipSchema,
   TableColumnAlign,
   TableColumnDisplay,
@@ -174,6 +176,29 @@ export type HomeViewModel = {
   actions: HomeActionConfig[];
 };
 
+export type HomeScreenCollectionSectionModel = {
+  id: string;
+  type: "collection";
+  label: string;
+  viewName: string;
+  collection: HomeCollectionConfig;
+};
+
+export type HomeScreenSectionModel = HomeScreenCollectionSectionModel;
+
+export type HomeScreenLayoutModel = {
+  type: "stack";
+  sections: HomeScreenSectionModel[];
+};
+
+export type HomeScreenModel = {
+  screenName: string;
+  type: "workspace";
+  label: string;
+  navigation: ScreenNavigationSchema;
+  layout: HomeScreenLayoutModel;
+};
+
 export type HomeActionConfig =
   | {
       type: "create";
@@ -245,6 +270,24 @@ export function selectPrimaryCollectionModels(schema: AppSchema): HomeViewModel[
   return selectCollectionModels(schema).filter((model) => model.navigation.primary);
 }
 
+export function selectPrimaryScreenModels(schema: AppSchema): HomeScreenModel[] {
+  return selectScreenModels(schema).filter((model) => model.navigation.primary);
+}
+
+export function selectScreenModels(schema: AppSchema): HomeScreenModel[] {
+  if (schema.screens === undefined) {
+    return selectPrimaryCollectionModels(schema).map(selectLegacyCollectionScreenModel);
+  }
+
+  const collectionModelsByViewName = new Map(
+    selectCollectionModels(schema).map((model) => [model.viewName, model]),
+  );
+
+  return Object.entries(schema.screens).map(([screenName, screen]) =>
+    selectScreenModel(screenName, screen, collectionModelsByViewName),
+  );
+}
+
 export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
   const viewEntries = Object.entries(schema.views);
   const collectionViewEntries = viewEntries.filter(
@@ -276,6 +319,62 @@ export function selectCollectionModels(schema: AppSchema): HomeViewModel[] {
       actions: collection.actions,
     };
   });
+}
+
+function selectScreenModel(
+  screenName: string,
+  screen: ScreenSchema,
+  collectionModelsByViewName: Map<string, HomeViewModel>,
+): HomeScreenModel {
+  return {
+    screenName,
+    type: screen.type,
+    label: screen.label,
+    navigation: {
+      primary: screen.navigation?.primary ?? true,
+    },
+    layout: {
+      type: screen.layout.type,
+      sections: screen.layout.sections.map((section) => {
+        const collectionModel = collectionModelsByViewName.get(section.view);
+
+        if (!collectionModel) {
+          throw new Error(`Missing collection view model "${section.view}".`);
+        }
+
+        return {
+          id: section.id,
+          type: section.type,
+          label: section.label ?? collectionModel.label,
+          viewName: section.view,
+          collection: collectionModel.collection,
+        };
+      }),
+    },
+  };
+}
+
+function selectLegacyCollectionScreenModel(collectionModel: HomeViewModel): HomeScreenModel {
+  return {
+    screenName: collectionModel.viewName,
+    type: "workspace",
+    label: collectionModel.label,
+    navigation: {
+      primary: collectionModel.navigation.primary,
+    },
+    layout: {
+      type: "stack",
+      sections: [
+        {
+          id: collectionModel.viewName,
+          type: "collection",
+          label: collectionModel.label,
+          viewName: collectionModel.viewName,
+          collection: collectionModel.collection,
+        },
+      ],
+    },
+  };
 }
 
 function selectHomeCollection(
