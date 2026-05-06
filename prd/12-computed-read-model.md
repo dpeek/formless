@@ -1,7 +1,7 @@
 # PRD 12: Computed and aggregate read model
 
 Status: in progress
-Current chunk: CR-02 numeric expression evaluator
+Current chunk: CR-03 parser and schema surface
 Last updated: 2026-05-06
 
 ## Goal
@@ -250,13 +250,14 @@ Notes:
 | CR-D6 | Keep React out of the read-model evaluator.                 | The evaluator should be testable and reusable by view models.          | `src/shared/query.ts`, `src/shared/field-types.ts`          |
 | CR-D7 | Treat invalid runtime arithmetic as empty display output.   | Existing records may have zeros or missing optional values.            | `src/app/generated/record-field-display.tsx`                |
 | CR-D8 | Use existing number formatting options where possible.      | Table columns already support number, currency, and percent display.   | `src/app/generated/format.ts`, `src/shared/schema-types.ts` |
+| CR-D9 | Return `number \| undefined` from numeric read-model eval.  | It gives generated UI a narrow empty-output signal without throwing.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts` |
 
 ## Chunks
 
 | ID    | Status  | Depends on   | Main files                                                      | Acceptance                                                                                                      |
 | ----- | ------- | ------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | CR-01 | shipped | none         | tests, PRD                                                      | Current rate table display, query count, context query, and missing derived values are characterized.           |
-| CR-02 | draft   | CR-01        | `src/shared/read-model.ts`, tests                               | Numeric expression evaluator supports fields, literals, arithmetic, invalid math, and deterministic formatting. |
+| CR-02 | shipped | CR-01        | `src/shared/read-model.ts`, tests                               | Numeric expression evaluator supports fields, literals, arithmetic, invalid math, and deterministic formatting. |
 | CR-03 | draft   | CR-02        | schema types/parser, schema tests                               | Optional read-model declarations parse, validate references, reject bad shapes, and stringify.                  |
 | CR-04 | draft   | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
 | CR-05 | draft   | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
@@ -283,17 +284,22 @@ Evidence:
 
 ### CR-02 numeric expression evaluator
 
-Add a deep shared read-model evaluator with no React dependency.
+Outcome:
 
-Acceptance:
-
-- Field references read number values from a stored record.
+- Added shared numeric expression types and evaluator in `src/shared/read-model.ts`.
+- Field references read finite number values from a stored record.
 - Literal number expressions evaluate.
 - Add, subtract, multiply, and divide evaluate.
 - Divide-by-zero returns no value, not `Infinity`.
-- Missing or non-number runtime values return no value.
+- Missing, non-number, and non-finite runtime values return no value.
+- Nested expressions are covered.
 - Evaluator output is deterministic and side-effect free.
-- Tests cover nested expressions.
+- Default read-model number formatting returns empty text for no value and stable plain-number text for finite values.
+
+Evidence:
+
+- `./tmp/test.txt`: `src/shared/read-model.test.ts` passed, 8 tests passed.
+- `./tmp/check.txt`: formatting, lint, and type checks passed for 151 files.
 
 ### CR-03 parser and schema surface
 
@@ -461,6 +467,12 @@ CR-01:
 
 - No global-doc promotion. Characterization tests only.
 
+CR-02:
+
+- Read-model numeric evaluator lives under shared runtime code at `src/shared/read-model.ts`.
+- Numeric evaluator has no React dependency.
+- Invalid numeric evaluation returns empty output through `undefined`.
+
 When this PRD ships, update `doc/current.md`:
 
 - Schema can declare read-model computed values and aggregates.
@@ -482,4 +494,5 @@ When this PRD ships, update `doc/roadmap.md` only if derived display values rema
 - PRD drafted 2026-05-06 from roadmap rate-card derived display need and declarative runtime exploration.
 - Scope is intentionally narrower than a full compute engine.
 - CR-01 shipped 2026-05-06 with characterization tests only.
+- CR-02 shipped 2026-05-06 with shared numeric expression evaluator and tests.
 - Open schema naming blocker before CR-03.
