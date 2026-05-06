@@ -656,6 +656,122 @@ describe("generated collection home", () => {
     expect(html).not.toContain("Average margin");
   });
 
+  it("renders aggregate collection summaries over the active context", () => {
+    const schema = rateCardSchemaWithAggregateSummarySlots();
+    const rateModel = selectCollectionModels(schema).find(
+      (candidate) => candidate.viewName === "rateHome",
+    );
+
+    if (!rateModel) {
+      throw new Error("Missing rate home model.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          resourceRecord("resource-2", "Engineer"),
+          rateCardRateRecordWithCost("rate-1", "resource-1", "card-1", 300, 600),
+          rateCardRateRecordWithCost("rate-2", "resource-2", "card-1", 100, 200),
+          rateCardRateRecordWithCost("rate-3", "resource-1", "card-2", 750, 900),
+        ],
+        schema,
+      ),
+    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-1",
+      today: "2026-05-01",
+    });
+
+    expect(html).toContain('aria-label="Collection summary"');
+    expect(html).toContain('aria-label="Cost total summary"');
+    expect(html).toContain("Cost total");
+    expect(html).toContain("$400.00");
+    expect(html).toContain("/ day");
+    expect(html).toContain('aria-label="Average margin summary"');
+    expect(html).toContain("Average margin");
+    expect(html).toContain("50%");
+    expect(html).not.toContain("$750.00");
+  });
+
+  it("renders empty aggregate summary inputs predictably", () => {
+    const schema = rateCardSchemaWithAggregateSummarySlots();
+    const rateModel = selectCollectionModels(schema).find(
+      (candidate) => candidate.viewName === "rateHome",
+    );
+
+    if (!rateModel) {
+      throw new Error("Missing rate home model.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap([cardRecord("card-1", "Default"), resourceRecord("resource-1", "Designer")], schema),
+    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-1",
+      today: "2026-05-01",
+    });
+
+    expect(html).toContain('aria-label="Collection summary"');
+    expect(html).toContain("Cost total");
+    expect(html).toContain("$0.00");
+    expect(html).toContain("Average margin");
+    expect(html).not.toContain("NaN");
+    expect(html).not.toContain("Infinity");
+  });
+
+  it("renders aggregate summaries for the active query tab only", () => {
+    const schema = taskSchemaWithAggregateSummarySlots();
+    const model = selectPrimaryCollectionModels(schema)[0];
+
+    if (!model) {
+      throw new Error("Missing task home model.");
+    }
+
+    const allQuery = model.collection.queries.tabs.find((tab) => tab.queryName === "taskAll");
+    const completedQuery = model.collection.queries.tabs.find(
+      (tab) => tab.queryName === "taskCompleted",
+    );
+
+    if (!allQuery || !completedQuery) {
+      throw new Error("Missing task summary query tabs.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          {
+            ...taskRecord("record-1", "Open", false),
+            values: { title: "Open", done: false, estimate: 2 },
+          },
+          {
+            ...taskRecord("record-2", "Finished", true),
+            values: { title: "Finished", done: true, estimate: 3 },
+          },
+        ],
+        schema,
+      ),
+    );
+
+    const allHtml = renderGeneratedHomeCollection(model, {
+      selectedQuery: allQuery,
+      today: "2026-05-01",
+    });
+    const completedHtml = renderGeneratedHomeCollection(model, {
+      selectedQuery: completedQuery,
+      today: "2026-05-01",
+    });
+
+    expect(allHtml).toContain("All estimate total");
+    expect(allHtml).toContain(">5<");
+    expect(allHtml).not.toContain("Completed estimate total");
+    expect(completedHtml).toContain("Completed estimate total");
+    expect(completedHtml).toContain(">3<");
+    expect(completedHtml).not.toContain("All estimate total");
+  });
+
   it("updates relationship counts after local record merges", () => {
     const rateModel = selectRateHomeModel();
 
@@ -1813,6 +1929,104 @@ function rateCardSchemaWithComputedMarginColumn(): AppSchema {
             align: "end",
             width: "sm",
             format: "percent",
+          },
+        ],
+      },
+    },
+  };
+}
+
+function rateCardSchemaWithAggregateSummarySlots(): AppSchema {
+  const rateHome = rateCardSchema.views.rateHome as Extract<
+    AppSchema["views"][string],
+    { type: "collection" }
+  >;
+
+  return {
+    ...rateCardSchema,
+    readModels: {
+      computedValues: {
+        rateMargin: {
+          entity: "rate",
+          type: "number",
+          expression: rateMarginExpression(),
+        },
+      },
+      aggregates: {
+        selectedCardCostTotal: {
+          query: "ratesForSelectedCard",
+          function: "sum",
+          value: { kind: "field", field: "cost" },
+        },
+        selectedCardAverageMargin: {
+          query: "ratesForSelectedCard",
+          function: "average",
+          value: { kind: "computed", computedValue: "rateMargin" },
+        },
+      },
+    },
+    views: {
+      ...rateCardSchema.views,
+      rateHome: {
+        ...rateHome,
+        summary: [
+          {
+            type: "aggregate",
+            aggregate: "selectedCardCostTotal",
+            label: "Cost total",
+            suffix: "/ day",
+            format: "currency",
+          },
+          {
+            type: "aggregate",
+            aggregate: "selectedCardAverageMargin",
+            label: "Average margin",
+            format: "percent",
+          },
+        ],
+      },
+    },
+  };
+}
+
+function taskSchemaWithAggregateSummarySlots(): AppSchema {
+  const taskHome = appSchema.views.taskHome as Extract<
+    AppSchema["views"][string],
+    { type: "collection" }
+  >;
+
+  return {
+    ...appSchema,
+    readModels: {
+      aggregates: {
+        allEstimateTotal: {
+          query: "taskAll",
+          function: "sum",
+          value: { kind: "field", field: "estimate" },
+        },
+        completedEstimateTotal: {
+          query: "taskCompleted",
+          function: "sum",
+          value: { kind: "field", field: "estimate" },
+        },
+      },
+    },
+    views: {
+      ...appSchema.views,
+      taskHome: {
+        ...taskHome,
+        summary: [
+          {
+            type: "aggregate",
+            aggregate: "allEstimateTotal",
+            label: "All estimate total",
+            format: "number",
+          },
+          {
+            type: "aggregate",
+            aggregate: "completedEstimateTotal",
+            label: "Completed estimate total",
+            format: "number",
           },
         ],
       },

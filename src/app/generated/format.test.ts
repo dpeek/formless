@@ -5,10 +5,15 @@ import type {
   FieldSchema,
   TableColumnFormat,
 } from "../../shared/schema.ts";
-import type { ComputedTableColumnConfig, FieldTableColumnConfig } from "../../client/views.ts";
+import type {
+  ComputedTableColumnConfig,
+  FieldTableColumnConfig,
+  HomeSummarySlotConfig,
+} from "../../client/views.ts";
 import {
   createInputValueToFieldValue,
   fieldValueToInputValue,
+  formatAggregateDisplayValue,
   formatComputedDisplayValue,
   formatFieldDisplayValue,
   inputValueToFieldValue,
@@ -39,6 +44,13 @@ describe("generated field format helpers", () => {
     expect(formatComputedDisplayValue(computedColumn("number"), 1.5)).toBe("1.5");
     expect(formatComputedDisplayValue(computedColumn("currency"), 1.5)).toBe("$1.50");
     expect(formatComputedDisplayValue(computedColumn("percent"), 0.125)).toBe("12.5%");
+  });
+
+  it("formats aggregate number values for generated collection summaries", () => {
+    expect(formatAggregateDisplayValue(summarySlot(), undefined)).toBe("");
+    expect(formatAggregateDisplayValue(summarySlot("number"), 1.5)).toBe("1.5");
+    expect(formatAggregateDisplayValue(summarySlot("currency"), 1.5)).toBe("$1.50");
+    expect(formatAggregateDisplayValue(summarySlot("percent"), 0.125)).toBe("12.5%");
   });
 
   it("converts current inline editor values for patch mutations", () => {
@@ -124,6 +136,22 @@ function computedColumn(format: TableColumnFormat = "plain"): ComputedTableColum
       expression: { kind: "field", field: "estimate" },
     },
     display: "readOnly",
+    format,
+  };
+}
+
+function summarySlot(format: TableColumnFormat = "plain"): HomeSummarySlotConfig {
+  return {
+    type: "aggregate",
+    key: "aggregate:value",
+    label: "Value",
+    aggregateName: "value",
+    aggregate: {
+      query: "taskAll",
+      function: "sum",
+      value: { kind: "field", field: "estimate" },
+    },
+    computedValues: {},
     format,
   };
 }

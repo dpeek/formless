@@ -1,10 +1,11 @@
 import type {
   ComputedTableColumnConfig,
   FieldTableColumnConfig,
+  HomeSummarySlotConfig,
   ReferenceFieldTableColumnConfig,
 } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
+import type { FieldSchema, TableColumnFormat } from "../../shared/schema.ts";
 import {
   createInputValueToFieldValue as createInputValueToFieldValuePrimitive,
   fieldInputAttributes,
@@ -35,11 +36,22 @@ export function formatComputedDisplayValue(
   column: ComputedTableColumnConfig,
   value: number | undefined,
 ) {
+  return formatReadModelDisplayValue(column.format, value);
+}
+
+export function formatAggregateDisplayValue(
+  slot: HomeSummarySlotConfig,
+  value: number | undefined,
+) {
+  return formatReadModelDisplayValue(slot.format, value);
+}
+
+function formatReadModelDisplayValue(format: TableColumnFormat, value: number | undefined) {
   if (value === undefined) {
     return "";
   }
 
-  return formatFieldDisplayPrimitive(readModelNumberField, value, { format: column.format });
+  return formatFieldDisplayPrimitive(readModelNumberField, value, { format });
 }
 
 export { formatPlainNumber };

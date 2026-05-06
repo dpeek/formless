@@ -400,6 +400,50 @@ describe("home view model collections", () => {
     expect(computedColumn && "commit" in computedColumn).toBe(false);
   });
 
+  it("resolves aggregate summary slots for collections", () => {
+    const schema = rateCardSchemaWithAggregateSummarySlots();
+    const rateModel = selectCollectionModels(schema).find((model) => model.viewName === "rateHome");
+
+    expect(rateModel?.collection.summary).toMatchObject([
+      {
+        type: "aggregate",
+        key: "aggregate:selectedCardCostTotal",
+        aggregateName: "selectedCardCostTotal",
+        aggregate: {
+          query: "ratesForSelectedCard",
+          function: "sum",
+          value: { kind: "field", field: "cost" },
+        },
+        label: "Cost total",
+        suffix: "/ day",
+        format: "currency",
+      },
+      {
+        type: "aggregate",
+        key: "aggregate:selectedCardAverageMargin",
+        aggregateName: "selectedCardAverageMargin",
+        aggregate: {
+          query: "ratesForSelectedCard",
+          function: "average",
+          value: { kind: "computed", computedValue: "rateMargin" },
+        },
+        label: "Average margin",
+        format: "percent",
+      },
+    ]);
+    expect(rateModel?.collection.summary?.[1]?.computedValues.rateMargin).toEqual(
+      schema.readModels?.computedValues?.rateMargin,
+    );
+  });
+
+  it("keeps summary absent when a collection has no summary slots", () => {
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+
+    expect("summary" in (rateModel?.collection ?? {})).toBe(false);
+  });
+
   it("applies field type default commit policies to table columns", () => {
     const taskHome = appSchema.views.taskHome as Extract<
       AppSchema["views"][string],
@@ -959,6 +1003,59 @@ function rateCardSchemaWithComputedMarginColumn(): AppSchema {
             align: "end",
             width: "sm",
             suffix: "margin",
+            format: "percent",
+          },
+        ],
+      },
+    },
+  };
+}
+
+function rateCardSchemaWithAggregateSummarySlots(): AppSchema {
+  const rateHome = rateCardSchema.views.rateHome as Extract<
+    AppSchema["views"][string],
+    { type: "collection" }
+  >;
+
+  return {
+    ...rateCardSchema,
+    readModels: {
+      computedValues: {
+        rateMargin: {
+          entity: "rate",
+          type: "number",
+          expression: rateMarginExpression(),
+        },
+      },
+      aggregates: {
+        selectedCardCostTotal: {
+          query: "ratesForSelectedCard",
+          function: "sum",
+          value: { kind: "field", field: "cost" },
+        },
+        selectedCardAverageMargin: {
+          query: "ratesForSelectedCard",
+          function: "average",
+          value: { kind: "computed", computedValue: "rateMargin" },
+        },
+      },
+    },
+    views: {
+      ...rateCardSchema.views,
+      rateHome: {
+        ...rateHome,
+        summary: [
+          {
+            type: "aggregate",
+            aggregate: "selectedCardCostTotal",
+            label: "Cost total",
+            suffix: "/ day",
+            format: "currency",
+          },
+          {
+            type: "aggregate",
+            aggregate: "selectedCardAverageMargin",
+            label: "Average margin",
             format: "percent",
           },
         ],

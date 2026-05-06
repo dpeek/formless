@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { evaluateNumericExpression, formatReadModelNumber } from "./read-model.ts";
+import { evaluateAggregate, evaluateNumericExpression, formatReadModelNumber } from "./read-model.ts";
 import type { StoredRecord } from "./protocol.ts";
 import type { NumericExpression } from "./read-model.ts";
 
@@ -151,6 +151,119 @@ describe("read model number formatting", () => {
     expect(formatReadModelNumber(1.5)).toBe("1.5");
     expect(formatReadModelNumber(1 / 3)).toBe("0.33");
     expect(formatReadModelNumber(1.2)).toBe("1.2");
+  });
+});
+
+describe("read model aggregates", () => {
+  const records = [
+    rateRecord,
+    {
+      ...rateRecord,
+      id: "rate-2",
+      values: { ...rateRecord.values, cost: 300, price: 600 },
+    },
+  ];
+
+  it("evaluates count, sum, average, min, and max aggregates", () => {
+    expect(evaluateAggregate({ query: "rates", function: "count" }, records)).toBe(2);
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "sum", value: { kind: "field", field: "cost" } },
+        records,
+      ),
+    ).toBe(450);
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "average", value: { kind: "field", field: "price" } },
+        records,
+      ),
+    ).toBe(425);
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "min", value: { kind: "field", field: "cost" } },
+        records,
+      ),
+    ).toBe(150);
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "max", value: { kind: "field", field: "price" } },
+        records,
+      ),
+    ).toBe(600);
+  });
+
+  it("evaluates aggregate values from computed values", () => {
+    expect(
+      evaluateAggregate(
+        {
+          query: "rates",
+          function: "average",
+          value: { kind: "computed", computedValue: "rateMargin" },
+        },
+        records,
+        {
+          rateMargin: {
+            entity: "rate",
+            type: "number",
+            expression: {
+              kind: "binary",
+              op: "divide",
+              left: {
+                kind: "binary",
+                op: "subtract",
+                left: { kind: "field", field: "price" },
+                right: { kind: "field", field: "cost" },
+              },
+              right: { kind: "field", field: "price" },
+            },
+          },
+        },
+      ),
+    ).toBe(0.45);
+  });
+
+  it("skips bad runtime aggregate values without crashing", () => {
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "sum", value: { kind: "field", field: "cost" } },
+        [
+          rateRecord,
+          {
+            ...rateRecord,
+            id: "rate-2",
+            values: { ...rateRecord.values, cost: "unknown" },
+          },
+        ],
+      ),
+    ).toBe(150);
+  });
+
+  it("renders empty aggregate inputs predictably", () => {
+    expect(evaluateAggregate({ query: "rates", function: "count" }, [])).toBe(0);
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "sum", value: { kind: "field", field: "cost" } },
+        [],
+      ),
+    ).toBe(0);
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "average", value: { kind: "field", field: "cost" } },
+        [],
+      ),
+    ).toBeUndefined();
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "min", value: { kind: "field", field: "cost" } },
+        [],
+      ),
+    ).toBeUndefined();
+    expect(
+      evaluateAggregate(
+        { query: "rates", function: "max", value: { kind: "field", field: "cost" } },
+        [],
+      ),
+    ).toBeUndefined();
   });
 });
 

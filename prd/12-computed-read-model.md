@@ -1,7 +1,7 @@
 # PRD 12: Computed and aggregate read model
 
 Status: in progress
-Current chunk: CR-05 aggregate summary slots
+Current chunk: CR-06 rate-card proof
 Last updated: 2026-05-06
 
 ## Goal
@@ -253,6 +253,8 @@ Notes:
 | CR-D9  | Return `number \| undefined` from numeric read-model eval.   | It gives generated UI a narrow empty-output signal without throwing.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts` |
 | CR-D10 | Use `readModels.computedValues` and `readModels.aggregates`. | It keeps derived read declarations separate from stored entity fields. | `prd/12-computed-read-model.md`                             |
 | CR-D11 | Computed table columns are render-only, never editor-backed. | Computed values must not enter generic patch paths.                    | `src/client/views.ts`, `src/app/generated/table.tsx`        |
+| CR-D12 | Summary slots render for the active query tab only.          | Query-scoped aggregate definitions should follow active collection UI. | `src/shared/schema-views.ts`, `src/app/generated/collection.tsx` |
+| CR-D13 | Empty count and sum render zero; empty average/min/max empty. | Totals stay useful while undefined reducers avoid misleading values.   | `src/shared/read-model.ts`, `src/shared/read-model.test.ts` |
 
 ## Chunks
 
@@ -262,7 +264,7 @@ Notes:
 | CR-02 | shipped | CR-01        | `src/shared/read-model.ts`, tests                               | Numeric expression evaluator supports fields, literals, arithmetic, invalid math, and deterministic formatting. |
 | CR-03 | shipped | CR-02        | schema types/parser, schema tests                               | Optional read-model declarations parse, validate references, reject bad shapes, and stringify.                  |
 | CR-04 | shipped | CR-03        | view model selection, generated table, tests                    | Read-only computed table columns render for records and update when records change.                             |
-| CR-05 | draft   | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
+| CR-05 | shipped | CR-03        | client store/read model selectors, collection summary UI, tests | Aggregate summary slots evaluate over current query results and active collection context.                      |
 | CR-06 | draft   | CR-04, CR-05 | `schema/apps/rates/schema.json`, app tests                      | Rate-card source schema shows margin and totals without storage or write changes.                               |
 | CR-07 | draft   | CR-06        | Browser smoke, `prd/12-computed-read-model.md`                  | Rates smoke passes; PRD status, decisions, blockers, and promote notes are current.                             |
 
@@ -346,17 +348,29 @@ Evidence:
 
 ### CR-05 aggregate summary slots
 
-Render collection-level aggregates over current query results.
+Outcome:
 
-Acceptance:
+- Collection views accept `summary` slots with `type: "aggregate"`.
+- Summary slots validate against `readModels.aggregates`.
+- Summary slot aggregate queries must be one of the collection query slots.
+- `evaluateAggregate` supports count, sum, average, min, and max.
+- Aggregates read number fields or number computed values.
+- Aggregate selectors evaluate over current query-matching local records.
+- Aggregate selectors respect active collection context.
+- Generated collections render summary slots near the result.
+- Generated collections render only summary slots for the active query tab.
+- Empty count and sum render `0`.
+- Empty average, min, and max render empty output.
+- Bad runtime aggregate values are skipped instead of crashing.
+- Existing count badge behavior stayed covered.
+- No storage, authority, sync, mutation, or source schema files changed.
 
-- Collection views accept summary slots for aggregate display.
-- Count, sum, average, min, and max evaluate over query-matching records.
-- Aggregates respect active query tab.
-- Aggregates respect active collection context.
-- Empty result sets render predictable empty or zero values by function.
-- One bad runtime aggregate value does not crash the collection.
-- Existing count badges keep behavior.
+Evidence:
+
+- `./tmp/agent-dev.json`: `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest affected reruns passed, including `src/app.test.tsx` 64 tests, `src/shared/schema.test.ts` 67 tests, `src/client/views.test.ts` 23 tests, `src/client/store.test.ts` 23 tests, and `src/shared/read-model.test.ts` 12 tests.
+- `./tmp/check.txt`: formatting, lint, and type checks passed for 154 files.
+- `bun browser --session cr-05-rates --ignore-https-errors open https://12-computed-read-model.formless.local/rates` and `snapshot -i`: `/rates` rendered the rate table.
 
 ### CR-06 rate-card proof
 
@@ -503,6 +517,17 @@ CR-04:
 - Computed table cells reuse generated number formatting from `src/app/generated/format.ts`.
 - Computed table output updates when source record values change in the client store.
 
+CR-05:
+
+- Collection views can declare read-only aggregate summary slots with `type: "aggregate"`.
+- Aggregate summary slots reference `readModels.aggregates`.
+- Aggregate summary slots render through `src/app/generated/collection.tsx`.
+- Aggregate summary slots render only for the active query tab.
+- Aggregate selectors evaluate against local query-matching records in `src/client/store.ts`.
+- Aggregate evaluation lives in `src/shared/read-model.ts`.
+- Empty count and sum render `0`; empty average, min, and max render empty output.
+- Runtime bad aggregate values are skipped instead of crashing the collection.
+
 When this PRD ships, update `doc/current.md`:
 
 - Schema can declare read-model computed values and aggregates.
@@ -527,3 +552,4 @@ When this PRD ships, update `doc/roadmap.md` only if derived display values rema
 - CR-02 shipped 2026-05-06 with shared numeric expression evaluator and tests.
 - CR-03 shipped 2026-05-06 with parser and schema tests.
 - CR-04 shipped 2026-05-06 with schema-backed computed table columns and generated table rendering.
+- CR-05 shipped 2026-05-06 with aggregate summary slots, client aggregate selectors, and generated collection rendering.

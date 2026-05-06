@@ -1,6 +1,8 @@
 import type {
   AppSchema,
+  AggregateSchema,
   CollectionNavigationSchema,
+  CollectionSummarySlotSchema,
   CollectionViewSchema,
   ComputedValueSchema,
   CountDisplaySchema,
@@ -96,6 +98,17 @@ export type HomeQueriesConfig = {
   defaultTab: HomeQueryTabConfig;
 };
 
+export type HomeSummarySlotConfig = {
+  type: "aggregate";
+  key: string;
+  aggregateName: string;
+  aggregate: AggregateSchema;
+  computedValues: Record<string, ComputedValueSchema>;
+  label: string;
+  suffix?: string;
+  format: TableColumnFormat;
+};
+
 export type HomeResultConfig =
   | {
       type: "list";
@@ -137,6 +150,7 @@ export type HomeCollectionConfig = {
   queries: HomeQueriesConfig;
   result: HomeResultConfig;
   actions: HomeActionConfig[];
+  summary?: HomeSummarySlotConfig[];
 };
 
 export type HomeViewModel = {
@@ -264,6 +278,7 @@ function selectHomeCollection(
   entity: EntitySchema,
 ): HomeCollectionConfig {
   const queries = selectQueries(schema, collectionView);
+  const summary = selectSummarySlots(schema, collectionView);
 
   return {
     entityName: collectionView.entity,
@@ -274,6 +289,7 @@ function selectHomeCollection(
     queries,
     result: selectResult(schema, collectionView, entity),
     actions: selectHomeActions(schema, viewEntries, collectionView, entity),
+    ...(summary.length === 0 ? {} : { summary }),
   };
 }
 
@@ -484,6 +500,44 @@ function selectHomeActions(
       ui: selectEntityActionUi(schema, label, action, slot.count),
     };
   });
+}
+
+function selectSummarySlots(
+  schema: AppSchema,
+  collectionView: CollectionViewSchema,
+): HomeSummarySlotConfig[] {
+  return (collectionView.summary ?? []).map((slot) =>
+    selectSummarySlot(schema, collectionView, slot),
+  );
+}
+
+function selectSummarySlot(
+  schema: AppSchema,
+  collectionView: CollectionViewSchema,
+  slot: CollectionSummarySlotSchema,
+): HomeSummarySlotConfig {
+  const aggregate = schema.readModels?.aggregates?.[slot.aggregate];
+
+  if (!aggregate) {
+    throw new Error(`Missing aggregate "${slot.aggregate}".`);
+  }
+
+  if (!collectionView.queries.some((querySlot) => querySlot.query === aggregate.query)) {
+    throw new Error(
+      `Aggregate "${slot.aggregate}" query "${aggregate.query}" must belong to collection "${collectionView.label}".`,
+    );
+  }
+
+  return {
+    type: "aggregate",
+    key: `aggregate:${slot.aggregate}`,
+    aggregateName: slot.aggregate,
+    aggregate,
+    computedValues: schema.readModels?.computedValues ?? {},
+    label: slot.label ?? humanizeFieldName(slot.aggregate),
+    ...(slot.suffix === undefined ? {} : { suffix: slot.suffix }),
+    format: slot.format ?? "plain",
+  };
 }
 
 function selectEntityActionUi<TAction extends EntityActionSchema>(

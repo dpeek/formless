@@ -1,5 +1,6 @@
 import { formatPlainNumber } from "./field-types.ts";
 import type { StoredRecord } from "./protocol.ts";
+import type { AggregateSchema, ComputedValueSchema } from "./schema-types.ts";
 
 export type NumericExpressionOperator = "add" | "subtract" | "multiply" | "divide";
 
@@ -67,6 +68,64 @@ export function formatReadModelNumber(value: number | undefined): string {
   }
 
   return formatPlainNumber(value);
+}
+
+export function evaluateAggregate(
+  aggregate: AggregateSchema,
+  records: StoredRecord[],
+  computedValues: Record<string, ComputedValueSchema> = {},
+): number | undefined {
+  if (aggregate.function === "count") {
+    return records.length;
+  }
+
+  const values = records.flatMap((record) => {
+    const value = evaluateAggregateValue(aggregate, record, computedValues);
+
+    return value === undefined ? [] : [value];
+  });
+
+  if (aggregate.function === "sum") {
+    return values.reduce((total, value) => total + value, 0);
+  }
+
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  if (aggregate.function === "average") {
+    return values.reduce((total, value) => total + value, 0) / values.length;
+  }
+
+  if (aggregate.function === "min") {
+    return Math.min(...values);
+  }
+
+  if (aggregate.function === "max") {
+    return Math.max(...values);
+  }
+
+  return undefined;
+}
+
+function evaluateAggregateValue(
+  aggregate: AggregateSchema,
+  record: StoredRecord,
+  computedValues: Record<string, ComputedValueSchema>,
+) {
+  if (aggregate.value?.kind === "field") {
+    return finiteNumberOrUndefined(record.values[aggregate.value.field]);
+  }
+
+  if (aggregate.value?.kind === "computed") {
+    const computedValue = computedValues[aggregate.value.computedValue];
+
+    return computedValue === undefined
+      ? undefined
+      : evaluateNumericExpression(computedValue.expression, record);
+  }
+
+  return undefined;
 }
 
 function finiteNumberOrUndefined(value: unknown): number | undefined {

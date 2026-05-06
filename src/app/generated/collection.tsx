@@ -3,6 +3,7 @@ import { Badge } from "@formless/ui/badge";
 import { Button } from "@formless/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
 import {
+  useAggregateValueMatchingQuery,
   useEntityRecordCountMatchingQuery,
   useEntityRecordCountReferencingField,
   useEntityRecordIdsMatchingQuery,
@@ -14,6 +15,7 @@ import type {
   HomeContextConfig,
   HomeQueryTabConfig,
   HomeResultConfig,
+  HomeSummarySlotConfig,
   RecordFieldConfig,
   RelatedCollectionConfig,
 } from "../../client/views.ts";
@@ -21,6 +23,7 @@ import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { HomeActionRow } from "./actions.tsx";
 import { GeneratedCreateDialog } from "./create.tsx";
+import { formatAggregateDisplayValue } from "./format.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTable } from "./table.tsx";
@@ -40,7 +43,7 @@ export function HomeCollection({
   selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
-  const { actions, context, entity, entityName, queries, result } = collection;
+  const { actions, context, entity, entityName, queries, result, summary } = collection;
   const queryTabs = queries.tabs;
 
   if (context) {
@@ -83,6 +86,13 @@ export function HomeCollection({
         </Tabs>
       )}
 
+      <CollectionSummary
+        entityName={entityName}
+        queryContext={queryContext}
+        selectedQuery={selectedQuery}
+        summary={summary ?? []}
+      />
+
       <CollectionResult
         entity={entity}
         entityName={entityName}
@@ -119,7 +129,7 @@ function ScopedHomeCollection({
   selectedQuery: HomeQueryTabConfig;
   today: string;
 }) {
-  const { actions, entity, entityName, queries, result } = collection;
+  const { actions, entity, entityName, queries, result, summary } = collection;
   const queryTabs = queries.tabs;
   const contextOptions = useEntityRecordOptionsMatchingQuery(
     context.entityName,
@@ -174,13 +184,22 @@ function ScopedHomeCollection({
       )}
 
       {queryContext ? (
-        <CollectionResult
-          entity={entity}
-          entityName={entityName}
-          query={selectedQuery.query}
-          queryContext={queryContext}
-          result={result}
-        />
+        <>
+          <CollectionSummary
+            entityName={entityName}
+            queryContext={queryContext}
+            selectedQuery={selectedQuery}
+            summary={summary ?? []}
+          />
+
+          <CollectionResult
+            entity={entity}
+            entityName={entityName}
+            query={selectedQuery.query}
+            queryContext={queryContext}
+            result={result}
+          />
+        </>
       ) : null}
 
       {actions.length > 0 ? (
@@ -369,6 +388,77 @@ function QueryCountBadge({
     <Badge aria-label={`${queryTab.label} count`} className="h-4 px-1.5" variant="outline">
       {count}
     </Badge>
+  );
+}
+
+function CollectionSummary({
+  entityName,
+  queryContext,
+  selectedQuery,
+  summary,
+}: {
+  entityName: string;
+  queryContext?: QueryEvaluationContext;
+  selectedQuery: HomeQueryTabConfig;
+  summary: HomeSummarySlotConfig[];
+}) {
+  const visibleSummary = summary.filter(
+    (slot) => slot.aggregate.query === selectedQuery.queryName,
+  );
+
+  if (!queryContext || visibleSummary.length === 0) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label="Collection summary"
+      className="flex flex-wrap items-stretch gap-3 border-b border-slate-200 pb-4"
+    >
+      {visibleSummary.map((slot) => (
+        <AggregateSummarySlot
+          entityName={entityName}
+          key={slot.key}
+          query={selectedQuery.query}
+          queryContext={queryContext}
+          slot={slot}
+        />
+      ))}
+    </section>
+  );
+}
+
+function AggregateSummarySlot({
+  entityName,
+  query,
+  queryContext,
+  slot,
+}: {
+  entityName: string;
+  query: HomeQueryTabConfig["query"];
+  queryContext: QueryEvaluationContext;
+  slot: HomeSummarySlotConfig;
+}) {
+  const value = useAggregateValueMatchingQuery(
+    entityName,
+    query,
+    slot.aggregate,
+    slot.computedValues,
+    queryContext,
+  );
+  const displayValue = formatAggregateDisplayValue(slot, value);
+
+  return (
+    <div
+      aria-label={`${slot.label} summary`}
+      className="min-w-32 rounded border border-slate-200 bg-white px-3 py-2"
+    >
+      <div className="text-xs font-medium text-slate-500">{slot.label}</div>
+      <div className="mt-1 flex min-h-6 items-baseline gap-1 text-sm font-semibold text-slate-900">
+        <span>{displayValue}</span>
+        {slot.suffix ? <span className="text-xs font-normal text-slate-500">{slot.suffix}</span> : null}
+      </div>
+    </div>
   );
 }
 

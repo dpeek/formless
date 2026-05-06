@@ -13,11 +13,13 @@ import {
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
 import type {
+  AggregateSchema,
   CollectionActionSlotSchema,
   CollectionContextSchema,
   CollectionNavigationSchema,
   CollectionQuerySchema,
   CollectionResultSchema,
+  CollectionSummarySlotSchema,
   CollectionViewQuerySlotSchema,
   CollectionViewSchema,
   ComputedValueSchema,
@@ -473,6 +475,7 @@ export function parseViews(
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
   relationships: Record<string, RelationshipSchema> | undefined,
+  readModels?: ReadModelSchema,
 ): Record<string, ViewSchema> {
   if (!isRecord(value)) {
     throw new Error("Schema views must be an object.");
@@ -481,7 +484,7 @@ export function parseViews(
   const views = Object.fromEntries(
     Object.entries(value).map(([viewName, view]) => [
       viewName,
-      parseView(viewName, view, entities, queries, itemViews, tableViews, relationships),
+      parseView(viewName, view, entities, queries, itemViews, tableViews, relationships, readModels),
     ]),
   );
 
@@ -638,6 +641,7 @@ function parseView(
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
   relationships: Record<string, RelationshipSchema> | undefined,
+  readModels?: ReadModelSchema,
 ): ViewSchema {
   if (viewName.trim() === "") {
     throw new Error("View names must be non-empty.");
@@ -660,6 +664,7 @@ function parseView(
       itemViews,
       tableViews,
       relationships,
+      readModels,
     );
   }
 
@@ -695,12 +700,13 @@ function parseCollectionView(
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
   relationships: Record<string, RelationshipSchema> | undefined,
+  readModels?: ReadModelSchema,
 ): CollectionViewSchema {
   assertExactKeys(
     `Collection view "${viewName}"`,
     value,
     ["type", "label", "entity", "queries", "defaultQuery", "result"],
-    ["navigation", "context", "actions"],
+    ["navigation", "context", "actions", "summary"],
   );
 
   if (typeof value.label !== "string" || value.label.trim() === "") {
@@ -748,6 +754,13 @@ function parseCollectionView(
 
   const result = parseCollectionResult(viewName, value.entity, value.result, itemViews, tableViews);
   const actions = parseCollectionActionSlots(viewName, value.entity, entity, value.actions);
+  const summary = parseCollectionSummarySlots(
+    viewName,
+    value.entity,
+    value.summary,
+    querySlots,
+    readModels?.aggregates ?? {},
+  );
 
   return {
     type: "collection",
@@ -759,6 +772,7 @@ function parseCollectionView(
     defaultQuery: value.defaultQuery,
     result,
     ...(actions ? { actions } : {}),
+    ...(summary ? { summary } : {}),
   };
 }
 
@@ -1258,6 +1272,74 @@ function parseCollectionActionSlot(
   }
 
   throw new Error(`${context} type must be "create" or "entityAction".`);
+}
+
+function parseCollectionSummarySlots(
+  viewName: string,
+  entityName: string,
+  value: unknown,
+  querySlots: CollectionViewQuerySlotSchema[],
+  aggregates: Record<string, AggregateSchema>,
+): CollectionSummarySlotSchema[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Collection view "${viewName}" summary must be an array.`);
+  }
+
+  const slots = value.map((slot, index) =>
+    parseCollectionSummarySlot(viewName, entityName, index, slot, querySlots, aggregates),
+  );
+
+  return slots.length > 0 ? slots : undefined;
+}
+
+function parseCollectionSummarySlot(
+  viewName: string,
+  entityName: string,
+  index: number,
+  value: unknown,
+  querySlots: CollectionViewQuerySlotSchema[],
+  aggregates: Record<string, AggregateSchema>,
+): CollectionSummarySlotSchema {
+  const context = `Collection view "${viewName}" summary slot ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["type", "aggregate"], ["label", "suffix", "format"]);
+
+  if (value.type !== "aggregate") {
+    throw new Error(`${context} type must be "aggregate".`);
+  }
+
+  const aggregateName = parseRequiredNonEmptyString(`${context} aggregate`, value.aggregate);
+  const aggregate = aggregates[aggregateName];
+
+  if (!aggregate) {
+    throw new Error(`${context} references unknown aggregate "${aggregateName}".`);
+  }
+
+  if (!querySlots.some((slot) => slot.query === aggregate.query)) {
+    throw new Error(
+      `${context} aggregate "${aggregateName}" query "${aggregate.query}" must be one of its query slots for entity "${entityName}".`,
+    );
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
+  const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
+
+  return {
+    type: "aggregate",
+    aggregate: aggregateName,
+    ...(label === undefined ? {} : { label }),
+    ...(suffix === undefined ? {} : { suffix }),
+    ...(format === undefined ? {} : { format }),
+  };
 }
 
 function parseCountDisplay(context: string, value: unknown): CountDisplaySchema {

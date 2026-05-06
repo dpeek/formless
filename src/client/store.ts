@@ -10,7 +10,8 @@ import {
 } from "../shared/query.ts";
 import { getRecordReadinessWarnings, type RecordReadinessWarning } from "./readiness.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AggregateSchema, AppSchema, ComputedValueSchema } from "../shared/schema.ts";
+import { evaluateAggregate } from "../shared/read-model.ts";
 
 export type NormalizedClientState = {
   activeSchemaKey: SchemaKey | null;
@@ -244,6 +245,29 @@ export function useEntityRecordCountMatchingQuery(
   return useClientStoreSelector(selector);
 }
 
+export function useAggregateValueMatchingQuery(
+  entityName: string,
+  query: QueryExpression,
+  aggregate: AggregateSchema,
+  computedValues: Record<string, ComputedValueSchema>,
+  context?: QueryEvaluationContext,
+) {
+  const contextKey = queryEvaluationContextCacheKey(context);
+  const selector = useMemo(
+    () =>
+      createAggregateValueMatchingQuerySelector(
+        entityName,
+        query,
+        aggregate,
+        computedValues,
+        context,
+      ),
+    [entityName, query, aggregate, computedValues, contextKey],
+  );
+
+  return useClientStoreSelector(selector);
+}
+
 export function useEntityRecordCountReferencingField(
   entityName: string,
   fieldName: string,
@@ -467,6 +491,50 @@ export function createEntityRecordCountMatchingQuerySelector(
     }
 
     return count;
+  };
+}
+
+export function createAggregateValueMatchingQuerySelector(
+  entityName: string,
+  query: QueryExpression,
+  aggregate: AggregateSchema,
+  computedValues: Record<string, ComputedValueSchema>,
+  context?: QueryEvaluationContext,
+) {
+  let previousRecordIds: string[] | undefined;
+  let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousContextKey: string | undefined;
+  let previousResult: number | undefined;
+
+  return (snapshot: QuerySelectorSnapshot) => {
+    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+    const contextKey = queryEvaluationContextCacheKey(context);
+
+    if (
+      recordIds === previousRecordIds &&
+      snapshot.recordsById === previousRecordsById &&
+      contextKey === previousContextKey
+    ) {
+      return previousResult;
+    }
+
+    const records = recordIds.flatMap((recordId) => {
+      const record = snapshot.recordsById[recordId];
+
+      if (!record || (query.kind !== "all" && !matchesQuery(record, query, context))) {
+        return [];
+      }
+
+      return [record];
+    });
+    const result = evaluateAggregate(aggregate, records, computedValues);
+
+    previousRecordIds = recordIds;
+    previousRecordsById = snapshot.recordsById;
+    previousContextKey = contextKey;
+    previousResult = result;
+
+    return result;
   };
 }
 

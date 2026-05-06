@@ -1055,6 +1055,78 @@ describe("schema table views", () => {
     ).toThrow('computed value "cardMargin" must use entity "rate"');
   });
 
+  it("parses and validates collection aggregate summary slots", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        readModels: scopedRateReadModels(),
+        views: scopedRateViews({
+          summary: [
+            {
+              type: "aggregate",
+              aggregate: "selectedCardCostTotal",
+              label: "Cost total",
+              suffix: "/ day",
+              format: "currency",
+            },
+            {
+              type: "aggregate",
+              aggregate: "selectedCardAverageMargin",
+              label: "Average margin",
+              format: "percent",
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(schema.views.rateHome).toMatchObject({
+      type: "collection",
+      summary: [
+        {
+          type: "aggregate",
+          aggregate: "selectedCardCostTotal",
+          label: "Cost total",
+          suffix: "/ day",
+          format: "currency",
+        },
+        {
+          type: "aggregate",
+          aggregate: "selectedCardAverageMargin",
+          label: "Average margin",
+          format: "percent",
+        },
+      ],
+    });
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            summary: [{ type: "aggregate", aggregate: "missing" }],
+          }),
+        }),
+      ),
+    ).toThrow('references unknown aggregate "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          readModels: {
+            aggregates: {
+              cardCount: {
+                query: "cardAll",
+                function: "count",
+              },
+            },
+          },
+          views: scopedRateViews({
+            summary: [{ type: "aggregate", aggregate: "cardCount" }],
+          }),
+        }),
+      ),
+    ).toThrow('aggregate "cardCount" query "cardAll" must be one of its query slots');
+  });
+
   it("parses and validates referenced-record field columns", () => {
     const schema = parseAppSchema(
       scopedRateSchema({

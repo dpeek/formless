@@ -4,6 +4,7 @@ import {
   applyChanges,
   applyRecordMerge,
   applySchemaSave,
+  createAggregateValueMatchingQuerySelector,
   createEntityRecordCountMatchingQuerySelector,
   createEntityRecordOptionsMatchingQuerySelector,
   createReferenceOptionsSelector,
@@ -393,6 +394,105 @@ describe("client store selectors", () => {
     expect(selector(getClientStoreSnapshot())).toBe(1);
   });
 
+  it("evaluates aggregate selectors through the selected-card query context", () => {
+    const query = rateCardSchema.queries.ratesForSelectedCard?.expression;
+
+    if (!query) {
+      throw new Error("Missing ratesForSelectedCard query.");
+    }
+
+    const selector = createAggregateValueMatchingQuerySelector(
+      "rate",
+      query,
+      {
+        query: "ratesForSelectedCard",
+        function: "sum",
+        value: { kind: "field", field: "cost" },
+      },
+      {},
+      { today: "2026-05-01", values: { card: "card-1" } },
+    );
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          rateValueRecord("rate-1", "card-1", 325, 475),
+          rateValueRecord("rate-2", "card-1", 450, 600),
+          rateValueRecord("rate-3", "card-2", 750, 900),
+        ],
+        rateCardSchema,
+      ),
+    );
+
+    expect(selector(getClientStoreSnapshot())).toBe(775);
+  });
+
+  it("evaluates aggregate selectors from computed values and skips bad runtime values", () => {
+    const selector = createAggregateValueMatchingQuerySelector(
+      "rate",
+      { kind: "all" },
+      {
+        query: "rateAll",
+        function: "average",
+        value: { kind: "computed", computedValue: "rateMargin" },
+      },
+      {
+        rateMargin: {
+          entity: "rate",
+          type: "number",
+          expression: {
+            kind: "binary",
+            op: "divide",
+            left: {
+              kind: "binary",
+              op: "subtract",
+              left: { kind: "field", field: "price" },
+              right: { kind: "field", field: "cost" },
+            },
+            right: { kind: "field", field: "price" },
+          },
+        },
+      },
+    );
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          rateValueRecord("rate-1", "card-1", 300, 600),
+          rateValueRecord("rate-2", "card-1", 100, 0),
+        ],
+        rateCardSchema,
+      ),
+    );
+
+    expect(selector(getClientStoreSnapshot())).toBe(0.5);
+  });
+
+  it("aggregate selectors update after matching record patches", () => {
+    const values: Array<number | undefined> = [];
+    const selector = createAggregateValueMatchingQuerySelector(
+      "rate",
+      { kind: "all" },
+      {
+        query: "rateAll",
+        function: "sum",
+        value: { kind: "field", field: "price" },
+      },
+      {},
+    );
+
+    applyBootstrapResponse(bootstrap([rateValueRecord("rate-1", "card-1", 325, 475)]));
+    const unsubscribe = subscribeToClientStoreSelector(selector, (value) => values.push(value));
+
+    try {
+      applyRecordMerge([rateValueRecord("rate-1", "card-1", 325, 500)], 2);
+
+      expect(values).toEqual([500]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("keeps tombstoned context and child records out of scoped options", () => {
     const cardSelector = createEntityRecordOptionsMatchingQuerySelector(
       "card",
@@ -473,6 +573,15 @@ function rateRecord(id: string, card: string): StoredRecord {
     id,
     entity: "rate",
     values: { card },
+    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function rateValueRecord(id: string, card: string, cost: number, price: number): StoredRecord {
+  return {
+    id,
+    entity: "rate",
+    values: { card, cost, price },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
   };
 }

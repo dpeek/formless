@@ -240,6 +240,14 @@ export type CollectionActionSlotSchema =
       count?: CountDisplaySchema;
     };
 
+export type CollectionSummarySlotSchema = {
+  type: "aggregate";
+  aggregate: string;
+  label?: string;
+  suffix?: string;
+  format?: TableColumnFormat;
+};
+
 export type CollectionViewSchema = {
   type: "collection";
   label: string;
@@ -250,6 +258,7 @@ export type CollectionViewSchema = {
   defaultQuery: string;
   result: CollectionResultSchema;
   actions?: CollectionActionSlotSchema[];
+  summary?: CollectionSummarySlotSchema[];
 };
 
 export type CreateViewSchema = {
