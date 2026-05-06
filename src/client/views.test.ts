@@ -259,6 +259,65 @@ describe("home view model collections", () => {
     expect(selectPrimaryCollectionModels(rateCardSchema)[0]?.viewName).toBe("rateHome");
   });
 
+  it("characterizes the rate-card non-primary collection model contracts", () => {
+    const models = selectCollectionModels(rateCardSchema).filter(
+      (model) => !model.navigation.primary,
+    );
+
+    expect(models.map(summarizeHomeModel)).toEqual([
+      {
+        viewName: "resourceHome",
+        label: "Resources",
+        entityName: "resource",
+        navigationPrimary: false,
+        context: null,
+        queries: [
+          { queryName: "resourceAll", label: "All", count: "count", expressionKind: "all" },
+        ],
+        defaultQueryName: "resourceAll",
+        result: {
+          type: "list",
+          itemViewName: "resourceListItem",
+          fields: ["name", "kind", "unit"],
+        },
+        actions: [
+          {
+            type: "create",
+            label: "Create Resource",
+            entityName: "resource",
+            fields: ["name"],
+            defaults: [],
+            enabled: true,
+          },
+        ],
+      },
+      {
+        viewName: "cardHome",
+        label: "Rate cards",
+        entityName: "card",
+        navigationPrimary: false,
+        context: null,
+        queries: [{ queryName: "cardAll", label: "All", count: "count", expressionKind: "all" }],
+        defaultQueryName: "cardAll",
+        result: {
+          type: "list",
+          itemViewName: "cardListItem",
+          fields: ["name", "isDefault", "marginMin", "marginMed", "marginMax"],
+        },
+        actions: [
+          {
+            type: "create",
+            label: "Create Rate card",
+            entityName: "card",
+            fields: ["name"],
+            defaults: [],
+            enabled: true,
+          },
+        ],
+      },
+    ]);
+  });
+
   it("resolves rate-card table columns with labels, editors, and alignment", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",

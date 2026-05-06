@@ -1,7 +1,7 @@
 # PRD 10: Declarative screen runtime
 
-Status: draft
-Current chunk: SCR-01 screen runtime characterization
+Status: active
+Current chunk: SCR-02 screen parser
 Last updated: 2026-05-06
 
 ## Goal
@@ -245,7 +245,7 @@ Notes:
 
 | ID     | Status | Depends on | Main files                                                                           | Acceptance                                                                                                                |
 | ------ | ------ | ---------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| SCR-01 | draft  | none       | tests                                                                                | Current task and rate home route, collection selection, query state, context state, and counts are characterized.         |
+| SCR-01 | shipped | none       | tests                                                                                | Current task and rate home route, collection selection, query state, context state, and counts are characterized.         |
 | SCR-02 | draft  | SCR-01     | `src/shared/schema-types.ts`, `src/shared/schema-screens.ts`, `src/shared/schema.ts` | Optional `screens` parses, validates references, rejects bad layouts, and preserves schemas without screens.              |
 | SCR-03 | draft  | SCR-02     | `src/client/views.ts` or `src/client/screens.ts`                                     | Screen model selection returns primary screen models and legacy fallback models with render-ready collection sections.    |
 | SCR-04 | draft  | SCR-03     | `src/app/routes/home.tsx`, `src/app/generated/screen.tsx`                            | Home route renders through screen models with no behavior change for one-section task and rate screens.                   |
@@ -448,5 +448,9 @@ Recommended order:
 
 - PRD drafted 2026-05-06 from `doc/explorations/declarative-app-runtime.md` and current Tasks/Rates runtime behavior.
 - Scope sized for 6-8 implementation sessions.
-- No code shipped yet.
+- SCR-01 shipped 2026-05-06.
+- SCR-01 evidence: `src/client/views.test.ts` characterizes task primary, rate primary, and rate non-primary collection models.
+- SCR-01 evidence: `src/app.test.tsx` characterizes route-local query reset shape, collection-view-local context state, query count badges, action target count badges, and relationship count badges.
+- SCR-01 note: `src/app/routes/home.tsx` selection helpers preserve existing local route state while making the behavior testable.
+- SCR-01 promote: no global doc promotion; characterization only.
 - No blockers.

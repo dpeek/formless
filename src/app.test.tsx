@@ -17,6 +17,13 @@ import {
   getClientStoreSnapshot,
   resetClientStore,
 } from "./client/store.ts";
+import {
+  createHomeRouteSelectionState,
+  selectHomeRouteContextRecordId,
+  withHomeRouteSelectedContextRecordId,
+  withHomeRouteSelectedQueryName,
+  withHomeRouteSelectedViewName,
+} from "./app/routes/home.tsx";
 import { buildSitePageTree } from "./site/tree.ts";
 import {
   selectCollectionModels,
@@ -306,6 +313,43 @@ describe("public site renderer", () => {
 });
 
 describe("generated collection home", () => {
+  it("characterizes home route query state as schema-key local", () => {
+    const currentRouteState = withHomeRouteSelectedContextRecordId(
+      withHomeRouteSelectedQueryName(
+        withHomeRouteSelectedViewName(createHomeRouteSelectionState(), "taskHome"),
+        "taskCompleted",
+      ),
+      "taskHome",
+      "record-1",
+    );
+    const nextRouteState = createHomeRouteSelectionState();
+
+    expect(currentRouteState).toEqual({
+      selectedViewName: "taskHome",
+      selectedQueryName: "taskCompleted",
+      selectedContextIdsByView: {
+        taskHome: "record-1",
+      },
+    });
+    expect(nextRouteState).toEqual({
+      selectedViewName: null,
+      selectedQueryName: null,
+      selectedContextIdsByView: {},
+    });
+  });
+
+  it("characterizes context state as collection-view local", () => {
+    const state = withHomeRouteSelectedContextRecordId(
+      withHomeRouteSelectedContextRecordId(createHomeRouteSelectionState(), "rateHome", "card-1"),
+      "cardHome",
+      "card-2",
+    );
+
+    expect(selectHomeRouteContextRecordId(state, "rateHome")).toBe("card-1");
+    expect(selectHomeRouteContextRecordId(state, "cardHome")).toBe("card-2");
+    expect(selectHomeRouteContextRecordId(state, "resourceHome")).toBeNull();
+  });
+
   it("renders Tasks as the collection title with query tabs and actions", () => {
     applyBootstrapResponse(bootstrap([]));
     const html = renderRoute("/tasks");
