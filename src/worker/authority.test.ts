@@ -104,16 +104,11 @@ describe("authority", () => {
     expect(body.meta).toEqual({
       slug: "home",
       generatedAt: expect.any(String),
-      warnings: [
-        {
-          code: "cycle",
-          recordId: "rec_site_content_post_shipped_schema",
-          message:
-            'Skipped cyclic query item "rec_site_content_post_shipped_schema" for block "rec_site_block_post_related_posts".',
-        },
-      ],
+      warnings: [],
     });
     expect(body.page.placements.map((placement) => placement.id)).toEqual([
+      "rec_site_place_home_footer",
+      "rec_site_place_home_header",
       "rec_site_place_home_hero",
       "rec_site_place_home_recent_posts",
       "rec_site_place_home_projects",

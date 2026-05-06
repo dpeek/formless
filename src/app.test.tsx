@@ -304,9 +304,9 @@ describe("generated collection home", () => {
     expect(html).toContain("Estii");
     expect(html).toContain("Formless");
     expect(html).toContain("Draft notes on generated editorial tools");
-    expect(html).toMatch(/aria-label="All count"[^>]*>22</);
+    expect(html).toMatch(/aria-label="All count"[^>]*>28</);
     expect(html).toMatch(/aria-label="Draft count"[^>]*>1</);
-    expect(html).toMatch(/aria-label="Published count"[^>]*>21</);
+    expect(html).toMatch(/aria-label="Published count"[^>]*>27</);
     expect(html).toMatch(/aria-label="Projects count"[^>]*>3</);
     expect(html).toMatch(/aria-label="Featured count"[^>]*>7</);
   });
@@ -331,11 +331,11 @@ describe("generated collection home", () => {
     );
     const after = renderRoute("/site");
 
-    expect(before).toMatch(/aria-label="All count"[^>]*>22</);
+    expect(before).toMatch(/aria-label="All count"[^>]*>28</);
     expect(before).toMatch(/aria-label="Draft count"[^>]*>1</);
     expect(before).toMatch(/aria-label="Projects count"[^>]*>3</);
     expect(before).toMatch(/aria-label="Featured count"[^>]*>7</);
-    expect(after).toMatch(/aria-label="All count"[^>]*>23</);
+    expect(after).toMatch(/aria-label="All count"[^>]*>29</);
     expect(after).toMatch(/aria-label="Draft count"[^>]*>2</);
     expect(after).toMatch(/aria-label="Projects count"[^>]*>4</);
     expect(after).toMatch(/aria-label="Featured count"[^>]*>8</);
@@ -398,8 +398,10 @@ describe("generated collection home", () => {
 
     expect(html).toContain('aria-label="Block records"');
     expect(html).toContain("Home");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
     expect(html).toContain("Create Block placement");
+    expect(html).toContain('value="Header"');
+    expect(html).toContain('value="Footer"');
     expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain('value="Recent posts"');
     expect(html).toContain('value="contentList"');

@@ -12,7 +12,7 @@ const generatedAt = "2026-05-06T00:00:00.000Z";
 
 describe("site page tree projection", () => {
   it("projects home into a nested public tree with shell, content, queries, and media blocks", () => {
-    const result = buildSitePageTree(siteSourceSchema, homeShellRecords(), "home", { generatedAt });
+    const result = buildSitePageTree(siteSourceSchema, baseTreeRecords(), "home", { generatedAt });
     const tree = requireTree(result);
 
     expect(tree.meta).toEqual({
@@ -40,6 +40,18 @@ describe("site page tree projection", () => {
       "Projects",
       "Resume",
     ]);
+    expect(header.placements.map((placement) => placement.block.type)).toEqual([
+      "link",
+      "link",
+      "link",
+      "link",
+    ]);
+    expect(header.placements.map((placement) => placement.block.href)).toEqual([
+      "/pages/home",
+      "/pages/blog",
+      "/pages/projects",
+      "/pages/resume",
+    ]);
 
     const footer = childForPlacement(tree.page, "footer", "rec_site_place_home_footer");
     expect(footer.title).toBe("Footer");
@@ -47,12 +59,20 @@ describe("site page tree projection", () => {
       "Explore",
       "Social",
     ]);
-    expect(
-      childForPlacement(footer, "footer", "rec_site_place_footer_section_explore").placements,
-    ).toHaveLength(2);
-    expect(
-      childForPlacement(footer, "footer", "rec_site_place_footer_section_social").placements,
-    ).toHaveLength(2);
+    const explore = childForPlacement(footer, "footer", "rec_site_place_footer_section_explore");
+    const social = childForPlacement(footer, "footer", "rec_site_place_footer_section_social");
+    expect(explore.placements.map((placement) => placement.slot)).toEqual(["link", "link"]);
+    expect(explore.placements.map((placement) => placement.block.title)).toEqual([
+      "Projects",
+      "Resume",
+    ]);
+    expect(explore.placements.map((placement) => placement.block.type)).toEqual(["link", "link"]);
+    expect(social.placements.map((placement) => placement.slot)).toEqual(["link", "link"]);
+    expect(social.placements.map((placement) => placement.block.title)).toEqual([
+      "GitHub",
+      "LinkedIn",
+    ]);
+    expect(social.placements.map((placement) => placement.block.type)).toEqual(["link", "link"]);
 
     const mainBlocks = tree.page.placements
       .filter((placement) => placement.slot === "main")
@@ -65,6 +85,7 @@ describe("site page tree projection", () => {
 
     const hero = childForPlacement(tree.page, "main", "rec_site_place_home_hero");
     const heroImage = childForPlacement(hero, "media", "rec_site_place_home_hero_image");
+    const heroVideo = childForPlacement(hero, "media", "rec_site_place_home_hero_video");
     expect(heroImage).toMatchObject({
       id: "rec_site_media_avatar",
       type: "image",
@@ -72,6 +93,15 @@ describe("site page tree projection", () => {
       alt: "Portrait of the site owner",
       width: 1200,
       height: 1200,
+    });
+    expect(heroVideo).toMatchObject({
+      id: "rec_site_media_intro_video",
+      type: "video",
+      href: "https://example.com/intro.mp4",
+      assetKey: "site-intro-video",
+      alt: "Short introduction video for the site owner",
+      width: 1920,
+      height: 1080,
     });
 
     const recentPosts = childForPlacement(tree.page, "main", "rec_site_place_home_recent_posts");
@@ -173,6 +203,14 @@ describe("site page tree projection", () => {
     expect(result.meta.warnings).toEqual([
       expect.objectContaining({
         code: "max-depth",
+        recordId: "rec_site_content_group_footer",
+      }),
+      expect.objectContaining({
+        code: "max-depth",
+        recordId: "rec_site_content_group_header",
+      }),
+      expect.objectContaining({
+        code: "max-depth",
         recordId: "rec_site_block_home_hero",
       }),
       expect.objectContaining({
@@ -245,124 +283,8 @@ describe("site page tree projection", () => {
   });
 });
 
-function homeShellRecords(): StoredRecord[] {
-  return [
-    ...baseTreeRecords(),
-    linkBlockRecord("rec_site_link_home", "Home", "/pages/home", 0),
-    linkBlockRecord("rec_site_link_blog", "Blog", "/pages/blog", 1),
-    linkBlockRecord("rec_site_link_projects", "Projects", "/pages/projects", 2),
-    linkBlockRecord("rec_site_link_resume", "Resume", "/pages/resume", 3),
-    blockRecord("rec_site_content_group_footer", {
-      type: "group",
-      title: "Footer",
-      label: "Footer",
-      status: "published",
-      featured: false,
-      order: 2,
-      templateKey: "footer",
-    }),
-    placementRecord(
-      "rec_site_place_home_header",
-      "rec_site_content_home",
-      "rec_site_content_group_header",
-      {
-        slot: "header",
-        order: 0,
-        variant: "header",
-        label: "Header",
-      },
-    ),
-    placementRecord(
-      "rec_site_place_home_footer",
-      "rec_site_content_home",
-      "rec_site_content_group_footer",
-      {
-        slot: "footer",
-        order: 0,
-        variant: "footer",
-        label: "Footer",
-      },
-    ),
-    placementRecord(
-      "rec_site_place_public_header_home",
-      "rec_site_content_group_header",
-      "rec_site_link_home",
-      {
-        slot: "header",
-        order: 0,
-        variant: "link",
-        label: "Home",
-      },
-    ),
-    placementRecord(
-      "rec_site_place_public_header_blog",
-      "rec_site_content_group_header",
-      "rec_site_link_blog",
-      {
-        slot: "header",
-        order: 1,
-        variant: "link",
-        label: "Blog",
-      },
-    ),
-    placementRecord(
-      "rec_site_place_public_header_projects",
-      "rec_site_content_group_header",
-      "rec_site_link_projects",
-      { slot: "header", order: 2, variant: "link", label: "Projects" },
-    ),
-    placementRecord(
-      "rec_site_place_public_header_resume",
-      "rec_site_content_group_header",
-      "rec_site_link_resume",
-      { slot: "header", order: 3, variant: "link", label: "Resume" },
-    ),
-    placementRecord(
-      "rec_site_place_footer_section_explore",
-      "rec_site_content_group_footer",
-      "rec_site_content_group_footer_main",
-      { slot: "footer", order: 0, variant: "section", label: "Explore" },
-    ),
-    placementRecord(
-      "rec_site_place_footer_section_social",
-      "rec_site_content_group_footer",
-      "rec_site_content_group_footer_social",
-      { slot: "footer", order: 1, variant: "section", label: "Social" },
-    ),
-  ];
-}
-
 function baseTreeRecords(): StoredRecord[] {
-  const hiddenFixturePlacements = new Set([
-    "rec_site_place_header_home",
-    "rec_site_place_header_blog",
-    "rec_site_place_header_projects",
-    "rec_site_place_header_resume",
-    "rec_site_place_post_related",
-  ]);
-
-  return siteSeedRecords.map((record) =>
-    hiddenFixturePlacements.has(record.id)
-      ? {
-          ...record,
-          values: {
-            ...record.values,
-            visible: false,
-          },
-        }
-      : record,
-  );
-}
-
-function linkBlockRecord(id: string, title: string, href: string, order: number): StoredRecord {
-  return blockRecord(id, {
-    type: "link",
-    title,
-    href,
-    status: "published",
-    featured: false,
-    order,
-  });
+  return siteSeedRecords;
 }
 
 function blockRecord(id: string, values: StoredRecord["values"]): StoredRecord {

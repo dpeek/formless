@@ -29,10 +29,22 @@ describe("worker schema app definitions", () => {
     expect(new Set(rates.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["card", "resource", "rate"]),
     );
-    expect(site.seedRecords).toHaveLength(37);
+    expect(site.seedRecords).toHaveLength(48);
     expect(new Set(site.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["block", "blockPlacement"]),
     );
+    expect(site.seedRecords.filter((record) => record.entity === "block")).toHaveLength(28);
+    expect(site.seedRecords.filter((record) => record.entity === "blockPlacement")).toHaveLength(
+      20,
+    );
+    expect(
+      site.seedRecords
+        .filter(
+          (record) =>
+            record.entity === "block" && ["image", "video"].includes(String(record.values.type)),
+        )
+        .map((record) => record.values.type),
+    ).toEqual(["image", "video"]);
   });
 
   it("returns undefined for unknown worker schema keys", () => {

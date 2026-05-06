@@ -1,7 +1,7 @@
 # PRD 05: Block tree projection and renderer
 
 Status: in progress
-Current chunk: STR-04 nested source seed shape
+Current chunk: STR-05 first custom renderer
 Last updated: 2026-05-06
 
 ## Goal
@@ -371,6 +371,8 @@ The exact slot names can change during implementation. The important rule is tha
 | STR-D8  | Keep the first renderer site-specific.                  | A general layout DSL is outside current release scope.              | `doc/roadmap.md`                                       |
 | STR-D9  | Defer true JSON stored values unless explicitly scoped. | `RecordValues` currently stores string, boolean, and number values. | `src/shared/protocol.ts`                               |
 | STR-D10 | Do not wait for REL-05.                                 | The page tree uses one-to-many containment, not many-to-many joins. | `prd/04-relationships.md`                              |
+| STR-D11 | Put page shell composition in source seeds.             | The source app should prove the tree shape without local fixtures.  | `schema/apps/site/seed-records.json`                   |
+| STR-D12 | Hide the seeded related-post placement for now.         | Query exclusion is not available, so visible self-query recurses.   | `rec_site_place_post_related.visible = false`          |
 
 ## Chunks
 
@@ -379,7 +381,7 @@ The exact slot names can change during implementation. The important rule is tha
 | STR-01 | shipped | PRD 03, REL-04 | `schema/apps/site/*`, `src/client/readiness.ts`, source/view/app tests              | Site source model uses `block` and `blockPlacement`; media is a block.             |
 | STR-02 | shipped | STR-01         | `src/site/tree.ts`, `src/site/tree.test.ts`, site fixtures                          | Flat block records project into a public nested tree with warnings.                |
 | STR-03 | shipped | STR-02         | `src/worker/authority.ts`, `src/worker/index.ts`, `src/shared/protocol.ts`, tests   | `GET /api/site/tree/:slug` returns filtered tree data for published pages.         |
-| STR-04 | planned | STR-03         | `schema/apps/site/seed-records.json`, source tests                                  | Seeds express Header, Home, nested footer sections, media blocks, and page blocks. |
+| STR-04 | shipped | STR-03         | `schema/apps/site/seed-records.json`, source tests                                  | Seeds express Header, Home, nested footer sections, media blocks, and page blocks. |
 | STR-05 | planned | STR-04         | `src/app.tsx`, `src/app/routes/site-page.tsx`, `src/app/site-renderer/*`, app tests | Public site routes render the tree without changing `/site` admin.                 |
 | STR-06 | planned | STR-05         | Browser Use, PRD promote notes                                                      | Browser smoke covers rendered home, nested header/footer, media, and admin.        |
 
@@ -464,29 +466,28 @@ Evidence:
 
 ### STR-04 nested source seed shape
 
-Goal: prove block containment with the source app.
+Outcome:
 
-Tasks:
-
-- Add page placements that include the Header group and Footer group.
-- Add a Footer root group if needed.
-- Nest footer section groups under the Footer root group.
-- Keep header/footer link blocks reusable.
-- Keep block and placement records flat.
-- Add media block examples.
-- Update source schema tests for record count and expected relationships if needed.
-- Keep admin views unchanged unless a small table column helps authoring.
-
-Acceptance:
-
+- Shipped 2026-05-06.
+- Site source seeds now contain 28 `block` records and 20 `blockPlacement` records.
 - Home contains Header, Hero, Recent posts, Featured projects, and Footer through placements.
-- Header contains link block placements.
-- Footer contains section/group block placements.
-- Footer section groups contain link block placements.
-- Media examples are blocks.
-- Seed records still parse as `StoredRecord`.
-- `bun run test` passes.
-- `bun run check` passes.
+- Header navigation uses reusable internal `link` blocks.
+- Footer has a root group with nested Explore and Social section groups.
+- Footer section groups use reusable `link` block placements.
+- Hero media uses `image` and `video` blocks.
+- Seed records stay flat; no parent stores child arrays.
+- `rec_site_place_post_related` is hidden until query-backed related posts can exclude the current post.
+- Site admin views were unchanged.
+
+Evidence:
+
+- Source seeds: `schema/apps/site/seed-records.json`.
+- Source seed count test: `src/worker/schema-apps.test.ts`.
+- Tree source-shape test: `src/site/tree.test.ts`.
+- Endpoint expectation: `src/worker/authority.test.ts`.
+- Admin count expectations: `src/app.test.tsx`.
+- `bun run test` passed 2026-05-06: 22 files, 396 tests.
+- `bun run check` passed 2026-05-06: no warnings, lint errors, or type errors.
 
 ### STR-05 first custom renderer
 
@@ -609,6 +610,14 @@ When STR-03 ships, update `doc/current.md`:
 - Draft-only page slugs return 404.
 - Non-site tree routes return 400.
 
+When STR-04 ships, update `doc/current.md`:
+
+- Site source seeds include Home header and footer placements.
+- Header navigation is nested under the Header group with reusable link blocks.
+- Footer has a root group with nested section groups and reusable link blocks.
+- Hero media examples are image and video blocks.
+- The related-post placement is hidden until query-backed related posts can exclude the current post.
+
 When this PRD ships, update `doc/current.md`:
 
 - Site public tree projection exists.
@@ -645,4 +654,10 @@ When this PRD ships, update `doc/roadmap.md` only if public site rendering becom
 - STR-03 added the public tree endpoint and shared response types.
 - STR-03 kept stored records flat and composes the public tree at read time.
 - STR-03 did not change source seeds, generated admin UI, sync, mutations, schema edits, or reset behavior.
+- STR-04 shipped 2026-05-06.
+- STR-04 moved the nested home shell from tree-test fixtures into source seed records.
+- STR-04 added reusable internal link blocks for header and footer navigation.
+- STR-04 added a Footer root group and nested footer section placements.
+- STR-04 added an intro video media block and hero media placement.
+- STR-04 kept stored records flat and did not change generated admin views.
 - No blockers.

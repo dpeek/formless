@@ -16,6 +16,23 @@
     "createdAt": "2026-05-05T00:00:01.000Z"
   },
   {
+    "id": "rec_site_media_intro_video",
+    "entity": "block",
+    "values": {
+      "type": "video",
+      "title": "Intro video",
+      "label": "Intro video",
+      "status": "published",
+      "featured": false,
+      "href": "https://example.com/intro.mp4",
+      "assetKey": "site-intro-video",
+      "alt": "Short introduction video for the site owner",
+      "width": 1920,
+      "height": 1080
+    },
+    "createdAt": "2026-05-05T00:00:02.000Z"
+  },
+  {
     "id": "rec_site_content_profile_intro",
     "entity": "block",
     "values": {
@@ -181,6 +198,58 @@
     "createdAt": "2026-05-05T00:00:12.000Z"
   },
   {
+    "id": "rec_site_content_link_home",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "title": "Home",
+      "href": "/pages/home",
+      "status": "published",
+      "featured": false,
+      "order": 0
+    },
+    "createdAt": "2026-05-05T00:00:12.100Z"
+  },
+  {
+    "id": "rec_site_content_link_blog",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "title": "Blog",
+      "href": "/pages/blog",
+      "status": "published",
+      "featured": false,
+      "order": 1
+    },
+    "createdAt": "2026-05-05T00:00:12.200Z"
+  },
+  {
+    "id": "rec_site_content_link_projects",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "title": "Projects",
+      "href": "/pages/projects",
+      "status": "published",
+      "featured": false,
+      "order": 2
+    },
+    "createdAt": "2026-05-05T00:00:12.300Z"
+  },
+  {
+    "id": "rec_site_content_link_resume",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "title": "Resume",
+      "href": "/pages/resume",
+      "status": "published",
+      "featured": false,
+      "order": 3
+    },
+    "createdAt": "2026-05-05T00:00:12.400Z"
+  },
+  {
     "id": "rec_site_content_link_github",
     "entity": "block",
     "values": {
@@ -235,6 +304,20 @@
       "templateKey": "header"
     },
     "createdAt": "2026-05-05T00:00:16.000Z"
+  },
+  {
+    "id": "rec_site_content_group_footer",
+    "entity": "block",
+    "values": {
+      "type": "group",
+      "title": "Footer",
+      "label": "Footer",
+      "status": "published",
+      "featured": false,
+      "order": 2,
+      "templateKey": "footer"
+    },
+    "createdAt": "2026-05-05T00:00:16.500Z"
   },
   {
     "id": "rec_site_content_group_footer_main",
@@ -341,7 +424,7 @@
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_home",
+      "block": "rec_site_content_link_home",
       "slot": "header",
       "order": 0,
       "visible": true,
@@ -355,7 +438,7 @@
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_blog",
+      "block": "rec_site_content_link_blog",
       "slot": "header",
       "order": 1,
       "visible": true,
@@ -369,7 +452,7 @@
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_projects",
+      "block": "rec_site_content_link_projects",
       "slot": "header",
       "order": 2,
       "visible": true,
@@ -383,7 +466,7 @@
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_resume",
+      "block": "rec_site_content_link_resume",
       "slot": "header",
       "order": 3,
       "visible": true,
@@ -397,8 +480,8 @@
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_footer_main",
-      "block": "rec_site_content_projects",
-      "slot": "footer",
+      "block": "rec_site_content_link_projects",
+      "slot": "link",
       "order": 0,
       "visible": true,
       "variant": "link",
@@ -411,8 +494,8 @@
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_footer_main",
-      "block": "rec_site_content_resume",
-      "slot": "footer",
+      "block": "rec_site_content_link_resume",
+      "slot": "link",
       "order": 1,
       "visible": true,
       "variant": "link",
@@ -426,7 +509,7 @@
     "values": {
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_github",
-      "slot": "footer",
+      "slot": "link",
       "order": 0,
       "visible": true,
       "variant": "link",
@@ -440,13 +523,69 @@
     "values": {
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_linkedin",
-      "slot": "footer",
+      "slot": "link",
       "order": 1,
       "visible": true,
       "variant": "link",
       "label": "LinkedIn"
     },
     "createdAt": "2026-05-05T00:00:26.000Z"
+  },
+  {
+    "id": "rec_site_place_home_header",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "block": "rec_site_content_group_header",
+      "slot": "header",
+      "order": 0,
+      "visible": true,
+      "variant": "header",
+      "label": "Header"
+    },
+    "createdAt": "2026-05-05T00:00:26.100Z"
+  },
+  {
+    "id": "rec_site_place_footer_section_explore",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer",
+      "block": "rec_site_content_group_footer_main",
+      "slot": "footer",
+      "order": 0,
+      "visible": true,
+      "variant": "section",
+      "label": "Explore"
+    },
+    "createdAt": "2026-05-05T00:00:26.200Z"
+  },
+  {
+    "id": "rec_site_place_footer_section_social",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer",
+      "block": "rec_site_content_group_footer_social",
+      "slot": "footer",
+      "order": 1,
+      "visible": true,
+      "variant": "section",
+      "label": "Social"
+    },
+    "createdAt": "2026-05-05T00:00:26.300Z"
+  },
+  {
+    "id": "rec_site_place_home_footer",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "block": "rec_site_content_group_footer",
+      "slot": "footer",
+      "order": 0,
+      "visible": true,
+      "variant": "footer",
+      "label": "Footer"
+    },
+    "createdAt": "2026-05-05T00:00:26.400Z"
   },
   {
     "id": "rec_site_place_home_hero",
@@ -475,6 +614,20 @@
       "label": "Portrait"
     },
     "createdAt": "2026-05-05T00:00:27.100Z"
+  },
+  {
+    "id": "rec_site_place_home_hero_video",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_hero",
+      "block": "rec_site_media_intro_video",
+      "slot": "media",
+      "order": 1,
+      "visible": true,
+      "variant": "video",
+      "label": "Intro video"
+    },
+    "createdAt": "2026-05-05T00:00:27.200Z"
   },
   {
     "id": "rec_site_place_home_recent_posts",
@@ -540,7 +693,7 @@
       "block": "rec_site_block_post_related_posts",
       "slot": "footer",
       "order": 2,
-      "visible": true,
+      "visible": false,
       "variant": "contentList",
       "label": "More posts"
     },
