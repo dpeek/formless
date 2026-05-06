@@ -2041,212 +2041,180 @@ describe("rate-card sample schema", () => {
 });
 
 describe("personal site sample schema", () => {
-  it("parses the generic content model, relationships, and source app view", () => {
+  it("parses the block model, relationships, and source app view", () => {
     const schema = parseAppSchema(rawSiteSchema);
 
-    expect(Object.keys(schema.entities)).toEqual(["contentItem", "mediaAsset", "contentPlacement"]);
-    expect(schema.entities.contentItem?.fields.kind).toEqual({
+    expect(Object.keys(schema.entities)).toEqual(["block", "blockPlacement"]);
+    expect(schema.entities.block?.fields.type).toEqual({
       type: "enum",
       required: true,
-      label: "Kind",
+      label: "Type",
       values: {
         page: { label: "Page" },
         post: { label: "Post" },
         project: { label: "Project" },
-        link: { label: "Link" },
-        block: { label: "Block" },
-        group: { label: "Group" },
         profile: { label: "Profile" },
-      },
-    });
-    expect(schema.entities.contentItem?.fields.label).toEqual({
-      type: "text",
-      required: false,
-      label: "Label",
-    });
-    expect(schema.entities.contentItem?.fields.body).toEqual({
-      type: "text",
-      required: false,
-      label: "Body",
-      format: "markdown",
-    });
-    expect(schema.entities.contentItem?.fields.slug).toMatchObject({
-      type: "text",
-      format: "slug",
-    });
-    expect(schema.entities.contentItem?.fields.href).toMatchObject({
-      type: "text",
-      format: "href",
-    });
-    expect(schema.entities.contentItem?.fields.primaryMedia).toEqual({
-      type: "reference",
-      required: false,
-      label: "Primary media",
-      to: "mediaAsset",
-      displayField: "label",
-    });
-    expect(schema.entities.mediaAsset?.fields.alt).toEqual({
-      type: "text",
-      required: true,
-      label: "Alt text",
-      format: "longText",
-    });
-    expect(schema.entities.contentPlacement?.fields.parent).toMatchObject({
-      type: "reference",
-      required: true,
-      to: "contentItem",
-      displayField: "title",
-    });
-    expect(schema.relationships).toMatchObject({
-      contentPrimaryMedia: {
-        kind: "toOne",
-        from: { entity: "contentItem", field: "primaryMedia" },
-        to: { entity: "mediaAsset" },
-        inverse: "mediaPrimaryContentItems",
-      },
-      mediaPrimaryContentItems: {
-        kind: "toMany",
-        from: { entity: "mediaAsset" },
-        to: { entity: "contentItem", field: "primaryMedia" },
-        inverse: "contentPrimaryMedia",
-      },
-      placementParent: {
-        kind: "toOne",
-        from: { entity: "contentPlacement", field: "parent" },
-        to: { entity: "contentItem" },
-        inverse: "contentPlacements",
-      },
-      contentPlacements: {
-        kind: "toMany",
-        from: { entity: "contentItem" },
-        to: { entity: "contentPlacement", field: "parent" },
-        inverse: "placementParent",
-      },
-      placementItem: {
-        kind: "toOne",
-        from: { entity: "contentPlacement", field: "item" },
-        to: { entity: "contentItem" },
-        inverse: "itemPlacements",
-      },
-      itemPlacements: {
-        kind: "toMany",
-        from: { entity: "contentItem" },
-        to: { entity: "contentPlacement", field: "item" },
-        inverse: "placementItem",
-      },
-      placementMedia: {
-        kind: "toOne",
-        from: { entity: "contentPlacement", field: "media" },
-        to: { entity: "mediaAsset" },
-        inverse: "mediaPlacements",
-      },
-      mediaPlacements: {
-        kind: "toMany",
-        from: { entity: "mediaAsset" },
-        to: { entity: "contentPlacement", field: "media" },
-        inverse: "placementMedia",
-      },
-    });
-    expect(schema.entities.contentPlacement?.fields.kind).toMatchObject({
-      type: "enum",
-      required: true,
-      values: {
-        header: { label: "Header" },
-        footer: { label: "Footer" },
-        hero: { label: "Hero" },
-        markdown: { label: "Markdown" },
+        group: { label: "Group" },
         link: { label: "Link" },
-        contentCard: { label: "Content card" },
+        markdown: { label: "Markdown" },
+        hero: { label: "Hero" },
         contentList: { label: "Content list" },
         contentGrid: { label: "Content grid" },
-        media: { label: "Media" },
+        image: { label: "Image" },
+        video: { label: "Video" },
+        file: { label: "File" },
         cta: { label: "Call to action" },
         subscribe: { label: "Subscribe" },
         custom: { label: "Custom" },
       },
     });
-    expect(schema.entities.contentPlacement?.fields.queryKey).toMatchObject({
+    expect(schema.entities.block?.fields.label).toEqual({
+      type: "text",
+      required: false,
+      label: "Label",
+    });
+    expect(schema.entities.block?.fields.body).toEqual({
+      type: "text",
+      required: false,
+      label: "Body",
+      format: "markdown",
+    });
+    expect(schema.entities.block?.fields.slug).toMatchObject({
+      type: "text",
+      format: "slug",
+    });
+    expect(schema.entities.block?.fields.href).toMatchObject({
+      type: "text",
+      format: "href",
+    });
+    expect(schema.entities.block?.fields.assetKey).toEqual({
+      type: "text",
+      required: false,
+      label: "Asset key",
+      format: "slug",
+    });
+    expect(schema.entities.block?.fields.alt).toEqual({
+      type: "text",
+      required: false,
+      label: "Alt text",
+      format: "longText",
+    });
+    expect(schema.entities.blockPlacement?.fields.parent).toMatchObject({
+      type: "reference",
+      required: true,
+      to: "block",
+      displayField: "title",
+    });
+    expect(schema.entities.blockPlacement?.fields.block).toMatchObject({
+      type: "reference",
+      required: true,
+      to: "block",
+      displayField: "title",
+    });
+    expect(schema.entities.blockPlacement?.fields.slot).toEqual({
+      type: "text",
+      required: true,
+      label: "Slot",
+      format: "slug",
+    });
+    expect(schema.relationships).toMatchObject({
+      placementParent: {
+        kind: "toOne",
+        from: { entity: "blockPlacement", field: "parent" },
+        to: { entity: "block" },
+        inverse: "blockPlacements",
+      },
+      blockPlacements: {
+        kind: "toMany",
+        from: { entity: "block" },
+        to: { entity: "blockPlacement", field: "parent" },
+        inverse: "placementParent",
+      },
+      placementBlock: {
+        kind: "toOne",
+        from: { entity: "blockPlacement", field: "block" },
+        to: { entity: "block" },
+        inverse: "blockUsedInPlacements",
+      },
+      blockUsedInPlacements: {
+        kind: "toMany",
+        from: { entity: "block" },
+        to: { entity: "blockPlacement", field: "block" },
+        inverse: "placementBlock",
+      },
+    });
+    expect(schema.entities.blockPlacement?.fields.variant).toMatchObject({
       type: "text",
       required: false,
     });
     expect(Object.keys(schema.queries)).toEqual([
-      "contentAll",
-      "contentDraft",
-      "contentPublished",
-      "contentPages",
-      "contentPosts",
-      "contentProjects",
-      "contentLinks",
-      "contentBlocks",
-      "contentGroups",
-      "featuredContent",
+      "blockAll",
+      "blockDraft",
+      "blockPublished",
+      "blockPages",
+      "blockPosts",
+      "blockProjects",
+      "blockLinks",
+      "blockGroups",
+      "blockImages",
+      "blockVideos",
+      "blockFiles",
+      "featuredBlocks",
       "publishedPosts",
       "featuredProjects",
-      "mediaAll",
-      "placementsForSelectedContent",
+      "placementsForSelectedBlock",
     ]);
     expect(schema.queries.publishedPosts?.expression).toMatchObject({
       kind: "and",
       expressions: [
-        { ref: { kind: "value", name: "kind" }, op: "eq", value: "post" },
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "post" },
         { ref: { kind: "value", name: "status" }, op: "eq", value: "published" },
       ],
     });
-    expect(schema.queries.placementsForSelectedContent?.expression).toMatchObject({
+    expect(schema.queries.placementsForSelectedBlock?.expression).toMatchObject({
       ref: { kind: "value", name: "parent" },
-      value: { kind: "context", name: "content" },
+      value: { kind: "context", name: "block" },
     });
-    expect(Object.keys(schema.tableViews)).toEqual([
-      "contentTable",
-      "contentPlacementTable",
-      "mediaTable",
-    ]);
-    expect(schema.views.contentHome).toMatchObject({
-      type: "collection",
-      label: "Content",
-      entity: "contentItem",
-      navigation: { primary: true },
-      result: { type: "table", tableView: "contentTable" },
-      actions: [{ type: "create", createView: "contentCreate" }],
-    });
-    expect(schema.views.contentCreate).toMatchObject({
-      type: "create",
-      entity: "contentItem",
-      fields: {
-        body: { editor: "markdown" },
-        primaryMedia: { editor: "reference" },
-      },
-    });
-    expect(schema.views.contentCompositionHome).toMatchObject({
+    expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
+    expect(schema.views.blockHome).toMatchObject({
       type: "collection",
       label: "Blocks",
-      entity: "contentPlacement",
+      entity: "block",
+      navigation: { primary: true },
+      result: { type: "table", tableView: "blockTable" },
+      actions: [{ type: "create", createView: "blockCreate" }],
+    });
+    expect(schema.views.blockCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        type: { editor: "enum" },
+        body: { editor: "markdown" },
+        assetKey: { editor: "slug" },
+      },
+    });
+    expect(schema.views.blockCompositionHome).toMatchObject({
+      type: "collection",
+      label: "Placements",
+      entity: "blockPlacement",
       navigation: { primary: true },
       context: {
-        name: "content",
-        entity: "contentItem",
-        query: "contentAll",
+        name: "block",
+        entity: "block",
+        query: "blockAll",
         labelField: "title",
-        relationship: "contentPlacements",
-        itemView: "contentContextItem",
+        relationship: "blockPlacements",
+        itemView: "blockContextItem",
       },
-      result: { type: "table", tableView: "contentPlacementTable" },
-      actions: [{ type: "create", createView: "contentPlacementCreate" }],
+      result: { type: "table", tableView: "blockPlacementTable" },
+      actions: [{ type: "create", createView: "blockPlacementCreate" }],
     });
-    expect(schema.views.contentPlacementCreate).toMatchObject({
+    expect(schema.views.blockPlacementCreate).toMatchObject({
       type: "create",
-      entity: "contentPlacement",
+      entity: "blockPlacement",
       defaults: {
-        parent: { kind: "context", name: "content" },
+        parent: { kind: "context", name: "block" },
       },
-    });
-    expect(schema.views.mediaHome).toMatchObject({
-      type: "collection",
-      label: "Media",
-      entity: "mediaAsset",
-      navigation: { primary: true },
-      result: { type: "table", tableView: "mediaTable" },
-      actions: [{ type: "create", createView: "mediaCreate" }],
     });
   });
 });

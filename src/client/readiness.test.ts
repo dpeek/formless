@@ -5,8 +5,8 @@ import type { StoredRecord } from "../shared/protocol.ts";
 describe("record readiness warnings", () => {
   it("lets draft content stay incomplete", () => {
     const warnings = getRecordReadinessWarnings(
-      record("draft-post", "contentItem", {
-        kind: "post",
+      record("draft-post", "block", {
+        type: "post",
         title: "Draft",
         status: "draft",
         featured: false,
@@ -18,8 +18,8 @@ describe("record readiness warnings", () => {
 
   it("warns when published posts are missing route, body, or date data", () => {
     const warnings = getRecordReadinessWarnings(
-      record("post-1", "contentItem", {
-        kind: "post",
+      record("post-1", "block", {
+        type: "post",
         title: "Published without metadata",
         status: "published",
         featured: false,
@@ -27,7 +27,7 @@ describe("record readiness warnings", () => {
     );
 
     expect(warnings.map((warning) => warning.code)).toEqual([
-      "published-content-route",
+      "published-block-route",
       "published-post-body",
       "published-post-date",
     ]);
@@ -35,8 +35,8 @@ describe("record readiness warnings", () => {
 
   it("warns when published projects have no summary or body", () => {
     const warnings = getRecordReadinessWarnings(
-      record("project-1", "contentItem", {
-        kind: "project",
+      record("project-1", "block", {
+        type: "project",
         title: "Project",
         slug: "projects/project",
         status: "published",
@@ -52,35 +52,33 @@ describe("record readiness warnings", () => {
     ]);
   });
 
-  it("warns when link placements do not resolve to content", () => {
+  it("warns when visible placements do not resolve to a child block", () => {
     const warnings = getRecordReadinessWarnings(
-      record("placement-1", "contentPlacement", {
+      record("placement-1", "blockPlacement", {
         parent: "group-1",
         slot: "header",
-        kind: "link",
-        item: "missing-content",
+        block: "missing-block",
         order: 0,
         visible: true,
       }),
       {},
     );
 
-    expect(warnings.map((warning) => warning.code)).toEqual(["placement-link-item"]);
+    expect(warnings.map((warning) => warning.code)).toEqual(["placement-block-child"]);
   });
 
-  it("accepts link placements with a live content item", () => {
+  it("accepts visible placements with a live child block", () => {
     const warnings = getRecordReadinessWarnings(
-      record("placement-1", "contentPlacement", {
+      record("placement-1", "blockPlacement", {
         parent: "group-1",
         slot: "header",
-        kind: "link",
-        item: "link-1",
+        block: "link-1",
         order: 0,
         visible: true,
       }),
       {
-        "link-1": record("link-1", "contentItem", {
-          kind: "link",
+        "link-1": record("link-1", "block", {
+          type: "link",
           title: "Example",
           href: "https://example.com",
           status: "published",
@@ -92,60 +90,55 @@ describe("record readiness warnings", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("warns when media assets have no alt text", () => {
+  it("warns when media blocks have no alt text", () => {
     const warnings = getRecordReadinessWarnings(
-      record("media-1", "mediaAsset", {
-        label: "Hero",
-        kind: "image",
-        key: "hero",
+      record("media-1", "block", {
+        type: "image",
+        title: "Hero",
+        assetKey: "hero",
+        status: "published",
+        featured: false,
       }),
     );
 
     expect(warnings).toEqual([
       {
-        code: "media-alt",
-        message: "Media asset should include alt text.",
+        code: "block-media-alt",
+        message: "Media block should include alt text.",
       },
     ]);
   });
 
-  it("warns when query-backed placements have no query key", () => {
+  it("warns when query-backed blocks have no query key", () => {
     const warnings = getRecordReadinessWarnings(
-      record("placement-1", "contentPlacement", {
-        parent: "content-1",
-        slot: "main",
-        kind: "contentList",
+      record("block-1", "block", {
+        type: "contentList",
         title: "Recent posts",
-        order: 0,
-        visible: true,
+        status: "published",
+        featured: false,
       }),
     );
 
     expect(warnings).toEqual([
       {
-        code: "placement-contentList-query",
-        message: "Content list placement should include a query key.",
+        code: "block-contentList-query",
+        message: "Content list block should include a query key.",
       },
     ]);
   });
 
-  it("warns when placement source references are missing", () => {
+  it("ignores hidden placements with missing child blocks", () => {
     const warnings = getRecordReadinessWarnings(
-      record("placement-1", "contentPlacement", {
-        parent: "content-1",
+      record("placement-1", "blockPlacement", {
+        parent: "block-1",
         slot: "main",
-        kind: "media",
+        block: "missing-block",
         order: 0,
-        visible: true,
+        visible: false,
       }),
     );
 
-    expect(warnings).toEqual([
-      {
-        code: "placement-media-asset",
-        message: "Media placement should point to a media asset.",
-      },
-    ]);
+    expect(warnings).toEqual([]);
   });
 
   it("ignores records outside the site authoring entities", () => {

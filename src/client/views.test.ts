@@ -506,16 +506,12 @@ describe("home view model collections", () => {
   it("selects the site editorial workspaces as primary collection models", () => {
     const models = selectPrimaryCollectionModels(siteSourceSchema);
 
-    expect(models.map((model) => model.viewName)).toEqual([
-      "contentHome",
-      "contentCompositionHome",
-      "mediaHome",
-    ]);
-    expect(models.map((model) => model.label)).toEqual(["Content", "Blocks", "Media"]);
-    expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true]);
+    expect(models.map((model) => model.viewName)).toEqual(["blockHome", "blockCompositionHome"]);
+    expect(models.map((model) => model.label)).toEqual(["Blocks", "Placements"]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([true, true]);
     expect(
       models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
-    ).toEqual(["contentTable", "contentPlacementTable", "mediaTable"]);
+    ).toEqual(["blockTable", "blockPlacementTable"]);
   });
 
   it("characterizes the site primary home model contracts", () => {
@@ -523,54 +519,78 @@ describe("home view model collections", () => {
 
     expect(models.map(summarizeHomeModel)).toEqual([
       {
-        viewName: "contentHome",
-        label: "Content",
-        entityName: "contentItem",
+        viewName: "blockHome",
+        label: "Blocks",
+        entityName: "block",
         navigationPrimary: true,
         context: null,
         queries: [
-          { queryName: "contentAll", label: "All", count: "count", expressionKind: "all" },
-          { queryName: "contentDraft", label: "Draft", count: "count", expressionKind: "where" },
+          { queryName: "blockAll", label: "All", count: "count", expressionKind: "all" },
+          { queryName: "blockDraft", label: "Draft", count: "count", expressionKind: "where" },
           {
-            queryName: "contentPublished",
+            queryName: "blockPublished",
             label: "Published",
             count: "count",
             expressionKind: "where",
           },
-          { queryName: "contentPages", label: "Pages", count: "count", expressionKind: "where" },
-          { queryName: "contentPosts", label: "Posts", count: "count", expressionKind: "where" },
+          { queryName: "blockPages", label: "Pages", count: "count", expressionKind: "where" },
+          { queryName: "blockPosts", label: "Posts", count: "count", expressionKind: "where" },
           {
-            queryName: "contentProjects",
+            queryName: "blockProjects",
             label: "Projects",
             count: "count",
             expressionKind: "where",
           },
-          { queryName: "contentLinks", label: "Links", count: "count", expressionKind: "where" },
+          { queryName: "blockLinks", label: "Links", count: "count", expressionKind: "where" },
           {
-            queryName: "contentBlocks",
-            label: "Blocks",
-            count: "count",
-            expressionKind: "where",
-          },
-          {
-            queryName: "contentGroups",
+            queryName: "blockGroups",
             label: "Groups",
             count: "count",
             expressionKind: "where",
           },
           {
-            queryName: "featuredContent",
+            queryName: "blockImages",
+            label: "Images",
+            count: "count",
+            expressionKind: "where",
+          },
+          {
+            queryName: "blockVideos",
+            label: "Videos",
+            count: "count",
+            expressionKind: "where",
+          },
+          {
+            queryName: "blockFiles",
+            label: "Files",
+            count: "count",
+            expressionKind: "where",
+          },
+          {
+            queryName: "featuredBlocks",
             label: "Featured",
             count: "count",
             expressionKind: "where",
           },
+          {
+            queryName: "publishedPosts",
+            label: "Published posts",
+            count: "count",
+            expressionKind: "and",
+          },
+          {
+            queryName: "featuredProjects",
+            label: "Featured projects",
+            count: "count",
+            expressionKind: "and",
+          },
         ],
-        defaultQueryName: "contentAll",
+        defaultQueryName: "blockAll",
         result: {
           type: "table",
-          tableViewName: "contentTable",
+          tableViewName: "blockTable",
           columns: [
-            "field:kind",
+            "field:type",
             "field:title",
             "field:label",
             "field:body",
@@ -580,15 +600,21 @@ describe("home view model collections", () => {
             "field:href",
             "field:publishedAt",
             "field:order",
+            "field:templateKey",
+            "field:assetKey",
+            "field:alt",
+            "field:width",
+            "field:height",
+            "field:limit",
           ],
         },
         actions: [
           {
             type: "create",
-            label: "Create Content item",
-            entityName: "contentItem",
+            label: "Create Block",
+            entityName: "block",
             fields: [
-              "kind",
+              "type",
               "title",
               "label",
               "subtitle",
@@ -602,7 +628,11 @@ describe("home view model collections", () => {
               "icon",
               "color",
               "templateKey",
-              "primaryMedia",
+              "assetKey",
+              "alt",
+              "width",
+              "height",
+              "limit",
             ],
             defaults: [],
             enabled: true,
@@ -610,45 +640,42 @@ describe("home view model collections", () => {
         ],
       },
       {
-        viewName: "contentCompositionHome",
-        label: "Blocks",
-        entityName: "contentPlacement",
+        viewName: "blockCompositionHome",
+        label: "Placements",
+        entityName: "blockPlacement",
         navigationPrimary: true,
         context: {
-          name: "content",
-          entityName: "contentItem",
-          queryName: "contentAll",
+          name: "block",
+          entityName: "block",
+          queryName: "blockAll",
           labelField: "title",
           relatedCollection: {
-            relationshipName: "contentPlacements",
+            relationshipName: "blockPlacements",
             label: "Placements",
-            entityName: "contentPlacement",
+            entityName: "blockPlacement",
             referenceFieldName: "parent",
           },
           createAction: null,
-          itemViewName: "contentContextItem",
-          recordFields: ["kind", "status", "featured"],
+          itemViewName: "blockContextItem",
+          recordFields: ["type", "status", "featured"],
         },
         queries: [
           {
-            queryName: "placementsForSelectedContent",
-            label: "Selected content",
+            queryName: "placementsForSelectedBlock",
+            label: "Selected block",
             count: "count",
             expressionKind: "where",
           },
         ],
-        defaultQueryName: "placementsForSelectedContent",
+        defaultQueryName: "placementsForSelectedBlock",
         result: {
           type: "table",
-          tableViewName: "contentPlacementTable",
+          tableViewName: "blockPlacementTable",
           columns: [
             "field:slot",
-            "field:kind",
-            "field:item",
-            "field:media",
-            "field:title",
-            "field:queryKey",
-            "field:limit",
+            "field:block",
+            "field:label",
+            "field:variant",
             "field:order",
             "field:visible",
           ],
@@ -657,53 +684,9 @@ describe("home view model collections", () => {
           {
             type: "create",
             label: "Create Block placement",
-            entityName: "contentPlacement",
-            fields: [
-              "slot",
-              "kind",
-              "item",
-              "media",
-              "title",
-              "subtitle",
-              "queryKey",
-              "limit",
-              "color",
-              "order",
-              "visible",
-            ],
+            entityName: "blockPlacement",
+            fields: ["slot", "block", "label", "variant", "order", "visible"],
             defaults: ["parent"],
-            enabled: true,
-          },
-        ],
-      },
-      {
-        viewName: "mediaHome",
-        label: "Media",
-        entityName: "mediaAsset",
-        navigationPrimary: true,
-        context: null,
-        queries: [{ queryName: "mediaAll", label: "All", count: "count", expressionKind: "all" }],
-        defaultQueryName: "mediaAll",
-        result: {
-          type: "table",
-          tableViewName: "mediaTable",
-          columns: [
-            "field:label",
-            "field:kind",
-            "field:key",
-            "field:alt",
-            "field:href",
-            "field:width",
-            "field:height",
-          ],
-        },
-        actions: [
-          {
-            type: "create",
-            label: "Create Media asset",
-            entityName: "mediaAsset",
-            fields: ["label", "kind", "key", "alt", "href", "credit", "width", "height"],
-            defaults: [],
             enabled: true,
           },
         ],
@@ -713,28 +696,32 @@ describe("home view model collections", () => {
 
   it("resolves site content table columns and expanded create fields", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "contentHome",
+      (model) => model.viewName === "blockHome",
     );
     const create = contentModel?.actions.find((action) => action.type === "create");
 
     expect(contentModel?.queryTabs.map((tab) => tab.queryName)).toEqual([
-      "contentAll",
-      "contentDraft",
-      "contentPublished",
-      "contentPages",
-      "contentPosts",
-      "contentProjects",
-      "contentLinks",
-      "contentBlocks",
-      "contentGroups",
-      "featuredContent",
+      "blockAll",
+      "blockDraft",
+      "blockPublished",
+      "blockPages",
+      "blockPosts",
+      "blockProjects",
+      "blockLinks",
+      "blockGroups",
+      "blockImages",
+      "blockVideos",
+      "blockFiles",
+      "featuredBlocks",
+      "publishedPosts",
+      "featuredProjects",
     ]);
     expect(
       contentModel?.result.type === "table"
         ? contentModel.result.columns.map((column) => column.key)
         : [],
     ).toEqual([
-      "field:kind",
+      "field:type",
       "field:title",
       "field:label",
       "field:body",
@@ -744,6 +731,12 @@ describe("home view model collections", () => {
       "field:href",
       "field:publishedAt",
       "field:order",
+      "field:templateKey",
+      "field:assetKey",
+      "field:alt",
+      "field:width",
+      "field:height",
+      "field:limit",
     ]);
     expect(
       contentModel?.result.type === "table"
@@ -760,9 +753,15 @@ describe("home view model collections", () => {
       "href",
       "date",
       "number",
+      "slug",
+      "slug",
+      "textarea",
+      "number",
+      "number",
+      "number",
     ]);
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
-      "kind",
+      "type",
       "title",
       "label",
       "subtitle",
@@ -776,37 +775,41 @@ describe("home view model collections", () => {
       "icon",
       "color",
       "templateKey",
-      "primaryMedia",
+      "assetKey",
+      "alt",
+      "width",
+      "height",
+      "limit",
     ]);
   });
 
   it("resolves the site scoped block composition context", () => {
     const compositionModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "contentCompositionHome",
+      (model) => model.viewName === "blockCompositionHome",
     );
 
     expect(compositionModel?.context).toMatchObject({
-      name: "content",
-      entityName: "contentItem",
-      queryName: "contentAll",
-      query: siteSourceSchema.queries.contentAll?.expression,
+      name: "block",
+      entityName: "block",
+      queryName: "blockAll",
+      query: siteSourceSchema.queries.blockAll?.expression,
       labelField: "title",
       relatedCollection: {
-        relationshipName: "contentPlacements",
+        relationshipName: "blockPlacements",
         relationship: {
           kind: "toMany",
-          from: { entity: "contentItem" },
-          to: { entity: "contentPlacement", field: "parent" },
+          from: { entity: "block" },
+          to: { entity: "blockPlacement", field: "parent" },
         },
       },
-      itemViewName: "contentContextItem",
-      recordFields: [{ fieldName: "kind" }, { fieldName: "status" }, { fieldName: "featured" }],
+      itemViewName: "blockContextItem",
+      recordFields: [{ fieldName: "type" }, { fieldName: "status" }, { fieldName: "featured" }],
     });
     expect(compositionModel?.actions[0]).toMatchObject({
       type: "create",
       label: "Create Block placement",
-      entityName: "contentPlacement",
-      defaults: [{ fieldName: "parent", value: { kind: "context", name: "content" } }],
+      entityName: "blockPlacement",
+      defaults: [{ fieldName: "parent", value: { kind: "context", name: "block" } }],
     });
   });
 
@@ -819,18 +822,18 @@ describe("home view model collections", () => {
         referenceFieldName: "card",
       },
     ]);
-    expect(selectRelatedCollectionModels(siteSourceSchema, "contentItem")).toMatchObject([
+    expect(selectRelatedCollectionModels(siteSourceSchema, "block")).toMatchObject([
       {
-        relationshipName: "contentPlacements",
+        relationshipName: "blockPlacements",
         label: "Placements",
-        entityName: "contentPlacement",
+        entityName: "blockPlacement",
         referenceFieldName: "parent",
       },
       {
-        relationshipName: "itemPlacements",
+        relationshipName: "blockUsedInPlacements",
         label: "Used in placements",
-        entityName: "contentPlacement",
-        referenceFieldName: "item",
+        entityName: "blockPlacement",
+        referenceFieldName: "block",
       },
     ]);
   });

@@ -1,7 +1,7 @@
 # PRD 05: Block tree projection and renderer
 
-Status: draft
-Current chunk: STR-01 block schema model
+Status: in progress
+Current chunk: STR-02 site tree read model
 Last updated: 2026-05-06
 
 ## Goal
@@ -376,7 +376,7 @@ The exact slot names can change during implementation. The important rule is tha
 
 | ID     | Status  | Depends on     | Main files                                                                          | Acceptance                                                                         |
 | ------ | ------- | -------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| STR-01 | ready   | PRD 03, REL-04 | `schema/apps/site/*`, `src/client/readiness.ts`, source/view/app tests              | Site source model uses `block` and `blockPlacement`; media is a block.             |
+| STR-01 | shipped | PRD 03, REL-04 | `schema/apps/site/*`, `src/client/readiness.ts`, source/view/app tests              | Site source model uses `block` and `blockPlacement`; media is a block.             |
 | STR-02 | planned | STR-01         | `src/site/tree.ts`, `src/site/tree.test.ts`, site fixtures                          | Flat block records project into a public nested tree with warnings.                |
 | STR-03 | planned | STR-02         | `src/worker/authority.ts`, `src/worker/index.ts`, `src/shared/protocol.ts`, tests   | `GET /api/site/tree/:slug` returns filtered tree data for published pages.         |
 | STR-04 | planned | STR-03         | `schema/apps/site/seed-records.json`, source tests                                  | Seeds express Header, Home, nested footer sections, media blocks, and page blocks. |
@@ -387,36 +387,31 @@ The exact slot names can change during implementation. The important rule is tha
 
 ### STR-01 block schema model
 
-Goal: rename the source model before building the tree.
+Outcome:
 
-Tasks:
+- Shipped 2026-05-06.
+- Site source schema entities are `block` and `blockPlacement`.
+- `mediaAsset` is removed; media fields live on `block`.
+- `block.type` is the discriminator and includes media, hero, markdown, list/grid, CTA, subscribe, and custom values.
+- `blockPlacement.block` is the child reference.
+- `blockPlacement.slot` is text with slug format.
+- Relationship metadata names `blockPlacements` and `blockUsedInPlacements`.
+- Site admin primary views are `blockHome` and `blockCompositionHome`.
+- Site seeds contain 22 `block` records and 15 `blockPlacement` records.
+- The former avatar media seed is now a `block` with `type = image`.
+- Former semantic placements became hero, list, grid, and markdown blocks where needed.
+- Readiness warnings now use `block.type` and visible `blockPlacement.block`.
 
-- Rename `contentItem` entity to `block`.
-- Rename `contentPlacement` entity to `blockPlacement`.
-- Remove `mediaAsset`.
-- Add media block types and fields to `block`.
-- Rename placement child field from `item` to `block`.
-- Change `blockPlacement.slot` from enum to text/slug.
-- Keep `blockPlacement.order`.
-- Update relationship metadata for `blockPlacements`.
-- Update site queries, item views, table views, create views, and collection views.
-- Update seed records to use `block` and `blockPlacement`.
-- Convert media seed records into `block` records with `type = image`.
-- Update readiness warnings for block types.
-- Update parser, view model, app, worker, and authority tests that assert site shape.
+Evidence:
 
-Acceptance:
-
-- Source schema entities are `block` and `blockPlacement`.
-- No `contentItem`, `contentPlacement`, or `mediaAsset` entity remains in the site source schema.
-- Media seed data is stored as `block` records.
-- Placements use `parent`, `block`, `slot`, `order`, and `visible`.
-- The Blocks workspace still scopes placements by selected parent block.
-- Header/footer/social editing still works through group blocks and placements.
-- `/site` still loads generated admin.
-- `/site/schema` shows the renamed schema.
-- `bun run test` passes.
-- `bun run check` passes.
+- Source schema: `schema/apps/site/schema.json`.
+- Seed records: `schema/apps/site/seed-records.json`.
+- Readiness code: `src/client/readiness.ts`.
+- Source/app/view tests updated in `src/shared/schema.test.ts`, `src/worker/schema-apps.test.ts`, `src/worker/authority.test.ts`, `src/client/views.test.ts`, `src/client/readiness.test.ts`, and `src/app.test.tsx`.
+- `bun run test` passed 2026-05-06: 21 files, 383 tests.
+- `bun run check` passed 2026-05-06: no warnings, lint errors, or type errors.
+- Browser Use attempted 2026-05-06 for `/site` and `/site/schema`; backend was unavailable with no Codex IAB session metadata.
+- HTTP bootstrap smoke passed 2026-05-06: `/api/site/bootstrap` returned entities `block`, `blockPlacement`, views `blockHome`, `blockCreate`, `blockCompositionHome`, `blockPlacementCreate`, and 37 records.
 
 ### STR-02 site tree read model
 
@@ -630,5 +625,11 @@ When this PRD ships, update `doc/roadmap.md` only if public site rendering becom
 - Draft assumes PRD 04 REL-04 has landed before implementation starts.
 - REL-05 is not required for this work.
 - True JSON `meta` is optional and not required for STR-01.
-- No implementation has started.
 - Done pass 2026-05-06: PRD drafted and updated for the `block` and `blockPlacement` model; no blockers.
+- STR-01 shipped 2026-05-06.
+- STR-01 changed no storage, sync, mutation, authority, or generated UI framework code.
+- STR-01 changed the site source schema, seed records, readiness warnings, and characterization tests.
+- STR-01 kept stored records flat.
+- Browser Use smoke was attempted for STR-01 but blocked by missing IAB session metadata.
+- HTTP dev smoke confirmed the site bootstrap serves the renamed block schema and seed records.
+- No blockers.

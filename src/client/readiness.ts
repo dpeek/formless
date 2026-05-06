@@ -13,78 +13,72 @@ export function getRecordReadinessWarnings(
     return [];
   }
 
-  if (record.entity === "contentItem") {
-    return getContentItemWarnings(record);
+  if (record.entity === "block") {
+    return getBlockWarnings(record);
   }
 
-  if (record.entity === "mediaAsset") {
-    return getMediaAssetWarnings(record);
-  }
-
-  if (record.entity === "contentPlacement") {
-    return getContentPlacementWarnings(record, recordsById);
+  if (record.entity === "blockPlacement") {
+    return getBlockPlacementWarnings(record, recordsById);
   }
 
   return [];
 }
 
-function getContentItemWarnings(record: StoredRecord): RecordReadinessWarning[] {
-  const kind = stringValue(record, "kind");
+function getBlockWarnings(record: StoredRecord): RecordReadinessWarning[] {
+  const type = stringValue(record, "type");
   const status = stringValue(record, "status");
-
-  if (status !== "published" || !["page", "post", "project"].includes(kind)) {
-    return [];
-  }
-
   const warnings: RecordReadinessWarning[] = [];
 
-  if (!hasTextValue(record, "slug") && !hasTextValue(record, "href")) {
+  if (status === "published" && ["page", "post", "project"].includes(type)) {
+    if (!hasTextValue(record, "slug") && !hasTextValue(record, "href")) {
+      warnings.push({
+        code: "published-block-route",
+        message: `Published ${type} block should have a slug or link.`,
+      });
+    }
+
+    if (type === "post") {
+      if (!hasTextValue(record, "body")) {
+        warnings.push({
+          code: "published-post-body",
+          message: "Published post should include body content.",
+        });
+      }
+
+      if (!hasTextValue(record, "publishedAt")) {
+        warnings.push({
+          code: "published-post-date",
+          message: "Published post should have a published date.",
+        });
+      }
+    }
+
+    if (type === "project" && !hasTextValue(record, "subtitle") && !hasTextValue(record, "body")) {
+      warnings.push({
+        code: "published-project-summary",
+        message: "Published project should include a summary or body.",
+      });
+    }
+  }
+
+  if (["image", "video"].includes(type) && !hasTextValue(record, "alt")) {
     warnings.push({
-      code: "published-content-route",
-      message: `Published ${kind} should have a slug or link.`,
+      code: "block-media-alt",
+      message: "Media block should include alt text.",
     });
   }
 
-  if (kind === "post") {
-    if (!hasTextValue(record, "body")) {
-      warnings.push({
-        code: "published-post-body",
-        message: "Published post should include body content.",
-      });
-    }
-
-    if (!hasTextValue(record, "publishedAt")) {
-      warnings.push({
-        code: "published-post-date",
-        message: "Published post should have a published date.",
-      });
-    }
-  }
-
-  if (kind === "project" && !hasTextValue(record, "subtitle") && !hasTextValue(record, "body")) {
+  if (["contentList", "contentGrid"].includes(type) && !hasTextValue(record, "templateKey")) {
     warnings.push({
-      code: "published-project-summary",
-      message: "Published project should include a summary or body.",
+      code: `block-${type}-query`,
+      message: `${blockTypeLabel(type)} block should include a query key.`,
     });
   }
 
   return warnings;
 }
 
-function getMediaAssetWarnings(record: StoredRecord): RecordReadinessWarning[] {
-  if (hasTextValue(record, "alt")) {
-    return [];
-  }
-
-  return [
-    {
-      code: "media-alt",
-      message: "Media asset should include alt text.",
-    },
-  ];
-}
-
-function getContentPlacementWarnings(
+function getBlockPlacementWarnings(
   record: StoredRecord,
   recordsById: Record<string, StoredRecord>,
 ): RecordReadinessWarning[] {
@@ -92,40 +86,12 @@ function getContentPlacementWarnings(
     return [];
   }
 
-  const kind = stringValue(record, "kind");
   const warnings: RecordReadinessWarning[] = [];
 
-  if (
-    kind === "hero" &&
-    !hasTextValue(record, "title") &&
-    !hasLiveReference(record, "item", recordsById, "contentItem")
-  ) {
-    warnings.push({
-      code: "placement-hero-source",
-      message: "Hero placement should point to content or provide a title.",
-    });
-  }
-
-  if (["header", "footer", "markdown", "link", "contentCard", "cta"].includes(kind)) {
-    warnWhenMissingReference(warnings, record, recordsById, "item", "contentItem", {
-      code: `placement-${kind}-item`,
-      message: `${placementKindLabel(kind)} placement should point to a content item.`,
-    });
-  }
-
-  if (kind === "media") {
-    warnWhenMissingReference(warnings, record, recordsById, "media", "mediaAsset", {
-      code: "placement-media-asset",
-      message: "Media placement should point to a media asset.",
-    });
-  }
-
-  if (["contentList", "contentGrid"].includes(kind) && !hasTextValue(record, "queryKey")) {
-    warnings.push({
-      code: `placement-${kind}-query`,
-      message: `${placementKindLabel(kind)} placement should include a query key.`,
-    });
-  }
+  warnWhenMissingReference(warnings, record, recordsById, "block", "block", {
+    code: "placement-block-child",
+    message: "Visible placement should point to a child block.",
+  });
 
   return warnings;
 }
@@ -169,18 +135,14 @@ function stringValue(record: StoredRecord, fieldName: string) {
   return "";
 }
 
-function placementKindLabel(kind: string) {
-  if (kind === "contentCard") {
-    return "Content card";
-  }
-
-  if (kind === "contentList") {
+function blockTypeLabel(type: string) {
+  if (type === "contentList") {
     return "Content list";
   }
 
-  if (kind === "contentGrid") {
+  if (type === "contentGrid") {
     return "Content grid";
   }
 
-  return kind.charAt(0).toUpperCase() + kind.slice(1);
+  return type.charAt(0).toUpperCase() + type.slice(1);
 }

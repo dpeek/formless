@@ -172,8 +172,8 @@ describe("App smoke routes", () => {
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset source schema");
     expect(html).toContain("Reset seed data");
-    expect(html).toContain("&quot;contentItem&quot;");
-    expect(html).toContain("&quot;contentPlacement&quot;");
+    expect(html).toContain("&quot;block&quot;");
+    expect(html).toContain("&quot;blockPlacement&quot;");
     expect(html).not.toContain("<code>tasks</code>");
     expect(html).not.toContain("<code>rates</code>");
   });
@@ -200,7 +200,7 @@ describe("generated collection home", () => {
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site");
 
-    expect(html).toContain('aria-label="Content item actions"');
+    expect(html).toContain('aria-label="Block actions"');
     expect(html).not.toContain('aria-label="Task actions"');
   });
 
@@ -291,11 +291,11 @@ describe("generated collection home", () => {
     const html = renderRoute("/site");
 
     expect(html).toContain("<h1");
-    expect(html).toContain("Content");
-    expect(html).toContain('aria-label="Collections"');
     expect(html).toContain("Blocks");
-    expect(html).toContain("Media");
-    expect(html).toContain("Create Content item");
+    expect(html).toContain('aria-label="Collections"');
+    expect(html).toContain("Placements");
+    expect(html).not.toContain("Media");
+    expect(html).toContain("Create Block");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Body");
     expect(html).toContain("<textarea");
@@ -304,11 +304,11 @@ describe("generated collection home", () => {
     expect(html).toContain("Estii");
     expect(html).toContain("Formless");
     expect(html).toContain("Draft notes on generated editorial tools");
-    expect(html).toMatch(/aria-label="All count"[^>]*>16</);
+    expect(html).toMatch(/aria-label="All count"[^>]*>22</);
     expect(html).toMatch(/aria-label="Draft count"[^>]*>1</);
-    expect(html).toMatch(/aria-label="Published count"[^>]*>15</);
+    expect(html).toMatch(/aria-label="Published count"[^>]*>21</);
     expect(html).toMatch(/aria-label="Projects count"[^>]*>3</);
-    expect(html).toMatch(/aria-label="Featured count"[^>]*>6</);
+    expect(html).toMatch(/aria-label="Featured count"[^>]*>7</);
   });
 
   it("updates site content query counts after local record merges", () => {
@@ -317,8 +317,8 @@ describe("generated collection home", () => {
 
     applyRecordMerge(
       [
-        siteContentRecord("rec_site_content_project_unannounced", {
-          kind: "project",
+        siteBlockRecord("rec_site_content_project_unannounced", {
+          type: "project",
           title: "Unannounced project",
           status: "draft",
           featured: true,
@@ -331,26 +331,26 @@ describe("generated collection home", () => {
     );
     const after = renderRoute("/site");
 
-    expect(before).toMatch(/aria-label="All count"[^>]*>16</);
+    expect(before).toMatch(/aria-label="All count"[^>]*>22</);
     expect(before).toMatch(/aria-label="Draft count"[^>]*>1</);
     expect(before).toMatch(/aria-label="Projects count"[^>]*>3</);
-    expect(before).toMatch(/aria-label="Featured count"[^>]*>6</);
-    expect(after).toMatch(/aria-label="All count"[^>]*>17</);
+    expect(before).toMatch(/aria-label="Featured count"[^>]*>7</);
+    expect(after).toMatch(/aria-label="All count"[^>]*>23</);
     expect(after).toMatch(/aria-label="Draft count"[^>]*>2</);
     expect(after).toMatch(/aria-label="Projects count"[^>]*>4</);
-    expect(after).toMatch(/aria-label="Featured count"[^>]*>7</);
+    expect(after).toMatch(/aria-label="Featured count"[^>]*>8</);
     expect(after).toContain("Unannounced project");
   });
 
   it("surfaces site readiness warnings without disabling generated editors", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "contentHome",
+      (model) => model.viewName === "blockHome",
     );
     const incompletePost: StoredRecord = {
       id: "rec_incomplete_post",
-      entity: "contentItem",
+      entity: "block",
       values: {
-        kind: "post",
+        type: "post",
         title: "Published without metadata",
         status: "published",
         featured: false,
@@ -373,7 +373,7 @@ describe("generated collection home", () => {
     );
 
     expect(html).toContain('aria-label="Readiness warnings"');
-    expect(html).toContain("Published post should have a slug or link.");
+    expect(html).toContain("Published post block should have a slug or link.");
     expect(html).toContain("Published post should include body content.");
     expect(html).toContain("Published post should have a published date.");
     expect(html).toContain("Published without metadata");
@@ -383,7 +383,7 @@ describe("generated collection home", () => {
 
   it("renders the scoped site composition workspace for selected content", () => {
     const compositionModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "contentCompositionHome",
+      (model) => model.viewName === "blockCompositionHome",
     );
 
     if (!compositionModel) {
@@ -396,21 +396,19 @@ describe("generated collection home", () => {
       today: "2026-05-05",
     });
 
-    expect(html).toContain('aria-label="Content item records"');
+    expect(html).toContain('aria-label="Block records"');
     expect(html).toContain("Home");
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
     expect(html).toContain("Create Block placement");
-    expect(html).toContain("Hero");
-    expect(html).toContain("Content list");
-    expect(html).toContain("Content grid");
+    expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain('value="Recent posts"');
-    expect(html).toContain('value="publishedPosts"');
-    expect(html).toContain('value="featuredProjects"');
+    expect(html).toContain('value="contentList"');
+    expect(html).toContain('value="contentGrid"');
   });
 
   it("renders header navigation as content block placements", () => {
     const blocksModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "contentCompositionHome",
+      (model) => model.viewName === "blockCompositionHome",
     );
 
     if (!blocksModel) {
@@ -423,11 +421,11 @@ describe("generated collection home", () => {
       today: "2026-05-05",
     });
 
-    expect(html).toContain('aria-label="Content item records"');
+    expect(html).toContain('aria-label="Block records"');
     expect(html).toContain("Header");
     expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
     expect(html).toContain("Create Block placement");
-    expect(html).toContain("Link");
+    expect(html).toContain('value="link"');
     expect(html).toContain('value="Home"');
     expect(html).toContain('value="Blog"');
     expect(html).toContain('value="Projects"');
@@ -1145,9 +1143,9 @@ describe("generated forms and records", () => {
   });
 
   it("keeps source site create and edit flows wired through field behavior", () => {
-    const action = requiredCreateAction(siteSourceSchema, "contentHome");
+    const action = requiredCreateAction(siteSourceSchema, "blockHome");
     const formData = new FormData();
-    formData.set("kind", "post");
+    formData.set("type", "post");
     formData.set("title", "Field behavior note");
     formData.set("label", "Field behavior");
     formData.set("subtitle", "Regression coverage");
@@ -1161,7 +1159,11 @@ describe("generated forms and records", () => {
     formData.set("icon", "note");
     formData.set("color", "#336699");
     formData.set("templateKey", "post");
-    formData.set("primaryMedia", "rec_site_media_avatar");
+    formData.set("assetKey", "field-behavior-note");
+    formData.set("alt", "Field behavior note image");
+    formData.set("width", "1200");
+    formData.set("height", "630");
+    formData.set("limit", "3");
 
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const createHtml = renderToStaticMarkup(
@@ -1169,14 +1171,14 @@ describe("generated forms and records", () => {
     );
     const editHtml = renderToStaticMarkup(
       <RecordTable
-        columns={tableColumnsFor(siteSourceSchema, "contentHome")}
-        entity={siteSourceSchema.entities.contentItem}
-        entityName="contentItem"
+        columns={tableColumnsFor(siteSourceSchema, "blockHome")}
+        entity={siteSourceSchema.entities.block}
+        entityName="block"
         query={{ kind: "all" }}
       />,
     );
 
-    expect(createHtml).toContain('name="kind"');
+    expect(createHtml).toContain('name="type"');
     expect(createHtml).toContain("Post");
     expect(createHtml).toContain('name="body"');
     expect(createHtml).toContain("<textarea");
@@ -1188,10 +1190,13 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('type="number"');
     expect(createHtml).toContain('min="0"');
     expect(createHtml).toContain('step="1"');
-    expect(createHtml).toContain('name="primaryMedia"');
-    expect(createHtml).toContain("Site owner portrait");
+    expect(createHtml).toContain('name="assetKey"');
+    expect(createHtml).toContain('name="alt"');
+    expect(createHtml).toContain('name="width"');
+    expect(createHtml).toContain('name="height"');
+    expect(createHtml).toContain('name="limit"');
     expect(resolveCreateValues(formData, action)).toEqual({
-      kind: "post",
+      type: "post",
       title: "Field behavior note",
       label: "Field behavior",
       subtitle: "Regression coverage",
@@ -1205,7 +1210,11 @@ describe("generated forms and records", () => {
       icon: "note",
       color: "#336699",
       templateKey: "post",
-      primaryMedia: "rec_site_media_avatar",
+      assetKey: "field-behavior-note",
+      alt: "Field behavior note image",
+      width: 1200,
+      height: 630,
+      limit: 3,
     });
     expect(editHtml).toContain("Shipping schema-backed authoring");
     expect(editHtml).toContain('aria-label="Body"');
@@ -1244,7 +1253,7 @@ describe("generated forms and records", () => {
   it("resolves site scoped create defaults for block placements", () => {
     const models = selectCollectionModels(siteSourceSchema);
     const placementAction = models
-      .find((model) => model.viewName === "contentCompositionHome")
+      .find((model) => model.viewName === "blockCompositionHome")
       ?.actions.find((action) => action.type === "create");
 
     if (!placementAction || placementAction.type !== "create") {
@@ -1256,10 +1265,9 @@ describe("generated forms and records", () => {
     );
     const placementFormData = new FormData();
     placementFormData.set("slot", "main");
-    placementFormData.set("kind", "contentList");
-    placementFormData.set("title", "Recent posts");
-    placementFormData.set("queryKey", "publishedPosts");
-    placementFormData.set("limit", "3");
+    placementFormData.set("block", "rec_site_block_home_recent_posts");
+    placementFormData.set("label", "Recent posts");
+    placementFormData.set("variant", "contentList");
     placementFormData.set("order", "1");
     placementFormData.set("visible", "on");
 
@@ -1267,15 +1275,14 @@ describe("generated forms and records", () => {
     expect(
       resolveCreateValues(placementFormData, placementAction, {
         today: "2026-05-05",
-        values: { content: "rec_site_content_home" },
+        values: { block: "rec_site_content_home" },
       }),
     ).toMatchObject({
       parent: "rec_site_content_home",
       slot: "main",
-      kind: "contentList",
-      title: "Recent posts",
-      queryKey: "publishedPosts",
-      limit: 3,
+      block: "rec_site_block_home_recent_posts",
+      label: "Recent posts",
+      variant: "contentList",
       order: 1,
       visible: true,
     });
@@ -1578,10 +1585,10 @@ function rateCardRateRecord(
   };
 }
 
-function siteContentRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+function siteBlockRecord(id: string, values: StoredRecord["values"]): StoredRecord {
   return {
     id,
-    entity: "contentItem",
+    entity: "block",
     values,
     createdAt: "2026-05-05T00:00:40.000Z",
   };

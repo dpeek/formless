@@ -80,7 +80,7 @@ describe("authority", () => {
       cursor: siteSeedRecords.length,
     });
     expect(new Set(body.records.map((record) => record.entity))).toEqual(
-      new Set(["contentItem", "contentPlacement", "mediaAsset"]),
+      new Set(["block", "blockPlacement"]),
     );
   });
 
