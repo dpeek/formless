@@ -1,5 +1,6 @@
 import type {
   ActionRequest,
+  ActionRequestInput,
   ActionResponse,
   CreateSelectedJoinRecordActionInput,
   RemoveSelectedJoinRecordsActionInput,
@@ -12,6 +13,7 @@ import { matchesQuery } from "../shared/query.ts";
 import type {
   AfterCreateHookSchema,
   AppSchema,
+  EntityActionKind,
   EntityActionSchema,
   EntitySchema,
   ManyToManyRelationshipSchema,
@@ -29,12 +31,120 @@ import {
   type WriteOutcome,
 } from "./storage.ts";
 
+type EntityActionRequestInputValidationContext<TAction extends EntityActionSchema> = {
+  actionName: string;
+  entityName: string;
+  entity: EntitySchema;
+  action: TAction;
+  value: unknown;
+};
+
+type EntityActionExecutionContext<TAction extends EntityActionSchema> = {
+  storage: DurableObjectStorage;
+  request: ActionRequest;
+  schema: AppSchema;
+  action: TAction;
+};
+
+type EntityActionCreateAfterCreateHookContext<TAction extends EntityActionSchema> = {
+  storage: DurableObjectStorage;
+  mutation: CreateMutation;
+  schema: AppSchema;
+  hook: AfterCreateHookSchema;
+  action: TAction;
+  createRecords: CreateMutationCausedRecordWriter;
+};
+
+type EntityActionKindRuntimeModule<TAction extends EntityActionSchema = EntityActionSchema> = {
+  kind: TAction["kind"];
+  validateInput: (
+    context: EntityActionRequestInputValidationContext<TAction>,
+  ) => ActionRequestInput | undefined;
+  execute: (context: EntityActionExecutionContext<TAction>) => WriteOutcome<ActionResponse>;
+  executeCreateAfterCreateHook?: (
+    context: EntityActionCreateAfterCreateHookContext<TAction>,
+  ) => void;
+};
+
+type EntityActionKindRuntimeModuleUnion = {
+  [Kind in EntityActionKind]: EntityActionKindRuntimeModule<
+    Extract<EntityActionSchema, { kind: Kind }>
+  >;
+}[EntityActionKind];
+
+const entityActionKindRuntimeModules = [
+  {
+    kind: "clear-completed",
+    validateInput: validateClearCompletedActionInput,
+    execute: executeClearCompletedAction,
+  },
+  {
+    kind: "create-missing-join-records",
+    validateInput: validateNoActionInput,
+    execute: executeCreateMissingJoinRecordsAction,
+    executeCreateAfterCreateHook: executeCreateMissingJoinRecordsAfterCreateHook,
+  },
+  {
+    kind: "create-selected-join-record",
+    validateInput: validateCreateSelectedJoinRecordActionInput,
+    execute: executeCreateSelectedJoinRecordAction,
+  },
+  {
+    kind: "remove-selected-join-records",
+    validateInput: validateRemoveSelectedJoinRecordsActionInput,
+    execute: executeRemoveSelectedJoinRecordsAction,
+  },
+] satisfies EntityActionKindRuntimeModuleUnion[];
+
 export function executeEntityAction(
   storage: DurableObjectStorage,
   request: ActionRequest,
   schema: AppSchema,
 ): ActionResponse {
   return executeEntityActionOutcome(storage, request, schema).response;
+}
+
+export function validateEntityActionRequest(value: unknown, schema: AppSchema): ActionRequest {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Action request must be an object.");
+  }
+
+  if (typeof value.actionId !== "string" || value.actionId.trim() === "") {
+    throw new BadRequestError("Action request must include a non-empty actionId.");
+  }
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new BadRequestError("Action request must include an entity.");
+  }
+
+  const entity = schema.entities[value.entity];
+  if (!entity) {
+    throw new BadRequestError(`Unknown entity "${value.entity}".`);
+  }
+
+  if (typeof value.action !== "string" || value.action.trim() === "") {
+    throw new BadRequestError("Action request must include an action.");
+  }
+
+  const action = entity.actions?.[value.action];
+  if (!action) {
+    throw new BadRequestError(`Unknown action "${value.action}" for entity "${value.entity}".`);
+  }
+
+  const input = getEntityActionKindRuntimeModule(action).validateInput({
+    actionName: value.action,
+    entityName: value.entity,
+    entity,
+    action,
+    value: value.input,
+  });
+
+  return {
+    actionId: value.actionId,
+    entity: value.entity,
+    action: value.action,
+    ...(input === undefined ? {} : { input }),
+  };
 }
 
 export function executeEntityActionOutcome(
@@ -49,49 +159,11 @@ export function executeEntityActionOutcome(
 
   const action = schema.entities[request.entity]?.actions?.[request.action];
 
-  if (action?.kind === "clear-completed") {
-    const records = selectActionTargetRecords(storage, request, schema, action);
-
-    return executeActionEffect(storage, request, records);
+  if (!action) {
+    throw new Error(`Unsupported action "${request.action}".`);
   }
 
-  if (action?.kind === "create-missing-join-records") {
-    const values = selectMissingJoinRecordValues(storage, request, schema, action);
-
-    return createRecordsForActionOutcome(
-      storage,
-      request.actionId,
-      request.entity,
-      request.action,
-      values,
-      (entity, recordValues, options) => {
-        assertUniqueConstraints(storage, schema, entity, recordValues, options);
-      },
-    );
-  }
-
-  if (action?.kind === "create-selected-join-record") {
-    const values = selectSelectedJoinRecordValues(storage, request, schema, action);
-
-    return createRecordsForActionOutcome(
-      storage,
-      request.actionId,
-      request.entity,
-      request.action,
-      [values],
-      (entity, recordValues, options) => {
-        assertUniqueConstraints(storage, schema, entity, recordValues, options);
-      },
-    );
-  }
-
-  if (action?.kind === "remove-selected-join-records") {
-    const records = selectSelectedJoinRecords(storage, request, schema, action);
-
-    return executeActionEffect(storage, request, records);
-  }
-
-  throw new Error(`Unsupported action "${request.action}".`);
+  return getEntityActionKindRuntimeModule(action).execute({ storage, request, schema, action });
 }
 
 export function executeCreateAfterCreateHooks(
@@ -116,20 +188,208 @@ function executeCreateAfterCreateHook(
 ) {
   const action = schema.entities[hook.entity]?.actions?.[hook.action];
 
-  if (action?.kind !== "create-missing-join-records") {
+  if (!action) {
     throw new Error(
       `Create hook "${mutation.entity}.${mutation.mutationId}" references unsupported action "${hook.entity}.${hook.action}".`,
     );
   }
 
-  const request: ActionRequest = {
-    actionId: mutation.mutationId,
-    entity: hook.entity,
-    action: hook.action,
-  };
-  const values = selectMissingJoinRecordValues(storage, request, schema, action);
+  const actionModule = getEntityActionKindRuntimeModule(action);
 
-  createRecords(hook.entity, values);
+  if (!actionModule.executeCreateAfterCreateHook) {
+    throw new Error(
+      `Create hook "${mutation.entity}.${mutation.mutationId}" references unsupported action "${hook.entity}.${hook.action}".`,
+    );
+  }
+
+  actionModule.executeCreateAfterCreateHook({
+    storage,
+    mutation,
+    schema,
+    hook,
+    action,
+    createRecords,
+  });
+}
+
+function executeClearCompletedAction(
+  context: EntityActionExecutionContext<Extract<EntityActionSchema, { kind: "clear-completed" }>>,
+) {
+  const records = selectActionTargetRecords(
+    context.storage,
+    context.request,
+    context.schema,
+    context.action,
+  );
+
+  return executeActionEffect(context.storage, context.request, records);
+}
+
+function executeCreateMissingJoinRecordsAction(
+  context: EntityActionExecutionContext<
+    Extract<EntityActionSchema, { kind: "create-missing-join-records" }>
+  >,
+) {
+  const values = selectMissingJoinRecordValues(
+    context.storage,
+    context.request,
+    context.schema,
+    context.action,
+  );
+
+  return createRecordsForActionOutcome(
+    context.storage,
+    context.request.actionId,
+    context.request.entity,
+    context.request.action,
+    values,
+    (entity, recordValues, options) => {
+      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
+    },
+  );
+}
+
+function executeCreateSelectedJoinRecordAction(
+  context: EntityActionExecutionContext<
+    Extract<EntityActionSchema, { kind: "create-selected-join-record" }>
+  >,
+) {
+  const values = selectSelectedJoinRecordValues(
+    context.storage,
+    context.request,
+    context.schema,
+    context.action,
+  );
+
+  return createRecordsForActionOutcome(
+    context.storage,
+    context.request.actionId,
+    context.request.entity,
+    context.request.action,
+    [values],
+    (entity, recordValues, options) => {
+      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
+    },
+  );
+}
+
+function executeRemoveSelectedJoinRecordsAction(
+  context: EntityActionExecutionContext<
+    Extract<EntityActionSchema, { kind: "remove-selected-join-records" }>
+  >,
+) {
+  const records = selectSelectedJoinRecords(
+    context.storage,
+    context.request,
+    context.schema,
+    context.action,
+  );
+
+  return executeActionEffect(context.storage, context.request, records);
+}
+
+function executeCreateMissingJoinRecordsAfterCreateHook(
+  context: EntityActionCreateAfterCreateHookContext<
+    Extract<EntityActionSchema, { kind: "create-missing-join-records" }>
+  >,
+) {
+  const request: ActionRequest = {
+    actionId: context.mutation.mutationId,
+    entity: context.hook.entity,
+    action: context.hook.action,
+  };
+  const values = selectMissingJoinRecordValues(
+    context.storage,
+    request,
+    context.schema,
+    context.action,
+  );
+
+  context.createRecords(context.hook.entity, values);
+}
+
+function validateClearCompletedActionInput(
+  context: EntityActionRequestInputValidationContext<
+    Extract<EntityActionSchema, { kind: "clear-completed" }>
+  >,
+) {
+  if (context.entity.fields.done?.type !== "boolean") {
+    throw new BadRequestError(
+      `Action "${context.actionName}" requires entity "${context.entityName}" to have a boolean done field.`,
+    );
+  }
+
+  return undefined;
+}
+
+function validateNoActionInput() {
+  return undefined;
+}
+
+function validateCreateSelectedJoinRecordActionInput(
+  context: EntityActionRequestInputValidationContext<
+    Extract<EntityActionSchema, { kind: "create-selected-join-record" }>
+  >,
+): CreateSelectedJoinRecordActionInput {
+  const value = context.value;
+
+  if (!isRecord(value)) {
+    throw new BadRequestError(
+      `Action "${context.actionName}" requires input with fromRecordId and toRecordId.`,
+    );
+  }
+
+  if (typeof value.fromRecordId !== "string" || value.fromRecordId.trim() === "") {
+    throw new BadRequestError(
+      `Action "${context.actionName}" input fromRecordId must be non-empty.`,
+    );
+  }
+
+  if (typeof value.toRecordId !== "string" || value.toRecordId.trim() === "") {
+    throw new BadRequestError(`Action "${context.actionName}" input toRecordId must be non-empty.`);
+  }
+
+  return {
+    fromRecordId: value.fromRecordId,
+    toRecordId: value.toRecordId,
+  };
+}
+
+function validateRemoveSelectedJoinRecordsActionInput(
+  context: EntityActionRequestInputValidationContext<
+    Extract<EntityActionSchema, { kind: "remove-selected-join-records" }>
+  >,
+): RemoveSelectedJoinRecordsActionInput {
+  const value = context.value;
+
+  if (!isRecord(value) || !Array.isArray(value.recordIds)) {
+    throw new BadRequestError(`Action "${context.actionName}" requires input with recordIds.`);
+  }
+
+  if (value.recordIds.length === 0) {
+    throw new BadRequestError(`Action "${context.actionName}" input recordIds must not be empty.`);
+  }
+
+  const seen = new Set<string>();
+  const recordIds = value.recordIds.map((recordId, index) => {
+    if (typeof recordId !== "string" || recordId.trim() === "") {
+      throw new BadRequestError(
+        `Action "${context.actionName}" input recordIds[${index}] must be non-empty.`,
+      );
+    }
+
+    if (seen.has(recordId)) {
+      throw new BadRequestError(
+        `Action "${context.actionName}" input recordIds must not contain duplicates.`,
+      );
+    }
+
+    seen.add(recordId);
+
+    return recordId;
+  });
+
+  return { recordIds };
 }
 
 function selectActionTargetRecords(
@@ -429,4 +689,22 @@ function executeActionEffect(
     request.action,
     records,
   );
+}
+
+function getEntityActionKindRuntimeModule<TAction extends EntityActionSchema>(
+  action: TAction,
+): EntityActionKindRuntimeModule<TAction> {
+  const actionModule = entityActionKindRuntimeModules.find(
+    (candidate) => candidate.kind === action.kind,
+  );
+
+  if (!actionModule) {
+    throw new Error(`Unsupported action kind "${action.kind}".`);
+  }
+
+  return actionModule as EntityActionKindRuntimeModule<TAction>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

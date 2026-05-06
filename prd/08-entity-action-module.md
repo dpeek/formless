@@ -1,7 +1,7 @@
 # PRD 08: Entity action module
 
 Status: in progress
-Current chunk: EA-02 shipped
+Current chunk: EA-03 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -133,7 +133,7 @@ Likely changed files:
 | ----- | ------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | EA-01 | shipped | none       | tests                                                        | Current action parse, validation, execution, replay, and UI behavior is characterized.      |
 | EA-02 | shipped | EA-01      | `src/shared/schema-actions.ts`, `src/shared/schema-types.ts` | Action kind schema parsing and capabilities are represented through a deeper action module. |
-| EA-03 | draft   | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
+| EA-03 | shipped | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
 | EA-04 | draft   | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
 | EA-05 | draft   | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
 | EA-06 | draft   | EA-05      | `prd/08-entity-action-module.md`                             | PRD status and promote notes reflect shipped behavior.                                      |
@@ -176,11 +176,13 @@ Recommended order:
 - `doc/roadmap.md`: no change unless new release-scope action behavior is added.
 - EA-01: no global doc promotion. Tests only characterize existing action behavior.
 - EA-02: promote that schema action parsing now dispatches through `entityActionKindModules`, and action kind capabilities expose after-create hook eligibility.
+- EA-03: promote that worker action request input validation, execution dispatch, and create-after-create hook execution now dispatch through action kind runtime modules.
 
 ## Evidence
 
 - 2026-05-06 EA-01: `bun run test -- src/shared/schema.test.ts src/worker/authority.test.ts`.
 - 2026-05-06 EA-02: `bun run test -- src/shared/schema.test.ts`; `bun run check`.
+- 2026-05-06 EA-03: `bun run test -- src/worker/authority.test.ts`; `bun run check`.
 
 ## PRD status notes
 
@@ -199,5 +201,12 @@ Recommended order:
 - EA-02 added parser coverage for afterCreate hooks that reference an existing action without the hook capability.
 - EA-D1 through EA-D7 stand.
 - Browser Use not run; parser/type-only change with no app behavior change.
+- EA-03 shipped 2026-05-06.
+- EA-03 moved action request validation from `src/worker/authority.ts` into `validateEntityActionRequest` in `src/worker/actions.ts`.
+- EA-03 added `entityActionKindRuntimeModules` in `src/worker/actions.ts`.
+- EA-03 makes action execution dispatch through action kind runtime modules.
+- EA-03 makes create-after-create hook execution dispatch through an action kind runtime module hook.
+- EA-03 keeps existing action request shapes and response shapes.
+- Browser Use not run; worker action behavior stayed covered by authority tests.
 - No blockers.
-- Next ready chunk: EA-03.
+- Next ready chunk: EA-04.

@@ -6,7 +6,6 @@ import {
 } from "../shared/field-types.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
 import type {
-  ActionRequest,
   CreateMutation,
   Mutation,
   MutationResponse,
@@ -36,7 +35,11 @@ import {
   type WriteOutcome,
   writeActiveSchemaOutcome,
 } from "./storage.ts";
-import { executeCreateAfterCreateHooks, executeEntityActionOutcome } from "./actions.ts";
+import {
+  executeCreateAfterCreateHooks,
+  executeEntityActionOutcome,
+  validateEntityActionRequest,
+} from "./actions.ts";
 import {
   assertExistingRecordsSatisfyUniqueConstraints,
   assertUniqueConstraints,
@@ -162,7 +165,7 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       if (request.method === "POST" && route.path === "/actions") {
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
-        const action = validateActionRequest(await readJson(request), schema);
+        const action = validateEntityActionRequest(await readJson(request), schema);
         const response = writes.apply(() =>
           executeEntityActionOutcome(this.ctx.storage, action, schema),
         );
@@ -417,109 +420,6 @@ function validateSourceSchemaReset(
 ) {
   validateCompatibleSchemaChange(currentSchema, sourceSchema, records);
   assertExistingRecordsSatisfyUniqueConstraints(sourceSchema, records);
-}
-
-function validateActionRequest(value: unknown, schema: AppSchema): ActionRequest {
-  if (!isRecord(value)) {
-    throw new BadRequestError("Action request must be an object.");
-  }
-
-  if (typeof value.actionId !== "string" || value.actionId.trim() === "") {
-    throw new BadRequestError("Action request must include a non-empty actionId.");
-  }
-
-  if (typeof value.entity !== "string" || value.entity.trim() === "") {
-    throw new BadRequestError("Action request must include an entity.");
-  }
-
-  const entity = schema.entities[value.entity];
-  if (!entity) {
-    throw new BadRequestError(`Unknown entity "${value.entity}".`);
-  }
-
-  if (typeof value.action !== "string" || value.action.trim() === "") {
-    throw new BadRequestError("Action request must include an action.");
-  }
-
-  const action = entity.actions?.[value.action];
-  if (!action) {
-    throw new BadRequestError(`Unknown action "${value.action}" for entity "${value.entity}".`);
-  }
-
-  if (action.kind === "clear-completed" && entity.fields.done?.type !== "boolean") {
-    throw new BadRequestError(
-      `Action "${value.action}" requires entity "${value.entity}" to have a boolean done field.`,
-    );
-  }
-
-  const input = validateActionInput(value.action, action.kind, value.input);
-
-  return {
-    actionId: value.actionId,
-    entity: value.entity,
-    action: value.action,
-    ...(input === undefined ? {} : { input }),
-  };
-}
-
-function validateActionInput(
-  actionName: string,
-  actionKind: NonNullable<EntitySchema["actions"]>[string]["kind"],
-  value: unknown,
-): ActionRequest["input"] | undefined {
-  if (actionKind === "create-selected-join-record") {
-    if (!isRecord(value)) {
-      throw new BadRequestError(
-        `Action "${actionName}" requires input with fromRecordId and toRecordId.`,
-      );
-    }
-
-    if (typeof value.fromRecordId !== "string" || value.fromRecordId.trim() === "") {
-      throw new BadRequestError(`Action "${actionName}" input fromRecordId must be non-empty.`);
-    }
-
-    if (typeof value.toRecordId !== "string" || value.toRecordId.trim() === "") {
-      throw new BadRequestError(`Action "${actionName}" input toRecordId must be non-empty.`);
-    }
-
-    return {
-      fromRecordId: value.fromRecordId,
-      toRecordId: value.toRecordId,
-    };
-  }
-
-  if (actionKind === "remove-selected-join-records") {
-    if (!isRecord(value) || !Array.isArray(value.recordIds)) {
-      throw new BadRequestError(`Action "${actionName}" requires input with recordIds.`);
-    }
-
-    if (value.recordIds.length === 0) {
-      throw new BadRequestError(`Action "${actionName}" input recordIds must not be empty.`);
-    }
-
-    const seen = new Set<string>();
-    const recordIds = value.recordIds.map((recordId, index) => {
-      if (typeof recordId !== "string" || recordId.trim() === "") {
-        throw new BadRequestError(
-          `Action "${actionName}" input recordIds[${index}] must be non-empty.`,
-        );
-      }
-
-      if (seen.has(recordId)) {
-        throw new BadRequestError(
-          `Action "${actionName}" input recordIds must not contain duplicates.`,
-        );
-      }
-
-      seen.add(recordId);
-
-      return recordId;
-    });
-
-    return { recordIds };
-  }
-
-  return undefined;
 }
 
 async function readJson(request: Request): Promise<unknown> {
