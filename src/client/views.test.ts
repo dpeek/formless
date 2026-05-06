@@ -180,6 +180,7 @@ describe("home view model collections", () => {
       context: {
         name: "card",
         entityName: "card",
+        presentation: "tabs",
         relatedCollection: {
           relationshipName: "cardRates",
           entityName: "rate",
@@ -199,6 +200,33 @@ describe("home view model collections", () => {
     expect(model?.collection.queries.tabs).toBe(model?.queryTabs);
     expect(model?.collection.result).toBe(model?.result);
     expect(model?.collection.actions).toBe(model?.actions);
+  });
+
+  it("exposes selected collection context presentation", () => {
+    const rateHome = rateCardSchema.views.rateHome;
+
+    if (rateHome?.type !== "collection" || !rateHome.context) {
+      throw new Error("Missing rate home context.");
+    }
+
+    const schema: AppSchema = {
+      ...rateCardSchema,
+      views: {
+        ...rateCardSchema.views,
+        rateHome: {
+          ...rateHome,
+          context: {
+            ...rateHome.context,
+            presentation: "listDetail",
+          },
+        },
+      },
+    };
+    const model = requiredCollectionModel(schema, "rateHome");
+
+    expect(requiredCollectionModel(rateCardSchema, "rateHome").context?.presentation).toBe("tabs");
+    expect(model.context?.presentation).toBe("listDetail");
+    expect(model.collection.context).toBe(model.context);
   });
 
   it("selects every collection model in schema order", () => {
@@ -694,6 +722,7 @@ describe("home view model collections", () => {
       queryName: "cardAll",
       query: rateCardSchema.queries.cardAll?.expression,
       labelField: "name",
+      presentation: "tabs",
       relatedCollection: {
         relationshipName: "cardRates",
         relationship: {
@@ -781,6 +810,7 @@ describe("home view model collections", () => {
         entityName: "card",
         queryName: "cardAll",
         labelField: "name",
+        presentation: "tabs",
         relatedCollection: {
           relationshipName: "cardRates",
           label: "Rates",
@@ -988,6 +1018,7 @@ describe("home view model collections", () => {
           entityName: "block",
           queryName: "blockAll",
           labelField: "title",
+          presentation: "tabs",
           relatedCollection: {
             relationshipName: "blockPlacements",
             label: "Placements",
@@ -1171,6 +1202,7 @@ describe("home view model collections", () => {
       queryName: "blockAll",
       query: siteSourceSchema.queries.blockAll?.expression,
       labelField: "title",
+      presentation: "tabs",
       relatedCollection: {
         relationshipName: "blockPlacements",
         relationship: {
@@ -1449,6 +1481,7 @@ function summarizeHomeModel(model: HomeViewModel) {
           entityName: collection.context.entityName,
           queryName: collection.context.queryName,
           labelField: collection.context.labelField,
+          presentation: collection.context.presentation,
           relatedCollection: collection.context.relatedCollection
             ? {
                 relationshipName: collection.context.relatedCollection.relationshipName,

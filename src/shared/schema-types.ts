@@ -222,11 +222,14 @@ export type CollectionNavigationSchema = {
   primary: boolean;
 };
 
+export type CollectionContextPresentation = "tabs" | "listDetail";
+
 export type CollectionContextSchema = {
   name: string;
   entity: string;
   query: string;
   labelField: string;
+  presentation: CollectionContextPresentation;
   relationship?: string;
   createView?: string;
   itemView?: string;

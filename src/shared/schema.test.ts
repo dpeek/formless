@@ -1636,12 +1636,62 @@ describe("schema collection views", () => {
         entity: "card",
         query: "cardAll",
         labelField: "name",
+        presentation: "tabs",
         createView: "cardCreate",
         itemView: "cardListItem",
       },
       queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],
       defaultQuery: "ratesForSelectedCard",
     });
+  });
+
+  it("parses and stringifies collection context presentation hints", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        views: scopedRateViews({
+          context: {
+            ...scopedRateViews().rateHome.context,
+            presentation: "listDetail",
+          },
+        }),
+      }),
+    );
+
+    expect(schema.views.rateHome).toMatchObject({
+      type: "collection",
+      context: {
+        presentation: "listDetail",
+      },
+    });
+    expect(JSON.parse(stringifySchema(schema)).views.rateHome.context.presentation).toBe(
+      "listDetail",
+    );
+  });
+
+  it("rejects invalid collection context presentation hints", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              ...scopedRateViews().rateHome.context,
+              presentation: "cards",
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context presentation must be "tabs" or "listDetail"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            context: undefined,
+            presentation: "listDetail",
+          }),
+        }),
+      ),
+    ).toThrow('Collection view "rateHome" has unsupported key "presentation"');
   });
 
   it("accepts relationship-backed collection contexts", () => {
@@ -1653,6 +1703,7 @@ describe("schema collection views", () => {
             entity: "card",
             query: "cardAll",
             labelField: "name",
+            presentation: "listDetail",
             relationship: "cardRates",
             createView: "cardCreate",
             itemView: "cardListItem",
@@ -1667,6 +1718,7 @@ describe("schema collection views", () => {
       context: {
         name: "card",
         entity: "card",
+        presentation: "listDetail",
         relationship: "cardRates",
       },
       queries: [{ query: "ratesForSelectedCard", count: { type: "count" } }],

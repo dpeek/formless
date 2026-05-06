@@ -15,6 +15,7 @@ import {
 import type {
   AggregateSchema,
   CollectionActionSlotSchema,
+  CollectionContextPresentation,
   CollectionContextSchema,
   CollectionNavigationSchema,
   CollectionQuerySchema,
@@ -924,13 +925,17 @@ function parseCollectionContext(
     context,
     value,
     ["name", "entity", "query", "labelField"],
-    ["relationship", "createView", "itemView"],
+    ["presentation", "relationship", "createView", "itemView"],
   );
 
   const name = parseRequiredNonEmptyString(`${context} name`, value.name);
   const entityName = parseRequiredNonEmptyString(`${context} entity`, value.entity);
   const queryName = parseRequiredNonEmptyString(`${context} query`, value.query);
   const labelField = parseRequiredNonEmptyString(`${context} labelField`, value.labelField);
+  const presentation = parseCollectionContextPresentation(
+    `${context} presentation`,
+    value.presentation,
+  );
   const relationship = parseCollectionContextRelationship(
     context,
     parseOptionalNonEmptyString(`${context} relationship`, value.relationship),
@@ -988,10 +993,26 @@ function parseCollectionContext(
     entity: entityName,
     query: queryName,
     labelField,
+    presentation,
     ...(relationship === undefined ? {} : { relationship }),
     ...(createView === undefined ? {} : { createView }),
     ...(itemViewName === undefined ? {} : { itemView: itemViewName }),
   };
+}
+
+function parseCollectionContextPresentation(
+  context: string,
+  value: unknown,
+): CollectionContextPresentation {
+  if (value === undefined) {
+    return "tabs";
+  }
+
+  if (value === "tabs" || value === "listDetail") {
+    return value;
+  }
+
+  throw new Error(`${context} must be "tabs" or "listDetail".`);
 }
 
 function parseCollectionContextRelationship(

@@ -1,7 +1,7 @@
 # PRD 13: Site editor list/detail
 
 Status: ready
-Current chunk: SED-02
+Current chunk: SED-03
 Last updated: 2026-05-06
 
 ## Goal
@@ -250,7 +250,7 @@ Notes:
 | ID     | Status  | Depends on | Main files                                | Acceptance                                                                                                                           |
 | ------ | ------- | ---------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | SED-01 | shipped | none       | tests, PRD                                | Current Site admin surfaces, context tab behavior, and public route behavior are characterized.                                      |
-| SED-02 | ready   | SED-01     | schema types/parser, view model, tests    | Collection context presentation parses, defaults to tabs, exposes render-ready facts, and rejects bad values.                        |
+| SED-02 | shipped | SED-01     | schema types/parser, view model, tests    | Collection context presentation parses, defaults to tabs, exposes render-ready facts, and rejects bad values.                        |
 | SED-03 | ready   | SED-02     | generated collection/screen UI, app tests | `listDetail` context presentation renders a selectable list plus selected-record detail without changing tab presentation behavior.  |
 | SED-04 | ready   | SED-03     | Site source schema, view tests, app tests | Site source schema defines primary Pages, Header, and Footer screens that use list/detail root selection.                            |
 | SED-05 | ready   | SED-04     | browser smoke, PRD                        | `/site`, `/pages`, and representative public page routes smoke pass; PRD status, decisions, blockers, and promote notes are current. |
@@ -293,12 +293,31 @@ Evidence to record:
 
 ### SED-02 context presentation model
 
+Status: shipped 2026-05-06.
+
+Outcome:
+
+- `CollectionContextSchema` accepts `presentation`.
+- Missing `presentation` parses as `tabs`.
+- Valid values are `tabs` and `listDetail`.
+- Collection-root `presentation` is rejected; presentation only lives inside context.
+- `HomeContextConfig` exposes `presentation`.
+- `stringifySchema` preserves explicit `listDetail`.
+- No generated UI behavior changed.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: full startup pass `27 passed (27)`, `473 passed (473)`; latest reruns pass including `src/shared/schema-views.ts` and `src/client/views.test.ts`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
+- Browser smoke not run; SED-02 changed parser and view-model facts only.
+
 Acceptance:
 
 - `CollectionContextSchema` accepts optional `presentation`.
 - Missing `presentation` defaults to `tabs`.
 - Valid values are `tabs` and `listDetail`.
-- `listDetail` on a collection without context is rejected if schema shape permits that case.
+- `listDetail` on a collection without context is rejected by schema shape.
 - `HomeContextConfig` exposes the selected presentation.
 - Existing view model tests for Tasks, Rates, and Site keep passing.
 - `stringifySchema` preserves explicit presentation values.
@@ -383,7 +402,7 @@ Acceptance:
 
 | ID     | Status | Blocks | Notes                                                                                       |
 | ------ | ------ | ------ | ------------------------------------------------------------------------------------------- |
-| SED-B1 | open   | SED-04 | Need SED-02/SED-03 generic list/detail support before the Site schema can adopt it cleanly. |
+| SED-B1 | open   | SED-04 | SED-02 shipped. Need SED-03 generic list/detail renderer before the Site schema can adopt it cleanly. |
 
 ## Cross-PRD dependencies
 
@@ -487,4 +506,4 @@ When this PRD ships, update `doc/roadmap.md` only if the first-release target sh
 - User direction: other block creation should move inline later.
 - User direction: current UI is overwhelming and tabs are likely the wrong page selection control.
 - Technical constraint: create views support context defaults but not literal `type` defaults today.
-- SED-01 is the next ready chunk.
+- SED-02 shipped 2026-05-06. Next ready chunk is SED-03 generated list/detail renderer.

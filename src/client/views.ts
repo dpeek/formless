@@ -1,6 +1,7 @@
 import type {
   AppSchema,
   AggregateSchema,
+  CollectionContextPresentation,
   CollectionNavigationSchema,
   CollectionSummarySlotSchema,
   CollectionViewSchema,
@@ -137,6 +138,7 @@ export type HomeContextConfig = {
   queryName: string;
   query: QueryExpression;
   labelField: string;
+  presentation: CollectionContextPresentation;
   relatedCollection?: RelatedCollectionConfig;
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
   itemViewName?: string;
@@ -486,6 +488,7 @@ function selectContext(
     queryName: collectionView.context.query,
     query: contextQuery.expression,
     labelField: collectionView.context.labelField,
+    presentation: collectionView.context.presentation,
     ...(relatedCollection === undefined ? {} : { relatedCollection }),
     ...(createAction === undefined ? {} : { createAction }),
     ...(itemViewName === undefined
