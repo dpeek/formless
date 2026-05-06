@@ -1,7 +1,7 @@
 # PRD 04: Relationship model
 
-Status: ready
-Current chunk: REL-06 relationship flow smoke
+Status: shipped
+Current chunk: none
 Last updated: 2026-05-06
 
 ## Goal
@@ -416,7 +416,7 @@ First-class support needed:
 | REL-03 | shipped | REL-02     | `src/client/views.ts`, `src/shared/schema-views.ts`, `src/client/views.test.ts`         | Collection contexts can be validated against relationship metadata.         |
 | REL-04 | shipped | REL-03     | `src/app/generated/collection.tsx`, `src/client/store.ts`, `src/app.test.tsx`           | Generated UI can show relationship-backed related collections and counts.   |
 | REL-05 | shipped | REL-04     | `src/shared/schema-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.test.ts` | Many-to-many join helpers support add missing, add selected, and remove.    |
-| REL-06 | ready   | REL-05     | Browser Use, source schemas, PRD promote notes                                          | Relationship flows are smoke-tested in rates and site apps.                 |
+| REL-06 | shipped | REL-05     | Browser Use, source schemas, PRD promote notes                                          | Relationship flows are smoke-tested in rates and site apps.                 |
 
 ## Chunk details
 
@@ -531,6 +531,28 @@ Acceptance:
 - `bun run test` passes.
 - `bun run check` passes.
 
+### REL-06 relationship flow smoke
+
+Goal: prove the shipped relationship metadata works in browser against source schemas.
+
+Outcome:
+
+- Reset rates and site dev data to source schemas and seed records.
+- `/rates` showed `cardRates` counts for Default and Premium rate cards.
+- Creating a resource through generated UI created missing rate join records.
+- Rate-card related counts updated from 5 to 6 for both Default and Premium.
+- `/site` Blocks showed `contentPlacements` counts for content item context tabs.
+- Creating a block placement under Home hid the parent field and defaulted it from selected context.
+- Home placement count updated from 3 to 4.
+- Reset rates and site seed data after smoke.
+
+Evidence:
+
+- Browser smoke on `http://127.0.0.1:4616/rates`.
+- Browser smoke on `http://127.0.0.1:4616/site`.
+- `bun run test` passed.
+- `bun run check` passed.
+
 ## Non-goals
 
 - Do not add array-valued relationship fields.
@@ -561,6 +583,7 @@ Acceptance:
 - `doc/current.md`: list relationship-backed collection context validation after REL-03 ships. REL-03 shipped facts: collection contexts can set `relationship` to a `toMany` relationship; parser validates the relationship from entity, target entity, context query field, and context create default field; `rateHome` uses `cardRates`; `contentCompositionHome` uses `contentPlacements`; client view models expose relationship name and metadata.
 - `doc/current.md`: describe relationship-backed generated related collections after REL-04 ships. REL-04 shipped facts: client view models can select `toMany` related collection models; scoped context tabs render derived inverse-reference counts from local records; `cardRates` and `contentPlacements` counts render without storing parent-side values; related create defaults continue to hide the parent reference and resolve it from selected context; no storage, sync, seed, or authority behavior changed.
 - `doc/current.md`: describe REL-05 many-to-many join helpers. REL-05 shipped facts: entity actions support `create-selected-join-record` and `remove-selected-join-records`; selected join creation names a `manyToMany` relationship, uses its through entity fields, defaults remaining required fields, rejects missing or tombstoned endpoints, and relies on existing unique constraints for duplicate active pair rejection; selected join removal tombstones explicit active join records; `create-missing-join-records` remains for matrix regeneration and afterCreate hooks.
+- `doc/current.md`: no new runtime facts for REL-06; promotion should keep REL-04 and REL-05 facts and may mention browser smoke covered `/rates` and `/site` relationship flows.
 - `doc/roadmap.md`: add first-release relationship scope only if this PRD becomes release-blocking.
 
 ## PRD status notes
@@ -636,3 +659,14 @@ Acceptance:
 - No new decisions in REL-05; REL-D5 and REL-D7 stand.
 - No blockers.
 - Done pass 2026-05-06: REL-05 stopped cleanly; tests and check pass; no blockers.
+- REL-06 shipped 2026-05-06.
+- REL-06 browser smoke reset rates and site to source schemas and seed records before testing.
+- REL-06 browser smoke covered `/rates` `cardRates` counts for Default and Premium.
+- REL-06 browser smoke created a resource and verified missing rate join records updated Default and Premium counts from 5 to 6.
+- REL-06 browser smoke covered `/site` `contentPlacements` counts for content item context tabs.
+- REL-06 browser smoke created a Home block placement and verified the hidden parent default updated Home placements count from 3 to 4.
+- REL-06 reset rates and site seed data after smoke.
+- REL-06 changed no source schemas, seed records, stored record shape, runtime behavior, generated UI, or sync behavior.
+- No new decisions in REL-06.
+- No blockers.
+- Done pass 2026-05-06: REL-06 stopped cleanly; tests and check pass; no blockers.
