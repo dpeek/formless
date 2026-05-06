@@ -21,6 +21,7 @@ import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/pro
 import {
   createStoredRecord,
   ensureStorageTables,
+  getActionResponseById,
   getBootstrapRecords,
   getChangesAfter,
   getCurrentCursor,
@@ -57,6 +58,9 @@ export class FormlessAuthority extends DurableObject<Env> {
     }
 
     const source = storageSourceFromApp(route.app);
+    const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
+      this.ctx.getWebSockets(),
+    );
 
     try {
       if (request.method === "GET" && route.path === "/bootstrap") {
@@ -80,9 +84,7 @@ export class FormlessAuthority extends DurableObject<Env> {
         const currentSchema = initializeStorageFromSource(this.ctx.storage, source).schema;
         const records = getBootstrapRecords(this.ctx.storage);
         const nextSchema = validateSchemaUpdate(await readJson(request), currentSchema, records);
-        const response = writeActiveSchema(this.ctx.storage, nextSchema);
-
-        this.broadcastSync(source);
+        const response = writes.committed(() => writeActiveSchema(this.ctx.storage, nextSchema));
 
         return jsonResponse(response);
       }
@@ -124,37 +126,37 @@ export class FormlessAuthority extends DurableObject<Env> {
         }
 
         if (mutation.op === "create") {
-          const response = createStoredRecord(
-            this.ctx.storage,
-            mutation,
-            (context) => {
-              executeCreateAfterCreateHooks(
-                context.storage,
-                context.mutation,
-                schema,
-                context.createRecords,
-              );
-            },
-            (entity, values, options) => {
-              assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
-            },
+          const response = writes.committed(() =>
+            createStoredRecord(
+              this.ctx.storage,
+              mutation,
+              (context) => {
+                executeCreateAfterCreateHooks(
+                  context.storage,
+                  context.mutation,
+                  schema,
+                  context.createRecords,
+                );
+              },
+              (entity, values, options) => {
+                assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
+              },
+            ),
           );
-
-          this.broadcastSync(source);
 
           return jsonResponse(response);
         }
 
-        const response = patchStoredRecord(
-          this.ctx.storage,
-          mutation,
-          "recordValues" in mutation ? mutation.recordValues : undefined,
-          (entity, values, options) => {
-            assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
-          },
+        const response = writes.committed(() =>
+          patchStoredRecord(
+            this.ctx.storage,
+            mutation,
+            "recordValues" in mutation ? mutation.recordValues : undefined,
+            (entity, values, options) => {
+              assertUniqueConstraints(this.ctx.storage, schema, entity, values, options);
+            },
+          ),
         );
-
-        this.broadcastSync(source);
 
         return jsonResponse(response);
       }
@@ -162,31 +164,39 @@ export class FormlessAuthority extends DurableObject<Env> {
       if (request.method === "POST" && route.path === "/actions") {
         const { schema } = initializeStorageFromSource(this.ctx.storage, source);
         const action = validateActionRequest(await readJson(request), schema);
-        const response = executeEntityAction(this.ctx.storage, action, schema);
+        const replay = getActionResponseById(this.ctx.storage, action.actionId);
 
-        this.broadcastSync(source);
+        if (replay) {
+          return jsonResponse(replay);
+        }
+
+        const response = writes.committed(() =>
+          executeEntityAction(this.ctx.storage, action, schema),
+        );
 
         return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/reset/schema") {
-        const { schema, updatedAt } = resetStorageSchemaToSource(
-          this.ctx.storage,
-          source,
-          validateSourceSchemaReset,
-        );
-        const response = bootstrapResponse(this.ctx.storage, schema, updatedAt);
+        const response = writes.committed(() => {
+          const { schema, updatedAt } = resetStorageSchemaToSource(
+            this.ctx.storage,
+            source,
+            validateSourceSchemaReset,
+          );
 
-        this.broadcastSync(source);
+          return bootstrapResponse(this.ctx.storage, schema, updatedAt);
+        });
 
         return jsonResponse(response);
       }
 
       if (request.method === "POST" && route.path === "/reset/seed") {
-        const { schema, updatedAt } = resetStorageToSourceSeed(this.ctx.storage, source);
-        const response = bootstrapResponse(this.ctx.storage, schema, updatedAt);
+        const response = writes.committed(() => {
+          const { schema, updatedAt } = resetStorageToSourceSeed(this.ctx.storage, source);
 
-        this.broadcastSync(source);
+          return bootstrapResponse(this.ctx.storage, schema, updatedAt);
+        });
 
         return jsonResponse(response);
       }
@@ -218,16 +228,6 @@ export class FormlessAuthority extends DurableObject<Env> {
     sendSyncToSocket(this.ctx.storage, source, socket, attachment);
   }
 
-  private broadcastSync(source: StorageSource) {
-    for (const socket of this.ctx.getWebSockets()) {
-      try {
-        sendSyncToSocket(this.ctx.storage, source, socket, syncSocketAttachment(socket));
-      } catch {
-        // A stale socket should not block other replicas from receiving committed state.
-      }
-    }
-  }
-
   private handleSyncWebSocketRequest(request: Request, app: WorkerSchemaAppDefinition) {
     if (request.method !== "GET") {
       return jsonResponse({ error: "WebSocket sync requires GET." }, 405, { Allow: "GET" });
@@ -250,6 +250,40 @@ export class FormlessAuthority extends DurableObject<Env> {
       status: 101,
       webSocket: client,
     });
+  }
+}
+
+class AuthorityWriteModule {
+  private readonly storage: DurableObjectStorage;
+  private readonly source: StorageSource;
+  private readonly webSockets: () => Iterable<WebSocket>;
+
+  constructor(
+    storage: DurableObjectStorage,
+    source: StorageSource,
+    webSockets: () => Iterable<WebSocket>,
+  ) {
+    this.storage = storage;
+    this.source = source;
+    this.webSockets = webSockets;
+  }
+
+  committed<T>(write: () => T): T {
+    const response = write();
+
+    this.notifyCommittedWrite();
+
+    return response;
+  }
+
+  private notifyCommittedWrite() {
+    for (const socket of this.webSockets()) {
+      try {
+        sendSyncToSocket(this.storage, this.source, socket, syncSocketAttachment(socket));
+      } catch {
+        // A stale socket should not block other replicas from receiving committed state.
+      }
+    }
   }
 }
 
