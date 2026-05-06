@@ -522,7 +522,10 @@
           "align": "end",
           "width": "sm",
           "suffix": "/ day",
-          "format": "number"
+          "format": "number",
+          "valueUnit": {
+            "unitField": "costUnit"
+          }
         },
         {
           "type": "field",
@@ -540,7 +543,10 @@
           "align": "end",
           "width": "sm",
           "suffix": "/ day",
-          "format": "number"
+          "format": "number",
+          "valueUnit": {
+            "unitField": "currency"
+          }
         },
         {
           "type": "computed",
@@ -557,7 +563,7 @@
           "editor": "enum",
           "commit": "immediate",
           "width": "xs",
-          "display": "readOnly"
+          "display": "hidden"
         }
       ]
     }

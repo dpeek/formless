@@ -234,6 +234,22 @@ describe("home view model collections", () => {
       "computed:rateMargin",
       "field:currency",
     ]);
+    expect(
+      models[2]?.result.type === "table"
+        ? models[2].result.columns.find((column) => column.fieldName === "cost")?.valueUnit
+        : undefined,
+    ).toMatchObject({
+      unitFieldName: "costUnit",
+      unitField: rateCardSchema.entities.rate?.fields.costUnit,
+    });
+    expect(
+      models[2]?.result.type === "table"
+        ? models[2].result.columns.find((column) => column.fieldName === "price")?.valueUnit
+        : undefined,
+    ).toMatchObject({
+      unitFieldName: "currency",
+      unitField: rateCardSchema.entities.rate?.fields.currency,
+    });
   });
 
   it("selects only primary collection models for home navigation", () => {
@@ -288,7 +304,7 @@ describe("home view model collections", () => {
       "hidden",
       "editor",
       "readOnly",
-      "readOnly",
+      "hidden",
     ]);
     expect(columns.map((column) => column.suffix ?? "")).toEqual([
       "",
@@ -392,7 +408,7 @@ describe("home view model collections", () => {
         type: "field",
         key: "field:currency",
         label: "Currency",
-        display: "readOnly",
+        display: "hidden",
         suffix: null,
         format: "plain",
       },
@@ -494,7 +510,7 @@ describe("home view model collections", () => {
     expect("summary" in (rateModel?.collection ?? {})).toBe(false);
   });
 
-  it("characterizes rate amount and unit editing as separate flat scalar fields", () => {
+  it("characterizes paired rate value/unit editing over flat scalar fields", () => {
     const rate = rateCardSchema.entities.rate;
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
@@ -517,6 +533,10 @@ describe("home view model collections", () => {
       suffix: "/ day",
       format: "number",
       display: "editor",
+      valueUnit: {
+        unitFieldName: "costUnit",
+        unitField: rate.fields.costUnit,
+      },
     });
     expect(
       columns.find((column) => column.type === "field" && column.fieldName === "costUnit"),
@@ -531,12 +551,16 @@ describe("home view model collections", () => {
       suffix: "/ day",
       format: "number",
       display: "editor",
+      valueUnit: {
+        unitFieldName: "currency",
+        unitField: rate.fields.currency,
+      },
     });
     expect(
       columns.find((column) => column.type === "field" && column.fieldName === "currency"),
     ).toMatchObject({
       editor: "enum",
-      display: "readOnly",
+      display: "hidden",
     });
     expect(typeof seedRate.values.cost).toBe("number");
     expect(typeof seedRate.values.costUnit).toBe("string");

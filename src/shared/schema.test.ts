@@ -774,6 +774,7 @@ describe("schema table views", () => {
           width: "sm",
           suffix: "/ day",
           format: "number",
+          valueUnit: { unitField: "costUnit" },
         },
         {
           type: "field",
@@ -792,6 +793,7 @@ describe("schema table views", () => {
           width: "sm",
           suffix: "/ day",
           format: "number",
+          valueUnit: { unitField: "currency" },
         },
         {
           type: "field",
@@ -799,7 +801,7 @@ describe("schema table views", () => {
           editor: "enum",
           commit: "immediate",
           width: "xs",
-          display: "readOnly",
+          display: "hidden",
         },
       ],
     });
@@ -965,6 +967,45 @@ describe("schema table views", () => {
         }),
       ),
     ).toThrow('referenceItemView "rateListItem" must use entity "resource"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "resource", valueUnit: { unitField: "costUnit" } }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("valueUnit requires a number field");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", valueUnit: { unitField: "missing" } }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('valueUnit references unknown unitField "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "field", field: "cost", valueUnit: { unitField: "resource" } }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('valueUnit unitField "rate.resource" must be an enum field');
   });
 
   it("parses and validates computed table columns", () => {
@@ -2166,9 +2207,9 @@ describe("rate-card sample schema", () => {
         commit: "field-commit",
         width: "lg",
       },
-      { type: "field", field: "cost" },
+      { type: "field", field: "cost", valueUnit: { unitField: "costUnit" } },
       { type: "field", field: "costUnit" },
-      { type: "field", field: "price" },
+      { type: "field", field: "price", valueUnit: { unitField: "currency" } },
       {
         type: "computed",
         computedValue: "rateMargin",
@@ -2178,7 +2219,7 @@ describe("rate-card sample schema", () => {
         display: "readOnly",
         format: "percent",
       },
-      { type: "field", field: "currency" },
+      { type: "field", field: "currency", display: "hidden" },
     ]);
     expect(schema.tableViews.rateTable?.columns[0]).toMatchObject({
       type: "referenceField",
@@ -3864,6 +3905,7 @@ function scopedRateTableViews() {
           width: "sm",
           suffix: "/ day",
           format: "number",
+          valueUnit: { unitField: "costUnit" },
         },
         {
           type: "field",
@@ -3882,6 +3924,7 @@ function scopedRateTableViews() {
           width: "sm",
           suffix: "/ day",
           format: "number",
+          valueUnit: { unitField: "currency" },
         },
         {
           type: "field",
@@ -3889,7 +3932,7 @@ function scopedRateTableViews() {
           editor: "enum",
           commit: "immediate",
           width: "xs",
-          display: "readOnly",
+          display: "hidden",
         },
       ],
     },

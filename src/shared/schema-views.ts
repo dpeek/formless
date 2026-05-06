@@ -285,6 +285,7 @@ function parseFieldTableColumn(
       "suffix",
       "format",
       "referenceItemView",
+      "valueUnit",
     ],
   );
 
@@ -319,6 +320,14 @@ function parseFieldTableColumn(
     field,
     itemViews,
   );
+  const valueUnit = parseOptionalValueUnitEditor(
+    `${context} valueUnit`,
+    value.valueUnit,
+    entityName,
+    fieldName,
+    field,
+    entity,
+  );
 
   return {
     type: "field",
@@ -332,6 +341,7 @@ function parseFieldTableColumn(
     ...(suffix === undefined ? {} : { suffix }),
     ...(format === undefined ? {} : { format }),
     ...(referenceItemView === undefined ? {} : { referenceItemView }),
+    ...(valueUnit === undefined ? {} : { valueUnit }),
   };
 }
 
@@ -1667,6 +1677,47 @@ function parseOptionalReferenceItemView(
   }
 
   return itemViewName;
+}
+
+function parseOptionalValueUnitEditor(
+  context: string,
+  value: unknown,
+  entityName: string,
+  valueFieldName: string,
+  valueField: FieldSchema,
+  entity: EntitySchema,
+) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["unitField"]);
+
+  if (valueField.type !== "number") {
+    throw new Error(`${context} requires a number field.`);
+  }
+
+  const unitFieldName = parseRequiredNonEmptyString(`${context} unitField`, value.unitField);
+
+  if (unitFieldName === valueFieldName) {
+    throw new Error(`${context} unitField must reference a different field.`);
+  }
+
+  const unitField = entity.fields[unitFieldName];
+
+  if (!unitField) {
+    throw new Error(`${context} references unknown unitField "${entityName}.${unitFieldName}".`);
+  }
+
+  if (unitField.type !== "enum") {
+    throw new Error(`${context} unitField "${entityName}.${unitFieldName}" must be an enum field.`);
+  }
+
+  return { unitField: unitFieldName };
 }
 
 function assertViewHasFields(viewName: string, fields: Record<string, unknown>) {

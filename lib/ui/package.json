@@ -73,7 +73,8 @@
     "./toggle": "./src/toggle.tsx",
     "./tooltip": "./src/tooltip.tsx",
     "./use-mobile": "./src/use-mobile.ts",
-    "./utils": "./src/utils.ts"
+    "./utils": "./src/utils.ts",
+    "./value-unit-input": "./src/value-unit-input.tsx"
   },
   "scripts": {
     "check": "oxlint --type-aware --type-check && oxfmt && bun test ./src"

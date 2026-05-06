@@ -32,6 +32,12 @@ export type RecordFieldConfig = {
   commit: FieldCommitPolicy;
   label?: string;
   format?: TableColumnFormat;
+  valueUnit?: ValueUnitFieldConfig;
+};
+
+export type ValueUnitFieldConfig = {
+  unitFieldName: string;
+  unitField: Extract<FieldSchema, { type: "enum" }>;
 };
 
 export type TableColumnBaseConfig = {
@@ -718,6 +724,7 @@ function selectTableColumns(
 
     const field = entity.fields[column.field] as FieldSchema;
     const referenceItem = selectReferenceItem(schema, field, column.referenceItemView);
+    const valueUnit = selectValueUnitField(entity, column.valueUnit?.unitField);
 
     return {
       type: "field",
@@ -733,8 +740,29 @@ function selectTableColumns(
       ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
       format: column.format ?? "plain",
       ...(referenceItem === undefined ? {} : { referenceItem }),
+      ...(valueUnit === undefined ? {} : { valueUnit }),
     };
   });
+}
+
+function selectValueUnitField(
+  entity: EntitySchema,
+  unitFieldName: string | undefined,
+): ValueUnitFieldConfig | undefined {
+  if (unitFieldName === undefined) {
+    return undefined;
+  }
+
+  const unitField = entity.fields[unitFieldName];
+
+  if (!unitField || unitField.type !== "enum") {
+    return undefined;
+  }
+
+  return {
+    unitFieldName,
+    unitField,
+  };
 }
 
 function selectReferenceItem(

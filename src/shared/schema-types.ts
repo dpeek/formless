@@ -98,6 +98,10 @@ export type TableColumnWidth = "xs" | "sm" | "md" | "lg";
 export type TableColumnDisplay = "editor" | "readOnly" | "hidden";
 export type TableColumnFormat = "plain" | "number" | "currency" | "percent";
 
+export type ValueUnitEditorSchema = {
+  unitField: string;
+};
+
 export type FieldTableColumnSchema = {
   type: "field";
   field: string;
@@ -110,6 +114,7 @@ export type FieldTableColumnSchema = {
   suffix?: string;
   format?: TableColumnFormat;
   referenceItemView?: string;
+  valueUnit?: ValueUnitEditorSchema;
 };
 
 export type ReferenceFieldTableColumnSchema = {

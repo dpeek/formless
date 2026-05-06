@@ -592,7 +592,7 @@ describe("generated collection home", () => {
     });
 
     expect(html).toContain('aria-label="Rate card records"');
-    expect(html).not.toContain("<select");
+    expect(html).toContain("<select");
     expect(html).toContain("Default");
     expect(html).toContain("Backup");
     expect(html).toMatch(/aria-label="Default Rates count"[^>]*>1</);
@@ -607,8 +607,10 @@ describe("generated collection home", () => {
     expect(html).toContain('value="Designer"');
     expect(html).not.toContain("Edit shared");
     expect(html).not.toContain('aria-label="Edit shared resource"');
+    expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(2);
     expect(html).toContain('aria-label="Cost"');
-    expect(html).not.toContain("Cost unit");
+    expect(html).toContain('aria-label="Cost unit"');
+    expect(html).toContain('aria-label="Price unit"');
     expect(html).not.toContain('aria-label="Currency"');
     expect(html).toContain("USD");
     expect(html).toContain("/ day");
@@ -1076,8 +1078,10 @@ describe("generated forms and records", () => {
     expect(html).toContain('value="Designer"');
     expect(html).not.toContain("Edit shared");
     expect(html).not.toContain('aria-label="Edit shared resource"');
+    expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(2);
     expect(html).toContain('aria-label="Cost"');
-    expect(html).not.toContain("Cost unit");
+    expect(html).toContain('aria-label="Cost unit"');
+    expect(html).toContain('aria-label="Price unit"');
     expect(html).toContain("USD");
     expect(html).toContain("/ day");
     expect(html).toContain('data-web-formatted-number-input="true"');
@@ -1683,8 +1687,9 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('aria-label="Price"');
     expect(editHtml).toContain('value="475"');
     expect(editHtml).toContain("USD");
+    expect(editHtml).toContain('aria-label="Cost unit"');
+    expect(editHtml).toContain('aria-label="Price unit"');
     expect(editHtml).toContain("/ day");
-    expect(editHtml).not.toContain("Cost unit");
   });
 
   it("keeps source site create and edit flows wired through field behavior", () => {

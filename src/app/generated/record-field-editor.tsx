@@ -10,11 +10,12 @@ import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import { FormattedNumberInput } from "@formless/ui/number-input";
 import { Textarea } from "@formless/ui/textarea";
 import { AutosizeTextInput } from "@formless/ui/text-input";
+import { ValueUnitInput } from "@formless/ui/value-unit-input";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
-import type { FieldValue } from "../../shared/protocol.ts";
+import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import {
@@ -47,8 +48,15 @@ export function RecordFieldEditor({
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const labelClass = showLabel ? "text-xs font-medium text-slate-600" : "sr-only";
   const recordValue = useRecordField(recordId, fieldName);
+  const valueUnitConfig = fieldConfig.valueUnit;
+  const unitRecordValue = useRecordField(recordId, valueUnitConfig?.unitFieldName ?? fieldName);
   const [draft, setDraft] = useState(() =>
     fieldValueToEditorInputValue(field, recordValue, numberFormat),
+  );
+  const [unitDraft, setUnitDraft] = useState(() =>
+    valueUnitConfig
+      ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue)
+      : "",
   );
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,26 +65,53 @@ export function RecordFieldEditor({
     setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
   }, [field, numberFormat, recordValue]);
 
-  async function commit(value: FieldValue) {
+  useEffect(() => {
+    setUnitDraft(
+      valueUnitConfig
+        ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue)
+        : "",
+    );
+  }, [unitRecordValue, valueUnitConfig]);
+
+  async function commitPatch(values: Partial<RecordValues>) {
     if (!canPatch || isPending) {
       return;
     }
 
-    if (recordValue === value || (recordValue === undefined && value === "")) {
+    const patchValues: Partial<RecordValues> = {};
+
+    for (const [patchFieldName, value] of Object.entries(values)) {
+      const currentValue = currentValueForPatchField(patchFieldName);
+
+      if (currentValue === value || (currentValue === undefined && value === "")) {
+        continue;
+      }
+
+      patchValues[patchFieldName] = value;
+    }
+
+    const patchFieldNames = Object.keys(patchValues);
+
+    if (patchFieldNames.length === 0) {
       return;
     }
 
     setIsPending(true);
-    setSyncStatus({ state: "syncing", message: `Updating ${fieldName}...` });
+    setSyncStatus({ state: "syncing", message: `Updating ${patchFieldNames.join(", ")}...` });
 
     try {
-      await submitPatchMutation(schemaKey, entityName, recordId, { [fieldName]: value });
+      await submitPatchMutation(schemaKey, entityName, recordId, patchValues);
       setError(null);
       setSyncStatus({ state: "idle", message: "Updated and synced." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Update failed.";
 
       setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
+      setUnitDraft(
+        valueUnitConfig
+          ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue)
+          : "",
+      );
       setError(message);
       setSyncStatus({
         state: "error",
@@ -85,6 +120,22 @@ export function RecordFieldEditor({
     } finally {
       setIsPending(false);
     }
+  }
+
+  function currentValueForPatchField(patchFieldName: string) {
+    if (patchFieldName === fieldName) {
+      return recordValue;
+    }
+
+    if (valueUnitConfig && patchFieldName === valueUnitConfig.unitFieldName) {
+      return unitRecordValue;
+    }
+
+    return undefined;
+  }
+
+  async function commit(value: FieldValue) {
+    await commitPatch({ [fieldName]: value });
   }
 
   if (adapter.kind === "boolean") {
@@ -195,6 +246,7 @@ export function RecordFieldEditor({
   const isColorEditor = adapter.kind === "text" && adapter.editor === "color";
   const isDateEditor = control.kind === "input" && control.inputType === "date";
   const isNumberEditor = adapter.kind === "number";
+  const isValueUnitEditor = isNumberEditor && valueUnitConfig !== undefined;
   const isAutosizeTextEditor =
     adapter.kind === "text" &&
     adapter.editor === "text" &&
@@ -351,6 +403,50 @@ export function RecordFieldEditor({
             required={adapter.required}
             value={draft}
           />
+        ) : isValueUnitEditor ? (
+          <ValueUnitInput
+            className="w-full"
+            commitOnBlur={commitPolicy === "field-commit"}
+            decode={(value) => decodeNumberEditorInputValue(value, numberFormat)}
+            disabled={!canPatch || isPending}
+            encode={(value) => encodeNumberEditorInputValue(value, numberFormat)}
+            inputClassName={
+              density === "compact"
+                ? "h-6 rounded border border-slate-300 px-2 py-0.5 text-xs"
+                : "rounded border border-slate-300 px-3 py-2"
+            }
+            inputRequired={adapter.required}
+            inputValue={draft}
+            label={label}
+            onInputValueChange={setDraft}
+            onInputValueCommit={(value) => {
+              setError(null);
+              void commitPatch({
+                [fieldName]: value,
+                [valueUnitConfig.unitFieldName]: inputValueToFieldValue(
+                  valueUnitConfig.unitField,
+                  unitDraft,
+                ),
+              });
+            }}
+            onInputValueRevert={() => {
+              setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
+              setUnitDraft(fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue));
+            }}
+            onInvalidCommit={(message) => {
+              setError(message);
+            }}
+            onUnitChange={setUnitDraft}
+            onUnitCommit={(unit) => {
+              setError(null);
+              void commitPatch(valueUnitPatch(fieldName, draft, numberFormat, valueUnitConfig, unit));
+            }}
+            options={enumValueUnitOptions(valueUnitConfig.unitField)}
+            unit={unitDraft}
+            unitClassName={density === "compact" ? "w-16" : "w-24"}
+            unitLabel={`${label} unit`}
+            unitRequired={valueUnitConfig.unitField.required}
+          />
         ) : isNumberEditor ? (
           <FormattedNumberInput
             aria-invalid={error !== null ? true : undefined}
@@ -405,6 +501,32 @@ export function RecordFieldEditor({
       {error ? <FieldError>{error}</FieldError> : null}
     </div>
   );
+}
+
+function valueUnitPatch(
+  fieldName: string,
+  draft: string,
+  numberFormat: "plain" | "number" | "currency" | "percent",
+  valueUnitConfig: NonNullable<RecordFieldConfig["valueUnit"]>,
+  unit: string,
+): Partial<RecordValues> {
+  const patch: Partial<RecordValues> = {
+    [valueUnitConfig.unitFieldName]: inputValueToFieldValue(valueUnitConfig.unitField, unit),
+  };
+  const amount = decodeNumberEditorInputValue(draft, numberFormat);
+
+  if (amount.kind === "valid") {
+    patch[fieldName] = amount.value;
+  }
+
+  return patch;
+}
+
+function enumValueUnitOptions(field: NonNullable<RecordFieldConfig["valueUnit"]>["unitField"]) {
+  return Object.entries(field.values).map(([value, option]) => ({
+    value,
+    label: option.label,
+  }));
 }
 
 function isTitleLikeTextField(fieldName: string, field: FieldSchema) {
