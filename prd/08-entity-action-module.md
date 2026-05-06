@@ -1,7 +1,7 @@
 # PRD 08: Entity action module
 
-Status: in progress
-Current chunk: EA-05 shipped
+Status: complete
+Current chunk: EA-06 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -137,7 +137,7 @@ Likely changed files:
 | EA-03 | shipped | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
 | EA-04 | shipped | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
 | EA-05 | shipped | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
-| EA-06 | draft   | EA-05      | `prd/08-entity-action-module.md`                             | PRD status and promote notes reflect shipped behavior.                                      |
+| EA-06 | shipped | EA-05      | `prd/08-entity-action-module.md`                             | PRD status and promote notes reflect shipped behavior.                                      |
 
 ## Non-goals
 
@@ -173,13 +173,19 @@ Recommended order:
 
 ## Promote after ship
 
-- `doc/current.md`: note that action kind behavior is selected through a deeper action module; schema parsing, input validation, execution, and generated UI facts are concentrated by action kind.
+- `doc/current.md`: note that action kind behavior is selected through a deeper action module.
+- `doc/current.md`: note that schema action parsing dispatches through `entityActionKindModules` in `src/shared/schema-actions.ts`.
+- `doc/current.md`: note that action kind capabilities expose after-create hook eligibility.
+- `doc/current.md`: note that worker action request input validation, execution dispatch, and create-after-create hook execution dispatch through action kind runtime modules in `src/worker/actions.ts`.
+- `doc/current.md`: note that generated action target count and affected-count success facts are selected through `entityActionUiModules` in `src/client/views.ts`.
+- `doc/current.md`: note that `src/app/generated/actions.tsx` consumes `action.ui`.
 - `doc/roadmap.md`: no change unless new release-scope action behavior is added.
 - EA-01: no global doc promotion. Tests only characterize existing action behavior.
 - EA-02: promote that schema action parsing now dispatches through `entityActionKindModules`, and action kind capabilities expose after-create hook eligibility.
 - EA-03: promote that worker action request input validation, execution dispatch, and create-after-create hook execution now dispatch through action kind runtime modules.
 - EA-04: promote that generated action target count and affected-count success facts are selected through `entityActionUiModules`, and `src/app/generated/actions.tsx` consumes `action.ui`.
 - EA-05: no global doc promotion. Verification only.
+- EA-06: no global doc promotion. PRD closeout only.
 
 ## Evidence
 
@@ -188,6 +194,7 @@ Recommended order:
 - 2026-05-06 EA-03: `bun run test -- src/worker/authority.test.ts`; `bun run check`.
 - 2026-05-06 EA-04: `bun run test -- src/client/views.test.ts src/app.test.tsx`; `bun run check`.
 - 2026-05-06 EA-05: `bun run test -- src/client/sync.test.ts`; `bun run test -- src/client/sync.test.ts src/worker/authority.test.ts src/client/views.test.ts src/app.test.tsx`; `bun run check`.
+- 2026-05-06 EA-06: `bun run check`.
 
 ## PRD status notes
 
@@ -224,5 +231,9 @@ Recommended order:
 - EA-05 keeps existing task action client sync coverage for `clearCompletedTasks`.
 - EA-05 action-flow checks passed for client sync, authority, view model, and app render tests.
 - Browser Use not run; test-only change with no app behavior change.
+- EA-06 shipped 2026-05-06.
+- EA-06 closed PRD 08 with status complete.
+- EA-06 expanded Promote after ship with source-faithful `doc/current.md` bullets for the shipped action module behavior.
+- Browser Use not run; PRD-only change with no app behavior change.
 - No blockers.
-- Next ready chunk: EA-06.
+- PRD complete; no next ready chunk.
