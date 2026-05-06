@@ -4,8 +4,8 @@ import { Button } from "@formless/ui/button";
 import { useEntityRecordCountMatchingQuery } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";
-import type { HomeActionConfig } from "../../client/views.ts";
-import type { QueryEvaluationContext, QueryExpression } from "../../shared/query.ts";
+import type { EntityActionTargetCountConfig, HomeActionConfig } from "../../client/views.ts";
+import type { QueryEvaluationContext } from "../../shared/query.ts";
 import {
   createDefaultsAreResolved,
   GeneratedCreateDialog,
@@ -14,9 +14,6 @@ import {
 import { useSchemaKey } from "./schema-app-context.tsx";
 
 type EntityHomeActionConfig = Extract<HomeActionConfig, { type: "entity-action" }>;
-type CountedEntityHomeActionConfig = EntityHomeActionConfig & {
-  targetQuery: QueryExpression;
-};
 
 export function HomeActionRow({
   actions,
@@ -42,10 +39,9 @@ export function HomeActionRow({
     try {
       const response = await submitAction(schemaKey, action.entityName, action.actionName);
       const affected = response.changes.length;
-      const message =
-        action.count?.type === "count"
-          ? `${action.label} synced. ${affected} affected.`
-          : `${action.label} synced.`;
+      const message = action.ui.showAffectedCountOnSuccess
+        ? `${action.label} synced. ${affected} affected.`
+        : `${action.label} synced.`;
 
       setSyncStatus({ state: "idle", message });
     } catch (error) {
@@ -120,7 +116,7 @@ function HomeEntityActionButton({
   pending: boolean;
   queryContext: QueryEvaluationContext;
 }) {
-  if (action.count?.type !== "count" || !hasTargetQuery(action)) {
+  if (!action.ui.targetCount) {
     return (
       <Button
         disabled={disabled}
@@ -140,6 +136,7 @@ function HomeEntityActionButton({
       onRun={onRun}
       pending={pending}
       queryContext={queryContext}
+      targetCount={action.ui.targetCount}
     />
   );
 }
@@ -150,35 +147,27 @@ function CountedHomeEntityActionButton({
   onRun,
   pending,
   queryContext,
+  targetCount,
 }: {
-  action: CountedEntityHomeActionConfig;
+  action: EntityHomeActionConfig;
   disabled: boolean;
   onRun: (action: EntityHomeActionConfig) => Promise<void>;
   pending: boolean;
   queryContext: QueryEvaluationContext;
+  targetCount: EntityActionTargetCountConfig;
 }) {
   const count = useEntityRecordCountMatchingQuery(
     action.entityName,
-    action.targetQuery,
+    targetCount.query,
     queryContext,
   );
 
   return (
     <Button disabled={disabled} onClick={() => void onRun(action)} type="button" variant="outline">
       <span>{pending ? `${action.label}...` : action.label}</span>
-      {action.count?.type === "count" ? (
-        <Badge
-          aria-label={`${action.label} target count`}
-          className="ml-2 h-4 px-1.5"
-          variant="outline"
-        >
-          {count}
-        </Badge>
-      ) : null}
+      <Badge aria-label={targetCount.ariaLabel} className="ml-2 h-4 px-1.5" variant="outline">
+        {count}
+      </Badge>
     </Button>
   );
-}
-
-function hasTargetQuery(action: EntityHomeActionConfig): action is CountedEntityHomeActionConfig {
-  return action.targetQuery !== undefined;
 }

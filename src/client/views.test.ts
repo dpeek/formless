@@ -74,8 +74,14 @@ describe("home view model collections", () => {
     expect(clearCompleted).toMatchObject({
       type: "entity-action",
       actionName: "clearCompletedTasks",
-      count: { type: "count" },
-      targetQuery: appSchema.queries.taskCompleted?.expression,
+      ui: {
+        showAffectedCountOnSuccess: true,
+        targetCount: {
+          display: { type: "count" },
+          query: appSchema.queries.taskCompleted?.expression,
+          ariaLabel: "Clear completed target count",
+        },
+      },
     });
   });
 
@@ -124,8 +130,9 @@ describe("home view model collections", () => {
           entityName: "task",
           actionName: "clearCompletedTasks",
           actionKind: "clear-completed",
-          targetQueryKind: "where",
-          count: "count",
+          showAffectedCountOnSuccess: true,
+          targetCountQueryKind: "where",
+          targetCountDisplay: "count",
         },
       ],
     });
@@ -412,8 +419,11 @@ describe("home view model collections", () => {
       action: {
         kind: "create-missing-join-records",
       },
+      ui: {
+        showAffectedCountOnSuccess: false,
+      },
     });
-    expect(action?.type === "entity-action" ? action.targetQuery : undefined).toBeUndefined();
+    expect(action?.type === "entity-action" ? action.ui.targetCount : undefined).toBeUndefined();
   });
 
   it("characterizes the rate-card primary home model contract", () => {
@@ -485,8 +495,9 @@ describe("home view model collections", () => {
           entityName: "rate",
           actionName: "regenerateMissingRates",
           actionKind: "create-missing-join-records",
-          targetQueryKind: null,
-          count: null,
+          showAffectedCountOnSuccess: false,
+          targetCountQueryKind: null,
+          targetCountDisplay: null,
         },
       ],
     });
@@ -895,7 +906,8 @@ function summarizeHomeAction(action: HomeActionConfig) {
     entityName: action.entityName,
     actionName: action.actionName,
     actionKind: action.action.kind,
-    targetQueryKind: action.targetQuery?.kind ?? null,
-    count: action.count?.type ?? null,
+    showAffectedCountOnSuccess: action.ui.showAffectedCountOnSuccess,
+    targetCountQueryKind: action.ui.targetCount?.query.kind ?? null,
+    targetCountDisplay: action.ui.targetCount?.display.type ?? null,
   };
 }

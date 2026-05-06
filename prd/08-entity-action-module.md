@@ -1,7 +1,7 @@
 # PRD 08: Entity action module
 
 Status: in progress
-Current chunk: EA-03 shipped
+Current chunk: EA-04 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -117,15 +117,16 @@ Likely changed files:
 
 ## Decisions
 
-| ID    | Decision                                                   | Reason                                                          | Evidence                                           |
-| ----- | ---------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| EA-D1 | Keep existing action syntax in the first pass.             | This PRD deepens action kind locality before adding behavior.   | `src/shared/schema-types.ts`                       |
-| EA-D2 | Keep authority as the action write caller.                 | The authority owns invariants, commits, and push notification.  | `src/worker/authority.ts`                          |
-| EA-D3 | Move request input validation out of authority route code. | Input shape belongs to the action kind interface.               | `src/worker/authority.ts`, `src/worker/actions.ts` |
-| EA-D4 | Keep action replay storage-backed.                         | Idempotency is an authority/storage invariant.                  | `src/worker/storage.ts`                            |
-| EA-D5 | Keep generated action UI generic.                          | Schema-declared actions should not become app-specific UI code. | `src/app/generated/actions.tsx`                    |
-| EA-D6 | Ship after PRD 05 or coordinate tightly with it.           | PRD 05 owns authority write orchestration.                      | `prd/05-authority-write-module.md`                 |
-| EA-D7 | Put schema parsing and capabilities behind action kinds.   | Create hooks and future behavior should ask the action module.  | `src/shared/schema-actions.ts`                     |
+| ID    | Decision                                                   | Reason                                                          | Evidence                                               |
+| ----- | ---------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------ |
+| EA-D1 | Keep existing action syntax in the first pass.             | This PRD deepens action kind locality before adding behavior.   | `src/shared/schema-types.ts`                           |
+| EA-D2 | Keep authority as the action write caller.                 | The authority owns invariants, commits, and push notification.  | `src/worker/authority.ts`                              |
+| EA-D3 | Move request input validation out of authority route code. | Input shape belongs to the action kind interface.               | `src/worker/authority.ts`, `src/worker/actions.ts`     |
+| EA-D4 | Keep action replay storage-backed.                         | Idempotency is an authority/storage invariant.                  | `src/worker/storage.ts`                                |
+| EA-D5 | Keep generated action UI generic.                          | Schema-declared actions should not become app-specific UI code. | `src/app/generated/actions.tsx`                        |
+| EA-D6 | Ship after PRD 05 or coordinate tightly with it.           | PRD 05 owns authority write orchestration.                      | `prd/05-authority-write-module.md`                     |
+| EA-D7 | Put schema parsing and capabilities behind action kinds.   | Create hooks and future behavior should ask the action module.  | `src/shared/schema-actions.ts`                         |
+| EA-D8 | Select generated action UI facts in the view model.        | Renderers should consume facts instead of action kind details.  | `src/client/views.ts`, `src/app/generated/actions.tsx` |
 
 ## Chunks
 
@@ -134,7 +135,7 @@ Likely changed files:
 | EA-01 | shipped | none       | tests                                                        | Current action parse, validation, execution, replay, and UI behavior is characterized.      |
 | EA-02 | shipped | EA-01      | `src/shared/schema-actions.ts`, `src/shared/schema-types.ts` | Action kind schema parsing and capabilities are represented through a deeper action module. |
 | EA-03 | shipped | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
-| EA-04 | draft   | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
+| EA-04 | shipped | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
 | EA-05 | draft   | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
 | EA-06 | draft   | EA-05      | `prd/08-entity-action-module.md`                             | PRD status and promote notes reflect shipped behavior.                                      |
 
@@ -177,12 +178,14 @@ Recommended order:
 - EA-01: no global doc promotion. Tests only characterize existing action behavior.
 - EA-02: promote that schema action parsing now dispatches through `entityActionKindModules`, and action kind capabilities expose after-create hook eligibility.
 - EA-03: promote that worker action request input validation, execution dispatch, and create-after-create hook execution now dispatch through action kind runtime modules.
+- EA-04: promote that generated action target count and affected-count success facts are selected through `entityActionUiModules`, and `src/app/generated/actions.tsx` consumes `action.ui`.
 
 ## Evidence
 
 - 2026-05-06 EA-01: `bun run test -- src/shared/schema.test.ts src/worker/authority.test.ts`.
 - 2026-05-06 EA-02: `bun run test -- src/shared/schema.test.ts`; `bun run check`.
 - 2026-05-06 EA-03: `bun run test -- src/worker/authority.test.ts`; `bun run check`.
+- 2026-05-06 EA-04: `bun run test -- src/client/views.test.ts src/app.test.tsx`; `bun run check`.
 
 ## PRD status notes
 
@@ -199,7 +202,7 @@ Recommended order:
 - EA-02 routes schema action parsing through `entityActionKindModules` in `src/shared/schema-actions.ts`.
 - EA-02 makes create.afterCreate validation use action kind capabilities instead of hard-coded kind checks.
 - EA-02 added parser coverage for afterCreate hooks that reference an existing action without the hook capability.
-- EA-D1 through EA-D7 stand.
+- EA-D1 through EA-D8 stand.
 - Browser Use not run; parser/type-only change with no app behavior change.
 - EA-03 shipped 2026-05-06.
 - EA-03 moved action request validation from `src/worker/authority.ts` into `validateEntityActionRequest` in `src/worker/actions.ts`.
@@ -208,5 +211,11 @@ Recommended order:
 - EA-03 makes create-after-create hook execution dispatch through an action kind runtime module hook.
 - EA-03 keeps existing action request shapes and response shapes.
 - Browser Use not run; worker action behavior stayed covered by authority tests.
+- EA-04 shipped 2026-05-06.
+- EA-04 added `EntityActionUiConfig` and `entityActionUiModules` in `src/client/views.ts`.
+- EA-04 selects target count badge facts and affected-count success message facts before rendering.
+- EA-04 makes `src/app/generated/actions.tsx` consume `action.ui` instead of `targetQuery` and action count fields.
+- EA-04 keeps generated action button markup and count behavior equivalent.
+- Browser Use not run; generated action behavior stayed covered by app render tests.
 - No blockers.
-- Next ready chunk: EA-04.
+- Next ready chunk: EA-05.
