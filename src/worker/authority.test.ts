@@ -1036,6 +1036,43 @@ describe("authority", () => {
     }
   });
 
+  it("broadcasts committed create mutations after caused records are committed", async () => {
+    useSchemaApp("rates");
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, rateCardSeedRecords.length, schemaResponse.updatedAt);
+
+      const message = readSyncSocketMessage(socket);
+      const created = await postMutationForEntity("mutation-broadcast-caused-records", "resource", {
+        name: "Animator",
+      });
+
+      expect(created.changes.length).toBeGreaterThan(1);
+      expect(created.changes[0]).toMatchObject({
+        mutationId: created.mutationId,
+        op: "create",
+        entity: "resource",
+        recordId: created.record.id,
+      });
+      expect(
+        created.changes
+          .slice(1)
+          .every((change) => change.op === "action" && change.entity === "rate"),
+      ).toBe(true);
+      await expect(message).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: created.changes,
+          cursor: created.cursor,
+        },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
   it("broadcasts committed patch mutations and actions", async () => {
     const created = await postMutation("mutation-broadcast-patch-source", {
       title: "Broadcast patch",
@@ -1105,6 +1142,58 @@ describe("authority", () => {
     }
   });
 
+  it("broadcasts reset schema and reset seed after committed reset writes", async () => {
+    const schemaUpdate = await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskLabel("Planner task"),
+    });
+    const schemaSocket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(schemaSocket, taskSeedRecords.length, schemaUpdate.updatedAt);
+
+      const schemaMessage = readSyncSocketMessage(schemaSocket);
+      const schemaReset = await postJson<BootstrapResponse>("/api/reset/schema", {});
+
+      await expect(schemaMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: [],
+          cursor: schemaReset.cursor,
+          schema: schemaReset.schema,
+          schemaUpdatedAt: schemaReset.schemaUpdatedAt,
+        },
+      });
+    } finally {
+      schemaSocket.close();
+    }
+
+    const created = await postMutation("mutation-before-broadcast-seed-reset", {
+      title: "Temporary",
+      done: false,
+    });
+    const seedSchema = await getJson<SchemaResponse>("/api/schema");
+    const seedSocket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(seedSocket, created.cursor, seedSchema.updatedAt);
+
+      const seedMessage = readSyncSocketMessage(seedSocket);
+      const seedReset = await postJson<BootstrapResponse>("/api/reset/seed", {});
+
+      await expect(seedMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: [],
+          cursor: seedReset.cursor,
+          schema: seedReset.schema,
+          schemaUpdatedAt: seedReset.schemaUpdatedAt,
+        },
+      });
+    } finally {
+      seedSocket.close();
+    }
+  });
+
   it("does not broadcast failed mutation validation or mutation replay", async () => {
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const socket = await openSyncSocket();
@@ -1155,6 +1244,59 @@ describe("authority", () => {
       ).toHaveLength(1);
       await expectNoCapturedMessages(replayCapture);
       replayCapture.stop();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("does not broadcast failed schema or action validation", async () => {
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, taskSeedRecords.length, schemaResponse.updatedAt);
+
+      const schemaCapture = captureSyncSocketMessages(socket);
+      const invalidSchema = await harness.fetch(apiPath("/api/schema"), {
+        body: JSON.stringify({
+          schema: {
+            version: 1,
+            entities: {
+              task: {
+                label: "Task",
+                fields: {
+                  title: { type: "text", required: true, label: "" },
+                },
+              },
+            },
+            queries: {},
+            itemViews: {},
+            tableViews: {},
+            views: {},
+          },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      expect(invalidSchema.status).toBe(400);
+      await expectNoCapturedMessages(schemaCapture);
+      schemaCapture.stop();
+
+      const actionCapture = captureSyncSocketMessages(socket);
+      const invalidAction = await harness.fetch(apiPath("/api/actions"), {
+        body: JSON.stringify({
+          actionId: "action-invalid-no-broadcast",
+          entity: "task",
+          action: "missing",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      expect(invalidAction.status).toBe(400);
+      await expectNoCapturedMessages(actionCapture);
+      actionCapture.stop();
     } finally {
       socket.close();
     }

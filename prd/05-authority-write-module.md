@@ -1,7 +1,7 @@
 # PRD 05: Authority write module
 
-Status: draft
-Current chunk: none
+Status: in progress
+Current chunk: AW-01 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -131,13 +131,13 @@ Likely changed files:
 
 ## Chunks
 
-| ID    | Status | Depends on | Main files                                       | Acceptance                                                                                                   |
-| ----- | ------ | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| AW-01 | draft  | none       | tests                                            | Current committed, failed, and replayed write behavior is characterized.                                     |
-| AW-02 | draft  | AW-01      | `src/worker/authority.ts`                        | Route write branches delegate committed-write notification.                                                  |
-| AW-03 | draft  | AW-02      | `src/worker/storage.ts`, `src/worker/actions.ts` | Mutation, action, schema, and reset writes share one outcome path where useful.                              |
-| AW-04 | draft  | AW-03      | tests                                            | Authority tests prove no broadcast on failed validation or replay, and broadcast after each committed write. |
-| AW-05 | draft  | AW-04      | `prd/05-authority-write-module.md`               | PRD status and promote notes reflect shipped behavior.                                                       |
+| ID    | Status  | Depends on | Main files                                       | Acceptance                                                                                                   |
+| ----- | ------- | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| AW-01 | shipped | none       | tests                                            | Current committed, failed, and replayed write behavior is characterized.                                     |
+| AW-02 | draft   | AW-01      | `src/worker/authority.ts`                        | Route write branches delegate committed-write notification.                                                  |
+| AW-03 | draft   | AW-02      | `src/worker/storage.ts`, `src/worker/actions.ts` | Mutation, action, schema, and reset writes share one outcome path where useful.                              |
+| AW-04 | draft   | AW-03      | tests                                            | Authority tests prove no broadcast on failed validation or replay, and broadcast after each committed write. |
+| AW-05 | draft   | AW-04      | `prd/05-authority-write-module.md`               | PRD status and promote notes reflect shipped behavior.                                                       |
 
 ## Non-goals
 
@@ -170,9 +170,15 @@ Recommended order:
 
 - `doc/current.md`: note that authority write behavior is routed through a write module; committed writes notify push sync; failed validation and replay do not notify.
 - `doc/roadmap.md`: no change unless this becomes first-release release scope.
+- AW-01: no global doc promotion. Tests only characterize existing write behavior.
+
+## Evidence
+
+- 2026-05-06 AW-01: `bun run test -- src/worker/authority.test.ts`.
+- 2026-05-06 AW-01: `bun run check`; `bun run test`.
 
 ## PRD status notes
 
 - PRD drafted 2026-05-06 from architecture review.
-- No code shipped yet.
+- AW-01 shipped 2026-05-06: added authority tests for caused-record create broadcasts, reset schema/seed broadcasts, failed schema/action validation without broadcasts, and existing mutation replay no-broadcast coverage.
 - No blockers.
