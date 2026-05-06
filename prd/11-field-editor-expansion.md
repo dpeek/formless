@@ -1,7 +1,7 @@
 # PRD 11: Field editor expansion
 
-Status: draft
-Current chunk: FE-01 editor support characterization
+Status: active
+Current chunk: FE-02 ISO date editor
 Last updated: 2026-05-06
 
 ## Goal
@@ -226,38 +226,42 @@ Patch scalar fields together through generic mutation paths.
 
 ## Chunks
 
-| ID    | Status | Depends on | Main files                                                             | Acceptance                                                                                                 |
-| ----- | ------ | ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| FE-01 | draft  | none       | tests, PRD                                                             | Current editor support, date value shape, markdown/color fallbacks, and number behavior are characterized. |
-| FE-02 | draft  | FE-01      | `lib/ui/src/date.tsx`, generated create/editor code                    | Date create and inline editors preserve `YYYY-MM-DD` field values.                                         |
-| FE-03 | draft  | FE-01      | `src/app/generated/*`, `lib/ui/src/color.tsx`, tests                   | `editor: "color"` uses `ColorInput`, commits text values, and displays swatches.                           |
-| FE-04 | draft  | FE-01      | `src/app/generated/*`, `lib/ui/src/markdown.tsx`, tests                | `editor: "markdown"` uses rich markdown editing where appropriate and keeps string storage.                |
-| FE-05 | draft  | FE-01      | `lib/ui/src/input.tsx`, `lib/ui/src/text-input.tsx`, generated editors | Autosizing editable text is available and used for title-like compact text fields.                         |
-| FE-06 | draft  | FE-05      | `lib/ui/src/number-input.tsx`, field behavior/display tests            | Number editors can use encode/decode formatting while storing finite numbers.                              |
-| FE-07 | draft  | FE-06      | schema view types/parser, generated table/editor code                  | View-declared value/unit editor patches multiple flat scalar fields.                                       |
-| FE-08 | draft  | FE-07      | source schemas, app tests, `bun browser`                               | Rates and site authoring smoke pass with richer editors and no storage shape change.                       |
-| FE-09 | draft  | FE-08      | `prd/11-field-editor-expansion.md`                                     | PRD status, shipped outcomes, blockers, and promote notes are current.                                     |
+| ID    | Status  | Depends on | Main files                                                             | Acceptance                                                                                                 |
+| ----- | ------- | ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| FE-01 | shipped | none       | tests, PRD                                                             | Current editor support, date value shape, markdown/color fallbacks, and number behavior are characterized. |
+| FE-02 | draft   | FE-01      | `lib/ui/src/date.tsx`, generated create/editor code                    | Date create and inline editors preserve `YYYY-MM-DD` field values.                                         |
+| FE-03 | draft   | FE-01      | `src/app/generated/*`, `lib/ui/src/color.tsx`, tests                   | `editor: "color"` uses `ColorInput`, commits text values, and displays swatches.                           |
+| FE-04 | draft   | FE-01      | `src/app/generated/*`, `lib/ui/src/markdown.tsx`, tests                | `editor: "markdown"` uses rich markdown editing where appropriate and keeps string storage.                |
+| FE-05 | draft   | FE-01      | `lib/ui/src/input.tsx`, `lib/ui/src/text-input.tsx`, generated editors | Autosizing editable text is available and used for title-like compact text fields.                         |
+| FE-06 | draft   | FE-05      | `lib/ui/src/number-input.tsx`, field behavior/display tests            | Number editors can use encode/decode formatting while storing finite numbers.                              |
+| FE-07 | draft   | FE-06      | schema view types/parser, generated table/editor code                  | View-declared value/unit editor patches multiple flat scalar fields.                                       |
+| FE-08 | draft   | FE-07      | source schemas, app tests, `bun browser`                               | Rates and site authoring smoke pass with richer editors and no storage shape change.                       |
+| FE-09 | draft   | FE-08      | `prd/11-field-editor-expansion.md`                                     | PRD status, shipped outcomes, blockers, and promote notes are current.                                     |
 
 ## Chunk details
 
 ### FE-01 editor support characterization
 
-Status: draft.
+Status: shipped 2026-05-06.
 
-Tasks:
+Outcomes:
 
-- Characterize current generated create controls for text, textarea, markdown, color, date, number, enum, and reference editors.
-- Characterize current inline patch controls for the same editors.
-- Characterize date create value shape and authority validation expectations.
-- Characterize current table suffix and number format display behavior.
-- Characterize site authoring markdown/color fields as string-backed editor hints.
-- Characterize rate cost/price plus unit fields as flat scalar records.
+- Adapter tests cover current generated control metadata.
+- Create renderer tests cover text, textarea, markdown, color, href, slug, icon, date, number, enum, and reference controls.
+- Inline renderer tests cover the same editor hints through patch controls.
+- Field behavior tests document date string pass-through, ISO authority validation, localized date rejection, and current compact-number rejection.
+- View-model tests document site markdown/color/slug/href/icon hints as string-backed text fields.
+- View-model tests document rate cost, costUnit, price, and currency as separate flat scalar fields.
 
-Acceptance:
+Evidence:
 
-- Tests document current behavior before changing controls.
-- No runtime behavior change.
-- No global doc promotion.
+- `./tmp/test.txt`: 22 files, 407 tests passed.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 151 files.
+- Browser smoke not run; no app behavior changed.
+
+Promotion:
+
+- No global doc promotion for FE-01.
 
 ### FE-02 ISO date editor
 
@@ -491,5 +495,7 @@ When this PRD ships, update `doc/roadmap.md` only if richer field/editor support
 ## PRD status notes
 
 - PRD drafted 2026-05-06 from field support exploration.
-- No implementation chunks started.
+- FE-01 shipped 2026-05-06 as characterization tests only.
+- No runtime behavior changed in FE-01.
+- No new decisions from FE-01.
 - No blockers beyond open design choices for value/unit metadata and compact markdown editing.

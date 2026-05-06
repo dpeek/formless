@@ -113,6 +113,7 @@ describe("field type behavior", () => {
     expect(fieldValueToInputValue(fields.title, undefined)).toBe("");
     expect(inputValueToFieldValue(fields.title, "Task")).toBe("Task");
     expect(inputValueToFieldValue(fields.dueDate, "2026-05-06")).toBe("2026-05-06");
+    expect(createInputValueToFieldValue(fields.dueDate, "May 06, 2026", true)).toBe("May 06, 2026");
     expect(inputValueToFieldValue(fields.estimate, "")).toBe("");
     expect(inputValueToFieldValue(fields.estimate, "1.5")).toBe(1.5);
     expect(inputValueToFieldValue(fields.priority, "high")).toBe("high");
@@ -123,6 +124,7 @@ describe("field type behavior", () => {
     expect(createInputValueToFieldValue(fields.estimate, "1.5", true)).toBe(1.5);
     expect(createInputValueToFieldValue(fields.title, undefined, false)).toBe("");
     expect(numberInputValueToFieldValue("0")).toBe(0);
+    expect(Number.isNaN(numberInputValueToFieldValue("1.2k"))).toBe(true);
   });
 
   it("centralizes generated editor control metadata without React", () => {
@@ -170,6 +172,13 @@ describe("field type behavior", () => {
       kind: "set",
       value: 0,
     });
+    expect(validateAuthorityFieldValue("dueDate", fields.dueDate, "2026-05-06", true)).toEqual({
+      kind: "set",
+      value: "2026-05-06",
+    });
+    expect(validateAuthorityFieldValue("dueDate", fields.dueDate, "", true)).toEqual({
+      kind: "omit",
+    });
     expect(validateAuthorityFieldValue("priority", fields.priority, "", true)).toEqual({
       kind: "omit",
     });
@@ -187,6 +196,12 @@ describe("field type behavior", () => {
     expect(() => validateAuthorityFieldValue("estimate", fields.estimate, Infinity, true)).toThrow(
       'Field "estimate" must be a finite number.',
     );
+    expect(() => validateAuthorityFieldValue("estimate", fields.estimate, NaN, true)).toThrow(
+      'Field "estimate" must be a finite number.',
+    );
+    expect(() =>
+      validateAuthorityFieldValue("dueDate", fields.dueDate, "May 06, 2026", true),
+    ).toThrow('Field "dueDate" must be a YYYY-MM-DD date.');
     expect(() => validateAuthorityFieldValue("priority", fields.priority, "missing", true)).toThrow(
       'Field "priority" must be a known enum value.',
     );

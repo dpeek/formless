@@ -4,6 +4,22 @@ import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 
 describe("generated field UI adapters", () => {
   it("exposes field behavior facts for generated create and inline editors", () => {
+    expect(
+      Object.fromEntries(
+        textEditors.map((editor) => [
+          editor,
+          selectGeneratedFieldEditorAdapter(fields.title, editor).control,
+        ]),
+      ),
+    ).toEqual({
+      text: { kind: "input", inputType: "text" },
+      textarea: { kind: "textarea" },
+      markdown: { kind: "textarea" },
+      href: { kind: "input", inputType: "text" },
+      slug: { kind: "input", inputType: "text" },
+      color: { kind: "input", inputType: "text" },
+      icon: { kind: "input", inputType: "text" },
+    });
     expect(selectGeneratedFieldEditorAdapter(fields.title, "text")).toMatchObject({
       kind: "text",
       control: { kind: "input", inputType: "text" },
@@ -15,6 +31,12 @@ describe("generated field UI adapters", () => {
     expect(selectGeneratedFieldEditorAdapter(fields.title, "markdown")).toMatchObject({
       kind: "text",
       control: { kind: "textarea" },
+    });
+    expect(selectGeneratedFieldEditorAdapter(fields.dueDate, "date")).toMatchObject({
+      kind: "date",
+      control: { kind: "input", inputType: "date" },
+      createDefaultValue: undefined,
+      required: false,
     });
     expect(selectGeneratedFieldEditorAdapter(fields.done, "boolean")).toMatchObject({
       kind: "boolean",
@@ -51,6 +73,7 @@ describe("generated field UI adapters", () => {
 const fields = {
   title: { type: "text", required: true },
   done: { type: "boolean", required: true, default: true },
+  dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false, default: 2, min: 0, max: 10, integer: true },
   priority: {
     type: "enum",
@@ -71,3 +94,5 @@ const fields = {
   },
   resource: { type: "reference", required: true, to: "resource", displayField: "name" },
 } satisfies Record<string, FieldSchema>;
+
+const textEditors = ["text", "textarea", "markdown", "href", "slug", "color", "icon"] as const;

@@ -1232,6 +1232,63 @@ describe("generated forms and records", () => {
     expect(html).toContain("Lead");
   });
 
+  it("characterizes generated create controls for current editor hints", () => {
+    const entity = fieldEditorCharacterizationEntity();
+    const action = fieldEditorCharacterizationCreateAction(entity);
+
+    applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")]));
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+
+    expect(html).toMatch(inputWithNameAndType("title", "text"));
+    expect(html).toMatch(textareaWithName("summary"));
+    expect(html).toMatch(textareaWithName("body"));
+    expect(html).toMatch(inputWithNameAndType("color", "text"));
+    expect(html).toMatch(inputWithNameAndType("href", "text"));
+    expect(html).toMatch(inputWithNameAndType("slug", "text"));
+    expect(html).toMatch(inputWithNameAndType("icon", "text"));
+    expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "June 01, 2025"));
+    expect(html).not.toMatch(inputWithNameAndType("publishedAt", "date"));
+    expect(html).toMatch(inputWithNameAndType("count", "number"));
+    expect(html).toContain("Draft");
+    expect(html).toContain("Published");
+    expect(html).toContain("Designer");
+  });
+
+  it("characterizes inline patch controls for current editor hints", () => {
+    const entity = fieldEditorCharacterizationEntity();
+
+    applyBootstrapResponse(
+      bootstrap([resourceRecord("resource-1", "Designer"), fieldEditorCharacterizationRecord()]),
+    );
+    const html = renderToStaticMarkup(
+      <RecordList
+        entity={entity}
+        entityName="editorCase"
+        query={{ kind: "all" }}
+        recordFields={fieldEditorCharacterizationRecordFields(entity)}
+      />,
+    );
+
+    expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
+    expect(html).toContain('value="Plain title"');
+    expect(html).toMatch(textareaWithAriaLabel("Summary"));
+    expect(html).toMatch(textareaWithAriaLabel("Body"));
+    expect(html).toContain("# Heading");
+    expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
+    expect(html).toContain('value="#336699"');
+    expect(html).toMatch(inputWithAriaLabelAndType("Link", "text"));
+    expect(html).toMatch(inputWithAriaLabelAndType("Slug", "text"));
+    expect(html).toMatch(inputWithAriaLabelAndType("Icon", "text"));
+    expect(html).toMatch(inputWithAriaLabelAndType("Published at", "date"));
+    expect(html).toContain('value="2026-05-06"');
+    expect(html).toMatch(inputWithAriaLabelAndType("Count", "number"));
+    expect(html).toContain('value="1200"');
+    expect(html).toContain("Published");
+    expect(html).toContain("Designer");
+  });
+
   it("renders the rate-home resource create dialog with only name visible", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
@@ -1815,6 +1872,74 @@ function scopedRateCreateAction(): Extract<HomeActionConfig, { type: "create" }>
   };
 }
 
+function fieldEditorCharacterizationCreateAction(
+  entity: EntitySchema,
+): Extract<HomeActionConfig, { type: "create" }> {
+  return {
+    type: "create",
+    label: `Create ${entity.label}`,
+    entityName: "editorCase",
+    entity,
+    fields: [
+      createFieldConfig(entity, "title", "text"),
+      createFieldConfig(entity, "summary", "textarea"),
+      createFieldConfig(entity, "body", "markdown"),
+      createFieldConfig(entity, "color", "color"),
+      createFieldConfig(entity, "href", "href"),
+      createFieldConfig(entity, "slug", "slug"),
+      createFieldConfig(entity, "icon", "icon"),
+      createFieldConfig(entity, "publishedAt", "date"),
+      createFieldConfig(entity, "count", "number"),
+      createFieldConfig(entity, "status", "enum"),
+      createFieldConfig(entity, "resource", "reference"),
+    ],
+    defaults: [],
+    enabled: entity.mutations.create.enabled,
+  };
+}
+
+function fieldEditorCharacterizationRecordFields(entity: EntitySchema): RecordFieldConfig[] {
+  return [
+    recordFieldConfig(entity, "title", "text", "field-commit"),
+    recordFieldConfig(entity, "summary", "textarea", "field-commit"),
+    recordFieldConfig(entity, "body", "markdown", "field-commit"),
+    recordFieldConfig(entity, "color", "color", "field-commit"),
+    recordFieldConfig(entity, "href", "href", "field-commit"),
+    recordFieldConfig(entity, "slug", "slug", "field-commit"),
+    recordFieldConfig(entity, "icon", "icon", "field-commit"),
+    recordFieldConfig(entity, "publishedAt", "date", "field-commit"),
+    recordFieldConfig(entity, "count", "number", "field-commit"),
+    recordFieldConfig(entity, "status", "enum", "immediate"),
+    recordFieldConfig(entity, "resource", "reference", "immediate"),
+  ];
+}
+
+function createFieldConfig(
+  entity: EntitySchema,
+  fieldName: string,
+  editor: CreateFieldConfig["editor"],
+): CreateFieldConfig {
+  return {
+    fieldName,
+    field: entity.fields[fieldName],
+    editor,
+  };
+}
+
+function recordFieldConfig(
+  entity: EntitySchema,
+  fieldName: string,
+  editor: RecordFieldConfig["editor"],
+  commit: RecordFieldConfig["commit"],
+): RecordFieldConfig {
+  return {
+    fieldName,
+    field: entity.fields[fieldName],
+    editor,
+    commit,
+  };
+}
+
 function taskRecord(
   id: string,
   title: string,
@@ -2071,6 +2196,27 @@ function siteBlockRecord(id: string, values: StoredRecord["values"]): StoredReco
   };
 }
 
+function fieldEditorCharacterizationRecord(): StoredRecord {
+  return {
+    id: "record-editor-case-1",
+    entity: "editorCase",
+    values: {
+      title: "Plain title",
+      summary: "Long summary",
+      body: "# Heading\n\nMarkdown body",
+      color: "#336699",
+      href: "https://example.com",
+      slug: "field-editor-case",
+      icon: "sparkles",
+      publishedAt: "2026-05-06",
+      count: 1200,
+      status: "published",
+      resource: "resource-1",
+    },
+    createdAt: "2026-05-05T00:00:50.000Z",
+  };
+}
+
 function taskEntityWithKindEnum(): EntitySchema {
   return {
     label: "Task",
@@ -2185,6 +2331,64 @@ function fieldBehaviorEntity(): EntitySchema {
       delete: { enabled: false },
     },
   };
+}
+
+function fieldEditorCharacterizationEntity(): EntitySchema {
+  return {
+    label: "Editor case",
+    fields: {
+      title: { type: "text", required: true, label: "Title" },
+      summary: { type: "text", required: false, label: "Summary", format: "longText" },
+      body: { type: "text", required: false, label: "Body", format: "markdown" },
+      color: { type: "text", required: false, label: "Color", format: "color" },
+      href: { type: "text", required: false, label: "Link", format: "href" },
+      slug: { type: "text", required: false, label: "Slug", format: "slug" },
+      icon: { type: "text", required: false, label: "Icon", format: "icon" },
+      publishedAt: { type: "date", required: false, label: "Published at" },
+      count: { type: "number", required: false, label: "Count", min: 0 },
+      status: {
+        type: "enum",
+        required: false,
+        label: "Status",
+        values: {
+          draft: { label: "Draft" },
+          published: { label: "Published" },
+        },
+      },
+      resource: {
+        type: "reference",
+        required: false,
+        label: "Resource",
+        to: "resource",
+        displayField: "name",
+      },
+    },
+    mutations: {
+      create: { enabled: true },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    },
+  };
+}
+
+function inputWithNameAndType(name: string, type: string) {
+  return new RegExp(`<input(?=[^>]*name="${name}")(?=[^>]*type="${type}")[^>]*>`);
+}
+
+function inputWithNameAndPlaceholder(name: string, placeholder: string) {
+  return new RegExp(`<input(?=[^>]*name="${name}")(?=[^>]*placeholder="${placeholder}")[^>]*>`);
+}
+
+function inputWithAriaLabelAndType(label: string, type: string) {
+  return new RegExp(`<input(?=[^>]*aria-label="${label}")(?=[^>]*type="${type}")[^>]*>`);
+}
+
+function textareaWithName(name: string) {
+  return new RegExp(`<textarea(?=[^>]*name="${name}")[^>]*>`);
+}
+
+function textareaWithAriaLabel(label: string) {
+  return new RegExp(`<textarea(?=[^>]*aria-label="${label}")[^>]*>`);
 }
 
 function withMutationPolicy(

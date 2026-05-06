@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  rateSeedRecords,
   rateSourceSchema as rateCardSchema,
   siteSourceSchema,
   taskSourceSchema as appSchema,
@@ -493,6 +494,56 @@ describe("home view model collections", () => {
     expect("summary" in (rateModel?.collection ?? {})).toBe(false);
   });
 
+  it("characterizes rate amount and unit editing as separate flat scalar fields", () => {
+    const rate = rateCardSchema.entities.rate;
+    const rateModel = selectCollectionModels(rateCardSchema).find(
+      (model) => model.viewName === "rateHome",
+    );
+    const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
+    const seedRate = rateSeedRecords.find((record) => record.entity === "rate");
+
+    if (!seedRate) {
+      throw new Error("Missing seed rate.");
+    }
+
+    expect(rate.fields.cost).toMatchObject({ type: "number", required: true });
+    expect(rate.fields.costUnit).toMatchObject({ type: "enum", required: true });
+    expect(rate.fields.price).toMatchObject({ type: "number", required: true });
+    expect(rate.fields.currency).toMatchObject({ type: "enum", required: true });
+    expect(
+      columns.find((column) => column.type === "field" && column.fieldName === "cost"),
+    ).toMatchObject({
+      editor: "number",
+      suffix: "/ day",
+      format: "number",
+      display: "editor",
+    });
+    expect(
+      columns.find((column) => column.type === "field" && column.fieldName === "costUnit"),
+    ).toMatchObject({
+      editor: "enum",
+      display: "hidden",
+    });
+    expect(
+      columns.find((column) => column.type === "field" && column.fieldName === "price"),
+    ).toMatchObject({
+      editor: "number",
+      suffix: "/ day",
+      format: "number",
+      display: "editor",
+    });
+    expect(
+      columns.find((column) => column.type === "field" && column.fieldName === "currency"),
+    ).toMatchObject({
+      editor: "enum",
+      display: "readOnly",
+    });
+    expect(typeof seedRate.values.cost).toBe("number");
+    expect(typeof seedRate.values.costUnit).toBe("string");
+    expect(typeof seedRate.values.price).toBe("number");
+    expect(typeof seedRate.values.currency).toBe("string");
+  });
+
   it("applies field type default commit policies to table columns", () => {
     const taskHome = appSchema.views.taskHome as Extract<
       AppSchema["views"][string],
@@ -968,6 +1019,44 @@ describe("home view model collections", () => {
       "height",
       "limit",
     ]);
+  });
+
+  it("characterizes site authoring rich text fields as string-backed editor hints", () => {
+    const block = siteSourceSchema.entities.block;
+    const contentModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "blockHome",
+    );
+    const create = contentModel?.actions.find((action) => action.type === "create");
+    const createEditors =
+      create?.type === "create"
+        ? Object.fromEntries(create.fields.map((field) => [field.fieldName, field.editor]))
+        : {};
+    const tableEditors =
+      contentModel?.result.type === "table"
+        ? Object.fromEntries(
+            contentModel.result.columns.map((column) => [column.fieldName, column.editor]),
+          )
+        : {};
+
+    expect(block.fields.body).toMatchObject({ type: "text", format: "markdown" });
+    expect(block.fields.color).toMatchObject({ type: "text", format: "color" });
+    expect(block.fields.slug).toMatchObject({ type: "text", format: "slug" });
+    expect(block.fields.href).toMatchObject({ type: "text", format: "href" });
+    expect(block.fields.icon).toMatchObject({ type: "text", format: "icon" });
+    expect(createEditors).toMatchObject({
+      subtitle: "textarea",
+      body: "markdown",
+      slug: "slug",
+      href: "href",
+      icon: "icon",
+      color: "color",
+    });
+    expect(tableEditors).toMatchObject({
+      body: "markdown",
+      slug: "slug",
+      href: "href",
+      alt: "textarea",
+    });
   });
 
   it("resolves the site scoped block composition context", () => {
