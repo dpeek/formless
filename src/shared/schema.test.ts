@@ -1513,6 +1513,118 @@ describe("schema collection views", () => {
     ).toThrow("Schema must define at least one primary collection view.");
   });
 
+  it("parses screens and preserves legacy schemas without screens", () => {
+    const legacySchema = parseAppSchema(baseSchema());
+    expect(legacySchema.screens).toBeUndefined();
+
+    const schema = parseAppSchema(
+      baseSchema({
+        views: {
+          ...defaultViews(),
+          taskHome: {
+            ...defaultCollectionView(),
+            navigation: { primary: false },
+          },
+        },
+        screens: defaultScreens({
+          layout: {
+            type: "stack",
+            sections: [{ id: "tasks", type: "collection", view: "taskHome", label: "Task list" }],
+          },
+        }),
+      }),
+    );
+
+    expect(schema.screens?.taskHome).toEqual({
+      type: "workspace",
+      label: "Tasks",
+      navigation: { primary: true },
+      layout: {
+        type: "stack",
+        sections: [
+          {
+            id: "tasks",
+            type: "collection",
+            view: "taskHome",
+            label: "Task list",
+          },
+        ],
+      },
+    });
+    expect(JSON.parse(stringifySchema(schema)).screens).toEqual(schema.screens);
+  });
+
+  it("rejects malformed screen layouts and duplicate section ids", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          screens: defaultScreens({
+            layout: {
+              type: "grid",
+              sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+            },
+          }),
+        }),
+      ),
+    ).toThrow('Screen "taskHome" layout type must be "stack".');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          screens: defaultScreens({
+            layout: {
+              type: "stack",
+              sections: [
+                { id: "tasks", type: "collection", view: "taskHome" },
+                { id: "tasks", type: "collection", view: "taskHome", label: "More tasks" },
+              ],
+            },
+          }),
+        }),
+      ),
+    ).toThrow('Screen "taskHome" layout section id "tasks" must be unique.');
+  });
+
+  it("validates screen collection view references", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          screens: defaultScreens({
+            layout: {
+              type: "stack",
+              sections: [{ id: "tasks", type: "collection", view: "missing" }],
+            },
+          }),
+        }),
+      ),
+    ).toThrow('Screen "taskHome" layout section 0 references unknown view "missing".');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          screens: defaultScreens({
+            layout: {
+              type: "stack",
+              sections: [{ id: "tasks", type: "collection", view: "taskCreate" }],
+            },
+          }),
+        }),
+      ),
+    ).toThrow('Screen "taskHome" layout section 0 must reference a collection view.');
+  });
+
+  it("requires a primary screen when screens exist", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          screens: defaultScreens({
+            navigation: { primary: false },
+          }),
+        }),
+      ),
+    ).toThrow("Schema must define at least one primary screen.");
+  });
+
   it("accepts collection contexts and context-bound child queries", () => {
     const schema = parseAppSchema(scopedRateSchema());
 
@@ -4196,6 +4308,21 @@ function defaultViews() {
         title: { editor: "text" },
         dueDate: { editor: "date" },
       },
+    },
+  };
+}
+
+function defaultScreens(screenOverrides: Record<string, unknown> = {}) {
+  return {
+    taskHome: {
+      type: "workspace",
+      label: "Tasks",
+      navigation: { primary: true },
+      layout: {
+        type: "stack",
+        sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+      },
+      ...screenOverrides,
     },
   };
 }

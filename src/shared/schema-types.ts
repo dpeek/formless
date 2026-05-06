@@ -275,6 +275,35 @@ export type CreateViewSchema = {
 
 export type ViewSchema = CollectionViewSchema | CreateViewSchema;
 
+export type ScreenNavigationSchema = {
+  primary: boolean;
+};
+
+export type CollectionScreenSectionSchema = {
+  id: string;
+  type: "collection";
+  view: string;
+  label?: string;
+};
+
+export type ScreenSectionSchema = CollectionScreenSectionSchema;
+
+export type StackScreenLayoutSchema = {
+  type: "stack";
+  sections: ScreenSectionSchema[];
+};
+
+export type ScreenLayoutSchema = StackScreenLayoutSchema;
+
+export type WorkspaceScreenSchema = {
+  type: "workspace";
+  label: string;
+  navigation?: ScreenNavigationSchema;
+  layout: ScreenLayoutSchema;
+};
+
+export type ScreenSchema = WorkspaceScreenSchema;
+
 export type ToOneRelationshipSchema = {
   kind: "toOne";
   label?: string;
@@ -425,4 +454,5 @@ export type AppSchema = {
   itemViews: Record<string, ItemViewSchema>;
   tableViews: Record<string, TableViewSchema>;
   views: Record<string, ViewSchema>;
+  screens?: Record<string, ScreenSchema>;
 };

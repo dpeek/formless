@@ -3,6 +3,7 @@ import { parseEntities } from "./schema-fields.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
 import { parseReadModels } from "./schema-read-models.ts";
 import { parseRelationships } from "./schema-relationships.ts";
+import { parseScreens } from "./schema-screens.ts";
 import {
   parseCollectionQueries,
   parseItemViews,
@@ -22,7 +23,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     "Schema",
     value,
     ["version", "entities", "queries", "itemViews", "tableViews", "views"],
-    ["relationships", "readModels"],
+    ["relationships", "readModels", "screens"],
   );
 
   const version = value.version;
@@ -54,7 +55,9 @@ export function parseAppSchema(value: unknown): AppSchema {
     tableViews,
     relationships,
     readModels,
+    { requirePrimaryCollection: value.screens === undefined },
   );
+  const screens = parseScreens(value.screens, views);
 
   return {
     version,
@@ -65,6 +68,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     itemViews,
     tableViews,
     views,
+    ...(screens === undefined ? {} : { screens }),
   };
 }
 

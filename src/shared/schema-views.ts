@@ -486,6 +486,7 @@ export function parseViews(
   tableViews: Record<string, TableViewSchema>,
   relationships: Record<string, RelationshipSchema> | undefined,
   readModels?: ReadModelSchema,
+  options: { requirePrimaryCollection?: boolean } = {},
 ): Record<string, ViewSchema> {
   if (!isRecord(value)) {
     throw new Error("Schema views must be an object.");
@@ -511,7 +512,7 @@ export function parseViews(
     throw new Error("Schema must define at least one view.");
   }
 
-  assertCollectionViews(views, entities, relationships);
+  assertCollectionViews(views, entities, relationships, options.requirePrimaryCollection ?? true);
 
   return views;
 }
@@ -520,6 +521,7 @@ function assertCollectionViews(
   views: Record<string, ViewSchema>,
   entities: Record<string, EntitySchema>,
   relationships: Record<string, RelationshipSchema> | undefined,
+  requirePrimaryCollection: boolean,
 ) {
   const collectionEntries = Object.entries(views).filter(
     (entry): entry is [string, CollectionViewSchema] => entry[1].type === "collection",
@@ -529,7 +531,10 @@ function assertCollectionViews(
     throw new Error('Schema must define at least one "collection" view.');
   }
 
-  if (!collectionEntries.some(([, view]) => view.navigation?.primary ?? true)) {
+  if (
+    requirePrimaryCollection &&
+    !collectionEntries.some(([, view]) => view.navigation?.primary ?? true)
+  ) {
     throw new Error("Schema must define at least one primary collection view.");
   }
 

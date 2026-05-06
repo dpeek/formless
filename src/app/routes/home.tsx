@@ -211,7 +211,9 @@ export function withHomeRouteSelectedQueryName(
   current: HomeRouteSelectionState,
   selectedQueryName: string | null,
 ): HomeRouteSelectionState {
-  return current.selectedQueryName === selectedQueryName ? current : { ...current, selectedQueryName };
+  return current.selectedQueryName === selectedQueryName
+    ? current
+    : { ...current, selectedQueryName };
 }
 
 export function withHomeRouteSelectedContextRecordId(
