@@ -2984,6 +2984,25 @@ describe("schema entity actions", () => {
         }),
       ),
     ).toThrow('create.afterCreate hook 0 references unknown action "missing" for entity "rate"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              mutations: {
+                ...defaultEntities().task.mutations,
+                create: {
+                  enabled: true,
+                  afterCreate: [{ entity: "task", action: "clearCompletedTasks" }],
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("create.afterCreate hook 0 action must create missing join records");
   });
 
   it("rejects create-missing-join-records actions without required defaults", () => {

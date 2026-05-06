@@ -303,6 +303,16 @@ export type EntityActionJoinSchema = {
   right: EntityActionJoinSourceSchema;
 };
 
+export type EntityActionKind =
+  | "clear-completed"
+  | "create-missing-join-records"
+  | "create-selected-join-record"
+  | "remove-selected-join-records";
+
+export type EntityActionCapabilities = {
+  createAfterCreateHook: boolean;
+};
+
 export type ClearCompletedEntityActionSchema = {
   label: string;
   kind: "clear-completed";

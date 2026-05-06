@@ -1,7 +1,7 @@
 # PRD 08: Entity action module
 
-Status: draft
-Current chunk: EA-01 shipped
+Status: in progress
+Current chunk: EA-02 shipped
 Last updated: 2026-05-06
 
 ## Goal
@@ -125,13 +125,14 @@ Likely changed files:
 | EA-D4 | Keep action replay storage-backed.                         | Idempotency is an authority/storage invariant.                  | `src/worker/storage.ts`                            |
 | EA-D5 | Keep generated action UI generic.                          | Schema-declared actions should not become app-specific UI code. | `src/app/generated/actions.tsx`                    |
 | EA-D6 | Ship after PRD 05 or coordinate tightly with it.           | PRD 05 owns authority write orchestration.                      | `prd/05-authority-write-module.md`                 |
+| EA-D7 | Put schema parsing and capabilities behind action kinds.   | Create hooks and future behavior should ask the action module.  | `src/shared/schema-actions.ts`                     |
 
 ## Chunks
 
 | ID    | Status  | Depends on | Main files                                                   | Acceptance                                                                                  |
 | ----- | ------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | EA-01 | shipped | none       | tests                                                        | Current action parse, validation, execution, replay, and UI behavior is characterized.      |
-| EA-02 | draft   | EA-01      | `src/shared/schema-actions.ts`, `src/shared/schema-types.ts` | Action kind schema parsing and capabilities are represented through a deeper action module. |
+| EA-02 | shipped | EA-01      | `src/shared/schema-actions.ts`, `src/shared/schema-types.ts` | Action kind schema parsing and capabilities are represented through a deeper action module. |
 | EA-03 | draft   | EA-02      | `src/worker/authority.ts`, `src/worker/actions.ts`           | Action request input validation and execution dispatch move behind action behavior.         |
 | EA-04 | draft   | EA-03      | `src/client/views.ts`, `src/app/generated/actions.tsx`       | Generated action buttons consume action UI facts instead of branching on action kinds.      |
 | EA-05 | draft   | EA-04      | tests, Browser Use if UI behavior changes                    | Tasks and rates action flows still pass.                                                    |
@@ -174,10 +175,12 @@ Recommended order:
 - `doc/current.md`: note that action kind behavior is selected through a deeper action module; schema parsing, input validation, execution, and generated UI facts are concentrated by action kind.
 - `doc/roadmap.md`: no change unless new release-scope action behavior is added.
 - EA-01: no global doc promotion. Tests only characterize existing action behavior.
+- EA-02: promote that schema action parsing now dispatches through `entityActionKindModules`, and action kind capabilities expose after-create hook eligibility.
 
 ## Evidence
 
 - 2026-05-06 EA-01: `bun run test -- src/shared/schema.test.ts src/worker/authority.test.ts`.
+- 2026-05-06 EA-02: `bun run test -- src/shared/schema.test.ts`; `bun run check`.
 
 ## PRD status notes
 
@@ -189,6 +192,12 @@ Recommended order:
 - Existing tests characterize clear-completed execution/replay, create-missing join execution/replay, selected join execution, generated action model facts, and action button rendering/counts.
 - EA-01 changed no runtime behavior, schema syntax, storage, sync, or generated UI.
 - Browser Use not run; test-only change with no app behavior change.
-- No new decisions; EA-D1 through EA-D6 stand.
+- EA-02 shipped 2026-05-06.
+- EA-02 added `EntityActionKind` and `EntityActionCapabilities` in `src/shared/schema-types.ts`.
+- EA-02 routes schema action parsing through `entityActionKindModules` in `src/shared/schema-actions.ts`.
+- EA-02 makes create.afterCreate validation use action kind capabilities instead of hard-coded kind checks.
+- EA-02 added parser coverage for afterCreate hooks that reference an existing action without the hook capability.
+- EA-D1 through EA-D7 stand.
+- Browser Use not run; parser/type-only change with no app behavior change.
 - No blockers.
-- Next ready chunk: EA-02.
+- Next ready chunk: EA-03.

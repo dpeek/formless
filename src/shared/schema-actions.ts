@@ -7,14 +7,57 @@ import type {
   CollectionQuerySchema,
   CreateMissingJoinRecordsEntityActionSchema,
   CreateSelectedJoinRecordEntityActionSchema,
+  EntityActionCapabilities,
   EntityActionJoinSchema,
   EntityActionJoinSourceSchema,
+  EntityActionKind,
   EntityActionSchema,
   EntityActionTargetSchema,
   EntitySchema,
   RelationshipSchema,
   RemoveSelectedJoinRecordsEntityActionSchema,
 } from "./schema-types.ts";
+
+type EntityActionParseContext = {
+  entityName: string;
+  actionName: string;
+  entity: EntitySchema;
+  queries: Record<string, CollectionQuerySchema>;
+  relationships: Record<string, RelationshipSchema> | undefined;
+};
+
+type EntityActionKindModule<TAction extends EntityActionSchema = EntityActionSchema> = {
+  kind: TAction["kind"];
+  capabilities: EntityActionCapabilities;
+  parse: (context: EntityActionParseContext, value: Record<string, unknown>) => TAction;
+};
+
+const entityActionKindModules = [
+  {
+    kind: "clear-completed",
+    capabilities: { createAfterCreateHook: false },
+    parse: parseClearCompletedEntityAction,
+  },
+  {
+    kind: "create-missing-join-records",
+    capabilities: { createAfterCreateHook: true },
+    parse: parseCreateMissingJoinRecordsEntityAction,
+  },
+  {
+    kind: "create-selected-join-record",
+    capabilities: { createAfterCreateHook: false },
+    parse: parseCreateSelectedJoinRecordEntityAction,
+  },
+  {
+    kind: "remove-selected-join-records",
+    capabilities: { createAfterCreateHook: false },
+    parse: parseRemoveSelectedJoinRecordsEntityAction,
+  },
+] satisfies EntityActionKindModule[];
+
+export function getEntityActionKindCapabilities(kind: EntityActionKind): EntityActionCapabilities {
+  return requireEntityActionKindModule(kind).capabilities;
+}
 
 export function parseEntityActionsForEntities(
   entities: Record<string, EntitySchema>,
@@ -90,32 +133,18 @@ function parseEntityAction(
     );
   }
 
-  if (value.kind === "clear-completed") {
-    return parseClearCompletedEntityAction(entityName, actionName, value, entity, queries);
-  }
-
-  if (value.kind === "create-missing-join-records") {
-    return parseCreateMissingJoinRecordsEntityAction(
-      entityName,
-      actionName,
+  const actionKind = getEntityActionKindModule(value.kind);
+  if (actionKind) {
+    return actionKind.parse(
+      {
+        entityName,
+        actionName,
+        entity,
+        queries,
+        relationships,
+      },
       value,
-      entity,
-      queries,
     );
-  }
-
-  if (value.kind === "create-selected-join-record") {
-    return parseCreateSelectedJoinRecordEntityAction(
-      entityName,
-      actionName,
-      value,
-      entity,
-      relationships,
-    );
-  }
-
-  if (value.kind === "remove-selected-join-records") {
-    return parseRemoveSelectedJoinRecordsEntityAction(entityName, actionName, value, relationships);
   }
 
   throw new Error(
@@ -124,12 +153,11 @@ function parseEntityAction(
 }
 
 function parseClearCompletedEntityAction(
-  entityName: string,
-  actionName: string,
+  context: EntityActionParseContext,
   value: Record<string, unknown>,
-  entity: EntitySchema,
-  queries: Record<string, CollectionQuerySchema>,
 ): ClearCompletedEntityActionSchema {
+  const { actionName, entity, entityName, queries } = context;
+
   assertExactKeys(
     `Entity action "${entityName}.${actionName}"`,
     value,
@@ -166,12 +194,11 @@ function parseClearCompletedEntityAction(
 }
 
 function parseCreateMissingJoinRecordsEntityAction(
-  entityName: string,
-  actionName: string,
+  context: EntityActionParseContext,
   value: Record<string, unknown>,
-  entity: EntitySchema,
-  queries: Record<string, CollectionQuerySchema>,
 ): CreateMissingJoinRecordsEntityActionSchema {
+  const { actionName, entity, entityName, queries } = context;
+
   assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, ["label", "kind", "join"]);
 
   const join = parseEntityActionJoin(entityName, actionName, value.join, entity, queries);
@@ -185,12 +212,11 @@ function parseCreateMissingJoinRecordsEntityAction(
 }
 
 function parseCreateSelectedJoinRecordEntityAction(
-  entityName: string,
-  actionName: string,
+  context: EntityActionParseContext,
   value: Record<string, unknown>,
-  entity: EntitySchema,
-  relationships: Record<string, RelationshipSchema> | undefined,
 ): CreateSelectedJoinRecordEntityActionSchema {
+  const { actionName, entity, entityName, relationships } = context;
+
   assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
     "label",
     "kind",
@@ -217,11 +243,11 @@ function parseCreateSelectedJoinRecordEntityAction(
 }
 
 function parseRemoveSelectedJoinRecordsEntityAction(
-  entityName: string,
-  actionName: string,
+  context: EntityActionParseContext,
   value: Record<string, unknown>,
-  relationships: Record<string, RelationshipSchema> | undefined,
 ): RemoveSelectedJoinRecordsEntityActionSchema {
+  const { actionName, entityName, relationships } = context;
+
   assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
     "label",
     "kind",
@@ -424,7 +450,7 @@ function validateCreateAfterCreateHooks(entities: Record<string, EntitySchema>) 
         );
       }
 
-      if (action.kind !== "create-missing-join-records") {
+      if (!getEntityActionCapabilities(action).createAfterCreateHook) {
         throw new Error(`${context} action must create missing join records.`);
       }
     }
@@ -478,4 +504,22 @@ function isClearCompletedTargetQuery(query: QueryExpression) {
     query.value === true &&
     fieldRefsEqual(query.ref, { kind: "value", name: "done" })
   );
+}
+
+function getEntityActionCapabilities(action: EntityActionSchema): EntityActionCapabilities {
+  return getEntityActionKindCapabilities(action.kind);
+}
+
+function requireEntityActionKindModule(kind: EntityActionKind): EntityActionKindModule {
+  const actionKind = getEntityActionKindModule(kind);
+
+  if (!actionKind) {
+    throw new Error(`Unsupported action kind "${kind}".`);
+  }
+
+  return actionKind;
+}
+
+function getEntityActionKindModule(kind: unknown): EntityActionKindModule | undefined {
+  return entityActionKindModules.find((actionKind) => actionKind.kind === kind);
 }
