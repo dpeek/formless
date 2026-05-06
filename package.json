@@ -10,6 +10,7 @@
     "start": "bun run scripts/agent-dev.ts start",
     "stop": "bun run scripts/agent-dev.ts stop",
     "ralph": "bun run scripts/ralph-loop.ts",
+    "browser": "agent-browser",
     "check": "vp check --fix",
     "test": "vp test --reporter=agent",
     "dev": "vp dev",

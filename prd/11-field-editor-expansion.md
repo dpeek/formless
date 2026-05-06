@@ -222,7 +222,7 @@ Patch scalar fields together through generic mutation paths.
 | FE-D6 | Keep React components out of shared field behavior.            | Field behavior must stay usable by parser, authority, and tests.                        | `src/shared/field-types.ts`                                            |
 | FE-D7 | Fix ISO date editor semantics before expanding date behavior.  | Field validation expects `YYYY-MM-DD`; editor UI must preserve that contract.           | `src/shared/field-types.ts`, `lib/ui/src/date.tsx`                     |
 | FE-D8 | Model value/unit as view/editor composition first.             | It proves ergonomics without committing to composite stored values.                     | `schema/apps/rates/schema.json`                                        |
-| FE-D9 | Use Browser Use for visible editor behavior changes.           | This PRD changes interactive controls, not just parser behavior.                        | `doc/current.md` checks section                                        |
+| FE-D9 | Use `bun browser` for visible editor behavior changes.         | This PRD changes interactive controls, not just parser behavior.                        | `doc/current.md` checks section                                        |
 
 ## Chunks
 
@@ -235,7 +235,7 @@ Patch scalar fields together through generic mutation paths.
 | FE-05 | draft  | FE-01      | `lib/ui/src/input.tsx`, `lib/ui/src/text-input.tsx`, generated editors | Autosizing editable text is available and used for title-like compact text fields.                         |
 | FE-06 | draft  | FE-05      | `lib/ui/src/number-input.tsx`, field behavior/display tests            | Number editors can use encode/decode formatting while storing finite numbers.                              |
 | FE-07 | draft  | FE-06      | schema view types/parser, generated table/editor code                  | View-declared value/unit editor patches multiple flat scalar fields.                                       |
-| FE-08 | draft  | FE-07      | source schemas, app tests, Browser Use                                 | Rates and site authoring smoke pass with richer editors and no storage shape change.                       |
+| FE-08 | draft  | FE-07      | source schemas, app tests, `bun browser`                               | Rates and site authoring smoke pass with richer editors and no storage shape change.                       |
 | FE-09 | draft  | FE-08      | `prd/11-field-editor-expansion.md`                                     | PRD status, shipped outcomes, blockers, and promote notes are current.                                     |
 
 ## Chunk details
@@ -368,15 +368,15 @@ Status: draft.
 Tasks:
 
 - Apply richer editor hints to source schemas where useful.
-- Smoke Tasks, Rates, and Site in Browser Use.
+- Smoke Tasks, Rates, and Site with `bun browser`.
 - Check mobile-ish and desktop layouts for editor overlap.
-- Run focused and full checks.
+- Read `./tmp/test.txt` and `./tmp/check.txt` after `bun start`.
 
 Acceptance:
 
-- `bun run test` passes.
-- `bun run check` passes.
-- Browser Use smoke covers changed editor surfaces.
+- `./tmp/test.txt` shows passing tests after `bun start`.
+- `./tmp/check.txt` shows passing checks after `bun start`.
+- `bun browser` smoke covers changed editor surfaces.
 - No storage, authority, sync, or protocol shape change.
 
 ### FE-09 PRD closeout

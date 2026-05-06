@@ -4,12 +4,12 @@ Repo docs are the project memory. Keep them current and source-faithful.
 
 ## Work
 
-1. Run `bun start` and read `./tmp/state.txt`
+1. Run `bun start` and read `./tmp/state.txt`, `./tmp/test.txt`, and `./tmp/check.txt`
 1. Read `doc/overview.md`, `doc/current.md` and `doc/roadmap.md`
 1. Ship the next ready chunk from the assigned PRD.
 1. Update only the assigned PRD with status, decisions, blockers, and promotion notes.
-1. Read `./tmp/state.txt` and fix issues
-1. Test app with Browser Use if needed
+1. Read `./tmp/state.txt`, `./tmp/test.txt`, and `./tmp/check.txt` and fix issues
+1. Test app with `bun browser ...` if app behavior changed
 1. End turn with changed files, checks, and PRD status.
 
 ## Docs
@@ -43,6 +43,9 @@ When user says `done`:
 ## Rules
 
 - Bun scripts only.
+- `bun start` owns dev, test, and check output.
+- Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually during normal agent work.
+- Use `./tmp/state.txt`, `./tmp/test.txt`, and `./tmp/check.txt` as check evidence.
 - Preserve user changes.
 - Keep data model flat; compose in view/query layer.
 - Claims in docs must point to code, schema, tests, or shipped behavior.

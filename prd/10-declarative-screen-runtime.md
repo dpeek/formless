@@ -252,7 +252,7 @@ Notes:
 | SCR-05 | draft  | SCR-04     | `schema/apps/tasks/schema.json`, `schema/apps/rates/schema.json`, tests              | Task and rate source schemas define explicit screens; reset/bootstrap/schema editor flows keep working.                   |
 | SCR-06 | draft  | SCR-05     | `src/app/generated/screen.tsx`, `src/app/routes/home.tsx`, tests                     | Stack layout renders multiple collection sections with independent query and context state.                               |
 | SCR-07 | draft  | SCR-06     | `src/client/views.ts`, `src/app/routes/home.tsx`, source schemas                     | Primary app workspace selection uses screen navigation when screens exist; collection navigation remains legacy fallback. |
-| SCR-08 | draft  | SCR-07     | tests, Browser Use, `prd/10-declarative-screen-runtime.md`                           | Tasks and Rates pass app smoke; PRD status, decisions, blockers, and promote notes are current.                           |
+| SCR-08 | draft  | SCR-07     | tests, `bun browser` smoke, `prd/10-declarative-screen-runtime.md`                   | Tasks and Rates pass app smoke; PRD status, decisions, blockers, and promote notes are current.                           |
 
 ## Chunk details
 
@@ -353,9 +353,9 @@ Verify behavior and update this PRD.
 
 Acceptance:
 
-- `bun run test` passes.
-- `bun run check` passes.
-- Browser Use smoke covers `/tasks` and `/rates`.
+- `./tmp/test.txt` shows passing tests after `bun start`.
+- `./tmp/check.txt` shows passing checks after `bun start`.
+- `bun browser` smoke covers `/tasks` and `/rates`.
 - `tmp/state.txt` has no unresolved issues.
 - Promote notes are ready for a docs/steward pass.
 - PRD status reflects shipped chunks, blockers, and decisions.
@@ -431,7 +431,7 @@ Recommended order:
 - Keep runtime claims backed by code, schema, tests, or shipped behavior.
 - Keep global-doc updates in `Promote after ship`.
 - Update only this PRD during normal SCR chunk work.
-- Run Browser Use for SCR-04, SCR-06, SCR-07, and SCR-08 if generated UI behavior changes.
+- Run `bun browser` smoke for SCR-04, SCR-06, SCR-07, and SCR-08 if generated UI behavior changes.
 
 ## Promote after ship
 

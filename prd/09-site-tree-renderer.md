@@ -1,7 +1,7 @@
 # PRD 05: Block tree projection and renderer
 
-Status: in progress
-Current chunk: STR-06 browser smoke and promotion notes
+Status: shipped
+Current chunk: none
 Last updated: 2026-05-06
 
 ## Goal
@@ -384,7 +384,7 @@ The exact slot names can change during implementation. The important rule is tha
 | STR-03 | shipped | STR-02         | `src/worker/authority.ts`, `src/worker/index.ts`, `src/shared/protocol.ts`, tests   | `GET /api/site/tree/:slug` returns filtered tree data for published pages.         |
 | STR-04 | shipped | STR-03         | `schema/apps/site/seed-records.json`, source tests                                  | Seeds express Header, Home, nested footer sections, media blocks, and page blocks. |
 | STR-05 | shipped | STR-04         | `src/app.tsx`, `src/app/routes/site-page.tsx`, `src/app/site-renderer/*`, app tests | Public site routes render the tree without changing `/site` admin.                 |
-| STR-06 | blocked | STR-05         | Browser Use, PRD promote notes                                                      | Browser smoke covers rendered home, nested header/footer, media, and admin.        |
+| STR-06 | shipped | STR-05         | Browser smoke, PRD promote notes                                                    | Browser smoke covers rendered home, nested header/footer, media, and admin.        |
 
 ## Chunk details
 
@@ -509,7 +509,7 @@ Outcome:
 - Query-backed list and grid blocks render public query results from the projected tree.
 - Unknown block types render nothing.
 - Rendered Home shows header navigation, hero content, recent posts, featured projects, media metadata, and nested footer links.
-- Browser Use smoke was not run in STR-05 because the required Node REPL browser-control tool was unavailable in this session; STR-06 still owns browser smoke.
+- Browser smoke was deferred to STR-06.
 
 Evidence:
 
@@ -522,25 +522,29 @@ Evidence:
 
 ### STR-06 browser smoke and promotion notes
 
-Goal: prove the first public rendering path in browser.
+Outcome:
 
-Tasks:
-
-- Smoke test rendered Home in Browser Use.
-- Smoke test a second slug page.
-- Smoke test `/site` admin still works.
-- Smoke test `/site/schema` still works.
-- Update this PRD with shipped facts.
-- Add global doc promotion notes under `Promote after ship`.
-
-Acceptance:
-
+- Shipped 2026-05-06.
+- Browser smoke passed for `/pages`, `/pages/home`, `/pages/blog`, `/site`, and `/site/schema`.
+- `/pages` redirects to `/pages/home`.
 - Rendered Home loads from the public route.
-- Header and footer come from nested block records.
-- Content list/grid blocks show published records only.
-- Media blocks render public metadata.
-- Admin route still edits blocks and placements.
-- No blocker remains in this PRD.
+- Home shows header navigation, hero content, recent posts, featured projects, image/video media metadata, and nested footer links.
+- `/pages/blog` renders a second published slug.
+- Query-backed list/grid blocks show published records only.
+- `/site` still opens generated admin with the Blocks workspace and Placements tab.
+- `/site/schema` still opens the schema editor with `block` and `blockPlacement` schema JSON.
+- Browser console showed no errors during the smoke paths.
+- `doc/current.md` and `doc/roadmap.md` now include shipped site tree and renderer facts.
+
+Evidence:
+
+- Browser smoke: Codex Browser Use against `http://127.0.0.1:4677`.
+- Dev state: `./tmp/state.txt`.
+- Test output: `./tmp/test.txt`.
+- Check output: `./tmp/check.txt`.
+- Public route source: `src/app/routes/site-page.tsx`.
+- Renderer source: `src/app/site-renderer/renderer.tsx`.
+- Tree projection source: `src/site/tree.ts`.
 
 ## Non-goals
 
@@ -570,10 +574,10 @@ Acceptance:
 
 ## Blockers
 
-| ID     | Status | Blocks | Notes                                                                                                                                                                                                                                              |
-| ------ | ------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| STR-B1 | closed | STR-01 | PRD 04 REL-04 shipped before this PRD was drafted.                                                                                                                                                                                                 |
-| STR-B2 | open   | STR-06 | Browser Use skill is installed, but the required Node REPL `js` tool was not exposed in this session. Confirmed again 2026-05-06; `bun start` recovered dev server readiness, but Browser Use cannot run without the mandated `js` execution tool. |
+| ID     | Status | Blocks | Notes                                                                                             |
+| ------ | ------ | ------ | ------------------------------------------------------------------------------------------------- |
+| STR-B1 | closed | STR-01 | PRD 04 REL-04 shipped before this PRD was drafted.                                                |
+| STR-B2 | closed | STR-06 | Closed 2026-05-06. Node REPL browser control was exposed in this session and browser smoke passed. |
 
 ## Cross-PRD dependencies
 
@@ -599,54 +603,13 @@ Acceptance:
 
 ## Promote after ship
 
-When STR-01 ships, update `doc/current.md`:
+Promoted 2026-05-06:
 
-- Site source schema uses `block` and `blockPlacement`.
-- Media is stored as blocks with media types.
-- Block placements use parent block, child block, named slot, order, and visibility.
-- Site admin route still works at `/site`.
-
-When STR-03 ships, update `doc/current.md`:
-
-- Site public tree endpoint exists at `/api/site/tree/:slug`.
-- Endpoint source: `src/worker/authority.ts`.
-- Tree projection source: `src/site/tree.ts`.
-- Tree response types: `src/shared/protocol.ts`.
-- Endpoint returns projected public tree data and does not include bootstrap schema or raw records.
-- Draft-only page slugs return 404.
-- Non-site tree routes return 400.
-
-When STR-04 ships, update `doc/current.md`:
-
-- Site source seeds include Home header and footer placements.
-- Header navigation is nested under the Header group with reusable link blocks.
-- Footer has a root group with nested section groups and reusable link blocks.
-- Hero media examples are image and video blocks.
-- The related-post placement is hidden until query-backed related posts can exclude the current post.
-
-When STR-05 ships, update `doc/current.md`:
-
-- Site renderer route exists at `/pages/*`.
-- `/pages` redirects to `/pages/home`.
-- Site renderer route source: `src/app/routes/site-page.tsx`.
-- Site renderer components source: `src/app/site-renderer/renderer.tsx`.
-- Public site routes fetch `/api/site/tree/:slug`.
-- Public site routes do not show generated admin navigation.
-- `/site` and `/site/schema` remain generated admin routes.
-- Unknown public block types render nothing.
-
-When this PRD ships, update `doc/current.md`:
-
-- Site public tree projection exists.
-- Site tree projection source: `src/site/tree.ts`.
-- Site public tree endpoint exists at `/api/site/tree/:slug`.
-- Public tree output excludes drafts, archived blocks, invisible placements, and tombstoned records.
-- Site renderer route exists at `/pages/*`.
-- `/pages` redirects to `/pages/home`.
-- `/site` and `/site/schema` remain generated admin routes.
-- Header and footer can be nested blocks/groups through `blockPlacement.parent`.
-
-When this PRD ships, update `doc/roadmap.md` only if public site rendering becomes release scope.
+- `doc/current.md` includes site source schema, seed records, block model, public tree endpoint, tree projection, renderer route, renderer source, and current route list.
+- `doc/current.md` records that public tree output excludes drafts, archived blocks, invisible placements, and tombstoned records.
+- `doc/current.md` records nested Header/Footer seed composition through `blockPlacement.parent`.
+- `doc/roadmap.md` includes public site rendering as first-release scope.
+- `doc/roadmap.md` keeps the first public renderer site-specific and keeps the general layout DSL out of first release.
 
 ## PRD status notes
 
@@ -683,7 +646,12 @@ When this PRD ships, update `doc/roadmap.md` only if public site rendering becom
 - STR-05 kept `/site` and `/site/schema` as generated admin routes.
 - STR-05 reads the projected public tree from `/api/site/tree/:slug`.
 - STR-05 added a site-specific renderer and did not change generated admin renderer components.
-- STR-05 Browser Use smoke was deferred to STR-06 because the required Node REPL browser-control tool was unavailable.
-- STR-06 blocked 2026-05-06 because Browser Use still has no exposed Node REPL `js` execution tool in this session.
-- `bun stop` cleared the stale dev process on port 4771 and `bun start` restored dev readiness at `https://kernel.formless.local`.
-- STR-06 browser smoke did not run; no chunk acceptance was promoted.
+- STR-05 browser smoke was deferred to STR-06.
+- STR-06 shipped 2026-05-06.
+- STR-06 Browser Use smoke passed for `/pages`, `/pages/home`, `/pages/blog`, `/site`, and `/site/schema`.
+- STR-06 confirmed Home renders nested header/footer, query-backed published records, and media metadata.
+- STR-06 confirmed `/site` and `/site/schema` remain generated admin routes.
+- `bun start` restored dev readiness at `https://pixel.formless.local`.
+- `./tmp/test.txt` shows 22 test files and 403 tests passing.
+- `./tmp/check.txt` shows formatting, lint, and type checks passing.
+- Shipped facts were promoted to `doc/current.md` and `doc/roadmap.md`.

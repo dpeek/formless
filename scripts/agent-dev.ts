@@ -545,6 +545,24 @@ function inferTestStatus(log: string, current: TestStatus): TestStatus {
   return current;
 }
 
+function inferCheckStatus(log: string, current: CheckStatus): CheckStatus {
+  const clean = stripAnsi(log).toLowerCase();
+
+  if (clean.includes("correctly formatted") && clean.includes("found no warnings")) {
+    return "pass";
+  }
+
+  if (
+    clean.includes("fail:") ||
+    clean.includes("error:") ||
+    /found [1-9][0-9]* .*(warning|lint error|type error)/.test(clean)
+  ) {
+    return "fail";
+  }
+
+  return current;
+}
+
 function readLog(filePath: string): string {
   try {
     return readFileSync(filePath, "utf8");
@@ -677,6 +695,29 @@ async function start(): Promise<number> {
     return installCode;
   }
 
+  writeState({
+    checkStatus: "running",
+    devStatus: "starting",
+    host,
+    session,
+    supervisorStatus: "starting",
+    testStatus: "pending",
+    url,
+  });
+  const checkCode = await runWithTee("vp", ["check"], paths.checkLog);
+  if (checkCode !== 0) {
+    writeState({
+      checkStatus: "fail",
+      devStatus: "fail",
+      host,
+      session,
+      supervisorStatus: "fail",
+      testStatus: "fail",
+      url,
+    });
+    return checkCode;
+  }
+
   const supervisorLog = openSync(paths.supervisorLog, "a");
   const supervisor = spawn(process.execPath, [scriptPath, "supervise", session], {
     cwd: rootDir,
@@ -775,7 +816,7 @@ async function supervise(session: string): Promise<number> {
   let devLogBuffer = "";
   let testLogBuffer = "";
   let state: AgentState = {
-    checkStatus: "idle",
+    checkStatus: inferCheckStatus(readLog(paths.checkLog), "idle"),
     devStatus: "starting",
     host,
     session,
