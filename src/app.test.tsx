@@ -1248,8 +1248,8 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithNameAndType("href", "text"));
     expect(html).toMatch(inputWithNameAndType("slug", "text"));
     expect(html).toMatch(inputWithNameAndType("icon", "text"));
-    expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "June 01, 2025"));
-    expect(html).not.toMatch(inputWithNameAndType("publishedAt", "date"));
+    expect(html).toMatch(inputWithNameAndType("publishedAt", "date"));
+    expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "2026-05-06"));
     expect(html).toMatch(inputWithNameAndType("count", "number"));
     expect(html).toContain("Draft");
     expect(html).toContain("Published");

@@ -215,7 +215,11 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
     return (
       <Field>
         <Label>{label}</Label>
-        <DateInput name={fieldName} required={adapter.required} />
+        <DateInput
+          defaultValue={adapter.createDefaultValue}
+          name={fieldName}
+          required={adapter.required}
+        />
       </Field>
     );
   }

@@ -12,61 +12,126 @@ import {
 } from "@formless/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@formless/ui/popover";
 
-function formatDate(date: Date | undefined) {
+export function formatDateInputValue(date: Date | undefined) {
   if (!date) {
     return "";
   }
 
-  return date.toLocaleDateString("en-US", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
-function isValidDate(date: Date | undefined) {
-  if (!date) {
-    return false;
+export function parseDateInputValue(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return undefined;
   }
-  return !isNaN(date.getTime());
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return undefined;
+  }
+
+  return date;
 }
 
 export function DateInput({
-  name,
-  required,
+  className,
   date,
+  defaultValue,
+  inputClassName,
+  name,
   onDateChange,
-}: {
-  name?: string;
-  required?: boolean;
+  onValueCommit,
+  onValueChange,
+  value,
+  ...inputProps
+}: Omit<React.ComponentProps<"input">, "defaultValue" | "onChange" | "type" | "value"> & {
+  className?: string;
   date?: Date;
+  defaultValue?: string;
+  inputClassName?: string;
   onDateChange?: (date?: Date) => void;
+  onValueCommit?: (value: string) => void;
+  onValueChange?: (value: string) => void;
+  value?: string;
 }) {
+  const isValueControlled = value !== undefined;
+  const [internalValue, setInternalValue] = React.useState(
+    () => value ?? defaultValue ?? formatDateInputValue(date),
+  );
+  const resolvedValue = value ?? internalValue;
+  const selectedDate = date ?? parseDateInputValue(resolvedValue);
   const [open, setOpen] = React.useState(false);
-  const [month, setMonth] = React.useState<Date | undefined>(date);
-  const [value, setValue] = React.useState(formatDate(date));
+  const [month, setMonth] = React.useState<Date | undefined>(selectedDate);
+
+  React.useEffect(() => {
+    if (date && !isValueControlled) {
+      setInternalValue(formatDateInputValue(date));
+    }
+  }, [date, isValueControlled]);
+
+  React.useEffect(() => {
+    if (selectedDate) {
+      setMonth(selectedDate);
+    }
+  }, [selectedDate]);
+
+  function updateValue(nextValue: string, options: { commit?: boolean } = {}) {
+    if (!isValueControlled) {
+      setInternalValue(nextValue);
+    }
+
+    onValueChange?.(nextValue);
+
+    if (nextValue === "") {
+      onDateChange?.(undefined);
+      if (options.commit) {
+        onValueCommit?.(nextValue);
+      }
+      return;
+    }
+
+    const nextDate = parseDateInputValue(nextValue);
+
+    if (nextDate) {
+      onDateChange?.(nextDate);
+      setMonth(nextDate);
+    }
+
+    if (options.commit) {
+      onValueCommit?.(nextValue);
+    }
+  }
 
   return (
-    <InputGroup>
+    <InputGroup className={className}>
       <InputGroupInput
-        id="date-required"
-        value={value}
         name={name}
-        placeholder="June 01, 2025"
-        required={required}
+        placeholder="2026-05-06"
+        {...inputProps}
+        className={inputClassName}
+        type="date"
+        value={resolvedValue}
         onChange={(e) => {
-          const date = new Date(e.target.value);
-          setValue(e.target.value);
-          if (isValidDate(date)) {
-            onDateChange?.(date);
-            setMonth(date);
-          }
+          updateValue(e.target.value);
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
             setOpen(true);
+            return;
           }
+
+          inputProps.onKeyDown?.(e);
         }}
       />
       <InputGroupAddon align="inline-end">
@@ -92,12 +157,11 @@ export function DateInput({
           >
             <Calendar
               mode="single"
-              selected={date}
+              selected={selectedDate}
               month={month}
               onMonthChange={setMonth}
               onSelect={(date) => {
-                onDateChange?.(date);
-                setValue(formatDate(date));
+                updateValue(formatDateInputValue(date), { commit: true });
                 setOpen(false);
               }}
             />

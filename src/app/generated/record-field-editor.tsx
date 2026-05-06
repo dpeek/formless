@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Checkbox } from "@formless/ui/checkbox";
+import { DateInput } from "@formless/ui/date";
 import { Field, FieldError } from "@formless/ui/field";
 import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
@@ -177,6 +178,7 @@ export function RecordFieldEditor({
 
   const control = adapter.control;
   const isMultilineTextEditor = control.kind === "textarea";
+  const isDateEditor = control.kind === "input" && control.inputType === "date";
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -227,6 +229,30 @@ export function RecordFieldEditor({
             }}
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={handleTextareaKeyDown}
+            required={adapter.required}
+            value={draft}
+          />
+        ) : isDateEditor ? (
+          <DateInput
+            aria-label={label}
+            className={
+              density === "compact"
+                ? "h-6 w-full rounded border border-slate-300 text-xs"
+                : "w-full rounded border border-slate-300"
+            }
+            disabled={!canPatch || isPending}
+            onBlur={(event) => {
+              if (commitPolicy === "field-commit") {
+                void commit(inputValueToFieldValue(field, event.currentTarget.value));
+              }
+            }}
+            onKeyDown={handleInputKeyDown}
+            onValueCommit={(value) => {
+              if (commitPolicy === "field-commit") {
+                void commit(inputValueToFieldValue(field, value));
+              }
+            }}
+            onValueChange={setDraft}
             required={adapter.required}
             value={draft}
           />

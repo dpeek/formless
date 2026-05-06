@@ -1,7 +1,7 @@
 # PRD 11: Field editor expansion
 
 Status: active
-Current chunk: FE-02 ISO date editor
+Current chunk: FE-03 color editor
 Last updated: 2026-05-06
 
 ## Goal
@@ -229,7 +229,7 @@ Patch scalar fields together through generic mutation paths.
 | ID    | Status  | Depends on | Main files                                                             | Acceptance                                                                                                 |
 | ----- | ------- | ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | FE-01 | shipped | none       | tests, PRD                                                             | Current editor support, date value shape, markdown/color fallbacks, and number behavior are characterized. |
-| FE-02 | draft   | FE-01      | `lib/ui/src/date.tsx`, generated create/editor code                    | Date create and inline editors preserve `YYYY-MM-DD` field values.                                         |
+| FE-02 | shipped | FE-01      | `lib/ui/src/date.tsx`, generated create/editor code                    | Date create and inline editors preserve `YYYY-MM-DD` field values.                                         |
 | FE-03 | draft   | FE-01      | `src/app/generated/*`, `lib/ui/src/color.tsx`, tests                   | `editor: "color"` uses `ColorInput`, commits text values, and displays swatches.                           |
 | FE-04 | draft   | FE-01      | `src/app/generated/*`, `lib/ui/src/markdown.tsx`, tests                | `editor: "markdown"` uses rich markdown editing where appropriate and keeps string storage.                |
 | FE-05 | draft   | FE-01      | `lib/ui/src/input.tsx`, `lib/ui/src/text-input.tsx`, generated editors | Autosizing editable text is available and used for title-like compact text fields.                         |
@@ -265,20 +265,29 @@ Promotion:
 
 ### FE-02 ISO date editor
 
-Status: draft.
+Status: shipped 2026-05-06.
 
-Tasks:
+Outcomes:
 
-- Update shared date input or generated date adapter so form values are `YYYY-MM-DD`.
-- Preserve optional date omission behavior.
-- Preserve required date validation behavior.
-- Use the same conversion path for create and inline patch where possible.
+- Shared `DateInput` now renders and submits `YYYY-MM-DD` values.
+- `DateInput` parses ISO strings into local `Date` objects without UTC day shifting.
+- Generated create forms pass date defaults into `DateInput`.
+- Generated inline date editors use `DateInput`.
+- Inline date typing still commits through blur/Enter.
+- Inline calendar selection commits the selected ISO date immediately.
+- Optional empty dates stay empty strings for editor state and omit through existing authority validation.
+- Required dates keep the native required field attribute.
 
-Acceptance:
+Evidence:
 
-- Create date values pass field validation.
-- Inline date patch values pass field validation.
-- Existing task due-date flows keep passing.
+- `./tmp/test.txt`: 23 files, 409 tests passed.
+- `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 152 files.
+- `bun browser` at `http://127.0.0.1:4951/tasks`: create form `FormData` contained `dueDate: "2026-05-11"`; created row rendered `2026-05-11`; inline calendar selection patched a row to `2026-05-10`; page errors empty.
+
+Promotion:
+
+- Generated date editors preserve `YYYY-MM-DD` field values in create and inline patch flows.
+- Shared `DateInput` lives in `lib/ui/src/date.tsx` and stays string-backed at the generated field boundary.
 
 ### FE-03 color editor
 
@@ -498,4 +507,7 @@ When this PRD ships, update `doc/roadmap.md` only if richer field/editor support
 - FE-01 shipped 2026-05-06 as characterization tests only.
 - No runtime behavior changed in FE-01.
 - No new decisions from FE-01.
+- FE-02 shipped 2026-05-06.
+- FE-02 changed generated date create and inline editor behavior only.
+- FE-02 kept date storage as `YYYY-MM-DD` strings.
 - No blockers beyond open design choices for value/unit metadata and compact markdown editing.
