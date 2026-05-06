@@ -24,7 +24,7 @@ import {
   type TableColumnConfig,
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
-import type { EntitySchema } from "./shared/schema.ts";
+import type { AppSchema, EntitySchema } from "./shared/schema.ts";
 import {
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
@@ -1200,6 +1200,187 @@ describe("generated forms and records", () => {
     });
   });
 
+  it("keeps source task create and edit flows wired through field behavior", () => {
+    const action = requiredCreateAction(appSchema, "taskHome");
+    const createHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+    const formData = new FormData();
+    formData.set("title", "Ship field behavior");
+    formData.set("dueDate", "2026-05-06");
+    formData.set("estimate", "2");
+    formData.set("priority", "high");
+
+    expect(createHtml).toContain('name="title"');
+    expect(createHtml).toContain('name="dueDate"');
+    expect(createHtml).toContain('aria-label="Select date"');
+    expect(createHtml).toContain('name="estimate"');
+    expect(createHtml).toContain('type="number"');
+    expect(createHtml).toContain('min="0"');
+    expect(createHtml).toContain('step="1"');
+    expect(createHtml).toContain('name="priority"');
+    expect(createHtml).toContain("High");
+    expect(createHtml).not.toContain('name="done"');
+    expect(resolveCreateValues(formData, action)).toEqual({
+      title: "Ship field behavior",
+      dueDate: "2026-05-06",
+      estimate: 2,
+      priority: "high",
+    });
+
+    applyBootstrapResponse(
+      bootstrap([
+        {
+          ...taskRecord("record-1", "Ship field behavior", true, "2026-05-06"),
+          values: {
+            title: "Ship field behavior",
+            done: true,
+            dueDate: "2026-05-06",
+            estimate: 2,
+            priority: "high",
+          },
+        },
+      ]),
+    );
+    const editHtml = renderToStaticMarkup(
+      <RecordList
+        entity={appSchema.entities.task}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={listRecordFieldsFor(appSchema, "taskHome")}
+      />,
+    );
+
+    expect(editHtml).toContain('value="Ship field behavior"');
+    expect(editHtml).toContain('type="checkbox"');
+    expect(editHtml).toContain("checked");
+    expect(editHtml).toContain('type="date"');
+    expect(editHtml).toContain('value="2026-05-06"');
+    expect(editHtml).toContain('type="number"');
+    expect(editHtml).toContain('value="2"');
+    expect(editHtml).toContain("High");
+  });
+
+  it("keeps source rate-card create and edit flows wired through field behavior", () => {
+    const action = requiredCreateAction(rateCardSchema, "rateHome");
+    const createHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+    const formData = new FormData();
+    formData.set("name", "Producer");
+
+    expect(createHtml).toContain('name="name"');
+    expect(createHtml).not.toContain('name="kind"');
+    expect(createHtml).not.toContain('name="unit"');
+    expect(resolveCreateValues(formData, action)).toEqual({
+      name: "Producer",
+    });
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const editHtml = renderToStaticMarkup(
+      <RecordTable
+        columns={tableColumnsFor(rateCardSchema, "rateHome")}
+        entity={rateCardSchema.entities.rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(editHtml).toContain('aria-label="Role"');
+    expect(editHtml).toContain('value="Designer"');
+    expect(editHtml).toContain('aria-label="Cost"');
+    expect(editHtml).toContain('value="325"');
+    expect(editHtml).toContain('aria-label="Price"');
+    expect(editHtml).toContain('value="475"');
+    expect(editHtml).toContain("USD");
+    expect(editHtml).toContain("/ day");
+    expect(editHtml).not.toContain("Cost unit");
+  });
+
+  it("keeps source site create and edit flows wired through field behavior", () => {
+    const action = requiredCreateAction(siteSourceSchema, "contentHome");
+    const formData = new FormData();
+    formData.set("kind", "post");
+    formData.set("title", "Field behavior note");
+    formData.set("label", "Field behavior");
+    formData.set("subtitle", "Regression coverage");
+    formData.set("body", "## Note\n\nCreate and edit stay wired.");
+    formData.set("status", "published");
+    formData.set("featured", "on");
+    formData.set("publishedAt", "2026-05-06");
+    formData.set("order", "4");
+    formData.set("slug", "blog/field-behavior-note");
+    formData.set("href", "https://example.com/field-behavior");
+    formData.set("icon", "note");
+    formData.set("color", "#336699");
+    formData.set("templateKey", "post");
+    formData.set("primaryMedia", "rec_site_media_avatar");
+
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const createHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+    const editHtml = renderToStaticMarkup(
+      <RecordTable
+        columns={tableColumnsFor(siteSourceSchema, "contentHome")}
+        entity={siteSourceSchema.entities.contentItem}
+        entityName="contentItem"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(createHtml).toContain('name="kind"');
+    expect(createHtml).toContain("Post");
+    expect(createHtml).toContain('name="body"');
+    expect(createHtml).toContain("<textarea");
+    expect(createHtml).toContain('name="featured"');
+    expect(createHtml).toContain('type="checkbox"');
+    expect(createHtml).toContain('name="publishedAt"');
+    expect(createHtml).toContain('aria-label="Select date"');
+    expect(createHtml).toContain('name="order"');
+    expect(createHtml).toContain('type="number"');
+    expect(createHtml).toContain('min="0"');
+    expect(createHtml).toContain('step="1"');
+    expect(createHtml).toContain('name="primaryMedia"');
+    expect(createHtml).toContain("Site owner portrait");
+    expect(resolveCreateValues(formData, action)).toEqual({
+      kind: "post",
+      title: "Field behavior note",
+      label: "Field behavior",
+      subtitle: "Regression coverage",
+      body: "## Note\n\nCreate and edit stay wired.",
+      status: "published",
+      featured: true,
+      publishedAt: "2026-05-06",
+      order: 4,
+      slug: "blog/field-behavior-note",
+      href: "https://example.com/field-behavior",
+      icon: "note",
+      color: "#336699",
+      templateKey: "post",
+      primaryMedia: "rec_site_media_avatar",
+    });
+    expect(editHtml).toContain("Shipping schema-backed authoring");
+    expect(editHtml).toContain('aria-label="Body"');
+    expect(editHtml).toContain("<textarea");
+    expect(editHtml).toContain('aria-label="Featured"');
+    expect(editHtml).toContain('type="checkbox"');
+    expect(editHtml).toContain('aria-label="Published at"');
+    expect(editHtml).toContain('type="date"');
+    expect(editHtml).toContain('aria-label="Order"');
+    expect(editHtml).toContain('type="number"');
+    expect(editHtml).toContain("Published");
+  });
+
   it("still resolves scoped create defaults for views that use them", () => {
     const action = scopedRateCreateAction();
     const formData = new FormData();
@@ -1402,6 +1583,51 @@ function createAction(
     defaults: [],
     enabled: entity.mutations.create.enabled,
   };
+}
+
+function requiredCreateAction(
+  schema: AppSchema,
+  viewName: string,
+): Extract<HomeActionConfig, { type: "create" }> {
+  const action = requiredCollectionModel(schema, viewName).actions.find(
+    (candidate) => candidate.type === "create",
+  );
+
+  if (!action || action.type !== "create") {
+    throw new Error(`Missing create action for ${viewName}.`);
+  }
+
+  return action;
+}
+
+function listRecordFieldsFor(schema: AppSchema, viewName: string): RecordFieldConfig[] {
+  const model = requiredCollectionModel(schema, viewName);
+
+  if (model.result.type !== "list") {
+    throw new Error(`Collection ${viewName} does not render a list.`);
+  }
+
+  return model.result.recordFields;
+}
+
+function tableColumnsFor(schema: AppSchema, viewName: string): TableColumnConfig[] {
+  const model = requiredCollectionModel(schema, viewName);
+
+  if (model.result.type !== "table") {
+    throw new Error(`Collection ${viewName} does not render a table.`);
+  }
+
+  return model.result.columns;
+}
+
+function requiredCollectionModel(schema: AppSchema, viewName: string) {
+  const model = selectCollectionModels(schema).find((candidate) => candidate.viewName === viewName);
+
+  if (!model) {
+    throw new Error(`Missing collection model ${viewName}.`);
+  }
+
+  return model;
 }
 
 function scopedRateCreateAction(): Extract<HomeActionConfig, { type: "create" }> {
