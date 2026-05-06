@@ -6,3 +6,5 @@ node_modules
 dist
 .DS_Store
 tmp
+.agents
+skills-lock.json
