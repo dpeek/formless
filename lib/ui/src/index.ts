@@ -55,6 +55,7 @@ export * from "./spinner.js";
 export * from "./switch.js";
 export * from "./table.js";
 export * from "./tabs.js";
+export * from "./text-input.js";
 export * from "./textarea.js";
 export * from "./toggle-group.js";
 export * from "./toggle.js";

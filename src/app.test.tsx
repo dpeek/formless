@@ -1011,12 +1011,7 @@ describe("generated forms and records", () => {
 
     applyBootstrapResponse(bootstrap([markdownRecord("## Draft\n\nLong body")]));
     const html = renderToStaticMarkup(
-      <RecordTable
-        columns={columns}
-        entity={task}
-        entityName="task"
-        query={{ kind: "all" }}
-      />,
+      <RecordTable columns={columns} entity={task} entityName="task" query={{ kind: "all" }} />,
     );
 
     expect(html).toContain('data-web-markdown-renderer="plate"');
@@ -1128,8 +1123,8 @@ describe("generated forms and records", () => {
     );
     const resourceIds = getClientStoreSnapshot().recordIdsByEntity.resource ?? [];
 
-    expect(before.match(/Designer/g)?.length).toBe(2);
-    expect(after.match(/Principal designer/g)?.length).toBe(2);
+    expect(before.match(/value="Designer"/g)?.length).toBe(2);
+    expect(after.match(/value="Principal designer"/g)?.length).toBe(2);
     expect(after).not.toContain('value="Designer"');
     expect(resourceIds).toEqual(["resource-1"]);
   });
@@ -1313,6 +1308,7 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toMatch(inputWithNameAndType("title", "text"));
+    expect(html).not.toContain('data-web-autosize-text-input="true"');
     expect(html).toMatch(textareaWithName("summary"));
     expect(html).toMatch(inputWithNameAndType("body", "hidden"));
     expect(html).toContain('data-web-markdown-editor="plate"');
@@ -1346,6 +1342,7 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
+    expect(html).toContain('data-web-autosize-text-input="true"');
     expect(html).toContain('value="Plain title"');
     expect(html).toMatch(textareaWithAriaLabel("Summary"));
     expect(html).toContain('data-web-markdown-editor="plate"');
@@ -1363,6 +1360,39 @@ describe("generated forms and records", () => {
     expect(html).toContain('value="1200"');
     expect(html).toContain("Published");
     expect(html).toContain("Designer");
+  });
+
+  it("renders compact text table editors as autosizing editable text", () => {
+    const entity = fieldEditorCharacterizationEntity();
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:title",
+        fieldName: "title",
+        field: entity.fields.title,
+        editor: "text",
+        commit: "field-commit",
+        label: "Title",
+        display: "editor",
+        format: "plain",
+        width: "lg",
+      },
+    ];
+
+    applyBootstrapResponse(bootstrap([fieldEditorCharacterizationRecord()]));
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={entity}
+        entityName="editorCase"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain('data-web-autosize-text-input="true"');
+    expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
+    expect(html).toContain('value="Plain title"');
+    expect(html).not.toContain('data-slot="input"');
   });
 
   it("renders the rate-home resource create dialog with only name visible", () => {

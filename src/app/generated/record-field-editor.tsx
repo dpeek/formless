@@ -8,6 +8,7 @@ import { Label } from "@formless/ui/label";
 import { MarkdownEditor } from "@formless/ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import { Textarea } from "@formless/ui/textarea";
+import { AutosizeTextInput } from "@formless/ui/text-input";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
@@ -184,6 +185,12 @@ export function RecordFieldEditor({
   const isMultilineTextEditor = control.kind === "textarea" && !isRichMarkdownEditor;
   const isColorEditor = adapter.kind === "text" && adapter.editor === "color";
   const isDateEditor = control.kind === "input" && control.inputType === "date";
+  const isAutosizeTextEditor =
+    adapter.kind === "text" &&
+    adapter.editor === "text" &&
+    control.kind === "input" &&
+    control.inputType === "text" &&
+    (density === "compact" || (!showLabel && isTitleLikeTextField(fieldName, field)));
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -287,6 +294,30 @@ export function RecordFieldEditor({
             required={adapter.required}
             value={draft}
           />
+        ) : isAutosizeTextEditor ? (
+          <AutosizeTextInput
+            aria-invalid={error !== null ? true : undefined}
+            aria-label={label}
+            autoSelect
+            className={density === "compact" ? "w-full min-w-0" : "min-w-[8ch] max-w-full"}
+            commitOnBlur={commitPolicy === "field-commit"}
+            controlClassName={
+              density === "compact" ? "h-6 w-full text-xs" : "h-7 w-full text-sm font-medium"
+            }
+            disabled={!canPatch || isPending}
+            onValueChange={setDraft}
+            onValueCommit={(value) => {
+              void commit(inputValueToFieldValue(field, value));
+            }}
+            onValueRevert={() => {
+              setDraft(fieldValueToInputValue(field, recordValue));
+            }}
+            placeholder={label}
+            required={adapter.required}
+            type="text"
+            value={draft}
+            {...adapter.inputAttributes}
+          />
         ) : isDateEditor ? (
           <DateInput
             aria-label={label}
@@ -336,6 +367,18 @@ export function RecordFieldEditor({
       </Field>
       {error ? <FieldError>{error}</FieldError> : null}
     </div>
+  );
+}
+
+function isTitleLikeTextField(fieldName: string, field: FieldSchema) {
+  const normalizedFieldName = fieldName.toLowerCase();
+  const normalizedLabel = (field.label ?? "").toLowerCase();
+
+  return (
+    normalizedFieldName === "title" ||
+    normalizedFieldName === "name" ||
+    normalizedLabel === "title" ||
+    normalizedLabel === "name"
   );
 }
 

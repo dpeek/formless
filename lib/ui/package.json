@@ -66,6 +66,7 @@
     "./switch": "./src/switch.tsx",
     "./tabs": "./src/tabs.tsx",
     "./table": "./src/table.tsx",
+    "./text-input": "./src/text-input.tsx",
     "./textarea": "./src/textarea.tsx",
     "./toggle-group": "./src/toggle-group.tsx",
     "./toggle": "./src/toggle.tsx",
