@@ -1,12 +1,15 @@
 import { createRecordId } from "../shared/ids.ts";
+import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type {
   ActionResponse,
+  BootstrapResponse,
   ChangeRow,
   CreateMutation,
   PatchMutation,
   MutationResponse,
   RecordValues,
   StoredRecord,
+  StoreSnapshot,
 } from "../shared/protocol.ts";
 import { parseAppSchema, stringifySchema, type AppSchema } from "../shared/schema.ts";
 import { nowIsoString } from "../shared/clock.ts";
@@ -186,8 +189,14 @@ export function writeActiveSchemaOutcome(
   storage: DurableObjectStorage,
   schema: AppSchema,
 ): WriteOutcome<StoredSchema> {
-  const updatedAt = nowIsoString();
+  return committedWrite(writeActiveSchemaAt(storage, schema, nowIsoString()));
+}
 
+function writeActiveSchemaAt(
+  storage: DurableObjectStorage,
+  schema: AppSchema,
+  updatedAt: string,
+): StoredSchema {
   storage.sql.exec(
     `
       INSERT INTO app_schema (id, schema_json, updated_at)
@@ -200,7 +209,7 @@ export function writeActiveSchemaOutcome(
     updatedAt,
   );
 
-  return committedWrite({ schema, updatedAt });
+  return { schema, updatedAt };
 }
 
 export function resetStorageSchemaToSource(
@@ -256,6 +265,81 @@ export function resetStorage(storage: DurableObjectStorage, seed: StorageResetSe
   });
 }
 
+export function exportStorageSnapshot(
+  storage: DurableObjectStorage,
+  schemaKey: string,
+): StoreSnapshot {
+  return storage.transactionSync(() => {
+    const storedSchema = readStoredSchema(storage);
+
+    if (!storedSchema) {
+      throw new Error("Cannot export store snapshot before storage is initialized.");
+    }
+
+    return {
+      kind: STORE_SNAPSHOT_KIND,
+      version: STORE_SNAPSHOT_VERSION,
+      schemaKey,
+      exportedAt: nowIsoString(),
+      schemaUpdatedAt: storedSchema.updatedAt,
+      sourceCursor: getCurrentCursor(storage),
+      schema: storedSchema.schema,
+      records: getBootstrapRecords(storage),
+    };
+  });
+}
+
+export function restoreStorageSnapshot(
+  storage: DurableObjectStorage,
+  snapshot: StoreSnapshot,
+): BootstrapResponse {
+  return writeOutcomeResponse(restoreStorageSnapshotOutcome(storage, snapshot));
+}
+
+export function restoreStorageSnapshotOutcome(
+  storage: DurableObjectStorage,
+  snapshot: StoreSnapshot,
+): WriteOutcome<BootstrapResponse> {
+  return storage.transactionSync(() => {
+    assertSnapshotRecordIdsAreUnique(snapshot.records);
+
+    const restoredAt = nowIsoString();
+    const currentRecords = getBootstrapRecords(storage);
+    const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
+    const snapshotRecordIds = new Set(snapshot.records.map((record) => record.id));
+    const restoreMutationId = `snapshot-restore:${restoredAt}`;
+    const storedSchema = writeActiveSchemaAt(storage, snapshot.schema, restoredAt);
+
+    for (const record of snapshot.records) {
+      upsertSnapshotRecord(storage, record);
+
+      const currentRecord = currentRecordsById.get(record.id);
+      if (!storedRecordsEqual(currentRecord, record)) {
+        insertRestoreChange(storage, restoreMutationId, record, restoredAt);
+      }
+    }
+
+    for (const record of currentRecords) {
+      if (snapshotRecordIds.has(record.id) || record.deletedAt) {
+        continue;
+      }
+
+      const tombstonedRecord = { ...record, deletedAt: restoredAt };
+      upsertSnapshotRecord(storage, tombstonedRecord);
+      insertRestoreChange(storage, restoreMutationId, tombstonedRecord, restoredAt);
+    }
+
+    storage.sql.exec("DELETE FROM action_executions");
+
+    return committedWrite({
+      schema: storedSchema.schema,
+      schemaUpdatedAt: storedSchema.updatedAt,
+      records: getBootstrapRecords(storage),
+      cursor: getCurrentCursor(storage),
+    });
+  });
+}
+
 function clearStorage(storage: DurableObjectStorage) {
   storage.sql.exec("DELETE FROM changes");
   storage.sql.exec("DELETE FROM records");
@@ -302,6 +386,45 @@ function insertSeedRecord(
     record.id,
     JSON.stringify(record),
     record.createdAt,
+  );
+}
+
+function upsertSnapshotRecord(storage: DurableObjectStorage, record: StoredRecord) {
+  storage.sql.exec(
+    `
+      INSERT INTO records (id, entity, values_json, created_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        entity = excluded.entity,
+        values_json = excluded.values_json,
+        created_at = excluded.created_at,
+        deleted_at = excluded.deleted_at
+    `,
+    record.id,
+    record.entity,
+    JSON.stringify(record.values),
+    record.createdAt,
+    record.deletedAt ?? null,
+  );
+}
+
+function insertRestoreChange(
+  storage: DurableObjectStorage,
+  mutationId: string,
+  record: StoredRecord,
+  createdAt: string,
+) {
+  storage.sql.exec(
+    `
+      INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    mutationId,
+    "action",
+    record.entity,
+    record.id,
+    JSON.stringify(record),
+    createdAt,
   );
 }
 
@@ -782,6 +905,42 @@ function mergeRecordValues(values: RecordValues, patch: Partial<RecordValues>): 
   }
 
   return merged;
+}
+
+function assertSnapshotRecordIdsAreUnique(records: StoredRecord[]) {
+  const seen = new Set<string>();
+
+  for (const record of records) {
+    if (seen.has(record.id)) {
+      throw new Error(`Store snapshot includes duplicate record id "${record.id}".`);
+    }
+
+    seen.add(record.id);
+  }
+}
+
+function storedRecordsEqual(left: StoredRecord | undefined, right: StoredRecord) {
+  return (
+    left !== undefined &&
+    left.id === right.id &&
+    left.entity === right.entity &&
+    left.createdAt === right.createdAt &&
+    left.deletedAt === right.deletedAt &&
+    recordValuesEqual(left.values, right.values)
+  );
+}
+
+function recordValuesEqual(left: RecordValues, right: RecordValues) {
+  const leftEntries = Object.entries(left);
+  const rightKeys = new Set(Object.keys(right));
+
+  if (leftEntries.length !== rightKeys.size) {
+    return false;
+  }
+
+  return leftEntries.every(
+    ([fieldName, fieldValue]) => rightKeys.has(fieldName) && right[fieldName] === fieldValue,
+  );
 }
 
 export function getStoredRecord(

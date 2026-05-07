@@ -1,7 +1,7 @@
 # PRD 15: Store snapshot export and restore
 
-Status: planned
-Current chunk: SNP-03
+Status: in progress
+Current chunk: SNP-04
 Last updated: 2026-05-07
 
 ## Goal
@@ -240,6 +240,7 @@ Notes:
 | SNP-D9  | Keep UI scoped to developer controls.             | Roadmap excludes general import/export UI from first release.                           | `doc/roadmap.md`                                  |
 | SNP-D10 | Return a bootstrap-shaped response after restore. | The restoring browser can replace its local replica in one existing path.               | `src/client/sync.ts`, `src/client/db.ts`          |
 | SNP-D11 | Reject unsupported version-1 envelope keys.       | Version 1 should stay reviewable and avoid silently importing ambiguous snapshot data.  | `src/shared/protocol.ts`                          |
+| SNP-D12 | Clear action replay history during restore.       | Restored records can make old action replay rows describe state that no longer exists.  | `src/worker/storage.ts`                           |
 
 ## Chunks
 
@@ -247,7 +248,7 @@ Notes:
 | ------ | ------- | ---------- | ------------------------------ | --------------------------------------------------------------------------------------------------------- |
 | SNP-01 | shipped | none       | PRD                            | PRD captures scope, decisions, chunks, blockers, and promote notes.                                       |
 | SNP-02 | shipped | SNP-01     | protocol, tests                | Snapshot envelope parses, rejects bad kind/version/schema key shape, and preserves supported JSON shape.  |
-| SNP-03 | planned | SNP-02     | storage, storage tests         | Storage can export and restore snapshots atomically with monotonic cursor behavior.                       |
+| SNP-03 | shipped | SNP-02     | storage, storage tests         | Storage can export and restore snapshots atomically with monotonic cursor behavior.                       |
 | SNP-04 | planned | SNP-03     | authority, authority tests     | Snapshot export and restore routes are schema-keyed, validate input, and broadcast only on commit.        |
 | SNP-05 | planned | SNP-04     | client sync, app UI, app tests | Schema route exposes developer export/restore controls and refreshes the local replica after restore.     |
 | SNP-06 | planned | SNP-05     | browser smoke, PRD             | Browser smoke covers export/restore flow; PRD status, decisions, blockers, and promote notes are current. |
@@ -297,6 +298,7 @@ Recommended order:
 - SNP-02: no global doc promotion. Protocol only.
 - SNP-02 shipped: no global doc promotion. Protocol parser only; no runtime route or storage behavior yet.
 - SNP-03: promote storage snapshot restore behavior if shipped.
+- SNP-03 shipped: storage can export active store snapshots and restore parsed snapshots with a fresh schema timestamp, preserved snapshot record metadata, tombstones for absent active records, monotonic change cursors, and cleared action replay rows.
 - SNP-04: promote API paths and authority write semantics if shipped.
 - SNP-05: promote client controls if shipped.
 - SNP-06: no global doc promotion beyond final shipped facts above.
@@ -309,13 +311,18 @@ Recommended order:
 - 2026-05-07 SNP-02: added `StoreSnapshot` envelope constants, type, and `parseStoreSnapshot` in `src/shared/protocol.ts`.
 - 2026-05-07 SNP-02: added protocol tests for supported version-1 shape, bad kind, bad version, schema-key mismatch, invalid cursor, invalid record shape, and unsupported keys in `src/shared/protocol.test.ts`.
 - 2026-05-07 SNP-02: `bun start` reports `testStatus: pass` and `checkStatus: pass`; `./tmp/test.txt` reports 29 files and 509 tests passing, and `./tmp/check.txt` reports formatting plus lint/type check passing for 166 files.
+- 2026-05-07 SNP-03: added `exportStorageSnapshot`, `restoreStorageSnapshot`, and `restoreStorageSnapshotOutcome` in `src/worker/storage.ts`.
+- 2026-05-07 SNP-03: storage restore writes a fresh schema timestamp, upserts snapshot records, tombstones active records missing from the snapshot, appends sync-visible restore changes, preserves monotonic change cursors, and clears action replay rows.
+- 2026-05-07 SNP-03: added storage tests for snapshot export shape, restore records/tombstones/cursor changes, atomic duplicate-ID rejection, and action replay cleanup in `src/worker/storage.test.ts`.
+- 2026-05-07 SNP-03: `bun start` reports `testStatus: pass` and `checkStatus: pass`; `./tmp/test.txt` reports `src/worker/storage.test.ts` 17 tests passing after the storage rerun, and `./tmp/check.txt` reports formatting plus lint/type check passing for 166 files.
 
 ## PRD status notes
 
 - PRD drafted 2026-05-07.
 - SNP-01 shipped 2026-05-07.
 - SNP-02 shipped 2026-05-07.
-- Current chunk: SNP-03.
+- SNP-03 shipped 2026-05-07.
+- Current chunk: SNP-04.
 - Current blocker: none.
 - Main risk: restore must not reset sync cursors, because existing replicas use cursor catch-up.
 - Main implementation note: use a small, tested restore module rather than putting restore diff logic directly in the route branch.
