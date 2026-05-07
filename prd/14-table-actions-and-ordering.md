@@ -1,7 +1,7 @@
 # PRD 14: Table actions and ordering
 
-Status: in progress
-Current chunk: TAO-06
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-07
 
 ## Goal
@@ -315,7 +315,7 @@ Notes:
 | TAO-03 | shipped | TAO-02     | edit view parser/model, generated edit dialog, Site schema  | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.           |
 | TAO-04 | shipped | TAO-03     | ordering parser/model, rank module, move menu, Site schema  | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                |
 | TAO-05 | shipped | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.    |
-| TAO-06 | planned | TAO-05     | browser smoke, PRD                                          | `/site`, `/tasks`, and `/rates` smoke pass; PRD status, blockers, and promote notes are current.     |
+| TAO-06 | shipped | TAO-05     | browser smoke, PRD                                          | `/site`, `/tasks`, and `/rates` smoke pass; PRD status, blockers, and promote notes are current.     |
 
 ## Chunk details
 
@@ -509,7 +509,7 @@ Evidence:
 
 ### TAO-06 closeout
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: smoke the shipped table action and ordering work and prepare promotion notes.
 
@@ -522,6 +522,34 @@ Tasks:
 - Update PRD status and chunk table.
 - Record blockers.
 - Record promote notes.
+
+Outcome:
+
+- `/site` browser smoke verifies placement Reorder and Actions columns.
+- `/site` browser smoke verifies Edit block opens the referenced child block edit dialog.
+- `/site` browser smoke verifies Move down reorders a main-slot placement and advances sync cursor.
+- `/tasks` browser smoke verifies existing task table and collection actions still render.
+- `/rates` browser smoke verifies existing rate table editing surface still renders.
+- `/pages` browser smoke redirects to `/pages/home` and renders the public Home page.
+- PRD status is `shipped`.
+- Chunk table marks TAO-01 through TAO-06 shipped.
+- Blockers are clear.
+- Promote notes are ready for a docs/steward pass.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass, updated `2026-05-07T04:51:04.896Z`.
+- `./tmp/test.txt`: `29 passed (29)`, `506 passed (506)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
+- Browser smoke: `bun browser --session tao-06 eval 'fetch("/api/site/reset/schema",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.status)'` returned `200`.
+- Browser smoke: `bun browser --session tao-06 eval 'fetch("/api/site/reset/seed",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.status)'` returned `200`.
+- Browser smoke: `bun browser --session tao-06 --ignore-https-errors batch --bail "open https://14-table-actions-and-ordering.formless.local/site" "wait 1000" "get text body"` returned the Site editor with `Pages`, placement table rows, `Reorder`, `Actions`, and `Create Block placement`.
+- Browser smoke: `bun browser --session tao-06 snapshot -i` showed `Edit block`, `Move to top`, `Move up`, `Move down`, and `Move to bottom` in the placement row Actions menu.
+- Browser smoke: focused `Move down` and pressed Enter; snapshot showed cursor advanced to 49 and `Recent posts` moved above `Schema-backed software for content-heavy products` in the `main` scope.
+- Browser smoke: `bun browser --session tao-06 --ignore-https-errors batch --bail "open https://14-table-actions-and-ordering.formless.local/tasks" "wait 1000" "get text body"` returned the Tasks table with `Create Task` and `Clear completed`.
+- Browser smoke: `bun browser --session tao-06 --ignore-https-errors batch --bail "open https://14-table-actions-and-ordering.formless.local/rates" "wait 1000" "get text body"` returned the Rates table with `Role`, `Cost`, `Price`, `Margin`, and `Create Resource`.
+- Browser smoke: `bun browser --session tao-06 --ignore-https-errors batch --bail "open https://14-table-actions-and-ordering.formless.local/pages" "wait 1000" "get url" "get text body"` redirected to `/pages/home` and returned the public Home page with header navigation, recent posts, hero, featured projects, and footer.
+- Browser smoke: `bun browser --session tao-06 errors` returned no page errors.
 
 Acceptance:
 
@@ -692,6 +720,7 @@ When this PRD ships, update `doc/roadmap.md` only if first-release target detail
 - TAO-03 shipped 2026-05-07 with edit views, `editRecord` table actions, generated edit dialogs, and Site placement Edit block actions; no ordering behavior added.
 - TAO-04 shipped 2026-05-07 with table-local ordering, sparse rank moves, generated move menus, and Site placement ordering controls.
 - TAO-05 shipped 2026-05-07 with `@dnd-kit/react`, generated drag handles, scoped sortable rows, and drop-time sparse rank patches.
+- TAO-06 shipped 2026-05-07 with closeout browser smoke for `/site`, `/tasks`, `/rates`, and `/pages`; PRD 14 is complete and ready for docs/steward promotion.
 - User direction: keep collection views as scope containers and make tables the first record interaction surface.
 - User direction: use table-local named actions and an `invokeAction` table column.
 - User direction: add proper edit views for edit dialogs.
