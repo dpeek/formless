@@ -27,6 +27,7 @@ import type {
   RecordValues,
   SchemaResponse,
   SchemaUpdateResponse,
+  StoreSnapshot,
   SyncSocketClientMessage,
   SyncSocketServerMessage,
   SyncResponse,
@@ -122,6 +123,28 @@ export async function saveActiveSchema(
   await saveSchema(schemaKey, response.schema, response.updatedAt);
   applySchemaSave(response.schema, response.updatedAt, schemaKey);
   notifySchemaChanged(schemaKey);
+
+  return response;
+}
+
+export async function exportStoreSnapshot(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
+  return fetchJson<StoreSnapshot>(fetcher, apiPath(schemaKey, "snapshot"));
+}
+
+export async function restoreStoreSnapshot(
+  schemaKey: SchemaKey,
+  snapshot: unknown,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await postJson<BootstrapResponse>(
+    fetcher,
+    apiPath(schemaKey, "snapshot/restore"),
+    snapshot,
+  );
+
+  await saveBootstrapResponse(schemaKey, response);
+  applyBootstrapResponse(response, schemaKey);
+  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
 
   return response;
 }

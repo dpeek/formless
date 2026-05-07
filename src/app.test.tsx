@@ -206,6 +206,10 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-label="Tasks route reset controls"');
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset schema and seed data");
+    expect(html).toContain('aria-label="Tasks store snapshot controls"');
+    expect(html).toContain("Export store snapshot");
+    expect(html).toContain("Tasks snapshot file");
+    expect(html).toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;screens&quot;");
     expect(html).toContain("&quot;task&quot;");
@@ -222,6 +226,10 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-label="Rates route reset controls"');
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset schema and seed data");
+    expect(html).toContain('aria-label="Rates store snapshot controls"');
+    expect(html).toContain("Export store snapshot");
+    expect(html).toContain("Rates snapshot file");
+    expect(html).toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;rateSetup&quot;");
     expect(html).toContain("&quot;rate&quot;");
@@ -239,6 +247,10 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-label="Site route reset controls"');
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset schema and seed data");
+    expect(html).toContain('aria-label="Site store snapshot controls"');
+    expect(html).toContain("Export store snapshot");
+    expect(html).toContain("Site snapshot file");
+    expect(html).toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;sitePages&quot;");
     expect(html).toContain("&quot;siteHeader&quot;");

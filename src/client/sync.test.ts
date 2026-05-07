@@ -13,10 +13,12 @@ import {
 import {
   applySyncResponse,
   bootstrapClient,
+  exportStoreSnapshot,
   fetchActiveSchema,
   resetSeedData,
   resetSourceSchema,
   requestSync,
+  restoreStoreSnapshot,
   saveActiveSchema,
   startPushSync,
   submitAction,
@@ -24,6 +26,7 @@ import {
   submitPatchMutation,
   syncClient,
 } from "./sync.ts";
+import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type {
   ActionResponse,
   BootstrapResponse,
@@ -31,6 +34,7 @@ import type {
   MutationResponse,
   SchemaResponse,
   SchemaUpdateResponse,
+  StoreSnapshot,
   StoredRecord,
   SyncSocketClientMessage,
   SyncSocketServerMessage,
@@ -629,6 +633,91 @@ describe("client sync", () => {
     expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
   });
 
+  it("exports store snapshots from the schema-keyed authority", async () => {
+    const snapshot = storeSnapshot({
+      records: [record("record-1", "First")],
+      sourceCursor: 3,
+    });
+
+    const response = await exportStoreSnapshot(
+      "tasks",
+      jsonFetcher("/api/tasks/snapshot", snapshot),
+    );
+
+    expect(response).toEqual(snapshot);
+  });
+
+  it("restores store snapshots and replaces the selected local replica", async () => {
+    const restoredRecord = record("record-2", "Restored");
+    const restoredSchema = schemaWithSummary();
+    const requestSnapshot = storeSnapshot({
+      records: [restoredRecord],
+      schema: restoredSchema,
+    });
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "Old")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    const response = await restoreStoreSnapshot("tasks", requestSnapshot, async (input, init) => {
+      expect(input).toBe("/api/tasks/snapshot/restore");
+      expect(init?.method).toBe("POST");
+      expect(parsePlainRequestBody(init?.body)).toEqual(requestSnapshot);
+
+      return Response.json({
+        schema: restoredSchema,
+        schemaUpdatedAt: "2026-04-28T00:02:00.000Z",
+        records: [restoredRecord],
+        cursor: 4,
+      } satisfies BootstrapResponse);
+    });
+    const snapshot = await readLocalSnapshot("tasks");
+    const clientSnapshot = getClientStoreSnapshot();
+
+    expect(response.records).toEqual([restoredRecord]);
+    expect(snapshot.schema).toEqual(restoredSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:02:00.000Z");
+    expect(snapshot.records).toEqual([restoredRecord]);
+    expect(snapshot.cursor).toBe(4);
+    expect(clientSnapshot.recordsById["record-1"]).toBeUndefined();
+    expect(clientSnapshot.recordsById["record-2"]).toEqual(restoredRecord);
+    expect(clientSnapshot.cursor).toBe(4);
+  });
+
+  it("keeps the selected local replica unchanged when snapshot restore fails", async () => {
+    const existingRecord = record("record-1", "Old");
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [existingRecord],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    try {
+      await restoreStoreSnapshot("tasks", storeSnapshot(), async () =>
+        Response.json({ error: "Store snapshot schemaKey must be \"tasks\"." }, { status: 400 }),
+      );
+      throw new Error("Expected restore to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('Store snapshot schemaKey must be "tasks".');
+    }
+
+    const snapshot = await readLocalSnapshot("tasks");
+    const clientSnapshot = getClientStoreSnapshot();
+
+    expect(snapshot.records).toEqual([existingRecord]);
+    expect(snapshot.cursor).toBe(1);
+    expect(clientSnapshot.recordsById["record-1"]).toEqual(existingRecord);
+    expect(clientSnapshot.cursor).toBe(1);
+  });
+
   it("resets source schema without deleting the selected local database", async () => {
     const acceptedRecord = record("record-2", "Second");
 
@@ -958,6 +1047,20 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
     create: { enabled: true },
     patch: { enabled: true },
     delete: { enabled: false },
+  };
+}
+
+function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+  return {
+    kind: STORE_SNAPSHOT_KIND,
+    version: STORE_SNAPSHOT_VERSION,
+    schemaKey: "tasks",
+    exportedAt: "2026-04-28T00:01:00.000Z",
+    schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+    sourceCursor: 1,
+    schema: appSchema,
+    records: [],
+    ...overrides,
   };
 }
 

@@ -109,6 +109,13 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
             message: `Reset schema and seed data at ${response.schemaUpdatedAt}.`,
           });
         }}
+        onRestoreSnapshot={(response) => {
+          setEditorText(stringifySchema(response.schema));
+          setStatus({
+            state: "idle",
+            message: `Restored store snapshot at ${response.schemaUpdatedAt}.`,
+          });
+        }}
       />
 
       <form className="space-y-4" onSubmit={submitSchema}>

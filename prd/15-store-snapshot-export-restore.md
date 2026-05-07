@@ -1,7 +1,7 @@
 # PRD 15: Store snapshot export and restore
 
 Status: in progress
-Current chunk: SNP-05
+Current chunk: SNP-06
 Last updated: 2026-05-07
 
 ## Goal
@@ -241,6 +241,8 @@ Notes:
 | SNP-D10 | Return a bootstrap-shaped response after restore. | The restoring browser can replace its local replica in one existing path.               | `src/client/sync.ts`, `src/client/db.ts`          |
 | SNP-D11 | Reject unsupported version-1 envelope keys.       | Version 1 should stay reviewable and avoid silently importing ambiguous snapshot data.  | `src/shared/protocol.ts`                          |
 | SNP-D12 | Clear action replay history during restore.       | Restored records can make old action replay rows describe state that no longer exists.  | `src/worker/storage.ts`                           |
+| SNP-D13 | Reuse client bootstrap save for restore.          | Restore returns full replica state.                                                    | `src/client/sync.ts`, `src/client/db.ts`          |
+| SNP-D14 | Keep snapshot UI in developer schema controls.    | Snapshot export/restore is developer tooling, not generated product UI.                | `src/app/dev-actions.tsx`, `src/app/routes/schema.tsx` |
 
 ## Chunks
 
@@ -250,7 +252,7 @@ Notes:
 | SNP-02 | shipped | SNP-01     | protocol, tests                | Snapshot envelope parses, rejects bad kind/version/schema key shape, and preserves supported JSON shape.  |
 | SNP-03 | shipped | SNP-02     | storage, storage tests         | Storage can export and restore snapshots atomically with monotonic cursor behavior.                       |
 | SNP-04 | shipped | SNP-03     | authority, authority tests     | Snapshot export and restore routes are schema-keyed, validate input, and broadcast only on commit.        |
-| SNP-05 | planned | SNP-04     | client sync, app UI, app tests | Schema route exposes developer export/restore controls and refreshes the local replica after restore.     |
+| SNP-05 | shipped | SNP-04     | client sync, app UI, app tests | Schema route exposes developer export/restore controls and refreshes the local replica after restore.     |
 | SNP-06 | planned | SNP-05     | browser smoke, PRD             | Browser smoke covers export/restore flow; PRD status, decisions, blockers, and promote notes are current. |
 
 ## Non-goals
@@ -302,6 +304,7 @@ Recommended order:
 - SNP-04: promote API paths and authority write semantics if shipped.
 - SNP-04 shipped: authority exposes `GET /api/:schemaKey/snapshot` and `POST /api/:schemaKey/snapshot/restore`; restore validates schema-key, envelope, record fields, references, timestamps, and unique constraints before commit, returns bootstrap shape, and broadcasts sync only after committed restore writes.
 - SNP-05: promote client controls if shipped.
+- SNP-05 shipped: client sync exposes snapshot export and restore helpers; schema routes expose developer snapshot controls that export authority snapshots, accept JSON restore files with confirmation, and refresh the visible schema editor plus selected local replica from the restore response.
 - SNP-06: no global doc promotion beyond final shipped facts above.
 
 ## Evidence
@@ -320,6 +323,11 @@ Recommended order:
 - 2026-05-07 SNP-04: restore route parses `StoreSnapshot`, enforces same schema key, validates record IDs, ISO timestamps, entity fields, reference targets, tombstones, and unique constraints before calling storage restore.
 - 2026-05-07 SNP-04: added authority tests for schema-keyed export, committed restore broadcast, rejected restore without commit or broadcast, and record validation in `src/worker/authority.test.ts`.
 - 2026-05-07 SNP-04: `bun start` reports `testStatus: pass` and `checkStatus: pass`; `./tmp/test.txt` reports `src/worker/authority.test.ts` 89 tests passing after the authority rerun, and `./tmp/check.txt` reports formatting plus lint/type check passing for 166 files.
+- 2026-05-07 SNP-05: added `exportStoreSnapshot` and `restoreStoreSnapshot` in `src/client/sync.ts`; restore posts to `/api/:schemaKey/snapshot/restore`, saves the bootstrap-shaped response, applies it to the active client store, and broadcasts schema/record/cursor updates.
+- 2026-05-07 SNP-05: added schema-route developer controls in `src/app/dev-actions.tsx` and route refresh wiring in `src/app/routes/schema.tsx`; controls export store snapshots, accept a JSON restore file, ask for restore confirmation, and show restore/export errors.
+- 2026-05-07 SNP-05: added client sync tests for snapshot export, successful restore replica replacement, and failed restore preserving local state in `src/client/sync.test.ts`; added route render assertions for snapshot controls in `src/app.test.tsx`.
+- 2026-05-07 SNP-05: browser smoke with `bun browser --session prd15-snp05 get text body` on `/tasks/schema` showed `Export store snapshot`, `Tasks snapshot file`, and `Restore store snapshot`.
+- 2026-05-07 SNP-05: `bun start` reports `testStatus: pass` and `checkStatus: pass`; `./tmp/test.txt` reports `src/client/sync.test.ts` 32 tests passing and `src/app.test.tsx` 86 tests passing after relevant reruns, and `./tmp/check.txt` reports formatting plus lint/type check passing for 166 files.
 
 ## PRD status notes
 
@@ -328,7 +336,8 @@ Recommended order:
 - SNP-02 shipped 2026-05-07.
 - SNP-03 shipped 2026-05-07.
 - SNP-04 shipped 2026-05-07.
-- Current chunk: SNP-05.
+- SNP-05 shipped 2026-05-07.
+- Current chunk: SNP-06.
 - Current blocker: none.
-- Main risk: client restore UI must replace the local replica from the bootstrap-shaped restore response.
-- Main implementation note: keep snapshot controls in developer/schema surfaces, not generated app product UI.
+- Main risk: SNP-06 browser smoke should cover the full export file and restore confirmation flow.
+- Main implementation note: snapshot controls stay in developer/schema surfaces, not generated app product UI.
