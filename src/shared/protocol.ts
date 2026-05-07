@@ -1,4 +1,4 @@
-import type { AppSchema } from "./schema.ts";
+import { parseAppSchema, type AppSchema } from "./schema.ts";
 
 export type EntityName = string;
 export type FieldValue = string | boolean | number;
@@ -64,6 +64,20 @@ export type BootstrapResponse = {
   schemaUpdatedAt: string;
   records: StoredRecord[];
   cursor: number;
+};
+
+export const STORE_SNAPSHOT_KIND = "formless.storeSnapshot";
+export const STORE_SNAPSHOT_VERSION = 1;
+
+export type StoreSnapshot = {
+  kind: typeof STORE_SNAPSHOT_KIND;
+  version: typeof STORE_SNAPSHOT_VERSION;
+  schemaKey: string;
+  exportedAt: string;
+  schemaUpdatedAt: string;
+  sourceCursor: number;
+  schema: AppSchema;
+  records: StoredRecord[];
 };
 
 export type SyncResponse = {
@@ -205,6 +219,40 @@ export function isSyncSocketAttachment(value: unknown): value is SyncSocketAttac
   return isRecord(value) && isCursor(value.cursor) && isNullableString(value.schemaUpdatedAt);
 }
 
+export function parseStoreSnapshot(value: unknown, expectedSchemaKey?: string): StoreSnapshot {
+  if (!isRecord(value)) {
+    throw new Error("Store snapshot must be an object.");
+  }
+
+  assertStoreSnapshotKeys(value);
+
+  if (value.kind !== STORE_SNAPSHOT_KIND) {
+    throw new Error(`Store snapshot kind must be "${STORE_SNAPSHOT_KIND}".`);
+  }
+
+  if (value.version !== STORE_SNAPSHOT_VERSION) {
+    throw new Error(`Store snapshot version must be ${STORE_SNAPSHOT_VERSION}.`);
+  }
+
+  const schemaKey = parseNonEmptyString("Store snapshot schemaKey", value.schemaKey);
+  if (expectedSchemaKey !== undefined && schemaKey !== expectedSchemaKey) {
+    throw new Error(`Store snapshot schemaKey must be "${expectedSchemaKey}".`);
+  }
+
+  const records = parseStoreSnapshotRecords(value.records);
+
+  return {
+    kind: STORE_SNAPSHOT_KIND,
+    version: STORE_SNAPSHOT_VERSION,
+    schemaKey,
+    exportedAt: parseNonEmptyString("Store snapshot exportedAt", value.exportedAt),
+    schemaUpdatedAt: parseNonEmptyString("Store snapshot schemaUpdatedAt", value.schemaUpdatedAt),
+    sourceCursor: parseCursor("Store snapshot sourceCursor", value.sourceCursor),
+    schema: parseAppSchema(value.schema),
+    records,
+  };
+}
+
 function isSyncResponse(value: unknown): value is SyncResponse {
   if (!isRecord(value) || !Array.isArray(value.changes) || !isCursor(value.cursor)) {
     return false;
@@ -271,4 +319,66 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertStoreSnapshotKeys(value: Record<string, unknown>) {
+  const requiredKeys = [
+    "kind",
+    "version",
+    "schemaKey",
+    "exportedAt",
+    "schemaUpdatedAt",
+    "sourceCursor",
+    "schema",
+    "records",
+  ];
+  const allowedKeys = new Set(requiredKeys);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Store snapshot has unsupported key "${key}".`);
+    }
+  }
+
+  for (const key of requiredKeys) {
+    if (!(key in value)) {
+      throw new Error(`Store snapshot must include "${key}".`);
+    }
+  }
+}
+
+function parseStoreSnapshotRecords(value: unknown): StoredRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Store snapshot records must be an array.");
+  }
+
+  return value.map((record, index) => {
+    if (!isStoredRecord(record)) {
+      throw new Error(`Store snapshot records[${index}] must be a stored record.`);
+    }
+
+    return {
+      id: record.id,
+      entity: record.entity,
+      values: { ...record.values },
+      createdAt: record.createdAt,
+      ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
+    };
+  });
+}
+
+function parseNonEmptyString(context: string, value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${context} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function parseCursor(context: string, value: unknown): number {
+  if (!isCursor(value)) {
+    throw new Error(`${context} must be a non-negative integer.`);
+  }
+
+  return value;
 }
