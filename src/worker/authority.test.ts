@@ -488,10 +488,10 @@ describe("authority", () => {
     });
     expect(snapshot.records).toEqual([...taskSeedRecords, created.record]);
 
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     const rateSnapshot = await getJson<StoreSnapshot>("/api/snapshot");
 
-    expect(rateSnapshot.schemaKey).toBe("rates");
+    expect(rateSnapshot.schemaKey).toBe("estii");
     expect(rateSnapshot.schema).toEqual(rateCardSchema);
     expect(rateSnapshot.records).toEqual(rateCardSeedRecords);
     expect(rateSnapshot.records.some((record) => record.id === created.record.id)).toBe(false);
@@ -502,13 +502,13 @@ describe("authority", () => {
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const restoredRecord = taskSnapshotRecord("snapshot-task-restored", "Restored task");
     const taskSocket = await openSyncSocket("/api/sync/ws", "tasks");
-    const ratesSocket = await openSyncSocket("/api/sync/ws", "rates");
+    const ratesSocket = await openSyncSocket("/api/sync/ws", "estii");
     let ratesCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
 
     try {
       await primeSyncSocket(taskSocket, before.cursor, schemaResponse.updatedAt);
 
-      useSchemaApp("rates");
+      useSchemaApp("estii");
       const rateSchema = await getJson<SchemaResponse>("/api/schema");
       await primeSyncSocket(ratesSocket, rateCardSeedRecords.length, rateSchema.updatedAt);
       ratesCapture = captureSyncSocketMessages(ratesSocket);
@@ -564,7 +564,7 @@ describe("authority", () => {
       const capture = captureSyncSocketMessages(socket);
       await expectError(
         "/api/snapshot/restore",
-        storeSnapshot({ schemaKey: "rates" }),
+        storeSnapshot({ schemaKey: "estii" }),
         'Store snapshot schemaKey must be "tasks".',
       );
       await expectNoCapturedMessages(capture);
