@@ -16,4 +16,3 @@ Read these before domain-sensitive engineering work:
 - Treat `doc/roadmap.md` as first-release target.
 - Treat each `prd/*.md` as one workstream owner.
 - If an ADR conflicts with a proposed change, call out the conflict.
-

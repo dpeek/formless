@@ -21,4 +21,3 @@ Use the `gh` CLI for issue operations from this repo.
 - PRD workstreams live in `prd/*.md`.
 - PRD files own chunks, blockers, decisions, evidence, and promote notes.
 - Do not create or move PRDs through GitHub Issues unless the user asks.
-

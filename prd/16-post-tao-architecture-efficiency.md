@@ -1,7 +1,7 @@
 # PRD 16: Post-TAO architecture efficiency
 
 Status: active
-Current chunk: AEC-04
+Current chunk: AEC-05
 Last updated: 2026-05-07
 
 ## Goal
@@ -172,7 +172,7 @@ Likely changed files:
 | AEC-01 | shipped | PRD 14 shipped   | PRD                               | PRD captures scope, decisions, blockers, dependencies, and promote notes.                                       |
 | AEC-02 | shipped | AEC-01           | agent docs, global docs           | Repo has agent skill memory, domain docs home, ADR home, and shipped PRD facts promoted source-faithfully.      |
 | AEC-03 | shipped | AEC-02, TAO done | table parser/model/renderer files | Post-TAO table behavior is behind deeper table modules with equivalent parser/model/render behavior.            |
-| AEC-04 | planned | AEC-02           | authority validation files        | Mutation, record value, reference, and schema compatibility validation move out of the route with same results. |
+| AEC-04 | shipped | AEC-02           | authority validation files        | Mutation, record value, reference, and schema compatibility validation move out of the route with same results. |
 | AEC-05 | planned | AEC-03, AEC-04   | test helper modules and tests     | Repeated schema, table, authority, and site editor setup is concentrated in tested helpers.                     |
 | AEC-06 | planned | AEC-05           | browser smoke if needed, PRD      | Checks pass; browser smoke runs if app behavior was touched; PRD status and promote notes are current.          |
 
@@ -291,7 +291,7 @@ Shipped:
 
 ### AEC-04 authority validation module
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: make authority write validation local without changing write behavior.
 
@@ -322,6 +322,15 @@ Evidence to record:
 - `./tmp/agent-dev.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
+
+Shipped:
+
+- Added `src/worker/authority-validation.ts`.
+- Moved mutation request validation, record field/reference validation, schema update compatibility validation, and source schema reset validation out of `src/worker/authority.ts`.
+- Kept request parsing, route dispatch, HTTP response mapping, and `AuthorityWriteModule` committed-write notification in `src/worker/authority.ts`.
+- Kept unique constraint checks on committed create/patch writes through existing `assertUniqueConstraints` callbacks.
+- PRD 15 coordination done before edits; `prd/15-store-snapshot-export-restore.md` is still planned and no snapshot restore validation code is present in this branch.
+- Browser smoke not run; worker validation behavior was refactored without intended app behavior change.
 
 ### AEC-05 test helper deepening
 
@@ -396,10 +405,10 @@ Acceptance:
 
 ## Blockers
 
-| ID     | Status | Blocks            | Notes                                                               |
-| ------ | ------ | ----------------- | ------------------------------------------------------------------- |
-| AEC-B1 | closed | AEC-02 through 06 | PRD 14 shipped 2026-05-07; AEC-02 can start.                        |
-| AEC-B2 | open   | AEC-04            | Coordinate with PRD 15 if snapshot restore changes validation code. |
+| ID     | Status | Blocks            | Notes                                                                                        |
+| ------ | ------ | ----------------- | -------------------------------------------------------------------------------------------- |
+| AEC-B1 | closed | AEC-02 through 06 | PRD 14 shipped 2026-05-07; AEC-02 can start.                                                 |
+| AEC-B2 | closed | AEC-04            | PRD 15 remains planned; no snapshot restore validation code was present before AEC-04 edits. |
 
 ## Cross-PRD dependencies
 
@@ -472,6 +481,7 @@ AEC-04:
 
 - `doc/current.md`: note authority validation module location if extracted.
 - `doc/current.md`: note authority route keeps HTTP shape while validation lives behind a deeper module.
+- Ready for docs/steward promotion: `src/worker/authority-validation.ts` owns mutation, record value, reference, and schema compatibility validation.
 
 AEC-05:
 
@@ -497,6 +507,11 @@ AEC-06:
 - 2026-05-07 AEC-03: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-03: `./tmp/test.txt` shows 31 files and 509 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
 - 2026-05-07 AEC-03: browser smoke not run because this was a behavior-preserving refactor.
+- 2026-05-07 AEC-04: PRD 15 coordination checked `prd/15-store-snapshot-export-restore.md`; it remains planned and no snapshot restore validation code was present before authority validation edits.
+- 2026-05-07 AEC-04: Extracted `src/worker/authority-validation.ts` from `src/worker/authority.ts` while preserving route parsing, HTTP status mapping, committed write notification, and existing mutation/schema/reference validation messages.
+- 2026-05-07 AEC-04: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-04: `./tmp/test.txt` shows 31 files and 509 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed across 175 files.
+- 2026-05-07 AEC-04: browser smoke not run because this was a worker validation refactor with no intended app behavior change.
 
 ## PRD status notes
 
@@ -506,6 +521,7 @@ AEC-06:
 - AEC-01 shipped 2026-05-07 after PRD 14 was marked shipped.
 - AEC-02 shipped 2026-05-07 as a docs/steward chunk.
 - AEC-03 shipped 2026-05-07 as a post-TAO table parser/model/renderer deepening chunk.
-- Next chunk: AEC-04 authority validation module; coordinate AEC-B2 before editing validation paths.
-- Main risk: authority validation extraction may overlap with snapshot restore validation if PRD 15 ships first.
-- Current blocker: AEC-B2 still applies before AEC-04 if PRD 15 touches validation.
+- AEC-04 shipped 2026-05-07 as an authority validation module extraction.
+- Next chunk: AEC-05 test helper deepening.
+- Main risk: AEC-05 should avoid shallow helpers and only extract repeated setup that improves locality.
+- Current blocker: none.
