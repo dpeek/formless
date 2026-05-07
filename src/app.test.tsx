@@ -28,7 +28,11 @@ import {
   withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
 import { buildSitePageTree } from "./site/tree.ts";
-import { createAppRuntimeProfile, type RuntimeProfile } from "./app/runtime-profile.ts";
+import {
+  createAppRuntimeProfile,
+  createPublishedSiteRuntimeProfile,
+  type RuntimeProfile,
+} from "./app/runtime-profile.ts";
 import {
   selectCollectionModels,
   selectPrimaryCollectionModels,
@@ -286,6 +290,25 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/site/schema"');
   });
 
+  it('renders a published Site profile home at "/" outside generated admin navigation', () => {
+    const html = renderRoute("/", createPublishedSiteRuntimeProfile());
+
+    expect(html).toContain("Loading site page...");
+    expect(html).toContain("Loading home.");
+    expect(html).not.toContain('href="/tasks"');
+    expect(html).not.toContain('href="/site/schema"');
+    expect(html).not.toContain("Formless</span>");
+  });
+
+  it("renders a published Site profile slug path outside generated admin navigation", () => {
+    const html = renderRoute("/projects/estii", createPublishedSiteRuntimeProfile());
+
+    expect(html).toContain("Loading site page...");
+    expect(html).toContain("Loading projects/estii.");
+    expect(html).not.toContain('href="/tasks"');
+    expect(html).not.toContain('href="/site/schema"');
+  });
+
   it('renders an app profile home at "/" without the multi-app switcher', () => {
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
     const html = renderRoute("/", createAppRuntimeProfile("estii"));
@@ -345,6 +368,20 @@ describe("public site renderer", () => {
     expect(html).toContain("Selected writing, projects, and durable systems work.");
   });
 
+  it("renders published Site links at top-level paths", () => {
+    const html = renderToStaticMarkup(
+      <SitePageRenderer linkMode="published" tree={sitePageTree("home")} />,
+    );
+
+    expect(html).toContain('href="/"');
+    expect(html).toContain('href="/blog"');
+    expect(html).toContain('href="/projects"');
+    expect(html).toContain('href="/resume"');
+    expect(html).toContain('href="/projects/estii"');
+    expect(html).not.toContain('href="/pages/home"');
+    expect(html).not.toContain('href="/pages/blog"');
+  });
+
   it("renders content list and grid query results without draft blocks", () => {
     const html = renderSitePage("home");
 
@@ -388,6 +425,17 @@ describe("public site renderer", () => {
     expect(html).toContain("No published site page exists for");
     expect(html).toContain("<code>missing</code>");
     expect(html).toContain('href="/pages/home"');
+  });
+
+  it("renders a published 404 state with a top-level Home link", () => {
+    const html = renderToStaticMarkup(
+      <SitePageRouteView linkMode="published" state={{ status: "not-found", slug: "missing" }} />,
+    );
+
+    expect(html).toContain("Page not found");
+    expect(html).toContain("<code>missing</code>");
+    expect(html).toContain('href="/"');
+    expect(html).not.toContain('href="/pages/home"');
   });
 
   it("does not render unknown block types", () => {

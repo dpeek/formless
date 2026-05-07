@@ -62,6 +62,11 @@ describe("runtime profile resolver", () => {
     expect(world.generatedRoutes).toBe(false);
     expect(world.route).toBe("/");
     expect(world.schemaRoute).toBeUndefined();
+    expect(profile.publishedSite).toEqual({
+      rootRoute: "/",
+      routePattern: "/*",
+      homeSlug: "home",
+    });
   });
 
   it("uses explicit config first and host config only as a deterministic fallback", () => {

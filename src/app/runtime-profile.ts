@@ -29,6 +29,12 @@ export type RuntimePublicSitePreview = {
   homeRoute: "/pages/home";
 };
 
+export type RuntimePublishedSiteRoutes = {
+  rootRoute: "/";
+  routePattern: "/*";
+  homeSlug: "home";
+};
+
 export type RuntimeProfile = {
   kind: RuntimeProfileKind;
   shell: RuntimeShellKind;
@@ -36,6 +42,7 @@ export type RuntimeProfile = {
   defaultRedirect?: `/${string}`;
   legacyRedirects: readonly RuntimeRedirect[];
   publicSitePreview?: RuntimePublicSitePreview;
+  publishedSite?: RuntimePublishedSiteRoutes;
 };
 
 export type RuntimeProfileResolverInput = {
@@ -114,6 +121,11 @@ export function createPublishedSiteRuntimeProfile(): RuntimeProfile {
       },
     ],
     legacyRedirects: [],
+    publishedSite: {
+      rootRoute: "/",
+      routePattern: "/*",
+      homeSlug: "home",
+    },
   };
 }
 

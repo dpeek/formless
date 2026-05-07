@@ -1,32 +1,48 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import {
+  isExternalSiteHref,
+  profileAwareSiteHref,
+  sitePagePathForSlug,
+  type SitePageLinkMode,
+} from "./links.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
 
 const PAGE_SLOT_ORDER = ["header", "main", "footer"];
 
-export function SitePageRenderer({ tree }: { tree: SitePageTree }) {
+const SitePageLinkModeContext = createContext<SitePageLinkMode>("preview");
+
+export function SitePageRenderer({
+  linkMode = "preview",
+  tree,
+}: {
+  linkMode?: SitePageLinkMode;
+  tree: SitePageTree;
+}) {
   const page = tree.page;
   const headerPlacements = placementsForSlot(page, "header");
   const mainPlacements = placementsForSlot(page, "main");
   const footerPlacements = placementsForSlot(page, "footer");
 
   return (
-    <article className="min-h-dvh bg-white text-zinc-950">
-      {headerPlacements.map((placement) => (
-        <SitePlacementRenderer key={placement.id} placement={placement} />
-      ))}
-
-      <main className="mx-auto flex max-w-5xl flex-col gap-12 px-6 py-10">
-        {mainPlacements.length === 0 ? <PageIntro block={page} /> : null}
-        {mainPlacements.map((placement) => (
+    <SitePageLinkModeContext.Provider value={linkMode}>
+      <article className="min-h-dvh bg-white text-zinc-950">
+        {headerPlacements.map((placement) => (
           <SitePlacementRenderer key={placement.id} placement={placement} />
         ))}
-        {renderUnclaimedSlots(page, PAGE_SLOT_ORDER)}
-      </main>
 
-      {footerPlacements.map((placement) => (
-        <SitePlacementRenderer key={placement.id} placement={placement} />
-      ))}
-    </article>
+        <main className="mx-auto flex max-w-5xl flex-col gap-12 px-6 py-10">
+          {mainPlacements.length === 0 ? <PageIntro block={page} /> : null}
+          {mainPlacements.map((placement) => (
+            <SitePlacementRenderer key={placement.id} placement={placement} />
+          ))}
+          {renderUnclaimedSlots(page, PAGE_SLOT_ORDER)}
+        </main>
+
+        {footerPlacements.map((placement) => (
+          <SitePlacementRenderer key={placement.id} placement={placement} />
+        ))}
+      </article>
+    </SitePageLinkModeContext.Provider>
   );
 }
 
@@ -122,12 +138,14 @@ function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: Si
 }
 
 function HeaderGroup({ block }: { block: SiteBlockNode }) {
+  const linkMode = useSitePageLinkMode();
+
   return (
     <header className="border-b border-zinc-200 bg-white">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
         <a
           className="text-sm font-semibold uppercase tracking-normal text-teal-700"
-          href="/pages/home"
+          href={sitePagePathForSlug("home", linkMode)}
         >
           Formless
         </a>
@@ -223,7 +241,8 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
 }
 
 function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: SitePlacementNode }) {
-  const href = blockHref(block);
+  const linkMode = useSitePageLinkMode();
+  const href = blockHref(block, linkMode);
 
   if (!href) {
     return null;
@@ -233,8 +252,8 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
     <a
       className="text-sm font-medium text-current underline decoration-transparent underline-offset-4 transition hover:decoration-current"
       href={href}
-      rel={isExternalHref(href) ? "noreferrer" : undefined}
-      target={isExternalHref(href) ? "_blank" : undefined}
+      rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
+      target={isExternalSiteHref(href) ? "_blank" : undefined}
     >
       {placement?.label ?? block.label ?? block.title}
     </a>
@@ -266,7 +285,8 @@ function ContentQueryBlock({ block, layout }: { block: SiteBlockNode; layout: "g
 }
 
 function ContentSummary({ block }: { block: SiteBlockNode }) {
-  const href = blockHref(block);
+  const linkMode = useSitePageLinkMode();
+  const href = blockHref(block, linkMode);
   const title = (
     <h3 className="text-lg font-semibold text-zinc-950">
       {href ? (
@@ -368,7 +388,8 @@ function VideoBlock({ block }: { block: SiteBlockNode }) {
 }
 
 function CtaBlock({ block }: { block: SiteBlockNode }) {
-  const href = blockHref(block);
+  const linkMode = useSitePageLinkMode();
+  const href = blockHref(block, linkMode);
 
   return (
     <section className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-zinc-200 bg-teal-50 p-5">
@@ -424,26 +445,18 @@ function PlainText({ className, text }: { className?: string; text: string }) {
   );
 }
 
-function blockHref(block: SiteBlockNode): string | undefined {
+function useSitePageLinkMode(): SitePageLinkMode {
+  return useContext(SitePageLinkModeContext);
+}
+
+function blockHref(block: SiteBlockNode, linkMode: SitePageLinkMode): string | undefined {
   if (block.href) {
-    return block.href;
+    return profileAwareSiteHref(block.href, linkMode);
   }
 
   if (block.slug) {
-    return `/pages/${encodeSiteSlugPath(block.slug)}`;
+    return sitePagePathForSlug(block.slug, linkMode);
   }
 
   return undefined;
-}
-
-function encodeSiteSlugPath(slug: string): string {
-  return slug
-    .split("/")
-    .filter((segment) => segment !== "")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-}
-
-function isExternalHref(href: string): boolean {
-  return /^https?:\/\//.test(href);
 }

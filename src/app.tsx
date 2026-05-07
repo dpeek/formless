@@ -187,7 +187,21 @@ function AppRoutes({ runtimeProfile }: { runtimeProfile: RuntimeProfile }) {
       ) : null}
       {runtimeProfile.publicSitePreview ? (
         <Route path={runtimeProfile.publicSitePreview.routePattern}>
-          {(params) => <SitePageRoute slug={normalizeSitePageSlug(params["*"])} />}
+          {(params) => (
+            <SitePageRoute linkMode="preview" slug={normalizeSitePageSlug(params["*"])} />
+          )}
+        </Route>
+      ) : null}
+      {runtimeProfile.publishedSite ? (
+        <Route path={runtimeProfile.publishedSite.rootRoute}>
+          <SitePageRoute linkMode="published" slug={runtimeProfile.publishedSite.homeSlug} />
+        </Route>
+      ) : null}
+      {runtimeProfile.publishedSite ? (
+        <Route path={runtimeProfile.publishedSite.routePattern}>
+          {(params) => (
+            <SitePageRoute linkMode="published" slug={normalizeSitePageSlug(params["*"])} />
+          )}
         </Route>
       ) : null}
       {runtimeProfile.legacyRedirects.map((redirect) => (

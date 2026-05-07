@@ -1,7 +1,7 @@
 # PRD 17: Runtime profiles and screen routes
 
 Status: active
-Current chunk: RPS-06
+Current chunk: RPS-07
 Last updated: 2026-05-07
 
 ## Goal
@@ -319,7 +319,7 @@ Rejected as incomplete because Estii screen routing and app/profile separation w
 | RPS-03 | shipped | RPS-02     | screen parser/types/model tests       | Workspace screens accept static app-relative paths and expose route-ready screen models.                             |
 | RPS-04 | shipped | RPS-03     | app shell, home route, source schemas | Dev shell renders screen sidebar/navigation and routes Estii setup through `/estii/setup`.                           |
 | RPS-05 | shipped | RPS-04     | runtime profile resolver, app routes  | Dev, app, and published Site profiles mount routes through one explicit profile seam.                                |
-| RPS-06 | planned | RPS-05     | Site public route and renderer        | Published Site profile serves `/` as home and `/*` as public page slugs with no generated admin shell.               |
+| RPS-06 | shipped | RPS-05     | Site public route and renderer        | Published Site profile serves `/` as home and `/*` as public page slugs with no generated admin shell.               |
 | RPS-07 | planned | RPS-06     | browser smoke, PRD                    | Checks pass; browser smoke covers dev routes, Estii screen routes, and published Site routes; PRD notes are current. |
 
 ## Chunk details
@@ -485,34 +485,39 @@ Evidence:
 
 ### RPS-06 published Site top-level routes
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: make the Site example runnable like a published website.
 
 Tasks:
 
-- Mount Site public renderer at `/` in `publishedSite` profile.
-- Map `/` to slug `home`.
-- Map `/*` to public page slug.
-- Keep dev preview at `/pages/*`.
-- Make public renderer links profile-aware.
-- Keep public visibility filtering in the existing tree projection.
+- Shipped: mounted Site public renderer at `/` in `publishedSite` profile.
+- Shipped: mapped `/` to slug `home`.
+- Shipped: mapped `/*` to public page slug.
+- Shipped: kept dev preview at `/pages/*`.
+- Shipped: made public renderer links profile-aware.
+- Shipped: kept public visibility filtering in the existing tree projection.
 
 Acceptance:
 
 - Published Site `/` renders the home page tree.
-- Published Site `/about` or another seeded slug renders that page when published.
+- Published Site `/projects` renders a seeded published page.
 - Published Site missing pages show not-found behavior.
 - Draft, archived, invisible, and tombstoned content remains excluded.
 - Dev `/pages/home` still renders public preview.
 - Public routes do not show generated admin navigation.
 
-Evidence to record:
+Evidence:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
-- Browser smoke for published Site `/`, one seeded slug, and a missing slug.
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `30 passed (30)`, `525 passed (525)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 169 files.
+- Browser smoke: reset Site source schema and seed data through `/api/site/reset/schema` and `/api/site/reset/seed`; both returned `200`.
+- Browser smoke: `bun browser --session rps-06 --ignore-https-errors batch --bail ...` opened dev `/pages/home`; public preview rendered Home, header navigation, hero, recent posts, featured projects, and footer.
+- Browser smoke: `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite bun start`, then `bun browser --session rps-06 --ignore-https-errors batch --bail ...` opened `/`; published Site rendered the Home page at the top-level root with no generated admin navigation.
+- Browser smoke: published Site `/projects` rendered the seeded Projects page.
+- Browser smoke: published Site `/missing` rendered public not-found behavior; the Home link resolved to `/`.
+- Browser smoke: published Site link check returned top-level internal hrefs `/`, `/blog`, `/projects`, `/resume`, `/blog/shipping-schema-backed-authoring`, `/projects/estii`, `/projects/opensurf`, and `/projects/formless`.
 
 ### RPS-07 closeout
 
@@ -552,8 +557,7 @@ Evidence to record:
 
 ## Blockers
 
-- None known for RPS-06.
-- Published Site browser smoke should run under `publishedSite` profile after RPS-06 mounts top-level public routes.
+- None known for RPS-07.
 
 ## Non-goals
 
@@ -589,7 +593,9 @@ Evidence to record:
 - `doc/current.md`: RPS-05 shipped; dev profile mounts Tasks, Estii, Site, schema editors, legacy Rates redirects, and `/pages/*` public preview.
 - `doc/current.md`: RPS-05 shipped; app profile mounts one selected schema app at `/`, app-relative screen subpaths, and `/schema` without the multi-app Formless switcher.
 - `doc/current.md`: RPS-05 shipped; published Site profile resolves to the Site world without generated admin routes; top-level public rendering waits for RPS-06.
-- `doc/current.md`: add published Site top-level route facts once RPS-06 ships.
+- `doc/current.md`: RPS-06 shipped; published Site profile mounts Site public rendering at `/` and maps `/*` to public page slugs.
+- `doc/current.md`: RPS-06 shipped; published Site `/` maps to slug `home`.
+- `doc/current.md`: RPS-06 shipped; Site public renderer links use `/pages/*` in dev preview and top-level paths in published mode.
 - `doc/roadmap.md`: add first-release screen-route scope only if this PRD is pulled into first-release work.
 
 ## Status notes
@@ -599,3 +605,4 @@ Evidence to record:
 - 2026-05-07: RPS-03 shipped. Workspace screens accept optional static app-relative paths; duplicate, dynamic, wildcard, relative, and `/schema` paths fail; screen models expose paths and path lookup.
 - 2026-05-07: RPS-04 shipped. Dev shell active app navigation uses primary screen models; `/estii/setup`, `/site/header`, and `/site/footer` route to declared screens; Schema remains a dev tooling route.
 - 2026-05-07: RPS-05 shipped. Runtime profile resolver now owns route mounts; dev profile keeps current multi-app routes; app profile mounts one schema app at root paths without the multi-app switcher; published Site profile resolves to Site without generated admin routes.
+- 2026-05-07: RPS-06 shipped. Published Site profile serves `/` as Home and `/*` as Site public page slugs with no generated admin shell; dev `/pages/*` preview remains.

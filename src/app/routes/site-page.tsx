@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SitePageRenderer } from "../site-renderer/renderer.tsx";
+import { sitePagePathForSlug, type SitePageLinkMode } from "../site-renderer/links.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../../shared/protocol.ts";
 
 export type SitePageRouteState =
@@ -21,7 +22,13 @@ export type SitePageRouteState =
       slug: string;
     };
 
-export function SitePageRoute({ slug }: { slug: string }) {
+export function SitePageRoute({
+  linkMode = "preview",
+  slug,
+}: {
+  linkMode?: SitePageLinkMode;
+  slug: string;
+}) {
   const normalizedSlug = normalizeSitePageSlug(slug);
   const [state, setState] = useState<SitePageRouteState>({
     status: "loading",
@@ -61,15 +68,21 @@ export function SitePageRoute({ slug }: { slug: string }) {
     };
   }, [normalizedSlug]);
 
-  return <SitePageRouteView state={state} />;
+  return <SitePageRouteView linkMode={linkMode} state={state} />;
 }
 
-export function SitePageRouteView({ state }: { state: SitePageRouteState }) {
+export function SitePageRouteView({
+  linkMode = "preview",
+  state,
+}: {
+  linkMode?: SitePageLinkMode;
+  state: SitePageRouteState;
+}) {
   switch (state.status) {
     case "ready":
-      return <SitePageRenderer tree={state.tree} />;
+      return <SitePageRenderer linkMode={linkMode} tree={state.tree} />;
     case "not-found":
-      return <SitePageNotFound slug={state.slug} />;
+      return <SitePageNotFound linkMode={linkMode} slug={state.slug} />;
     case "error":
       return <SitePageError message={state.message} slug={state.slug} />;
     case "loading":
@@ -131,14 +144,17 @@ function SitePageLoading({ slug }: { slug: string }) {
   );
 }
 
-function SitePageNotFound({ slug }: { slug: string }) {
+function SitePageNotFound({ linkMode, slug }: { linkMode: SitePageLinkMode; slug: string }) {
   return (
     <section className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-semibold">Page not found</h1>
       <p className="mt-2 text-sm text-slate-600">
         No published site page exists for <code>{slug}</code>.
       </p>
-      <a className="mt-4 inline-flex text-sm font-medium underline" href="/pages/home">
+      <a
+        className="mt-4 inline-flex text-sm font-medium underline"
+        href={sitePagePathForSlug("home", linkMode)}
+      >
         Home
       </a>
     </section>
