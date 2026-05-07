@@ -28,7 +28,22 @@ describe("site page tree projection", () => {
       templateKey: "home",
     });
 
-    const header = childForPlacement(tree.page, "header", "rec_site_place_home_header");
+    expect(tree.page.placements.map((placement) => placement.id)).toEqual([
+      "rec_site_place_home_header",
+      "rec_site_place_home_hero",
+      "rec_site_place_home_recent_posts",
+      "rec_site_place_home_projects",
+      "rec_site_place_home_footer",
+    ]);
+    expect(tree.page.placements.map((placement) => placement.slot)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+
+    const header = childForPlacement(tree.page, "rec_site_place_home_header");
     expect(header).toMatchObject({
       id: "rec_site_content_group_header",
       type: "group",
@@ -53,39 +68,41 @@ describe("site page tree projection", () => {
       "/pages/resume",
     ]);
 
-    const footer = childForPlacement(tree.page, "footer", "rec_site_place_home_footer");
+    const footer = childForPlacement(tree.page, "rec_site_place_home_footer");
     expect(footer.title).toBe("Footer");
     expect(footer.placements.map((placement) => placement.block.title)).toEqual([
       "Explore",
       "Social",
     ]);
-    const explore = childForPlacement(footer, "footer", "rec_site_place_footer_section_explore");
-    const social = childForPlacement(footer, "footer", "rec_site_place_footer_section_social");
-    expect(explore.placements.map((placement) => placement.slot)).toEqual(["link", "link"]);
+    const explore = childForPlacement(footer, "rec_site_place_footer_section_explore");
+    const social = childForPlacement(footer, "rec_site_place_footer_section_social");
+    expect(explore.placements.map((placement) => placement.slot)).toEqual([undefined, undefined]);
     expect(explore.placements.map((placement) => placement.block.title)).toEqual([
       "Projects",
       "Resume",
     ]);
     expect(explore.placements.map((placement) => placement.block.type)).toEqual(["link", "link"]);
-    expect(social.placements.map((placement) => placement.slot)).toEqual(["link", "link"]);
+    expect(social.placements.map((placement) => placement.slot)).toEqual([undefined, undefined]);
     expect(social.placements.map((placement) => placement.block.title)).toEqual([
       "GitHub",
       "LinkedIn",
     ]);
     expect(social.placements.map((placement) => placement.block.type)).toEqual(["link", "link"]);
 
-    const mainBlocks = tree.page.placements
-      .filter((placement) => placement.slot === "main")
-      .map((placement) => placement.block);
+    const mainBlocks = [
+      childForPlacement(tree.page, "rec_site_place_home_hero"),
+      childForPlacement(tree.page, "rec_site_place_home_recent_posts"),
+      childForPlacement(tree.page, "rec_site_place_home_projects"),
+    ];
     expect(mainBlocks.map((block) => block.title)).toEqual([
       "Schema-backed software for content-heavy products",
       "Recent posts",
       "Featured projects",
     ]);
 
-    const hero = childForPlacement(tree.page, "main", "rec_site_place_home_hero");
-    const heroImage = childForPlacement(hero, "media", "rec_site_place_home_hero_image");
-    const heroVideo = childForPlacement(hero, "media", "rec_site_place_home_hero_video");
+    const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
+    const heroImage = childForPlacement(hero, "rec_site_place_home_hero_image");
+    const heroVideo = childForPlacement(hero, "rec_site_place_home_hero_video");
     expect(heroImage).toMatchObject({
       id: "rec_site_media_avatar",
       type: "image",
@@ -104,7 +121,7 @@ describe("site page tree projection", () => {
       height: 1080,
     });
 
-    const recentPosts = childForPlacement(tree.page, "main", "rec_site_place_home_recent_posts");
+    const recentPosts = childForPlacement(tree.page, "rec_site_place_home_recent_posts");
     expect(recentPosts.query).toMatchObject({
       key: "publishedPosts",
       items: [{ title: "Shipping schema-backed authoring" }],
@@ -113,7 +130,7 @@ describe("site page tree projection", () => {
       "Draft notes on generated editorial tools",
     );
 
-    const projectList = childForPlacement(tree.page, "main", "rec_site_place_home_projects");
+    const projectList = childForPlacement(tree.page, "rec_site_place_home_projects");
     expect(projectList.query?.key).toBe("publishedProjects");
     expect(projectList.query?.items.map((item) => item.title)).toEqual([
       "Estii",
@@ -197,14 +214,10 @@ describe("site page tree projection", () => {
       maxDepth: 1,
     });
     const tree = requireTree(result);
-    const hero = childForPlacement(tree.page, "main", "rec_site_place_home_hero");
+    const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
 
     expect(hero.placements).toEqual([]);
     expect(result.meta.warnings).toEqual([
-      expect.objectContaining({
-        code: "max-depth",
-        recordId: "rec_site_content_group_footer",
-      }),
       expect.objectContaining({
         code: "max-depth",
         recordId: "rec_site_content_group_header",
@@ -220,6 +233,10 @@ describe("site page tree projection", () => {
       expect.objectContaining({
         code: "max-depth",
         recordId: "rec_site_block_home_projects",
+      }),
+      expect.objectContaining({
+        code: "max-depth",
+        recordId: "rec_site_content_group_footer",
       }),
     ]);
   });
@@ -238,7 +255,7 @@ describe("site page tree projection", () => {
     );
     const result = buildSitePageTree(siteSourceSchema, records, "home", { generatedAt });
     const tree = requireTree(result);
-    const recentPosts = childForPlacement(tree.page, "main", "rec_site_place_home_recent_posts");
+    const recentPosts = childForPlacement(tree.page, "rec_site_place_home_recent_posts");
 
     expect(result.meta.warnings).toEqual([
       expect.objectContaining({
@@ -313,7 +330,7 @@ function placementRecord(
     values: {
       parent,
       block,
-      slot: options.slot ?? "main",
+      ...(options.slot === undefined ? {} : { slot: options.slot }),
       order: options.order ?? 99,
       visible: options.visible ?? true,
       variant: options.variant ?? "fixture",
@@ -331,17 +348,11 @@ function requireTree(result: SitePageTreeProjection): SitePageTree {
   return result.tree;
 }
 
-function childForPlacement(
-  parent: SiteBlockNode,
-  slot: string,
-  placementId: string,
-): SiteBlockNode {
-  const placement = parent.placements.find(
-    (candidate) => candidate.slot === slot && candidate.id === placementId,
-  );
+function childForPlacement(parent: SiteBlockNode, placementId: string): SiteBlockNode {
+  const placement = parent.placements.find((candidate) => candidate.id === placementId);
 
   if (!placement) {
-    throw new Error(`Missing placement "${placementId}" in slot "${slot}".`);
+    throw new Error(`Missing placement "${placementId}".`);
   }
 
   return placement.block;

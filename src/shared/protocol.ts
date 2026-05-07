@@ -180,7 +180,7 @@ export type SiteBlockNode = {
 
 export type SitePlacementNode = {
   id: string;
-  slot: string;
+  slot?: string;
   order: number;
   visible: boolean;
   variant?: string;

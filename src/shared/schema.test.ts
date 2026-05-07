@@ -3392,7 +3392,7 @@ describe("personal site sample schema", () => {
     });
     expect(schema.entities.blockPlacement?.fields.slot).toEqual({
       type: "text",
-      required: true,
+      required: false,
       label: "Slot",
       format: "slug",
     });

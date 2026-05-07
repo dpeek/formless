@@ -113,11 +113,11 @@ describe("authority", () => {
       warnings: [],
     });
     expect(body.page.placements.map((placement) => placement.id)).toEqual([
-      "rec_site_place_home_footer",
       "rec_site_place_home_header",
       "rec_site_place_home_hero",
       "rec_site_place_home_recent_posts",
       "rec_site_place_home_projects",
+      "rec_site_place_home_footer",
     ]);
     expect(recentPosts?.query?.items.map((item) => item.id)).toEqual([
       "rec_site_content_post_shipped_schema",

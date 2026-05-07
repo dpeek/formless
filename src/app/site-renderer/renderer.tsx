@@ -7,8 +7,6 @@ import {
 } from "./links.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
 
-const PAGE_SLOT_ORDER = ["header", "main", "footer"];
-
 const SitePageLinkModeContext = createContext<SitePageLinkMode>("preview");
 
 export function SitePageRenderer({
@@ -19,28 +17,11 @@ export function SitePageRenderer({
   tree: SitePageTree;
 }) {
   const page = tree.page;
-  const headerPlacements = placementsForSlot(page, "header");
-  const mainPlacements = placementsForSlot(page, "main");
-  const footerPlacements = placementsForSlot(page, "footer");
 
   return (
     <SitePageLinkModeContext.Provider value={linkMode}>
       <article className="min-h-dvh bg-white text-zinc-950">
-        {headerPlacements.map((placement) => (
-          <SitePlacementRenderer key={placement.id} placement={placement} />
-        ))}
-
-        <main className="mx-auto flex max-w-5xl flex-col gap-12 px-6 py-10">
-          {mainPlacements.length === 0 ? <PageIntro block={page} /> : null}
-          {mainPlacements.map((placement) => (
-            <SitePlacementRenderer key={placement.id} placement={placement} />
-          ))}
-          {renderUnclaimedSlots(page, PAGE_SLOT_ORDER)}
-        </main>
-
-        {footerPlacements.map((placement) => (
-          <SitePlacementRenderer key={placement.id} placement={placement} />
-        ))}
+        <PagePlacementFlow page={page} />
       </article>
     </SitePageLinkModeContext.Provider>
   );
@@ -88,15 +69,12 @@ function SiteBlockRenderer({
 }
 
 function PageBlock({ block }: { block: SiteBlockNode }) {
-  const mainPlacements = placementsForSlot(block, "main");
-
   return (
     <article className="space-y-8">
-      {mainPlacements.length === 0 ? <PageIntro block={block} /> : null}
-      {mainPlacements.map((placement) => (
+      {block.placements.length === 0 ? <PageIntro block={block} /> : null}
+      {block.placements.map((placement) => (
         <SitePlacementRenderer key={placement.id} placement={placement} />
       ))}
-      {renderUnclaimedSlots(block, ["main"])}
     </article>
   );
 }
@@ -124,14 +102,12 @@ function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: Si
     return <FooterGroup block={block} />;
   }
 
-  const slots = slotNames(block);
-
   return (
     <section className="space-y-4" data-block-type={block.type}>
       <h2 className="text-xl font-semibold">{block.label ?? block.title}</h2>
       {block.body ? <PlainText text={block.body} className="text-sm text-zinc-600" /> : null}
-      {slots.map((slot) => (
-        <SiteSlot key={slot} block={block} slot={slot} />
+      {block.placements.map((placement) => (
+        <SitePlacementRenderer key={placement.id} placement={placement} />
       ))}
     </section>
   );
@@ -150,7 +126,7 @@ function HeaderGroup({ block }: { block: SiteBlockNode }) {
           Formless
         </a>
         <nav aria-label={block.label ?? block.title} className="flex flex-wrap items-center gap-4">
-          <SiteSlot block={block} slot="header" />
+          <SitePlacementList placements={placementsForSlotOrDefault(block, "header")} />
         </nav>
       </div>
     </header>
@@ -158,8 +134,8 @@ function HeaderGroup({ block }: { block: SiteBlockNode }) {
 }
 
 function FooterGroup({ block }: { block: SiteBlockNode }) {
-  const footerSections = placementsForSlot(block, "footer");
-  const otherSlots = slotNames(block).filter((slot) => slot !== "footer");
+  const footerSections = placementsForSlotOrDefault(block, "footer");
+  const claimed = placementIdSet(footerSections);
 
   return (
     <footer className="border-t border-zinc-200 bg-zinc-950 text-white">
@@ -174,9 +150,7 @@ function FooterGroup({ block }: { block: SiteBlockNode }) {
           {footerSections.map((placement) => (
             <SitePlacementRenderer key={placement.id} placement={placement} />
           ))}
-          {otherSlots.map((slot) => (
-            <SiteSlot key={slot} block={block} slot={slot} />
-          ))}
+          {renderUnclaimedPlacements(block, claimed)}
         </div>
       </div>
     </footer>
@@ -190,15 +164,15 @@ function FooterSection({ block }: { block: SiteBlockNode }) {
         {block.label ?? block.title}
       </h3>
       <nav aria-label={block.label ?? block.title} className="flex flex-col items-start gap-2">
-        <SiteSlot block={block} slot="link" />
+        <SitePlacementList placements={placementsForSlotOrDefault(block, "link")} />
       </nav>
     </section>
   );
 }
 
 function HeroBlock({ block }: { block: SiteBlockNode }) {
-  const media = placementsForSlot(block, "media");
-  const otherSlots = slotNames(block).filter((slot) => slot !== "media");
+  const media = mediaPlacements(block);
+  const claimed = placementIdSet(media);
 
   return (
     <section className="grid items-center gap-8 py-4 md:grid-cols-[1.2fr_0.8fr]">
@@ -219,9 +193,7 @@ function HeroBlock({ block }: { block: SiteBlockNode }) {
           ))}
         </div>
       ) : null}
-      {otherSlots.map((slot) => (
-        <SiteSlot key={slot} block={block} slot={slot} />
-      ))}
+      {renderUnclaimedPlacements(block, claimed)}
     </section>
   );
 }
@@ -235,7 +207,7 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
       {block.body ? (
         <PlainText text={block.body} className="text-base leading-7 text-zinc-700" />
       ) : null}
-      {renderUnclaimedSlots(block, [])}
+      {renderUnclaimedPlacements(block)}
     </section>
   );
 }
@@ -279,7 +251,7 @@ function ContentQueryBlock({ block, layout }: { block: SiteBlockNode; layout: "g
           ))}
         </div>
       )}
-      {renderUnclaimedSlots(block, [])}
+      {renderUnclaimedPlacements(block)}
     </section>
   );
 }
@@ -402,35 +374,141 @@ function CtaBlock({ block }: { block: SiteBlockNode }) {
           {block.label ?? "Open"}
         </a>
       ) : null}
-      {renderUnclaimedSlots(block, [])}
+      {renderUnclaimedPlacements(block)}
     </section>
   );
 }
 
-function SiteSlot({ block, slot }: { block: SiteBlockNode; slot: string }) {
+function PagePlacementFlow({ page }: { page: SiteBlockNode }) {
+  const nodes: ReactNode[] = [];
+  let bodyRun: SitePlacementNode[] = [];
+  let renderedBody = false;
+
+  const flushBodyRun = () => {
+    if (bodyRun.length === 0) {
+      return;
+    }
+
+    const run = bodyRun;
+    bodyRun = [];
+    renderedBody = true;
+    nodes.push(
+      <PageMain key={`body-${nodes.length}`}>
+        {run.map((placement) => (
+          <SitePlacementRenderer key={placement.id} placement={placement} />
+        ))}
+      </PageMain>,
+    );
+  };
+
+  for (const placement of page.placements) {
+    if (isPageChromePlacement(placement)) {
+      flushBodyRun();
+
+      if (isPageFooterPlacement(placement) && !renderedBody) {
+        renderedBody = true;
+        nodes.push(
+          <PageMain key="intro">
+            <PageIntro block={page} />
+          </PageMain>,
+        );
+      }
+
+      nodes.push(<SitePlacementRenderer key={placement.id} placement={placement} />);
+      continue;
+    }
+
+    bodyRun.push(placement);
+  }
+
+  flushBodyRun();
+
+  if (!renderedBody) {
+    nodes.push(
+      <PageMain key="intro">
+        <PageIntro block={page} />
+      </PageMain>,
+    );
+  }
+
+  return <>{nodes}</>;
+}
+
+function PageMain({ children }: { children: ReactNode }) {
+  return <main className="mx-auto flex max-w-5xl flex-col gap-12 px-6 py-10">{children}</main>;
+}
+
+function SitePlacementList({ placements }: { placements: SitePlacementNode[] }) {
   return (
     <>
-      {placementsForSlot(block, slot).map((placement) => (
+      {placements.map((placement) => (
         <SitePlacementRenderer key={placement.id} placement={placement} />
       ))}
     </>
   );
 }
 
-function renderUnclaimedSlots(block: SiteBlockNode, claimedSlots: string[]): ReactNode {
-  const claimed = new Set(claimedSlots);
-
-  return slotNames(block)
-    .filter((slot) => !claimed.has(slot))
-    .map((slot) => <SiteSlot key={slot} block={block} slot={slot} />);
+function renderUnclaimedPlacements(
+  block: SiteBlockNode,
+  claimed: Set<string> = new Set(),
+): ReactNode {
+  return block.placements
+    .filter((placement) => !claimed.has(placement.id))
+    .map((placement) => <SitePlacementRenderer key={placement.id} placement={placement} />);
 }
 
 function placementsForSlot(block: SiteBlockNode, slot: string): SitePlacementNode[] {
   return block.placements.filter((placement) => placement.slot === slot);
 }
 
-function slotNames(block: SiteBlockNode): string[] {
-  return [...new Set(block.placements.map((placement) => placement.slot))];
+function placementsForSlotOrDefault(block: SiteBlockNode, slot: string): SitePlacementNode[] {
+  const slotPlacements = placementsForSlot(block, slot);
+
+  return slotPlacements.length > 0 ? slotPlacements : unSlottedPlacements(block);
+}
+
+function unSlottedPlacements(block: SiteBlockNode): SitePlacementNode[] {
+  return block.placements.filter((placement) => placement.slot === undefined);
+}
+
+function mediaPlacements(block: SiteBlockNode): SitePlacementNode[] {
+  const slotPlacements = placementsForSlot(block, "media");
+
+  if (slotPlacements.length > 0) {
+    return slotPlacements;
+  }
+
+  return block.placements.filter(
+    (placement) =>
+      placement.block.type === "image" ||
+      placement.block.type === "video" ||
+      placement.variant === "image" ||
+      placement.variant === "video",
+  );
+}
+
+function placementIdSet(placements: SitePlacementNode[]): Set<string> {
+  return new Set(placements.map((placement) => placement.id));
+}
+
+function isPageChromePlacement(placement: SitePlacementNode): boolean {
+  return isPageHeaderPlacement(placement) || isPageFooterPlacement(placement);
+}
+
+function isPageHeaderPlacement(placement: SitePlacementNode): boolean {
+  return (
+    placement.slot === "header" ||
+    placement.variant === "header" ||
+    placement.block.templateKey === "header"
+  );
+}
+
+function isPageFooterPlacement(placement: SitePlacementNode): boolean {
+  return (
+    placement.slot === "footer" ||
+    placement.variant === "footer" ||
+    placement.block.templateKey === "footer"
+  );
 }
 
 function PlainText({ className, text }: { className?: string; text: string }) {

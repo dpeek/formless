@@ -314,7 +314,7 @@ function projectBlock(record: StoredRecord): SiteBlockNode {
 function projectPlacement(placement: StoredRecord, childBlock: SiteBlockNode): SitePlacementNode {
   return {
     id: placement.id,
-    slot: stringValue(placement.values.slot) ?? "",
+    ...optionalStringField("slot", placement.values.slot),
     order: numberValue(placement.values.order) ?? 0,
     visible: placement.values.visible === true,
     ...optionalStringField("variant", placement.values.variant),
@@ -358,8 +358,8 @@ function isPublicBlock(record: StoredRecord): boolean {
 
 function comparePlacements(a: StoredRecord, b: StoredRecord): number {
   return (
-    compareStrings(stringValue(a.values.slot) ?? "", stringValue(b.values.slot) ?? "") ||
     compareNumbers(numberValue(a.values.order), numberValue(b.values.order)) ||
+    compareStrings(stringValue(a.values.slot) ?? "", stringValue(b.values.slot) ?? "") ||
     compareRecords(a, b)
   );
 }

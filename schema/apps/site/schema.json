@@ -198,7 +198,7 @@
         },
         "slot": {
           "type": "text",
-          "required": true,
+          "required": false,
           "label": "Slot",
           "format": "slug"
         },

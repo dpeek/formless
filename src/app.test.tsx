@@ -533,7 +533,6 @@ describe("public site renderer", () => {
               ...tree.page.placements,
               {
                 id: "rec_site_place_unknown",
-                slot: "main",
                 order: 99,
                 visible: true,
                 block: unknownBlock,

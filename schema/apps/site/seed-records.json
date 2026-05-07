@@ -371,7 +371,6 @@
     "values": {
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_home",
-      "slot": "header",
       "order": 1000,
       "visible": true,
       "variant": "link",
@@ -385,7 +384,6 @@
     "values": {
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_blog",
-      "slot": "header",
       "order": 2000,
       "visible": true,
       "variant": "link",
@@ -399,7 +397,6 @@
     "values": {
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_projects",
-      "slot": "header",
       "order": 3000,
       "visible": true,
       "variant": "link",
@@ -413,7 +410,6 @@
     "values": {
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_resume",
-      "slot": "header",
       "order": 4000,
       "visible": true,
       "variant": "link",
@@ -427,7 +423,6 @@
     "values": {
       "parent": "rec_site_content_group_footer_main",
       "block": "rec_site_content_link_projects",
-      "slot": "link",
       "order": 1000,
       "visible": true,
       "variant": "link",
@@ -441,7 +436,6 @@
     "values": {
       "parent": "rec_site_content_group_footer_main",
       "block": "rec_site_content_link_resume",
-      "slot": "link",
       "order": 2000,
       "visible": true,
       "variant": "link",
@@ -455,7 +449,6 @@
     "values": {
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_github",
-      "slot": "link",
       "order": 1000,
       "visible": true,
       "variant": "link",
@@ -469,7 +462,6 @@
     "values": {
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_linkedin",
-      "slot": "link",
       "order": 2000,
       "visible": true,
       "variant": "link",
@@ -483,7 +475,6 @@
     "values": {
       "parent": "rec_site_content_home",
       "block": "rec_site_content_group_header",
-      "slot": "header",
       "order": 1000,
       "visible": true,
       "variant": "header",
@@ -497,7 +488,6 @@
     "values": {
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_main",
-      "slot": "footer",
       "order": 1000,
       "visible": true,
       "variant": "section",
@@ -511,7 +501,6 @@
     "values": {
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_social",
-      "slot": "footer",
       "order": 2000,
       "visible": true,
       "variant": "section",
@@ -525,8 +514,7 @@
     "values": {
       "parent": "rec_site_content_home",
       "block": "rec_site_content_group_footer",
-      "slot": "footer",
-      "order": 1000,
+      "order": 5000,
       "visible": true,
       "variant": "footer",
       "label": "Footer"
@@ -539,8 +527,7 @@
     "values": {
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_hero",
-      "slot": "main",
-      "order": 1000,
+      "order": 2000,
       "visible": true,
       "variant": "hero",
       "label": "Schema-backed software for content-heavy products"
@@ -553,7 +540,6 @@
     "values": {
       "parent": "rec_site_block_home_hero",
       "block": "rec_site_media_avatar",
-      "slot": "media",
       "order": 1000,
       "visible": true,
       "variant": "image",
@@ -567,7 +553,6 @@
     "values": {
       "parent": "rec_site_block_home_hero",
       "block": "rec_site_media_intro_video",
-      "slot": "media",
       "order": 2000,
       "visible": true,
       "variant": "video",
@@ -581,8 +566,7 @@
     "values": {
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_recent_posts",
-      "slot": "main",
-      "order": 2000,
+      "order": 3000,
       "visible": true,
       "variant": "contentList",
       "label": "Recent posts"
@@ -595,8 +579,7 @@
     "values": {
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_projects",
-      "slot": "main",
-      "order": 3000,
+      "order": 4000,
       "visible": true,
       "variant": "contentGrid",
       "label": "Featured projects"
@@ -609,7 +592,6 @@
     "values": {
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_block_post_body",
-      "slot": "main",
       "order": 1000,
       "visible": true,
       "variant": "markdown",
@@ -623,8 +605,7 @@
     "values": {
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_content_profile_intro",
-      "slot": "meta",
-      "order": 1000,
+      "order": 2000,
       "visible": true,
       "variant": "contentCard",
       "label": "Profile"
@@ -637,8 +618,7 @@
     "values": {
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_block_post_related_posts",
-      "slot": "footer",
-      "order": 1000,
+      "order": 3000,
       "visible": false,
       "variant": "contentList",
       "label": "More posts"
