@@ -1,7 +1,7 @@
 # PRD 16: Post-TAO architecture efficiency
 
-Status: planned
-Current chunk: AEC-01
+Status: active
+Current chunk: AEC-02
 Last updated: 2026-05-07
 
 ## Goal
@@ -167,7 +167,7 @@ Likely changed files:
 
 | ID     | Status  | Depends on       | Main files                        | Acceptance                                                                                                      |
 | ------ | ------- | ---------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| AEC-01 | planned | PRD 14 shipped   | PRD                               | PRD captures scope, decisions, blockers, dependencies, and promote notes.                                       |
+| AEC-01 | shipped | PRD 14 shipped   | PRD                               | PRD captures scope, decisions, blockers, dependencies, and promote notes.                                       |
 | AEC-02 | planned | AEC-01           | agent docs, global docs           | Repo has agent skill memory, domain docs home, ADR home, and shipped PRD facts promoted source-faithfully.      |
 | AEC-03 | planned | AEC-02, TAO done | table parser/model/renderer files | Post-TAO table behavior is behind deeper table modules with equivalent parser/model/render behavior.            |
 | AEC-04 | planned | AEC-02           | authority validation files        | Mutation, record value, reference, and schema compatibility validation move out of the route with same results. |
@@ -178,7 +178,7 @@ Likely changed files:
 
 ### AEC-01 PRD draft
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: capture the post-TAO cleanup stream.
 
@@ -376,7 +376,7 @@ Acceptance:
 
 | ID     | Status | Blocks            | Notes                                                               |
 | ------ | ------ | ----------------- | ------------------------------------------------------------------- |
-| AEC-B1 | open   | AEC-02 through 06 | PRD 14 must ship first.                                             |
+| AEC-B1 | closed | AEC-02 through 06 | PRD 14 shipped 2026-05-07; AEC-02 can start.                        |
 | AEC-B2 | open   | AEC-04            | Coordinate with PRD 15 if snapshot restore changes validation code. |
 
 ## Cross-PRD dependencies
@@ -460,13 +460,15 @@ AEC-06:
 ## Evidence
 
 - 2026-05-07 AEC-01: PRD drafted from architecture review candidates and checked against `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, `prd/14-table-actions-and-ordering.md`, and existing untracked `prd/15-store-snapshot-export-restore.md`.
-- 2026-05-07 AEC-01: `bun start` reports formatting/check pass and dev URL `https://formless.local`.
+- 2026-05-07 AEC-01: PRD 14 is shipped in `prd/14-table-actions-and-ordering.md`; AEC-B1 closed and AEC-02 is the next chunk.
+- 2026-05-07 AEC-01: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-01: `./tmp/test.txt` shows 29 files and 506 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
 
 ## PRD status notes
 
 - PRD drafted 2026-05-07 from user request to expand the architecture efficiency candidates into a post-TAO PRD.
 - User direction: ship after TAO.
 - Existing `prd/15-store-snapshot-export-restore.md` was present and preserved; this PRD uses number 16.
-- Main risk: doing table extraction before TAO would create churn against active feature work.
+- AEC-01 shipped 2026-05-07 after PRD 14 was marked shipped.
 - Main risk: authority validation extraction may overlap with snapshot restore validation if PRD 15 ships first.
-- Current blocker: PRD 14 not shipped.
+- Current blocker: none for AEC-02; AEC-B2 still applies before AEC-04 if PRD 15 touches validation.
