@@ -495,6 +495,68 @@ describe("home view model collections", () => {
     });
   });
 
+  it("resolves editRecord table actions to edit dialog facts", () => {
+    const schema = parseAppSchema({
+      ...rateCardSchema,
+      tableViews: {
+        ...rateCardSchema.tableViews,
+        rateTable: {
+          ...rateCardSchema.tableViews.rateTable,
+          actions: {
+            editResource: {
+              type: "editRecord",
+              label: "Edit resource",
+              target: { kind: "reference", field: "resource" },
+              editView: "resourceEdit",
+            },
+          },
+          columns: [
+            ...rateCardSchema.tableViews.rateTable.columns,
+            { type: "invokeAction", action: "editResource" },
+          ],
+        },
+      },
+      views: {
+        ...rateCardSchema.views,
+        resourceEdit: {
+          type: "edit",
+          entity: "resource",
+          fields: {
+            name: { editor: "text", commit: "field-commit" },
+            unit: { editor: "enum", commit: "immediate" },
+          },
+        },
+      },
+    });
+    const rateModel = selectCollectionModels(schema).find((model) => model.viewName === "rateHome");
+    const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
+    const actionColumn = columns.at(-1);
+
+    expect(actionColumn).toMatchObject({
+      type: "invokeAction",
+      actions: [
+        {
+          type: "editRecord",
+          actionName: "editResource",
+          label: "Edit resource",
+          target: {
+            kind: "reference",
+            fieldName: "resource",
+            entityName: "resource",
+          },
+          editView: {
+            viewName: "resourceEdit",
+            entityName: "resource",
+            fields: [
+              { fieldName: "name", editor: "text", commit: "field-commit" },
+              { fieldName: "unit", editor: "enum", commit: "immediate" },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
   it("resolves the source rate-card read-model slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
@@ -982,6 +1044,7 @@ describe("home view model collections", () => {
             "field:variant",
             "field:order",
             "field:visible",
+            "invokeAction:editChildBlock",
           ],
         },
         actions: [
@@ -1044,6 +1107,7 @@ describe("home view model collections", () => {
             "field:variant",
             "field:order",
             "field:visible",
+            "invokeAction:editChildBlock",
           ],
         },
         actions: [
@@ -1106,6 +1170,7 @@ describe("home view model collections", () => {
             "field:variant",
             "field:order",
             "field:visible",
+            "invokeAction:editChildBlock",
           ],
         },
         actions: [
@@ -1208,6 +1273,17 @@ describe("home view model collections", () => {
         commit: "immediate",
         display: "editor",
         align: null,
+        width: "xs",
+        format: "plain",
+      },
+      {
+        type: "invokeAction",
+        key: "invokeAction:editChildBlock",
+        label: "",
+        editor: null,
+        commit: null,
+        display: "readOnly",
+        align: "end",
         width: "xs",
         format: "plain",
       },

@@ -29,6 +29,7 @@ import type {
   CreateDefaultValueSchema,
   CreateViewFieldSchema,
   CreateViewSchema,
+  EditViewSchema,
   EntitySchema,
   FieldCommitPolicy,
   FieldEditor,
@@ -43,6 +44,7 @@ import type {
   TableColumnWidth,
   TableActionAvailabilitySchema,
   TableActionPresentation,
+  TableEditRecordTargetSchema,
   TableActionSchema,
   TableActionVariant,
   ToManyRelationshipSchema,
@@ -200,7 +202,7 @@ function parseTableView(
     throw new Error(`Table view "${tableViewName}" references unknown entity "${entityName}".`);
   }
 
-  const actions = parseOptionalTableActions(tableViewName, value.actions);
+  const actions = parseOptionalTableActions(tableViewName, value.actions, entityName, entity);
   const columns = parseTableColumns(
     tableViewName,
     entityName,
@@ -222,6 +224,8 @@ function parseTableView(
 function parseOptionalTableActions(
   tableViewName: string,
   value: unknown,
+  entityName: string,
+  entity: EntitySchema,
 ): Record<string, TableActionSchema> | undefined {
   if (value === undefined) {
     return undefined;
@@ -237,7 +241,7 @@ function parseOptionalTableActions(
         throw new Error(`Table view "${tableViewName}" action names must be non-empty.`);
       }
 
-      return [actionName, parseTableAction(tableViewName, actionName, action)];
+      return [actionName, parseTableAction(tableViewName, actionName, action, entityName, entity)];
     }),
   );
 }
@@ -246,6 +250,8 @@ function parseTableAction(
   tableViewName: string,
   actionName: string,
   value: unknown,
+  entityName: string,
+  entity: EntitySchema,
 ): TableActionSchema {
   const context = `Table view "${tableViewName}" action "${actionName}"`;
 
@@ -253,7 +259,18 @@ function parseTableAction(
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, ["label"], ["variant", "availability"]);
+  if (value.type === undefined) {
+    assertExactKeys(context, value, ["label"], ["variant", "availability"]);
+  } else if (value.type === "editRecord") {
+    assertExactKeys(
+      context,
+      value,
+      ["type", "label", "target", "editView"],
+      ["variant", "availability"],
+    );
+  } else {
+    throw new Error(`${context} type must be "editRecord".`);
+  }
 
   const label = parseRequiredNonEmptyString(`${context} label`, value.label);
   const variant = parseOptionalTableActionVariant(`${context} variant`, value.variant);
@@ -262,11 +279,66 @@ function parseTableAction(
     value.availability,
   );
 
+  if (value.type === "editRecord") {
+    const target = parseTableEditRecordTarget(
+      `${context} target`,
+      value.target,
+      entityName,
+      entity,
+    );
+    const editView = parseRequiredNonEmptyString(`${context} editView`, value.editView);
+
+    return {
+      type: "editRecord",
+      label,
+      target,
+      editView,
+      ...(variant === undefined ? {} : { variant }),
+      ...(availability === undefined ? {} : { availability }),
+    };
+  }
+
   return {
     label,
     ...(variant === undefined ? {} : { variant }),
     ...(availability === undefined ? {} : { availability }),
   };
+}
+
+function parseTableEditRecordTarget(
+  context: string,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+): TableEditRecordTargetSchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  if (value.kind === "row") {
+    assertExactKeys(context, value, ["kind"]);
+
+    return { kind: "row" };
+  }
+
+  if (value.kind === "reference") {
+    assertExactKeys(context, value, ["kind", "field"]);
+
+    const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+    const field = entity.fields[fieldName];
+
+    if (!field) {
+      throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
+    }
+
+    if (field.type !== "reference") {
+      throw new Error(`${context} field "${entityName}.${fieldName}" must be a reference field.`);
+    }
+
+    return { kind: "reference", field: fieldName };
+  }
+
+  throw new Error(`${context} kind must be "row" or "reference".`);
 }
 
 function parseTableColumns(
@@ -595,11 +667,7 @@ function parseInvokeActionTableColumn(
   };
 }
 
-function parseInvokeActionReferences(
-  context: string,
-  action: unknown,
-  actions: unknown,
-): string[] {
+function parseInvokeActionReferences(context: string, action: unknown, actions: unknown): string[] {
   if (action !== undefined && actions !== undefined) {
     throw new Error(`${context} must use either action or actions, not both.`);
   }
@@ -661,6 +729,7 @@ export function parseViews(
   }
 
   assertCollectionViews(views, entities, relationships, options.requirePrimaryCollection ?? true);
+  assertTableActionEditViews(views, tableViews, entities);
 
   return views;
 }
@@ -750,6 +819,56 @@ function assertCollectionViews(
   }
 }
 
+function assertTableActionEditViews(
+  views: Record<string, ViewSchema>,
+  tableViews: Record<string, TableViewSchema>,
+  entities: Record<string, EntitySchema>,
+) {
+  for (const [tableViewName, tableView] of Object.entries(tableViews)) {
+    const tableEntity = entities[tableView.entity];
+
+    if (!tableEntity) {
+      continue;
+    }
+
+    for (const [actionName, action] of Object.entries(tableView.actions ?? {})) {
+      if (action.type !== "editRecord") {
+        continue;
+      }
+
+      const context = `Table view "${tableViewName}" action "${actionName}"`;
+      const editView = views[action.editView];
+
+      if (!editView) {
+        throw new Error(`${context} references unknown edit view "${action.editView}".`);
+      }
+
+      if (editView.type !== "edit") {
+        throw new Error(`${context} must reference an edit view.`);
+      }
+
+      let targetEntityName = tableView.entity;
+      if (action.target.kind === "reference") {
+        const targetField = tableEntity.fields[action.target.field];
+
+        if (targetField?.type !== "reference") {
+          throw new Error(
+            `${context} target field "${tableView.entity}.${action.target.field}" must be a reference field.`,
+          );
+        }
+
+        targetEntityName = targetField.to;
+      }
+
+      if (editView.entity !== targetEntityName) {
+        throw new Error(
+          `${context} edit view "${action.editView}" must use entity "${targetEntityName}".`,
+        );
+      }
+    }
+  }
+}
+
 function validateCreateActionContextDefaults(
   collectionViewName: string,
   createViewName: string,
@@ -823,8 +942,8 @@ function parseView(
     throw new Error(`View "${viewName}" must be an object.`);
   }
 
-  if (value.type !== "collection" && value.type !== "create") {
-    throw new Error(`View "${viewName}" type must be "collection" or "create".`);
+  if (value.type !== "collection" && value.type !== "create" && value.type !== "edit") {
+    throw new Error(`View "${viewName}" type must be "collection", "create", or "edit".`);
   }
 
   if (value.type === "collection") {
@@ -838,6 +957,10 @@ function parseView(
       relationships,
       readModels,
     );
+  }
+
+  if (value.type === "edit") {
+    return parseEditView(viewName, value, entities);
   }
 
   assertExactKeys(`View "${viewName}"`, value, ["type", "entity", "fields"], ["defaults"]);
@@ -861,6 +984,32 @@ function parseView(
     entity: value.entity,
     fields,
     ...(defaults === undefined ? {} : { defaults }),
+  };
+}
+
+function parseEditView(
+  viewName: string,
+  value: Record<string, unknown>,
+  entities: Record<string, EntitySchema>,
+): EditViewSchema {
+  assertExactKeys(`View "${viewName}"`, value, ["type", "entity", "fields"]);
+
+  if (typeof value.entity !== "string" || value.entity.trim() === "") {
+    throw new Error(`View "${viewName}" must include an entity.`);
+  }
+
+  const entity = entities[value.entity];
+  if (!entity) {
+    throw new Error(`View "${viewName}" references unknown entity "${value.entity}".`);
+  }
+
+  const fields = parseListViewFields(viewName, value.entity, value.fields, entity);
+  assertViewHasFields(viewName, fields);
+
+  return {
+    type: "edit",
+    entity: value.entity,
+    fields,
   };
 }
 

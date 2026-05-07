@@ -33,10 +33,12 @@ import {
 } from "../../client/store.ts";
 import type {
   ComputedTableColumnConfig,
+  EditViewConfig,
   FieldTableColumnConfig,
   HomeQueryTabConfig,
   InvokeActionTableColumnConfig,
   ReferenceFieldTableColumnConfig,
+  EditRecordTableActionConfig,
   TableActionConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
@@ -48,6 +50,10 @@ import { formatAggregateDisplayValue, formatComputedDisplayValue } from "./forma
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
+
+type ReferenceEditRecordTableActionConfig = EditRecordTableActionConfig & {
+  target: Extract<EditRecordTableActionConfig["target"], { kind: "reference" }>;
+};
 
 export function RecordTable({
   columns,
@@ -281,7 +287,7 @@ function RecordTableCell({
   if (column.type === "invokeAction") {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
-        <InvokeActionTableCell column={column} />
+        <InvokeActionTableCell column={column} sourceRecordId={recordId} />
       </div>
     );
   }
@@ -312,9 +318,28 @@ function RecordTableCell({
   );
 }
 
-function InvokeActionTableCell({ column }: { column: InvokeActionTableColumnConfig }) {
+function InvokeActionTableCell({
+  column,
+  sourceRecordId,
+}: {
+  column: InvokeActionTableColumnConfig;
+  sourceRecordId: string;
+}) {
+  const [openActionName, setOpenActionName] = useState<string | null>(null);
+
   if (column.actions.length === 0) {
     return null;
+  }
+
+  const openAction = column.actions.find(
+    (action): action is EditRecordTableActionConfig =>
+      action.actionName === openActionName && action.type === "editRecord",
+  );
+
+  function openActionDialog(action: TableActionConfig) {
+    if (action.type === "editRecord" && !action.disabled) {
+      setOpenActionName(action.actionName);
+    }
   }
 
   if (column.presentation === "button" && column.actions.length === 1) {
@@ -324,39 +349,71 @@ function InvokeActionTableCell({ column }: { column: InvokeActionTableColumnConf
       return null;
     }
 
-    return <TableActionButton action={action} />;
+    return (
+      <>
+        <TableActionButton action={action} onOpen={() => openActionDialog(action)} />
+        {openAction ? (
+          <EditRecordTableActionDialog
+            action={openAction}
+            onOpenChange={(open) => {
+              if (!open) {
+                setOpenActionName(null);
+              }
+            }}
+            open={true}
+            sourceRecordId={sourceRecordId}
+          />
+        ) : null}
+      </>
+    );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button aria-label={column.headerLabel} size="icon-xs" type="button" variant="outline">
-            <span aria-hidden="true">...</span>
-          </Button>
-        }
-      />
-      <DropdownMenuContent align={column.align === "end" ? "end" : "start"}>
-        {column.actions.map((action) => (
-          <DropdownMenuItem
-            aria-label={actionAriaLabel(action)}
-            disabled={action.disabled}
-            key={action.actionName}
-            variant={action.variant === "destructive" ? "destructive" : "default"}
-          >
-            {action.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button aria-label={column.headerLabel} size="icon-xs" type="button" variant="outline">
+              <span aria-hidden="true">...</span>
+            </Button>
+          }
+        />
+        <DropdownMenuContent align={column.align === "end" ? "end" : "start"}>
+          {column.actions.map((action) => (
+            <DropdownMenuItem
+              aria-label={actionAriaLabel(action)}
+              disabled={action.disabled}
+              key={action.actionName}
+              onClick={() => openActionDialog(action)}
+              variant={action.variant === "destructive" ? "destructive" : "default"}
+            >
+              {action.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {openAction ? (
+        <EditRecordTableActionDialog
+          action={openAction}
+          onOpenChange={(open) => {
+            if (!open) {
+              setOpenActionName(null);
+            }
+          }}
+          open={true}
+          sourceRecordId={sourceRecordId}
+        />
+      ) : null}
+    </>
   );
 }
 
-function TableActionButton({ action }: { action: TableActionConfig }) {
+function TableActionButton({ action, onOpen }: { action: TableActionConfig; onOpen: () => void }) {
   return (
     <Button
       aria-label={actionAriaLabel(action)}
       disabled={action.disabled}
+      onClick={action.type === "editRecord" ? onOpen : undefined}
       size="xs"
       type="button"
       variant={action.variant === "destructive" ? "destructive" : "outline"}
@@ -372,6 +429,141 @@ function actionAriaLabel(action: TableActionConfig) {
   }
 
   return action.label;
+}
+
+function EditRecordTableActionDialog({
+  action,
+  onOpenChange,
+  open,
+  sourceRecordId,
+}: {
+  action: EditRecordTableActionConfig;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  sourceRecordId: string;
+}) {
+  if (action.target.kind === "row") {
+    return (
+      <RecordEditDialog
+        action={action}
+        onOpenChange={onOpenChange}
+        open={open}
+        targetRecordId={sourceRecordId}
+      />
+    );
+  }
+
+  if (!isReferenceEditRecordAction(action)) {
+    return null;
+  }
+
+  return (
+    <ReferencedRecordEditActionDialog
+      action={action}
+      onOpenChange={onOpenChange}
+      open={open}
+      sourceRecordId={sourceRecordId}
+    />
+  );
+}
+
+function ReferencedRecordEditActionDialog({
+  action,
+  onOpenChange,
+  open,
+  sourceRecordId,
+}: {
+  action: ReferenceEditRecordTableActionConfig;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  sourceRecordId: string;
+}) {
+  const targetRecordId = useRecordField(sourceRecordId, action.target.fieldName);
+
+  return (
+    <RecordEditDialog
+      action={action}
+      onOpenChange={onOpenChange}
+      open={open}
+      targetRecordId={typeof targetRecordId === "string" ? targetRecordId : undefined}
+    />
+  );
+}
+
+function isReferenceEditRecordAction(
+  action: EditRecordTableActionConfig,
+): action is ReferenceEditRecordTableActionConfig {
+  return action.target.kind === "reference";
+}
+
+function RecordEditDialog({
+  action,
+  onOpenChange,
+  open,
+  targetRecordId,
+}: {
+  action: EditRecordTableActionConfig;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  targetRecordId: string | undefined;
+}) {
+  const targetRecord = useRecord(targetRecordId ?? "");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{action.label}</DialogTitle>
+          <DialogDescription>{action.editView.entity.label}</DialogDescription>
+        </DialogHeader>
+        {targetRecord && targetRecordId ? (
+          <EditViewFields editView={action.editView} targetRecordId={targetRecordId} />
+        ) : (
+          <p className="text-sm text-slate-600">Record unavailable.</p>
+        )}
+        {!action.editView.entity.mutations.patch.enabled ? (
+          <p className="text-sm text-slate-600">
+            Editing is disabled for {action.editView.entity.label}.
+          </p>
+        ) : null}
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" type="button" />}>Done</DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditViewFields({
+  editView,
+  targetRecordId,
+}: {
+  editView: EditViewConfig;
+  targetRecordId: string;
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {editView.fields.map((fieldConfig) => (
+        <div className={editFieldClass(fieldConfig)} key={fieldConfig.fieldName}>
+          <RecordFieldEditor
+            canPatch={editView.entity.mutations.patch.enabled}
+            entityName={editView.entityName}
+            fieldConfig={fieldConfig}
+            recordId={targetRecordId}
+            showLabel={true}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function editFieldClass(fieldConfig: EditViewConfig["fields"][number]) {
+  if (fieldConfig.editor === "markdown" || fieldConfig.editor === "textarea") {
+    return "md:col-span-2";
+  }
+
+  return "";
 }
 
 function tableCellJustifyClass(column: TableColumnConfig) {

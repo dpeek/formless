@@ -1509,6 +1509,7 @@ describe("generated forms and records", () => {
         headerLabel: "Inspect rate",
         actions: [
           {
+            type: "static",
             actionName: "inspectRate",
             label: "Inspect rate",
             variant: "default",
@@ -1528,12 +1529,14 @@ describe("generated forms and records", () => {
         headerLabel: "Rate actions",
         actions: [
           {
+            type: "static",
             actionName: "inspectRate",
             label: "Inspect rate",
             variant: "default",
             disabled: false,
           },
           {
+            type: "static",
             actionName: "blockedRate",
             label: "Blocked rate",
             variant: "destructive",
@@ -1561,6 +1564,27 @@ describe("generated forms and records", () => {
     expect(html).toContain("Rate actions");
     expect(html).toContain('aria-label="Rate actions"');
     expect(html).toContain('data-slot="dropdown-menu-trigger"');
+  });
+
+  it("renders Site placement edit child block row actions", () => {
+    const placementModel = selectCollectionModels(siteSourceSchema).find(
+      (model) => model.viewName === "pageCompositionHome",
+    );
+    const columns = placementModel?.result.type === "table" ? placementModel.result.columns : [];
+    const blockPlacement = siteSourceSchema.entities.blockPlacement;
+
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema));
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={blockPlacement}
+        entityName="blockPlacement"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain("Edit block");
+    expect(html).toContain('aria-label="Edit block"');
   });
 
   it("renders shared resource label updates across rate cards without duplicating resources", () => {

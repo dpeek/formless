@@ -10,6 +10,8 @@ import type {
   CountDisplaySchema,
   CreateDefaultValueSchema,
   CreateViewSchema,
+  EditRecordTableActionSchema,
+  EditViewSchema,
   EntityActionSchema,
   EntitySchema,
   FieldCommitPolicy,
@@ -25,7 +27,6 @@ import type {
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
-  TableActionSchema,
   TableViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
@@ -82,12 +83,45 @@ export type ComputedTableColumnConfig = TableColumnBaseConfig & {
   computedValue: ComputedValueSchema;
 };
 
-export type TableActionConfig = {
+export type TableActionBaseConfig = {
   actionName: string;
   label: string;
   variant: TableActionVariant;
   disabled: boolean;
   disabledReason?: string;
+};
+
+export type StaticTableActionConfig = TableActionBaseConfig & {
+  type: "static";
+};
+
+export type EditRecordTableActionConfig = TableActionBaseConfig & {
+  type: "editRecord";
+  target: TableEditRecordTargetConfig;
+  editView: EditViewConfig;
+};
+
+export type TableActionConfig = StaticTableActionConfig | EditRecordTableActionConfig;
+
+export type TableEditRecordTargetConfig =
+  | {
+      kind: "row";
+      entityName: string;
+      entity: EntitySchema;
+    }
+  | {
+      kind: "reference";
+      fieldName: string;
+      field: Extract<FieldSchema, { type: "reference" }>;
+      entityName: string;
+      entity: EntitySchema;
+    };
+
+export type EditViewConfig = {
+  viewName: string;
+  entityName: string;
+  entity: EntitySchema;
+  fields: RecordFieldConfig[];
 };
 
 export type InvokeActionTableColumnConfig = TableColumnBaseConfig & {
@@ -811,6 +845,15 @@ function selectCreateDefaults(view: CreateViewSchema, entity: EntitySchema): Cre
   }));
 }
 
+function selectEditFields(view: EditViewSchema, entity: EntitySchema): RecordFieldConfig[] {
+  return Object.entries(view.fields).map(([fieldName, viewField]) => ({
+    fieldName,
+    field: entity.fields[fieldName] as FieldSchema,
+    editor: viewField.editor,
+    commit: viewField.commit,
+  }));
+}
+
 function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordFieldConfig[] {
   return Object.entries(view.fields).map(([fieldName, viewField]) => ({
     fieldName,
@@ -883,9 +926,8 @@ function selectTableColumns(
     }
 
     if (column.type === "invokeAction") {
-      const actions = selectTableActionConfigs(view.actions ?? {}, invokeActionNames(column));
-      const presentation =
-        column.presentation ?? (actions.length === 1 ? "button" : "dropdown");
+      const actions = selectTableActionConfigs(schema, view, invokeActionNames(column));
+      const presentation = column.presentation ?? (actions.length === 1 ? "button" : "dropdown");
       const headerLabel = column.label ?? defaultInvokeActionHeaderLabel(actions);
 
       return {
@@ -926,28 +968,104 @@ function selectTableColumns(
 }
 
 function selectTableActionConfigs(
-  tableActions: Record<string, TableActionSchema>,
+  schema: AppSchema,
+  tableView: TableViewSchema,
   actionNames: string[],
 ): TableActionConfig[] {
-  return actionNames.flatMap((actionName) => {
-    const action = tableActions[actionName];
+  const configs: TableActionConfig[] = [];
+
+  for (const actionName of actionNames) {
+    const action = tableView.actions?.[actionName];
 
     if (!action || action.availability?.state === "hidden") {
-      return [];
+      continue;
     }
 
-    return [
-      {
-        actionName,
-        label: action.label,
-        variant: action.variant ?? "default",
-        disabled: action.availability?.state === "disabled",
-        ...(action.availability?.reason === undefined
-          ? {}
-          : { disabledReason: action.availability.reason }),
-      },
-    ];
-  });
+    const base = {
+      actionName,
+      label: action.label,
+      variant: action.variant ?? "default",
+      disabled: action.availability?.state === "disabled",
+      ...(action.availability?.reason === undefined
+        ? {}
+        : { disabledReason: action.availability.reason }),
+    };
+
+    if (action.type !== "editRecord") {
+      configs.push({ ...base, type: "static" });
+      continue;
+    }
+
+    configs.push({
+      ...base,
+      type: "editRecord",
+      target: selectEditRecordTarget(schema, tableView, action),
+      editView: selectEditViewConfig(schema, action.editView),
+    });
+  }
+
+  return configs;
+}
+
+function selectEditRecordTarget(
+  schema: AppSchema,
+  tableView: TableViewSchema,
+  action: EditRecordTableActionSchema,
+): TableEditRecordTargetConfig {
+  const tableEntity = schema.entities[tableView.entity];
+
+  if (!tableEntity) {
+    throw new Error(`Missing table entity "${tableView.entity}".`);
+  }
+
+  if (action.target.kind === "row") {
+    return {
+      kind: "row",
+      entityName: tableView.entity,
+      entity: tableEntity,
+    };
+  }
+
+  const field = tableEntity.fields[action.target.field];
+
+  if (field?.type !== "reference") {
+    throw new Error(`Missing reference field "${tableView.entity}.${action.target.field}".`);
+  }
+
+  const referencedEntity = schema.entities[field.to];
+
+  if (!referencedEntity) {
+    throw new Error(`Missing referenced entity "${field.to}".`);
+  }
+
+  return {
+    kind: "reference",
+    fieldName: action.target.field,
+    field,
+    entityName: field.to,
+    entity: referencedEntity,
+  };
+}
+
+function selectEditViewConfig(schema: AppSchema, editViewName: string): EditViewConfig {
+  const view = schema.views[editViewName];
+
+  if (!view || view.type !== "edit") {
+    throw new Error(`Missing edit view "${editViewName}".`);
+  }
+
+  const entity = schema.entities[view.entity];
+
+  if (!entity) {
+    throw new Error(`Missing edit view entity "${view.entity}".`);
+  }
+
+  return {
+    viewName: editViewName,
+    entityName: view.entity,
+    entity,
+    fields: selectEditFields(view, entity),
+  };
 }
 
 function invokeActionNames(

@@ -106,11 +106,32 @@ export type TableActionAvailabilitySchema = {
   reason?: string;
 };
 
-export type TableActionSchema = {
+export type TableEditRecordTargetSchema =
+  | {
+      kind: "row";
+    }
+  | {
+      kind: "reference";
+      field: string;
+    };
+
+export type TableActionBaseSchema = {
   label: string;
   variant?: TableActionVariant;
   availability?: TableActionAvailabilitySchema;
 };
+
+export type StaticTableActionSchema = TableActionBaseSchema & {
+  type?: undefined;
+};
+
+export type EditRecordTableActionSchema = TableActionBaseSchema & {
+  type: "editRecord";
+  target: TableEditRecordTargetSchema;
+  editView: string;
+};
+
+export type TableActionSchema = StaticTableActionSchema | EditRecordTableActionSchema;
 
 export type ValueUnitEditorSchema = {
   unitField: string;
@@ -313,7 +334,13 @@ export type CreateViewSchema = {
   defaults?: Record<string, CreateDefaultValueSchema>;
 };
 
-export type ViewSchema = CollectionViewSchema | CreateViewSchema;
+export type EditViewSchema = {
+  type: "edit";
+  entity: string;
+  fields: Record<string, ViewFieldSchema>;
+};
+
+export type ViewSchema = CollectionViewSchema | CreateViewSchema | EditViewSchema;
 
 export type ScreenNavigationSchema = {
   primary: boolean;

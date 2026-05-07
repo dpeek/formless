@@ -1,7 +1,7 @@
 # PRD 14: Table actions and ordering
 
 Status: in progress
-Current chunk: TAO-02
+Current chunk: TAO-04
 Last updated: 2026-05-07
 
 ## Goal
@@ -312,7 +312,7 @@ Notes:
 | ------ | ------- | ---------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | TAO-01 | shipped | none       | PRD, characterization tests                                 | Current table action/create/edit/order behavior is characterized; PRD status and chunks are current. |
 | TAO-02 | shipped | TAO-01     | schema types/parser, view model, generated table/action UI  | Table-local actions parse; `invokeAction` column renders single action button/dropdown facts.        |
-| TAO-03 | planned | TAO-02     | edit view parser/model, generated edit dialog, Site schema  | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.           |
+| TAO-03 | shipped | TAO-02     | edit view parser/model, generated edit dialog, Site schema  | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.           |
 | TAO-04 | planned | TAO-03     | ordering parser/model, rank module, move menu, Site schema  | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                |
 | TAO-05 | planned | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.    |
 | TAO-06 | planned | TAO-05     | browser smoke, PRD                                          | `/site`, `/tasks`, and `/rates` smoke pass; PRD status, blockers, and promote notes are current.     |
@@ -387,25 +387,19 @@ Evidence:
 
 ### TAO-03 edit view and editRecord action
 
-Status: planned.
+Status: shipped.
 
 Goal: add a full edit dialog action for table row and reference targets.
 
-Tasks:
+Outcome:
 
-- Add top-level `edit` views.
-- Parse edit view fields with `editor` and `commit`.
-- Select edit view field configs.
-- Add `editRecord` table action kind.
-- Validate row targets.
-- Validate reference targets.
-- Validate target entity matches edit view entity.
-- Render an edit dialog from `RecordFieldEditor`.
-- Use a wider dialog layout for markdown and long text.
-- Use live per-field patch semantics.
-- Add Site `blockEdit`.
-- Add Site placement `editChildBlock`.
-- Add a Site placement `invokeAction` column for Edit block.
+- Top-level `edit` views parse and stringify with field `editor` and `commit`.
+- `editRecord` table actions validate row and reference targets.
+- `editRecord` actions validate target entity against the referenced edit view.
+- View models select edit dialog facts for generated tables.
+- Generated table action buttons open wider live-patch edit dialogs backed by `RecordFieldEditor`.
+- Edit dialogs close with `Done`.
+- Site schema adds `blockEdit`, `blockPlacementTable.actions.editChildBlock`, and an explicit `invokeAction` Edit block column.
 
 Acceptance:
 
@@ -420,15 +414,15 @@ Acceptance:
 - Dialog closes with Done.
 - Existing create views keep working.
 
-Evidence to record:
+Evidence:
 
-- Parser tests.
-- View model tests.
-- Generated app render tests.
-- Browser smoke for `/site`.
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- Parser tests: `src/shared/schema.test.ts`.
+- View model tests: `src/client/views.test.ts`.
+- Generated app render tests: `src/app.test.tsx`.
+- Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/site`; snapshot showed the Site placement table Edit block column and buttons; focused first Edit block and `bun browser press Enter`; snapshot showed the Edit block dialog with Header fields and Done.
+- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:02:54.276Z`.
+- `./tmp/test.txt`: full restart run passed 28 files and 495 tests; final source-schema rerun passed 12 files and 363 tests.
+- `./tmp/check.txt`: formatting, lint, and type checks pass.
 
 ### TAO-04 ordering model and move menu
 
@@ -696,6 +690,7 @@ When this PRD ships, update `doc/roadmap.md` only if first-release target detail
 - PRD drafted 2026-05-07 from table actions and ordering design grilling.
 - TAO-01 shipped 2026-05-07 with characterization tests only; no runtime behavior changed.
 - TAO-02 shipped 2026-05-07 with table-local action descriptors and `invokeAction` columns; no edit dialog or ordering behavior added.
+- TAO-03 shipped 2026-05-07 with edit views, `editRecord` table actions, generated edit dialogs, and Site placement Edit block actions; no ordering behavior added.
 - User direction: keep collection views as scope containers and make tables the first record interaction surface.
 - User direction: use table-local named actions and an `invokeAction` table column.
 - User direction: add proper edit views for edit dialogs.

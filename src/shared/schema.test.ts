@@ -916,6 +916,186 @@ describe("schema table views", () => {
     ).toThrow("must use either action or actions, not both");
   });
 
+  it("parses edit views and editRecord table actions", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        tableViews: {
+          rateTable: {
+            ...scopedRateTableViews().rateTable,
+            actions: {
+              editRate: {
+                type: "editRecord",
+                label: "Edit rate",
+                target: { kind: "row" },
+                editView: "rateEdit",
+              },
+              editResource: {
+                type: "editRecord",
+                label: "Edit resource",
+                target: { kind: "reference", field: "resource" },
+                editView: "resourceEdit",
+              },
+            },
+            columns: [
+              ...scopedRateTableViews().rateTable.columns,
+              { type: "invokeAction", actions: ["editRate", "editResource"] },
+            ],
+          },
+        },
+        views: {
+          ...scopedRateViews({ result: { type: "table", tableView: "rateTable" } }),
+          rateEdit: {
+            type: "edit",
+            entity: "rate",
+            fields: {
+              cost: { editor: "number", commit: "field-commit" },
+              resource: { editor: "reference", commit: "immediate" },
+            },
+          },
+          resourceEdit: {
+            type: "edit",
+            entity: "resource",
+            fields: {
+              name: { editor: "text", commit: "field-commit" },
+              kind: { editor: "enum", commit: "immediate" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.views.rateEdit).toEqual({
+      type: "edit",
+      entity: "rate",
+      fields: {
+        cost: { editor: "number", commit: "field-commit" },
+        resource: { editor: "reference", commit: "immediate" },
+      },
+    });
+    expect(schema.tableViews.rateTable?.actions?.editResource).toEqual({
+      type: "editRecord",
+      label: "Edit resource",
+      target: { kind: "reference", field: "resource" },
+      editView: "resourceEdit",
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("validates editRecord targets and edit view references", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              actions: {
+                editResource: {
+                  type: "editRecord",
+                  label: "Edit resource",
+                  target: { kind: "reference", field: "missing" },
+                  editView: "resourceEdit",
+                },
+              },
+              columns: [{ type: "invokeAction", action: "editResource" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              actions: {
+                editResource: {
+                  type: "editRecord",
+                  label: "Edit resource",
+                  target: { kind: "reference", field: "cost" },
+                  editView: "resourceEdit",
+                },
+              },
+              columns: [{ type: "invokeAction", action: "editResource" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('field "rate.cost" must be a reference field');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              actions: {
+                editRate: {
+                  type: "editRecord",
+                  label: "Edit rate",
+                  target: { kind: "row" },
+                  editView: "missingEdit",
+                },
+              },
+              columns: [{ type: "invokeAction", action: "editRate" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown edit view "missingEdit"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              actions: {
+                editResource: {
+                  type: "editRecord",
+                  label: "Edit resource",
+                  target: { kind: "reference", field: "resource" },
+                  editView: "rateEdit",
+                },
+              },
+              columns: [{ type: "invokeAction", action: "editResource" }],
+            },
+          },
+          views: {
+            ...scopedRateViews({ result: { type: "table", tableView: "rateTable" } }),
+            rateEdit: {
+              type: "edit",
+              entity: "rate",
+              fields: {
+                cost: { editor: "number", commit: "field-commit" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('edit view "rateEdit" must use entity "resource"');
+  });
+
+  it("validates edit view fields", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: {
+            ...scopedRateViews(),
+            resourceEdit: {
+              type: "edit",
+              entity: "resource",
+              fields: {
+                name: { editor: "text" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('has unsupported commit policy "undefined"');
+  });
+
   it("validates table view field columns", () => {
     expect(() =>
       parseAppSchema(
@@ -2755,6 +2935,7 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
+        "invokeAction",
       ],
     ]);
 
@@ -3122,6 +3303,21 @@ describe("personal site sample schema", () => {
         body: { editor: "markdown" },
         assetKey: { editor: "slug" },
       },
+    });
+    expect(schema.views.blockEdit).toMatchObject({
+      type: "edit",
+      entity: "block",
+      fields: {
+        type: { editor: "enum", commit: "immediate" },
+        body: { editor: "markdown", commit: "field-commit" },
+        assetKey: { editor: "slug", commit: "field-commit" },
+      },
+    });
+    expect(schema.tableViews.blockPlacementTable?.actions?.editChildBlock).toMatchObject({
+      type: "editRecord",
+      label: "Edit block",
+      target: { kind: "reference", field: "block" },
+      editView: "blockEdit",
     });
     expect(schema.views.blockCompositionHome).toMatchObject({
       type: "collection",

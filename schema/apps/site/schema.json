@@ -735,6 +735,17 @@
     },
     "blockPlacementTable": {
       "entity": "blockPlacement",
+      "actions": {
+        "editChildBlock": {
+          "type": "editRecord",
+          "label": "Edit block",
+          "target": {
+            "kind": "reference",
+            "field": "block"
+          },
+          "editView": "blockEdit"
+        }
+      },
       "columns": [
         {
           "type": "field",
@@ -779,6 +790,12 @@
           "editor": "boolean",
           "commit": "immediate",
           "width": "xs"
+        },
+        {
+          "type": "invokeAction",
+          "action": "editChildBlock",
+          "width": "xs",
+          "align": "end"
         }
       ]
     }
@@ -1045,6 +1062,80 @@
         },
         "limit": {
           "editor": "number"
+        }
+      }
+    },
+    "blockEdit": {
+      "type": "edit",
+      "entity": "block",
+      "fields": {
+        "type": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "title": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "subtitle": {
+          "editor": "textarea",
+          "commit": "field-commit"
+        },
+        "body": {
+          "editor": "markdown",
+          "commit": "field-commit"
+        },
+        "status": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "publishedAt": {
+          "editor": "date",
+          "commit": "field-commit"
+        },
+        "slug": {
+          "editor": "slug",
+          "commit": "field-commit"
+        },
+        "href": {
+          "editor": "href",
+          "commit": "field-commit"
+        },
+        "icon": {
+          "editor": "icon",
+          "commit": "field-commit"
+        },
+        "color": {
+          "editor": "color",
+          "commit": "field-commit"
+        },
+        "templateKey": {
+          "editor": "slug",
+          "commit": "field-commit"
+        },
+        "assetKey": {
+          "editor": "slug",
+          "commit": "field-commit"
+        },
+        "alt": {
+          "editor": "textarea",
+          "commit": "field-commit"
+        },
+        "width": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "height": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "limit": {
+          "editor": "number",
+          "commit": "field-commit"
         }
       }
     },
