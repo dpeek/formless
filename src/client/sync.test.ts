@@ -701,7 +701,7 @@ describe("client sync", () => {
 
     try {
       await restoreStoreSnapshot("tasks", storeSnapshot(), async () =>
-        Response.json({ error: "Store snapshot schemaKey must be \"tasks\"." }, { status: 400 }),
+        Response.json({ error: 'Store snapshot schemaKey must be "tasks".' }, { status: 400 }),
       );
       throw new Error("Expected restore to fail.");
     } catch (error) {

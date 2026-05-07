@@ -1,7 +1,7 @@
 # PRD 15: Store snapshot export and restore
 
-Status: in progress
-Current chunk: SNP-06
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-07
 
 ## Goal
@@ -227,22 +227,22 @@ Notes:
 
 ## Decisions
 
-| ID      | Decision                                          | Reason                                                                                  | Evidence                                          |
-| ------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| SNP-D1  | Export from the authority store.                  | Browser IndexedDB is a local replica, not authoritative state.                          | `doc/overview.md`, `src/client/db.ts`             |
-| SNP-D2  | Keep snapshots schema-keyed.                      | One schema key maps to one authority instance and one browser DB.                       | `doc/current.md`, `src/worker/index.ts`           |
-| SNP-D3  | Version the snapshot envelope.                    | Snapshot compatibility needs an explicit contract as storage and schema semantics grow. | `src/shared/protocol.ts`                          |
-| SNP-D4  | Do not export raw changes.                        | Changes are sync transport history, not the portable store state.                       | `src/worker/storage.ts`                           |
-| SNP-D5  | Do not export action execution rows.              | Action replay rows are authority implementation detail.                                 | `src/worker/storage.ts`                           |
-| SNP-D6  | Restore by appending sync-visible changes.        | Cursor rollback can leave existing replicas stale.                                      | `src/client/sync.ts`, `src/worker/storage.ts`     |
-| SNP-D7  | Restore sets a fresh schema update timestamp.     | Restore is a new committed schema state even when imported schema text is old.          | `src/worker/authority.ts`                         |
-| SNP-D8  | Restore validates against the snapshot schema.    | The snapshot should be internally consistent before it becomes authoritative state.     | `src/shared/schema.ts`, `src/worker/authority.ts` |
-| SNP-D9  | Keep UI scoped to developer controls.             | Roadmap excludes general import/export UI from first release.                           | `doc/roadmap.md`                                  |
-| SNP-D10 | Return a bootstrap-shaped response after restore. | The restoring browser can replace its local replica in one existing path.               | `src/client/sync.ts`, `src/client/db.ts`          |
-| SNP-D11 | Reject unsupported version-1 envelope keys.       | Version 1 should stay reviewable and avoid silently importing ambiguous snapshot data.  | `src/shared/protocol.ts`                          |
-| SNP-D12 | Clear action replay history during restore.       | Restored records can make old action replay rows describe state that no longer exists.  | `src/worker/storage.ts`                           |
-| SNP-D13 | Reuse client bootstrap save for restore.          | Restore returns full replica state.                                                    | `src/client/sync.ts`, `src/client/db.ts`          |
-| SNP-D14 | Keep snapshot UI in developer schema controls.    | Snapshot export/restore is developer tooling, not generated product UI.                | `src/app/dev-actions.tsx`, `src/app/routes/schema.tsx` |
+| ID      | Decision                                          | Reason                                                                                  | Evidence                                               |
+| ------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| SNP-D1  | Export from the authority store.                  | Browser IndexedDB is a local replica, not authoritative state.                          | `doc/overview.md`, `src/client/db.ts`                  |
+| SNP-D2  | Keep snapshots schema-keyed.                      | One schema key maps to one authority instance and one browser DB.                       | `doc/current.md`, `src/worker/index.ts`                |
+| SNP-D3  | Version the snapshot envelope.                    | Snapshot compatibility needs an explicit contract as storage and schema semantics grow. | `src/shared/protocol.ts`                               |
+| SNP-D4  | Do not export raw changes.                        | Changes are sync transport history, not the portable store state.                       | `src/worker/storage.ts`                                |
+| SNP-D5  | Do not export action execution rows.              | Action replay rows are authority implementation detail.                                 | `src/worker/storage.ts`                                |
+| SNP-D6  | Restore by appending sync-visible changes.        | Cursor rollback can leave existing replicas stale.                                      | `src/client/sync.ts`, `src/worker/storage.ts`          |
+| SNP-D7  | Restore sets a fresh schema update timestamp.     | Restore is a new committed schema state even when imported schema text is old.          | `src/worker/authority.ts`                              |
+| SNP-D8  | Restore validates against the snapshot schema.    | The snapshot should be internally consistent before it becomes authoritative state.     | `src/shared/schema.ts`, `src/worker/authority.ts`      |
+| SNP-D9  | Keep UI scoped to developer controls.             | Roadmap excludes general import/export UI from first release.                           | `doc/roadmap.md`                                       |
+| SNP-D10 | Return a bootstrap-shaped response after restore. | The restoring browser can replace its local replica in one existing path.               | `src/client/sync.ts`, `src/client/db.ts`               |
+| SNP-D11 | Reject unsupported version-1 envelope keys.       | Version 1 should stay reviewable and avoid silently importing ambiguous snapshot data.  | `src/shared/protocol.ts`                               |
+| SNP-D12 | Clear action replay history during restore.       | Restored records can make old action replay rows describe state that no longer exists.  | `src/worker/storage.ts`                                |
+| SNP-D13 | Reuse client bootstrap save for restore.          | Restore returns full replica state.                                                     | `src/client/sync.ts`, `src/client/db.ts`               |
+| SNP-D14 | Keep snapshot UI in developer schema controls.    | Snapshot export/restore is developer tooling, not generated product UI.                 | `src/app/dev-actions.tsx`, `src/app/routes/schema.tsx` |
 
 ## Chunks
 
@@ -253,7 +253,7 @@ Notes:
 | SNP-03 | shipped | SNP-02     | storage, storage tests         | Storage can export and restore snapshots atomically with monotonic cursor behavior.                       |
 | SNP-04 | shipped | SNP-03     | authority, authority tests     | Snapshot export and restore routes are schema-keyed, validate input, and broadcast only on commit.        |
 | SNP-05 | shipped | SNP-04     | client sync, app UI, app tests | Schema route exposes developer export/restore controls and refreshes the local replica after restore.     |
-| SNP-06 | planned | SNP-05     | browser smoke, PRD             | Browser smoke covers export/restore flow; PRD status, decisions, blockers, and promote notes are current. |
+| SNP-06 | shipped | SNP-05     | browser smoke, PRD             | Browser smoke covers export/restore flow; PRD status, decisions, blockers, and promote notes are current. |
 
 ## Non-goals
 
@@ -328,6 +328,9 @@ Recommended order:
 - 2026-05-07 SNP-05: added client sync tests for snapshot export, successful restore replica replacement, and failed restore preserving local state in `src/client/sync.test.ts`; added route render assertions for snapshot controls in `src/app.test.tsx`.
 - 2026-05-07 SNP-05: browser smoke with `bun browser --session prd15-snp05 get text body` on `/tasks/schema` showed `Export store snapshot`, `Tasks snapshot file`, and `Restore store snapshot`.
 - 2026-05-07 SNP-05: `bun start` reports `testStatus: pass` and `checkStatus: pass`; `./tmp/test.txt` reports `src/client/sync.test.ts` 32 tests passing and `src/app.test.tsx` 86 tests passing after relevant reruns, and `./tmp/check.txt` reports formatting plus lint/type check passing for 166 files.
+- 2026-05-07 SNP-06: browser smoke downloaded a Tasks store snapshot with `bun browser --session prd15-snp06 download @e13 ./tmp/prd15-snp06-tasks-snapshot.json`; the JSON contains `kind: "formless.storeSnapshot"`, `version: 1`, `schemaKey: "tasks"`, schema, records, and source cursor.
+- 2026-05-07 SNP-06: browser smoke restored a Tasks snapshot through the schema-route confirmation dialog; `/tasks/schema` showed `Restored store snapshot at 2026-05-07T05:51:12.592Z.` and `Restored Tasks snapshot at 2026-05-07T05:51:12.592Z.`.
+- 2026-05-07 SNP-06: `bun start` reports `testStatus: pass` and `checkStatus: pass`; `./tmp/test.txt` reports 29 files and 520 tests passing, followed by `src/client/sync.test.ts` reruns with 32 tests passing, and `./tmp/check.txt` reports formatting plus lint/type check passing for 166 files.
 
 ## PRD status notes
 
@@ -337,7 +340,9 @@ Recommended order:
 - SNP-03 shipped 2026-05-07.
 - SNP-04 shipped 2026-05-07.
 - SNP-05 shipped 2026-05-07.
-- Current chunk: SNP-06.
+- SNP-06 shipped 2026-05-07.
+- Current chunk: complete.
 - Current blocker: none.
-- Main risk: SNP-06 browser smoke should cover the full export file and restore confirmation flow.
+- Main risk: none open.
 - Main implementation note: snapshot controls stay in developer/schema surfaces, not generated app product UI.
+- PRD complete; no next ready chunk.
