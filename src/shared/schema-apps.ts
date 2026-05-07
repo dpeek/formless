@@ -58,10 +58,7 @@ export function findSchemaAppDefinitionByRoute(pathname: string): SchemaAppDefin
   );
 }
 
-export function schemaAppScreenRoute(
-  app: SchemaAppDefinition,
-  screenPath: string,
-): `/${string}` {
+export function schemaAppScreenRoute(app: SchemaAppDefinition, screenPath: string): `/${string}` {
   return screenPath === "/" ? app.route : (`${app.route}${screenPath}` as `/${string}`);
 }
 

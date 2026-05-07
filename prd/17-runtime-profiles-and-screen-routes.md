@@ -1,7 +1,7 @@
 # PRD 17: Runtime profiles and screen routes
 
 Status: active
-Current chunk: RPS-05
+Current chunk: RPS-06
 Last updated: 2026-05-07
 
 ## Goal
@@ -318,7 +318,7 @@ Rejected as incomplete because Estii screen routing and app/profile separation w
 | RPS-02 | shipped | RPS-01     | app registries, source schema paths   | `rates` is renamed to `estii` at the app boundary while rate-card data behavior stays unchanged.                     |
 | RPS-03 | shipped | RPS-02     | screen parser/types/model tests       | Workspace screens accept static app-relative paths and expose route-ready screen models.                             |
 | RPS-04 | shipped | RPS-03     | app shell, home route, source schemas | Dev shell renders screen sidebar/navigation and routes Estii setup through `/estii/setup`.                           |
-| RPS-05 | planned | RPS-04     | runtime profile resolver, app routes  | Dev, app, and published Site profiles mount routes through one explicit profile seam.                                |
+| RPS-05 | shipped | RPS-04     | runtime profile resolver, app routes  | Dev, app, and published Site profiles mount routes through one explicit profile seam.                                |
 | RPS-06 | planned | RPS-05     | Site public route and renderer        | Published Site profile serves `/` as home and `/*` as public page slugs with no generated admin shell.               |
 | RPS-07 | planned | RPS-06     | browser smoke, PRD                    | Checks pass; browser smoke covers dev routes, Estii screen routes, and published Site routes; PRD notes are current. |
 
@@ -453,18 +453,18 @@ Evidence:
 
 ### RPS-05 runtime profile resolver
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: make route mounting explicit.
 
 Tasks:
 
-- Add runtime profile types for `dev`, `app`, and `publishedSite`.
-- Add a profile resolver.
-- Move route construction behind the profile resolver.
-- Keep dev profile behavior equivalent except for Estii and screen paths.
-- Add app profile tests for one generated app mounted without a multi-app switcher.
-- Keep API path generation schema-keyed.
+- Shipped: added runtime profile types for `dev`, `app`, and `publishedSite`.
+- Shipped: added `resolveRuntimeProfile` with explicit config first, host fallback, and dev default.
+- Shipped: moved app route construction behind runtime profile world mounts.
+- Shipped: kept dev profile behavior equivalent for Tasks, Estii, Site, schema editors, legacy Rates redirects, and `/pages/*` public preview.
+- Shipped: added app profile route mounts for one selected schema app at `/`, screen subpaths, and `/schema` without the Formless app switcher.
+- Shipped: kept generated HomeRoute and SchemaRoute calls schema-keyed.
 
 Acceptance:
 
@@ -474,11 +474,14 @@ Acceptance:
 - Cookies are not required for correct route behavior.
 - Existing client sync URLs remain `/api/:schemaKey/*`.
 
-Evidence to record:
+Evidence:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `30 passed (30)`, `521 passed (521)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 168 files.
+- `src/app/runtime-profile.test.ts`: covers dev, app, and published Site profile resolution and root-mounted app screen paths.
+- `src/app.test.tsx`: covers app profile `/`, `/setup`, and `/schema` without the multi-app switcher.
+- Browser smoke: `bun browser --session rps-05 --ignore-https-errors batch --bail ...` opened `/tasks`, `/estii/setup`, and `/pages/home`; each route rendered expected dev shell or public preview content.
 
 ### RPS-06 published Site top-level routes
 
@@ -549,9 +552,8 @@ Evidence to record:
 
 ## Blockers
 
-- None known for RPS-05.
-- Runtime profile source may need a small config convention before RPS-05 implementation.
-- Published Site browser smoke needs a way to run the app under `publishedSite` profile.
+- None known for RPS-06.
+- Published Site browser smoke should run under `publishedSite` profile after RPS-06 mounts top-level public routes.
 
 ## Non-goals
 
@@ -583,7 +585,10 @@ Evidence to record:
 - `doc/current.md`: RPS-04 shipped; source screens declare paths for Tasks `/`, Estii `/` and `/setup`, and Site `/`, `/header`, `/footer`.
 - `doc/current.md`: RPS-04 shipped; dev shell sidebar renders active app screen navigation from primary screen models and keeps Schema as a dev tooling route.
 - `doc/current.md`: RPS-04 shipped; app screen routes render through `HomeRoute` with app-relative screen paths while mutations keep the active schema key.
-- `doc/current.md`: add runtime profile facts once RPS-05 ships.
+- `doc/current.md`: RPS-05 shipped; runtime profile resolver lives in `src/app/runtime-profile.ts`.
+- `doc/current.md`: RPS-05 shipped; dev profile mounts Tasks, Estii, Site, schema editors, legacy Rates redirects, and `/pages/*` public preview.
+- `doc/current.md`: RPS-05 shipped; app profile mounts one selected schema app at `/`, app-relative screen subpaths, and `/schema` without the multi-app Formless switcher.
+- `doc/current.md`: RPS-05 shipped; published Site profile resolves to the Site world without generated admin routes; top-level public rendering waits for RPS-06.
 - `doc/current.md`: add published Site top-level route facts once RPS-06 ships.
 - `doc/roadmap.md`: add first-release screen-route scope only if this PRD is pulled into first-release work.
 
@@ -593,3 +598,4 @@ Evidence to record:
 - 2026-05-07: RPS-02 shipped. App boundary is `estii`; route is `/estii`; schema route is `/estii/schema`; source folder is `schema/apps/estii`; old browser routes redirect; old `/api/rates/*` is unsupported.
 - 2026-05-07: RPS-03 shipped. Workspace screens accept optional static app-relative paths; duplicate, dynamic, wildcard, relative, and `/schema` paths fail; screen models expose paths and path lookup.
 - 2026-05-07: RPS-04 shipped. Dev shell active app navigation uses primary screen models; `/estii/setup`, `/site/header`, and `/site/footer` route to declared screens; Schema remains a dev tooling route.
+- 2026-05-07: RPS-05 shipped. Runtime profile resolver now owns route mounts; dev profile keeps current multi-app routes; app profile mounts one schema app at root paths without the multi-app switcher; published Site profile resolves to Site without generated admin routes.

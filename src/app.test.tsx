@@ -28,6 +28,7 @@ import {
   withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
 import { buildSitePageTree } from "./site/tree.ts";
+import { createAppRuntimeProfile, type RuntimeProfile } from "./app/runtime-profile.ts";
 import {
   selectCollectionModels,
   selectPrimaryCollectionModels,
@@ -63,10 +64,10 @@ import {
   sitePlacementRecord,
 } from "./test/site-editor.ts";
 
-function renderRoute(path: string) {
+function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
-      <App />
+      <App runtimeProfile={runtimeProfile} />
     </Router>,
   );
 }
@@ -283,6 +284,47 @@ describe("App smoke routes", () => {
     expect(html).toContain("Loading home.");
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
+  });
+
+  it('renders an app profile home at "/" without the multi-app switcher', () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
+    const html = renderRoute("/", createAppRuntimeProfile("estii"));
+
+    expect(html).toContain(">Rates</h1>");
+    expect(html).toContain('aria-label="Estii screens"');
+    expect(html).toContain('href="/setup"');
+    expect(html).toContain('href="/schema"');
+    expect(html).not.toContain('href="/tasks"');
+    expect(html).not.toContain('href="/site"');
+    expect(html).not.toContain('href="/estii"');
+    expect(html).not.toContain('href="/estii/schema"');
+  });
+
+  it("renders an app profile screen path without the schema key prefix", () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
+    const html = renderRoute("/setup", createAppRuntimeProfile("estii"));
+
+    expect(html).toContain(">Setup</h1>");
+    expect(html).toContain('aria-label="Estii screens"');
+    expect(html).toContain('href="/"');
+    expect(html).toContain('href="/setup"');
+    expect(html).toContain(">Rate cards</h2>");
+    expect(html).toContain(">Resources</h2>");
+    expect(html).not.toContain('href="/estii/setup"');
+  });
+
+  it('renders an app profile schema editor at "/schema" with the selected schema key', () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
+    const html = renderRoute("/schema", createAppRuntimeProfile("estii"));
+
+    expect(html).toContain("Estii Schema");
+    expect(html).toContain("<code>estii</code>");
+    expect(html).toContain('href="/setup"');
+    expect(html).toContain('href="/schema"');
+    expect(html).toContain('aria-label="Estii route reset controls"');
+    expect(html).not.toContain('href="/tasks"');
+    expect(html).not.toContain('href="/site"');
+    expect(html).not.toContain('href="/estii/schema"');
   });
 });
 

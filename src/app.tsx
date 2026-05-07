@@ -18,22 +18,30 @@ import { HomeRoute } from "./app/routes/home.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { SchemaRoute } from "./app/routes/schema.tsx";
 import { normalizeSitePageSlug, SitePageRoute } from "./app/routes/site-page.tsx";
+import {
+  findRuntimeWorldMountByRoute,
+  hasGeneratedRoutes,
+  isRuntimePublicSiteRoute,
+  resolveRuntimeProfile,
+  runtimeScreenPathFromRoute,
+  runtimeScreenRoute,
+  type RuntimeProfile,
+  type RuntimeWorldMount,
+} from "./app/runtime-profile.ts";
 import { useActiveSchemaKey, useSchema } from "./client/store.ts";
 import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.ts";
-import {
-  defaultSchemaKey,
-  findSchemaAppDefinitionByRoute,
-  schemaAppScreenPathFromRoute,
-  schemaAppScreenRoute,
-  type SchemaAppDefinition,
-  schemaAppDefinitions,
-  schemaApps,
-} from "./shared/schema-apps.ts";
 
-export function App() {
+export function App({
+  runtimeProfile: runtimeProfileProp,
+}: { runtimeProfile?: RuntimeProfile } = {}) {
   const [location] = useLocation();
-  const isPublicSiteRoute = location === "/pages" || location.startsWith("/pages/");
-  const routeApp = findSchemaAppDefinitionByRoute(location);
+  const runtimeProfile = useMemo(
+    () => runtimeProfileProp ?? resolveRuntimeProfile(),
+    [runtimeProfileProp],
+  );
+  const isPublicSiteRoute = isRuntimePublicSiteRoute(runtimeProfile, location);
+  const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location);
+  const routeApp = routeWorld?.app;
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
   const routeAppSchema =
@@ -44,12 +52,14 @@ export function App() {
     () => (routeAppSchema ? selectPrimaryScreenModels(routeAppSchema) : []),
     [routeAppSchema],
   );
-  const activeScreenPath = routeApp ? schemaAppScreenPathFromRoute(routeApp, location) : undefined;
+  const activeScreenPath = routeWorld
+    ? runtimeScreenPathFromRoute(routeWorld, location)
+    : undefined;
 
-  if (isPublicSiteRoute) {
+  if (isPublicSiteRoute || runtimeProfile.shell === "publishedSite") {
     return (
       <main className="min-h-dvh">
-        <AppRoutes />
+        <AppRoutes runtimeProfile={runtimeProfile} />
       </main>
     );
   }
@@ -58,14 +68,18 @@ export function App() {
     <SidebarProvider>
       <Sidebar collapsible="offcanvas">
         <SidebarHeader>
-          <div className="px-2 py-1 text-sm font-semibold">Formless</div>
+          <div className="px-2 py-1 text-sm font-semibold">
+            {runtimeProfile.shell === "dev" ? "Formless" : routeApp?.label}
+          </div>
         </SidebarHeader>
         <SidebarContent>
-          <AppNavigation routeApp={routeApp} />
-          {routeApp ? (
+          {runtimeProfile.shell === "dev" ? (
+            <AppNavigation routeApp={routeApp} runtimeProfile={runtimeProfile} />
+          ) : null}
+          {routeWorld ? (
             <AppScreenNavigation
               activeScreenPath={activeScreenPath}
-              app={routeApp}
+              world={routeWorld}
               screenModels={routeAppScreenModels}
             />
           ) : null}
@@ -77,24 +91,30 @@ export function App() {
           <span className="text-sm font-medium">{routeApp?.label ?? "Formless"}</span>
         </header>
         <div className="flex-1 p-6">
-          <AppRoutes />
+          <AppRoutes runtimeProfile={runtimeProfile} />
         </div>
       </SidebarInset>
     </SidebarProvider>
   );
 }
 
-function AppNavigation({ routeApp }: { routeApp: SchemaAppDefinition | undefined }) {
+function AppNavigation({
+  routeApp,
+  runtimeProfile,
+}: {
+  routeApp: RuntimeWorldMount["app"] | undefined;
+  runtimeProfile: RuntimeProfile;
+}) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Apps</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
-          {schemaApps.map((app) => (
+          {runtimeProfile.worlds.map(({ app, route }) => (
             <SidebarMenuItem key={app.key}>
               <SidebarMenuButton
                 isActive={routeApp?.key === app.key}
-                render={<Link href={app.route} />}
+                render={<Link href={route} />}
               >
                 <span>{app.label}</span>
               </SidebarMenuButton>
@@ -108,12 +128,12 @@ function AppNavigation({ routeApp }: { routeApp: SchemaAppDefinition | undefined
 
 function AppScreenNavigation({
   activeScreenPath,
-  app,
   screenModels,
+  world,
 }: {
   activeScreenPath: string | undefined;
-  app: SchemaAppDefinition;
   screenModels: HomeScreenModel[];
+  world: RuntimeWorldMount;
 }) {
   const screenLinks = screenModels.filter(
     (model): model is HomeScreenModel & { path: string } => model.path !== undefined,
@@ -121,64 +141,77 @@ function AppScreenNavigation({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{app.label}</SidebarGroupLabel>
+      <SidebarGroupLabel>{world.app.label}</SidebarGroupLabel>
       <SidebarGroupContent>
-        <SidebarMenu aria-label={`${app.label} screens`}>
+        <SidebarMenu aria-label={`${world.app.label} screens`}>
           {screenLinks.map((model) => (
             <SidebarMenuItem key={model.screenName}>
               <SidebarMenuButton
                 isActive={activeScreenPath === model.path}
-                render={<Link href={schemaAppScreenRoute(app, model.path)} />}
+                render={<Link href={runtimeScreenRoute(world, model.path)} />}
               >
                 <span>{model.label}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={activeScreenPath === undefined}
-              render={<Link href={app.schemaRoute} />}
-            >
-              <span>Schema</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {world.schemaRoute ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={activeScreenPath === undefined}
+                render={<Link href={world.schemaRoute} />}
+              >
+                <span>Schema</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
   );
 }
 
-function AppRoutes() {
+function AppRoutes({ runtimeProfile }: { runtimeProfile: RuntimeProfile }) {
+  const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
+
   return (
     <Switch>
-      <Route path="/">
-        <Redirect replace to={schemaAppDefinitions[defaultSchemaKey].route} />
-      </Route>
-      <Route path="/pages">
-        <Redirect replace to="/pages/home" />
-      </Route>
-      <Route path="/pages/*">
-        {(params) => <SitePageRoute slug={normalizeSitePageSlug(params["*"])} />}
-      </Route>
-      <Route path="/rates/schema">
-        <Redirect replace to="/estii/schema" />
-      </Route>
-      <Route path="/rates">
-        <Redirect replace to="/estii" />
-      </Route>
-      {schemaApps.map((app) => (
-        <Route key={app.schemaRoute} path={app.schemaRoute}>
-          <SchemaRoute schemaKey={app.key} />
+      {runtimeProfile.defaultRedirect ? (
+        <Route path="/">
+          <Redirect replace to={runtimeProfile.defaultRedirect} />
+        </Route>
+      ) : null}
+      {runtimeProfile.publicSitePreview ? (
+        <Route path={runtimeProfile.publicSitePreview.rootRoute}>
+          <Redirect replace to={runtimeProfile.publicSitePreview.homeRoute} />
+        </Route>
+      ) : null}
+      {runtimeProfile.publicSitePreview ? (
+        <Route path={runtimeProfile.publicSitePreview.routePattern}>
+          {(params) => <SitePageRoute slug={normalizeSitePageSlug(params["*"])} />}
+        </Route>
+      ) : null}
+      {runtimeProfile.legacyRedirects.map((redirect) => (
+        <Route key={redirect.from} path={redirect.from}>
+          <Redirect replace to={redirect.to} />
         </Route>
       ))}
-      {schemaApps.map((app) => (
-        <Route key={app.route} path={app.route}>
-          <HomeRoute schemaKey={app.key} screenPath="/" />
+      {generatedWorlds.map((world) =>
+        world.schemaRoute ? (
+          <Route key={world.schemaRoute} path={world.schemaRoute}>
+            <SchemaRoute schemaKey={world.app.key} />
+          </Route>
+        ) : null,
+      )}
+      {generatedWorlds.map((world) => (
+        <Route key={world.route} path={world.route}>
+          <HomeRoute schemaKey={world.app.key} screenPath="/" />
         </Route>
       ))}
-      {schemaApps.map((app) => (
-        <Route key={`${app.route}/*`} path={`${app.route}/*`}>
-          {(params) => <HomeRoute schemaKey={app.key} screenPath={`/${params["*"]}`} />}
+      {generatedWorlds.map((world) => (
+        <Route key={`${world.route}/*`} path={runtimeScreenWildcardRoute(world)}>
+          {(params) => (
+            <HomeRoute schemaKey={world.app.key} screenPath={runtimeWildcardScreenPath(params)} />
+          )}
         </Route>
       ))}
       <Route>
@@ -186,4 +219,14 @@ function AppRoutes() {
       </Route>
     </Switch>
   );
+}
+
+function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {
+  return world.route === "/" ? "/*" : `${world.route}/*`;
+}
+
+function runtimeWildcardScreenPath(params: unknown): string {
+  const wildcard = (params as { "*": string | undefined })["*"];
+
+  return `/${wildcard ?? ""}`;
 }

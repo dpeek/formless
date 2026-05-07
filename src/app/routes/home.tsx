@@ -16,13 +16,7 @@ import { HomeScreen } from "../generated/screen.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
-export function HomeRoute({
-  schemaKey,
-  screenPath,
-}: {
-  schemaKey: SchemaKey;
-  screenPath: string;
-}) {
+export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; screenPath: string }) {
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
   const schema = activeSchemaKey === null || activeSchemaKey === schemaKey ? activeSchema : null;
