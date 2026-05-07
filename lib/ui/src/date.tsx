@@ -65,19 +65,24 @@ export function DateInput({
   value?: string;
 }) {
   const isValueControlled = value !== undefined;
+  const dateInputValue = date ? formatDateInputValue(date) : undefined;
   const [internalValue, setInternalValue] = React.useState(
-    () => value ?? defaultValue ?? formatDateInputValue(date),
+    () => value ?? defaultValue ?? dateInputValue ?? "",
   );
   const resolvedValue = value ?? internalValue;
-  const selectedDate = date ?? parseDateInputValue(resolvedValue);
+  const selectedDateValue = dateInputValue ?? resolvedValue;
+  const selectedDate = React.useMemo(
+    () => parseDateInputValue(selectedDateValue),
+    [selectedDateValue],
+  );
   const [open, setOpen] = React.useState(false);
   const [month, setMonth] = React.useState<Date | undefined>(selectedDate);
 
   React.useEffect(() => {
-    if (date && !isValueControlled) {
-      setInternalValue(formatDateInputValue(date));
+    if (dateInputValue && !isValueControlled) {
+      setInternalValue(dateInputValue);
     }
-  }, [date, isValueControlled]);
+  }, [dateInputValue, isValueControlled]);
 
   React.useEffect(() => {
     if (selectedDate) {

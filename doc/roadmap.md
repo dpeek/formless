@@ -110,6 +110,8 @@ Current workstream: Site editor list/detail.
 - Generated collection renderer owns query tabs, context selection, summaries, actions, and result rendering.
 - Generated table renderer owns field, reference-field, value/unit, and computed columns.
 - Generated field editors use shared UI primitives for richer scalar editing.
+- Generated edit dialogs can use per-field patching before draft save flows exist.
+- Table row reordering can start on generic patch writes; atomic batch mutations are later.
 
 ## Docs
 
@@ -130,6 +132,11 @@ Current workstream: Site editor list/detail.
 - App marketplace.
 - Full layout DSL.
 - Full computed graph engine.
+- Draft edit sessions with save/cancel.
+- Cross-field draft validation UI.
+- Proper delete mutations and generated delete UI.
+- Destructive action confirmation flow.
+- Atomic batch mutation endpoint.
 - Boards.
 - Dashboards.
 - Charts.
