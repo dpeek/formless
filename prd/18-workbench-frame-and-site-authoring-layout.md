@@ -1,7 +1,7 @@
 # PRD 18: Workbench frame and Site authoring layout
 
-Status: active
-Current chunk: WAF-08
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-07
 
 ## Goal
@@ -300,7 +300,7 @@ Site screens:
 | WAF-05 | shipped | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
 | WAF-06 | shipped | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
 | WAF-07 | shipped | WAF-06                | generated collection UI, schema  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
-| WAF-08 | planned | WAF-07                | browser smoke, PRD               | Checks pass; browser smoke covers Site Pages, Navigation, tools, reset dialog, and sync status details.   |
+| WAF-08 | shipped | WAF-07                | browser smoke, PRD               | Checks pass; browser smoke covers Site Pages, Navigation, tools, reset dialog, and sync status details.   |
 
 ## Chunk details
 
@@ -603,16 +603,16 @@ Promotion notes:
 
 ### WAF-08 closeout
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: verify changed UI behavior and update this PRD.
 
 Tasks:
 
-- Read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
-- Fix issues from dev/test/check output.
-- Run browser smoke because app behavior changes.
-- Update chunk statuses, decisions, blockers, and promote notes.
+- Shipped: read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
+- Shipped: confirmed dev/test/check output is green.
+- Shipped: ran browser smoke for Site Pages, Site Navigation, workbench tools, Reset confirmation, and sync details.
+- Shipped: updated chunk status, blockers, evidence, and promote notes.
 
 Acceptance:
 
@@ -621,12 +621,24 @@ Acceptance:
 - Browser smoke covers Site Pages, Site Navigation, workbench tools, Reset confirmation, and sync details.
 - PRD status and promote notes are current.
 
-Evidence to record:
+Outcome:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
-- Browser smoke command and result.
+- PRD 18 is complete.
+- No app behavior changed in this closeout chunk.
+- The check loop applied formatter-only JSX line wrapping in generated collection UI.
+- Browser smoke confirmed the shipped Site authoring frame, tools, and status surfaces.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `32 passed (32)`, `547 passed (547)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke: `bun browser --session waf08 .../site` rendered `h1` Pages with workbench frame `1`, generated app frame `1`, Pages list/detail `1`, Pages records `1`, one visible `Add placement`, and no `Create Block placement` text.
+- Browser smoke: opening `[data-sync-status-control] summary` showed details for world `site`, schema `v1`, cursor, push sync, and last sync.
+- Browser smoke: opening `[data-workbench-tools] summary` showed one visible Schema link and one visible Reset button.
+- Browser smoke: clicking Reset opened a destructive confirmation with `This restores the source schema and source seed data for site`; confirmation was canceled.
+- Browser smoke: `bun browser --session waf08 .../site/navigation` rendered `h1` Navigation with Header/Footer list-detail sections, no Header/Footer/Block selector records, two `Add placement` buttons, and no `Create Block placement` text.
+- Browser smoke: `bun browser --session waf08 errors` returned no page errors.
 
 ## Dependencies
 
@@ -639,7 +651,7 @@ Evidence to record:
 
 ## Blockers
 
-- No known blockers for WAF-08.
+- No known blockers.
 
 ## Non-goals
 
@@ -666,6 +678,7 @@ Evidence to record:
 - `doc/current.md`: update Site screens to Pages and Navigation after WAF-05 ships.
 - `doc/current.md`: note Site list/detail uses the wide generated workspace after WAF-06 ships.
 - `doc/current.md`: note singleton context behavior after WAF-07 ships.
+- WAF-08: no new global doc facts; docs/steward pass can promote the shipped WAF-02 through WAF-07 facts above.
 - `doc/roadmap.md`: update release target if this PRD is pulled into first-release scope.
 
 ## Status notes
@@ -677,3 +690,4 @@ Evidence to record:
 - 2026-05-07: WAF-05 shipped. Decision WAF-D5/WAF-D6 implemented in `schema/apps/site/schema.json`: Site top-level screens are Pages and Navigation, Header/Footer are Navigation stack sections, and `/site/header` plus `/site/footer` are no longer screen routes. Next ready chunk is WAF-06.
 - 2026-05-07: WAF-06 shipped. Decision WAF-D7 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/generated/collection.tsx`, and `src/app/generated/table.tsx`: generated workspaces use a wide app content area, list/detail gives most desktop width to detail/table content, compact context fields stay above related placements, and tables keep natural column width inside their scroller. Next ready chunk is WAF-07.
 - 2026-05-07: WAF-07 shipped. Decision WAF-D8/WAF-D9 implemented in `src/client/views.ts`, `src/app/generated/collection.tsx`, and `schema/apps/site/schema.json`: Site Pages uses a `Pages` context selector label, Header/Footer singleton contexts render detail directly with no one-item selector, and placement actions use `Add placement`. Next ready chunk is WAF-08.
+- 2026-05-07: WAF-08 shipped. Browser smoke covered Site Pages, Site Navigation, workbench Tools, Reset confirmation, and sync details with no page errors. PRD 18 is complete and ready for docs/steward promotion.

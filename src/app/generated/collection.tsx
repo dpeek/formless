@@ -345,9 +345,7 @@ function ListDetailScopedHomeCollection({
             />
           </>
         ) : contextOptions.length === 0 ? null : (
-          <p className="text-sm text-slate-600">
-            No {context.label.toLowerCase()} selected.
-          </p>
+          <p className="text-sm text-slate-600">No {context.label.toLowerCase()} selected.</p>
         )}
 
         {actions.length > 0 ? (
@@ -394,9 +392,7 @@ function ContextListDetailSelector({
       </div>
 
       {options.length === 0 ? (
-        <p className="text-sm text-slate-600">
-          No {context.label.toLowerCase()} records yet.
-        </p>
+        <p className="text-sm text-slate-600">No {context.label.toLowerCase()} records yet.</p>
       ) : (
         <ul aria-label={`${context.label} records`} className="space-y-1">
           {options.map((option) => (
@@ -506,9 +502,7 @@ function ContextSelector({
       </div>
 
       {options.length === 0 ? (
-        <p className="text-sm text-slate-600">
-          No {context.label.toLowerCase()} records yet.
-        </p>
+        <p className="text-sm text-slate-600">No {context.label.toLowerCase()} records yet.</p>
       ) : null}
 
       <ContextRecordEditor context={context} recordId={selectedContextRecordId} />
