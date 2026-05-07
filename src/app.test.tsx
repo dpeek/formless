@@ -334,8 +334,9 @@ describe("App smoke routes", () => {
     expect(html).toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;sitePages&quot;");
-    expect(html).toContain("&quot;siteHeader&quot;");
-    expect(html).toContain("&quot;siteFooter&quot;");
+    expect(html).toContain("&quot;siteNavigation&quot;");
+    expect(html).not.toContain("&quot;siteHeader&quot;");
+    expect(html).not.toContain("&quot;siteFooter&quot;");
     expect(html).toContain("&quot;block&quot;");
     expect(html).toContain("&quot;blockPlacement&quot;");
     expect(html).not.toContain("<code>tasks</code>");
@@ -821,8 +822,10 @@ describe("generated collection home", () => {
     expect(html).toContain("<h1");
     expect(html).toContain(">Pages</h1>");
     expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain('href="/site/header"');
-    expect(html).toContain('href="/site/footer"');
+    expect(html).toContain('href="/site/navigation"');
+    expect(html).not.toContain('href="/site/header"');
+    expect(html).not.toContain('href="/site/footer"');
+    expect(html).toContain("Navigation");
     expect(html).toContain("Header");
     expect(html).toContain("Footer");
     expect(html).toContain('aria-label="Block list detail"');
@@ -853,11 +856,11 @@ describe("generated collection home", () => {
     expect(html).toContain(">Pages</h1>");
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain('href="/site"');
-    expect(html).toContain('href="/site/header"');
-    expect(html).toContain('href="/site/footer"');
+    expect(html).toContain('href="/site/navigation"');
+    expect(html).not.toContain('href="/site/header"');
+    expect(html).not.toContain('href="/site/footer"');
     expect(html).toContain("Pages");
-    expect(html).toContain("Header");
-    expect(html).toContain("Footer");
+    expect(html).toContain("Navigation");
     expect(html).toContain('aria-label="Block list detail"');
     expect(html).toContain("Home");
     expect(html).toContain("Placements");
@@ -867,23 +870,31 @@ describe("generated collection home", () => {
     expect(html).not.toContain(">Blocks</h1>");
   });
 
-  it("routes site header and footer screens by path", () => {
+  it("routes site navigation with header and footer sections by path", () => {
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
-    const headerHtml = renderRoute("/site/header");
-    const footerHtml = renderRoute("/site/footer");
+    const html = renderRoute("/site/navigation");
 
-    expect(headerHtml).toContain(">Header</h1>");
-    expect(headerHtml).toContain('aria-label="Site screens"');
-    expect(headerHtml).toContain('href="/site/header"');
-    expect(headerHtml).toMatch(/aria-label="Header Placements count"[^>]*>4</);
-    expect(headerHtml).toContain('value="Home"');
-    expect(headerHtml).toContain('value="Blog"');
-    expect(footerHtml).toContain(">Footer</h1>");
-    expect(footerHtml).toContain('aria-label="Site screens"');
-    expect(footerHtml).toContain('href="/site/footer"');
-    expect(footerHtml).toMatch(/aria-label="Footer Placements count"[^>]*>2</);
-    expect(footerHtml).toContain('value="Explore"');
-    expect(footerHtml).toContain('value="Social"');
+    expect(html).toContain(">Navigation</h1>");
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site"');
+    expect(html).toContain('href="/site/navigation"');
+    expect(html).not.toContain('href="/site/header"');
+    expect(html).not.toContain('href="/site/footer"');
+    expect(html).toContain(">Header</h2>");
+    expect(html).toContain(">Footer</h2>");
+    expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
+    expect(html).toMatch(/aria-label="Footer Placements count"[^>]*>2</);
+    expect(html).toContain('value="Home"');
+    expect(html).toContain('value="Blog"');
+    expect(html).toContain('value="Explore"');
+    expect(html).toContain('value="Social"');
+  });
+
+  it("does not route site header and footer as top-level screens", () => {
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+
+    expect(renderRoute("/site/header")).toContain("Not found");
+    expect(renderRoute("/site/footer")).toContain("Not found");
   });
 
   it("updates site page root selection after local record merges", () => {

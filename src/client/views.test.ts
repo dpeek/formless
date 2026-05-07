@@ -1606,13 +1606,12 @@ describe("home view model collections", () => {
     });
   });
 
-  it("selects site Pages, Header, and Footer as primary screen models", () => {
+  it("selects site Pages and Navigation as primary screen models", () => {
     const models = selectPrimaryScreenModels(siteSourceSchema);
 
     expect(models.map((model) => ({ screenName: model.screenName, path: model.path }))).toEqual([
       { screenName: "sitePages", path: "/" },
-      { screenName: "siteHeader", path: "/header" },
-      { screenName: "siteFooter", path: "/footer" },
+      { screenName: "siteNavigation", path: "/navigation" },
     ]);
     expect(models.map(summarizeScreenModel)).toEqual([
       {
@@ -1630,8 +1629,8 @@ describe("home view model collections", () => {
         ],
       },
       {
-        screenName: "siteHeader",
-        label: "Header",
+        screenName: "siteNavigation",
+        label: "Navigation",
         primary: true,
         layoutType: "stack",
         sections: [
@@ -1641,14 +1640,6 @@ describe("home view model collections", () => {
             viewName: "headerCompositionHome",
             entityName: "blockPlacement",
           },
-        ],
-      },
-      {
-        screenName: "siteFooter",
-        label: "Footer",
-        primary: true,
-        layoutType: "stack",
-        sections: [
           {
             id: "footer",
             label: "Footer",

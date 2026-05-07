@@ -1,7 +1,7 @@
 # PRD 18: Workbench frame and Site authoring layout
 
 Status: active
-Current chunk: WAF-05
+Current chunk: WAF-06
 Last updated: 2026-05-07
 
 ## Goal
@@ -297,7 +297,7 @@ Site screens:
 | WAF-02 | shipped | PRD 17 route profiles | app shell, route frame tests     | Dev workbench chrome wraps the generated app frame; app sidebar lists app screens only.                   |
 | WAF-03 | shipped | WAF-02                | dev tools, schema route/reset UI | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
 | WAF-04 | shipped | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
-| WAF-05 | planned | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
+| WAF-05 | shipped | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
 | WAF-06 | planned | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
 | WAF-07 | planned | WAF-06                | generated collection UI, schema  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
 | WAF-08 | planned | WAF-07                | browser smoke, PRD               | Checks pass; browser smoke covers Site Pages, Navigation, tools, reset dialog, and sync status details.   |
@@ -467,17 +467,17 @@ Promotion notes:
 
 ### WAF-05 Site Pages and Navigation screens
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: make Site top-level screens match authoring mental model.
 
 Tasks:
 
-- Replace primary Site Header/Footer screens with one Navigation screen.
-- Keep Pages as default Site authoring screen.
-- Put Header and Footer as stack sections inside Navigation.
-- Keep raw Blocks and Placements views non-primary/debug.
-- Keep public Site behavior unchanged.
+- Shipped: replaced primary Site Header/Footer screens with one Navigation screen.
+- Shipped: kept Pages as default Site authoring screen.
+- Shipped: put Header and Footer as stack sections inside Navigation.
+- Shipped: kept raw Blocks and Placements views non-primary/debug.
+- Shipped: kept public Site behavior unchanged.
 
 Acceptance:
 
@@ -489,9 +489,24 @@ Acceptance:
 
 Evidence to record:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+Outcome:
+
+- `schema/apps/site/schema.json` defines `screens.sitePages` at `/` and `screens.siteNavigation` at `/navigation`.
+- `screens.siteNavigation` has `header` and `footer` stack sections backed by `headerCompositionHome` and `footerCompositionHome`.
+- `src/client/views.test.ts` characterizes Site primary screen models as Pages and Navigation.
+- `src/app.test.tsx` covers `/site/navigation` and confirms `/site/header` and `/site/footer` are not top-level screens.
+- `src/shared/schema.test.ts` characterizes the source schema screens.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest affected rerun passed; final tail showed `src/shared/schema.test.ts` `85 passed (85)` and `PASS Waiting for file changes`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke reset source state: `fetch('/api/site/reset/seed')` returned screen names `sitePages` and `siteNavigation`.
+- Browser smoke `/site`: DOM eval returned `h1` Pages, links `/site` Pages and `/site/navigation` Navigation, and zero `/site/header` or `/site/footer` links.
+- Browser smoke `/site/navigation`: DOM eval returned `h1` Navigation, Header/Footer section headings, Header/Footer placement counts, and zero `/site/header` or `/site/footer` links.
+- Browser smoke `/pages/home`: DOM eval returned workbench frame `0` and generated app frame `0`.
+- Browser smoke: `bun browser --session waf05 errors` returned no page errors.
 
 ### WAF-06 wide Site workspace layout
 
@@ -590,8 +605,7 @@ Evidence to record:
 
 ## Blockers
 
-- WAF-05 depends on PRD 17 screen paths if routes are part of acceptance.
-- No known blocker for WAF-04 if implemented as a chrome refactor over existing status facts.
+- No known blockers for WAF-06.
 
 ## Non-goals
 
@@ -625,3 +639,4 @@ Evidence to record:
 - 2026-05-07: WAF-02 shipped. Decision WAF-D1/WAF-D2 implemented in `src/app.tsx`: dev app switching lives in workbench chrome, generated app frame owns screen navigation only, and Schema remains a direct route but not an app sidebar item. Next ready chunk is WAF-03.
 - 2026-05-07: WAF-03 shipped. Decision WAF-D2/WAF-D3 implemented in `src/app.tsx`, `src/app/dev-actions.tsx`, and `src/app/routes/schema.tsx`: workbench Tools owns Schema and one active-world Reset, dev schema routes render outside the generated app frame, and schema page content keeps snapshot tooling without reset controls. Next ready chunk is WAF-04.
 - 2026-05-07: WAF-04 shipped. Decision WAF-D4 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`, and `src/app/routes/status-line.tsx`: generated page content no longer renders inline sync diagnostics, workbench/header chrome owns a small sync details control, and app-profile generated chrome keeps the same status access. Next ready chunk is WAF-05.
+- 2026-05-07: WAF-05 shipped. Decision WAF-D5/WAF-D6 implemented in `schema/apps/site/schema.json`: Site top-level screens are Pages and Navigation, Header/Footer are Navigation stack sections, and `/site/header` plus `/site/footer` are no longer screen routes. Next ready chunk is WAF-06.

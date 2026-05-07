@@ -3577,20 +3577,15 @@ describe("personal site sample schema", () => {
           sections: [{ id: "pages", type: "collection", view: "pageCompositionHome" }],
         },
       },
-      siteHeader: {
+      siteNavigation: {
         type: "workspace",
-        label: "Header",
+        label: "Navigation",
         navigation: { primary: true },
         layout: {
-          sections: [{ id: "header", type: "collection", view: "headerCompositionHome" }],
-        },
-      },
-      siteFooter: {
-        type: "workspace",
-        label: "Footer",
-        navigation: { primary: true },
-        layout: {
-          sections: [{ id: "footer", type: "collection", view: "footerCompositionHome" }],
+          sections: [
+            { id: "header", type: "collection", view: "headerCompositionHome" },
+            { id: "footer", type: "collection", view: "footerCompositionHome" },
+          ],
         },
       },
     });

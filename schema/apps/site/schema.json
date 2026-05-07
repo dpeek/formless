@@ -1230,10 +1230,10 @@
         ]
       }
     },
-    "siteHeader": {
+    "siteNavigation": {
       "type": "workspace",
-      "label": "Header",
-      "path": "/header",
+      "label": "Navigation",
+      "path": "/navigation",
       "navigation": {
         "primary": true
       },
@@ -1244,20 +1244,7 @@
             "id": "header",
             "type": "collection",
             "view": "headerCompositionHome"
-          }
-        ]
-      }
-    },
-    "siteFooter": {
-      "type": "workspace",
-      "label": "Footer",
-      "path": "/footer",
-      "navigation": {
-        "primary": true
-      },
-      "layout": {
-        "type": "stack",
-        "sections": [
+          },
           {
             "id": "footer",
             "type": "collection",
