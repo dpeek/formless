@@ -325,6 +325,7 @@ describe("client sync", () => {
 
     try {
       sockets.instances[0]?.open();
+      await waitFor(() => sockets.instances[0]?.sentMessages.length === 1);
       sockets.instances[0]?.closeFromServer();
 
       await waitFor(() => sockets.instances.length === 2);
