@@ -1,7 +1,7 @@
 # PRD 16: Post-TAO architecture efficiency
 
 Status: active
-Current chunk: AEC-02
+Current chunk: AEC-03
 Last updated: 2026-05-07
 
 ## Goal
@@ -162,13 +162,15 @@ Likely changed files:
 | AEC-D8  | Extract test helpers only when they remove repeated setup.          | Helper indirection should buy real leverage and locality.               | `src/app.test.tsx`, `src/shared/schema.test.ts`     |
 | AEC-D9  | Do not add ADRs for obvious or temporary preferences.               | ADRs should record decisions future agents would otherwise re-litigate. | missing `docs/adr/`, skill setup rules              |
 | AEC-D10 | Preserve current runtime behavior unless a chunk says docs/tooling. | This PRD is technical debt cleanup, not feature scope.                  | `doc/roadmap.md`                                    |
+| AEC-D11 | Use GitHub Issues for issue-tracker skill config.                   | Repo remote is GitHub; PRD workstreams remain local markdown docs.      | `docs/agents/issue-tracker.md`, `prd/*.md`          |
+| AEC-D12 | Use one root context and default triage labels.                     | Repo is one runtime context; no existing label override was present.    | `CONTEXT.md`, `docs/agents/triage-labels.md`        |
 
 ## Chunks
 
 | ID     | Status  | Depends on       | Main files                        | Acceptance                                                                                                      |
 | ------ | ------- | ---------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | AEC-01 | shipped | PRD 14 shipped   | PRD                               | PRD captures scope, decisions, blockers, dependencies, and promote notes.                                       |
-| AEC-02 | planned | AEC-01           | agent docs, global docs           | Repo has agent skill memory, domain docs home, ADR home, and shipped PRD facts promoted source-faithfully.      |
+| AEC-02 | shipped | AEC-01           | agent docs, global docs           | Repo has agent skill memory, domain docs home, ADR home, and shipped PRD facts promoted source-faithfully.      |
 | AEC-03 | planned | AEC-02, TAO done | table parser/model/renderer files | Post-TAO table behavior is behind deeper table modules with equivalent parser/model/render behavior.            |
 | AEC-04 | planned | AEC-02           | authority validation files        | Mutation, record value, reference, and schema compatibility validation move out of the route with same results. |
 | AEC-05 | planned | AEC-03, AEC-04   | test helper modules and tests     | Repeated schema, table, authority, and site editor setup is concentrated in tested helpers.                     |
@@ -204,7 +206,7 @@ Evidence to record:
 
 ### AEC-02 agent memory and docs steward pass
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: make repo memory easier for agents to consume.
 
@@ -232,6 +234,16 @@ Evidence to record:
 - `./tmp/agent-dev.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
+
+Shipped:
+
+- Added `AGENTS.md` Agent skills block.
+- Added `CONTEXT.md`.
+- Added `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/domain.md`.
+- Added `docs/adr/README.md`.
+- Promoted shipped relationship, action, read-model footer, field editor, Site editor, and table action/ordering facts into `doc/current.md`.
+- Aligned `doc/roadmap.md` generated-table release scope with shipped table row actions, edit dialogs, ordering controls, and drag handles.
+- Browser smoke not run; docs/tooling only, no app behavior changed.
 
 ### AEC-03 post-TAO generated table deepening
 
@@ -435,9 +447,10 @@ AEC-01:
 
 AEC-02:
 
-- `doc/current.md`: note `CONTEXT.md` and `docs/agents/` as repo memory if added.
-- `doc/current.md`: promote shipped PRD facts from completed PRDs that are missing.
-- `doc/roadmap.md`: update only stale release-scope facts.
+- Promoted 2026-05-07.
+- `doc/current.md` notes `CONTEXT.md`, `docs/agents/`, and `docs/adr/` as repo memory.
+- `doc/current.md` promotes missing shipped facts from completed PRDs.
+- `doc/roadmap.md` keeps release-scope wording aligned with shipped table action and ordering behavior.
 
 AEC-03:
 
@@ -463,6 +476,11 @@ AEC-06:
 - 2026-05-07 AEC-01: PRD 14 is shipped in `prd/14-table-actions-and-ordering.md`; AEC-B1 closed and AEC-02 is the next chunk.
 - 2026-05-07 AEC-01: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-01: `./tmp/test.txt` shows 29 files and 506 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
+- 2026-05-07 AEC-02: `AGENTS.md`, `CONTEXT.md`, `docs/agents/`, and `docs/adr/README.md` added repo-local agent memory.
+- 2026-05-07 AEC-02: `doc/current.md` promoted missing shipped facts from completed PRDs; `doc/roadmap.md` received only generated-table release-scope alignment.
+- 2026-05-07 AEC-02: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-02: `./tmp/test.txt` shows 29 files and 506 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
+- 2026-05-07 AEC-02: browser smoke not run because no app behavior changed.
 
 ## PRD status notes
 
@@ -470,5 +488,7 @@ AEC-06:
 - User direction: ship after TAO.
 - Existing `prd/15-store-snapshot-export-restore.md` was present and preserved; this PRD uses number 16.
 - AEC-01 shipped 2026-05-07 after PRD 14 was marked shipped.
+- AEC-02 shipped 2026-05-07 as a docs/steward chunk.
+- Next ready chunk: AEC-03 post-TAO generated table deepening.
 - Main risk: authority validation extraction may overlap with snapshot restore validation if PRD 15 ships first.
-- Current blocker: none for AEC-02; AEC-B2 still applies before AEC-04 if PRD 15 touches validation.
+- Current blocker: none for AEC-03; AEC-B2 still applies before AEC-04 if PRD 15 touches validation.

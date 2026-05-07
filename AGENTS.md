@@ -2,6 +2,20 @@
 
 Repo docs are the project memory. Keep them current and source-faithful.
 
+## Agent skills
+
+### Issue tracker
+
+Issues use GitHub Issues for `dpeek/formless`; PRD workstreams stay in `prd/*.md`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo: read root `CONTEXT.md` and `docs/adr/` when a skill needs domain memory. See `docs/agents/domain.md`.
+
 ## Work
 
 1. Run `bun start` and read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`

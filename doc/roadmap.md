@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 
 Release target: first usable Formless release.
 
@@ -108,10 +108,11 @@ Current workstream: Site editor list/detail.
 - Public site routes do not show generated admin navigation.
 - Generated screen renderer owns route workspace layout.
 - Generated collection renderer owns query tabs, context selection, summaries, actions, and result rendering.
-- Generated table renderer owns field, reference-field, value/unit, and computed columns.
+- Generated table renderer owns field, reference-field, value/unit, computed, invoke-action, and ordering-handle columns.
+- Generated table renderer owns table-local row actions, edit dialogs, ordering controls, and drag handles.
 - Generated field editors use shared UI primitives for richer scalar editing.
 - Generated edit dialogs can use per-field patching before draft save flows exist.
-- Table row reordering can start on generic patch writes; atomic batch mutations are later.
+- Table row reordering uses generic patch writes; atomic batch mutations are later.
 
 ## Docs
 

@@ -1,6 +1,6 @@
 # Current
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 
 ## Runtime
 
@@ -29,6 +29,9 @@ Last updated: 2026-05-06
 - Authority socket catches up from client cursor.
 - Authority socket omits schema when client timestamp is current.
 - Authority broadcasts committed create, patch, action, schema write, reset schema, and reset seed sync messages.
+- Authority committed write notifier: `AuthorityWriteModule` in `src/worker/authority.ts`.
+- Storage write outcome helpers: `WriteOutcome`, `committedWrite`, `replayedWrite` in `src/worker/storage.ts`.
+- Replayed mutation and action writes return stored responses without push notification.
 - Failed validation and mutation replay do not broadcast.
 - Browser push sync has no polling fallback.
 - Home route starts push sync after route-keyed bootstrap.
@@ -56,6 +59,20 @@ Last updated: 2026-05-06
 - Reset code: `src/worker/authority.ts`, `src/worker/storage.ts`, `src/client/sync.ts`.
 - Task source schema defines `screens.taskHome`.
 - Rate-card source schema defines `screens.rateHome` and non-primary `screens.rateSetup`.
+- Site source schema defines `screens.sitePages`, `screens.siteHeader`, and `screens.siteFooter`.
+
+## Relationships
+
+- App schemas can declare optional top-level `relationships`.
+- Relationship kinds: `toOne`, `toMany`, `manyToMany`.
+- Relationship metadata parser: `src/shared/schema-relationships.ts`.
+- Relationship metadata does not change stored record shape.
+- Collection contexts can name a `toMany` relationship.
+- Relationship-backed context queries validate against relationship fields.
+- Client view models expose relationship context facts.
+- Related context counts derive from local records.
+- Rate-card source relationships: `rateCard`, `cardRates`, `rateResource`, `resourceRates`, `cardResources`, `resourceCards`.
+- Site source relationships: `placementParent`, `blockPlacements`, `placementBlock`, `blockUsedInPlacements`.
 
 ## Screens
 
@@ -89,7 +106,9 @@ Last updated: 2026-05-06
 - Runtime bad aggregate values are skipped.
 - Table views can declare computed columns with `type: "computed"`.
 - Collection views can declare aggregate summary slots with `type: "aggregate"`.
+- Collection table results can declare aggregate footer slots.
 - Aggregate summary slots render only for the active query tab.
+- Aggregate footer slots render only for the active query tab.
 - Aggregate selectors evaluate against local query-matching records in `src/client/store.ts`.
 - Authority writes, storage, sync, and mutation paths do not store read-model values.
 
@@ -109,6 +128,15 @@ Last updated: 2026-05-06
 - Text editors can render title-like autosizing editable text.
 - Number editors can use formatted number input and still store numbers.
 - Value/unit table editing patches multiple flat scalar fields.
+
+## Actions
+
+- Action parser dispatches by action kind in `src/shared/schema-actions.ts`.
+- Action runtime dispatches by action kind in `src/worker/actions.ts`.
+- Action UI facts dispatch by action kind in `src/client/views.ts`.
+- Action kinds: `clear-completed`, `create-missing-join-records`, `create-selected-join-record`, `remove-selected-join-records`.
+- Action kind capabilities expose after-create hook eligibility.
+- Generated actions consume selected `action.ui` facts in `src/app/generated/actions.tsx`.
 
 ## Task App
 
@@ -143,9 +171,10 @@ Last updated: 2026-05-06
 - `ratesForSelectedCard` uses context.
 - Table view: `rateTable`.
 - `rateTable` renders `resource.name` through a `referenceField` column.
-- `rateTable` uses value/unit editing for cost and price columns.
+- `rateTable` uses value/unit editing for the cost column.
+- `rateTable` renders `price` with currency formatting.
 - `rateTable` renders read-only `Margin` through `readModels.computedValues.rateMargin`.
-- `rateHome` renders `Cost total`, `Price total`, and `Average margin` summary slots.
+- `rateTable` renders average cost, average price, and average margin footer slots.
 - Rate-card read-model values do not add stored `rate` fields.
 - `cardHome` and `resourceHome` stay in schema as non-primary admin/setup views.
 
@@ -169,6 +198,11 @@ Last updated: 2026-05-06
 - `blockPlacement.parent` is the parent block.
 - `blockPlacement.block` is the child block.
 - `blockPlacement.slot`, `order`, and `visible` control placement.
+- Primary Site admin screens: Pages, Header, Footer.
+- Site editor root selection uses generated list/detail context presentation.
+- Raw Blocks and Placements stay non-primary admin/setup views.
+- Site placement table can edit referenced child blocks.
+- Site placement table supports generated ordering controls.
 - Public tree excludes drafts, archived blocks, invisible placements, and tombstoned records.
 - Missing children and cycles become tree metadata warnings.
 - Home seed includes nested Header, Hero, Recent posts, Featured projects, and Footer blocks.
@@ -190,8 +224,21 @@ Last updated: 2026-05-06
 - Field display: `src/app/generated/record-field-display.tsx`.
 - View and screen model selection: `src/client/views.ts`.
 - Collection rendering consumes model facts, not raw schema.
-- Table rendering supports field, reference-field, and computed columns.
+- Table rendering supports field, reference-field, computed, invoke-action, and ordering-handle columns.
+- Table rendering supports table-local row actions.
+- Table rendering supports generated edit dialogs.
+- Table rendering supports table-local ordering with sparse numeric ranks.
+- Table drag reorder uses `@dnd-kit/react` in generated app code.
 - Collection rendering supports aggregate summary slots.
+- Table rendering supports aggregate footer slots.
+
+## Docs
+
+- Agent instructions: `AGENTS.md`.
+- Domain context: `CONTEXT.md`.
+- Agent skill config: `docs/agents/`.
+- ADR home: `docs/adr/`.
+- Workstream PRDs: `prd/*.md`.
 
 ## Tests
 
