@@ -21,30 +21,30 @@ type DevActionStatus = {
   message: string | null;
 };
 
+type SourceResetControlProps = {
+  buttonLabel?: string;
+  className?: string;
+  onResetSourceData?: (response: BootstrapResponse) => void;
+  schemaKey: SchemaKey;
+};
+
 type DevActionsProps = {
   schemaKey: SchemaKey;
   onResetSourceData?: (response: BootstrapResponse) => void;
   onRestoreSnapshot?: (response: BootstrapResponse) => void;
+  showReset?: boolean;
+  showSnapshots?: boolean;
 };
 
-export function DevActions({ schemaKey, onResetSourceData, onRestoreSnapshot }: DevActionsProps) {
+export function SourceResetControl({
+  buttonLabel = "Reset",
+  className,
+  onResetSourceData,
+  schemaKey,
+}: SourceResetControlProps) {
   const app = getSchemaAppDefinition(schemaKey);
-  const restoreInputId = useId();
-  const restoreInputRef = useRef<HTMLInputElement | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
-  const [selectedRestoreFile, setSelectedRestoreFile] = useState<File | null>(null);
   const [resetStatus, setResetStatus] = useState<DevActionStatus>({
-    pending: false,
-    error: null,
-    message: null,
-  });
-  const [exportStatus, setExportStatus] = useState<DevActionStatus>({
-    pending: false,
-    error: null,
-    message: null,
-  });
-  const [restoreStatus, setRestoreStatus] = useState<DevActionStatus>({
     pending: false,
     error: null,
     message: null,
@@ -64,7 +64,7 @@ export function DevActions({ schemaKey, onResetSourceData, onRestoreSnapshot }: 
       setResetStatus({
         pending: false,
         error: null,
-        message: `Reset ${app.label} source data at ${response.schemaUpdatedAt}.`,
+        message: `Reset ${app.label} source schema and seed data at ${response.schemaUpdatedAt}.`,
       });
     } catch (error) {
       setResetStatus({
@@ -74,6 +74,62 @@ export function DevActions({ schemaKey, onResetSourceData, onRestoreSnapshot }: 
       });
     }
   }
+
+  return (
+    <div className={className}>
+      <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <AlertDialogTrigger
+          render={<Button disabled={resetStatus.pending} type="button" variant="destructive" />}
+        >
+          {resetStatus.pending ? "Resetting..." : buttonLabel}
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset {app.label}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This restores the source schema and source seed data for <code>{app.key}</code>.
+              Existing records for this world are replaced by the source seed records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void resetSourceData()}
+              type="button"
+              variant="destructive"
+            >
+              Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <DevActionMessage status={resetStatus} />
+    </div>
+  );
+}
+
+export function DevActions({
+  schemaKey,
+  onResetSourceData,
+  onRestoreSnapshot,
+  showReset = true,
+  showSnapshots = true,
+}: DevActionsProps) {
+  const app = getSchemaAppDefinition(schemaKey);
+  const restoreInputId = useId();
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [selectedRestoreFile, setSelectedRestoreFile] = useState<File | null>(null);
+  const [exportStatus, setExportStatus] = useState<DevActionStatus>({
+    pending: false,
+    error: null,
+    message: null,
+  });
+  const [restoreStatus, setRestoreStatus] = useState<DevActionStatus>({
+    pending: false,
+    error: null,
+    message: null,
+  });
 
   async function exportSnapshot() {
     if (exportStatus.pending) {
@@ -138,108 +194,90 @@ export function DevActions({ schemaKey, onResetSourceData, onRestoreSnapshot }: 
       aria-label={`${app.label} developer controls`}
       className="rounded border border-slate-200 p-3"
     >
-      <div
-        aria-label={`${app.label} route reset controls`}
-        className="flex flex-wrap items-center gap-3"
-      >
-        <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-          <AlertDialogTrigger
-            render={<Button disabled={resetStatus.pending} type="button" variant="destructive" />}
-          >
-            {resetStatus.pending ? "Resetting..." : "Reset schema and seed data"}
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Reset {app.label} schema and seed data?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This clears records for <code>{app.key}</code> and restores the source schema and
-                source seed records.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => void resetSourceData()}
-                type="button"
-                variant="destructive"
-              >
-                Reset
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-
-      <div
-        aria-label={`${app.label} store snapshot controls`}
-        className="mt-3 flex flex-wrap items-end gap-3"
-      >
-        <Button
-          disabled={exportStatus.pending}
-          onClick={() => void exportSnapshot()}
-          type="button"
-          variant="outline"
+      {showReset ? (
+        <div
+          aria-label={`${app.label} source reset controls`}
+          className="flex flex-wrap items-center gap-3"
         >
-          {exportStatus.pending ? "Exporting..." : "Export store snapshot"}
-        </Button>
-
-        <div className="grid gap-1">
-          <label className="text-xs font-medium text-slate-700" htmlFor={restoreInputId}>
-            {app.label} snapshot file
-          </label>
-          <input
-            ref={restoreInputRef}
-            accept="application/json,.json"
-            className="block w-72 max-w-full rounded border border-slate-300 px-2 py-1 text-sm"
-            disabled={restoreStatus.pending}
-            id={restoreInputId}
-            onChange={(event) => {
-              setSelectedRestoreFile(event.currentTarget.files?.[0] ?? null);
-              setRestoreStatus({ pending: false, error: null, message: null });
-            }}
-            type="file"
+          <SourceResetControl
+            buttonLabel="Reset"
+            onResetSourceData={onResetSourceData}
+            schemaKey={schemaKey}
           />
         </div>
+      ) : null}
 
-        <AlertDialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
-          <AlertDialogTrigger
-            render={
-              <Button
-                disabled={restoreStatus.pending || !selectedRestoreFile}
-                type="button"
-                variant="destructive"
-              />
-            }
+      {showSnapshots ? (
+        <div
+          aria-label={`${app.label} store snapshot controls`}
+          className={`${showReset ? "mt-3 " : ""}flex flex-wrap items-end gap-3`}
+        >
+          <Button
+            disabled={exportStatus.pending}
+            onClick={() => void exportSnapshot()}
+            type="button"
+            variant="outline"
           >
-            {restoreStatus.pending ? "Restoring..." : "Restore store snapshot"}
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Restore {app.label} store snapshot?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This replaces the authority store for <code>{app.key}</code> with the selected
-                snapshot JSON.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                disabled={restoreStatus.pending || !selectedRestoreFile}
-                onClick={() => void restoreSnapshot()}
-                type="button"
-                variant="destructive"
-              >
-                Restore
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+            {exportStatus.pending ? "Exporting..." : "Export store snapshot"}
+          </Button>
 
-      {selectedRestoreFile ? (
+          <div className="grid gap-1">
+            <label className="text-xs font-medium text-slate-700" htmlFor={restoreInputId}>
+              {app.label} snapshot file
+            </label>
+            <input
+              ref={restoreInputRef}
+              accept="application/json,.json"
+              className="block w-72 max-w-full rounded border border-slate-300 px-2 py-1 text-sm"
+              disabled={restoreStatus.pending}
+              id={restoreInputId}
+              onChange={(event) => {
+                setSelectedRestoreFile(event.currentTarget.files?.[0] ?? null);
+                setRestoreStatus({ pending: false, error: null, message: null });
+              }}
+              type="file"
+            />
+          </div>
+
+          <AlertDialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  disabled={restoreStatus.pending || !selectedRestoreFile}
+                  type="button"
+                  variant="destructive"
+                />
+              }
+            >
+              {restoreStatus.pending ? "Restoring..." : "Restore store snapshot"}
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Restore {app.label} store snapshot?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This replaces the authority store for <code>{app.key}</code> with the selected
+                  snapshot JSON.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={restoreStatus.pending || !selectedRestoreFile}
+                  onClick={() => void restoreSnapshot()}
+                  type="button"
+                  variant="destructive"
+                >
+                  Restore
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ) : null}
+
+      {showSnapshots && selectedRestoreFile ? (
         <p className="mt-2 text-xs text-slate-600">Selected {selectedRestoreFile.name}</p>
       ) : null}
-      <DevActionMessage status={resetStatus} />
       <DevActionMessage status={exportStatus} />
       <DevActionMessage status={restoreStatus} />
     </section>

@@ -102,13 +102,7 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
 
       <DevActions
         schemaKey={schemaKey}
-        onResetSourceData={(response) => {
-          setEditorText(stringifySchema(response.schema));
-          setStatus({
-            state: "idle",
-            message: `Reset schema and seed data at ${response.schemaUpdatedAt}.`,
-          });
-        }}
+        showReset={false}
         onRestoreSnapshot={(response) => {
           setEditorText(stringifySchema(response.schema));
           setStatus({

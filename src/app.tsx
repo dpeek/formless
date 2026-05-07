@@ -14,6 +14,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@formless/ui/sidebar";
+import { SourceResetControl } from "./app/dev-actions.tsx";
 import { HomeRoute } from "./app/routes/home.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { SchemaRoute } from "./app/routes/schema.tsx";
@@ -55,6 +56,8 @@ export function App({
   const activeScreenPath = routeWorld
     ? runtimeScreenPathFromRoute(routeWorld, location)
     : undefined;
+  const isWorkbenchToolRoute =
+    runtimeProfile.shell === "dev" && routeWorld?.schemaRoute === location;
 
   if (isPublicSiteRoute || runtimeProfile.shell === "publishedSite") {
     return (
@@ -76,8 +79,14 @@ export function App({
   );
 
   return runtimeProfile.shell === "dev" ? (
-    <WorkbenchFrame routeApp={routeApp} runtimeProfile={runtimeProfile}>
-      {generatedAppFrame}
+    <WorkbenchFrame routeWorld={routeWorld} runtimeProfile={runtimeProfile}>
+      {isWorkbenchToolRoute ? (
+        <main className="bg-background p-6" data-frame="workbench-tool">
+          <AppRoutes runtimeProfile={runtimeProfile} />
+        </main>
+      ) : (
+        generatedAppFrame
+      )}
     </WorkbenchFrame>
   ) : (
     generatedAppFrame
@@ -86,13 +95,15 @@ export function App({
 
 function WorkbenchFrame({
   children,
-  routeApp,
+  routeWorld,
   runtimeProfile,
 }: {
   children: ReactNode;
-  routeApp: RuntimeWorldMount["app"] | undefined;
+  routeWorld: RuntimeWorldMount | undefined;
   runtimeProfile: RuntimeProfile;
 }) {
+  const routeApp = routeWorld?.app;
+
   return (
     <div className="min-h-dvh bg-slate-100" data-frame="workbench">
       <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-2">
@@ -110,22 +121,86 @@ function WorkbenchFrame({
             {routeApp ? routeApp.label : "No active world"}
           </span>
         </div>
-        <nav aria-label="Workbench apps" className="flex flex-wrap items-center gap-1">
-          {runtimeProfile.worlds.map(({ app, route }) => (
-            <Link
-              className={workbenchAppLinkClassName(routeApp?.key === app.key)}
-              href={route}
-              key={app.key}
-            >
-              {app.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex flex-wrap items-center gap-2">
+          <nav aria-label="Workbench apps" className="flex flex-wrap items-center gap-1">
+            {runtimeProfile.worlds.map(({ app, route }) => (
+              <Link
+                className={workbenchAppLinkClassName(routeApp?.key === app.key)}
+                href={route}
+                key={app.key}
+              >
+                {app.label}
+              </Link>
+            ))}
+          </nav>
+          <WorkbenchTools world={routeWorld} />
+        </div>
       </header>
       <div className="bg-background" data-frame="workbench-content">
         {children}
       </div>
     </div>
+  );
+}
+
+function WorkbenchTools({ world }: { world: RuntimeWorldMount | undefined }) {
+  const app = world?.app;
+
+  return (
+    <details className="group relative" data-workbench-tools>
+      <summary className="flex h-7 cursor-pointer list-none items-center gap-1 rounded border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden">
+        <span>Tools</span>
+      </summary>
+      <div
+        aria-label="Workbench tools"
+        className="absolute right-0 z-40 mt-2 w-72 rounded border border-border bg-popover p-3 text-popover-foreground shadow-md"
+      >
+        <div className="space-y-1 border-b border-border pb-3">
+          <p className="text-xs font-medium">{app ? `${app.label} tools` : "Workbench tools"}</p>
+          <p className="text-xs text-slate-600">
+            {app ? (
+              <>
+                Active world <code>{app.key}</code>.
+              </>
+            ) : (
+              "No active world."
+            )}
+          </p>
+        </div>
+
+        <div className="mt-3 grid gap-3">
+          {world?.schemaRoute ? (
+            <Link
+              className="flex h-7 items-center gap-2 rounded border border-border px-2 text-xs font-medium hover:bg-muted"
+              href={world.schemaRoute}
+            >
+              <span>Schema</span>
+            </Link>
+          ) : (
+            <span className="flex h-7 items-center rounded border border-border px-2 text-xs text-slate-500">
+              Schema unavailable
+            </span>
+          )}
+
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600">
+              Reset restores the source schema and source seed data for the active world.
+            </p>
+            {app ? (
+              <SourceResetControl buttonLabel="Reset" schemaKey={app.key} />
+            ) : (
+              <button
+                className="h-7 rounded border border-border px-2 text-xs text-slate-500"
+                disabled
+                type="button"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </details>
   );
 }
 

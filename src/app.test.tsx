@@ -158,6 +158,13 @@ function selectRateHomeModel() {
   return model;
 }
 
+function expectWorkbenchTools(html: string, schemaRoute: string, schemaKey: string) {
+  expect(html).toContain('aria-label="Workbench tools"');
+  expect(html).toContain(`href="${schemaRoute}"`);
+  expect(html).toContain(`Active world <code>${schemaKey}</code>.`);
+  expect(html).toContain("Reset restores the source schema and source seed data");
+}
+
 describe("App smoke routes", () => {
   it('renders the "/tasks" route with task navigation', () => {
     const html = renderRoute("/tasks");
@@ -171,10 +178,10 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
+    expectWorkbenchTools(html, "/tasks/schema", "tasks");
     expect(html).toContain('aria-label="Tasks screens"');
     expect(html).toContain("Loading Tasks...");
     expect(html).not.toContain("Create Task");
-    expect(html).not.toContain('href="/tasks/schema"');
   });
 
   it('renders the "/estii" route with Estii navigation', () => {
@@ -189,10 +196,10 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
+    expectWorkbenchTools(html, "/estii/schema", "estii");
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain("Loading Estii...");
     expect(html).not.toContain("Create Resource");
-    expect(html).not.toContain('href="/estii/schema"');
   });
 
   it('renders the "/site" route with site navigation', () => {
@@ -207,10 +214,10 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
+    expectWorkbenchTools(html, "/site/schema", "site");
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain("Loading Site...");
     expect(html).not.toContain("Create Content item");
-    expect(html).not.toContain('href="/site/schema"');
   });
 
   it('renders the "/tasks/schema" route', () => {
@@ -218,15 +225,17 @@ describe("App smoke routes", () => {
     const html = renderRoute("/tasks/schema");
 
     expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('data-frame="workbench-tool"');
+    expect(html).not.toContain('data-frame="generated-app"');
     expect(html).toContain('aria-label="Workbench apps"');
-    expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).not.toContain('href="/tasks/schema"');
+    expectWorkbenchTools(html, "/tasks/schema", "tasks");
+    expect(html).not.toContain('aria-label="Tasks screens"');
     expect(html).toContain("Tasks Schema");
     expect(html).toContain("<code>tasks</code>");
-    expect(html).toContain('aria-label="Tasks route reset controls"');
+    expect(html).not.toContain('aria-label="Tasks route reset controls"');
+    expect(html).not.toContain('aria-label="Tasks source reset controls"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Reset schema and seed data");
+    expect(html).not.toContain("Reset schema and seed data");
     expect(html).toContain('aria-label="Tasks store snapshot controls"');
     expect(html).toContain("Export store snapshot");
     expect(html).toContain("Tasks snapshot file");
@@ -243,16 +252,18 @@ describe("App smoke routes", () => {
     const html = renderRoute("/estii/schema");
 
     expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('data-frame="workbench-tool"');
+    expect(html).not.toContain('data-frame="generated-app"');
     expect(html).toContain('aria-label="Workbench apps"');
-    expect(html).toContain('aria-label="Estii screens"');
-    expect(html).toContain('href="/estii/setup"');
-    expect(html).not.toContain('href="/estii/schema"');
+    expectWorkbenchTools(html, "/estii/schema", "estii");
+    expect(html).not.toContain('aria-label="Estii screens"');
+    expect(html).not.toContain('href="/estii/setup"');
     expect(html).toContain("Estii Schema");
     expect(html).toContain("<code>estii</code>");
-    expect(html).toContain('aria-label="Estii route reset controls"');
+    expect(html).not.toContain('aria-label="Estii route reset controls"');
+    expect(html).not.toContain('aria-label="Estii source reset controls"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Reset schema and seed data");
+    expect(html).not.toContain("Reset schema and seed data");
     expect(html).toContain('aria-label="Estii store snapshot controls"');
     expect(html).toContain("Export store snapshot");
     expect(html).toContain("Estii snapshot file");
@@ -270,17 +281,19 @@ describe("App smoke routes", () => {
     const html = renderRoute("/site/schema");
 
     expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('data-frame="workbench-tool"');
+    expect(html).not.toContain('data-frame="generated-app"');
     expect(html).toContain('aria-label="Workbench apps"');
-    expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain('href="/site/header"');
-    expect(html).toContain('href="/site/footer"');
-    expect(html).not.toContain('href="/site/schema"');
+    expectWorkbenchTools(html, "/site/schema", "site");
+    expect(html).not.toContain('aria-label="Site screens"');
+    expect(html).not.toContain('href="/site/header"');
+    expect(html).not.toContain('href="/site/footer"');
     expect(html).toContain("Site Schema");
     expect(html).toContain("<code>site</code>");
-    expect(html).toContain('aria-label="Site route reset controls"');
+    expect(html).not.toContain('aria-label="Site route reset controls"');
+    expect(html).not.toContain('aria-label="Site source reset controls"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Reset schema and seed data");
+    expect(html).not.toContain("Reset schema and seed data");
     expect(html).toContain('aria-label="Site store snapshot controls"');
     expect(html).toContain("Export store snapshot");
     expect(html).toContain("Site snapshot file");
@@ -370,7 +383,8 @@ describe("App smoke routes", () => {
     expect(html).toContain("<code>estii</code>");
     expect(html).toContain('href="/setup"');
     expect(html).not.toContain('href="/schema"');
-    expect(html).toContain('aria-label="Estii route reset controls"');
+    expect(html).not.toContain('aria-label="Estii route reset controls"');
+    expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/estii/schema"');

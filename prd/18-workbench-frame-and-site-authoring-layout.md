@@ -1,7 +1,7 @@
 # PRD 18: Workbench frame and Site authoring layout
 
 Status: active
-Current chunk: WAF-03
+Current chunk: WAF-04
 Last updated: 2026-05-07
 
 ## Goal
@@ -295,7 +295,7 @@ Site screens:
 | ------ | ------- | --------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | WAF-01 | shipped | none                  | PRD                              | PRD captures workbench/app frame split, Site screen shape, one Reset, sync status, layout, and non-goals. |
 | WAF-02 | shipped | PRD 17 route profiles | app shell, route frame tests     | Dev workbench chrome wraps the generated app frame; app sidebar lists app screens only.                   |
-| WAF-03 | planned | WAF-02                | dev tools, schema route/reset UI | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
+| WAF-03 | shipped | WAF-02                | dev tools, schema route/reset UI | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
 | WAF-04 | planned | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
 | WAF-05 | planned | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
 | WAF-06 | planned | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
@@ -374,19 +374,20 @@ Promotion notes:
 
 ### WAF-03 workbench tools and one Reset
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: move schema/reset tooling out of app navigation.
 
 Tasks:
 
-- Add workbench Tools menu/dialog/drawer.
-- Add Schema entry to workbench tools.
-- Move Reset into workbench tools.
-- Keep only one visible Reset button.
-- Keep destructive confirmation.
-- Keep reset scoped to the active schema key.
-- Remove old separate or duplicated reset surfaces.
+- Shipped: added a workbench Tools disclosure in `src/app.tsx`.
+- Shipped: added Schema as a workbench tool link for the active world.
+- Shipped: moved source Reset into workbench Tools.
+- Shipped: kept one visible Reset button inside open workbench Tools.
+- Shipped: kept destructive confirmation.
+- Shipped: kept reset scoped to the active schema key.
+- Shipped: removed reset controls from schema-route page content.
+- Shipped: kept store snapshot controls on schema routes.
 
 Acceptance:
 
@@ -396,11 +397,29 @@ Acceptance:
 - No UI exposes separate reset schema and reset seed controls.
 - Reset affects only the active world.
 
-Evidence to record:
+Outcome:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- `src/app.tsx` renders dev schema routes as `data-frame="workbench-tool"` outside the generated app frame.
+- `src/app.tsx` renders active-world Tools with Schema and Reset.
+- `src/app/dev-actions.tsx` exports reusable `SourceResetControl`.
+- `src/app/routes/schema.tsx` keeps snapshot controls but no reset controls.
+- `src/app.test.tsx` covers workbench Tools, workbench schema routes, and absence of schema-route reset controls.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest affected reruns passed; `src/app.test.tsx` showed `95 passed (95)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke: `/site` eval returned workbench and generated frames present, one workbench Schema link, Tools closed by default.
+- Browser smoke: after opening Tools on `/site`, eval returned `toolsOpen=true`, one visible Reset button, and one visible `/site/schema` link.
+- Browser smoke: Reset confirmation copy included `This restores the source schema and source seed data for site`; confirmation was canceled.
+- Browser smoke: `/site/schema` eval returned workbench `1`, workbench-tool `1`, generated app frame `0`, Site Schema present, old `Reset schema and seed data` text absent.
+- Browser smoke: `bun browser --session waf03 errors` returned no page errors.
+
+Promotion notes:
+
+- `doc/current.md`: Schema and Reset are workbench tools, not generated app screens.
+- `doc/current.md`: one Reset UI restores source schema and source seed data for the active world.
 
 ### WAF-04 chrome sync status
 
@@ -588,3 +607,4 @@ Evidence to record:
 
 - 2026-05-07: PRD created from screenshot review and discussion. User direction: keep Schema out of generated app sidebar, use a workbench frame for dev tools, expose one Reset button, move sync status out of page content, use Pages and Navigation for Site, and make list/detail wider without inventing new primitives.
 - 2026-05-07: WAF-02 shipped. Decision WAF-D1/WAF-D2 implemented in `src/app.tsx`: dev app switching lives in workbench chrome, generated app frame owns screen navigation only, and Schema remains a direct route but not an app sidebar item. Next ready chunk is WAF-03.
+- 2026-05-07: WAF-03 shipped. Decision WAF-D2/WAF-D3 implemented in `src/app.tsx`, `src/app/dev-actions.tsx`, and `src/app/routes/schema.tsx`: workbench Tools owns Schema and one active-world Reset, dev schema routes render outside the generated app frame, and schema page content keeps snapshot tooling without reset controls. Next ready chunk is WAF-04.
