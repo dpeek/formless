@@ -757,9 +757,13 @@
             "field": "slot"
           }
         ],
-        "presentations": ["moveMenu"]
+        "presentations": ["dragHandle", "moveMenu"]
       },
       "columns": [
+        {
+          "type": "orderingHandle",
+          "width": "xs"
+        },
         {
           "type": "field",
           "field": "slot",

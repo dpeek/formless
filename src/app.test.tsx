@@ -1591,6 +1591,9 @@ describe("generated forms and records", () => {
 
     expect(html).toContain('aria-label="Actions"');
     expect(html).toContain('data-slot="dropdown-menu-trigger"');
+    expect(html).toContain('aria-label="Reorder"');
+    expect(html).toContain('data-formless-ordering-handle="true"');
+    expect(html).toContain("data-formless-sortable-row=");
   });
 
   it("sorts generated table rows by ordering rank before rendering", () => {

@@ -201,11 +201,20 @@ export type InvokeActionTableColumnSchema = {
   presentation?: TableActionPresentation;
 };
 
+export type OrderingHandleTableColumnSchema = {
+  type: "orderingHandle";
+  label?: string;
+  align?: TableColumnAlign;
+  width?: TableColumnWidth;
+  display?: TableColumnDisplay;
+};
+
 export type TableColumnSchema =
   | FieldTableColumnSchema
   | ReferenceFieldTableColumnSchema
   | ComputedTableColumnSchema
-  | InvokeActionTableColumnSchema;
+  | InvokeActionTableColumnSchema
+  | OrderingHandleTableColumnSchema;
 
 export type TableViewSchema = {
   entity: string;

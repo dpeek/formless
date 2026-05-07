@@ -147,11 +147,17 @@ export type InvokeActionTableColumnConfig = TableColumnBaseConfig & {
   ordering?: TableOrderingConfig;
 };
 
+export type OrderingHandleTableColumnConfig = TableColumnBaseConfig & {
+  type: "orderingHandle";
+  headerLabel: string;
+};
+
 export type TableColumnConfig =
   | FieldTableColumnConfig
   | ReferenceFieldTableColumnConfig
   | ComputedTableColumnConfig
-  | InvokeActionTableColumnConfig;
+  | InvokeActionTableColumnConfig
+  | OrderingHandleTableColumnConfig;
 
 export type CreateFieldConfig = {
   fieldName: string;
@@ -971,6 +977,19 @@ function selectTableColumns(
       };
     }
 
+    if (column.type === "orderingHandle") {
+      return {
+        type: "orderingHandle",
+        key: "orderingHandle",
+        label: column.label ?? "",
+        headerLabel: column.label ?? "Reorder",
+        ...(column.align === undefined ? { align: "center" as const } : { align: column.align }),
+        ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
+        display: column.display ?? "readOnly",
+        format: "plain",
+      };
+    }
+
     const field = entity.fields[column.field] as FieldSchema;
     const referenceItem = selectReferenceItem(schema, field, column.referenceItemView);
     const valueUnit = selectValueUnitField(entity, column.valueUnit?.unitField);
@@ -993,14 +1012,20 @@ function selectTableColumns(
     };
   });
 
+  const columnsWithOrderingHandle =
+    ordering?.presentations.includes("dragHandle") &&
+    !view.columns.some((column) => column.type === "orderingHandle")
+      ? [selectSyntheticOrderingHandleColumn(), ...columns]
+      : columns;
+
   if (
     ordering?.presentations.includes("moveMenu") &&
     !view.columns.some((column) => column.type === "invokeAction" && column.includeOrdering)
   ) {
-    return [...columns, selectSyntheticOrderingMenuColumn(ordering)];
+    return [...columnsWithOrderingHandle, selectSyntheticOrderingMenuColumn(ordering)];
   }
 
-  return columns;
+  return columnsWithOrderingHandle;
 }
 
 function selectTableOrderingConfig(
@@ -1050,6 +1075,19 @@ function selectSyntheticOrderingMenuColumn(
     includeOrdering: true,
     ordering,
     align: "end",
+    width: "xs",
+    display: "readOnly",
+    format: "plain",
+  };
+}
+
+function selectSyntheticOrderingHandleColumn(): OrderingHandleTableColumnConfig {
+  return {
+    type: "orderingHandle",
+    key: "orderingHandle",
+    label: "",
+    headerLabel: "Reorder",
+    align: "center",
     width: "xs",
     display: "readOnly",
     format: "plain",
@@ -1180,7 +1218,7 @@ function tableFooterColumnName(column: TableColumnConfig) {
     return column.computedValueName;
   }
 
-  if (column.type === "invokeAction") {
+  if (column.type === "invokeAction" || column.type === "orderingHandle") {
     return "";
   }
 

@@ -546,6 +546,10 @@ function parseTableColumn(
     return parseInvokeActionTableColumn(context, value, actions, ordering);
   }
 
+  if (value.type === "orderingHandle") {
+    return parseOrderingHandleTableColumn(context, value, ordering);
+  }
+
   return parseFieldTableColumn(context, value, entityName, entity, itemViews);
 }
 
@@ -836,6 +840,39 @@ function parseInvokeActionTableColumn(
     ...(width === undefined ? {} : { width }),
     ...(display === undefined ? {} : { display }),
     ...(presentation === undefined ? {} : { presentation }),
+  };
+}
+
+function parseOrderingHandleTableColumn(
+  context: string,
+  value: Record<string, unknown>,
+  ordering: TableOrderingSchema | undefined,
+): TableColumnSchema {
+  assertExactKeys(context, value, ["type"], ["label", "align", "width", "display"]);
+
+  if (!ordering) {
+    throw new Error(`${context} orderingHandle requires table ordering.`);
+  }
+
+  if (!ordering.presentations?.includes("dragHandle")) {
+    throw new Error(`${context} orderingHandle requires dragHandle ordering presentation.`);
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
+  const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
+  const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
+
+  if (display === "editor") {
+    throw new Error(`${context} orderingHandle columns must be read-only or hidden.`);
+  }
+
+  return {
+    type: "orderingHandle",
+    ...(label === undefined ? {} : { label }),
+    ...(align === undefined ? {} : { align }),
+    ...(width === undefined ? {} : { width }),
+    ...(display === undefined ? {} : { display }),
   };
 }
 
@@ -1851,7 +1888,7 @@ function tableFooterColumnName(column: TableColumnSchema) {
     return column.computedValue;
   }
 
-  if (column.type === "invokeAction") {
+  if (column.type === "invokeAction" || column.type === "orderingHandle") {
     return undefined;
   }
 

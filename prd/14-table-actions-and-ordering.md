@@ -1,7 +1,7 @@
 # PRD 14: Table actions and ordering
 
 Status: in progress
-Current chunk: TAO-05
+Current chunk: TAO-06
 Last updated: 2026-05-07
 
 ## Goal
@@ -314,7 +314,7 @@ Notes:
 | TAO-02 | shipped | TAO-01     | schema types/parser, view model, generated table/action UI  | Table-local actions parse; `invokeAction` column renders single action button/dropdown facts.        |
 | TAO-03 | shipped | TAO-02     | edit view parser/model, generated edit dialog, Site schema  | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.           |
 | TAO-04 | shipped | TAO-03     | ordering parser/model, rank module, move menu, Site schema  | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                |
-| TAO-05 | planned | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.    |
+| TAO-05 | shipped | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.    |
 | TAO-06 | planned | TAO-05     | browser smoke, PRD                                          | `/site`, `/tasks`, and `/rates` smoke pass; PRD status, blockers, and promote notes are current.     |
 
 ## Chunk details
@@ -467,23 +467,23 @@ Evidence:
 
 ### TAO-05 drag reorder
 
-Status: planned.
+Status: shipped.
 
 Goal: add dnd-kit drag handle ordering.
 
-Tasks:
+Outcome:
 
-- Add `@dnd-kit/react`.
-- Add explicit `orderingHandle` column.
-- Auto-insert handle column only when ordering asks for drag handle and no column exists.
-- Wire dnd-kit sortable rows.
-- Use a dedicated drag handle ref.
-- Use dnd-kit grouping by ordering scope.
-- Validate scope again on drop.
-- Patch only on drop.
-- Keep row menu move commands as keyboard-friendly ordering controls.
-- Prevent cross-scope drag/drop.
-- Preserve table footer and readiness warning row behavior.
+- Added `@dnd-kit/react`.
+- Added `orderingHandle` table column schema, parser, stringify, and view model facts.
+- Auto-inserted handle columns only when ordering asks for `dragHandle` and no explicit handle column exists.
+- Wired generated table rows through dnd-kit sortable groups when drag handles are active.
+- Used a dedicated handle ref on the Reorder button.
+- Grouped drag sorting by ordering scope key.
+- Validated scope again on drop.
+- Patched only from `onDragEnd`.
+- Kept move-menu commands in the row action dropdown.
+- Preserved table footer rendering and grouped readiness warning rows with their sortable record row.
+- Site `blockPlacementTable` now declares drag handles plus move menus.
 
 Acceptance:
 
@@ -491,18 +491,21 @@ Acceptance:
 - Drag handle and row menu are separate utility columns.
 - Dragging within one scope visually reorders rows.
 - Dropping within one scope patches the moved row rank.
-- Cross-scope drop is rejected or ignored.
+- Cross-scope drop is guarded by dnd-kit `accept` and checked again on drop.
 - Dragging does not patch during hover.
 - Move menu still works without pointer drag.
-- Browser smoke verifies `/site` drag behavior if feasible through `bun browser`.
+- Browser smoke verified `/site` drag behavior through `bun browser`.
 
-Evidence to record:
+Evidence:
 
-- Generated table tests.
-- Browser smoke for `/site`.
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- Parser tests: `src/shared/schema.test.ts`.
+- Rank helper tests: `src/shared/table-ordering.test.ts`.
+- View model tests: `src/client/views.test.ts`.
+- Generated table render tests: `src/app.test.tsx`.
+- Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/site/schema`; reset source schema/seed; `bun browser open https://14-table-actions-and-ordering.formless.local/site`; snapshot showed Reorder and Actions as separate columns; mouse drag of the Featured projects Reorder handle over the first `main` Reorder handle moved Featured projects to the top of the `main` scope and advanced cursor to 49.
+- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:46:23.568Z`.
+- `./tmp/test.txt`: full restart run passed 29 files and 506 tests.
+- `./tmp/check.txt`: formatting, lint, and type checks pass.
 
 ### TAO-06 closeout
 
@@ -568,9 +571,9 @@ Acceptance:
 
 ## Blockers
 
-| ID     | Status | Blocks | Notes                                                              |
-| ------ | ------ | ------ | ------------------------------------------------------------------ |
-| TAO-B1 | open   | TAO-05 | `@dnd-kit/react` must be added before drag reorder implementation. |
+| ID     | Status | Blocks | Notes                                            |
+| ------ | ------ | ------ | ------------------------------------------------ |
+| TAO-B1 | closed | TAO-05 | `@dnd-kit/react` added and drag reorder shipped. |
 
 ## Cross-PRD dependencies
 
@@ -688,6 +691,7 @@ When this PRD ships, update `doc/roadmap.md` only if first-release target detail
 - TAO-02 shipped 2026-05-07 with table-local action descriptors and `invokeAction` columns; no edit dialog or ordering behavior added.
 - TAO-03 shipped 2026-05-07 with edit views, `editRecord` table actions, generated edit dialogs, and Site placement Edit block actions; no ordering behavior added.
 - TAO-04 shipped 2026-05-07 with table-local ordering, sparse rank moves, generated move menus, and Site placement ordering controls.
+- TAO-05 shipped 2026-05-07 with `@dnd-kit/react`, generated drag handles, scoped sortable rows, and drop-time sparse rank patches.
 - User direction: keep collection views as scope containers and make tables the first record interaction surface.
 - User direction: use table-local named actions and an `invokeAction` table column.
 - User direction: add proper edit views for edit dialogs.

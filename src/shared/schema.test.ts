@@ -991,9 +991,10 @@ describe("schema table views", () => {
             ordering: {
               field: "sortOrder",
               scope: [{ kind: "field", field: "card" }],
-              presentations: ["moveMenu"],
+              presentations: ["dragHandle", "moveMenu"],
             },
             columns: [
+              { type: "orderingHandle", width: "xs" },
               ...scopedRateTableViews().rateTable.columns,
               { type: "invokeAction", includeOrdering: true },
             ],
@@ -1008,7 +1009,11 @@ describe("schema table views", () => {
     expect(schema.tableViews.rateTable?.ordering).toEqual({
       field: "sortOrder",
       scope: [{ kind: "field", field: "card" }],
-      presentations: ["moveMenu"],
+      presentations: ["dragHandle", "moveMenu"],
+    });
+    expect(schema.tableViews.rateTable?.columns[0]).toEqual({
+      type: "orderingHandle",
+      width: "xs",
     });
     expect(schema.tableViews.rateTable?.columns.at(-1)).toEqual({
       type: "invokeAction",
@@ -1400,6 +1405,34 @@ describe("schema table views", () => {
         }),
       ),
     ).toThrow("includeOrdering requires table ordering");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "orderingHandle" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("orderingHandle requires table ordering");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: scopedRateEntitiesWithSortOrder(),
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              ordering: { field: "sortOrder", presentations: ["moveMenu"] },
+              columns: [{ type: "orderingHandle" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("orderingHandle requires dragHandle ordering presentation");
   });
 
   it("parses and validates computed table columns", () => {
@@ -3038,6 +3071,7 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
+        "orderingHandle",
         "field",
         "field",
         "field",

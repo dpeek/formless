@@ -590,6 +590,28 @@ describe("home view model collections", () => {
     });
   });
 
+  it("auto-inserts ordering handles when drag handles are requested", () => {
+    const schema = rateCardSchemaWithDragOrdering();
+    const rateModel = requiredCollectionModel(schema, "rateHome");
+    const result = rateModel.result;
+
+    if (result.type !== "table") {
+      throw new Error("Missing rate table model.");
+    }
+
+    expect(result.ordering?.presentations).toEqual(["dragHandle"]);
+    expect(result.columns[0]).toMatchObject({
+      type: "orderingHandle",
+      key: "orderingHandle",
+      label: "",
+      headerLabel: "Reorder",
+      align: "center",
+      width: "xs",
+      display: "readOnly",
+    });
+    expect(result.columns.some((column) => column.key === "invokeAction:ordering")).toBe(false);
+  });
+
   it("resolves the source rate-card read-model slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
@@ -1071,6 +1093,7 @@ describe("home view model collections", () => {
           type: "table",
           tableViewName: "blockPlacementTable",
           columns: [
+            "orderingHandle",
             "field:slot",
             "field:block",
             "field:label",
@@ -1133,6 +1156,7 @@ describe("home view model collections", () => {
           type: "table",
           tableViewName: "blockPlacementTable",
           columns: [
+            "orderingHandle",
             "field:slot",
             "field:block",
             "field:label",
@@ -1195,6 +1219,7 @@ describe("home view model collections", () => {
           type: "table",
           tableViewName: "blockPlacementTable",
           columns: [
+            "orderingHandle",
             "field:slot",
             "field:block",
             "field:label",
@@ -1232,7 +1257,7 @@ describe("home view model collections", () => {
     ).toMatchObject({
       fieldName: "order",
       scope: [{ fieldName: "parent" }, { fieldName: "slot" }],
-      presentations: ["moveMenu"],
+      presentations: ["dragHandle", "moveMenu"],
     });
     expect(
       columns.map((column) => ({
@@ -1247,6 +1272,17 @@ describe("home view model collections", () => {
         format: column.format,
       })),
     ).toEqual([
+      {
+        type: "orderingHandle",
+        key: "orderingHandle",
+        label: "",
+        editor: null,
+        commit: null,
+        display: "readOnly",
+        align: "center",
+        width: "xs",
+        format: "plain",
+      },
       {
         type: "field",
         key: "field:slot",
@@ -1728,6 +1764,25 @@ function rateCardSchemaWithOrdering(): AppSchema {
           field: "sortOrder",
           scope: [{ kind: "field", field: "card" }],
           presentations: ["moveMenu"],
+        },
+      },
+    },
+  });
+}
+
+function rateCardSchemaWithDragOrdering(): AppSchema {
+  const schema = rateCardSchemaWithOrdering();
+
+  return parseAppSchema({
+    ...schema,
+    tableViews: {
+      ...schema.tableViews,
+      rateTable: {
+        ...schema.tableViews.rateTable,
+        ordering: {
+          field: "sortOrder",
+          scope: [{ kind: "field", field: "card" }],
+          presentations: ["dragHandle"],
         },
       },
     },

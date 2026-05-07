@@ -98,6 +98,80 @@ export function calculateOrderingMovePlan({
 
   const targetIndex = targetMoveIndex(currentIndex, groupRecordIds.length, direction);
 
+  return calculateOrderingRepositionPlan({
+    currentIndex,
+    fieldName,
+    groupRecordIds,
+    recordId,
+    recordsById,
+    rankOptions,
+    targetIndex,
+  });
+}
+
+export function calculateOrderingDragMovePlan({
+  fieldName,
+  orderedRecordIds,
+  recordId,
+  recordsById,
+  scopeFields,
+  targetIndex,
+  rankOptions = {},
+}: {
+  fieldName: string;
+  orderedRecordIds: string[];
+  recordId: string;
+  recordsById: Record<string, StoredRecord>;
+  scopeFields: string[];
+  targetIndex: number;
+  rankOptions?: OrderingRankOptions;
+}): OrderingMovePlan {
+  const sourceRecord = recordsById[recordId];
+
+  if (!sourceRecord) {
+    return { kind: "unavailable", reason: "missing-record" };
+  }
+
+  const groupRecordIds = orderingScopeRecordIds(
+    orderedRecordIds,
+    recordsById,
+    sourceRecord,
+    scopeFields,
+  );
+  const currentIndex = groupRecordIds.indexOf(recordId);
+
+  if (currentIndex === -1 || targetIndex < 0 || targetIndex >= groupRecordIds.length) {
+    return { kind: "unavailable", reason: "outside-scope" };
+  }
+
+  return calculateOrderingRepositionPlan({
+    currentIndex,
+    fieldName,
+    groupRecordIds,
+    recordId,
+    recordsById,
+    rankOptions,
+    targetIndex,
+  });
+}
+
+function calculateOrderingRepositionPlan({
+  currentIndex,
+  fieldName,
+  groupRecordIds,
+  recordId,
+  recordsById,
+  rankOptions,
+  targetIndex,
+}: {
+  currentIndex: number;
+  fieldName: string;
+  groupRecordIds: string[];
+  recordId: string;
+  recordsById: Record<string, StoredRecord>;
+  rankOptions: OrderingRankOptions;
+  targetIndex: number;
+}): OrderingMovePlan {
   if (targetIndex === currentIndex) {
     return { kind: "unavailable", reason: "already-at-boundary" };
   }

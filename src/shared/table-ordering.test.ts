@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { StoredRecord } from "./protocol.ts";
 import {
+  calculateOrderingDragMovePlan,
   calculateOrderingMovePlan,
   rebalanceOrderingRanks,
   sortRecordIdsByOrdering,
@@ -73,6 +74,42 @@ describe("table ordering ranks", () => {
         rankOptions: { min: 0 },
       }),
     ).toEqual({ kind: "unavailable", reason: "already-at-boundary" });
+  });
+
+  it("calculates drag-drop patches inside ordering scope", () => {
+    const recordsById = recordsByIdFrom([
+      placementRecord("a", { parent: "page-1", slot: "main", order: 1000 }),
+      placementRecord("b", { parent: "page-1", slot: "main", order: 2000 }),
+      placementRecord("c", { parent: "page-1", slot: "main", order: 3000 }),
+      placementRecord("d", { parent: "page-1", slot: "footer", order: 1500 }),
+    ]);
+    const orderedRecordIds = sortRecordIdsByOrdering(["a", "b", "c", "d"], recordsById, "order", [
+      "parent",
+      "slot",
+    ]);
+
+    expect(
+      calculateOrderingDragMovePlan({
+        fieldName: "order",
+        orderedRecordIds,
+        recordId: "a",
+        recordsById,
+        scopeFields: ["parent", "slot"],
+        targetIndex: 2,
+        rankOptions: { min: 0 },
+      }),
+    ).toEqual({ kind: "patch", recordId: "a", rank: 4000 });
+    expect(
+      calculateOrderingDragMovePlan({
+        fieldName: "order",
+        orderedRecordIds,
+        recordId: "d",
+        recordsById,
+        scopeFields: ["parent", "slot"],
+        targetIndex: 1,
+        rankOptions: { min: 0 },
+      }),
+    ).toEqual({ kind: "unavailable", reason: "outside-scope" });
   });
 
   it("isolates rebalance ranks when no safe rank gap remains", () => {
