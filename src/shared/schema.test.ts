@@ -812,6 +812,110 @@ describe("schema table views", () => {
     });
   });
 
+  it("parses table-local actions and invokeAction columns", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        tableViews: {
+          rateTable: {
+            ...scopedRateTableViews().rateTable,
+            actions: {
+              inspectRate: { label: "Inspect rate" },
+              disableRate: {
+                label: "Disable rate",
+                variant: "destructive",
+                availability: { state: "disabled", reason: "Unavailable in this slice" },
+              },
+            },
+            columns: [
+              ...scopedRateTableViews().rateTable.columns,
+              {
+                type: "invokeAction",
+                action: "inspectRate",
+                width: "xs",
+                align: "end",
+              },
+              {
+                type: "invokeAction",
+                actions: ["inspectRate", "disableRate"],
+                presentation: "dropdown",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(schema.tableViews.rateTable?.actions).toEqual({
+      inspectRate: { label: "Inspect rate" },
+      disableRate: {
+        label: "Disable rate",
+        variant: "destructive",
+        availability: { state: "disabled", reason: "Unavailable in this slice" },
+      },
+    });
+    expect(schema.tableViews.rateTable?.columns.at(-2)).toEqual({
+      type: "invokeAction",
+      action: "inspectRate",
+      width: "xs",
+      align: "end",
+    });
+    expect(schema.tableViews.rateTable?.columns.at(-1)).toEqual({
+      type: "invokeAction",
+      actions: ["inspectRate", "disableRate"],
+      presentation: "dropdown",
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("validates table invokeAction references", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "invokeAction", action: "inspectRate" }],
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown table action "inspectRate"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              actions: { inspectRate: { label: "Inspect rate" } },
+              columns: [{ type: "invokeAction", actions: [] }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("must reference at least one table action");
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              actions: { inspectRate: { label: "Inspect rate" } },
+              columns: [
+                {
+                  type: "invokeAction",
+                  action: "inspectRate",
+                  actions: ["inspectRate"],
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    ).toThrow("must use either action or actions, not both");
+  });
+
   it("validates table view field columns", () => {
     expect(() =>
       parseAppSchema(

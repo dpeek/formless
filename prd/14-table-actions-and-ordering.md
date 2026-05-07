@@ -311,7 +311,7 @@ Notes:
 | ID     | Status  | Depends on | Main files                                                  | Acceptance                                                                                           |
 | ------ | ------- | ---------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | TAO-01 | shipped | none       | PRD, characterization tests                                 | Current table action/create/edit/order behavior is characterized; PRD status and chunks are current. |
-| TAO-02 | planned | TAO-01     | schema types/parser, view model, generated table/action UI  | Table-local actions parse; `invokeAction` column renders single action button/dropdown facts.        |
+| TAO-02 | shipped | TAO-01     | schema types/parser, view model, generated table/action UI  | Table-local actions parse; `invokeAction` column renders single action button/dropdown facts.        |
 | TAO-03 | planned | TAO-02     | edit view parser/model, generated edit dialog, Site schema  | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.           |
 | TAO-04 | planned | TAO-03     | ordering parser/model, rank module, move menu, Site schema  | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                |
 | TAO-05 | planned | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.    |
@@ -349,21 +349,20 @@ Evidence:
 
 ### TAO-02 table action model and invoke column
 
-Status: planned.
+Status: shipped.
 
 Goal: add table-local named actions and an action cell column without edit dialogs or ordering yet.
 
-Tasks:
+Outcome:
 
-- Add table-local `actions`.
-- Add `invokeAction` table column schema.
-- Validate action references.
-- Select render-ready action column facts in the view model.
-- Render single action as a button by default.
-- Render multiple actions as a dropdown.
-- Use dropdown-menu primitives from `lib/ui`.
-- Add hidden/disabled availability model shape if it fits cleanly, but keep first behavior minimal.
-- Keep existing collection actions unchanged.
+- Table views can declare table-local named `actions`.
+- Table action descriptors support label, destructive variant, and static hidden/disabled availability.
+- `invokeAction` table columns parse with one `action` or multiple `actions`.
+- Missing, empty, duplicate, and conflicting action refs fail at schema parse time.
+- View models select render-ready action facts and hide columns when all referenced actions are hidden.
+- Generated tables render one action as a button and multiple actions as a dropdown.
+- Action columns default to a blank visual header with accessible header text.
+- Existing collection actions stay unchanged.
 
 Acceptance:
 
@@ -376,14 +375,15 @@ Acceptance:
 - The action column has an inferred accessible header label and blank visual header by default.
 - No edit dialog or ordering behavior is required in this chunk.
 
-Evidence to record:
+Evidence:
 
-- Parser tests.
-- View model tests.
-- Generated table render tests.
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- Parser tests: `src/shared/schema.test.ts`.
+- View model tests: `src/client/views.test.ts`.
+- Generated table render tests: `src/app.test.tsx`.
+- Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/rates`; `bun browser snapshot -i` showed the rate table and collection actions.
+- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T03:48:16.104Z`.
+- `./tmp/test.txt`: table render rerun passed 2 files and 85 tests; final schema/view reruns passed 12 files and 358 tests plus client view 33 tests.
+- `./tmp/check.txt`: formatting, lint, and type checks pass.
 
 ### TAO-03 edit view and editRecord action
 
@@ -695,6 +695,7 @@ When this PRD ships, update `doc/roadmap.md` only if first-release target detail
 
 - PRD drafted 2026-05-07 from table actions and ordering design grilling.
 - TAO-01 shipped 2026-05-07 with characterization tests only; no runtime behavior changed.
+- TAO-02 shipped 2026-05-07 with table-local action descriptors and `invokeAction` columns; no edit dialog or ordering behavior added.
 - User direction: keep collection views as scope containers and make tables the first record interaction surface.
 - User direction: use table-local named actions and an `invokeAction` table column.
 - User direction: add proper edit views for edit dialogs.

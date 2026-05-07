@@ -97,6 +97,20 @@ export type TableColumnAlign = "start" | "center" | "end";
 export type TableColumnWidth = "xs" | "sm" | "md" | "lg";
 export type TableColumnDisplay = "editor" | "readOnly" | "hidden";
 export type TableColumnFormat = "plain" | "number" | "currency" | "percent";
+export type TableActionVariant = "default" | "destructive";
+export type TableActionAvailabilityState = "visible" | "hidden" | "disabled";
+export type TableActionPresentation = "button" | "dropdown";
+
+export type TableActionAvailabilitySchema = {
+  state: TableActionAvailabilityState;
+  reason?: string;
+};
+
+export type TableActionSchema = {
+  label: string;
+  variant?: TableActionVariant;
+  availability?: TableActionAvailabilitySchema;
+};
 
 export type ValueUnitEditorSchema = {
   unitField: string;
@@ -142,13 +156,26 @@ export type ComputedTableColumnSchema = {
   format?: TableColumnFormat;
 };
 
+export type InvokeActionTableColumnSchema = {
+  type: "invokeAction";
+  action?: string;
+  actions?: string[];
+  label?: string;
+  align?: TableColumnAlign;
+  width?: TableColumnWidth;
+  display?: TableColumnDisplay;
+  presentation?: TableActionPresentation;
+};
+
 export type TableColumnSchema =
   | FieldTableColumnSchema
   | ReferenceFieldTableColumnSchema
-  | ComputedTableColumnSchema;
+  | ComputedTableColumnSchema
+  | InvokeActionTableColumnSchema;
 
 export type TableViewSchema = {
   entity: string;
+  actions?: Record<string, TableActionSchema>;
   columns: TableColumnSchema[];
 };
 

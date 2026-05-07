@@ -17,7 +17,7 @@ import {
   type HomeViewModel,
   type TableColumnConfig,
 } from "./views.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
 import type { NumericExpression } from "../shared/read-model.ts";
 
 describe("home view model collections", () => {
@@ -415,6 +415,83 @@ describe("home view model collections", () => {
       referencedEntityName: "resource",
       fieldName: "name",
       field: rateCardSchema.entities.resource?.fields.name,
+    });
+  });
+
+  it("resolves table invokeAction columns to render-ready action facts", () => {
+    const schema = parseAppSchema({
+      ...rateCardSchema,
+      tableViews: {
+        ...rateCardSchema.tableViews,
+        rateTable: {
+          ...rateCardSchema.tableViews.rateTable,
+          actions: {
+            inspectRate: { label: "Inspect rate" },
+            blockedRate: {
+              label: "Blocked rate",
+              availability: { state: "disabled", reason: "No selected card" },
+            },
+            hiddenRate: {
+              label: "Hidden rate",
+              availability: { state: "hidden" },
+            },
+          },
+          columns: [
+            ...rateCardSchema.tableViews.rateTable.columns,
+            { type: "invokeAction", action: "inspectRate" },
+            {
+              type: "invokeAction",
+              actions: ["inspectRate", "blockedRate", "hiddenRate"],
+              label: "Rate actions",
+            },
+          ],
+        },
+      },
+    });
+    const rateModel = selectCollectionModels(schema).find((model) => model.viewName === "rateHome");
+    const columns = rateModel?.result.type === "table" ? rateModel.result.columns : [];
+    const singleActionColumn = columns.at(-2);
+    const multipleActionColumn = columns.at(-1);
+
+    expect(singleActionColumn).toMatchObject({
+      type: "invokeAction",
+      key: "invokeAction:inspectRate",
+      label: "",
+      headerLabel: "Inspect rate",
+      align: "end",
+      width: "xs",
+      display: "readOnly",
+      presentation: "button",
+      actions: [
+        {
+          actionName: "inspectRate",
+          label: "Inspect rate",
+          variant: "default",
+          disabled: false,
+        },
+      ],
+    });
+    expect(multipleActionColumn).toMatchObject({
+      type: "invokeAction",
+      key: "invokeAction:inspectRate,blockedRate,hiddenRate",
+      label: "Rate actions",
+      headerLabel: "Rate actions",
+      presentation: "dropdown",
+      actions: [
+        {
+          actionName: "inspectRate",
+          label: "Inspect rate",
+          variant: "default",
+          disabled: false,
+        },
+        {
+          actionName: "blockedRate",
+          label: "Blocked rate",
+          variant: "default",
+          disabled: true,
+          disabledReason: "No selected card",
+        },
+      ],
     });
   });
 
@@ -1060,8 +1137,8 @@ describe("home view model collections", () => {
         type: column.type,
         key: column.key,
         label: column.label,
-        editor: column.type === "computed" ? null : column.editor,
-        commit: column.type === "computed" ? null : column.commit,
+        editor: tableColumnEditor(column),
+        commit: tableColumnCommit(column),
         display: column.display,
         align: column.align ?? null,
         width: column.width ?? null,
@@ -1231,7 +1308,7 @@ describe("home view model collections", () => {
       contentModel?.result.type === "table"
         ? Object.fromEntries(
             contentModel.result.columns
-              .filter((column) => column.type !== "computed")
+              .filter((column) => column.type === "field" || column.type === "referenceField")
               .map((column) => [column.fieldName, column.editor]),
           )
         : {};
@@ -1591,11 +1668,27 @@ function rateMarginExpression(): NumericExpression {
 }
 
 function tableColumnEditors(columns: TableColumnConfig[]) {
-  return columns.map((column) => (column.type === "computed" ? null : column.editor));
+  return columns.map(tableColumnEditor);
 }
 
 function tableColumnCommits(columns: TableColumnConfig[]) {
-  return columns.map((column) => (column.type === "computed" ? null : column.commit));
+  return columns.map(tableColumnCommit);
+}
+
+function tableColumnEditor(column: TableColumnConfig) {
+  if (column.type !== "field" && column.type !== "referenceField") {
+    return null;
+  }
+
+  return column.editor;
+}
+
+function tableColumnCommit(column: TableColumnConfig) {
+  if (column.type !== "field" && column.type !== "referenceField") {
+    return null;
+  }
+
+  return column.commit;
 }
 
 function findFieldTableColumn(columns: TableColumnConfig[], fieldName: string) {

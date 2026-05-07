@@ -10,6 +10,12 @@ import {
   DialogTitle,
 } from "@formless/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@formless/ui/dropdown-menu";
+import {
   Table,
   TableBody,
   TableCell,
@@ -29,7 +35,9 @@ import type {
   ComputedTableColumnConfig,
   FieldTableColumnConfig,
   HomeQueryTabConfig,
+  InvokeActionTableColumnConfig,
   ReferenceFieldTableColumnConfig,
+  TableActionConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
 } from "../../client/views.ts";
@@ -79,7 +87,7 @@ export function RecordTable({
             <TableRow>
               {visibleColumns.map((column) => (
                 <TableHead className={tableHeadClass(column)} key={column.key}>
-                  {column.label}
+                  <RecordTableHeader column={column} />
                 </TableHead>
               ))}
             </TableRow>
@@ -116,6 +124,14 @@ export function RecordTable({
       )}
     </section>
   );
+}
+
+function RecordTableHeader({ column }: { column: TableColumnConfig }) {
+  if (column.type === "invokeAction" && column.label === "") {
+    return <span className="sr-only">{column.headerLabel}</span>;
+  }
+
+  return column.label;
 }
 
 function RecordTableFooter({
@@ -262,6 +278,14 @@ function RecordTableCell({
     );
   }
 
+  if (column.type === "invokeAction") {
+    return (
+      <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
+        <InvokeActionTableCell column={column} />
+      </div>
+    );
+  }
+
   if (column.display === "readOnly") {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
@@ -286,6 +310,68 @@ function RecordTableCell({
       <ReferencedRecordEditButton column={column} sourceRecordId={recordId} />
     </div>
   );
+}
+
+function InvokeActionTableCell({ column }: { column: InvokeActionTableColumnConfig }) {
+  if (column.actions.length === 0) {
+    return null;
+  }
+
+  if (column.presentation === "button" && column.actions.length === 1) {
+    const action = column.actions[0];
+
+    if (!action) {
+      return null;
+    }
+
+    return <TableActionButton action={action} />;
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button aria-label={column.headerLabel} size="icon-xs" type="button" variant="outline">
+            <span aria-hidden="true">...</span>
+          </Button>
+        }
+      />
+      <DropdownMenuContent align={column.align === "end" ? "end" : "start"}>
+        {column.actions.map((action) => (
+          <DropdownMenuItem
+            aria-label={actionAriaLabel(action)}
+            disabled={action.disabled}
+            key={action.actionName}
+            variant={action.variant === "destructive" ? "destructive" : "default"}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function TableActionButton({ action }: { action: TableActionConfig }) {
+  return (
+    <Button
+      aria-label={actionAriaLabel(action)}
+      disabled={action.disabled}
+      size="xs"
+      type="button"
+      variant={action.variant === "destructive" ? "destructive" : "outline"}
+    >
+      {action.label}
+    </Button>
+  );
+}
+
+function actionAriaLabel(action: TableActionConfig) {
+  if (action.disabled && action.disabledReason) {
+    return `${action.label}: ${action.disabledReason}`;
+  }
+
+  return action.label;
 }
 
 function tableCellJustifyClass(column: TableColumnConfig) {

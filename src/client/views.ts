@@ -19,10 +19,13 @@ import type {
   ScreenNavigationSchema,
   ScreenSchema,
   ToManyRelationshipSchema,
+  TableActionPresentation,
+  TableActionVariant,
   TableColumnAlign,
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
+  TableActionSchema,
   TableViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
@@ -79,10 +82,26 @@ export type ComputedTableColumnConfig = TableColumnBaseConfig & {
   computedValue: ComputedValueSchema;
 };
 
+export type TableActionConfig = {
+  actionName: string;
+  label: string;
+  variant: TableActionVariant;
+  disabled: boolean;
+  disabledReason?: string;
+};
+
+export type InvokeActionTableColumnConfig = TableColumnBaseConfig & {
+  type: "invokeAction";
+  headerLabel: string;
+  actions: TableActionConfig[];
+  presentation: TableActionPresentation;
+};
+
 export type TableColumnConfig =
   | FieldTableColumnConfig
   | ReferenceFieldTableColumnConfig
-  | ComputedTableColumnConfig;
+  | ComputedTableColumnConfig
+  | InvokeActionTableColumnConfig;
 
 export type CreateFieldConfig = {
   fieldName: string;
@@ -863,6 +882,26 @@ function selectTableColumns(
       };
     }
 
+    if (column.type === "invokeAction") {
+      const actions = selectTableActionConfigs(view.actions ?? {}, invokeActionNames(column));
+      const presentation =
+        column.presentation ?? (actions.length === 1 ? "button" : "dropdown");
+      const headerLabel = column.label ?? defaultInvokeActionHeaderLabel(actions);
+
+      return {
+        type: "invokeAction",
+        key: `invokeAction:${invokeActionNames(column).join(",")}`,
+        label: column.label ?? "",
+        headerLabel,
+        actions,
+        presentation,
+        ...(column.align === undefined ? { align: "end" as const } : { align: column.align }),
+        ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
+        display: actions.length === 0 ? "hidden" : (column.display ?? "readOnly"),
+        format: "plain",
+      };
+    }
+
     const field = entity.fields[column.field] as FieldSchema;
     const referenceItem = selectReferenceItem(schema, field, column.referenceItemView);
     const valueUnit = selectValueUnitField(entity, column.valueUnit?.unitField);
@@ -886,6 +925,45 @@ function selectTableColumns(
   });
 }
 
+function selectTableActionConfigs(
+  tableActions: Record<string, TableActionSchema>,
+  actionNames: string[],
+): TableActionConfig[] {
+  return actionNames.flatMap((actionName) => {
+    const action = tableActions[actionName];
+
+    if (!action || action.availability?.state === "hidden") {
+      return [];
+    }
+
+    return [
+      {
+        actionName,
+        label: action.label,
+        variant: action.variant ?? "default",
+        disabled: action.availability?.state === "disabled",
+        ...(action.availability?.reason === undefined
+          ? {}
+          : { disabledReason: action.availability.reason }),
+      },
+    ];
+  });
+}
+
+function invokeActionNames(
+  column: Extract<TableViewSchema["columns"][number], { type: "invokeAction" }>,
+): string[] {
+  return column.action === undefined ? (column.actions ?? []) : [column.action];
+}
+
+function defaultInvokeActionHeaderLabel(actions: TableActionConfig[]) {
+  if (actions.length === 1) {
+    return actions[0]?.label ?? "Action";
+  }
+
+  return "Actions";
+}
+
 function tableFooterColumnName(column: TableColumnConfig) {
   if (column.type === "field") {
     return column.fieldName;
@@ -893,6 +971,10 @@ function tableFooterColumnName(column: TableColumnConfig) {
 
   if (column.type === "computed") {
     return column.computedValueName;
+  }
+
+  if (column.type === "invokeAction") {
+    return "";
   }
 
   return `${column.sourceReferenceFieldName}.${column.fieldName}`;

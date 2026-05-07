@@ -1491,17 +1491,76 @@ describe("generated forms and records", () => {
       ),
     );
     const html = renderToStaticMarkup(
-      <RecordTable
-        columns={columns}
-        entity={rate}
-        entityName="rate"
-        query={{ kind: "all" }}
-      />,
+      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
     );
 
     expect(html).toContain("Designer");
     expect(html).toContain("Edit shared");
     expect(html).toContain('aria-label="Edit shared resource"');
+  });
+
+  it("renders table invokeAction columns as a button or dropdown", () => {
+    const rate = rateCardSchema.entities.rate;
+    const columns: TableColumnConfig[] = [
+      {
+        type: "invokeAction",
+        key: "invokeAction:inspectRate",
+        label: "",
+        headerLabel: "Inspect rate",
+        actions: [
+          {
+            actionName: "inspectRate",
+            label: "Inspect rate",
+            variant: "default",
+            disabled: false,
+          },
+        ],
+        presentation: "button",
+        align: "end",
+        width: "xs",
+        display: "readOnly",
+        format: "plain",
+      },
+      {
+        type: "invokeAction",
+        key: "invokeAction:inspectRate,blockedRate",
+        label: "Rate actions",
+        headerLabel: "Rate actions",
+        actions: [
+          {
+            actionName: "inspectRate",
+            label: "Inspect rate",
+            variant: "default",
+            disabled: false,
+          },
+          {
+            actionName: "blockedRate",
+            label: "Blocked rate",
+            variant: "destructive",
+            disabled: true,
+            disabledReason: "No selected card",
+          },
+        ],
+        presentation: "dropdown",
+        align: "end",
+        width: "xs",
+        display: "readOnly",
+        format: "plain",
+      },
+    ];
+
+    applyBootstrapResponse(
+      bootstrap([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], rateCardSchema),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+    );
+
+    expect(html).toContain("Inspect rate");
+    expect(html).toContain('aria-label="Inspect rate"');
+    expect(html).toContain("Rate actions");
+    expect(html).toContain('aria-label="Rate actions"');
+    expect(html).toContain('data-slot="dropdown-menu-trigger"');
   });
 
   it("renders shared resource label updates across rate cards without duplicating resources", () => {

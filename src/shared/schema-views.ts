@@ -41,6 +41,10 @@ import type {
   TableColumnFormat,
   TableColumnSchema,
   TableColumnWidth,
+  TableActionAvailabilitySchema,
+  TableActionPresentation,
+  TableActionSchema,
+  TableActionVariant,
   ToManyRelationshipSchema,
   TableViewSchema,
   ViewFieldSchema,
@@ -184,7 +188,7 @@ function parseTableView(
     throw new Error(`Table view "${tableViewName}" must be an object.`);
   }
 
-  assertExactKeys(`Table view "${tableViewName}"`, value, ["entity", "columns"]);
+  assertExactKeys(`Table view "${tableViewName}"`, value, ["entity", "columns"], ["actions"]);
 
   const entityName = parseRequiredNonEmptyString(
     `Table view "${tableViewName}" entity`,
@@ -196,6 +200,7 @@ function parseTableView(
     throw new Error(`Table view "${tableViewName}" references unknown entity "${entityName}".`);
   }
 
+  const actions = parseOptionalTableActions(tableViewName, value.actions);
   const columns = parseTableColumns(
     tableViewName,
     entityName,
@@ -204,11 +209,63 @@ function parseTableView(
     itemViews,
     entities,
     readModels?.computedValues ?? {},
+    actions,
   );
 
   return {
     entity: entityName,
+    ...(actions === undefined ? {} : { actions }),
     columns,
+  };
+}
+
+function parseOptionalTableActions(
+  tableViewName: string,
+  value: unknown,
+): Record<string, TableActionSchema> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`Table view "${tableViewName}" actions must be an object.`);
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([actionName, action]) => {
+      if (actionName.trim() === "") {
+        throw new Error(`Table view "${tableViewName}" action names must be non-empty.`);
+      }
+
+      return [actionName, parseTableAction(tableViewName, actionName, action)];
+    }),
+  );
+}
+
+function parseTableAction(
+  tableViewName: string,
+  actionName: string,
+  value: unknown,
+): TableActionSchema {
+  const context = `Table view "${tableViewName}" action "${actionName}"`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["label"], ["variant", "availability"]);
+
+  const label = parseRequiredNonEmptyString(`${context} label`, value.label);
+  const variant = parseOptionalTableActionVariant(`${context} variant`, value.variant);
+  const availability = parseOptionalTableActionAvailability(
+    `${context} availability`,
+    value.availability,
+  );
+
+  return {
+    label,
+    ...(variant === undefined ? {} : { variant }),
+    ...(availability === undefined ? {} : { availability }),
   };
 }
 
@@ -220,6 +277,7 @@ function parseTableColumns(
   itemViews: Record<string, ItemViewSchema>,
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
+  actions: Record<string, TableActionSchema> | undefined,
 ): TableColumnSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Table view "${tableViewName}" columns must be a non-empty array.`);
@@ -235,6 +293,7 @@ function parseTableColumns(
       itemViews,
       entities,
       computedValues,
+      actions,
     ),
   );
 }
@@ -248,6 +307,7 @@ function parseTableColumn(
   itemViews: Record<string, ItemViewSchema>,
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
+  actions: Record<string, TableActionSchema> | undefined,
 ): TableColumnSchema {
   const context = `Table view "${tableViewName}" column ${index}`;
 
@@ -261,6 +321,10 @@ function parseTableColumn(
 
   if (value.type === "computed") {
     return parseComputedTableColumn(context, value, entityName, computedValues);
+  }
+
+  if (value.type === "invokeAction") {
+    return parseInvokeActionTableColumn(context, value, actions);
   }
 
   return parseFieldTableColumn(context, value, entityName, entity, itemViews);
@@ -478,6 +542,88 @@ function parseComputedTableColumn(
     ...(suffix === undefined ? {} : { suffix }),
     ...(format === undefined ? {} : { format }),
   };
+}
+
+function parseInvokeActionTableColumn(
+  context: string,
+  value: Record<string, unknown>,
+  actions: Record<string, TableActionSchema> | undefined,
+): TableColumnSchema {
+  assertExactKeys(
+    context,
+    value,
+    ["type"],
+    ["action", "actions", "label", "align", "width", "display", "presentation"],
+  );
+
+  const referencedActions = parseInvokeActionReferences(context, value.action, value.actions);
+
+  for (const actionName of referencedActions) {
+    if (!actions?.[actionName]) {
+      throw new Error(`${context} references unknown table action "${actionName}".`);
+    }
+  }
+
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const align = parseOptionalTableColumnAlign(`${context} align`, value.align);
+  const width = parseOptionalTableColumnWidth(`${context} width`, value.width);
+  const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
+
+  if (display === "editor") {
+    throw new Error(`${context} invokeAction columns must be read-only or hidden.`);
+  }
+
+  const presentation = parseOptionalTableActionPresentation(
+    `${context} presentation`,
+    value.presentation,
+  );
+
+  if (presentation === "button" && referencedActions.length > 1) {
+    throw new Error(`${context} button presentation requires exactly one action.`);
+  }
+
+  return {
+    type: "invokeAction",
+    ...(value.action === undefined
+      ? { actions: referencedActions }
+      : { action: referencedActions[0] }),
+    ...(label === undefined ? {} : { label }),
+    ...(align === undefined ? {} : { align }),
+    ...(width === undefined ? {} : { width }),
+    ...(display === undefined ? {} : { display }),
+    ...(presentation === undefined ? {} : { presentation }),
+  };
+}
+
+function parseInvokeActionReferences(
+  context: string,
+  action: unknown,
+  actions: unknown,
+): string[] {
+  if (action !== undefined && actions !== undefined) {
+    throw new Error(`${context} must use either action or actions, not both.`);
+  }
+
+  if (action !== undefined) {
+    return [parseRequiredNonEmptyString(`${context} action`, action)];
+  }
+
+  if (!Array.isArray(actions) || actions.length === 0) {
+    throw new Error(`${context} must reference at least one table action.`);
+  }
+
+  const actionNames = actions.map((candidate, index) =>
+    parseRequiredNonEmptyString(`${context} actions ${index}`, candidate),
+  );
+  const duplicate = actionNames.find(
+    (candidate, index) => actionNames.indexOf(candidate) !== index,
+  );
+
+  if (duplicate) {
+    throw new Error(`${context} references duplicate table action "${duplicate}".`);
+  }
+
+  return actionNames;
 }
 
 export function parseViews(
@@ -1375,6 +1521,10 @@ function tableFooterColumnName(column: TableColumnSchema) {
     return column.computedValue;
   }
 
+  if (column.type === "invokeAction") {
+    return undefined;
+  }
+
   return `${column.referenceField}.${column.field}`;
 }
 
@@ -1809,6 +1959,70 @@ function parseOptionalTableColumnFormat(
 
   if (value !== "plain" && value !== "number" && value !== "currency" && value !== "percent") {
     throw new Error(`${context} must be "plain", "number", "currency", or "percent".`);
+  }
+
+  return value;
+}
+
+function parseOptionalTableActionVariant(
+  context: string,
+  value: unknown,
+): TableActionVariant | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "default" && value !== "destructive") {
+    throw new Error(`${context} must be "default" or "destructive".`);
+  }
+
+  return value;
+}
+
+function parseOptionalTableActionPresentation(
+  context: string,
+  value: unknown,
+): TableActionPresentation | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "button" && value !== "dropdown") {
+    throw new Error(`${context} must be "button" or "dropdown".`);
+  }
+
+  return value;
+}
+
+function parseOptionalTableActionAvailability(
+  context: string,
+  value: unknown,
+): TableActionAvailabilitySchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["state"], ["reason"]);
+
+  const state = parseTableActionAvailabilityState(`${context} state`, value.state);
+  const reason = parseOptionalNonEmptyString(`${context} reason`, value.reason);
+
+  return {
+    state,
+    ...(reason === undefined ? {} : { reason }),
+  };
+}
+
+function parseTableActionAvailabilityState(
+  context: string,
+  value: unknown,
+): TableActionAvailabilitySchema["state"] {
+  if (value !== "visible" && value !== "hidden" && value !== "disabled") {
+    throw new Error(`${context} must be "visible", "hidden", or "disabled".`);
   }
 
   return value;
