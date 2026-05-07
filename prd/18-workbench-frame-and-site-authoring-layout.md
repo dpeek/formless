@@ -1,7 +1,7 @@
 # PRD 18: Workbench frame and Site authoring layout
 
-Status: planned
-Current chunk: WAF-02
+Status: active
+Current chunk: WAF-03
 Last updated: 2026-05-07
 
 ## Goal
@@ -294,7 +294,7 @@ Site screens:
 | ID     | Status  | Depends on            | Main files                       | Acceptance                                                                                                |
 | ------ | ------- | --------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | WAF-01 | shipped | none                  | PRD                              | PRD captures workbench/app frame split, Site screen shape, one Reset, sync status, layout, and non-goals. |
-| WAF-02 | planned | PRD 17 route profiles | app shell, route frame tests     | Dev workbench chrome wraps the generated app frame; app sidebar lists app screens only.                   |
+| WAF-02 | shipped | PRD 17 route profiles | app shell, route frame tests     | Dev workbench chrome wraps the generated app frame; app sidebar lists app screens only.                   |
 | WAF-03 | planned | WAF-02                | dev tools, schema route/reset UI | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
 | WAF-04 | planned | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
 | WAF-05 | planned | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
@@ -328,7 +328,7 @@ Evidence:
 
 ### WAF-02 workbench and generated app frame
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: create the chrome separation.
 
@@ -349,11 +349,28 @@ Acceptance:
 - Public Site routes show no workbench or generated admin chrome.
 - Existing app route behavior remains correct after PRD 17 route changes.
 
-Evidence to record:
+Outcome:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- Added dev workbench chrome around generated app routes in `src/app.tsx`.
+- Moved dev app switching into the workbench chrome.
+- Kept the generated app frame reusable for app profile without workbench chrome.
+- Removed Schema from generated app screen navigation.
+- Preserved direct schema editor routes for later WAF-03 tool placement.
+- Preserved public Site route shell behavior.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `32 passed (32)`, `543 passed (543)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke: `bun browser --session waf02 --ignore-https-errors open https://18-workbench-frame-and-site-authoring-layout.formless.local/site`; DOM eval showed `workbench:1`, `generated:1`, `siteSchema:0`, `siteScreens:1`.
+- Browser smoke: `/pages/home` DOM eval showed `workbench:0`, `generated:0`, `tasks:0`, `siteSchema:0`.
+
+Promotion notes:
+
+- `doc/current.md`: dev profile now renders a workbench frame outside the generated app frame.
+- `doc/current.md`: generated app sidebar now lists app screens only; Schema is no longer an app screen navigation item.
+- `doc/current.md`: app profile reuses the generated app frame without workbench chrome.
 
 ### WAF-03 workbench tools and one Reset
 
@@ -538,7 +555,6 @@ Evidence to record:
 
 ## Blockers
 
-- WAF-02 depends on PRD 17's route/profile shape.
 - WAF-05 depends on PRD 17 screen paths if routes are part of acceptance.
 - No known blocker for WAF-04 if implemented as a chrome refactor over existing status facts.
 
@@ -571,3 +587,4 @@ Evidence to record:
 ## Status notes
 
 - 2026-05-07: PRD created from screenshot review and discussion. User direction: keep Schema out of generated app sidebar, use a workbench frame for dev tools, expose one Reset button, move sync status out of page content, use Pages and Navigation for Site, and make list/detail wider without inventing new primitives.
+- 2026-05-07: WAF-02 shipped. Decision WAF-D1/WAF-D2 implemented in `src/app.tsx`: dev app switching lives in workbench chrome, generated app frame owns screen navigation only, and Schema remains a direct route but not an app sidebar item. Next ready chunk is WAF-03.

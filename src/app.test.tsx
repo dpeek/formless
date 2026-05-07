@@ -162,6 +162,9 @@ describe("App smoke routes", () => {
   it('renders the "/tasks" route with task navigation', () => {
     const html = renderRoute("/tasks");
 
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('aria-label="Workbench apps"');
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/estii"');
@@ -169,15 +172,17 @@ describe("App smoke routes", () => {
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).toContain("Schema");
     expect(html).toContain("Loading Tasks...");
     expect(html).not.toContain("Create Task");
-    expect(html).toContain('href="/tasks/schema"');
+    expect(html).not.toContain('href="/tasks/schema"');
   });
 
   it('renders the "/estii" route with Estii navigation', () => {
     const html = renderRoute("/estii");
 
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('aria-label="Workbench apps"');
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/estii"');
@@ -185,15 +190,17 @@ describe("App smoke routes", () => {
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expect(html).toContain('aria-label="Estii screens"');
-    expect(html).toContain("Schema");
     expect(html).toContain("Loading Estii...");
     expect(html).not.toContain("Create Resource");
-    expect(html).toContain('href="/estii/schema"');
+    expect(html).not.toContain('href="/estii/schema"');
   });
 
   it('renders the "/site" route with site navigation', () => {
     const html = renderRoute("/site");
 
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('aria-label="Workbench apps"');
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/estii"');
@@ -201,18 +208,20 @@ describe("App smoke routes", () => {
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expect(html).toContain('aria-label="Site screens"');
-    expect(html).toContain("Schema");
     expect(html).toContain("Loading Site...");
     expect(html).not.toContain("Create Content item");
-    expect(html).toContain('href="/site/schema"');
+    expect(html).not.toContain('href="/site/schema"');
   });
 
   it('renders the "/tasks/schema" route', () => {
     applyBootstrapResponse(bootstrap([], appSchema), "tasks");
     const html = renderRoute("/tasks/schema");
 
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('aria-label="Workbench apps"');
     expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).toContain('href="/tasks/schema"');
+    expect(html).not.toContain('href="/tasks/schema"');
     expect(html).toContain("Tasks Schema");
     expect(html).toContain("<code>tasks</code>");
     expect(html).toContain('aria-label="Tasks route reset controls"');
@@ -233,17 +242,20 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap([], rateCardSchema), "estii");
     const html = renderRoute("/estii/schema");
 
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('aria-label="Workbench apps"');
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/estii/setup"');
-    expect(html).toContain('href="/estii/schema"');
+    expect(html).not.toContain('href="/estii/schema"');
     expect(html).toContain("Estii Schema");
     expect(html).toContain("<code>estii</code>");
     expect(html).toContain('aria-label="Estii route reset controls"');
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset schema and seed data");
-    expect(html).toContain('aria-label="Rates store snapshot controls"');
+    expect(html).toContain('aria-label="Estii store snapshot controls"');
     expect(html).toContain("Export store snapshot");
-    expect(html).toContain("Rates snapshot file");
+    expect(html).toContain("Estii snapshot file");
     expect(html).toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;rateSetup&quot;");
@@ -257,10 +269,13 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap([], siteSourceSchema), "site");
     const html = renderRoute("/site/schema");
 
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('aria-label="Workbench apps"');
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain('href="/site/header"');
     expect(html).toContain('href="/site/footer"');
-    expect(html).toContain('href="/site/schema"');
+    expect(html).not.toContain('href="/site/schema"');
     expect(html).toContain("Site Schema");
     expect(html).toContain("<code>site</code>");
     expect(html).toContain('aria-label="Site route reset controls"');
@@ -286,6 +301,8 @@ describe("App smoke routes", () => {
 
     expect(html).toContain("Loading site page...");
     expect(html).toContain("Loading home.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
   });
@@ -295,6 +312,8 @@ describe("App smoke routes", () => {
 
     expect(html).toContain("Loading site page...");
     expect(html).toContain("Loading home.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
     expect(html).not.toContain("Formless</span>");
@@ -305,6 +324,8 @@ describe("App smoke routes", () => {
 
     expect(html).toContain("Loading site page...");
     expect(html).toContain("Loading projects/estii.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
   });
@@ -313,10 +334,12 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
     const html = renderRoute("/", createAppRuntimeProfile("estii"));
 
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
     expect(html).toContain(">Rates</h1>");
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/setup"');
-    expect(html).toContain('href="/schema"');
+    expect(html).not.toContain('href="/schema"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/estii"');
@@ -331,6 +354,7 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/"');
     expect(html).toContain('href="/setup"');
+    expect(html).not.toContain('href="/schema"');
     expect(html).toContain(">Rate cards</h2>");
     expect(html).toContain(">Resources</h2>");
     expect(html).not.toContain('href="/estii/setup"');
@@ -340,10 +364,12 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
     const html = renderRoute("/schema", createAppRuntimeProfile("estii"));
 
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
     expect(html).toContain("Estii Schema");
     expect(html).toContain("<code>estii</code>");
     expect(html).toContain('href="/setup"');
-    expect(html).toContain('href="/schema"');
+    expect(html).not.toContain('href="/schema"');
     expect(html).toContain('aria-label="Estii route reset controls"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');

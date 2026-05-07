@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import {
   Sidebar,
@@ -64,23 +64,96 @@ export function App({
     );
   }
 
+  const generatedAppFrame = (
+    <GeneratedAppFrame
+      activeScreenPath={activeScreenPath}
+      routeApp={routeApp}
+      routeWorld={routeWorld}
+      screenModels={routeAppScreenModels}
+    >
+      <AppRoutes runtimeProfile={runtimeProfile} />
+    </GeneratedAppFrame>
+  );
+
+  return runtimeProfile.shell === "dev" ? (
+    <WorkbenchFrame routeApp={routeApp} runtimeProfile={runtimeProfile}>
+      {generatedAppFrame}
+    </WorkbenchFrame>
+  ) : (
+    generatedAppFrame
+  );
+}
+
+function WorkbenchFrame({
+  children,
+  routeApp,
+  runtimeProfile,
+}: {
+  children: ReactNode;
+  routeApp: RuntimeWorldMount["app"] | undefined;
+  runtimeProfile: RuntimeProfile;
+}) {
   return (
-    <SidebarProvider>
+    <div className="min-h-dvh bg-slate-100" data-frame="workbench">
+      <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            className="text-sm font-semibold text-foreground"
+            href={runtimeProfile.defaultRedirect ?? "/"}
+          >
+            Formless
+          </Link>
+          <span className="rounded border border-border px-2 py-0.5 text-xs text-slate-600">
+            Dev profile
+          </span>
+          <span className="truncate text-xs text-slate-600">
+            {routeApp ? routeApp.label : "No active world"}
+          </span>
+        </div>
+        <nav aria-label="Workbench apps" className="flex flex-wrap items-center gap-1">
+          {runtimeProfile.worlds.map(({ app, route }) => (
+            <Link
+              className={workbenchAppLinkClassName(routeApp?.key === app.key)}
+              href={route}
+              key={app.key}
+            >
+              {app.label}
+            </Link>
+          ))}
+        </nav>
+      </header>
+      <div className="bg-background" data-frame="workbench-content">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function GeneratedAppFrame({
+  activeScreenPath,
+  children,
+  routeApp,
+  routeWorld,
+  screenModels,
+}: {
+  activeScreenPath: string | undefined;
+  children: ReactNode;
+  routeApp: RuntimeWorldMount["app"] | undefined;
+  routeWorld: RuntimeWorldMount | undefined;
+  screenModels: HomeScreenModel[];
+}) {
+  return (
+    <SidebarProvider data-frame="generated-app">
       <Sidebar collapsible="offcanvas">
         <SidebarHeader>
-          <div className="px-2 py-1 text-sm font-semibold">
-            {runtimeProfile.shell === "dev" ? "Formless" : routeApp?.label}
-          </div>
+          <div className="px-2 py-1 text-sm font-semibold">{routeApp?.label ?? "Formless"}</div>
         </SidebarHeader>
         <SidebarContent>
-          {runtimeProfile.shell === "dev" ? (
-            <AppNavigation routeApp={routeApp} runtimeProfile={runtimeProfile} />
-          ) : null}
           {routeWorld ? (
             <AppScreenNavigation
               activeScreenPath={activeScreenPath}
               world={routeWorld}
-              screenModels={routeAppScreenModels}
+              screenModels={screenModels}
             />
           ) : null}
         </SidebarContent>
@@ -90,40 +163,17 @@ export function App({
           <SidebarTrigger />
           <span className="text-sm font-medium">{routeApp?.label ?? "Formless"}</span>
         </header>
-        <div className="flex-1 p-6">
-          <AppRoutes runtimeProfile={runtimeProfile} />
-        </div>
+        <div className="flex-1 p-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
 }
 
-function AppNavigation({
-  routeApp,
-  runtimeProfile,
-}: {
-  routeApp: RuntimeWorldMount["app"] | undefined;
-  runtimeProfile: RuntimeProfile;
-}) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Apps</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {runtimeProfile.worlds.map(({ app, route }) => (
-            <SidebarMenuItem key={app.key}>
-              <SidebarMenuButton
-                isActive={routeApp?.key === app.key}
-                render={<Link href={route} />}
-              >
-                <span>{app.label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
+function workbenchAppLinkClassName(isActive: boolean) {
+  const base =
+    "rounded px-2 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground";
+
+  return isActive ? `${base} bg-muted text-foreground` : `${base} text-slate-600`;
 }
 
 function AppScreenNavigation({
@@ -154,16 +204,6 @@ function AppScreenNavigation({
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
-          {world.schemaRoute ? (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={activeScreenPath === undefined}
-                render={<Link href={world.schemaRoute} />}
-              >
-                <span>Schema</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ) : null}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
