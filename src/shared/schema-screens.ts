@@ -13,6 +13,8 @@ import type {
   ViewSchema,
 } from "./schema-types.ts";
 
+const SCHEMA_EDITOR_SCREEN_PATH = "/schema";
+
 export function parseScreens(
   value: unknown,
   views: Record<string, ViewSchema>,
@@ -40,6 +42,8 @@ export function parseScreens(
     throw new Error("Schema must define at least one primary screen.");
   }
 
+  assertUniqueScreenPaths(screens);
+
   return screens;
 }
 
@@ -56,22 +60,83 @@ function parseScreen(
     throw new Error(`Screen "${screenName}" must be an object.`);
   }
 
-  assertExactKeys(`Screen "${screenName}"`, value, ["type", "label", "layout"], ["navigation"]);
+  assertExactKeys(`Screen "${screenName}"`, value, ["type", "label", "layout"], [
+    "navigation",
+    "path",
+  ]);
 
   if (value.type !== "workspace") {
     throw new Error(`Screen "${screenName}" type must be "workspace".`);
   }
 
   const label = parseRequiredNonEmptyString(`Screen "${screenName}" label`, value.label);
+  const path = parseScreenPath(screenName, value.path);
   const navigation = parseScreenNavigation(screenName, value.navigation);
   const layout = parseScreenLayout(screenName, value.layout, views);
 
   return {
     type: "workspace",
     label,
+    ...(path === undefined ? {} : { path }),
     ...(navigation === undefined ? {} : { navigation }),
     layout,
   };
+}
+
+function parseScreenPath(screenName: string, value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !isStaticAppRelativePath(value)) {
+    throw new Error(`Screen "${screenName}" path must be a static app-relative path.`);
+  }
+
+  if (value === SCHEMA_EDITOR_SCREEN_PATH) {
+    throw new Error(
+      `Screen "${screenName}" path must not collide with schema editor path "${SCHEMA_EDITOR_SCREEN_PATH}".`,
+    );
+  }
+
+  return value;
+}
+
+function isStaticAppRelativePath(value: string): boolean {
+  if (value === "/") {
+    return true;
+  }
+
+  return /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/.test(value);
+}
+
+function assertUniqueScreenPaths(screens: Record<string, ScreenSchema>) {
+  const screenNamesByPath = new Map<string, string>();
+
+  for (const [screenName, screen] of Object.entries(screens)) {
+    if (screen.path === undefined) {
+      continue;
+    }
+
+    const existingScreenName = screenNamesByPath.get(screen.path);
+    if (existingScreenName) {
+      throw new Error(
+        `Screen path "${screen.path}" must be unique. Used by "${existingScreenName}" and "${screenName}".`,
+      );
+    }
+
+    screenNamesByPath.set(screen.path, screenName);
+  }
+
+  const firstPathlessPrimaryScreenName = Object.entries(screens).find(
+    ([, screen]) => (screen.navigation?.primary ?? true) && screen.path === undefined,
+  )?.[0];
+  const explicitRootScreenName = screenNamesByPath.get("/");
+
+  if (firstPathlessPrimaryScreenName && explicitRootScreenName) {
+    throw new Error(
+      `Screen path "/" must be unique. It is implied by "${firstPathlessPrimaryScreenName}" and declared by "${explicitRootScreenName}".`,
+    );
+  }
 }
 
 function parseScreenNavigation(

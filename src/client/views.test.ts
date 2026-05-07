@@ -10,6 +10,7 @@ import {
   selectPrimaryCollectionModels,
   selectPrimaryScreenModels,
   selectRelatedCollectionModels,
+  selectScreenModelByPath,
   selectScreenModels,
   type FieldTableColumnConfig,
   type HomeActionConfig,
@@ -1533,6 +1534,52 @@ describe("home view model collections", () => {
     expect(selectPrimaryScreenModels(rateCardSchema).map((model) => model.screenName)).toEqual([
       "rateHome",
     ]);
+  });
+
+  it("exposes route-ready screen paths and selects models by path", () => {
+    const pathBackedRateSchema: AppSchema = {
+      ...rateCardSchema,
+      screens: {
+        rateHome: {
+          ...rateCardSchema.screens!.rateHome,
+          type: "workspace",
+          label: "Rates",
+          path: "/",
+        },
+        rateSetup: {
+          ...rateCardSchema.screens!.rateSetup,
+          type: "workspace",
+          label: "Setup",
+          path: "/setup",
+          navigation: { primary: true },
+        },
+      },
+    };
+
+    expect(
+      selectPrimaryScreenModels(pathBackedRateSchema).map((model) => ({
+        screenName: model.screenName,
+        path: model.path,
+      })),
+    ).toEqual([
+      { screenName: "rateHome", path: "/" },
+      { screenName: "rateSetup", path: "/setup" },
+    ]);
+    expect(selectScreenModelByPath(pathBackedRateSchema, "/setup")?.screenName).toBe("rateSetup");
+    expect(selectScreenModelByPath(pathBackedRateSchema, "/missing")).toBeUndefined();
+  });
+
+  it("uses the app root path for the first primary screen when paths are omitted", () => {
+    expect(
+      selectScreenModels(rateCardSchema).map((model) => ({
+        screenName: model.screenName,
+        path: model.path,
+      })),
+    ).toEqual([
+      { screenName: "rateHome", path: "/" },
+      { screenName: "rateSetup", path: undefined },
+    ]);
+    expect(selectScreenModelByPath(rateCardSchema, "/")?.screenName).toBe("rateHome");
   });
 
   it("exposes render-ready collection facts on screen sections", () => {

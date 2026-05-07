@@ -1,7 +1,7 @@
 # PRD 17: Runtime profiles and screen routes
 
 Status: active
-Current chunk: RPS-03
+Current chunk: RPS-04
 Last updated: 2026-05-07
 
 ## Goal
@@ -316,7 +316,7 @@ Rejected as incomplete because Estii screen routing and app/profile separation w
 | ------ | ------- | ---------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | RPS-01 | shipped | none       | PRD                                   | PRD captures runtime profile, Estii rename, screen path, published Site, decisions, dependencies, and promote notes. |
 | RPS-02 | shipped | RPS-01     | app registries, source schema paths   | `rates` is renamed to `estii` at the app boundary while rate-card data behavior stays unchanged.                     |
-| RPS-03 | planned | RPS-02     | screen parser/types/model tests       | Workspace screens accept static app-relative paths and expose route-ready screen models.                             |
+| RPS-03 | shipped | RPS-02     | screen parser/types/model tests       | Workspace screens accept static app-relative paths and expose route-ready screen models.                             |
 | RPS-04 | planned | RPS-03     | app shell, home route, source schemas | Dev shell renders screen sidebar/navigation and routes Estii setup through `/estii/setup`.                           |
 | RPS-05 | planned | RPS-04     | runtime profile resolver, app routes  | Dev, app, and published Site profiles mount routes through one explicit profile seam.                                |
 | RPS-06 | planned | RPS-05     | Site public route and renderer        | Published Site profile serves `/` as home and `/*` as public page slugs with no generated admin shell.               |
@@ -387,19 +387,20 @@ Evidence:
 
 ### RPS-03 static screen path schema
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: let screens own app-relative paths.
 
 Tasks:
 
-- Add optional `path` to workspace screen schema.
-- Validate static app-relative path shape.
-- Reject duplicate screen paths inside one schema.
-- Keep schemas without paths parsing.
-- Expose path in screen models.
-- Select screen models by path.
-- Add parser and view-model tests.
+- Shipped: added optional `path` to workspace screen schema.
+- Shipped: validated static app-relative path shape.
+- Shipped: rejected duplicate screen paths inside one schema.
+- Shipped: rejected schema-editor path collision at `/schema`.
+- Shipped: kept schemas without paths parsing.
+- Shipped: exposed path in screen models.
+- Shipped: selected screen models by path.
+- Shipped: added parser and view-model tests.
 
 Acceptance:
 
@@ -410,11 +411,11 @@ Acceptance:
 - Saved schemas without screen paths still render.
 - Screen models expose route-ready path facts.
 
-Evidence to record:
+Evidence:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: initial full watch `29 passed (29)`, `506 passed (506)`; latest affected reruns `src/shared/schema.test.ts` passed `85 passed (85)` and `src/client/views.test.ts` passed `38 passed (38)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
 
 ### RPS-04 generated screen navigation routes
 
@@ -547,7 +548,7 @@ Evidence to record:
 
 ## Blockers
 
-- None known for RPS-03.
+- None known for RPS-04.
 - Runtime profile source may need a small config convention before RPS-05 implementation.
 - Published Site browser smoke needs a way to run the app under `publishedSite` profile.
 
@@ -575,7 +576,10 @@ Evidence to record:
 - `doc/current.md`: RPS-02 shipped; update source schema paths from `schema/apps/rates` to `schema/apps/estii`.
 - `doc/current.md`: RPS-02 shipped; update browser local DB and broadcast channel names to `formless:estii`.
 - `doc/roadmap.md`: RPS-02 shipped; replace `/rates` release target with `/estii`.
-- `doc/current.md`: add screen path facts once RPS-03 and RPS-04 ship.
+- `doc/current.md`: RPS-03 shipped; workspace screens can declare optional static app-relative `path`.
+- `doc/current.md`: RPS-03 shipped; screen path parser rejects duplicates, params, wildcards, non-root relative paths, and `/schema`.
+- `doc/current.md`: RPS-03 shipped; screen models expose path facts and assign `/` to the first primary screen when paths are omitted.
+- `doc/current.md`: add screen route and navigation facts once RPS-04 ships.
 - `doc/current.md`: add runtime profile facts once RPS-05 ships.
 - `doc/current.md`: add published Site top-level route facts once RPS-06 ships.
 - `doc/roadmap.md`: add first-release screen-route scope only if this PRD is pulled into first-release work.
@@ -584,3 +588,4 @@ Evidence to record:
 
 - 2026-05-07: PRD created from architecture discussion. User direction: rename Rates to Estii, add screen/sidebar/routing, support published Site top-level routes, and avoid making cookie-selected worlds the main model.
 - 2026-05-07: RPS-02 shipped. App boundary is `estii`; route is `/estii`; schema route is `/estii/schema`; source folder is `schema/apps/estii`; old browser routes redirect; old `/api/rates/*` is unsupported.
+- 2026-05-07: RPS-03 shipped. Workspace screens accept optional static app-relative paths; duplicate, dynamic, wildcard, relative, and `/schema` paths fail; screen models expose paths and path lookup.

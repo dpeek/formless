@@ -279,6 +279,7 @@ export type HomeScreenModel = {
   screenName: string;
   type: "workspace";
   label: string;
+  path?: string;
   navigation: ScreenNavigationSchema;
   layout: HomeScreenLayoutModel;
 };
@@ -358,17 +359,28 @@ export function selectPrimaryScreenModels(schema: AppSchema): HomeScreenModel[] 
   return selectScreenModels(schema).filter((model) => model.navigation.primary);
 }
 
+export function selectScreenModelByPath(
+  schema: AppSchema,
+  path: string,
+): HomeScreenModel | undefined {
+  return selectScreenModels(schema).find((model) => model.path === path);
+}
+
 export function selectScreenModels(schema: AppSchema): HomeScreenModel[] {
   if (schema.screens === undefined) {
-    return selectPrimaryCollectionModels(schema).map(selectLegacyCollectionScreenModel);
+    return assignScreenModelPaths(
+      selectPrimaryCollectionModels(schema).map(selectLegacyCollectionScreenModel),
+    );
   }
 
   const collectionModelsByViewName = new Map(
     selectCollectionModels(schema).map((model) => [model.viewName, model]),
   );
 
-  return Object.entries(schema.screens).map(([screenName, screen]) =>
-    selectScreenModel(screenName, screen, collectionModelsByViewName),
+  return assignScreenModelPaths(
+    Object.entries(schema.screens).map(([screenName, screen]) =>
+      selectScreenModel(screenName, screen, collectionModelsByViewName),
+    ),
   );
 }
 
@@ -414,6 +426,7 @@ function selectScreenModel(
     screenName,
     type: screen.type,
     label: screen.label,
+    ...(screen.path === undefined ? {} : { path: screen.path }),
     navigation: {
       primary: screen.navigation?.primary ?? true,
     },
@@ -436,6 +449,19 @@ function selectScreenModel(
       }),
     },
   };
+}
+
+function assignScreenModelPaths(models: HomeScreenModel[]): HomeScreenModel[] {
+  let hasRootPath = models.some((model) => model.path === "/");
+
+  return models.map((model) => {
+    if (model.path !== undefined || !model.navigation.primary || hasRootPath) {
+      return model;
+    }
+
+    hasRootPath = true;
+    return { ...model, path: "/" };
+  });
 }
 
 function selectLegacyCollectionScreenModel(collectionModel: HomeViewModel): HomeScreenModel {

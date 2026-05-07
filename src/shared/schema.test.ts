@@ -2105,6 +2105,55 @@ describe("schema collection views", () => {
     expect(JSON.parse(stringifySchema(schema)).screens).toEqual(schema.screens);
   });
 
+  it("parses static app-relative screen paths", () => {
+    const rootSchema = parseAppSchema(
+      baseSchema({
+        screens: defaultScreens({ path: "/" }),
+      }),
+    );
+    const setupSchema = parseAppSchema(
+      baseSchema({
+        screens: defaultScreens({ path: "/setup" }),
+      }),
+    );
+
+    expect(rootSchema.screens?.taskHome?.path).toBe("/");
+    expect(setupSchema.screens?.taskHome?.path).toBe("/setup");
+  });
+
+  it("rejects duplicate screen paths", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          screens: {
+            taskHome: defaultScreen({ path: "/" }),
+            taskSetup: defaultScreen({ label: "Setup", path: "/" }),
+          },
+        }),
+      ),
+    ).toThrow('Screen path "/" must be unique. Used by "taskHome" and "taskSetup".');
+  });
+
+  it("rejects non-static screen paths and schema editor path collisions", () => {
+    for (const path of ["", "setup", "/tasks/:taskId", "/*", "/tasks/*"]) {
+      expect(() =>
+        parseAppSchema(
+          baseSchema({
+            screens: defaultScreens({ path }),
+          }),
+        ),
+      ).toThrow('Screen "taskHome" path must be a static app-relative path.');
+    }
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          screens: defaultScreens({ path: "/schema" }),
+        }),
+      ),
+    ).toThrow('Screen "taskHome" path must not collide with schema editor path "/schema".');
+  });
+
   it("rejects malformed screen layouts and duplicate section ids", () => {
     expect(() =>
       parseAppSchema(
@@ -5094,16 +5143,20 @@ function defaultViews() {
 
 function defaultScreens(screenOverrides: Record<string, unknown> = {}) {
   return {
-    taskHome: {
-      type: "workspace",
-      label: "Tasks",
-      navigation: { primary: true },
-      layout: {
-        type: "stack",
-        sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
-      },
-      ...screenOverrides,
+    taskHome: defaultScreen(screenOverrides),
+  };
+}
+
+function defaultScreen(screenOverrides: Record<string, unknown> = {}) {
+  return {
+    type: "workspace",
+    label: "Tasks",
+    navigation: { primary: true },
+    layout: {
+      type: "stack",
+      sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
     },
+    ...screenOverrides,
   };
 }
 

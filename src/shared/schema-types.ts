@@ -388,6 +388,7 @@ export type ScreenLayoutSchema = StackScreenLayoutSchema;
 export type WorkspaceScreenSchema = {
   type: "workspace";
   label: string;
+  path?: string;
   navigation?: ScreenNavigationSchema;
   layout: ScreenLayoutSchema;
 };
