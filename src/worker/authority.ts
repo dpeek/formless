@@ -13,14 +13,20 @@ import type {
   PatchMutation,
   RecordValues,
   SitePageTreeResponse,
+  StoreSnapshot,
   SyncResponse,
   SyncSocketAttachment,
   SyncSocketServerMessage,
   StoredRecord,
 } from "../shared/protocol.ts";
-import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
+import {
+  isSyncSocketAttachment,
+  isSyncSocketClientMessage,
+  parseStoreSnapshot,
+} from "../shared/protocol.ts";
 import {
   createStoredRecordOutcome,
+  exportStorageSnapshot,
   mapWriteOutcome,
   ensureStorageTables,
   getBootstrapRecords,
@@ -33,6 +39,7 @@ import {
   replayedWrite,
   resetStorageSchemaToSourceOutcome,
   resetStorageToSourceSeedOutcome,
+  restoreStorageSnapshotOutcome,
   type StorageSource,
   type WriteOutcome,
   writeActiveSchemaOutcome,
@@ -87,6 +94,12 @@ export class FormlessAuthority extends DurableObject<Env> {
         return jsonResponse({ schema, updatedAt });
       }
 
+      if (request.method === "GET" && route.path === "/snapshot") {
+        initializeStorageFromSource(this.ctx.storage, source);
+
+        return jsonResponse(exportStorageSnapshot(this.ctx.storage, route.app.key));
+      }
+
       if (request.method === "GET" && isSiteTreePath(route.path)) {
         if (route.app.key !== "site") {
           throw new BadRequestError("Site page trees are only available for the site schema.");
@@ -110,6 +123,15 @@ export class FormlessAuthority extends DurableObject<Env> {
         const records = getBootstrapRecords(this.ctx.storage);
         const nextSchema = validateSchemaUpdate(await readJson(request), currentSchema, records);
         const response = writes.apply(() => writeActiveSchemaOutcome(this.ctx.storage, nextSchema));
+
+        return jsonResponse(response);
+      }
+
+      if (request.method === "POST" && route.path === "/snapshot/restore") {
+        const snapshot = validateStoreSnapshotRestore(await readJson(request), route.app.key);
+        const response = writes.apply(() =>
+          restoreStorageSnapshotOutcome(this.ctx.storage, snapshot),
+        );
 
         return jsonResponse(response);
       }
@@ -686,6 +708,91 @@ function validateSchemaUpdate(
   assertExistingRecordsSatisfyUniqueConstraints(nextSchema, records);
 
   return nextSchema;
+}
+
+function validateStoreSnapshotRestore(value: unknown, schemaKey: string): StoreSnapshot {
+  let snapshot: StoreSnapshot;
+
+  try {
+    snapshot = parseStoreSnapshot(value, schemaKey);
+  } catch (error) {
+    throw new BadRequestError(
+      error instanceof Error ? error.message : "Store snapshot is invalid.",
+    );
+  }
+
+  validateSnapshotRecords(snapshot);
+  assertIsoTimestamp("Store snapshot exportedAt", snapshot.exportedAt);
+  assertIsoTimestamp("Store snapshot schemaUpdatedAt", snapshot.schemaUpdatedAt);
+  assertExistingRecordsSatisfyUniqueConstraints(snapshot.schema, snapshot.records);
+
+  return snapshot;
+}
+
+function validateSnapshotRecords(snapshot: StoreSnapshot) {
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of snapshot.records) {
+    if (record.id.trim() === "") {
+      throw new BadRequestError("Store snapshot record id must be non-empty.");
+    }
+
+    if (recordsById.has(record.id)) {
+      throw new BadRequestError(`Store snapshot includes duplicate record id "${record.id}".`);
+    }
+
+    assertIsoTimestamp(`Store snapshot record "${record.id}" createdAt`, record.createdAt);
+
+    if (record.deletedAt !== undefined) {
+      assertIsoTimestamp(`Store snapshot record "${record.id}" deletedAt`, record.deletedAt);
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  for (const record of snapshot.records) {
+    validateSnapshotRecord(record, snapshot.schema, recordsById);
+  }
+}
+
+function validateSnapshotRecord(
+  record: StoredRecord,
+  schema: AppSchema,
+  recordsById: Map<string, StoredRecord>,
+) {
+  const entity = schema.entities[record.entity];
+
+  if (!entity) {
+    throw new BadRequestError(
+      `Store snapshot record "${record.id}" references unknown entity "${record.entity}".`,
+    );
+  }
+
+  for (const fieldName of Object.keys(record.values)) {
+    if (!entity.fields[fieldName]) {
+      throw new BadRequestError(
+        `Store snapshot record "${record.id}" includes unknown field "${record.entity}.${fieldName}".`,
+      );
+    }
+  }
+
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    const fieldValue = record.values[fieldName];
+
+    if (!isValidStoredFieldValue(fieldValue, field, recordsById)) {
+      throw new BadRequestError(
+        `Store snapshot record "${record.id}" has invalid field "${record.entity}.${fieldName}".`,
+      );
+    }
+  }
+}
+
+function assertIsoTimestamp(context: string, value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.valueOf()) || date.toISOString() !== value) {
+    throw new BadRequestError(`${context} must be an ISO timestamp.`);
+  }
 }
 
 function validateCompatibleSchemaChange(

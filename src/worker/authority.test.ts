@@ -8,6 +8,8 @@ import type {
   SchemaUpdateResponse,
   SiteBlockNode,
   SitePageTreeResponse,
+  StoreSnapshot,
+  StoredRecord,
   SyncResponse,
   SyncSocketServerMessage,
 } from "../shared/protocol.ts";
@@ -459,6 +461,157 @@ describe("authority", () => {
     expect(rateReset.records).toEqual(rateCardSeedRecords);
     expect(rateReset.cursor).toBe(rateCardSeedRecords.length);
     expect(tasksBootstrap.records).toEqual([...taskSeedRecords, task.record]);
+  });
+
+  it("exports authority store snapshots by schema key", async () => {
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const created = await postMutation("mutation-snapshot-export-task", {
+      title: "Snapshot export",
+      done: false,
+    });
+
+    const snapshot = await getJson<StoreSnapshot>("/api/snapshot");
+
+    expect(snapshot).toMatchObject({
+      kind: "formless.storeSnapshot",
+      version: 1,
+      schemaKey: "tasks",
+      exportedAt: expect.any(String),
+      schemaUpdatedAt: schemaResponse.updatedAt,
+      sourceCursor: created.cursor,
+      schema: appSchema,
+    });
+    expect(snapshot.records).toEqual([...taskSeedRecords, created.record]);
+
+    useSchemaApp("rates");
+    const rateSnapshot = await getJson<StoreSnapshot>("/api/snapshot");
+
+    expect(rateSnapshot.schemaKey).toBe("rates");
+    expect(rateSnapshot.schema).toEqual(rateCardSchema);
+    expect(rateSnapshot.records).toEqual(rateCardSeedRecords);
+    expect(rateSnapshot.records.some((record) => record.id === created.record.id)).toBe(false);
+  });
+
+  it("restores snapshots and broadcasts committed restore writes", async () => {
+    const before = await getJson<BootstrapResponse>("/api/bootstrap");
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const restoredRecord = taskSnapshotRecord("snapshot-task-restored", "Restored task");
+    const taskSocket = await openSyncSocket("/api/sync/ws", "tasks");
+    const ratesSocket = await openSyncSocket("/api/sync/ws", "rates");
+    let ratesCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
+
+    try {
+      await primeSyncSocket(taskSocket, before.cursor, schemaResponse.updatedAt);
+
+      useSchemaApp("rates");
+      const rateSchema = await getJson<SchemaResponse>("/api/schema");
+      await primeSyncSocket(ratesSocket, rateCardSeedRecords.length, rateSchema.updatedAt);
+      ratesCapture = captureSyncSocketMessages(ratesSocket);
+
+      useSchemaApp("tasks");
+      const message = readSyncSocketMessage(taskSocket);
+      const restored = await postJson<BootstrapResponse>(
+        "/api/snapshot/restore",
+        storeSnapshot({
+          schemaUpdatedAt: schemaResponse.updatedAt,
+          sourceCursor: before.cursor,
+          records: [...before.records, restoredRecord],
+        }),
+      );
+
+      expect(restored.records).toEqual([...before.records, restoredRecord]);
+      expect(restored.cursor).toBe(before.cursor + 1);
+      expect(restored.schemaUpdatedAt).not.toBe(schemaResponse.updatedAt);
+      await expect(message).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: [
+            expect.objectContaining({
+              mutationId: `snapshot-restore:${restored.schemaUpdatedAt}`,
+              op: "action",
+              entity: "task",
+              recordId: restoredRecord.id,
+              payload: restoredRecord,
+              createdAt: restored.schemaUpdatedAt,
+            }),
+          ],
+          cursor: restored.cursor,
+          schema: restored.schema,
+          schemaUpdatedAt: restored.schemaUpdatedAt,
+        },
+      });
+      await expectNoCapturedMessages(ratesCapture);
+    } finally {
+      ratesCapture?.stop();
+      taskSocket.close();
+      ratesSocket.close();
+    }
+  });
+
+  it("rejects invalid restore snapshots without committing or broadcasting", async () => {
+    const before = await getJson<BootstrapResponse>("/api/bootstrap");
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, before.cursor, schemaResponse.updatedAt);
+
+      const capture = captureSyncSocketMessages(socket);
+      await expectError(
+        "/api/snapshot/restore",
+        storeSnapshot({ schemaKey: "rates" }),
+        'Store snapshot schemaKey must be "tasks".',
+      );
+      await expectNoCapturedMessages(capture);
+      capture.stop();
+    } finally {
+      socket.close();
+    }
+
+    await expect(getJson<BootstrapResponse>("/api/bootstrap")).resolves.toEqual(before);
+  });
+
+  it("validates restore snapshot records before commit", async () => {
+    await expectError(
+      "/api/snapshot/restore",
+      storeSnapshot({
+        records: [
+          {
+            ...taskSnapshotRecord("snapshot-task-invalid-field", "Invalid field"),
+            values: { title: "Invalid field", done: false, missing: "nope" },
+          },
+        ],
+      }),
+      'Store snapshot record "snapshot-task-invalid-field" includes unknown field "task.missing".',
+    );
+
+    await expectError(
+      "/api/snapshot/restore",
+      storeSnapshot({
+        schema: schemaWithTaskProjectReference({ required: true }),
+        records: [
+          {
+            ...taskSnapshotRecord("snapshot-task-missing-project", "Missing project"),
+            values: { title: "Missing project", done: false, project: "missing-project" },
+          },
+        ],
+      }),
+      'Store snapshot record "snapshot-task-missing-project" has invalid field "task.project".',
+    );
+
+    await expectError(
+      "/api/snapshot/restore",
+      storeSnapshot({
+        schema: schemaWithTaskConstraints({
+          uniqueTitle: { kind: "unique", fields: ["title"] },
+        }),
+        records: [
+          taskSnapshotRecord("snapshot-task-duplicate-title-a", "Duplicate"),
+          taskSnapshotRecord("snapshot-task-duplicate-title-b", "Duplicate"),
+        ],
+      }),
+      'Cannot add unique constraint "task.uniqueTitle" because existing records violate it.',
+    );
   });
 
   it("applies expanded rate-card defaults when creating sample records", async () => {
@@ -2766,6 +2919,29 @@ function getSeedCompletedTask() {
   }
 
   return completed;
+}
+
+function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+  return {
+    kind: "formless.storeSnapshot",
+    version: 1,
+    schemaKey: "tasks",
+    exportedAt: "2026-04-28T00:00:00.000Z",
+    schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+    sourceCursor: taskSeedRecords.length,
+    schema: appSchema,
+    records: taskSeedRecords,
+    ...overrides,
+  };
+}
+
+function taskSnapshotRecord(id: string, title: string): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: { title, done: false },
+    createdAt: "2026-05-07T00:10:00.000Z",
+  };
 }
 
 function schemaWithPriorityEnum(

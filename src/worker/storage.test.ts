@@ -497,11 +497,7 @@ function taskSchema(): AppSchema {
   };
 }
 
-function record(
-  id: string,
-  title: string,
-  overrides: Partial<StoredRecord> = {},
-): StoredRecord {
+function record(id: string, title: string, overrides: Partial<StoredRecord> = {}): StoredRecord {
   return {
     id,
     entity: "task",
