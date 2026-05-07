@@ -1,7 +1,7 @@
 # PRD 18: Workbench frame and Site authoring layout
 
 Status: active
-Current chunk: WAF-07
+Current chunk: WAF-08
 Last updated: 2026-05-07
 
 ## Goal
@@ -299,7 +299,7 @@ Site screens:
 | WAF-04 | shipped | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
 | WAF-05 | shipped | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
 | WAF-06 | shipped | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
-| WAF-07 | planned | WAF-06                | generated collection UI, schema  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
+| WAF-07 | shipped | WAF-06                | generated collection UI, schema  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
 | WAF-08 | planned | WAF-07                | browser smoke, PRD               | Checks pass; browser smoke covers Site Pages, Navigation, tools, reset dialog, and sync status details.   |
 
 ## Chunk details
@@ -555,17 +555,18 @@ Evidence:
 
 ### WAF-07 singleton context and label cleanup
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: remove storage-shaped noise without new concepts.
 
 Tasks:
 
-- Auto-render singleton `listDetail` contexts without showing a one-item selector.
-- Use author-facing labels in Site source schema where existing schema supports them.
-- Set placement create action labels to `Add placement` or equivalent.
-- Keep storage entity names unchanged.
-- Keep raw debug views available outside primary app navigation.
+- Shipped: auto-rendered singleton `listDetail` contexts without showing a one-item selector.
+- Shipped: used query-derived context labels in generated context selectors.
+- Shipped: set Site placement create action labels to `Add placement`.
+- Shipped: changed the Site `blockPlacement` entity label to `Placement`.
+- Shipped: kept storage entity names `block` and `blockPlacement` unchanged.
+- Shipped: kept raw debug views available outside primary app navigation.
 
 Acceptance:
 
@@ -575,12 +576,30 @@ Acceptance:
 - Placement create button is author-facing.
 - No storage entity rename occurs.
 
-Evidence to record:
+Outcome:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
-- Browser smoke screenshot for Site Navigation.
+- `src/client/views.ts` adds a render-facing context label derived from the context query label, with `All` falling back to the context entity label.
+- `src/app/generated/collection.tsx` uses context labels for list/detail selector labels and hides the selector rail for one-option list/detail contexts.
+- `schema/apps/site/schema.json` keeps storage entities unchanged, labels `blockPlacement` as `Placement`, and labels Site placement create actions `Add placement`.
+- `src/app.test.tsx` covers Pages labels, Header/Footer singleton rendering, and author-facing placement actions.
+- `src/client/views.test.ts`, `src/shared/schema.test.ts`, and `src/worker/schema-apps.test.ts` characterize the updated source schema/view facts.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest affected rerun passed; final tail showed `src/app.test.tsx` `99 passed (99)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke reset source state with `fetch('/api/site/reset/schema')` and `fetch('/api/site/reset/seed')`.
+- Browser smoke `/site`: DOM eval returned `h1` Pages, `pagesRecords` 1, `blockRecords` 0, `pagesListDetail` 1, `addPlacementButtons` 1, and no `Create Block placement` text.
+- Browser smoke `/site/navigation`: DOM eval returned `h1` Navigation, `headerListDetail` 1, `footerListDetail` 1, `blockRecords` 0, `headerRecords` 0, `footerRecords` 0, `addPlacementButtons` 2, and no `Create Block placement` text.
+- Browser smoke screenshot: `./tmp/waf07-site-navigation.png`.
+- Browser smoke: `bun browser --session waf07 errors` returned no page errors.
+
+Promotion notes:
+
+- `doc/current.md`: Site authoring context selectors now use query-derived labels; Pages shows `Pages` instead of `Block`.
+- `doc/current.md`: singleton Site Header/Footer contexts render detail directly without a one-item selector.
+- `doc/current.md`: Site placement actions use `Add placement`, and the author-facing placement entity label is `Placement`.
 
 ### WAF-08 closeout
 
@@ -620,7 +639,7 @@ Evidence to record:
 
 ## Blockers
 
-- No known blockers for WAF-07.
+- No known blockers for WAF-08.
 
 ## Non-goals
 
@@ -657,3 +676,4 @@ Evidence to record:
 - 2026-05-07: WAF-04 shipped. Decision WAF-D4 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`, and `src/app/routes/status-line.tsx`: generated page content no longer renders inline sync diagnostics, workbench/header chrome owns a small sync details control, and app-profile generated chrome keeps the same status access. Next ready chunk is WAF-05.
 - 2026-05-07: WAF-05 shipped. Decision WAF-D5/WAF-D6 implemented in `schema/apps/site/schema.json`: Site top-level screens are Pages and Navigation, Header/Footer are Navigation stack sections, and `/site/header` plus `/site/footer` are no longer screen routes. Next ready chunk is WAF-06.
 - 2026-05-07: WAF-06 shipped. Decision WAF-D7 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/generated/collection.tsx`, and `src/app/generated/table.tsx`: generated workspaces use a wide app content area, list/detail gives most desktop width to detail/table content, compact context fields stay above related placements, and tables keep natural column width inside their scroller. Next ready chunk is WAF-07.
+- 2026-05-07: WAF-07 shipped. Decision WAF-D8/WAF-D9 implemented in `src/client/views.ts`, `src/app/generated/collection.tsx`, and `schema/apps/site/schema.json`: Site Pages uses a `Pages` context selector label, Header/Footer singleton contexts render detail directly with no one-item selector, and placement actions use `Add placement`. Next ready chunk is WAF-08.

@@ -180,7 +180,7 @@
       }
     },
     "blockPlacement": {
-      "label": "Block placement",
+      "label": "Placement",
       "fields": {
         "parent": {
           "type": "reference",
@@ -941,7 +941,8 @@
       "actions": [
         {
           "type": "create",
-          "createView": "blockPlacementCreate"
+          "createView": "blockPlacementCreate",
+          "label": "Add placement"
         }
       ]
     },
@@ -977,7 +978,8 @@
       "actions": [
         {
           "type": "create",
-          "createView": "blockPlacementCreate"
+          "createView": "blockPlacementCreate",
+          "label": "Add placement"
         }
       ]
     },
@@ -1013,7 +1015,8 @@
       "actions": [
         {
           "type": "create",
-          "createView": "blockPlacementCreate"
+          "createView": "blockPlacementCreate",
+          "label": "Add placement"
         }
       ]
     },
@@ -1179,7 +1182,8 @@
       "actions": [
         {
           "type": "create",
-          "createView": "blockPlacementCreate"
+          "createView": "blockPlacementCreate",
+          "label": "Add placement"
         }
       ]
     },

@@ -15,7 +15,7 @@ describe("worker schema app definitions", () => {
     expect(tasks.sourceSchema.entities.task?.label).toBe("Task");
     expect(estii.sourceSchema.entities.rate?.label).toBe("Rate");
     expect(site.sourceSchema.entities.block?.label).toBe("Block");
-    expect(site.sourceSchema.entities.blockPlacement?.label).toBe("Block placement");
+    expect(site.sourceSchema.entities.blockPlacement?.label).toBe("Placement");
   });
 
   it("loads parsed seed records for each app", () => {

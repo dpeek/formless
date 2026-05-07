@@ -268,29 +268,37 @@ function ListDetailScopedHomeCollection({
   today: string;
 }) {
   const activeOption = contextOptions.find((option) => option.id === activeContextRecordId);
+  const isSingletonContext = contextOptions.length === 1;
+  const detailLabel = activeOption?.label ?? context.label;
 
   return (
     <section
-      aria-label={`${context.entity.label} list detail`}
-      className="grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]"
+      aria-label={`${context.label} list detail`}
+      className={
+        isSingletonContext
+          ? "min-w-0 space-y-6"
+          : "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]"
+      }
     >
-      <ContextListDetailSelector
-        context={context}
-        onSelectContext={onSelectContext}
-        options={contextOptions}
-        selectedContextRecordId={activeContextRecordId}
-      />
+      {isSingletonContext ? null : (
+        <ContextListDetailSelector
+          context={context}
+          onSelectContext={onSelectContext}
+          options={contextOptions}
+          selectedContextRecordId={activeContextRecordId}
+        />
+      )}
 
       <div className="min-w-0 space-y-6">
         {activeContextRecordId && queryContext ? (
           <>
             <section
-              aria-label={`${activeOption?.label ?? context.entity.label} detail`}
+              aria-label={`${detailLabel} detail`}
               className="space-y-3 border-b border-slate-200 pb-4"
             >
-              <h2 className="text-base font-semibold">
-                {activeOption?.label ?? context.entity.label}
-              </h2>
+              {isSingletonContext ? null : (
+                <h2 className="text-base font-semibold">{detailLabel}</h2>
+              )}
               <ContextRecordEditor
                 context={context}
                 density="compact"
@@ -338,7 +346,7 @@ function ListDetailScopedHomeCollection({
           </>
         ) : contextOptions.length === 0 ? null : (
           <p className="text-sm text-slate-600">
-            No {context.entity.label.toLowerCase()} selected.
+            No {context.label.toLowerCase()} selected.
           </p>
         )}
 
@@ -370,10 +378,10 @@ function ContextListDetailSelector({
   return (
     <aside className="min-w-0 space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-slate-900">{context.entity.label}</h2>
+        <h2 className="text-sm font-medium text-slate-900">{context.label}</h2>
         {context.createAction ? (
           <Button
-            aria-label={`Create ${context.entity.label}`}
+            aria-label={context.createAction.label}
             disabled={!context.createAction.enabled}
             onClick={() => setCreateDialogOpen(true)}
             size="icon-sm"
@@ -387,10 +395,10 @@ function ContextListDetailSelector({
 
       {options.length === 0 ? (
         <p className="text-sm text-slate-600">
-          No {context.entity.label.toLowerCase()} records yet.
+          No {context.label.toLowerCase()} records yet.
         </p>
       ) : (
-        <ul aria-label={`${context.entity.label} records`} className="space-y-1">
+        <ul aria-label={`${context.label} records`} className="space-y-1">
           {options.map((option) => (
             <li key={option.id}>
               <ContextListDetailOptionButton
@@ -476,7 +484,7 @@ function ContextSelector({
           }}
           value={selectedContextRecordId ?? ""}
         >
-          <TabsList aria-label={`${context.entity.label} records`} variant="line">
+          <TabsList aria-label={`${context.label} records`} variant="line">
             {options.map((option) => (
               <ContextSelectorTabTrigger context={context} key={option.id} option={option} />
             ))}
@@ -485,7 +493,7 @@ function ContextSelector({
 
         {context.createAction ? (
           <Button
-            aria-label={`Create ${context.entity.label}`}
+            aria-label={context.createAction.label}
             disabled={!context.createAction.enabled}
             onClick={() => setCreateDialogOpen(true)}
             size="icon-sm"
@@ -499,7 +507,7 @@ function ContextSelector({
 
       {options.length === 0 ? (
         <p className="text-sm text-slate-600">
-          No {context.entity.label.toLowerCase()} records yet.
+          No {context.label.toLowerCase()} records yet.
         </p>
       ) : null}
 

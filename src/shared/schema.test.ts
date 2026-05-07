@@ -3377,6 +3377,7 @@ describe("personal site sample schema", () => {
     });
     expect(schema.entities.block?.fields).not.toHaveProperty("featured");
     expect(schema.entities.block?.fields).not.toHaveProperty("order");
+    expect(schema.entities.blockPlacement?.label).toBe("Placement");
     expect(schema.entities.blockPlacement?.fields.parent).toMatchObject({
       type: "reference",
       required: true,
@@ -3522,7 +3523,7 @@ describe("personal site sample schema", () => {
         itemView: "blockContextItem",
       },
       result: { type: "table", tableView: "blockPlacementTable" },
-      actions: [{ type: "create", createView: "blockPlacementCreate" }],
+      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
     expect(schema.views.pageCompositionHome).toMatchObject({
       type: "collection",
@@ -3539,7 +3540,7 @@ describe("personal site sample schema", () => {
         presentation: "listDetail",
       },
       result: { type: "table", tableView: "blockPlacementTable" },
-      actions: [{ type: "create", createView: "blockPlacementCreate" }],
+      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
     expect(schema.views.headerCompositionHome).toMatchObject({
       type: "collection",
@@ -3550,6 +3551,7 @@ describe("personal site sample schema", () => {
         query: "blockHeaderRoot",
         presentation: "listDetail",
       },
+      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
     expect(schema.views.footerCompositionHome).toMatchObject({
       type: "collection",
@@ -3560,6 +3562,7 @@ describe("personal site sample schema", () => {
         query: "blockFooterRoot",
         presentation: "listDetail",
       },
+      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
     expect(schema.views.blockPlacementCreate).toMatchObject({
       type: "create",

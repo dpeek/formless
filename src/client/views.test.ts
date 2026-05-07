@@ -1034,6 +1034,7 @@ describe("home view model collections", () => {
       "blockHeaderRoot",
       "blockFooterRoot",
     ]);
+    expect(models.map((model) => model.context?.label)).toEqual(["Pages", "Header", "Footer"]);
     expect(models.map((model) => model.context?.presentation)).toEqual([
       "listDetail",
       "listDetail",
@@ -1107,7 +1108,7 @@ describe("home view model collections", () => {
         actions: [
           {
             type: "create",
-            label: "Create Block placement",
+            label: "Add placement",
             entityName: "blockPlacement",
             fields: ["slot", "block", "label", "variant", "visible"],
             defaults: ["parent"],
@@ -1170,7 +1171,7 @@ describe("home view model collections", () => {
         actions: [
           {
             type: "create",
-            label: "Create Block placement",
+            label: "Add placement",
             entityName: "blockPlacement",
             fields: ["slot", "block", "label", "variant", "visible"],
             defaults: ["parent"],
@@ -1233,7 +1234,7 @@ describe("home view model collections", () => {
         actions: [
           {
             type: "create",
-            label: "Create Block placement",
+            label: "Add placement",
             entityName: "blockPlacement",
             fields: ["slot", "block", "label", "variant", "visible"],
             defaults: ["parent"],
@@ -1499,7 +1500,7 @@ describe("home view model collections", () => {
     });
     expect(compositionModel?.actions[0]).toMatchObject({
       type: "create",
-      label: "Create Block placement",
+      label: "Add placement",
       entityName: "blockPlacement",
       defaults: [{ fieldName: "parent", value: { kind: "context", name: "block" } }],
     });

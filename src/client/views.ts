@@ -215,6 +215,7 @@ export type HomeResultConfig =
 
 export type HomeContextConfig = {
   name: string;
+  label: string;
   entityName: string;
   entity: EntitySchema;
   queryName: string;
@@ -591,6 +592,7 @@ function selectContext(
 
   return {
     name: collectionView.context.name,
+    label: contextQuery.label === "All" ? contextEntity.label : contextQuery.label,
     entityName: collectionView.context.entity,
     entity: contextEntity,
     queryName: collectionView.context.query,

@@ -742,7 +742,7 @@ describe("generated collection home", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
 
-    expect(html).toContain('aria-label="Block placement actions"');
+    expect(html).toContain('aria-label="Placement actions"');
     expect(html).not.toContain('aria-label="Task actions"');
   });
 
@@ -841,11 +841,11 @@ describe("generated collection home", () => {
     expect(html).toContain("Navigation");
     expect(html).toContain("Header");
     expect(html).toContain("Footer");
-    expect(html).toContain('aria-label="Block list detail"');
-    expect(html).toContain('aria-label="Block records"');
+    expect(html).toContain('aria-label="Pages list detail"');
+    expect(html).toContain('aria-label="Pages records"');
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain("Placements");
-    expect(html).toContain("Create Block placement");
+    expect(html).toContain("Add placement");
     expect(html).not.toContain("Create Block<");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Body");
@@ -874,10 +874,10 @@ describe("generated collection home", () => {
     expect(html).not.toContain('href="/site/footer"');
     expect(html).toContain("Pages");
     expect(html).toContain("Navigation");
-    expect(html).toContain('aria-label="Block list detail"');
+    expect(html).toContain('aria-label="Pages list detail"');
     expect(html).toContain("Home");
     expect(html).toContain("Placements");
-    expect(html).toContain("Create Block placement");
+    expect(html).toContain("Add placement");
     expect(html).toContain('data-slot="table"');
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).not.toContain(">Blocks</h1>");
@@ -895,8 +895,13 @@ describe("generated collection home", () => {
     expect(html).not.toContain('href="/site/footer"');
     expect(html).toContain(">Header</h2>");
     expect(html).toContain(">Footer</h2>");
-    expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
-    expect(html).toMatch(/aria-label="Footer Placements count"[^>]*>2</);
+    expect(html).toContain('aria-label="Header list detail"');
+    expect(html).toContain('aria-label="Footer list detail"');
+    expect(html).not.toContain('aria-label="Block records"');
+    expect(html).not.toContain('aria-label="Header records"');
+    expect(html).not.toContain('aria-label="Footer records"');
+    expect(html).not.toContain('aria-label="Header Placements count"');
+    expect(html).not.toContain('aria-label="Footer Placements count"');
     expect(html).toContain('value="Home"');
     expect(html).toContain('value="Blog"');
     expect(html).toContain('value="Explore"');
@@ -931,7 +936,7 @@ describe("generated collection home", () => {
 
     expect(before).not.toContain("Unannounced page");
     expect(after).toContain("Unannounced page");
-    expect(after).toContain('aria-label="Block records"');
+    expect(after).toContain('aria-label="Pages records"');
     expect(after).toMatch(/aria-label="Unannounced page Placements count"[^>]*>0</);
   });
 
@@ -980,7 +985,7 @@ describe("generated collection home", () => {
     expect(html).toContain('data-slot="tabs-trigger"');
     expect(html).toContain("Home");
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
-    expect(html).toContain("Create Block placement");
+    expect(html).toContain("Add placement");
     expect(html).toContain('value="Header"');
     expect(html).toContain('value="Footer"');
     expect(html).toContain("Schema-backed software for content-heavy products");
@@ -1001,7 +1006,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Block records"');
     expect(html).toContain("Header");
     expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
-    expect(html).toContain("Create Block placement");
+    expect(html).toContain("Add placement");
     expect(html).toContain('value="link"');
     expect(html).toContain('value="Home"');
     expect(html).toContain('value="Blog"');
