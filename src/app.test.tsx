@@ -18,6 +18,7 @@ import {
   getClientStoreSnapshot,
   resetClientStore,
 } from "./client/store.ts";
+import { resetSyncStatus, setSyncStatus } from "./client/sync-status.ts";
 import {
   createHomeRouteSelectionState,
   homeRouteSectionSelectionKey,
@@ -94,6 +95,7 @@ function sitePageTree(slug = "home", records = siteSeedRecords): SitePageTree {
 
 beforeEach(() => {
   resetClientStore();
+  resetSyncStatus();
 });
 
 function renderGeneratedHomeCollection(
@@ -165,6 +167,14 @@ function expectWorkbenchTools(html: string, schemaRoute: string, schemaKey: stri
   expect(html).toContain("Reset restores the source schema and source seed data");
 }
 
+function expectSyncStatusControl(html: string, schemaKey: string) {
+  expect(html).toContain("data-sync-status-control");
+  expect(html).toContain(`aria-label="Sync status details for ${schemaKey}"`);
+  expect(html).toContain(`<code>${schemaKey}</code>`);
+  expect(html).toContain("Push sync");
+  expect(html).toContain("Cursor");
+}
+
 describe("App smoke routes", () => {
   it('renders the "/tasks" route with task navigation', () => {
     const html = renderRoute("/tasks");
@@ -215,9 +225,33 @@ describe("App smoke routes", () => {
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expectWorkbenchTools(html, "/site/schema", "site");
+    expectSyncStatusControl(html, "site");
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain("Loading Site...");
     expect(html).not.toContain("Create Content item");
+  });
+
+  it("renders sync details in workbench chrome instead of generated page content", () => {
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute("/site");
+
+    expectSyncStatusControl(html, "site");
+    expect(html).toContain("Sync details");
+    expect(html).toContain("Schema</dt><dd>v1</dd>");
+    expect(html).toContain('Push sync</dt><dd><span class="capitalize">idle</span>');
+    expect(html).toContain("Local cache ready.");
+    expect(html).toContain("Last sync</dt><dd><time");
+    expect(html).not.toContain('<p class="text-sm text-slate-600" role="status">');
+  });
+
+  it("renders sync errors as noticeable chrome status", () => {
+    setSyncStatus({ state: "error", message: "Push sync unavailable." });
+    const html = renderRoute("/site");
+
+    expectSyncStatusControl(html, "site");
+    expect(html).toContain("Sync issue");
+    expect(html).toContain("Push sync unavailable.");
+    expect(html).toContain("text-red-700");
   });
 
   it('renders the "/tasks/schema" route', () => {
@@ -349,6 +383,7 @@ describe("App smoke routes", () => {
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
+    expectSyncStatusControl(html, "estii");
     expect(html).toContain(">Rates</h1>");
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/setup"');

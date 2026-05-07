@@ -7,12 +7,11 @@ import {
   useActiveSchemaKey,
   useSchema,
 } from "../../client/store.ts";
-import { type SyncStatus } from "../../client/sync-status.ts";
+import { setSyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import { parseAppSchema, stringifySchema } from "../../shared/schema.ts";
 import { DevActions } from "../dev-actions.tsx";
-import { DeveloperStatusLine } from "./status-line.tsx";
 
 export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   const app = getSchemaAppDefinition(schemaKey);
@@ -22,16 +21,12 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   const schema = routeIsActive ? activeSchema : null;
   const [editorText, setEditorText] = useState(() => (schema ? stringifySchema(schema) : ""));
   const routeEditorText = routeIsActive ? editorText : "";
-  const [status, setStatus] = useState<SyncStatus>({
-    state: "idle",
-    message: "Schema editor ready.",
-  });
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     selectClientStoreSchemaKey(schemaKey);
     setEditorText("");
-    setStatus({ state: "syncing", message: "Loading active schema." });
+    setSyncStatus({ state: "syncing", message: "Loading active schema." });
     const stopBroadcast = connectBroadcastToClientStore(schemaKey);
     let cancelled = false;
 
@@ -41,11 +36,11 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
         await fetchActiveSchema(schemaKey);
 
         if (!cancelled) {
-          setStatus({ state: "idle", message: "Loaded active schema." });
+          setSyncStatus({ state: "idle", message: "Loaded active schema." });
         }
       } catch (error) {
         if (!cancelled) {
-          setStatus({
+          setSyncStatus({
             state: "error",
             message: error instanceof Error ? error.message : "Could not load schema.",
           });
@@ -70,16 +65,16 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   async function submitSchema(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSaving(true);
-    setStatus({ state: "syncing", message: "Saving schema..." });
+    setSyncStatus({ state: "syncing", message: "Saving schema..." });
 
     try {
       const parsed = parseAppSchema(JSON.parse(editorText) as unknown);
       const response = await saveActiveSchema(schemaKey, parsed);
 
       setEditorText(stringifySchema(response.schema));
-      setStatus({ state: "idle", message: `Saved schema at ${response.updatedAt}.` });
+      setSyncStatus({ state: "idle", message: `Saved schema at ${response.updatedAt}.` });
     } catch (error) {
-      setStatus({
+      setSyncStatus({
         state: "error",
         message: error instanceof Error ? error.message : "Schema save failed.",
       });
@@ -97,7 +92,6 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
             Key <code>{app.key}</code>
           </p>
         </div>
-        <DeveloperStatusLine schemaVersion={schema?.version} status={status} />
       </header>
 
       <DevActions
@@ -105,7 +99,7 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
         showReset={false}
         onRestoreSnapshot={(response) => {
           setEditorText(stringifySchema(response.schema));
-          setStatus({
+          setSyncStatus({
             state: "idle",
             message: `Restored store snapshot at ${response.schemaUpdatedAt}.`,
           });

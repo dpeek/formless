@@ -19,6 +19,7 @@ import { HomeRoute } from "./app/routes/home.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { SchemaRoute } from "./app/routes/schema.tsx";
 import { normalizeSitePageSlug, SitePageRoute } from "./app/routes/site-page.tsx";
+import { SyncStatusControl } from "./app/routes/status-line.tsx";
 import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
@@ -73,6 +74,7 @@ export function App({
       routeApp={routeApp}
       routeWorld={routeWorld}
       screenModels={routeAppScreenModels}
+      showSyncStatus={runtimeProfile.shell === "app"}
     >
       <AppRoutes runtimeProfile={runtimeProfile} />
     </GeneratedAppFrame>
@@ -122,6 +124,7 @@ function WorkbenchFrame({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <SyncStatusControl appKey={routeApp?.key} />
           <nav aria-label="Workbench apps" className="flex flex-wrap items-center gap-1">
             {runtimeProfile.worlds.map(({ app, route }) => (
               <Link
@@ -210,12 +213,14 @@ function GeneratedAppFrame({
   routeApp,
   routeWorld,
   screenModels,
+  showSyncStatus,
 }: {
   activeScreenPath: string | undefined;
   children: ReactNode;
   routeApp: RuntimeWorldMount["app"] | undefined;
   routeWorld: RuntimeWorldMount | undefined;
   screenModels: HomeScreenModel[];
+  showSyncStatus: boolean;
 }) {
   return (
     <SidebarProvider data-frame="generated-app">
@@ -234,9 +239,12 @@ function GeneratedAppFrame({
         </SidebarContent>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-          <SidebarTrigger />
-          <span className="text-sm font-medium">{routeApp?.label ?? "Formless"}</span>
+        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <SidebarTrigger />
+            <span className="truncate text-sm font-medium">{routeApp?.label ?? "Formless"}</span>
+          </div>
+          {showSyncStatus ? <SyncStatusControl appKey={routeApp?.key} /> : null}
         </header>
         <div className="flex-1 p-6">{children}</div>
       </SidebarInset>

@@ -1,7 +1,7 @@
 # PRD 18: Workbench frame and Site authoring layout
 
 Status: active
-Current chunk: WAF-04
+Current chunk: WAF-05
 Last updated: 2026-05-07
 
 ## Goal
@@ -296,7 +296,7 @@ Site screens:
 | WAF-01 | shipped | none                  | PRD                              | PRD captures workbench/app frame split, Site screen shape, one Reset, sync status, layout, and non-goals. |
 | WAF-02 | shipped | PRD 17 route profiles | app shell, route frame tests     | Dev workbench chrome wraps the generated app frame; app sidebar lists app screens only.                   |
 | WAF-03 | shipped | WAF-02                | dev tools, schema route/reset UI | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
-| WAF-04 | planned | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
+| WAF-04 | shipped | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
 | WAF-05 | planned | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
 | WAF-06 | planned | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
 | WAF-07 | planned | WAF-06                | generated collection UI, schema  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
@@ -423,18 +423,18 @@ Promotion notes:
 
 ### WAF-04 chrome sync status
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: make sync diagnostics useful but unobtrusive.
 
 Tasks:
 
-- Replace inline route `DeveloperStatusLine` usage with chrome status control.
-- Keep status facts sourced from existing sync status and client store hooks.
-- Add details dialog/popover.
-- Make idle/synced status quiet.
-- Make error status noticeable.
-- Preserve accessible status semantics.
+- Shipped: replaced inline route `DeveloperStatusLine` usage with a chrome status control.
+- Shipped: kept status facts sourced from existing sync status and client store hooks.
+- Shipped: added a native details popover for sync diagnostics.
+- Shipped: made idle/synced status quiet.
+- Shipped: made error status noticeable.
+- Shipped: preserved accessible status semantics.
 
 Acceptance:
 
@@ -443,11 +443,27 @@ Acceptance:
 - Opening the control shows schema version, cursor, status message, last sync, and app key.
 - Loading and error states remain visible and accessible.
 
-Evidence to record:
+Outcome:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- `src/app/routes/status-line.tsx` now exports `SyncStatusControl`.
+- `src/app.tsx` renders the control in dev workbench chrome and app-profile generated header chrome.
+- `src/app/routes/home.tsx` no longer renders inline sync status in generated page content.
+- `src/app/routes/schema.tsx` reports schema load/save/restore through the global sync status source.
+- `src/app.test.tsx` covers workbench chrome sync details, error styling, and app-profile header placement.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `32 passed (32)`, `545 passed (545)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke: `bun browser --session waf04 --ignore-https-errors open https://18-workbench-frame-and-site-authoring-layout.formless.local/site`.
+- Browser smoke: DOM eval returned workbench `1`, generated app frame `1`, sync status controls `1`, generated-frame status roles `0`; details included world `site`, schema `v1`, cursor, push sync state/message, and last sync.
+- Browser smoke: clicking `[data-sync-status-control] summary` opened the details popover.
+- Browser smoke: `bun browser --session waf04 errors` returned no page errors.
+
+Promotion notes:
+
+- `doc/current.md`: sync status now lives in workbench/header chrome as a small details control, not generated page content.
 
 ### WAF-05 Site Pages and Navigation screens
 
@@ -608,3 +624,4 @@ Evidence to record:
 - 2026-05-07: PRD created from screenshot review and discussion. User direction: keep Schema out of generated app sidebar, use a workbench frame for dev tools, expose one Reset button, move sync status out of page content, use Pages and Navigation for Site, and make list/detail wider without inventing new primitives.
 - 2026-05-07: WAF-02 shipped. Decision WAF-D1/WAF-D2 implemented in `src/app.tsx`: dev app switching lives in workbench chrome, generated app frame owns screen navigation only, and Schema remains a direct route but not an app sidebar item. Next ready chunk is WAF-03.
 - 2026-05-07: WAF-03 shipped. Decision WAF-D2/WAF-D3 implemented in `src/app.tsx`, `src/app/dev-actions.tsx`, and `src/app/routes/schema.tsx`: workbench Tools owns Schema and one active-world Reset, dev schema routes render outside the generated app frame, and schema page content keeps snapshot tooling without reset controls. Next ready chunk is WAF-04.
+- 2026-05-07: WAF-04 shipped. Decision WAF-D4 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`, and `src/app/routes/status-line.tsx`: generated page content no longer renders inline sync diagnostics, workbench/header chrome owns a small sync details control, and app-profile generated chrome keeps the same status access. Next ready chunk is WAF-05.

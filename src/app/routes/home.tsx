@@ -14,7 +14,6 @@ import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
 import { HomeScreen } from "../generated/screen.tsx";
 import { NotFoundRoute } from "./not-found.tsx";
-import { DeveloperStatusLine } from "./status-line.tsx";
 
 export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; screenPath: string }) {
   const activeSchemaKey = useActiveSchemaKey();
@@ -79,7 +78,6 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
         <p className="text-sm text-slate-600">
           <SchemaLoadingMessage appLabel={app.label} />
         </p>
-        <DeveloperStatusLine />
       </section>
     );
   }
@@ -93,7 +91,6 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
         <p>No entities are defined in the active schema.</p>
-        <DeveloperStatusLine schemaVersion={schema.version} />
       </section>
     );
   }
@@ -102,7 +99,6 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
     <section className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{homeScreen.label}</h1>
-        <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
 
       <SchemaAppProvider schemaKey={schemaKey}>
