@@ -2,10 +2,9 @@ import { expect } from "vite-plus/test";
 
 import type { ActionResponse, MutationResponse } from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
+import type { createWorkerHarness } from "../worker/miniflare-test.ts";
 
-type AuthorityHarness = {
-  fetch: (path: string, init?: RequestInit) => Promise<Response>;
-};
+type AuthorityHarness = Pick<Awaited<ReturnType<typeof createWorkerHarness>>, "fetch">;
 
 export type AuthorityWriteHelpers = ReturnType<typeof createAuthorityWriteHelpers>;
 

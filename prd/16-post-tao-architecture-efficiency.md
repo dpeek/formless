@@ -1,7 +1,7 @@
 # PRD 16: Post-TAO architecture efficiency
 
-Status: active
-Current chunk: AEC-06
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-07
 
 ## Goal
@@ -174,7 +174,7 @@ Likely changed files:
 | AEC-03 | shipped | AEC-02, TAO done | table parser/model/renderer files | Post-TAO table behavior is behind deeper table modules with equivalent parser/model/render behavior.            |
 | AEC-04 | shipped | AEC-02           | authority validation files        | Mutation, record value, reference, and schema compatibility validation move out of the route with same results. |
 | AEC-05 | shipped | AEC-03, AEC-04   | test helper modules and tests     | Repeated schema, table, authority, and site editor setup is concentrated in tested helpers.                     |
-| AEC-06 | planned | AEC-05           | browser smoke if needed, PRD      | Checks pass; browser smoke runs if app behavior was touched; PRD status and promote notes are current.          |
+| AEC-06 | shipped | AEC-05           | browser smoke if needed, PRD      | Checks pass; browser smoke runs if app behavior was touched; PRD status and promote notes are current.          |
 
 ## Chunk details
 
@@ -377,7 +377,7 @@ Shipped:
 
 ### AEC-06 closeout
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: verify and close the cleanup stream.
 
@@ -397,6 +397,13 @@ Acceptance:
 - Browser smoke evidence exists if app behavior changed.
 - PRD status is current.
 - Promote notes are ready for docs/steward follow-up if any remain.
+
+Shipped:
+
+- Fixed closeout check failure by typing `src/test/authority-write.ts` against the Miniflare worker harness fetch shape.
+- Verified `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt` after `bun start`.
+- Recorded final PRD status, evidence, blocker state, and promote notes.
+- Browser smoke not run; only test helper typing, formatting, and PRD closeout changed.
 
 ## Non-goals
 
@@ -500,7 +507,8 @@ AEC-05:
 
 AEC-06:
 
-- PRD 16 is ready for docs/steward promotion.
+- PRD 16 shipped and is ready for docs/steward promotion.
+- Remaining global-doc promote candidates are the AEC-03, AEC-04, and AEC-05 module/test-helper anchors listed above.
 
 ## Evidence
 
@@ -528,6 +536,10 @@ AEC-06:
 - 2026-05-07 AEC-05: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-05: `./tmp/test.txt` shows touched watcher reruns passing, including authority, schema parser, app, and generated table coverage; `./tmp/check.txt` shows formatting, lint, and type checks passed across 175 files.
 - 2026-05-07 AEC-05: browser smoke not run because only test helpers and tests changed.
+- 2026-05-07 AEC-06: Initial closeout `bun start` found a TypeScript mismatch between `createAuthorityWriteHelpers` and the Miniflare harness fetch type; fixed in `src/test/authority-write.ts`.
+- 2026-05-07 AEC-06: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-06: `./tmp/test.txt` shows 31 files and 510 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed across 180 files.
+- 2026-05-07 AEC-06: browser smoke not run because no rendered app behavior changed.
 
 ## PRD status notes
 
@@ -539,6 +551,7 @@ AEC-06:
 - AEC-03 shipped 2026-05-07 as a post-TAO table parser/model/renderer deepening chunk.
 - AEC-04 shipped 2026-05-07 as an authority validation module extraction.
 - AEC-05 shipped 2026-05-07 as a test helper deepening chunk.
-- Next chunk: AEC-06 closeout.
-- Main risk: AEC-06 should verify current evidence and avoid turning closeout into new refactor work.
+- AEC-06 shipped 2026-05-07 as PRD closeout.
+- Next chunk: none; PRD 16 is complete.
+- Main risk: none for this PRD; downstream docs/steward work should promote the listed anchors source-faithfully.
 - Current blocker: none.

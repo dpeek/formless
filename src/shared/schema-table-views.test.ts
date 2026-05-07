@@ -71,8 +71,8 @@ describe("schema table views", () => {
     expect(() => parseAppSchema(invalidRateSchema)).toThrow(
       'references unknown field "rate.missing"',
     );
-    expect(sourceLikeRateSchema().tableViews.rateTable?.columns.map((column) => column.type)).toEqual(
-      ["referenceField", "field", "field", "field", "computed"],
-    );
+    expect(
+      sourceLikeRateSchema().tableViews.rateTable?.columns.map((column) => column.type),
+    ).toEqual(["referenceField", "field", "field", "field", "computed"]);
   });
 });
