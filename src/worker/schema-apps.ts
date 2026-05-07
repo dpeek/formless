@@ -1,5 +1,5 @@
-import rawRateSeedRecords from "../../schema/apps/rates/seed-records.json";
-import rawRateSourceSchema from "../../schema/apps/rates/schema.json";
+import rawEstiiSeedRecords from "../../schema/apps/estii/seed-records.json";
+import rawEstiiSourceSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
 import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import rawTaskSeedRecords from "../../schema/apps/tasks/seed-records.json";
@@ -21,7 +21,7 @@ export type WorkerSchemaAppDefinition = SchemaAppDefinition & {
 };
 
 const taskSourceSchema = parseAppSchema(rawTaskSourceSchema);
-const rateSourceSchema = parseAppSchema(rawRateSourceSchema);
+const estiiSourceSchema = parseAppSchema(rawEstiiSourceSchema);
 const siteSourceSchema = parseAppSchema(rawSiteSourceSchema);
 
 export const workerSchemaAppDefinitions = {
@@ -30,10 +30,10 @@ export const workerSchemaAppDefinitions = {
     sourceSchema: taskSourceSchema,
     seedRecords: parseSeedRecords(rawTaskSeedRecords, taskSourceSchema, "tasks seed records"),
   },
-  rates: {
-    ...schemaAppDefinitions.rates,
-    sourceSchema: rateSourceSchema,
-    seedRecords: parseSeedRecords(rawRateSeedRecords, rateSourceSchema, "rates seed records"),
+  estii: {
+    ...schemaAppDefinitions.estii,
+    sourceSchema: estiiSourceSchema,
+    seedRecords: parseSeedRecords(rawEstiiSeedRecords, estiiSourceSchema, "estii seed records"),
   },
   site: {
     ...schemaAppDefinitions.site,

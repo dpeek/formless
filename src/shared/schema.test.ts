@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import rawRateCardSchema from "../../schema/apps/rates/schema.json";
+import rawRateCardSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
 import { sourceLikeSchemas } from "../test/schema-builders.ts";
 import { parseAppSchema, stringifySchema } from "./schema.ts";

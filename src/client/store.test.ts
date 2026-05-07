@@ -98,14 +98,14 @@ describe("client store", () => {
   });
 
   it("ignores stale responses for an inactive schema key", () => {
-    selectClientStoreSchemaKey("rates");
+    selectClientStoreSchemaKey("estii");
 
     applyBootstrapResponse(bootstrap([record("record-1", "First")]), "tasks");
 
-    expect(getClientStoreSnapshot().activeSchemaKey).toBe("rates");
+    expect(getClientStoreSnapshot().activeSchemaKey).toBe("estii");
     expect(getClientStoreSnapshot().recordsById).toEqual({});
 
-    applyBootstrapResponse(bootstrap([record("record-2", "Rate")]), "rates");
+    applyBootstrapResponse(bootstrap([record("record-2", "Rate")]), "estii");
 
     expect(getClientStoreSnapshot().recordsById["record-2"]).toEqual(record("record-2", "Rate"));
   });

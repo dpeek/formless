@@ -1,7 +1,7 @@
 import { getWorkerSchemaAppDefinition } from "../worker/schema-apps.ts";
 
 export const taskSourceApp = getWorkerSchemaAppDefinition("tasks");
-export const rateSourceApp = getWorkerSchemaAppDefinition("rates");
+export const rateSourceApp = getWorkerSchemaAppDefinition("estii");
 export const siteSourceApp = getWorkerSchemaAppDefinition("site");
 
 export const taskSourceSchema = taskSourceApp.sourceSchema;

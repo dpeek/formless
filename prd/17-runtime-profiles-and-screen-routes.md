@@ -1,7 +1,7 @@
 # PRD 17: Runtime profiles and screen routes
 
-Status: planned
-Current chunk: RPS-02
+Status: active
+Current chunk: RPS-03
 Last updated: 2026-05-07
 
 ## Goal
@@ -69,8 +69,8 @@ Existing anchors:
 - Browser local DB naming: `src/client/db.ts`.
 - Worker dispatch: `src/worker/index.ts`.
 - Authority routes: `src/worker/authority.ts`.
-- Rate-card source schema: `schema/apps/rates/schema.json`.
-- Rate-card seed records: `schema/apps/rates/seed-records.json`.
+- Rate-card source schema: `schema/apps/estii/schema.json`.
+- Rate-card seed records: `schema/apps/estii/seed-records.json`.
 - Site source schema: `schema/apps/site/schema.json`.
 - Site seed records: `schema/apps/site/seed-records.json`.
 - App tests: `src/app.test.tsx`.
@@ -277,7 +277,7 @@ Notes:
 | RPS-D2  | Add runtime profiles instead of making path prefixes do every job.        | Dev, generated app, and published site need different route shells.                     | `src/app.tsx`, `src/app/routes/site-page.tsx`                          |
 | RPS-D3  | Do not use cookies as canonical world identity.                           | Cookie-selected worlds make URLs ambiguous and weaken link/debug behavior.              | current path-keyed API and app routes                                  |
 | RPS-D4  | Allow host/config/profile resolution before any future cookie preference. | Host/config keep published behavior deterministic while still allowing local variants.  | `doc/explorations/declarative-app-runtime.md`                          |
-| RPS-D5  | Rename Rates to Estii at the app boundary, not the whole data model.      | The current schema still models rate cards; entity names should change only with data.  | `schema/apps/rates/schema.json`, `doc/current.md`                      |
+| RPS-D5  | Rename Rates to Estii at the app boundary, not the whole data model.      | The current schema still models rate cards; entity names should change only with data.  | `schema/apps/estii/schema.json`, `src/shared/schema-apps.ts`           |
 | RPS-D6  | Add static screen paths before route params.                              | Estii needs simple app navigation now; param routes need record-detail semantics later. | `prd/10-declarative-screen-runtime.md`                                 |
 | RPS-D7  | Use screen navigation as sidebar route data.                              | Screens are now app entry points; collection navigation is legacy fallback.             | `src/client/views.ts`, `src/app/routes/home.tsx`                       |
 | RPS-D8  | Keep schema editors as dev/app tooling, not published site routes.        | Public published pages should not expose generated admin or schema edit UI.             | `src/app.tsx`, `src/app/routes/schema.tsx`                             |
@@ -315,7 +315,7 @@ Rejected as incomplete because Estii screen routing and app/profile separation w
 | ID     | Status  | Depends on | Main files                            | Acceptance                                                                                                           |
 | ------ | ------- | ---------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | RPS-01 | shipped | none       | PRD                                   | PRD captures runtime profile, Estii rename, screen path, published Site, decisions, dependencies, and promote notes. |
-| RPS-02 | planned | RPS-01     | app registries, source schema paths   | `rates` is renamed to `estii` at the app boundary while rate-card data behavior stays unchanged.                     |
+| RPS-02 | shipped | RPS-01     | app registries, source schema paths   | `rates` is renamed to `estii` at the app boundary while rate-card data behavior stays unchanged.                     |
 | RPS-03 | planned | RPS-02     | screen parser/types/model tests       | Workspace screens accept static app-relative paths and expose route-ready screen models.                             |
 | RPS-04 | planned | RPS-03     | app shell, home route, source schemas | Dev shell renders screen sidebar/navigation and routes Estii setup through `/estii/setup`.                           |
 | RPS-05 | planned | RPS-04     | runtime profile resolver, app routes  | Dev, app, and published Site profiles mount routes through one explicit profile seam.                                |
@@ -347,19 +347,19 @@ Evidence:
 
 ### RPS-02 Rates to Estii rename
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: rename the app boundary before adding more screens.
 
 Tasks:
 
-- Rename `SchemaKey` member `rates` to `estii`.
-- Rename app metadata to label `Estii`, route `/estii`, schema route `/estii/schema`.
-- Move source files from `schema/apps/rates/` to `schema/apps/estii/`.
-- Update imports, tests, expected DB names, broadcast channels, and API paths.
-- Redirect old browser routes `/rates` and `/rates/schema` to Estii routes.
-- Keep old `/api/rates/*` unsupported.
-- Keep rate-card schema contents behaviorally unchanged.
+- Shipped: renamed `SchemaKey` member `rates` to `estii`.
+- Shipped: renamed app metadata to label `Estii`, route `/estii`, schema route `/estii/schema`.
+- Shipped: moved source files from `schema/apps/rates/` to `schema/apps/estii/`.
+- Shipped: updated imports, tests, expected DB names, broadcast channels, and API paths.
+- Shipped: redirected old browser routes `/rates` and `/rates/schema` to Estii routes.
+- Shipped: kept old `/api/rates/*` unsupported.
+- Shipped: kept rate-card schema contents behaviorally unchanged.
 
 Acceptance:
 
@@ -373,12 +373,17 @@ Acceptance:
 - Tasks and Site remain isolated.
 - Existing rate-card tests pass with Estii app naming.
 
-Evidence to record:
+Evidence:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
-- Browser smoke for `/estii` and `/estii/schema`.
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `29 passed (29)`, `506 passed (506)`; latest focused rerun `src/worker/authority.test.ts` passed `85 passed (85)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
+- Browser smoke: `bun browser --session rps-02 open .../estii` loaded Estii shell with `Rates` workspace and `Cursor 17`.
+- Browser smoke: `bun browser --session rps-02 open .../estii/schema` loaded `Estii Schema` with key `estii`.
+- Browser smoke: `bun browser --session rps-02 open .../rates` redirected to `/estii`.
+- Browser smoke: `bun browser --session rps-02 open .../rates/schema` redirected to `/estii/schema`.
+- API smoke: `GET /api/estii/bootstrap` returned `200` with rate-card schema and 17 records.
+- API smoke: `GET /api/rates/bootstrap` returned `404`.
 
 ### RPS-03 static screen path schema
 
@@ -542,7 +547,7 @@ Evidence to record:
 
 ## Blockers
 
-- None known for RPS-02.
+- None known for RPS-03.
 - Runtime profile source may need a small config convention before RPS-05 implementation.
 - Published Site browser smoke needs a way to run the app under `publishedSite` profile.
 
@@ -566,15 +571,16 @@ Evidence to record:
 
 ## Promote after ship
 
-- `doc/current.md`: rename Rate-Card app section to Estii once RPS-02 ships.
-- `doc/current.md`: update source schema paths from `schema/apps/rates` to `schema/apps/estii` once RPS-02 ships.
-- `doc/current.md`: update browser local DB and broadcast channel names once RPS-02 ships.
+- `doc/current.md`: RPS-02 shipped; rename Rate-Card app section to Estii.
+- `doc/current.md`: RPS-02 shipped; update source schema paths from `schema/apps/rates` to `schema/apps/estii`.
+- `doc/current.md`: RPS-02 shipped; update browser local DB and broadcast channel names to `formless:estii`.
+- `doc/roadmap.md`: RPS-02 shipped; replace `/rates` release target with `/estii`.
 - `doc/current.md`: add screen path facts once RPS-03 and RPS-04 ship.
 - `doc/current.md`: add runtime profile facts once RPS-05 ships.
 - `doc/current.md`: add published Site top-level route facts once RPS-06 ships.
-- `doc/roadmap.md`: replace `/rates` release target with `/estii` once RPS-02 ships.
 - `doc/roadmap.md`: add first-release screen-route scope only if this PRD is pulled into first-release work.
 
 ## Status notes
 
 - 2026-05-07: PRD created from architecture discussion. User direction: rename Rates to Estii, add screen/sidebar/routing, support published Site top-level routes, and avoid making cookie-selected worlds the main model.
+- 2026-05-07: RPS-02 shipped. App boundary is `estii`; route is `/estii`; schema route is `/estii/schema`; source folder is `schema/apps/estii`; old browser routes redirect; old `/api/rates/*` is unsupported.

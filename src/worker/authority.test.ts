@@ -42,7 +42,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetSchemaApp("tasks");
-  await resetSchemaApp("rates");
+  await resetSchemaApp("estii");
   await resetSchemaApp("site");
   useSchemaApp("tasks");
 });
@@ -63,8 +63,8 @@ describe("authority", () => {
     });
   });
 
-  it("returns the rate-card source schema from the rates bootstrap path", async () => {
-    useSchemaApp("rates");
+  it("returns the rate-card source schema from the Estii bootstrap path", async () => {
+    useSchemaApp("estii");
 
     const body = await getJson<BootstrapResponse>("/api/bootstrap");
 
@@ -165,6 +165,7 @@ describe("authority", () => {
 
   it("rejects unknown schema keys and old unkeyed API paths", async () => {
     await expectNotFound("/api/missing/bootstrap");
+    await expectNotFound("/api/rates/bootstrap");
     await expectNotFound("/api/bootstrap");
     await expectNotFound("/api/schema");
     await expectNotFound("/api/dev/reset");
@@ -173,7 +174,7 @@ describe("authority", () => {
   it("isolates records and mutation replay by schema key", async () => {
     const task = await postMutation("mutation-shared", { title: "First", done: false });
 
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     const resource = await postMutationForEntity("mutation-shared", "resource", {
       name: "Designer",
     });
@@ -453,7 +454,7 @@ describe("authority", () => {
       done: false,
     });
 
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     await postMutationForEntity("mutation-rate-local-resource", "resource", {
       name: "Temporary resource",
     });
@@ -619,7 +620,7 @@ describe("authority", () => {
   });
 
   it("applies expanded rate-card defaults when creating sample records", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: rateCardSchemaWithoutAfterCreateHooks(),
     });
@@ -743,7 +744,7 @@ describe("authority", () => {
   });
 
   it("creates missing rate join records through the rate-card action", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: rateCardSchemaWithoutAfterCreateHooks(),
     });
@@ -801,7 +802,7 @@ describe("authority", () => {
   });
 
   it("creates and removes selected many-to-many join records through relationship actions", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: rateCardSchemaWithSelectedJoinActions(),
     });
@@ -883,7 +884,7 @@ describe("authority", () => {
   });
 
   it("rejects selected join creation with missing or tombstoned endpoints", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: rateCardSchemaWithSelectedJoinActions(),
     });
@@ -932,7 +933,7 @@ describe("authority", () => {
   });
 
   it("rejects selected join action input validation without committing or broadcasting", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: rateCardSchemaWithSelectedJoinActions(),
     });
@@ -1054,7 +1055,7 @@ describe("authority", () => {
   });
 
   it("runs rate-card afterCreate hooks for card creates through mutation changes", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     await createRateResources(5);
 
     const body = {
@@ -1087,7 +1088,7 @@ describe("authority", () => {
   });
 
   it("runs rate-card afterCreate hooks for resource creates through mutation changes", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     const cards = await createRateCards(2);
 
     const resource = await postMutationForEntity("mutation-resource-lifecycle", "resource", {
@@ -1253,7 +1254,7 @@ describe("authority", () => {
 
   it("accepts keyed hibernatable sync WebSocket upgrades", async () => {
     const tasksSocket = await openSyncSocket("/api/sync/ws", "tasks");
-    const ratesSocket = await openSyncSocket("/api/sync/ws", "rates");
+    const ratesSocket = await openSyncSocket("/api/sync/ws", "estii");
 
     tasksSocket.close();
     ratesSocket.close();
@@ -1333,7 +1334,7 @@ describe("authority", () => {
   it("broadcasts committed task creates to same-schema sync WebSockets only", async () => {
     const taskSocketA = await openSyncSocket("/api/sync/ws", "tasks");
     const taskSocketB = await openSyncSocket("/api/sync/ws", "tasks");
-    const ratesSocket = await openSyncSocket("/api/sync/ws", "rates");
+    const ratesSocket = await openSyncSocket("/api/sync/ws", "estii");
     let ratesCapture: ReturnType<typeof captureSyncSocketMessages> | undefined;
 
     try {
@@ -1341,7 +1342,7 @@ describe("authority", () => {
       await primeSyncSocket(taskSocketA, taskSeedRecords.length, taskSchema.updatedAt);
       await primeSyncSocket(taskSocketB, taskSeedRecords.length, taskSchema.updatedAt);
 
-      useSchemaApp("rates");
+      useSchemaApp("estii");
       const rateSchema = await getJson<SchemaResponse>("/api/schema");
       await primeSyncSocket(ratesSocket, rateCardSeedRecords.length, rateSchema.updatedAt);
       ratesCapture = captureSyncSocketMessages(ratesSocket);
@@ -1378,7 +1379,7 @@ describe("authority", () => {
   });
 
   it("broadcasts committed create mutations after caused records are committed", async () => {
-    useSchemaApp("rates");
+    useSchemaApp("estii");
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const socket = await openSyncSocket();
 

@@ -159,8 +159,8 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
-    expect(html).toContain('href="/rates"');
-    expect(html).toContain("Rates");
+    expect(html).toContain('href="/estii"');
+    expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expect(html).toContain('aria-label="Tasks content"');
@@ -171,21 +171,21 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/tasks/schema"');
   });
 
-  it('renders the "/rates" route with rate navigation', () => {
-    const html = renderRoute("/rates");
+  it('renders the "/estii" route with Estii navigation', () => {
+    const html = renderRoute("/estii");
 
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
-    expect(html).toContain('href="/rates"');
-    expect(html).toContain("Rates");
+    expect(html).toContain('href="/estii"');
+    expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expect(html).toContain('aria-label="Rates content"');
+    expect(html).toContain('aria-label="Estii content"');
     expect(html).toContain("Home");
     expect(html).toContain("Schema");
-    expect(html).toContain("Loading Rates...");
+    expect(html).toContain("Loading Estii...");
     expect(html).not.toContain("Create Resource");
-    expect(html).not.toContain('href="/rates/schema"');
+    expect(html).not.toContain('href="/estii/schema"');
   });
 
   it('renders the "/site" route with site navigation', () => {
@@ -193,8 +193,8 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
-    expect(html).toContain('href="/rates"');
-    expect(html).toContain("Rates");
+    expect(html).toContain('href="/estii"');
+    expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
     expect(html).toContain('aria-label="Site content"');
@@ -223,16 +223,17 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;screens&quot;");
     expect(html).toContain("&quot;task&quot;");
     expect(html).not.toContain("<code>rates</code>");
+    expect(html).not.toContain("<code>estii</code>");
   });
 
-  it('renders the "/rates/schema" route', () => {
-    applyBootstrapResponse(bootstrap([], rateCardSchema), "rates");
-    const html = renderRoute("/rates/schema");
+  it('renders the "/estii/schema" route', () => {
+    applyBootstrapResponse(bootstrap([], rateCardSchema), "estii");
+    const html = renderRoute("/estii/schema");
 
-    expect(html).toContain('aria-label="Rates content"');
-    expect(html).toContain("Rates Schema");
-    expect(html).toContain("<code>rates</code>");
-    expect(html).toContain('aria-label="Rates route reset controls"');
+    expect(html).toContain('aria-label="Estii content"');
+    expect(html).toContain("Estii Schema");
+    expect(html).toContain("<code>estii</code>");
+    expect(html).toContain('aria-label="Estii route reset controls"');
     expect(html).toContain("Save schema");
     expect(html).toContain("Reset schema and seed data");
     expect(html).toContain('aria-label="Rates store snapshot controls"');
@@ -244,6 +245,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;rate&quot;");
     expect(html).toContain("&quot;resource&quot;");
     expect(html).not.toContain("<code>tasks</code>");
+    expect(html).not.toContain("<code>rates</code>");
   });
 
   it('renders the "/site/schema" route', () => {
@@ -268,6 +270,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;blockPlacement&quot;");
     expect(html).not.toContain("<code>tasks</code>");
     expect(html).not.toContain("<code>rates</code>");
+    expect(html).not.toContain("<code>estii</code>");
   });
 
   it('renders the "/pages/home" public site route outside generated admin navigation', () => {
@@ -792,7 +795,7 @@ describe("generated collection home", () => {
 
   it("renders only primary rate-card collection navigation", () => {
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema));
-    const html = renderRoute("/rates");
+    const html = renderRoute("/estii");
 
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain("Rates");

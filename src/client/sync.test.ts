@@ -48,7 +48,7 @@ import {
 
 beforeEach(async () => {
   await deleteClientDb("tasks");
-  await deleteClientDb("rates");
+  await deleteClientDb("estii");
   resetClientStore();
 });
 
@@ -72,10 +72,10 @@ describe("client sync", () => {
     expect(snapshot.cursor).toBe(1);
   });
 
-  it("bootstraps rate data into the rate local database only", async () => {
+  it("bootstraps rate data into the Estii local database only", async () => {
     await bootstrapClient(
-      "rates",
-      jsonFetcher("/api/rates/bootstrap", {
+      "estii",
+      jsonFetcher("/api/estii/bootstrap", {
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
         records: [record("record-2", "Rate")],
@@ -84,7 +84,7 @@ describe("client sync", () => {
     );
 
     expect((await readLocalSnapshot("tasks")).records).toEqual([]);
-    expect((await readLocalSnapshot("rates")).records).toEqual([record("record-2", "Rate")]);
+    expect((await readLocalSnapshot("estii")).records).toEqual([record("record-2", "Rate")]);
   });
 
   it("merges incremental sync records and advances the cursor", async () => {
@@ -237,12 +237,12 @@ describe("client sync", () => {
     }
   });
 
-  it("opens rate-card push sync on the rate schema key", () => {
+  it("opens rate-card push sync on the Estii schema key", () => {
     const sockets = fakeSocketFactory();
-    const stop = startPushSync("rates", { socketFactory: sockets.create });
+    const stop = startPushSync("estii", { socketFactory: sockets.create });
 
     try {
-      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe("/api/rates/sync/ws");
+      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe("/api/estii/sync/ws");
     } finally {
       stop();
     }
@@ -275,7 +275,7 @@ describe("client sync", () => {
       await waitFor(() => getClientStoreSnapshot().cursor === 2);
 
       const taskSnapshot = await readLocalSnapshot("tasks");
-      const rateSnapshot = await readLocalSnapshot("rates");
+      const rateSnapshot = await readLocalSnapshot("estii");
 
       expect(taskSnapshot.records.map((storedRecord) => storedRecord.id)).toEqual([
         "record-1",
@@ -519,25 +519,25 @@ describe("client sync", () => {
     expect(storeSnapshot.cursor).toBe(2);
   });
 
-  it("submits rate-card actions to the rates API and merges created rates", async () => {
+  it("submits rate-card actions to the Estii API and merges created rates", async () => {
     const createdRate = rateRecord("rate-1", "resource-1", "card-1");
 
-    await saveBootstrapResponse("rates", {
+    await saveBootstrapResponse("estii", {
       schema: rateCardSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [],
       cursor: 0,
     });
-    await refreshClientStoreFromDb("rates");
+    await refreshClientStoreFromDb("estii");
 
     const response = await submitAction(
-      "rates",
+      "estii",
       "rate",
       "regenerateMissingRates",
       async (input, init) => {
         const action = parseActionRequestBody(init?.body);
 
-        expect(input).toBe("/api/rates/actions");
+        expect(input).toBe("/api/estii/actions");
         expect(init?.method).toBe("POST");
         expect(action).toMatchObject({
           entity: "rate",
@@ -554,7 +554,7 @@ describe("client sync", () => {
     );
 
     const taskSnapshot = await readLocalSnapshot("tasks");
-    const rateSnapshot = await readLocalSnapshot("rates");
+    const rateSnapshot = await readLocalSnapshot("estii");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(response.changes[0]?.payload).toEqual(createdRate);
@@ -757,7 +757,7 @@ describe("client sync", () => {
       records: [record("record-1", "First")],
       cursor: 1,
     });
-    await saveBootstrapResponse("rates", {
+    await saveBootstrapResponse("estii", {
       schema: appSchema,
       schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
       records: [record("record-3", "Rate")],
@@ -765,8 +765,8 @@ describe("client sync", () => {
     });
 
     const response = await resetSeedData(
-      "rates",
-      jsonFetcher("/api/rates/reset/seed", {
+      "estii",
+      jsonFetcher("/api/estii/reset/seed", {
         schema: appSchema,
         schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
         records: [acceptedRecord],
@@ -774,7 +774,7 @@ describe("client sync", () => {
       } satisfies BootstrapResponse),
     );
     const taskSnapshot = await readLocalSnapshot("tasks");
-    const rateSnapshot = await readLocalSnapshot("rates");
+    const rateSnapshot = await readLocalSnapshot("estii");
     const storeSnapshot = getClientStoreSnapshot();
 
     expect(response.records).toEqual([acceptedRecord]);
@@ -787,8 +787,8 @@ describe("client sync", () => {
   });
 
   it("can request the rate-card source schema reset", async () => {
-    await resetSourceSchema("rates", async (input, init) => {
-      expect(input).toBe("/api/rates/reset/schema");
+    await resetSourceSchema("estii", async (input, init) => {
+      expect(input).toBe("/api/estii/reset/schema");
       expect(init?.method).toBe("POST");
       expect(parsePlainRequestBody(init?.body)).toEqual({});
 
@@ -850,8 +850,8 @@ describe("client sync", () => {
     const stopBroadcast = connectBroadcastToClientStore("tasks");
 
     try {
-      await mergeRecords("rates", [record("record-2", "Rate")], 1);
-      publishClientEvent("rates", "records-updated");
+      await mergeRecords("estii", [record("record-2", "Rate")], 1);
+      publishClientEvent("estii", "records-updated");
 
       await delay(20);
       expect(states).toEqual([getClientStoreSnapshot()]);

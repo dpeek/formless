@@ -1,4 +1,4 @@
-export type SchemaKey = "tasks" | "rates" | "site";
+export type SchemaKey = "tasks" | "estii" | "site";
 
 export const defaultSchemaKey = "tasks" satisfies SchemaKey;
 
@@ -18,11 +18,11 @@ export const schemaAppDefinitions = {
     schemaRoute: "/tasks/schema",
     seedChangeMutationPrefix: "seed-task",
   },
-  rates: {
-    key: "rates",
-    label: "Rates",
-    route: "/rates",
-    schemaRoute: "/rates/schema",
+  estii: {
+    key: "estii",
+    label: "Estii",
+    route: "/estii",
+    schemaRoute: "/estii/schema",
     seedChangeMutationPrefix: "seed-rate-card",
   },
   site: {
@@ -36,7 +36,7 @@ export const schemaAppDefinitions = {
 
 export const schemaApps = [
   schemaAppDefinitions.tasks,
-  schemaAppDefinitions.rates,
+  schemaAppDefinitions.estii,
   schemaAppDefinitions.site,
 ] as const satisfies readonly SchemaAppDefinition[];
 

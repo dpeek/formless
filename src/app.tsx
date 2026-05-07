@@ -127,6 +127,12 @@ function AppRoutes() {
       <Route path="/pages/*">
         {(params) => <SitePageRoute slug={normalizeSitePageSlug(params["*"])} />}
       </Route>
+      <Route path="/rates/schema">
+        <Redirect replace to="/estii/schema" />
+      </Route>
+      <Route path="/rates">
+        <Redirect replace to="/estii" />
+      </Route>
       {schemaApps.map((app) => (
         <Route key={app.route} path={app.route}>
           <HomeRoute schemaKey={app.key} />
