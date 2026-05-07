@@ -981,6 +981,43 @@ describe("schema table views", () => {
     expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
   });
 
+  it("parses table ordering and ordering action columns", () => {
+    const schema = parseAppSchema(
+      scopedRateSchema({
+        entities: scopedRateEntitiesWithSortOrder(),
+        tableViews: {
+          rateTable: {
+            ...scopedRateTableViews().rateTable,
+            ordering: {
+              field: "sortOrder",
+              scope: [{ kind: "field", field: "card" }],
+              presentations: ["moveMenu"],
+            },
+            columns: [
+              ...scopedRateTableViews().rateTable.columns,
+              { type: "invokeAction", includeOrdering: true },
+            ],
+          },
+        },
+        views: scopedRateViews({
+          result: { type: "table", tableView: "rateTable" },
+        }),
+      }),
+    );
+
+    expect(schema.tableViews.rateTable?.ordering).toEqual({
+      field: "sortOrder",
+      scope: [{ kind: "field", field: "card" }],
+      presentations: ["moveMenu"],
+    });
+    expect(schema.tableViews.rateTable?.columns.at(-1)).toEqual({
+      type: "invokeAction",
+      actions: [],
+      includeOrdering: true,
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
   it("validates editRecord targets and edit view references", () => {
     expect(() =>
       parseAppSchema(
@@ -1291,6 +1328,78 @@ describe("schema table views", () => {
         }),
       ),
     ).toThrow('valueUnit unitField "rate.resource" must be an enum field');
+  });
+
+  it("validates table ordering fields and action inclusion", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              ordering: { field: "missing" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('ordering references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              ordering: { field: "resource" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('ordering field "rate.resource" must be a number field');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: scopedRateEntitiesWithSortOrder({ integer: true }),
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              ordering: { field: "sortOrder" },
+            },
+          },
+        }),
+      ),
+    ).toThrow('ordering field "rate.sortOrder" must not be integer');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: scopedRateEntitiesWithSortOrder(),
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              ordering: {
+                field: "sortOrder",
+                scope: [{ kind: "field", field: "missing" }],
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('ordering scope 0 references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              columns: [{ type: "invokeAction", includeOrdering: true }],
+            },
+          },
+        }),
+      ),
+    ).toThrow("includeOrdering requires table ordering");
   });
 
   it("parses and validates computed table columns", () => {
@@ -2934,7 +3043,6 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
-        "field",
         "invokeAction",
       ],
     ]);
@@ -4521,6 +4629,28 @@ function scopedRateEntitiesWithUniqueRatePair(fields = ["resource", "card"]) {
         uniqueRatePair: {
           kind: "unique",
           fields,
+        },
+      },
+    },
+  };
+}
+
+function scopedRateEntitiesWithSortOrder(overrides: Record<string, unknown> = {}) {
+  const entities = scopedRateEntities();
+
+  return {
+    ...entities,
+    rate: {
+      ...entities.rate,
+      fields: {
+        ...entities.rate.fields,
+        sortOrder: {
+          type: "number",
+          required: true,
+          label: "Sort order",
+          default: 1000,
+          min: 0,
+          ...overrides,
         },
       },
     },

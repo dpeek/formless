@@ -39,6 +39,7 @@ import {
   type HomeViewModel,
   type RecordFieldConfig,
   type TableColumnConfig,
+  type TableOrderingConfig,
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { SitePageTree } from "./shared/protocol.ts";
@@ -1517,6 +1518,7 @@ describe("generated forms and records", () => {
           },
         ],
         presentation: "button",
+        includeOrdering: false,
         align: "end",
         width: "xs",
         display: "readOnly",
@@ -1545,6 +1547,7 @@ describe("generated forms and records", () => {
           },
         ],
         presentation: "dropdown",
+        includeOrdering: false,
         align: "end",
         width: "xs",
         display: "readOnly",
@@ -1566,11 +1569,13 @@ describe("generated forms and records", () => {
     expect(html).toContain('data-slot="dropdown-menu-trigger"');
   });
 
-  it("renders Site placement edit child block row actions", () => {
+  it("renders Site placement row action dropdowns", () => {
     const placementModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "pageCompositionHome",
     );
     const columns = placementModel?.result.type === "table" ? placementModel.result.columns : [];
+    const ordering =
+      placementModel?.result.type === "table" ? placementModel.result.ordering : undefined;
     const blockPlacement = siteSourceSchema.entities.blockPlacement;
 
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema));
@@ -1579,12 +1584,68 @@ describe("generated forms and records", () => {
         columns={columns}
         entity={blockPlacement}
         entityName="blockPlacement"
+        ordering={ordering}
         query={{ kind: "all" }}
       />,
     );
 
-    expect(html).toContain("Edit block");
-    expect(html).toContain('aria-label="Edit block"');
+    expect(html).toContain('aria-label="Actions"');
+    expect(html).toContain('data-slot="dropdown-menu-trigger"');
+  });
+
+  it("sorts generated table rows by ordering rank before rendering", () => {
+    const blockPlacement = siteSourceSchema.entities.blockPlacement;
+    const orderField = blockPlacement.fields.order;
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:label",
+        fieldName: "label",
+        field: blockPlacement.fields.label,
+        editor: "text",
+        commit: "field-commit",
+        label: "Label",
+        display: "readOnly",
+        format: "plain",
+      },
+    ];
+
+    if (orderField.type !== "number") {
+      throw new Error("Missing placement order field.");
+    }
+
+    const ordering: TableOrderingConfig = {
+      fieldName: "order",
+      field: orderField,
+      scope: [
+        { kind: "field", fieldName: "parent", field: blockPlacement.fields.parent },
+        { kind: "field", fieldName: "slot", field: blockPlacement.fields.slot },
+      ],
+      presentations: ["moveMenu"],
+    };
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          placementRecord("placement-3", "Third", 3000),
+          placementRecord("placement-1", "First", 1000),
+          placementRecord("placement-2", "Second", 2000),
+        ],
+        siteSourceSchema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={blockPlacement}
+        entityName="blockPlacement"
+        ordering={ordering}
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html.indexOf("First")).toBeLessThan(html.indexOf("Second"));
+    expect(html.indexOf("Second")).toBeLessThan(html.indexOf("Third"));
   });
 
   it("renders shared resource label updates across rate cards without duplicating resources", () => {
@@ -2313,7 +2374,6 @@ describe("generated forms and records", () => {
     placementFormData.set("block", "rec_site_block_home_recent_posts");
     placementFormData.set("label", "Recent posts");
     placementFormData.set("variant", "contentList");
-    placementFormData.set("order", "1");
     placementFormData.set("visible", "on");
 
     expect(html).not.toContain('name="parent"');
@@ -2328,7 +2388,6 @@ describe("generated forms and records", () => {
       block: "rec_site_block_home_recent_posts",
       label: "Recent posts",
       variant: "contentList",
-      order: 1,
       visible: true,
     });
   });
@@ -3147,6 +3206,22 @@ function siteBlockRecord(id: string, values: StoredRecord["values"]): StoredReco
     id,
     entity: "block",
     values,
+    createdAt: "2026-05-05T00:00:40.000Z",
+  };
+}
+
+function placementRecord(id: string, label: string, order: number): StoredRecord {
+  return {
+    id,
+    entity: "blockPlacement",
+    values: {
+      parent: "page-1",
+      block: "block-1",
+      slot: "main",
+      label,
+      order,
+      visible: true,
+    },
     createdAt: "2026-05-05T00:00:40.000Z",
   };
 }

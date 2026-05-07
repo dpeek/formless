@@ -27,6 +27,7 @@ import type {
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
+  TableOrderingPresentation,
   TableViewSchema,
   ViewSchema,
 } from "../shared/schema.ts";
@@ -124,11 +125,26 @@ export type EditViewConfig = {
   fields: RecordFieldConfig[];
 };
 
+export type TableOrderingScopeConfig = {
+  kind: "field";
+  fieldName: string;
+  field: FieldSchema;
+};
+
+export type TableOrderingConfig = {
+  fieldName: string;
+  field: Extract<FieldSchema, { type: "number" }>;
+  scope: TableOrderingScopeConfig[];
+  presentations: TableOrderingPresentation[];
+};
+
 export type InvokeActionTableColumnConfig = TableColumnBaseConfig & {
   type: "invokeAction";
   headerLabel: string;
   actions: TableActionConfig[];
   presentation: TableActionPresentation;
+  includeOrdering: boolean;
+  ordering?: TableOrderingConfig;
 };
 
 export type TableColumnConfig =
@@ -187,6 +203,7 @@ export type HomeResultConfig =
       type: "table";
       tableViewName: string;
       columns: TableColumnConfig[];
+      ordering?: TableOrderingConfig;
       footer?: TableFooterSlotConfig[];
     };
 
@@ -619,13 +636,15 @@ function selectResult(
     if (!tableView) {
       throw new Error(`Missing table view "${collectionView.result.tableView}".`);
     }
-    const columns = selectTableColumns(schema, tableView, entity);
+    const ordering = selectTableOrderingConfig(tableView, entity);
+    const columns = selectTableColumns(schema, tableView, entity, ordering);
     const footer = selectTableFooterSlots(schema, collectionView.result.footer ?? [], columns);
 
     return {
       type: "table",
       tableViewName: collectionView.result.tableView,
       columns,
+      ...(ordering === undefined ? {} : { ordering }),
       ...(footer.length === 0 ? {} : { footer }),
     };
   }
@@ -867,8 +886,9 @@ function selectTableColumns(
   schema: AppSchema,
   view: TableViewSchema,
   entity: EntitySchema,
+  ordering: TableOrderingConfig | undefined,
 ): TableColumnConfig[] {
-  return view.columns.map((column) => {
+  const columns: TableColumnConfig[] = view.columns.map((column): TableColumnConfig => {
     if (column.type === "computed") {
       const computedValue = schema.readModels?.computedValues?.[column.computedValue];
 
@@ -927,19 +947,26 @@ function selectTableColumns(
 
     if (column.type === "invokeAction") {
       const actions = selectTableActionConfigs(schema, view, invokeActionNames(column));
-      const presentation = column.presentation ?? (actions.length === 1 ? "button" : "dropdown");
-      const headerLabel = column.label ?? defaultInvokeActionHeaderLabel(actions);
+      const includeOrdering =
+        column.includeOrdering === true && ordering?.presentations.includes("moveMenu") === true;
+      const presentation =
+        column.presentation ?? (actions.length === 1 && !includeOrdering ? "button" : "dropdown");
+      const headerLabel =
+        column.label ?? (includeOrdering ? "Actions" : defaultInvokeActionHeaderLabel(actions));
 
       return {
         type: "invokeAction",
-        key: `invokeAction:${invokeActionNames(column).join(",")}`,
+        key: `invokeAction:${[...invokeActionNames(column), ...(includeOrdering ? ["ordering"] : [])].join(",")}`,
         label: column.label ?? "",
         headerLabel,
         actions,
         presentation,
+        includeOrdering,
+        ...(includeOrdering && ordering ? { ordering } : {}),
         ...(column.align === undefined ? { align: "end" as const } : { align: column.align }),
         ...(column.width === undefined ? { width: "xs" as const } : { width: column.width }),
-        display: actions.length === 0 ? "hidden" : (column.display ?? "readOnly"),
+        display:
+          actions.length === 0 && !includeOrdering ? "hidden" : (column.display ?? "readOnly"),
         format: "plain",
       };
     }
@@ -958,13 +985,75 @@ function selectTableColumns(
       label: column.label ?? fieldLabel(column.field, field),
       ...(column.align === undefined ? {} : { align: column.align }),
       ...(column.width === undefined ? {} : { width: column.width }),
-      display: column.display ?? "editor",
+      display: column.display ?? (ordering?.fieldName === column.field ? "hidden" : "editor"),
       ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
       format: column.format ?? "plain",
       ...(referenceItem === undefined ? {} : { referenceItem }),
       ...(valueUnit === undefined ? {} : { valueUnit }),
     };
   });
+
+  if (
+    ordering?.presentations.includes("moveMenu") &&
+    !view.columns.some((column) => column.type === "invokeAction" && column.includeOrdering)
+  ) {
+    return [...columns, selectSyntheticOrderingMenuColumn(ordering)];
+  }
+
+  return columns;
+}
+
+function selectTableOrderingConfig(
+  view: TableViewSchema,
+  entity: EntitySchema,
+): TableOrderingConfig | undefined {
+  if (!view.ordering) {
+    return undefined;
+  }
+
+  const field = entity.fields[view.ordering.field];
+
+  if (!field || field.type !== "number") {
+    throw new Error(`Missing ordering field "${view.ordering.field}".`);
+  }
+
+  return {
+    fieldName: view.ordering.field,
+    field,
+    scope: (view.ordering.scope ?? []).map((scopeField) => {
+      const field = entity.fields[scopeField.field];
+
+      if (!field) {
+        throw new Error(`Missing ordering scope field "${scopeField.field}".`);
+      }
+
+      return {
+        kind: "field",
+        fieldName: scopeField.field,
+        field,
+      };
+    }),
+    presentations: view.ordering.presentations ?? ["moveMenu"],
+  };
+}
+
+function selectSyntheticOrderingMenuColumn(
+  ordering: TableOrderingConfig,
+): InvokeActionTableColumnConfig {
+  return {
+    type: "invokeAction",
+    key: "invokeAction:ordering",
+    label: "",
+    headerLabel: "Actions",
+    actions: [],
+    presentation: "dropdown",
+    includeOrdering: true,
+    ordering,
+    align: "end",
+    width: "xs",
+    display: "readOnly",
+    format: "plain",
+  };
 }
 
 function selectTableActionConfigs(

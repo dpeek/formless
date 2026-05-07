@@ -372,7 +372,7 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_home",
       "slot": "header",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "link",
       "label": "Home"
@@ -386,7 +386,7 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_blog",
       "slot": "header",
-      "order": 1,
+      "order": 2000,
       "visible": true,
       "variant": "link",
       "label": "Blog"
@@ -400,7 +400,7 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_projects",
       "slot": "header",
-      "order": 2,
+      "order": 3000,
       "visible": true,
       "variant": "link",
       "label": "Projects"
@@ -414,7 +414,7 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_resume",
       "slot": "header",
-      "order": 3,
+      "order": 4000,
       "visible": true,
       "variant": "link",
       "label": "Resume"
@@ -428,7 +428,7 @@
       "parent": "rec_site_content_group_footer_main",
       "block": "rec_site_content_link_projects",
       "slot": "link",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "link",
       "label": "Projects"
@@ -442,7 +442,7 @@
       "parent": "rec_site_content_group_footer_main",
       "block": "rec_site_content_link_resume",
       "slot": "link",
-      "order": 1,
+      "order": 2000,
       "visible": true,
       "variant": "link",
       "label": "Resume"
@@ -456,7 +456,7 @@
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_github",
       "slot": "link",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "link",
       "label": "GitHub"
@@ -470,7 +470,7 @@
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_linkedin",
       "slot": "link",
-      "order": 1,
+      "order": 2000,
       "visible": true,
       "variant": "link",
       "label": "LinkedIn"
@@ -484,7 +484,7 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_content_group_header",
       "slot": "header",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "header",
       "label": "Header"
@@ -498,7 +498,7 @@
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_main",
       "slot": "footer",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "section",
       "label": "Explore"
@@ -512,7 +512,7 @@
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_social",
       "slot": "footer",
-      "order": 1,
+      "order": 2000,
       "visible": true,
       "variant": "section",
       "label": "Social"
@@ -526,7 +526,7 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_content_group_footer",
       "slot": "footer",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "footer",
       "label": "Footer"
@@ -540,7 +540,7 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_hero",
       "slot": "main",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "hero",
       "label": "Schema-backed software for content-heavy products"
@@ -554,7 +554,7 @@
       "parent": "rec_site_block_home_hero",
       "block": "rec_site_media_avatar",
       "slot": "media",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "image",
       "label": "Portrait"
@@ -568,7 +568,7 @@
       "parent": "rec_site_block_home_hero",
       "block": "rec_site_media_intro_video",
       "slot": "media",
-      "order": 1,
+      "order": 2000,
       "visible": true,
       "variant": "video",
       "label": "Intro video"
@@ -582,7 +582,7 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_recent_posts",
       "slot": "main",
-      "order": 1,
+      "order": 2000,
       "visible": true,
       "variant": "contentList",
       "label": "Recent posts"
@@ -596,7 +596,7 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_projects",
       "slot": "main",
-      "order": 2,
+      "order": 3000,
       "visible": true,
       "variant": "contentGrid",
       "label": "Featured projects"
@@ -610,7 +610,7 @@
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_block_post_body",
       "slot": "main",
-      "order": 0,
+      "order": 1000,
       "visible": true,
       "variant": "markdown",
       "label": "Body"
@@ -624,7 +624,7 @@
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_content_profile_intro",
       "slot": "meta",
-      "order": 1,
+      "order": 1000,
       "visible": true,
       "variant": "contentCard",
       "label": "Profile"
@@ -638,7 +638,7 @@
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_block_post_related_posts",
       "slot": "footer",
-      "order": 2,
+      "order": 1000,
       "visible": false,
       "variant": "contentList",
       "label": "More posts"

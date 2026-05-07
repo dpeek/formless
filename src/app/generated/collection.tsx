@@ -719,6 +719,7 @@ function CollectionResult({
         entity={entity}
         entityName={entityName}
         footer={result.footer ?? []}
+        ordering={result.ordering}
         query={query}
         queryName={queryName}
         queryContext={queryContext}

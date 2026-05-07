@@ -100,6 +100,7 @@ export type TableColumnFormat = "plain" | "number" | "currency" | "percent";
 export type TableActionVariant = "default" | "destructive";
 export type TableActionAvailabilityState = "visible" | "hidden" | "disabled";
 export type TableActionPresentation = "button" | "dropdown";
+export type TableOrderingPresentation = "moveMenu" | "dragHandle";
 
 export type TableActionAvailabilitySchema = {
   state: TableActionAvailabilityState;
@@ -132,6 +133,17 @@ export type EditRecordTableActionSchema = TableActionBaseSchema & {
 };
 
 export type TableActionSchema = StaticTableActionSchema | EditRecordTableActionSchema;
+
+export type TableOrderingScopeSchema = {
+  kind: "field";
+  field: string;
+};
+
+export type TableOrderingSchema = {
+  field: string;
+  scope?: TableOrderingScopeSchema[];
+  presentations?: TableOrderingPresentation[];
+};
 
 export type ValueUnitEditorSchema = {
   unitField: string;
@@ -181,6 +193,7 @@ export type InvokeActionTableColumnSchema = {
   type: "invokeAction";
   action?: string;
   actions?: string[];
+  includeOrdering?: boolean;
   label?: string;
   align?: TableColumnAlign;
   width?: TableColumnWidth;
@@ -197,6 +210,7 @@ export type TableColumnSchema =
 export type TableViewSchema = {
   entity: string;
   actions?: Record<string, TableActionSchema>;
+  ordering?: TableOrderingSchema;
   columns: TableColumnSchema[];
 };
 

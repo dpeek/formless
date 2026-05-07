@@ -1,7 +1,7 @@
 # PRD 14: Table actions and ordering
 
 Status: in progress
-Current chunk: TAO-04
+Current chunk: TAO-05
 Last updated: 2026-05-07
 
 ## Goal
@@ -313,7 +313,7 @@ Notes:
 | TAO-01 | shipped | none       | PRD, characterization tests                                 | Current table action/create/edit/order behavior is characterized; PRD status and chunks are current. |
 | TAO-02 | shipped | TAO-01     | schema types/parser, view model, generated table/action UI  | Table-local actions parse; `invokeAction` column renders single action button/dropdown facts.        |
 | TAO-03 | shipped | TAO-02     | edit view parser/model, generated edit dialog, Site schema  | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.           |
-| TAO-04 | planned | TAO-03     | ordering parser/model, rank module, move menu, Site schema  | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                |
+| TAO-04 | shipped | TAO-03     | ordering parser/model, rank module, move menu, Site schema  | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                |
 | TAO-05 | planned | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.    |
 | TAO-06 | planned | TAO-05     | browser smoke, PRD                                          | `/site`, `/tasks`, and `/rates` smoke pass; PRD status, blockers, and promote notes are current.     |
 
@@ -426,26 +426,21 @@ Evidence:
 
 ### TAO-04 ordering model and move menu
 
-Status: planned.
+Status: shipped.
 
 Goal: add table-local sparse rank ordering and generated move menu controls.
 
-Tasks:
+Outcome:
 
-- Add table `ordering`.
-- Validate ordering field exists.
-- Validate ordering field is a number field.
-- Reject `integer: true` ordering fields.
-- Validate ordering scope fields exist.
-- Add ordering facts to table view model.
-- Add isolated rank calculation helper.
-- Sort table rows by rank inside table renderer.
-- Add generated move to top, move up, move down, and move to bottom controls.
-- Merge ordering controls into `invokeAction` dropdown when `includeOrdering` is true.
-- Auto-insert menu column only when needed and not explicit.
-- Change Site `blockPlacement.order` to non-integer number.
-- Seed or normalize sparse order values if needed.
-- Hide or remove raw editable `order` column from Site placement table.
+- Table views can declare `ordering` with a numeric rank field, row-field scope, and presentations.
+- Ordering validation rejects missing fields, non-number fields, and integer rank fields.
+- `invokeAction.includeOrdering` merges generated move menu items into row action dropdowns.
+- The view model auto-inserts an ordering-only dropdown when move menus are requested and no explicit action column includes ordering.
+- Generated tables sort rows by rank before rendering.
+- Move to top/up/down/bottom computes sparse scoped ranks and patches only the moved row when a safe gap exists.
+- Rebalance planning is isolated in the rank helper for no-gap cases.
+- Site `blockPlacement.order` is a non-integer number field with sparse seed ranks.
+- Site placement tables hide the raw editable `order` column and show ordering controls through `Actions`.
 
 Acceptance:
 
@@ -459,15 +454,16 @@ Acceptance:
 - Site placements are ordered by sparse rank.
 - Site placement raw order is not a normal editable cell after controls exist.
 
-Evidence to record:
+Evidence:
 
-- Parser tests.
-- Rank helper unit tests.
-- Generated table render/action tests.
-- Browser smoke for `/site`.
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- Parser tests: `src/shared/schema.test.ts`.
+- Rank helper unit tests: `src/shared/table-ordering.test.ts`.
+- View model tests: `src/client/views.test.ts`.
+- Generated table render/action tests: `src/app.test.tsx`.
+- Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/site`; reset source schema/seed; snapshot showed no raw `Order` column, an `Actions` column, and Site placement move menu items; `Move down` reordered a main-slot placement.
+- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:30:55.805Z`.
+- `./tmp/test.txt`: full restart run passed 29 files and 504 tests.
+- `./tmp/check.txt`: formatting, lint, and type checks pass.
 
 ### TAO-05 drag reorder
 
@@ -691,6 +687,7 @@ When this PRD ships, update `doc/roadmap.md` only if first-release target detail
 - TAO-01 shipped 2026-05-07 with characterization tests only; no runtime behavior changed.
 - TAO-02 shipped 2026-05-07 with table-local action descriptors and `invokeAction` columns; no edit dialog or ordering behavior added.
 - TAO-03 shipped 2026-05-07 with edit views, `editRecord` table actions, generated edit dialogs, and Site placement Edit block actions; no ordering behavior added.
+- TAO-04 shipped 2026-05-07 with table-local ordering, sparse rank moves, generated move menus, and Site placement ordering controls.
 - User direction: keep collection views as scope containers and make tables the first record interaction surface.
 - User direction: use table-local named actions and an `invokeAction` table column.
 - User direction: add proper edit views for edit dialogs.

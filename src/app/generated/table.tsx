@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@formless/ui/dropdown-menu";
 import {
@@ -29,8 +30,11 @@ import {
   useEntityRecordIdsMatchingQuery,
   useRecord,
   useRecordField,
+  useRecordsById,
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
+import { setSyncStatus } from "../../client/sync-status.ts";
+import { submitPatchMutation } from "../../client/sync.ts";
 import type {
   ComputedTableColumnConfig,
   EditViewConfig,
@@ -42,17 +46,42 @@ import type {
   TableActionConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
+  TableOrderingConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
+import type { StoredRecord } from "../../shared/protocol.ts";
 import { evaluateNumericExpression } from "../../shared/read-model.ts";
+import {
+  calculateOrderingMovePlan,
+  sortRecordIdsByOrdering,
+  type OrderingMoveDirection,
+  type OrderingMovePlan,
+} from "../../shared/table-ordering.ts";
 import { formatAggregateDisplayValue, formatComputedDisplayValue } from "./format.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
+import { useSchemaKey } from "./schema-app-context.tsx";
 
 type ReferenceEditRecordTableActionConfig = EditRecordTableActionConfig & {
   target: Extract<EditRecordTableActionConfig["target"], { kind: "reference" }>;
+};
+
+type TableOrderingContext = {
+  canPatch: boolean;
+  entityName: string;
+  orderedRecordIds: string[];
+  ordering: TableOrderingConfig;
+  recordsById: Record<string, StoredRecord>;
+};
+
+type OrderingMoveMenuItem = {
+  direction: OrderingMoveDirection;
+  label: string;
+  plan: OrderingMovePlan;
+  disabled: boolean;
+  disabledReason?: string;
 };
 
 export function RecordTable({
@@ -60,6 +89,7 @@ export function RecordTable({
   entity,
   entityName,
   footer = [],
+  ordering,
   query,
   queryName,
   queryContext,
@@ -68,12 +98,31 @@ export function RecordTable({
   entity: EntitySchema;
   entityName: string;
   footer?: TableFooterSlotConfig[];
+  ordering?: TableOrderingConfig;
   query: HomeQueryTabConfig["query"];
   queryName?: string;
   queryContext?: QueryEvaluationContext;
 }) {
   const canPatch = entity.mutations.patch.enabled;
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
+  const recordsById = useRecordsById();
+  const orderedRecordIds = ordering
+    ? sortRecordIdsByOrdering(
+        recordIds,
+        recordsById,
+        ordering.fieldName,
+        ordering.scope.map((field) => field.fieldName),
+      )
+    : recordIds;
+  const orderingContext = ordering
+    ? {
+        canPatch,
+        entityName,
+        orderedRecordIds,
+        ordering,
+        recordsById,
+      }
+    : undefined;
   const visibleColumns = columns.filter((column) => column.display !== "hidden");
   const visibleFooter = footer.filter(
     (slot) => queryName === undefined || slot.aggregate.query === queryName,
@@ -99,7 +148,7 @@ export function RecordTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {recordIds.map((recordId) => (
+            {orderedRecordIds.map((recordId) => (
               <Fragment key={recordId}>
                 <TableRow>
                   {visibleColumns.map((column) => (
@@ -108,6 +157,7 @@ export function RecordTable({
                         canPatch={canPatch}
                         entityName={entityName}
                         column={column}
+                        orderingContext={orderingContext}
                         recordId={recordId}
                       />
                     </TableCell>
@@ -257,11 +307,13 @@ function RecordTableCell({
   canPatch,
   column,
   entityName,
+  orderingContext,
   recordId,
 }: {
   canPatch: boolean;
   column: TableColumnConfig;
   entityName: string;
+  orderingContext?: TableOrderingContext;
   recordId: string;
 }) {
   const justifyClass = tableCellJustifyClass(column);
@@ -287,7 +339,11 @@ function RecordTableCell({
   if (column.type === "invokeAction") {
     return (
       <div className={`flex min-h-6 items-center gap-1 ${justifyClass}`}>
-        <InvokeActionTableCell column={column} sourceRecordId={recordId} />
+        <InvokeActionTableCell
+          column={column}
+          orderingContext={orderingContext}
+          sourceRecordId={recordId}
+        />
       </div>
     );
   }
@@ -320,14 +376,20 @@ function RecordTableCell({
 
 function InvokeActionTableCell({
   column,
+  orderingContext,
   sourceRecordId,
 }: {
   column: InvokeActionTableColumnConfig;
+  orderingContext?: TableOrderingContext;
   sourceRecordId: string;
 }) {
+  const schemaKey = useSchemaKey();
   const [openActionName, setOpenActionName] = useState<string | null>(null);
+  const [pendingOrderingDirection, setPendingOrderingDirection] =
+    useState<OrderingMoveDirection | null>(null);
+  const orderingItems = selectOrderingMoveMenuItems(column, sourceRecordId, orderingContext);
 
-  if (column.actions.length === 0) {
+  if (column.actions.length === 0 && orderingItems.length === 0) {
     return null;
   }
 
@@ -342,7 +404,34 @@ function InvokeActionTableCell({
     }
   }
 
-  if (column.presentation === "button" && column.actions.length === 1) {
+  async function invokeOrderingMove(item: OrderingMoveMenuItem) {
+    if (item.disabled || item.plan.kind !== "patch" || !orderingContext) {
+      return;
+    }
+
+    setPendingOrderingDirection(item.direction);
+    setSyncStatus({ state: "syncing", message: `${item.label}...` });
+
+    try {
+      await submitPatchMutation(schemaKey, orderingContext.entityName, item.plan.recordId, {
+        [orderingContext.ordering.fieldName]: item.plan.rank,
+      });
+      setSyncStatus({ state: "idle", message: "Row moved and synced." });
+    } catch (error) {
+      setSyncStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Move failed.",
+      });
+    } finally {
+      setPendingOrderingDirection(null);
+    }
+  }
+
+  if (
+    column.presentation === "button" &&
+    column.actions.length === 1 &&
+    orderingItems.length === 0
+  ) {
     const action = column.actions[0];
 
     if (!action) {
@@ -390,6 +479,19 @@ function InvokeActionTableCell({
               {action.label}
             </DropdownMenuItem>
           ))}
+          {column.actions.length > 0 && orderingItems.length > 0 ? <DropdownMenuSeparator /> : null}
+          {orderingItems.map((item) => (
+            <DropdownMenuItem
+              aria-label={orderingMoveAriaLabel(item)}
+              disabled={item.disabled || pendingOrderingDirection !== null}
+              key={item.direction}
+              onClick={() => {
+                void invokeOrderingMove(item);
+              }}
+            >
+              {item.label}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
       {openAction ? (
@@ -429,6 +531,85 @@ function actionAriaLabel(action: TableActionConfig) {
   }
 
   return action.label;
+}
+
+function selectOrderingMoveMenuItems(
+  column: InvokeActionTableColumnConfig,
+  sourceRecordId: string,
+  orderingContext: TableOrderingContext | undefined,
+): OrderingMoveMenuItem[] {
+  if (!column.includeOrdering || !column.ordering || !orderingContext) {
+    return [];
+  }
+
+  return orderingMoveDirections().map(({ direction, label }) => {
+    const plan = calculateOrderingMovePlan({
+      direction,
+      fieldName: orderingContext.ordering.fieldName,
+      orderedRecordIds: orderingContext.orderedRecordIds,
+      recordId: sourceRecordId,
+      recordsById: orderingContext.recordsById,
+      scopeFields: orderingContext.ordering.scope.map((field) => field.fieldName),
+      rankOptions: {
+        ...(orderingContext.ordering.field.min === undefined
+          ? {}
+          : { min: orderingContext.ordering.field.min }),
+        ...(orderingContext.ordering.field.max === undefined
+          ? {}
+          : { max: orderingContext.ordering.field.max }),
+      },
+    });
+    const disabledReason = orderingMoveDisabledReason(direction, plan, orderingContext.canPatch);
+
+    return {
+      direction,
+      label,
+      plan,
+      disabled: disabledReason !== undefined,
+      ...(disabledReason === undefined ? {} : { disabledReason }),
+    };
+  });
+}
+
+function orderingMoveDirections(): Array<{ direction: OrderingMoveDirection; label: string }> {
+  return [
+    { direction: "top", label: "Move to top" },
+    { direction: "up", label: "Move up" },
+    { direction: "down", label: "Move down" },
+    { direction: "bottom", label: "Move to bottom" },
+  ];
+}
+
+function orderingMoveDisabledReason(
+  direction: OrderingMoveDirection,
+  plan: OrderingMovePlan,
+  canPatch: boolean,
+) {
+  if (!canPatch) {
+    return "Editing is disabled";
+  }
+
+  if (plan.kind === "patch") {
+    return undefined;
+  }
+
+  if (plan.kind === "rebalance") {
+    return "Rebalance required";
+  }
+
+  if (plan.reason === "already-at-boundary") {
+    return direction === "top" || direction === "up" ? "Already first" : "Already last";
+  }
+
+  return "Move unavailable";
+}
+
+function orderingMoveAriaLabel(item: OrderingMoveMenuItem) {
+  if (item.disabled && item.disabledReason) {
+    return `${item.label}: ${item.disabledReason}`;
+  }
+
+  return item.label;
 }
 
 function EditRecordTableActionDialog({

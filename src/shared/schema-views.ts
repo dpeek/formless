@@ -47,6 +47,9 @@ import type {
   TableEditRecordTargetSchema,
   TableActionSchema,
   TableActionVariant,
+  TableOrderingPresentation,
+  TableOrderingSchema,
+  TableOrderingScopeSchema,
   ToManyRelationshipSchema,
   TableViewSchema,
   ViewFieldSchema,
@@ -190,7 +193,12 @@ function parseTableView(
     throw new Error(`Table view "${tableViewName}" must be an object.`);
   }
 
-  assertExactKeys(`Table view "${tableViewName}"`, value, ["entity", "columns"], ["actions"]);
+  assertExactKeys(
+    `Table view "${tableViewName}"`,
+    value,
+    ["entity", "columns"],
+    ["actions", "ordering"],
+  );
 
   const entityName = parseRequiredNonEmptyString(
     `Table view "${tableViewName}" entity`,
@@ -203,6 +211,7 @@ function parseTableView(
   }
 
   const actions = parseOptionalTableActions(tableViewName, value.actions, entityName, entity);
+  const ordering = parseOptionalTableOrdering(tableViewName, value.ordering, entityName, entity);
   const columns = parseTableColumns(
     tableViewName,
     entityName,
@@ -212,13 +221,148 @@ function parseTableView(
     entities,
     readModels?.computedValues ?? {},
     actions,
+    ordering,
   );
 
   return {
     entity: entityName,
     ...(actions === undefined ? {} : { actions }),
+    ...(ordering === undefined ? {} : { ordering }),
     columns,
   };
+}
+
+function parseOptionalTableOrdering(
+  tableViewName: string,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+): TableOrderingSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const context = `Table view "${tableViewName}" ordering`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["field"], ["scope", "presentations"]);
+
+  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+  const field = entity.fields[fieldName];
+
+  if (!field) {
+    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
+  }
+
+  if (field.type !== "number") {
+    throw new Error(`${context} field "${entityName}.${fieldName}" must be a number field.`);
+  }
+
+  if (field.integer === true) {
+    throw new Error(`${context} field "${entityName}.${fieldName}" must not be integer.`);
+  }
+
+  const scope = parseOptionalTableOrderingScope(context, value.scope, entityName, entity);
+  const presentations = parseOptionalTableOrderingPresentations(context, value.presentations);
+
+  return {
+    field: fieldName,
+    ...(scope === undefined ? {} : { scope }),
+    ...(presentations === undefined ? {} : { presentations }),
+  };
+}
+
+function parseOptionalTableOrderingScope(
+  context: string,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+): TableOrderingScopeSchema[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${context} scope must be a non-empty array.`);
+  }
+
+  const scope = value.map((candidate, index) =>
+    parseTableOrderingScopeField(`${context} scope ${index}`, candidate, entityName, entity),
+  );
+  const duplicate = scope.find(
+    (candidate, index) => scope.findIndex((item) => item.field === candidate.field) !== index,
+  );
+
+  if (duplicate) {
+    throw new Error(`${context} scope references duplicate field "${duplicate.field}".`);
+  }
+
+  return scope;
+}
+
+function parseTableOrderingScopeField(
+  context: string,
+  value: unknown,
+  entityName: string,
+  entity: EntitySchema,
+): TableOrderingScopeSchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["kind", "field"]);
+
+  if (value.kind !== "field") {
+    throw new Error(`${context} kind must be "field".`);
+  }
+
+  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
+
+  if (!entity.fields[fieldName]) {
+    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
+  }
+
+  return { kind: "field", field: fieldName };
+}
+
+function parseOptionalTableOrderingPresentations(
+  context: string,
+  value: unknown,
+): TableOrderingPresentation[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${context} presentations must be a non-empty array.`);
+  }
+
+  const presentations = value.map((candidate, index) =>
+    parseTableOrderingPresentation(`${context} presentations ${index}`, candidate),
+  );
+  const duplicate = presentations.find(
+    (candidate, index) => presentations.indexOf(candidate) !== index,
+  );
+
+  if (duplicate) {
+    throw new Error(`${context} presentations references duplicate "${duplicate}".`);
+  }
+
+  return presentations;
+}
+
+function parseTableOrderingPresentation(
+  context: string,
+  value: unknown,
+): TableOrderingPresentation {
+  if (value === "moveMenu" || value === "dragHandle") {
+    return value;
+  }
+
+  throw new Error(`${context} must be "moveMenu" or "dragHandle".`);
 }
 
 function parseOptionalTableActions(
@@ -350,6 +494,7 @@ function parseTableColumns(
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
   actions: Record<string, TableActionSchema> | undefined,
+  ordering: TableOrderingSchema | undefined,
 ): TableColumnSchema[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(`Table view "${tableViewName}" columns must be a non-empty array.`);
@@ -366,6 +511,7 @@ function parseTableColumns(
       entities,
       computedValues,
       actions,
+      ordering,
     ),
   );
 }
@@ -380,6 +526,7 @@ function parseTableColumn(
   entities: Record<string, EntitySchema>,
   computedValues: Record<string, ComputedValueSchema>,
   actions: Record<string, TableActionSchema> | undefined,
+  ordering: TableOrderingSchema | undefined,
 ): TableColumnSchema {
   const context = `Table view "${tableViewName}" column ${index}`;
 
@@ -396,7 +543,7 @@ function parseTableColumn(
   }
 
   if (value.type === "invokeAction") {
-    return parseInvokeActionTableColumn(context, value, actions);
+    return parseInvokeActionTableColumn(context, value, actions, ordering);
   }
 
   return parseFieldTableColumn(context, value, entityName, entity, itemViews);
@@ -620,15 +767,35 @@ function parseInvokeActionTableColumn(
   context: string,
   value: Record<string, unknown>,
   actions: Record<string, TableActionSchema> | undefined,
+  ordering: TableOrderingSchema | undefined,
 ): TableColumnSchema {
   assertExactKeys(
     context,
     value,
     ["type"],
-    ["action", "actions", "label", "align", "width", "display", "presentation"],
+    ["action", "actions", "includeOrdering", "label", "align", "width", "display", "presentation"],
   );
 
-  const referencedActions = parseInvokeActionReferences(context, value.action, value.actions);
+  const parsedIncludeOrdering = parseOptionalBoolean(
+    `${context} includeOrdering`,
+    value.includeOrdering,
+  );
+  const includeOrdering =
+    parsedIncludeOrdering ??
+    (value.action === undefined && value.actions === undefined && ordering !== undefined
+      ? true
+      : undefined);
+
+  if (includeOrdering && !ordering) {
+    throw new Error(`${context} includeOrdering requires table ordering.`);
+  }
+
+  const referencedActions = parseInvokeActionReferences(
+    context,
+    value.action,
+    value.actions,
+    includeOrdering,
+  );
 
   for (const actionName of referencedActions) {
     if (!actions?.[actionName]) {
@@ -654,11 +821,16 @@ function parseInvokeActionTableColumn(
     throw new Error(`${context} button presentation requires exactly one action.`);
   }
 
+  if (presentation === "button" && includeOrdering) {
+    throw new Error(`${context} button presentation cannot include ordering controls.`);
+  }
+
   return {
     type: "invokeAction",
     ...(value.action === undefined
       ? { actions: referencedActions }
       : { action: referencedActions[0] }),
+    ...(includeOrdering === undefined ? {} : { includeOrdering }),
     ...(label === undefined ? {} : { label }),
     ...(align === undefined ? {} : { align }),
     ...(width === undefined ? {} : { width }),
@@ -667,13 +839,22 @@ function parseInvokeActionTableColumn(
   };
 }
 
-function parseInvokeActionReferences(context: string, action: unknown, actions: unknown): string[] {
+function parseInvokeActionReferences(
+  context: string,
+  action: unknown,
+  actions: unknown,
+  allowEmpty: boolean | undefined,
+): string[] {
   if (action !== undefined && actions !== undefined) {
     throw new Error(`${context} must use either action or actions, not both.`);
   }
 
   if (action !== undefined) {
     return [parseRequiredNonEmptyString(`${context} action`, action)];
+  }
+
+  if ((actions === undefined || (Array.isArray(actions) && actions.length === 0)) && allowEmpty) {
+    return [];
   }
 
   if (!Array.isArray(actions) || actions.length === 0) {
@@ -2138,6 +2319,18 @@ function parseOptionalTableActionPresentation(
 
   if (value !== "button" && value !== "dropdown") {
     throw new Error(`${context} must be "button" or "dropdown".`);
+  }
+
+  return value;
+}
+
+function parseOptionalBoolean(context: string, value: unknown): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`${context} must be a boolean.`);
   }
 
   return value;

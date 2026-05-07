@@ -206,8 +206,7 @@
           "type": "number",
           "required": true,
           "label": "Order",
-          "default": 0,
-          "integer": true,
+          "default": 1000,
           "min": 0
         },
         "visible": {
@@ -746,6 +745,20 @@
           "editView": "blockEdit"
         }
       },
+      "ordering": {
+        "field": "order",
+        "scope": [
+          {
+            "kind": "field",
+            "field": "parent"
+          },
+          {
+            "kind": "field",
+            "field": "slot"
+          }
+        ],
+        "presentations": ["moveMenu"]
+      },
       "columns": [
         {
           "type": "field",
@@ -777,15 +790,6 @@
         },
         {
           "type": "field",
-          "field": "order",
-          "editor": "number",
-          "commit": "field-commit",
-          "align": "end",
-          "width": "xs",
-          "format": "number"
-        },
-        {
-          "type": "field",
           "field": "visible",
           "editor": "boolean",
           "commit": "immediate",
@@ -794,6 +798,7 @@
         {
           "type": "invokeAction",
           "action": "editChildBlock",
+          "includeOrdering": true,
           "width": "xs",
           "align": "end"
         }
@@ -1189,9 +1194,6 @@
         },
         "variant": {
           "editor": "slug"
-        },
-        "order": {
-          "editor": "number"
         },
         "visible": {
           "editor": "boolean"

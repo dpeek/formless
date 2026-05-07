@@ -286,6 +286,10 @@ export function useRecord(recordId: string) {
   return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]);
 }
 
+export function useRecordsById() {
+  return useClientStoreSelector((snapshot) => snapshot.recordsById);
+}
+
 export function useRecordCreatedAt(recordId: string) {
   return useClientStoreSelector((snapshot) => snapshot.recordsById[recordId]?.createdAt);
 }

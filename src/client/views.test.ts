@@ -557,6 +557,39 @@ describe("home view model collections", () => {
     });
   });
 
+  it("resolves table ordering facts and auto-inserted move menus", () => {
+    const schema = rateCardSchemaWithOrdering();
+    const rateModel = requiredCollectionModel(schema, "rateHome");
+    const result = rateModel.result;
+
+    if (result.type !== "table") {
+      throw new Error("Missing rate table model.");
+    }
+
+    expect(result.ordering).toMatchObject({
+      fieldName: "sortOrder",
+      field: schema.entities.rate?.fields.sortOrder,
+      scope: [{ kind: "field", fieldName: "card" }],
+      presentations: ["moveMenu"],
+    });
+    expect(result.columns.at(-1)).toMatchObject({
+      type: "invokeAction",
+      key: "invokeAction:ordering",
+      label: "",
+      headerLabel: "Actions",
+      actions: [],
+      presentation: "dropdown",
+      includeOrdering: true,
+      ordering: {
+        fieldName: "sortOrder",
+        scope: [{ fieldName: "card" }],
+      },
+      align: "end",
+      width: "xs",
+      display: "readOnly",
+    });
+  });
+
   it("resolves the source rate-card read-model slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
@@ -1042,9 +1075,8 @@ describe("home view model collections", () => {
             "field:block",
             "field:label",
             "field:variant",
-            "field:order",
             "field:visible",
-            "invokeAction:editChildBlock",
+            "invokeAction:editChildBlock,ordering",
           ],
         },
         actions: [
@@ -1052,7 +1084,7 @@ describe("home view model collections", () => {
             type: "create",
             label: "Create Block placement",
             entityName: "blockPlacement",
-            fields: ["slot", "block", "label", "variant", "order", "visible"],
+            fields: ["slot", "block", "label", "variant", "visible"],
             defaults: ["parent"],
             enabled: true,
           },
@@ -1105,9 +1137,8 @@ describe("home view model collections", () => {
             "field:block",
             "field:label",
             "field:variant",
-            "field:order",
             "field:visible",
-            "invokeAction:editChildBlock",
+            "invokeAction:editChildBlock,ordering",
           ],
         },
         actions: [
@@ -1115,7 +1146,7 @@ describe("home view model collections", () => {
             type: "create",
             label: "Create Block placement",
             entityName: "blockPlacement",
-            fields: ["slot", "block", "label", "variant", "order", "visible"],
+            fields: ["slot", "block", "label", "variant", "visible"],
             defaults: ["parent"],
             enabled: true,
           },
@@ -1168,9 +1199,8 @@ describe("home view model collections", () => {
             "field:block",
             "field:label",
             "field:variant",
-            "field:order",
             "field:visible",
-            "invokeAction:editChildBlock",
+            "invokeAction:editChildBlock,ordering",
           ],
         },
         actions: [
@@ -1178,7 +1208,7 @@ describe("home view model collections", () => {
             type: "create",
             label: "Create Block placement",
             entityName: "blockPlacement",
-            fields: ["slot", "block", "label", "variant", "order", "visible"],
+            fields: ["slot", "block", "label", "variant", "visible"],
             defaults: ["parent"],
             enabled: true,
           },
@@ -1187,15 +1217,22 @@ describe("home view model collections", () => {
     ]);
   });
 
-  it("characterizes the current Site placement table raw order and visibility columns", () => {
+  it("resolves Site placement ordering controls and visibility columns", () => {
     const placementModel = requiredCollectionModel(siteSourceSchema, "pageCompositionHome");
     const columns = placementModel.result.type === "table" ? placementModel.result.columns : [];
 
     expect(siteSourceSchema.entities.blockPlacement.fields.order).toMatchObject({
       type: "number",
       required: true,
-      integer: true,
+      default: 1000,
       min: 0,
+    });
+    expect(
+      placementModel.result.type === "table" ? placementModel.result.ordering : undefined,
+    ).toMatchObject({
+      fieldName: "order",
+      scope: [{ fieldName: "parent" }, { fieldName: "slot" }],
+      presentations: ["moveMenu"],
     });
     expect(
       columns.map((column) => ({
@@ -1256,17 +1293,6 @@ describe("home view model collections", () => {
       },
       {
         type: "field",
-        key: "field:order",
-        label: "Order",
-        editor: "number",
-        commit: "field-commit",
-        display: "editor",
-        align: "end",
-        width: "xs",
-        format: "number",
-      },
-      {
-        type: "field",
         key: "field:visible",
         label: "Visible",
         editor: "boolean",
@@ -1278,7 +1304,7 @@ describe("home view model collections", () => {
       },
       {
         type: "invokeAction",
-        key: "invokeAction:editChildBlock",
+        key: "invokeAction:editChildBlock,ordering",
         label: "",
         editor: null,
         commit: null,
@@ -1670,6 +1696,42 @@ function rateCardSchemaWithComputedMarginColumn(): AppSchema {
       },
     },
   };
+}
+
+function rateCardSchemaWithOrdering(): AppSchema {
+  const rateTable = rateCardSchema.tableViews.rateTable;
+  const rateEntity = rateCardSchema.entities.rate;
+
+  return parseAppSchema({
+    ...rateCardSchema,
+    entities: {
+      ...rateCardSchema.entities,
+      rate: {
+        ...rateEntity,
+        fields: {
+          ...rateEntity.fields,
+          sortOrder: {
+            type: "number",
+            required: true,
+            label: "Sort order",
+            default: 1000,
+            min: 0,
+          },
+        },
+      },
+    },
+    tableViews: {
+      ...rateCardSchema.tableViews,
+      rateTable: {
+        ...rateTable,
+        ordering: {
+          field: "sortOrder",
+          scope: [{ kind: "field", field: "card" }],
+          presentations: ["moveMenu"],
+        },
+      },
+    },
+  });
 }
 
 function rateCardSchemaWithAggregateSummarySlots(): AppSchema {
