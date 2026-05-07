@@ -1,7 +1,7 @@
 # PRD 17: Runtime profiles and screen routes
 
-Status: active
-Current chunk: RPS-07
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-07
 
 ## Goal
@@ -320,7 +320,7 @@ Rejected as incomplete because Estii screen routing and app/profile separation w
 | RPS-04 | shipped | RPS-03     | app shell, home route, source schemas | Dev shell renders screen sidebar/navigation and routes Estii setup through `/estii/setup`.                           |
 | RPS-05 | shipped | RPS-04     | runtime profile resolver, app routes  | Dev, app, and published Site profiles mount routes through one explicit profile seam.                                |
 | RPS-06 | shipped | RPS-05     | Site public route and renderer        | Published Site profile serves `/` as home and `/*` as public page slugs with no generated admin shell.               |
-| RPS-07 | planned | RPS-06     | browser smoke, PRD                    | Checks pass; browser smoke covers dev routes, Estii screen routes, and published Site routes; PRD notes are current. |
+| RPS-07 | shipped | RPS-06     | browser smoke, PRD                    | Checks pass; browser smoke covers dev routes, Estii screen routes, and published Site routes; PRD notes are current. |
 
 ## Chunk details
 
@@ -521,30 +521,42 @@ Evidence:
 
 ### RPS-07 closeout
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: verify route profile behavior and update the PRD.
 
 Tasks:
 
-- Read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
-- Fix any issues from dev/test/check output.
-- Run browser smoke because app behavior changes.
-- Update PRD chunk statuses, decisions, blockers, and promote notes.
+- Shipped: read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
+- Shipped: confirmed final dev/test/check output is green after restoring the default dev profile.
+- Shipped: reset source schema and seed data for `tasks`, `estii`, and `site` before dev route smoke.
+- Shipped: ran browser smoke for dev app routes, Estii screen routes, Site editor routes, dev public preview, and published Site top-level routes.
+- Shipped: updated PRD chunk status, blockers, evidence, and promote notes.
 
 Acceptance:
 
 - `./tmp/test.txt` shows passing tests.
 - `./tmp/check.txt` shows passing checks.
 - Browser smoke covers the changed route surfaces.
-- PRD status reflects shipped chunks and remaining work.
+- PRD status reflects all chunks shipped.
 
-Evidence to record:
+Evidence:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
-- Browser smoke command and result.
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `30 passed (30)`, `525 passed (525)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 169 files.
+- Browser smoke: source schema and seed resets for `tasks`, `estii`, and `site` returned `200` through `/api/:schemaKey/reset/schema` and `/api/:schemaKey/reset/seed`.
+- Browser smoke: `bun browser --session rps-07 .../tasks` rendered Tasks with `Create Task`, `Clear completed`, and Schema navigation.
+- Browser smoke: `bun browser --session rps-07 .../estii` rendered Estii Rates with `Create Resource`, `Margin`, and Schema navigation.
+- Browser smoke: `bun browser --session rps-07 .../estii/setup` rendered Estii Setup with `Rate cards`, `Resources`, `Create Rate card`, and `Create Resource`.
+- Browser smoke: `bun browser --session rps-07 .../estii/schema` rendered Estii Schema with key `estii` and schema text containing `rateSetup`.
+- Browser smoke: `bun browser --session rps-07 .../site/header` and `/site/footer` rendered Site editor screen routes with `Create Block placement`.
+- Browser smoke: `bun browser --session rps-07 .../pages/home` rendered dev public preview with Home, Recent posts, and Featured projects, with no generated admin shell markers.
+- Browser smoke: `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite bun start`, then `bun browser --session rps-07-published .../` rendered published Home at `/` with no generated admin shell markers.
+- Browser smoke: published Site `/projects` rendered the Projects page at top-level path.
+- Browser smoke: published Site `/missing` rendered public not-found behavior and the Home link resolved to `/`.
+- Browser smoke: `bun browser --session rps-07 errors` and `bun browser --session rps-07-published errors` returned no page errors.
+- Final profile state: ran default `bun start` after published smoke so `./tmp/*` reflects the normal dev profile.
 
 ## Dependencies
 
@@ -557,7 +569,7 @@ Evidence to record:
 
 ## Blockers
 
-- None known for RPS-07.
+- None.
 
 ## Non-goals
 
@@ -596,6 +608,7 @@ Evidence to record:
 - `doc/current.md`: RPS-06 shipped; published Site profile mounts Site public rendering at `/` and maps `/*` to public page slugs.
 - `doc/current.md`: RPS-06 shipped; published Site `/` maps to slug `home`.
 - `doc/current.md`: RPS-06 shipped; Site public renderer links use `/pages/*` in dev preview and top-level paths in published mode.
+- `doc/current.md`: RPS-07 shipped no new runtime facts beyond RPS-02 through RPS-06.
 - `doc/roadmap.md`: add first-release screen-route scope only if this PRD is pulled into first-release work.
 
 ## Status notes
@@ -606,3 +619,4 @@ Evidence to record:
 - 2026-05-07: RPS-04 shipped. Dev shell active app navigation uses primary screen models; `/estii/setup`, `/site/header`, and `/site/footer` route to declared screens; Schema remains a dev tooling route.
 - 2026-05-07: RPS-05 shipped. Runtime profile resolver now owns route mounts; dev profile keeps current multi-app routes; app profile mounts one schema app at root paths without the multi-app switcher; published Site profile resolves to Site without generated admin routes.
 - 2026-05-07: RPS-06 shipped. Published Site profile serves `/` as Home and `/*` as Site public page slugs with no generated admin shell; dev `/pages/*` preview remains.
+- 2026-05-07: RPS-07 shipped. Closeout checks and browser smoke passed for dev app routes, Estii screen routes, Site editor routes, dev public preview, and published Site top-level routes. PRD 17 is complete.
