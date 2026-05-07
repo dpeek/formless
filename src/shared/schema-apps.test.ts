@@ -4,6 +4,8 @@ import {
   findSchemaAppDefinitionByRoute,
   getSchemaAppDefinition,
   isSchemaKey,
+  schemaAppScreenPathFromRoute,
+  schemaAppScreenRoute,
   schemaApps,
 } from "./schema-apps.ts";
 
@@ -27,9 +29,22 @@ describe("schema app definitions", () => {
     expect(findSchemaAppDefinition("site")?.label).toBe("Site");
     expect(findSchemaAppDefinition("missing")).toBeUndefined();
     expect(findSchemaAppDefinitionByRoute("/site")?.key).toBe("site");
+    expect(findSchemaAppDefinitionByRoute("/site/header")?.key).toBe("site");
+    expect(findSchemaAppDefinitionByRoute("/estii/setup")?.key).toBe("estii");
     expect(findSchemaAppDefinitionByRoute("/estii/schema")?.key).toBe("estii");
     expect(findSchemaAppDefinitionByRoute("/rates/schema")).toBeUndefined();
     expect(findSchemaAppDefinitionByRoute("/site/schema")?.key).toBe("site");
     expect(findSchemaAppDefinitionByRoute("/missing")).toBeUndefined();
+  });
+
+  it("maps app-relative screen paths to browser routes", () => {
+    const estii = getSchemaAppDefinition("estii");
+
+    expect(schemaAppScreenRoute(estii, "/")).toBe("/estii");
+    expect(schemaAppScreenRoute(estii, "/setup")).toBe("/estii/setup");
+    expect(schemaAppScreenPathFromRoute(estii, "/estii")).toBe("/");
+    expect(schemaAppScreenPathFromRoute(estii, "/estii/setup")).toBe("/setup");
+    expect(schemaAppScreenPathFromRoute(estii, "/estii/schema")).toBeUndefined();
+    expect(schemaAppScreenPathFromRoute(estii, "/tasks")).toBeUndefined();
   });
 });

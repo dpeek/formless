@@ -53,5 +53,31 @@ export function findSchemaAppDefinition(key: string): SchemaAppDefinition | unde
 }
 
 export function findSchemaAppDefinitionByRoute(pathname: string): SchemaAppDefinition | undefined {
-  return schemaApps.find((app) => app.route === pathname || app.schemaRoute === pathname);
+  return schemaApps.find(
+    (app) => app.schemaRoute === pathname || schemaAppScreenPathFromRoute(app, pathname),
+  );
+}
+
+export function schemaAppScreenRoute(
+  app: SchemaAppDefinition,
+  screenPath: string,
+): `/${string}` {
+  return screenPath === "/" ? app.route : (`${app.route}${screenPath}` as `/${string}`);
+}
+
+export function schemaAppScreenPathFromRoute(
+  app: SchemaAppDefinition,
+  pathname: string,
+): string | undefined {
+  if (pathname === app.schemaRoute) {
+    return undefined;
+  }
+
+  if (pathname === app.route) {
+    return "/";
+  }
+
+  const routePrefix = `${app.route}/`;
+
+  return pathname.startsWith(routePrefix) ? pathname.slice(app.route.length) : undefined;
 }

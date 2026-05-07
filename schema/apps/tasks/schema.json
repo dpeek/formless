@@ -232,6 +232,7 @@
     "taskHome": {
       "type": "workspace",
       "label": "Tasks",
+      "path": "/",
       "navigation": {
         "primary": true
       },

@@ -1215,6 +1215,7 @@
     "sitePages": {
       "type": "workspace",
       "label": "Pages",
+      "path": "/",
       "navigation": {
         "primary": true
       },
@@ -1232,6 +1233,7 @@
     "siteHeader": {
       "type": "workspace",
       "label": "Header",
+      "path": "/header",
       "navigation": {
         "primary": true
       },
@@ -1249,6 +1251,7 @@
     "siteFooter": {
       "type": "workspace",
       "label": "Footer",
+      "path": "/footer",
       "navigation": {
         "primary": true
       },

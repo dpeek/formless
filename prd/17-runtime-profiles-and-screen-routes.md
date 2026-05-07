@@ -1,7 +1,7 @@
 # PRD 17: Runtime profiles and screen routes
 
 Status: active
-Current chunk: RPS-04
+Current chunk: RPS-05
 Last updated: 2026-05-07
 
 ## Goal
@@ -317,7 +317,7 @@ Rejected as incomplete because Estii screen routing and app/profile separation w
 | RPS-01 | shipped | none       | PRD                                   | PRD captures runtime profile, Estii rename, screen path, published Site, decisions, dependencies, and promote notes. |
 | RPS-02 | shipped | RPS-01     | app registries, source schema paths   | `rates` is renamed to `estii` at the app boundary while rate-card data behavior stays unchanged.                     |
 | RPS-03 | shipped | RPS-02     | screen parser/types/model tests       | Workspace screens accept static app-relative paths and expose route-ready screen models.                             |
-| RPS-04 | planned | RPS-03     | app shell, home route, source schemas | Dev shell renders screen sidebar/navigation and routes Estii setup through `/estii/setup`.                           |
+| RPS-04 | shipped | RPS-03     | app shell, home route, source schemas | Dev shell renders screen sidebar/navigation and routes Estii setup through `/estii/setup`.                           |
 | RPS-05 | planned | RPS-04     | runtime profile resolver, app routes  | Dev, app, and published Site profiles mount routes through one explicit profile seam.                                |
 | RPS-06 | planned | RPS-05     | Site public route and renderer        | Published Site profile serves `/` as home and `/*` as public page slugs with no generated admin shell.               |
 | RPS-07 | planned | RPS-06     | browser smoke, PRD                    | Checks pass; browser smoke covers dev routes, Estii screen routes, and published Site routes; PRD notes are current. |
@@ -419,19 +419,19 @@ Evidence:
 
 ### RPS-04 generated screen navigation routes
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: render declared app screens as real routes.
 
 Tasks:
 
-- Update source schemas with explicit screen paths.
-- Make Estii `rateSetup` primary and path-backed.
-- Route `/estii/setup` to the Estii setup screen.
-- Route Site editor screen paths.
-- Render active app screen navigation from screen models.
-- Keep Schema as a dev tooling route.
-- Preserve selected query and context state per screen and section.
+- Shipped: updated Tasks, Estii, and Site source schemas with explicit screen paths.
+- Shipped: made Estii `rateSetup` primary, labeled `Setup`, and path-backed at `/setup`.
+- Shipped: routed `/estii/setup` to the Estii setup screen.
+- Shipped: routed Site editor screen paths `/site`, `/site/header`, and `/site/footer`.
+- Shipped: rendered active app screen navigation from primary screen models in the dev shell sidebar.
+- Shipped: kept Schema as a dev tooling route in the active app sidebar.
+- Shipped: preserved selected query and context state keys by screen and section.
 
 Acceptance:
 
@@ -443,12 +443,13 @@ Acceptance:
 - Schema editor routes still work.
 - Generated mutations still submit with the active schema key.
 
-Evidence to record:
+Evidence:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
-- Browser smoke for `/tasks`, `/estii`, `/estii/setup`, `/site`, `/site/header`, `/site/footer`, and `/estii/schema`.
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: full watcher run showed `29 passed (29)`, `511 passed (511)`; latest focused rerun `src/client/views.test.ts` passed `38 passed (38)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
+- Browser smoke reset source schema and seed data for `tasks`, `estii`, and `site` through `/api/:schemaKey/reset/schema` and `/api/:schemaKey/reset/seed`; all six reset calls returned `200`.
+- Browser smoke: `bun browser --session rps-04 batch --bail ...` opened `/tasks`, `/estii`, `/estii/setup`, `/site`, `/site/header`, `/site/footer`, and `/estii/schema`; each route rendered expected screen or schema content and browser errors were empty.
 
 ### RPS-05 runtime profile resolver
 
@@ -548,7 +549,7 @@ Evidence to record:
 
 ## Blockers
 
-- None known for RPS-04.
+- None known for RPS-05.
 - Runtime profile source may need a small config convention before RPS-05 implementation.
 - Published Site browser smoke needs a way to run the app under `publishedSite` profile.
 
@@ -579,7 +580,9 @@ Evidence to record:
 - `doc/current.md`: RPS-03 shipped; workspace screens can declare optional static app-relative `path`.
 - `doc/current.md`: RPS-03 shipped; screen path parser rejects duplicates, params, wildcards, non-root relative paths, and `/schema`.
 - `doc/current.md`: RPS-03 shipped; screen models expose path facts and assign `/` to the first primary screen when paths are omitted.
-- `doc/current.md`: add screen route and navigation facts once RPS-04 ships.
+- `doc/current.md`: RPS-04 shipped; source screens declare paths for Tasks `/`, Estii `/` and `/setup`, and Site `/`, `/header`, `/footer`.
+- `doc/current.md`: RPS-04 shipped; dev shell sidebar renders active app screen navigation from primary screen models and keeps Schema as a dev tooling route.
+- `doc/current.md`: RPS-04 shipped; app screen routes render through `HomeRoute` with app-relative screen paths while mutations keep the active schema key.
 - `doc/current.md`: add runtime profile facts once RPS-05 ships.
 - `doc/current.md`: add published Site top-level route facts once RPS-06 ships.
 - `doc/roadmap.md`: add first-release screen-route scope only if this PRD is pulled into first-release work.
@@ -589,3 +592,4 @@ Evidence to record:
 - 2026-05-07: PRD created from architecture discussion. User direction: rename Rates to Estii, add screen/sidebar/routing, support published Site top-level routes, and avoid making cookie-selected worlds the main model.
 - 2026-05-07: RPS-02 shipped. App boundary is `estii`; route is `/estii`; schema route is `/estii/schema`; source folder is `schema/apps/estii`; old browser routes redirect; old `/api/rates/*` is unsupported.
 - 2026-05-07: RPS-03 shipped. Workspace screens accept optional static app-relative paths; duplicate, dynamic, wildcard, relative, and `/schema` paths fail; screen models expose paths and path lookup.
+- 2026-05-07: RPS-04 shipped. Dev shell active app navigation uses primary screen models; `/estii/setup`, `/site/header`, and `/site/footer` route to declared screens; Schema remains a dev tooling route.

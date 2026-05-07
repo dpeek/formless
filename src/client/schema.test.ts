@@ -78,6 +78,7 @@ describe("task source schema", () => {
       taskHome: {
         type: "workspace",
         label: "Tasks",
+        path: "/",
         navigation: { primary: true },
         layout: {
           type: "stack",
@@ -104,6 +105,7 @@ describe("rate source schema", () => {
       rateHome: {
         type: "workspace",
         label: "Rates",
+        path: "/",
         navigation: { primary: true },
         layout: {
           type: "stack",
@@ -112,8 +114,9 @@ describe("rate source schema", () => {
       },
       rateSetup: {
         type: "workspace",
-        label: "Rate setup",
-        navigation: { primary: false },
+        label: "Setup",
+        path: "/setup",
+        navigation: { primary: true },
         layout: {
           type: "stack",
           sections: [

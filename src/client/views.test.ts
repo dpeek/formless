@@ -302,6 +302,7 @@ describe("home view model collections", () => {
     ]);
     expect(selectPrimaryScreenModels(rateCardSchema).map((model) => model.screenName)).toEqual([
       "rateHome",
+      "rateSetup",
     ]);
   });
 
@@ -1517,8 +1518,8 @@ describe("home view model collections", () => {
       },
       {
         screenName: "rateSetup",
-        label: "Rate setup",
-        primary: false,
+        label: "Setup",
+        primary: true,
         layoutType: "stack",
         sections: [
           { id: "cards", label: "Rate cards", viewName: "cardHome", entityName: "card" },
@@ -1533,31 +1534,13 @@ describe("home view model collections", () => {
     ]);
     expect(selectPrimaryScreenModels(rateCardSchema).map((model) => model.screenName)).toEqual([
       "rateHome",
+      "rateSetup",
     ]);
   });
 
   it("exposes route-ready screen paths and selects models by path", () => {
-    const pathBackedRateSchema: AppSchema = {
-      ...rateCardSchema,
-      screens: {
-        rateHome: {
-          ...rateCardSchema.screens!.rateHome,
-          type: "workspace",
-          label: "Rates",
-          path: "/",
-        },
-        rateSetup: {
-          ...rateCardSchema.screens!.rateSetup,
-          type: "workspace",
-          label: "Setup",
-          path: "/setup",
-          navigation: { primary: true },
-        },
-      },
-    };
-
     expect(
-      selectPrimaryScreenModels(pathBackedRateSchema).map((model) => ({
+      selectPrimaryScreenModels(rateCardSchema).map((model) => ({
         screenName: model.screenName,
         path: model.path,
       })),
@@ -1565,13 +1548,23 @@ describe("home view model collections", () => {
       { screenName: "rateHome", path: "/" },
       { screenName: "rateSetup", path: "/setup" },
     ]);
-    expect(selectScreenModelByPath(pathBackedRateSchema, "/setup")?.screenName).toBe("rateSetup");
-    expect(selectScreenModelByPath(pathBackedRateSchema, "/missing")).toBeUndefined();
+    expect(selectScreenModelByPath(rateCardSchema, "/setup")?.screenName).toBe("rateSetup");
+    expect(selectScreenModelByPath(rateCardSchema, "/missing")).toBeUndefined();
   });
 
   it("uses the app root path for the first primary screen when paths are omitted", () => {
+    const { path: _homePath, ...rateHomeWithoutPath } = rateCardSchema.screens!.rateHome;
+    const { path: _setupPath, ...rateSetupWithoutPath } = rateCardSchema.screens!.rateSetup;
+    const pathlessRateSchema: AppSchema = {
+      ...rateCardSchema,
+      screens: {
+        rateHome: rateHomeWithoutPath,
+        rateSetup: rateSetupWithoutPath,
+      },
+    };
+
     expect(
-      selectScreenModels(rateCardSchema).map((model) => ({
+      selectScreenModels(pathlessRateSchema).map((model) => ({
         screenName: model.screenName,
         path: model.path,
       })),
@@ -1579,7 +1572,7 @@ describe("home view model collections", () => {
       { screenName: "rateHome", path: "/" },
       { screenName: "rateSetup", path: undefined },
     ]);
-    expect(selectScreenModelByPath(rateCardSchema, "/")?.screenName).toBe("rateHome");
+    expect(selectScreenModelByPath(pathlessRateSchema, "/")?.screenName).toBe("rateHome");
   });
 
   it("exposes render-ready collection facts on screen sections", () => {
@@ -1616,6 +1609,11 @@ describe("home view model collections", () => {
   it("selects site Pages, Header, and Footer as primary screen models", () => {
     const models = selectPrimaryScreenModels(siteSourceSchema);
 
+    expect(models.map((model) => ({ screenName: model.screenName, path: model.path }))).toEqual([
+      { screenName: "sitePages", path: "/" },
+      { screenName: "siteHeader", path: "/header" },
+      { screenName: "siteFooter", path: "/footer" },
+    ]);
     expect(models.map(summarizeScreenModel)).toEqual([
       {
         screenName: "sitePages",

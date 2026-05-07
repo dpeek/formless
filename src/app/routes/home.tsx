@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
@@ -9,23 +8,30 @@ import {
 } from "../../client/store.ts";
 import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
 import { bootstrapClient, startPushSync } from "../../client/sync.ts";
-import { selectPrimaryScreenModels } from "../../client/views.ts";
+import { selectScreenModelByPath } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import { SchemaAppProvider } from "../generated/schema-app-context.tsx";
 import { HomeScreen } from "../generated/screen.tsx";
+import { NotFoundRoute } from "./not-found.tsx";
 import { DeveloperStatusLine } from "./status-line.tsx";
 
-export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
+export function HomeRoute({
+  schemaKey,
+  screenPath,
+}: {
+  schemaKey: SchemaKey;
+  screenPath: string;
+}) {
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
   const schema = activeSchemaKey === null || activeSchemaKey === schemaKey ? activeSchema : null;
   const app = getSchemaAppDefinition(schemaKey);
-  const screenModels = useMemo(() => (schema ? selectPrimaryScreenModels(schema) : []), [schema]);
+  const homeScreen = useMemo(
+    () => (schema ? selectScreenModelByPath(schema, screenPath) : undefined),
+    [schema, screenPath],
+  );
   const [selectionState, setSelectionState] = useState(createHomeRouteSelectionState);
-  const selectedScreenName = selectionState.selectedScreenName;
-  const homeScreen =
-    screenModels.find((model) => model.screenName === selectedScreenName) ?? screenModels[0];
   const today = useTodayDateString();
 
   useEffect(() => {
@@ -72,17 +78,6 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
     };
   }, [app.label, schemaKey]);
 
-  useEffect(() => {
-    const selectedScreenExists = screenModels.some(
-      (model) => model.screenName === selectedScreenName,
-    );
-    const defaultScreenName = screenModels[0]?.screenName ?? null;
-
-    if (!selectedScreenExists && selectedScreenName !== defaultScreenName) {
-      setSelectionState((current) => withHomeRouteSelectedScreenName(current, defaultScreenName));
-    }
-  }, [screenModels, selectedScreenName]);
-
   if (!schema) {
     return (
       <section className="mx-auto max-w-3xl space-y-4">
@@ -96,6 +91,10 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   }
 
   if (!homeScreen) {
+    if (screenPath !== "/") {
+      return <NotFoundRoute />;
+    }
+
     return (
       <section className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-semibold">Formless</h1>
@@ -111,25 +110,6 @@ export function HomeRoute({ schemaKey }: { schemaKey: SchemaKey }) {
         <h1 className="text-2xl font-semibold">{homeScreen.label}</h1>
         <DeveloperStatusLine schemaVersion={schema.version} />
       </header>
-
-      {screenModels.length <= 1 ? null : (
-        <Tabs
-          onValueChange={(value) => {
-            if (typeof value === "string") {
-              setSelectionState((current) => withHomeRouteSelectedScreenName(current, value));
-            }
-          }}
-          value={homeScreen.screenName}
-        >
-          <TabsList aria-label={schema.screens ? "Screens" : "Collections"} variant="line">
-            {screenModels.map((model) => (
-              <TabsTrigger key={model.screenName} value={model.screenName}>
-                {model.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      )}
 
       <SchemaAppProvider schemaKey={schemaKey}>
         <HomeScreen

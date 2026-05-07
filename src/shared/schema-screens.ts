@@ -60,10 +60,12 @@ function parseScreen(
     throw new Error(`Screen "${screenName}" must be an object.`);
   }
 
-  assertExactKeys(`Screen "${screenName}"`, value, ["type", "label", "layout"], [
-    "navigation",
-    "path",
-  ]);
+  assertExactKeys(
+    `Screen "${screenName}"`,
+    value,
+    ["type", "label", "layout"],
+    ["navigation", "path"],
+  );
 
   if (value.type !== "workspace") {
     throw new Error(`Screen "${screenName}" type must be "workspace".`);

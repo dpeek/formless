@@ -163,12 +163,11 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expect(html).toContain('aria-label="Tasks content"');
-    expect(html).toContain("Home");
+    expect(html).toContain('aria-label="Tasks screens"');
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Tasks...");
     expect(html).not.toContain("Create Task");
-    expect(html).not.toContain('href="/tasks/schema"');
+    expect(html).toContain('href="/tasks/schema"');
   });
 
   it('renders the "/estii" route with Estii navigation', () => {
@@ -180,12 +179,11 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expect(html).toContain('aria-label="Estii content"');
-    expect(html).toContain("Home");
+    expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Estii...");
     expect(html).not.toContain("Create Resource");
-    expect(html).not.toContain('href="/estii/schema"');
+    expect(html).toContain('href="/estii/schema"');
   });
 
   it('renders the "/site" route with site navigation', () => {
@@ -197,19 +195,19 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expect(html).toContain('aria-label="Site content"');
-    expect(html).toContain("Home");
+    expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain("Schema");
     expect(html).toContain("Loading Site...");
     expect(html).not.toContain("Create Content item");
-    expect(html).not.toContain('href="/site/schema"');
+    expect(html).toContain('href="/site/schema"');
   });
 
   it('renders the "/tasks/schema" route', () => {
     applyBootstrapResponse(bootstrap([], appSchema), "tasks");
     const html = renderRoute("/tasks/schema");
 
-    expect(html).toContain('aria-label="Tasks content"');
+    expect(html).toContain('aria-label="Tasks screens"');
+    expect(html).toContain('href="/tasks/schema"');
     expect(html).toContain("Tasks Schema");
     expect(html).toContain("<code>tasks</code>");
     expect(html).toContain('aria-label="Tasks route reset controls"');
@@ -230,7 +228,9 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap([], rateCardSchema), "estii");
     const html = renderRoute("/estii/schema");
 
-    expect(html).toContain('aria-label="Estii content"');
+    expect(html).toContain('aria-label="Estii screens"');
+    expect(html).toContain('href="/estii/setup"');
+    expect(html).toContain('href="/estii/schema"');
     expect(html).toContain("Estii Schema");
     expect(html).toContain("<code>estii</code>");
     expect(html).toContain('aria-label="Estii route reset controls"');
@@ -252,7 +252,10 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap([], siteSourceSchema), "site");
     const html = renderRoute("/site/schema");
 
-    expect(html).toContain('aria-label="Site content"');
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site/header"');
+    expect(html).toContain('href="/site/footer"');
+    expect(html).toContain('href="/site/schema"');
     expect(html).toContain("Site Schema");
     expect(html).toContain("<code>site</code>");
     expect(html).toContain('aria-label="Site route reset controls"');
@@ -463,12 +466,14 @@ describe("generated collection home", () => {
     expect(html).not.toContain('aria-label="Collections"');
   });
 
-  it("renders primary screen tabs and hides non-primary screens", () => {
+  it("renders primary screen links and hides non-primary screens", () => {
     applyBootstrapResponse(bootstrap([], taskNavigationScreenSchema()));
     const html = renderRoute("/tasks");
 
-    expect(html).toContain('aria-label="Screens"');
+    expect(html).toContain('aria-label="Tasks screens"');
     expect(html).not.toContain('aria-label="Collections"');
+    expect(html).toContain('href="/tasks"');
+    expect(html).toContain('href="/tasks/review"');
     expect(html).toContain("Task home");
     expect(html).toContain("Task review");
     expect(html).not.toContain("Hidden setup");
@@ -650,7 +655,9 @@ describe("generated collection home", () => {
 
     expect(html).toContain("<h1");
     expect(html).toContain(">Pages</h1>");
-    expect(html).toContain('aria-label="Screens"');
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site/header"');
+    expect(html).toContain('href="/site/footer"');
     expect(html).toContain("Header");
     expect(html).toContain("Footer");
     expect(html).toContain('aria-label="Block list detail"');
@@ -679,9 +686,10 @@ describe("generated collection home", () => {
 
     expect(html).toContain("<h1");
     expect(html).toContain(">Pages</h1>");
-    expect(html).toContain('aria-label="Screens"');
-    expect(html).toContain('data-slot="tabs-list"');
-    expect(html).toContain('data-slot="tabs-trigger"');
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site"');
+    expect(html).toContain('href="/site/header"');
+    expect(html).toContain('href="/site/footer"');
     expect(html).toContain("Pages");
     expect(html).toContain("Header");
     expect(html).toContain("Footer");
@@ -692,6 +700,25 @@ describe("generated collection home", () => {
     expect(html).toContain('data-slot="table"');
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).not.toContain(">Blocks</h1>");
+  });
+
+  it("routes site header and footer screens by path", () => {
+    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    const headerHtml = renderRoute("/site/header");
+    const footerHtml = renderRoute("/site/footer");
+
+    expect(headerHtml).toContain(">Header</h1>");
+    expect(headerHtml).toContain('aria-label="Site screens"');
+    expect(headerHtml).toContain('href="/site/header"');
+    expect(headerHtml).toMatch(/aria-label="Header Placements count"[^>]*>4</);
+    expect(headerHtml).toContain('value="Home"');
+    expect(headerHtml).toContain('value="Blog"');
+    expect(footerHtml).toContain(">Footer</h1>");
+    expect(footerHtml).toContain('aria-label="Site screens"');
+    expect(footerHtml).toContain('href="/site/footer"');
+    expect(footerHtml).toMatch(/aria-label="Footer Placements count"[^>]*>2</);
+    expect(footerHtml).toContain('value="Explore"');
+    expect(footerHtml).toContain('value="Social"');
   });
 
   it("updates site page root selection after local record merges", () => {
@@ -798,10 +825,27 @@ describe("generated collection home", () => {
     const html = renderRoute("/estii");
 
     expect(html).not.toContain('aria-label="Collections"');
+    expect(html).toContain('aria-label="Estii screens"');
+    expect(html).toContain('href="/estii/setup"');
     expect(html).toContain("Rates");
     expect(html).toContain("Create Resource");
     expect(html).not.toContain("Regenerate missing rates");
     expect(html).not.toMatch(/<button[^>]*>Create Rate<\/button>/);
+  });
+
+  it("routes Estii setup through the setup screen path", () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
+    const html = renderRoute("/estii/setup");
+
+    expect(html).toContain(">Setup</h1>");
+    expect(html).toContain('aria-label="Estii screens"');
+    expect(html).toContain('href="/estii"');
+    expect(html).toContain('href="/estii/setup"');
+    expect(html).toContain(">Rate cards</h2>");
+    expect(html).toContain(">Resources</h2>");
+    expect(html).toContain("Create Rate card");
+    expect(html).toContain("Create Resource");
+    expect(html).not.toContain(">Rates</h1>");
   });
 
   it("renders the scoped rate-card collection with a card selector", () => {
@@ -2652,6 +2696,7 @@ function taskNavigationScreenSchema(): AppSchema {
       taskHome: {
         type: "workspace",
         label: "Task home",
+        path: "/",
         navigation: {
           primary: true,
         },
@@ -2669,6 +2714,7 @@ function taskNavigationScreenSchema(): AppSchema {
       taskReview: {
         type: "workspace",
         label: "Task review",
+        path: "/review",
         navigation: {
           primary: true,
         },
@@ -2686,6 +2732,7 @@ function taskNavigationScreenSchema(): AppSchema {
       taskSetup: {
         type: "workspace",
         label: "Hidden setup",
+        path: "/setup",
         navigation: {
           primary: false,
         },
