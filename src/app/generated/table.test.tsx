@@ -17,6 +17,7 @@ describe("RecordTable", () => {
     });
 
     expect(html).toContain('value="$825.00"');
+    expect(html).toContain("min-w-max table-fixed");
     expect(html).toContain("w-52 min-w-52 max-w-60");
   });
 });

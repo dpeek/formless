@@ -272,7 +272,7 @@ function ListDetailScopedHomeCollection({
   return (
     <section
       aria-label={`${context.entity.label} list detail`}
-      className="grid gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)]"
+      className="grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]"
     >
       <ContextListDetailSelector
         context={context}
@@ -291,7 +291,11 @@ function ListDetailScopedHomeCollection({
               <h2 className="text-base font-semibold">
                 {activeOption?.label ?? context.entity.label}
               </h2>
-              <ContextRecordEditor context={context} recordId={activeContextRecordId} />
+              <ContextRecordEditor
+                context={context}
+                density="compact"
+                recordId={activeContextRecordId}
+              />
             </section>
 
             {queryTabs.length <= 1 ? null : (
@@ -562,9 +566,11 @@ function RelatedCollectionCountBadge({
 
 function ContextRecordEditor({
   context,
+  density = "default",
   recordId,
 }: {
   context: HomeContextConfig;
+  density?: "default" | "compact";
   recordId: string | null;
 }) {
   const recordFields = context.recordFields ?? [];
@@ -574,10 +580,17 @@ function ContextRecordEditor({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3 pt-1">
+    <div
+      className={
+        density === "compact"
+          ? "grid min-w-0 gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3"
+          : "flex flex-wrap items-end gap-3 pt-1"
+      }
+    >
       {recordFields.map((fieldConfig) => (
         <RecordFieldEditor
           canPatch={context.entity.mutations.patch.enabled}
+          density={density}
           entityName={context.entityName}
           fieldConfig={fieldConfig}
           key={fieldConfig.fieldName}

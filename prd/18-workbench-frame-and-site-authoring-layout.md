@@ -1,7 +1,7 @@
 # PRD 18: Workbench frame and Site authoring layout
 
 Status: active
-Current chunk: WAF-06
+Current chunk: WAF-07
 Last updated: 2026-05-07
 
 ## Goal
@@ -298,7 +298,7 @@ Site screens:
 | WAF-03 | shipped | WAF-02                | dev tools, schema route/reset UI | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
 | WAF-04 | shipped | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
 | WAF-05 | shipped | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
-| WAF-06 | planned | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
+| WAF-06 | shipped | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
 | WAF-07 | planned | WAF-06                | generated collection UI, schema  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
 | WAF-08 | planned | WAF-07                | browser smoke, PRD               | Checks pass; browser smoke covers Site Pages, Navigation, tools, reset dialog, and sync status details.   |
 
@@ -510,7 +510,7 @@ Evidence:
 
 ### WAF-06 wide Site workspace layout
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: give authoring content enough room.
 
@@ -533,10 +533,25 @@ Acceptance:
 
 Evidence to record:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
-- Browser smoke screenshot for Site Pages.
+Outcome:
+
+- `src/app/routes/home.tsx` widens generated workspace screens to `max-w-[112rem]`.
+- `src/app.tsx` keeps generated app content `min-w-0` so detail panes and tables can use available width.
+- `src/app/generated/collection.tsx` gives list/detail a bounded desktop context rail and a remaining-width detail pane.
+- `src/app/generated/collection.tsx` renders list/detail context fields with compact density above related records.
+- `src/app/generated/table.tsx` lets generated tables keep natural minimum column width inside the table scroller.
+- `src/app.test.tsx` and `src/app/generated/table.test.tsx` cover the wide workspace/list-detail/table layout facts.
+
+Evidence:
+
+- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest affected rerun passed; final tail showed `2 passed (2)` and `100 passed (100)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke: `bun browser --session waf06 --ignore-https-errors open https://18-workbench-frame-and-site-authoring-layout.formless.local/site`.
+- Browser smoke: desktop eval returned `h1` Pages, workspace class `max-w-[112rem]`, workspace width `1136`, detail width `824`, table width `880`, and table container width `824`.
+- Browser smoke: mobile eval at `390x900` returned equal rail/detail widths `358` and `stacks=true`.
+- Browser smoke screenshot: `./tmp/waf06-site-pages.png`.
+- Browser smoke: `bun browser --session waf06 errors` returned no page errors.
 
 ### WAF-07 singleton context and label cleanup
 
@@ -605,7 +620,7 @@ Evidence to record:
 
 ## Blockers
 
-- No known blockers for WAF-06.
+- No known blockers for WAF-07.
 
 ## Non-goals
 
@@ -630,7 +645,8 @@ Evidence to record:
 - `doc/current.md`: note one Reset UI restores source schema and seed data after WAF-03 ships.
 - `doc/current.md`: update sync status location after WAF-04 ships.
 - `doc/current.md`: update Site screens to Pages and Navigation after WAF-05 ships.
-- `doc/current.md`: note Site list/detail wide workspace and singleton context behavior after WAF-06/WAF-07 ship.
+- `doc/current.md`: note Site list/detail uses the wide generated workspace after WAF-06 ships.
+- `doc/current.md`: note singleton context behavior after WAF-07 ships.
 - `doc/roadmap.md`: update release target if this PRD is pulled into first-release scope.
 
 ## Status notes
@@ -640,3 +656,4 @@ Evidence to record:
 - 2026-05-07: WAF-03 shipped. Decision WAF-D2/WAF-D3 implemented in `src/app.tsx`, `src/app/dev-actions.tsx`, and `src/app/routes/schema.tsx`: workbench Tools owns Schema and one active-world Reset, dev schema routes render outside the generated app frame, and schema page content keeps snapshot tooling without reset controls. Next ready chunk is WAF-04.
 - 2026-05-07: WAF-04 shipped. Decision WAF-D4 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`, and `src/app/routes/status-line.tsx`: generated page content no longer renders inline sync diagnostics, workbench/header chrome owns a small sync details control, and app-profile generated chrome keeps the same status access. Next ready chunk is WAF-05.
 - 2026-05-07: WAF-05 shipped. Decision WAF-D5/WAF-D6 implemented in `schema/apps/site/schema.json`: Site top-level screens are Pages and Navigation, Header/Footer are Navigation stack sections, and `/site/header` plus `/site/footer` are no longer screen routes. Next ready chunk is WAF-06.
+- 2026-05-07: WAF-06 shipped. Decision WAF-D7 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/generated/collection.tsx`, and `src/app/generated/table.tsx`: generated workspaces use a wide app content area, list/detail gives most desktop width to detail/table content, compact context fields stay above related placements, and tables keep natural column width inside their scroller. Next ready chunk is WAF-07.

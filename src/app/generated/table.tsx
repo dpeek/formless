@@ -187,7 +187,7 @@ export function RecordTable({
       {recordIds.length === 0 ? (
         <p className="text-sm text-slate-600">No records yet.</p>
       ) : (
-        <Table className="table-fixed text-xs">
+        <Table className="min-w-max table-fixed text-xs">
           <TableHeader>
             <TableRow>
               {visibleColumns.map((column) => (

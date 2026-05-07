@@ -96,7 +96,7 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
   }
 
   return (
-    <section className="mx-auto max-w-3xl space-y-8">
+    <section className="mx-auto w-full max-w-[112rem] space-y-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{homeScreen.label}</h1>
       </header>

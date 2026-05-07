@@ -661,6 +661,19 @@ describe("generated collection home", () => {
     );
   });
 
+  it("renders generated Site workspaces with wide list/detail table layout", () => {
+    bootstrapSiteEditor();
+    const html = renderRoute("/site");
+
+    expect(html).toContain('class="mx-auto w-full max-w-[112rem] space-y-8"');
+    expect(html).toContain(
+      "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]",
+    );
+    expect(html).toContain("grid min-w-0 gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3");
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain("min-w-max table-fixed");
+  });
+
   it("renders synthetic stack sections in order with independent selected queries", () => {
     const schema = taskStackScreenSchema();
     const screen = requiredScreenModel(schema, "taskStack");
