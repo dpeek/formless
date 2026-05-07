@@ -1,7 +1,7 @@
 # PRD 14: Table actions and ordering
 
-Status: planned
-Current chunk: TAO-01
+Status: in progress
+Current chunk: TAO-02
 Last updated: 2026-05-07
 
 ## Goal
@@ -275,63 +275,64 @@ Notes:
 
 ## Decisions
 
-| ID      | Decision                                                                 | Reason                                                                                  | Evidence                                                     |
-| ------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| TAO-D1  | Keep collection views separate from table views.                         | Collections own scope/query/context; tables own row interaction.                        | `doc/current.md`, `src/client/views.ts`                      |
-| TAO-D2  | Make table the first record interaction surface.                         | Tables are where row/cell actions and ordering are needed now.                          | `src/app/generated/table.tsx`                                |
-| TAO-D3  | Model action scope first and rendering second.                           | Button/dropdown/hover can change without changing action semantics.                     | User design discussion                                       |
-| TAO-D4  | Use a shared UI action descriptor backed by separate execution kinds.     | Open dialogs, create, patch, and authority actions should render consistently.          | `src/app/generated/actions.tsx`, `src/client/sync.ts`        |
-| TAO-D5  | Keep table action definitions table-local first.                         | Row target resolution depends on local table context.                                   | `src/shared/schema-views.ts`, `src/client/views.ts`          |
-| TAO-D6  | Add `invokeAction` as a table column type.                               | Current schema renders cells from column definitions.                                   | `src/shared/schema-types.ts`, `src/app/generated/table.tsx`  |
-| TAO-D7  | Use named action references in `invokeAction` columns.                   | Actions can later be reused by row menus, keyboard affordances, or mobile presentation. | User design discussion                                       |
-| TAO-D8  | Add explicit `edit` views.                                               | Full edit dialogs should not overload create, item, or table column schemas.            | `src/shared/schema-views.ts`, `src/app/generated/create.tsx` |
-| TAO-D9  | Edit view fields require `editor` and `commit`.                          | Edit dialogs patch existing records like inline editors.                                | `src/app/generated/record-field-editor.tsx`                  |
-| TAO-D10 | Edit dialogs live-patch fields and close with Done.                      | Draft save/cancel is future roadmap scope.                                              | `doc/roadmap.md`                                             |
-| TAO-D11 | First `editRecord` targets are row and reference.                        | Site placement rows need referenced child block editing.                                | `schema/apps/site/schema.json`                               |
-| TAO-D12 | Keep normal booleans as field editors, not actions.                      | `visible` is better as a checkbox than Hide/Show row actions.                           | `src/app/generated/record-field-editor.tsx`                  |
-| TAO-D13 | Use Site `blockPlacementTable` as proving table.                         | It needs referenced edit, visible checkbox, and scoped ordering.                        | `schema/apps/site/schema.json`                               |
-| TAO-D14 | Use table-local ordering, not query-level ordering.                      | Current queries filter records; table drag only needs render-time ordering.             | `src/shared/query.ts`, `src/client/store.ts`                 |
-| TAO-D15 | Use sparse/fractional numeric ranks.                                     | Avoids dense multi-row rewrites for normal drag reorder.                                | User design discussion                                       |
-| TAO-D16 | Ordering fields must be non-integer number fields.                       | Fractional ranks cannot use integer fields.                                             | `src/shared/schema-fields.ts`                                |
-| TAO-D17 | Allow `min: 0` ordering fields.                                          | Rebalance can keep ranks inside positive range.                                         | User design discussion                                       |
-| TAO-D18 | Declare ordering scope through row fields first.                         | Site placement scope is already `parent` and `slot`.                                    | `schema/apps/site/schema.json`                               |
-| TAO-D19 | Disallow cross-scope drag/move first.                                    | Moving across scope implies patching other fields, not just ordering.                   | User design discussion                                       |
-| TAO-D20 | Generate move top/up/down/bottom controls from ordering.                 | Move availability depends on scoped sorted rows, not just row record state.             | User design discussion                                       |
-| TAO-D21 | Merge generated ordering controls into row action menus.                 | One row menu is better UX than separate action affordances.                             | User design discussion                                       |
-| TAO-D22 | Keep drag handle and row menu as separate utility columns.               | Drag and dropdown have different pointer and keyboard semantics.                        | User design discussion                                       |
-| TAO-D23 | Make utility columns explicit, with auto-insert fallback.                | Column order should stay schema-owned.                                                  | User design discussion                                       |
-| TAO-D24 | Use `@dnd-kit/react` for drag sorting.                                   | It provides React sortable hooks, handles, grouping, and accessibility support.         | dnd-kit docs                                                 |
-| TAO-D25 | Keep dnd-kit in the generated app layer, not `lib/ui`.                   | Drag reorder depends on schema, records, sync, and ordering rules.                      | `lib/ui/src/table.tsx`, `src/app/generated/table.tsx`        |
-| TAO-D26 | Patch data only on drop, not hover.                                      | Avoids sync noise and half-committed drag state.                                        | User design discussion                                       |
-| TAO-D27 | Represent but do not ship destructive behavior.                          | Proper delete and confirmation flows are future roadmap scope.                          | `doc/roadmap.md`                                             |
-| TAO-D28 | Infer icons first; schema icons later.                                   | Standard action icons can be chosen by action type.                                     | Existing `lucide-react` usage                                |
+| ID      | Decision                                                              | Reason                                                                                  | Evidence                                                     |
+| ------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| TAO-D1  | Keep collection views separate from table views.                      | Collections own scope/query/context; tables own row interaction.                        | `doc/current.md`, `src/client/views.ts`                      |
+| TAO-D2  | Make table the first record interaction surface.                      | Tables are where row/cell actions and ordering are needed now.                          | `src/app/generated/table.tsx`                                |
+| TAO-D3  | Model action scope first and rendering second.                        | Button/dropdown/hover can change without changing action semantics.                     | User design discussion                                       |
+| TAO-D4  | Use a shared UI action descriptor backed by separate execution kinds. | Open dialogs, create, patch, and authority actions should render consistently.          | `src/app/generated/actions.tsx`, `src/client/sync.ts`        |
+| TAO-D5  | Keep table action definitions table-local first.                      | Row target resolution depends on local table context.                                   | `src/shared/schema-views.ts`, `src/client/views.ts`          |
+| TAO-D6  | Add `invokeAction` as a table column type.                            | Current schema renders cells from column definitions.                                   | `src/shared/schema-types.ts`, `src/app/generated/table.tsx`  |
+| TAO-D7  | Use named action references in `invokeAction` columns.                | Actions can later be reused by row menus, keyboard affordances, or mobile presentation. | User design discussion                                       |
+| TAO-D8  | Add explicit `edit` views.                                            | Full edit dialogs should not overload create, item, or table column schemas.            | `src/shared/schema-views.ts`, `src/app/generated/create.tsx` |
+| TAO-D9  | Edit view fields require `editor` and `commit`.                       | Edit dialogs patch existing records like inline editors.                                | `src/app/generated/record-field-editor.tsx`                  |
+| TAO-D10 | Edit dialogs live-patch fields and close with Done.                   | Draft save/cancel is future roadmap scope.                                              | `doc/roadmap.md`                                             |
+| TAO-D11 | First `editRecord` targets are row and reference.                     | Site placement rows need referenced child block editing.                                | `schema/apps/site/schema.json`                               |
+| TAO-D12 | Keep normal booleans as field editors, not actions.                   | `visible` is better as a checkbox than Hide/Show row actions.                           | `src/app/generated/record-field-editor.tsx`                  |
+| TAO-D13 | Use Site `blockPlacementTable` as proving table.                      | It needs referenced edit, visible checkbox, and scoped ordering.                        | `schema/apps/site/schema.json`                               |
+| TAO-D14 | Use table-local ordering, not query-level ordering.                   | Current queries filter records; table drag only needs render-time ordering.             | `src/shared/query.ts`, `src/client/store.ts`                 |
+| TAO-D15 | Use sparse/fractional numeric ranks.                                  | Avoids dense multi-row rewrites for normal drag reorder.                                | User design discussion                                       |
+| TAO-D16 | Ordering fields must be non-integer number fields.                    | Fractional ranks cannot use integer fields.                                             | `src/shared/schema-fields.ts`                                |
+| TAO-D17 | Allow `min: 0` ordering fields.                                       | Rebalance can keep ranks inside positive range.                                         | User design discussion                                       |
+| TAO-D18 | Declare ordering scope through row fields first.                      | Site placement scope is already `parent` and `slot`.                                    | `schema/apps/site/schema.json`                               |
+| TAO-D19 | Disallow cross-scope drag/move first.                                 | Moving across scope implies patching other fields, not just ordering.                   | User design discussion                                       |
+| TAO-D20 | Generate move top/up/down/bottom controls from ordering.              | Move availability depends on scoped sorted rows, not just row record state.             | User design discussion                                       |
+| TAO-D21 | Merge generated ordering controls into row action menus.              | One row menu is better UX than separate action affordances.                             | User design discussion                                       |
+| TAO-D22 | Keep drag handle and row menu as separate utility columns.            | Drag and dropdown have different pointer and keyboard semantics.                        | User design discussion                                       |
+| TAO-D23 | Make utility columns explicit, with auto-insert fallback.             | Column order should stay schema-owned.                                                  | User design discussion                                       |
+| TAO-D24 | Use `@dnd-kit/react` for drag sorting.                                | It provides React sortable hooks, handles, grouping, and accessibility support.         | dnd-kit docs                                                 |
+| TAO-D25 | Keep dnd-kit in the generated app layer, not `lib/ui`.                | Drag reorder depends on schema, records, sync, and ordering rules.                      | `lib/ui/src/table.tsx`, `src/app/generated/table.tsx`        |
+| TAO-D26 | Patch data only on drop, not hover.                                   | Avoids sync noise and half-committed drag state.                                        | User design discussion                                       |
+| TAO-D27 | Represent but do not ship destructive behavior.                       | Proper delete and confirmation flows are future roadmap scope.                          | `doc/roadmap.md`                                             |
+| TAO-D28 | Infer icons first; schema icons later.                                | Standard action icons can be chosen by action type.                                     | Existing `lucide-react` usage                                |
 
 ## Chunks
 
-| ID     | Status  | Depends on | Main files                                                   | Acceptance                                                                                               |
-| ------ | ------- | ---------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| TAO-01 | planned | none       | PRD, characterization tests                                  | Current table action/create/edit/order behavior is characterized; PRD status and chunks are current.     |
-| TAO-02 | planned | TAO-01     | schema types/parser, view model, generated table/action UI   | Table-local actions parse; `invokeAction` column renders single action button/dropdown facts.            |
-| TAO-03 | planned | TAO-02     | edit view parser/model, generated edit dialog, Site schema   | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.               |
-| TAO-04 | planned | TAO-03     | ordering parser/model, rank module, move menu, Site schema   | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                    |
-| TAO-05 | planned | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser  | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.        |
-| TAO-06 | planned | TAO-05     | browser smoke, PRD                                           | `/site`, `/tasks`, and `/rates` smoke pass; PRD status, blockers, and promote notes are current.         |
+| ID     | Status  | Depends on | Main files                                                  | Acceptance                                                                                           |
+| ------ | ------- | ---------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| TAO-01 | shipped | none       | PRD, characterization tests                                 | Current table action/create/edit/order behavior is characterized; PRD status and chunks are current. |
+| TAO-02 | planned | TAO-01     | schema types/parser, view model, generated table/action UI  | Table-local actions parse; `invokeAction` column renders single action button/dropdown facts.        |
+| TAO-03 | planned | TAO-02     | edit view parser/model, generated edit dialog, Site schema  | `edit` views parse; Site placement rows open child block edit dialog through `editRecord`.           |
+| TAO-04 | planned | TAO-03     | ordering parser/model, rank module, move menu, Site schema  | Table ordering sorts rows; move top/up/down/bottom patches sparse ranks within scope.                |
+| TAO-05 | planned | TAO-04     | dnd-kit dependency, generated table drag UI, tests, browser | Drag handle reorders rows within scope using dnd-kit; data patches on drop; browser smoke passes.    |
+| TAO-06 | planned | TAO-05     | browser smoke, PRD                                          | `/site`, `/tasks`, and `/rates` smoke pass; PRD status, blockers, and promote notes are current.     |
 
 ## Chunk details
 
 ### TAO-01 characterization
 
-Status: planned.
+Status: shipped.
 
 Goal: protect the current generated table behavior before adding actions and ordering.
 
-Tasks:
+Outcome:
 
-- Characterize existing table column parsing for field, reference-field, value/unit, and computed columns.
-- Characterize existing collection action rendering.
-- Characterize existing one-off referenced record edit button behavior if useful.
-- Characterize current Site placement table columns and visible `order` behavior.
-- Confirm existing source schemas parse unchanged.
+- Source schemas parse and re-parse through `stringifySchema`.
+- Current table column types remain characterized for field, reference-field, value/unit, and computed columns.
+- Collection actions still render below generated table results.
+- Current one-off referenced-record edit button renders for `referenceItemView` field columns.
+- Site `blockPlacementTable` still exposes raw editable integer `order` and editable `visible`.
+- No runtime behavior changed.
 
 Acceptance:
 
@@ -340,11 +341,11 @@ Acceptance:
 - Site placement table baseline is documented in tests or PRD evidence.
 - No runtime behavior changes.
 
-Evidence to record:
+Evidence:
 
-- `./tmp/agent-dev.json`.
-- `./tmp/test.txt`.
-- `./tmp/check.txt`.
+- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T03:39:55.864Z`.
+- `./tmp/test.txt`: final post-rebase rerun passed 3 files and 190 tests.
+- `./tmp/check.txt`: formatting, lint, and type checks pass.
 
 ### TAO-02 table action model and invoke column
 
@@ -566,20 +567,20 @@ Acceptance:
 
 ## Open questions
 
-| ID      | Question                                                         | Default for implementation                                                                 |
-| ------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| TAO-O1  | Should table action definitions later become globally reusable?   | No for this PRD. Keep table-local until duplication appears.                               |
-| TAO-O2  | Should availability support user/role/permission rules now?       | No. Reserve the concept; first implementation can use target resolution and mutation state. |
-| TAO-O3  | Should edit views later support draft save/cancel?                | Yes later; first implementation live-patches fields.                                       |
-| TAO-O4  | Should reorder use atomic batch mutations?                        | Later. Sparse ranks avoid making batch transport a prerequisite.                            |
-| TAO-O5  | Should move across scope patch scope fields too?                  | Later. Cross-scope movement is not just sorting.                                            |
-| TAO-O6  | Should source schemas explicitly include utility columns?         | Yes. Auto-insert is fallback only.                                                         |
+| ID     | Question                                                        | Default for implementation                                                                  |
+| ------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| TAO-O1 | Should table action definitions later become globally reusable? | No for this PRD. Keep table-local until duplication appears.                                |
+| TAO-O2 | Should availability support user/role/permission rules now?     | No. Reserve the concept; first implementation can use target resolution and mutation state. |
+| TAO-O3 | Should edit views later support draft save/cancel?              | Yes later; first implementation live-patches fields.                                        |
+| TAO-O4 | Should reorder use atomic batch mutations?                      | Later. Sparse ranks avoid making batch transport a prerequisite.                            |
+| TAO-O5 | Should move across scope patch scope fields too?                | Later. Cross-scope movement is not just sorting.                                            |
+| TAO-O6 | Should source schemas explicitly include utility columns?       | Yes. Auto-insert is fallback only.                                                          |
 
 ## Blockers
 
-| ID      | Status | Blocks | Notes                                                                 |
-| ------- | ------ | ------ | --------------------------------------------------------------------- |
-| TAO-B1  | open   | TAO-05 | `@dnd-kit/react` must be added before drag reorder implementation.    |
+| ID     | Status | Blocks | Notes                                                              |
+| ------ | ------ | ------ | ------------------------------------------------------------------ |
+| TAO-B1 | open   | TAO-05 | `@dnd-kit/react` must be added before drag reorder implementation. |
 
 ## Cross-PRD dependencies
 
@@ -693,6 +694,7 @@ When this PRD ships, update `doc/roadmap.md` only if first-release target detail
 ## PRD status notes
 
 - PRD drafted 2026-05-07 from table actions and ordering design grilling.
+- TAO-01 shipped 2026-05-07 with characterization tests only; no runtime behavior changed.
 - User direction: keep collection views as scope containers and make tables the first record interaction surface.
 - User direction: use table-local named actions and an `invokeAction` table column.
 - User direction: add proper edit views for edit dialogs.

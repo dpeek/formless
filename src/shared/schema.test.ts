@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/rates/schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
+import rawTaskSchema from "../../schema/apps/tasks/schema.json";
 import { parseAppSchema, stringifySchema } from "./schema.ts";
 
 describe("schema text fields", () => {
@@ -2606,6 +2607,56 @@ describe("rate-card sample schema", () => {
         readModels: { computedValues: {}, aggregates: {} },
       }).readModels,
     ).toEqual({ computedValues: {}, aggregates: {} });
+  });
+});
+
+describe("source schemas", () => {
+  it("parses and re-parses the current source schemas unchanged", () => {
+    const parsedSchemas = [rawTaskSchema, rawRateCardSchema, rawSiteSchema].map((rawSchema) =>
+      parseAppSchema(rawSchema),
+    );
+
+    expect(parsedSchemas.map((schema) => Object.keys(schema.tableViews))).toEqual([
+      [],
+      ["rateTable"],
+      ["blockTable", "blockPlacementTable"],
+    ]);
+    expect(
+      parsedSchemas.map((schema) =>
+        Object.values(schema.tableViews).flatMap((tableView) =>
+          tableView.columns.map((column) => column.type),
+        ),
+      ),
+    ).toEqual([
+      [],
+      ["referenceField", "field", "field", "field", "computed"],
+      [
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+      ],
+    ]);
+
+    for (const schema of parsedSchemas) {
+      expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+    }
   });
 });
 

@@ -846,6 +846,32 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="$900.00"');
   });
 
+  it("keeps collection actions below the current generated table result", () => {
+    const rateModel = selectRateHomeModel();
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "card-1",
+      today: "2026-05-01",
+    });
+    const tableIndex = html.indexOf('data-slot="table"');
+    const actionRowIndex = html.indexOf('aria-label="Rate actions"');
+
+    expect(tableIndex).toBeGreaterThanOrEqual(0);
+    expect(actionRowIndex).toBeGreaterThan(tableIndex);
+    expect(html).toMatch(/<button[^>]*>Create Resource<\/button>/);
+    expect(html).not.toContain("Regenerate missing rates");
+  });
+
   it("renders list/detail context presentation with selected context fields and rows", () => {
     const schema = rateCardSchemaWithListDetailContext();
     const rateModel = requiredCollectionModel(schema, "rateHome");
@@ -1422,6 +1448,60 @@ describe("generated forms and records", () => {
     expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('value="325"');
     expect(html).toContain('value="$475.00"');
+  });
+
+  it("characterizes the current one-off referenced-record edit button", () => {
+    const rate = rateCardSchema.entities.rate;
+    const resource = rateCardSchema.entities.resource;
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:resource",
+        fieldName: "resource",
+        field: rate.fields.resource,
+        editor: "reference",
+        commit: "immediate",
+        label: "Resource",
+        width: "lg",
+        display: "readOnly",
+        format: "plain",
+        referenceItem: {
+          itemViewName: "resourceListItem",
+          entityName: "resource",
+          entity: resource,
+          recordFields: [
+            {
+              fieldName: "name",
+              field: resource.fields.name,
+              editor: "text",
+              commit: "field-commit",
+            },
+          ],
+        },
+      },
+    ];
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain("Designer");
+    expect(html).toContain("Edit shared");
+    expect(html).toContain('aria-label="Edit shared resource"');
   });
 
   it("renders shared resource label updates across rate cards without duplicating resources", () => {

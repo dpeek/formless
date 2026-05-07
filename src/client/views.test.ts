@@ -1045,6 +1045,98 @@ describe("home view model collections", () => {
     ]);
   });
 
+  it("characterizes the current Site placement table raw order and visibility columns", () => {
+    const placementModel = requiredCollectionModel(siteSourceSchema, "pageCompositionHome");
+    const columns = placementModel.result.type === "table" ? placementModel.result.columns : [];
+
+    expect(siteSourceSchema.entities.blockPlacement.fields.order).toMatchObject({
+      type: "number",
+      required: true,
+      integer: true,
+      min: 0,
+    });
+    expect(
+      columns.map((column) => ({
+        type: column.type,
+        key: column.key,
+        label: column.label,
+        editor: column.type === "computed" ? null : column.editor,
+        commit: column.type === "computed" ? null : column.commit,
+        display: column.display,
+        align: column.align ?? null,
+        width: column.width ?? null,
+        format: column.format,
+      })),
+    ).toEqual([
+      {
+        type: "field",
+        key: "field:slot",
+        label: "Slot",
+        editor: "slug",
+        commit: "field-commit",
+        display: "editor",
+        align: null,
+        width: "sm",
+        format: "plain",
+      },
+      {
+        type: "field",
+        key: "field:block",
+        label: "Child block",
+        editor: "reference",
+        commit: "immediate",
+        display: "editor",
+        align: null,
+        width: "lg",
+        format: "plain",
+      },
+      {
+        type: "field",
+        key: "field:label",
+        label: "Label",
+        editor: "text",
+        commit: "field-commit",
+        display: "editor",
+        align: null,
+        width: "md",
+        format: "plain",
+      },
+      {
+        type: "field",
+        key: "field:variant",
+        label: "Variant",
+        editor: "slug",
+        commit: "field-commit",
+        display: "editor",
+        align: null,
+        width: "sm",
+        format: "plain",
+      },
+      {
+        type: "field",
+        key: "field:order",
+        label: "Order",
+        editor: "number",
+        commit: "field-commit",
+        display: "editor",
+        align: "end",
+        width: "xs",
+        format: "number",
+      },
+      {
+        type: "field",
+        key: "field:visible",
+        label: "Visible",
+        editor: "boolean",
+        commit: "immediate",
+        display: "editor",
+        align: null,
+        width: "xs",
+        format: "plain",
+      },
+    ]);
+  });
+
   it("resolves site content table columns and expanded create fields", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "blockHome",
