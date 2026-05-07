@@ -4,12 +4,8 @@ import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
 import { parseReadModels } from "./schema-read-models.ts";
 import { parseRelationships } from "./schema-relationships.ts";
 import { parseScreens } from "./schema-screens.ts";
-import {
-  parseCollectionQueries,
-  parseItemViews,
-  parseTableViews,
-  parseViews,
-} from "./schema-views.ts";
+import { parseTableViews } from "./schema-table-views.ts";
+import { parseCollectionQueries, parseItemViews, parseViews } from "./schema-views.ts";
 import type { AppSchema } from "./schema-types.ts";
 
 export type * from "./schema-types.ts";

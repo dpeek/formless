@@ -1,7 +1,7 @@
 # PRD 16: Post-TAO architecture efficiency
 
 Status: active
-Current chunk: AEC-03
+Current chunk: AEC-04
 Last updated: 2026-05-07
 
 ## Goal
@@ -171,7 +171,7 @@ Likely changed files:
 | ------ | ------- | ---------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | AEC-01 | shipped | PRD 14 shipped   | PRD                               | PRD captures scope, decisions, blockers, dependencies, and promote notes.                                       |
 | AEC-02 | shipped | AEC-01           | agent docs, global docs           | Repo has agent skill memory, domain docs home, ADR home, and shipped PRD facts promoted source-faithfully.      |
-| AEC-03 | planned | AEC-02, TAO done | table parser/model/renderer files | Post-TAO table behavior is behind deeper table modules with equivalent parser/model/render behavior.            |
+| AEC-03 | shipped | AEC-02, TAO done | table parser/model/renderer files | Post-TAO table behavior is behind deeper table modules with equivalent parser/model/render behavior.            |
 | AEC-04 | planned | AEC-02           | authority validation files        | Mutation, record value, reference, and schema compatibility validation move out of the route with same results. |
 | AEC-05 | planned | AEC-03, AEC-04   | test helper modules and tests     | Repeated schema, table, authority, and site editor setup is concentrated in tested helpers.                     |
 | AEC-06 | planned | AEC-05           | browser smoke if needed, PRD      | Checks pass; browser smoke runs if app behavior was touched; PRD status and promote notes are current.          |
@@ -247,7 +247,7 @@ Shipped:
 
 ### AEC-03 post-TAO generated table deepening
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: make generated table behavior local after TAO ships.
 
@@ -278,6 +278,16 @@ Evidence to record:
 - `./tmp/agent-dev.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
+
+Shipped:
+
+- Added table parser module `src/shared/schema-table-views.ts`.
+- Added shared field parser helper `src/shared/schema-view-field-parser.ts`.
+- Added table model module `src/client/table-model.ts`.
+- Added generated table action module `src/app/generated/table-actions.tsx`.
+- Added generated table ordering helper module `src/app/generated/table-ordering-ui.ts`.
+- Added parser and model interface tests in `src/shared/schema-table-views.test.ts` and `src/client/table-model.test.ts`.
+- Browser smoke not run; rendered behavior was refactored without intended behavior change.
 
 ### AEC-04 authority validation module
 
@@ -456,6 +466,7 @@ AEC-03:
 
 - `doc/current.md`: note post-TAO table parser/model/renderer module locations if extracted.
 - `doc/current.md`: note generated table behavior remains table-owned.
+- Ready for docs/steward promotion: `src/shared/schema-table-views.ts`, `src/client/table-model.ts`, `src/app/generated/table-actions.tsx`, and `src/app/generated/table-ordering-ui.ts`.
 
 AEC-04:
 
@@ -481,6 +492,11 @@ AEC-06:
 - 2026-05-07 AEC-02: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-02: `./tmp/test.txt` shows 29 files and 506 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
 - 2026-05-07 AEC-02: browser smoke not run because no app behavior changed.
+- 2026-05-07 AEC-03: Extracted table parser, table model, table action, and table ordering modules while keeping table schema and rendered behavior unchanged.
+- 2026-05-07 AEC-03: Added direct parser/model interface coverage in `src/shared/schema-table-views.test.ts` and `src/client/table-model.test.ts`; existing generated table/app tests still pass.
+- 2026-05-07 AEC-03: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-03: `./tmp/test.txt` shows 31 files and 509 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
+- 2026-05-07 AEC-03: browser smoke not run because this was a behavior-preserving refactor.
 
 ## PRD status notes
 
@@ -489,6 +505,7 @@ AEC-06:
 - Existing `prd/15-store-snapshot-export-restore.md` was present and preserved; this PRD uses number 16.
 - AEC-01 shipped 2026-05-07 after PRD 14 was marked shipped.
 - AEC-02 shipped 2026-05-07 as a docs/steward chunk.
-- Next ready chunk: AEC-03 post-TAO generated table deepening.
+- AEC-03 shipped 2026-05-07 as a post-TAO table parser/model/renderer deepening chunk.
+- Next chunk: AEC-04 authority validation module; coordinate AEC-B2 before editing validation paths.
 - Main risk: authority validation extraction may overlap with snapshot restore validation if PRD 15 ships first.
-- Current blocker: none for AEC-03; AEC-B2 still applies before AEC-04 if PRD 15 touches validation.
+- Current blocker: AEC-B2 still applies before AEC-04 if PRD 15 touches validation.
