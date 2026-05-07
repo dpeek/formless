@@ -1,7 +1,7 @@
 # PRD 16: Post-TAO architecture efficiency
 
 Status: active
-Current chunk: AEC-05
+Current chunk: AEC-06
 Last updated: 2026-05-07
 
 ## Goal
@@ -173,7 +173,7 @@ Likely changed files:
 | AEC-02 | shipped | AEC-01           | agent docs, global docs           | Repo has agent skill memory, domain docs home, ADR home, and shipped PRD facts promoted source-faithfully.      |
 | AEC-03 | shipped | AEC-02, TAO done | table parser/model/renderer files | Post-TAO table behavior is behind deeper table modules with equivalent parser/model/render behavior.            |
 | AEC-04 | shipped | AEC-02           | authority validation files        | Mutation, record value, reference, and schema compatibility validation move out of the route with same results. |
-| AEC-05 | planned | AEC-03, AEC-04   | test helper modules and tests     | Repeated schema, table, authority, and site editor setup is concentrated in tested helpers.                     |
+| AEC-05 | shipped | AEC-03, AEC-04   | test helper modules and tests     | Repeated schema, table, authority, and site editor setup is concentrated in tested helpers.                     |
 | AEC-06 | planned | AEC-05           | browser smoke if needed, PRD      | Checks pass; browser smoke runs if app behavior was touched; PRD status and promote notes are current.          |
 
 ## Chunk details
@@ -334,7 +334,7 @@ Shipped:
 
 ### AEC-05 test helper deepening
 
-Status: planned.
+Status: shipped 2026-05-07.
 
 Goal: reduce repeated test setup and make future chunks faster.
 
@@ -364,6 +364,16 @@ Evidence to record:
 - `./tmp/agent-dev.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
+
+Shipped:
+
+- Added `src/test/schema-builders.ts` for cloned source-like task, rate, and site schemas plus invalid schema mutation cases.
+- Added `src/test/protocol-builders.ts` for bootstrap response setup.
+- Added `src/test/generated-table.tsx` for required collection/table model lookup and generated table rendering setup.
+- Added `src/test/site-editor.ts` for Site editor bootstrap, root collection/table lookup, and Site block/placement records.
+- Added `src/test/authority-write.ts` for authority write route helpers, schema-key routing, mutation/action posts, and error expectations.
+- Replaced repeated setup in schema parser, table model, generated table, Site editor, and authority tests.
+- Browser smoke not run; test helpers only, no app behavior changed.
 
 ### AEC-06 closeout
 
@@ -486,6 +496,7 @@ AEC-04:
 AEC-05:
 
 - `doc/current.md`: note shared test helper locations only if they become important agent anchors.
+- Ready for docs/steward promotion: `src/test/schema-builders.ts`, `src/test/protocol-builders.ts`, `src/test/generated-table.tsx`, `src/test/site-editor.ts`, and `src/test/authority-write.ts`.
 
 AEC-06:
 
@@ -512,6 +523,11 @@ AEC-06:
 - 2026-05-07 AEC-04: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-04: `./tmp/test.txt` shows 31 files and 509 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed across 175 files.
 - 2026-05-07 AEC-04: browser smoke not run because this was a worker validation refactor with no intended app behavior change.
+- 2026-05-07 AEC-05: Added shared schema, protocol bootstrap, generated table, Site editor, and authority write test helpers under `src/test/`.
+- 2026-05-07 AEC-05: Updated schema parser, table model, generated table, app, and authority tests to use the helpers where setup was repeated.
+- 2026-05-07 AEC-05: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-05: `./tmp/test.txt` shows touched watcher reruns passing, including authority, schema parser, app, and generated table coverage; `./tmp/check.txt` shows formatting, lint, and type checks passed across 175 files.
+- 2026-05-07 AEC-05: browser smoke not run because only test helpers and tests changed.
 
 ## PRD status notes
 
@@ -522,6 +538,7 @@ AEC-06:
 - AEC-02 shipped 2026-05-07 as a docs/steward chunk.
 - AEC-03 shipped 2026-05-07 as a post-TAO table parser/model/renderer deepening chunk.
 - AEC-04 shipped 2026-05-07 as an authority validation module extraction.
-- Next chunk: AEC-05 test helper deepening.
-- Main risk: AEC-05 should avoid shallow helpers and only extract repeated setup that improves locality.
+- AEC-05 shipped 2026-05-07 as a test helper deepening chunk.
+- Next chunk: AEC-06 closeout.
+- Main risk: AEC-06 should verify current evidence and avoid turning closeout into new refactor work.
 - Current blocker: none.

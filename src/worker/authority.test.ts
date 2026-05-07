@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { WebSocketEventMap } from "miniflare";
 import type {
-  ActionResponse,
   BootstrapResponse,
   MutationResponse,
   SchemaResponse,
@@ -23,24 +22,29 @@ import {
   taskSeedRecords,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
+import {
+  createAuthorityWriteHelpers,
+  type AuthorityWriteHelpers,
+} from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
 let harness: Harness;
-let currentSchemaKey: SchemaKey;
+let authority: AuthorityWriteHelpers;
 
 beforeAll(async () => {
   harness = await createWorkerHarness("src/worker/index.ts", {
     FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
   });
+  authority = createAuthorityWriteHelpers(harness);
 });
 
 beforeEach(async () => {
   await resetSchemaApp("tasks");
   await resetSchemaApp("rates");
   await resetSchemaApp("site");
-  currentSchemaKey = "tasks";
+  useSchemaApp("tasks");
 });
 
 afterAll(async () => {
@@ -3388,25 +3392,15 @@ function defaultCollectionView(): Extract<AppSchema["views"][string], { type: "c
 }
 
 async function resetSchemaApp(schemaKey: SchemaKey) {
-  const response = await harness.fetch(`/api/${schemaKey}/reset/seed`, {
-    body: "{}",
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
-
-  expect(response.status).toBe(200);
+  await authority.resetSchemaApp(schemaKey);
 }
 
 function useSchemaApp(schemaKey: SchemaKey) {
-  currentSchemaKey = schemaKey;
+  authority.useSchemaApp(schemaKey);
 }
 
-function apiPath(path: string, schemaKey = currentSchemaKey) {
-  if (!path.startsWith("/api/")) {
-    throw new Error(`Expected API path, received "${path}".`);
-  }
-
-  return `/api/${schemaKey}${path.slice("/api".length)}`;
+function apiPath(path: string, schemaKey?: SchemaKey) {
+  return authority.apiPath(path, schemaKey);
 }
 
 async function createRateResources(count: number) {
@@ -3438,7 +3432,7 @@ async function createRateCards(count: number) {
 }
 
 async function postMutation(mutationId: string, values: Record<string, unknown>) {
-  return postMutationForEntity(mutationId, "task", values);
+  return authority.postMutation(mutationId, values);
 }
 
 async function postMutationForEntity(
@@ -3446,24 +3440,11 @@ async function postMutationForEntity(
   entity: string,
   values: Record<string, unknown>,
 ) {
-  const response = await harness.fetch(apiPath("/api/mutations"), {
-    body: JSON.stringify({
-      mutationId,
-      entity,
-      op: "create",
-      values,
-    }),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
-
-  expect(response.status).toBe(200);
-
-  return (await response.json()) as MutationResponse;
+  return authority.postMutationForEntity(mutationId, entity, values);
 }
 
 async function postAction(actionId: string, action: string) {
-  return postActionForEntity(actionId, "task", action);
+  return authority.postAction(actionId, action);
 }
 
 async function postActionForEntity(
@@ -3472,15 +3453,10 @@ async function postActionForEntity(
   action: string,
   extra: Record<string, unknown> = {},
 ) {
-  return postJson<ActionResponse>("/api/actions", {
-    actionId,
-    entity,
-    action,
-    ...extra,
-  });
+  return authority.postActionForEntity(actionId, entity, action, extra);
 }
 
-async function openSyncSocket(path = "/api/sync/ws", schemaKey = currentSchemaKey) {
+async function openSyncSocket(path = "/api/sync/ws", schemaKey?: SchemaKey) {
   const response = await harness.fetch(apiPath(path, schemaKey), {
     headers: { Upgrade: "websocket" },
   });
@@ -3583,40 +3559,17 @@ function collectSiteTreeBlockIds(root: SiteBlockNode): string[] {
 }
 
 async function getJson<T>(path: string) {
-  const response = await harness.fetch(apiPath(path));
-
-  expect(response.status).toBe(200);
-
-  return (await response.json()) as T;
+  return authority.getJson<T>(path);
 }
 
 async function postJson<T>(path: string, body: unknown) {
-  const response = await harness.fetch(apiPath(path), {
-    body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
-
-  expect(response.status).toBe(200);
-
-  return (await response.json()) as T;
+  return authority.postJson<T>(path, body);
 }
 
 async function expectError(path: string, body: unknown, message: string) {
-  const response = await harness.fetch(apiPath(path), {
-    body: body === undefined ? undefined : JSON.stringify(body),
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    method: body === undefined ? "GET" : "POST",
-  });
-
-  expect(response.status).toBe(400);
-  expect((await response.json()) as { error: string }).toEqual({
-    error: expect.stringContaining(message),
-  });
+  await authority.expectError(path, body, message);
 }
 
 async function expectNotFound(path: string) {
-  const response = await harness.fetch(path);
-
-  expect(response.status).toBe(404);
+  await authority.expectNotFound(path);
 }

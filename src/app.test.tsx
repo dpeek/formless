@@ -53,6 +53,15 @@ import {
   taskSeedRecords,
   taskSourceSchema as appSchema,
 } from "./test/schema-apps.ts";
+import { renderRecordTableHtml, requiredTableModel } from "./test/generated-table.tsx";
+import { bootstrapResponse } from "./test/protocol-builders.ts";
+import {
+  bootstrapSiteEditor,
+  requiredSiteCollectionModel,
+  requiredSiteTableModel,
+  siteBlockRecord,
+  sitePlacementRecord,
+} from "./test/site-editor.ts";
 
 function renderRoute(path: string) {
   return renderToStaticMarkup(
@@ -543,7 +552,7 @@ describe("generated collection home", () => {
   });
 
   it("labels generated action rows from the active entity", () => {
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    bootstrapSiteEditor();
     const html = renderRoute("/site");
 
     expect(html).toContain('aria-label="Block placement actions"');
@@ -633,7 +642,7 @@ describe("generated collection home", () => {
   });
 
   it("renders seeded site content from the site route", () => {
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    bootstrapSiteEditor();
     const html = renderRoute("/site");
 
     expect(html).toContain("<h1");
@@ -662,7 +671,7 @@ describe("generated collection home", () => {
   });
 
   it("renders the site route as Pages first with screen navigation", () => {
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    bootstrapSiteEditor();
     const html = renderRoute("/site");
 
     expect(html).toContain("<h1");
@@ -683,7 +692,7 @@ describe("generated collection home", () => {
   });
 
   it("updates site page root selection after local record merges", () => {
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    bootstrapSiteEditor();
     const before = renderRoute("/site");
 
     applyRecordMerge(
@@ -708,9 +717,7 @@ describe("generated collection home", () => {
   });
 
   it("surfaces site readiness warnings without disabling generated editors", () => {
-    const contentModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "blockHome",
-    );
+    const contentTable = requiredSiteTableModel("blockHome");
     const incompletePost: StoredRecord = {
       id: "rec_incomplete_post",
       entity: "block",
@@ -722,19 +729,14 @@ describe("generated collection home", () => {
       createdAt: "2026-05-05T00:00:00.000Z",
     };
 
-    if (!contentModel || contentModel.result.type !== "table") {
-      throw new Error("Missing content table model.");
-    }
-
-    applyBootstrapResponse(bootstrap([incompletePost], siteSourceSchema), "site");
-    const html = renderToStaticMarkup(
-      <RecordTable
-        columns={contentModel.result.columns}
-        entity={contentModel.entity}
-        entityName={contentModel.entityName}
-        query={{ kind: "all" }}
-      />,
-    );
+    const html = renderRecordTableHtml({
+      columns: contentTable.columns,
+      entity: contentTable.entity,
+      entityName: contentTable.entityName,
+      records: [incompletePost],
+      schema: siteSourceSchema,
+      schemaKey: "site",
+    });
 
     expect(html).toContain('aria-label="Readiness warnings"');
     expect(html).toContain("Published post block should have a slug or link.");
@@ -746,15 +748,9 @@ describe("generated collection home", () => {
   });
 
   it("renders the scoped site composition workspace for selected content", () => {
-    const compositionModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "blockCompositionHome",
-    );
+    const compositionModel = requiredSiteCollectionModel("blockCompositionHome");
 
-    if (!compositionModel) {
-      throw new Error("Missing composition model.");
-    }
-
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    bootstrapSiteEditor();
     const html = renderGeneratedHomeCollection(compositionModel, {
       selectedContextRecordId: "rec_site_content_home",
       today: "2026-05-05",
@@ -775,15 +771,9 @@ describe("generated collection home", () => {
   });
 
   it("renders header navigation as content block placements", () => {
-    const blocksModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "blockCompositionHome",
-    );
+    const blocksModel = requiredSiteCollectionModel("blockCompositionHome");
 
-    if (!blocksModel) {
-      throw new Error("Missing blocks model.");
-    }
-
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    bootstrapSiteEditor();
     const html = renderGeneratedHomeCollection(blocksModel, {
       selectedContextRecordId: "rec_site_content_group_header",
       today: "2026-05-05",
@@ -1582,24 +1572,16 @@ describe("generated forms and records", () => {
   });
 
   it("renders Site placement row action dropdowns", () => {
-    const placementModel = selectCollectionModels(siteSourceSchema).find(
-      (model) => model.viewName === "pageCompositionHome",
-    );
-    const columns = placementModel?.result.type === "table" ? placementModel.result.columns : [];
-    const ordering =
-      placementModel?.result.type === "table" ? placementModel.result.ordering : undefined;
-    const blockPlacement = siteSourceSchema.entities.blockPlacement;
-
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema));
-    const html = renderToStaticMarkup(
-      <RecordTable
-        columns={columns}
-        entity={blockPlacement}
-        entityName="blockPlacement"
-        ordering={ordering}
-        query={{ kind: "all" }}
-      />,
-    );
+    const placementTable = requiredSiteTableModel("pageCompositionHome");
+    const html = renderRecordTableHtml({
+      columns: placementTable.columns,
+      entity: placementTable.entity,
+      entityName: placementTable.entityName,
+      ordering: placementTable.ordering,
+      records: siteSeedRecords,
+      schema: siteSourceSchema,
+      schemaKey: "site",
+    });
 
     expect(html).toContain('aria-label="Actions"');
     expect(html).toContain('data-slot="dropdown-menu-trigger"');
@@ -1639,25 +1621,19 @@ describe("generated forms and records", () => {
       presentations: ["moveMenu"],
     };
 
-    applyBootstrapResponse(
-      bootstrap(
-        [
-          placementRecord("placement-3", "Third", 3000),
-          placementRecord("placement-1", "First", 1000),
-          placementRecord("placement-2", "Second", 2000),
-        ],
-        siteSourceSchema,
-      ),
-    );
-    const html = renderToStaticMarkup(
-      <RecordTable
-        columns={columns}
-        entity={blockPlacement}
-        entityName="blockPlacement"
-        ordering={ordering}
-        query={{ kind: "all" }}
-      />,
-    );
+    const html = renderRecordTableHtml({
+      columns,
+      entity: blockPlacement,
+      entityName: "blockPlacement",
+      ordering,
+      records: [
+        sitePlacementRecord("placement-3", "Third", 3000),
+        sitePlacementRecord("placement-1", "First", 1000),
+        sitePlacementRecord("placement-2", "Second", 2000),
+      ],
+      schema: siteSourceSchema,
+      schemaKey: "site",
+    });
 
     expect(html.indexOf("First")).toBeLessThan(html.indexOf("Second"));
     expect(html.indexOf("Second")).toBeLessThan(html.indexOf("Third"));
@@ -2287,7 +2263,7 @@ describe("generated forms and records", () => {
     formData.set("height", "630");
     formData.set("limit", "3");
 
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    bootstrapSiteEditor();
     const createHtml = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
     );
@@ -2575,13 +2551,7 @@ function listRecordFieldsFor(schema: AppSchema, viewName: string): RecordFieldCo
 }
 
 function tableColumnsFor(schema: AppSchema, viewName: string): TableColumnConfig[] {
-  const model = requiredCollectionModel(schema, viewName);
-
-  if (model.result.type !== "table") {
-    throw new Error(`Collection ${viewName} does not render a table.`);
-  }
-
-  return model.result.columns;
+  return requiredTableModel(schema, viewName).columns;
 }
 
 function requiredCollectionModel(schema: AppSchema, viewName: string) {
@@ -3216,31 +3186,6 @@ function rateMarginExpression(): NumericExpression {
   };
 }
 
-function siteBlockRecord(id: string, values: StoredRecord["values"]): StoredRecord {
-  return {
-    id,
-    entity: "block",
-    values,
-    createdAt: "2026-05-05T00:00:40.000Z",
-  };
-}
-
-function placementRecord(id: string, label: string, order: number): StoredRecord {
-  return {
-    id,
-    entity: "blockPlacement",
-    values: {
-      parent: "page-1",
-      block: "block-1",
-      slot: "main",
-      label,
-      order,
-      visible: true,
-    },
-    createdAt: "2026-05-05T00:00:40.000Z",
-  };
-}
-
 function fieldEditorCharacterizationRecord(): StoredRecord {
   return {
     id: "record-editor-case-1",
@@ -3451,10 +3396,8 @@ function withMutationPolicy(
 }
 
 function bootstrap(records: StoredRecord[], schema = appSchema): BootstrapResponse {
-  return {
-    schema,
-    schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
-    records,
+  return bootstrapResponse(schema, records, {
     cursor: 1,
-  };
+    schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+  });
 }

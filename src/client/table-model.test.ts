@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { rateSourceSchema, siteSourceSchema } from "../test/schema-apps.ts";
+import { sourceLikeRateSchema, sourceLikeSiteSchema } from "../test/schema-builders.ts";
 import { selectTableResultModel } from "./table-model.ts";
 
 describe("table model", () => {
   it("selects render-ready rate table columns", () => {
+    const rateSourceSchema = sourceLikeRateSchema();
     const result = selectTableResultModel(
       rateSourceSchema,
       rateSourceSchema.tableViews.rateTable,
@@ -21,6 +22,7 @@ describe("table model", () => {
   });
 
   it("selects table ordering, row actions, and edit-dialog facts", () => {
+    const siteSourceSchema = sourceLikeSiteSchema();
     const result = selectTableResultModel(
       siteSourceSchema,
       siteSourceSchema.tableViews.blockPlacementTable,

@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { rateSourceSchema, siteSourceSchema } from "../test/schema-apps.ts";
+import {
+  invalidSchemaFrom,
+  sourceLikeRateSchema,
+  sourceLikeSiteSchema,
+} from "../test/schema-builders.ts";
+import { parseAppSchema } from "./schema.ts";
 import { parseTableViews } from "./schema-table-views.ts";
 
 describe("schema table views", () => {
   it("parses post-TAO table columns, actions, and ordering through the table parser", () => {
+    const rateSourceSchema = sourceLikeRateSchema();
     const tableViews = parseTableViews(
       rateSourceSchema.tableViews,
       rateSourceSchema.entities,
@@ -23,6 +29,7 @@ describe("schema table views", () => {
       "computed",
     ]);
 
+    const siteSourceSchema = sourceLikeSiteSchema();
     const siteTableViews = parseTableViews(
       siteSourceSchema.tableViews,
       siteSourceSchema.entities,
@@ -48,5 +55,24 @@ describe("schema table views", () => {
         presentations: ["dragHandle", "moveMenu"],
       },
     });
+  });
+
+  it("builds invalid source-like table parser cases without mutating source fixtures", () => {
+    const invalidRateSchema = invalidSchemaFrom(sourceLikeRateSchema(), (schema) => {
+      const rateTable = schema.tableViews.rateTable;
+
+      if (!rateTable) {
+        throw new Error("Missing rate table fixture.");
+      }
+
+      rateTable.columns = [{ type: "field", field: "missing" }];
+    });
+
+    expect(() => parseAppSchema(invalidRateSchema)).toThrow(
+      'references unknown field "rate.missing"',
+    );
+    expect(sourceLikeRateSchema().tableViews.rateTable?.columns.map((column) => column.type)).toEqual(
+      ["referenceField", "field", "field", "field", "computed"],
+    );
   });
 });

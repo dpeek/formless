@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/rates/schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
-import rawTaskSchema from "../../schema/apps/tasks/schema.json";
+import { sourceLikeSchemas } from "../test/schema-builders.ts";
 import { parseAppSchema, stringifySchema } from "./schema.ts";
 
 describe("schema text fields", () => {
@@ -3038,9 +3038,7 @@ describe("rate-card sample schema", () => {
 
 describe("source schemas", () => {
   it("parses and re-parses the current source schemas unchanged", () => {
-    const parsedSchemas = [rawTaskSchema, rawRateCardSchema, rawSiteSchema].map((rawSchema) =>
-      parseAppSchema(rawSchema),
-    );
+    const parsedSchemas = sourceLikeSchemas().map((schema) => parseAppSchema(schema));
 
     expect(parsedSchemas.map((schema) => Object.keys(schema.tableViews))).toEqual([
       [],
