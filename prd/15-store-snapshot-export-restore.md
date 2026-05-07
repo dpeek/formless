@@ -1,7 +1,7 @@
 # PRD 15: Store snapshot export and restore
 
 Status: planned
-Current chunk: SNP-01
+Current chunk: SNP-02
 Last updated: 2026-05-07
 
 ## Goal
@@ -244,7 +244,7 @@ Notes:
 
 | ID     | Status  | Depends on | Main files                     | Acceptance                                                                                                |
 | ------ | ------- | ---------- | ------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| SNP-01 | planned | none       | PRD                            | PRD captures scope, decisions, chunks, blockers, and promote notes.                                       |
+| SNP-01 | shipped | none       | PRD                            | PRD captures scope, decisions, chunks, blockers, and promote notes.                                       |
 | SNP-02 | planned | SNP-01     | protocol, tests                | Snapshot envelope parses, rejects bad kind/version/schema key shape, and preserves supported JSON shape.  |
 | SNP-03 | planned | SNP-02     | storage, storage tests         | Storage can export and restore snapshots atomically with monotonic cursor behavior.                       |
 | SNP-04 | planned | SNP-03     | authority, authority tests     | Snapshot export and restore routes are schema-keyed, validate input, and broadcast only on commit.        |
@@ -303,10 +303,13 @@ Recommended order:
 
 - 2026-05-07 SNP-01: PRD drafted from user request and checked against `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, `src/shared/protocol.ts`, `src/worker/authority.ts`, `src/worker/storage.ts`, `src/client/db.ts`, and `src/client/sync.ts`.
 - 2026-05-07 SNP-01: `bun start` reports `testStatus: pass` and `checkStatus: pass`.
+- 2026-05-07 SNP-01: shipped PRD-only chunk; `./tmp/test.txt` reports 29 files and 506 tests passing, and `./tmp/check.txt` reports formatting plus lint/type check passing for 166 files.
 
 ## PRD status notes
 
 - PRD drafted 2026-05-07.
+- SNP-01 shipped 2026-05-07.
+- Current chunk: SNP-02.
 - Current blocker: none.
 - Main risk: restore must not reset sync cursors, because existing replicas use cursor catch-up.
 - Main implementation note: use a small, tested restore module rather than putting restore diff logic directly in the route branch.
