@@ -1062,7 +1062,7 @@ describe("home view model collections", () => {
           name: "block",
           entityName: "block",
           queryName: "blockPages",
-          labelField: "title",
+          labelField: "label",
           presentation: "listDetail",
           relatedCollection: {
             relationshipName: "blockPlacements",
@@ -1072,16 +1072,7 @@ describe("home view model collections", () => {
           },
           createAction: null,
           itemViewName: "blockRootDetail",
-          recordFields: [
-            "title",
-            "label",
-            "subtitle",
-            "body",
-            "slug",
-            "status",
-            "publishedAt",
-            "templateKey",
-          ],
+          recordFields: ["label", "body", "href", "templateKey"],
         },
         queries: [
           {
@@ -1097,20 +1088,18 @@ describe("home view model collections", () => {
           tableViewName: "blockPlacementTable",
           columns: [
             "orderingHandle",
-            "field:slot",
             "field:block",
             "field:label",
-            "field:variant",
-            "field:visible",
             "invokeAction:editChildBlock,ordering",
           ],
+          footer: undefined,
         },
         actions: [
           {
             type: "create",
             label: "Add placement",
             entityName: "blockPlacement",
-            fields: ["slot", "block", "label", "variant", "visible"],
+            fields: ["block", "label"],
             defaults: ["parent"],
             enabled: true,
           },
@@ -1125,7 +1114,7 @@ describe("home view model collections", () => {
           name: "block",
           entityName: "block",
           queryName: "blockHeaderRoot",
-          labelField: "title",
+          labelField: "label",
           presentation: "listDetail",
           relatedCollection: {
             relationshipName: "blockPlacements",
@@ -1135,16 +1124,7 @@ describe("home view model collections", () => {
           },
           createAction: null,
           itemViewName: "blockRootDetail",
-          recordFields: [
-            "title",
-            "label",
-            "subtitle",
-            "body",
-            "slug",
-            "status",
-            "publishedAt",
-            "templateKey",
-          ],
+          recordFields: ["label", "body", "href", "templateKey"],
         },
         queries: [
           {
@@ -1160,20 +1140,18 @@ describe("home view model collections", () => {
           tableViewName: "blockPlacementTable",
           columns: [
             "orderingHandle",
-            "field:slot",
             "field:block",
             "field:label",
-            "field:variant",
-            "field:visible",
             "invokeAction:editChildBlock,ordering",
           ],
+          footer: undefined,
         },
         actions: [
           {
             type: "create",
             label: "Add placement",
             entityName: "blockPlacement",
-            fields: ["slot", "block", "label", "variant", "visible"],
+            fields: ["block", "label"],
             defaults: ["parent"],
             enabled: true,
           },
@@ -1188,7 +1166,7 @@ describe("home view model collections", () => {
           name: "block",
           entityName: "block",
           queryName: "blockFooterRoot",
-          labelField: "title",
+          labelField: "label",
           presentation: "listDetail",
           relatedCollection: {
             relationshipName: "blockPlacements",
@@ -1198,16 +1176,7 @@ describe("home view model collections", () => {
           },
           createAction: null,
           itemViewName: "blockRootDetail",
-          recordFields: [
-            "title",
-            "label",
-            "subtitle",
-            "body",
-            "slug",
-            "status",
-            "publishedAt",
-            "templateKey",
-          ],
+          recordFields: ["label", "body", "href", "templateKey"],
         },
         queries: [
           {
@@ -1223,20 +1192,18 @@ describe("home view model collections", () => {
           tableViewName: "blockPlacementTable",
           columns: [
             "orderingHandle",
-            "field:slot",
             "field:block",
             "field:label",
-            "field:variant",
-            "field:visible",
             "invokeAction:editChildBlock,ordering",
           ],
+          footer: undefined,
         },
         actions: [
           {
             type: "create",
             label: "Add placement",
             entityName: "blockPlacement",
-            fields: ["slot", "block", "label", "variant", "visible"],
+            fields: ["block", "label"],
             defaults: ["parent"],
             enabled: true,
           },
@@ -1245,7 +1212,7 @@ describe("home view model collections", () => {
     ]);
   });
 
-  it("resolves Site placement ordering controls and visibility columns", () => {
+  it("resolves Site placement ordering controls", () => {
     const placementModel = requiredCollectionModel(siteSourceSchema, "pageCompositionHome");
     const columns = placementModel.result.type === "table" ? placementModel.result.columns : [];
 
@@ -1259,7 +1226,7 @@ describe("home view model collections", () => {
       placementModel.result.type === "table" ? placementModel.result.ordering : undefined,
     ).toMatchObject({
       fieldName: "order",
-      scope: [{ fieldName: "parent" }, { fieldName: "slot" }],
+      scope: [{ fieldName: "parent" }],
       presentations: ["dragHandle", "moveMenu"],
     });
     expect(
@@ -1288,17 +1255,6 @@ describe("home view model collections", () => {
       },
       {
         type: "field",
-        key: "field:slot",
-        label: "Slot",
-        editor: "slug",
-        commit: "field-commit",
-        display: "editor",
-        align: null,
-        width: "sm",
-        format: "plain",
-      },
-      {
-        type: "field",
         key: "field:block",
         label: "Child block",
         editor: "reference",
@@ -1317,28 +1273,6 @@ describe("home view model collections", () => {
         display: "editor",
         align: null,
         width: "md",
-        format: "plain",
-      },
-      {
-        type: "field",
-        key: "field:variant",
-        label: "Variant",
-        editor: "slug",
-        commit: "field-commit",
-        display: "editor",
-        align: null,
-        width: "sm",
-        format: "plain",
-      },
-      {
-        type: "field",
-        key: "field:visible",
-        label: "Visible",
-        editor: "boolean",
-        commit: "immediate",
-        display: "editor",
-        align: null,
-        width: "xs",
         format: "plain",
       },
       {
@@ -1363,8 +1297,6 @@ describe("home view model collections", () => {
 
     expect(contentModel?.queryTabs.map((tab) => tab.queryName)).toEqual([
       "blockAll",
-      "blockDraft",
-      "blockPublished",
       "blockPages",
       "blockPosts",
       "blockProjects",
@@ -1373,8 +1305,6 @@ describe("home view model collections", () => {
       "blockImages",
       "blockVideos",
       "blockFiles",
-      "publishedPosts",
-      "publishedProjects",
     ]);
     expect(
       contentModel?.result.type === "table"
@@ -1382,56 +1312,38 @@ describe("home view model collections", () => {
         : [],
     ).toEqual([
       "field:type",
-      "field:title",
       "field:label",
       "field:body",
-      "field:status",
-      "field:slug",
       "field:href",
-      "field:publishedAt",
       "field:templateKey",
-      "field:assetKey",
-      "field:alt",
+      "field:icon",
+      "field:color",
       "field:width",
       "field:height",
-      "field:limit",
     ]);
     expect(
       contentModel?.result.type === "table" ? tableColumnEditors(contentModel.result.columns) : [],
     ).toEqual([
       "enum",
       "text",
-      "text",
       "markdown",
-      "enum",
-      "slug",
       "href",
-      "date",
       "slug",
-      "slug",
-      "textarea",
-      "number",
+      "icon",
+      "color",
       "number",
       "number",
     ]);
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "type",
-      "title",
       "label",
-      "subtitle",
       "body",
-      "status",
-      "publishedAt",
-      "slug",
       "href",
+      "templateKey",
       "icon",
       "color",
-      "templateKey",
-      "assetKey",
-      "alt",
       "width",
       "height",
-      "limit",
     ]);
   });
 
@@ -1456,22 +1368,21 @@ describe("home view model collections", () => {
 
     expect(block.fields.body).toMatchObject({ type: "text", format: "markdown" });
     expect(block.fields.color).toMatchObject({ type: "text", format: "color" });
-    expect(block.fields.slug).toMatchObject({ type: "text", format: "slug" });
     expect(block.fields.href).toMatchObject({ type: "text", format: "href" });
     expect(block.fields.icon).toMatchObject({ type: "text", format: "icon" });
     expect(createEditors).toMatchObject({
-      subtitle: "textarea",
+      label: "text",
       body: "markdown",
-      slug: "slug",
       href: "href",
       icon: "icon",
       color: "color",
     });
     expect(tableEditors).toMatchObject({
+      label: "text",
       body: "markdown",
-      slug: "slug",
       href: "href",
-      alt: "textarea",
+      icon: "icon",
+      color: "color",
     });
   });
 
@@ -1485,7 +1396,7 @@ describe("home view model collections", () => {
       entityName: "block",
       queryName: "blockAll",
       query: siteSourceSchema.queries.blockAll?.expression,
-      labelField: "title",
+      labelField: "label",
       presentation: "tabs",
       relatedCollection: {
         relationshipName: "blockPlacements",
@@ -1496,7 +1407,7 @@ describe("home view model collections", () => {
         },
       },
       itemViewName: "blockContextItem",
-      recordFields: [{ fieldName: "type" }, { fieldName: "status" }],
+      recordFields: [{ fieldName: "label" }, { fieldName: "type" }],
     });
     expect(compositionModel?.actions[0]).toMatchObject({
       type: "create",

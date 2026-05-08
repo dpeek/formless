@@ -48,10 +48,7 @@ describe("schema table views", () => {
       },
       ordering: {
         field: "order",
-        scope: [
-          { kind: "field", field: "parent" },
-          { kind: "field", field: "slot" },
-        ],
+        scope: [{ kind: "field", field: "parent" }],
         presentations: ["dragHandle", "moveMenu"],
       },
     });

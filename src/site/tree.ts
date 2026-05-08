@@ -57,7 +57,7 @@ export function buildSitePageTree(
     warnings.push({
       code: "missing-root",
       recordId: slug,
-      message: `No published page block found for slug "${slug}".`,
+      message: `No page block found for route "${slug}".`,
     });
 
     return { tree: null, meta };
@@ -86,11 +86,13 @@ function indexSiteRecords(records: StoredRecord[]): SiteTreeIndexes {
 
   for (const record of records) {
     if (record.entity === "block") {
-      blocks.set(record.id, record);
+      if (!record.deletedAt) {
+        blocks.set(record.id, record);
+      }
       continue;
     }
 
-    if (record.entity !== "blockPlacement" || record.deletedAt || record.values.visible !== true) {
+    if (record.entity !== "blockPlacement" || record.deletedAt) {
       continue;
     }
 
@@ -122,31 +124,17 @@ function resolveRootPage(
       (record) =>
         record.entity === "block" &&
         stringValue(record.values.type) === "page" &&
-        stringValue(record.values.slug) === slug,
+        hrefMatchesRoute(stringValue(record.values.href), slug),
     )
     .sort(compareRecords);
-  const publicCandidates: StoredRecord[] = [];
 
-  for (const candidate of candidates) {
-    if (isPublicBlock(candidate)) {
-      publicCandidates.push(candidate);
-      continue;
-    }
+  const root = candidates[0];
 
-    warnings.push({
-      code: "skipped-root",
-      recordId: candidate.id,
-      message: `Skipped non-public page block "${candidate.id}" for slug "${slug}".`,
-    });
-  }
-
-  const root = publicCandidates[0];
-
-  for (const duplicate of publicCandidates.slice(1)) {
+  for (const duplicate of candidates.slice(1)) {
     warnings.push({
       code: "skipped-root",
       recordId: duplicate.id,
-      message: `Skipped duplicate published page block "${duplicate.id}" for slug "${slug}".`,
+      message: `Skipped duplicate page block "${duplicate.id}" for route "${slug}".`,
     });
   }
 
@@ -202,10 +190,6 @@ function buildPlacementNodes(
       continue;
     }
 
-    if (!isPublicBlock(childBlock)) {
-      continue;
-    }
-
     if (ancestors.has(childBlock.id)) {
       context.warnings.push({
         code: "cycle",
@@ -246,12 +230,10 @@ function buildQueryProjection(
     return { key: queryKey, items: [] };
   }
 
-  const queryRecords = matchPublicQueryBlocks(query, context, record.id);
-  const limit = nonNegativeNumberValue(record.values.limit);
-  const limitedRecords = limit === undefined ? queryRecords : queryRecords.slice(0, limit);
+  const queryRecords = matchQueryBlocks(query, context, record.id);
   const items: SiteBlockNode[] = [];
 
-  for (const item of limitedRecords) {
+  for (const item of queryRecords) {
     if (ancestors.has(item.id)) {
       context.warnings.push({
         code: "cycle",
@@ -267,16 +249,16 @@ function buildQueryProjection(
   return { key: queryKey, items };
 }
 
-function matchPublicQueryBlocks(
+function matchQueryBlocks(
   query: CollectionQuerySchema,
   context: SiteTreeBuildContext,
   sourceRecordId: string,
 ): StoredRecord[] {
   try {
     return [...context.indexes.blocks.values()]
-      .filter(isPublicBlock)
+      .filter(isLiveBlock)
       .filter((record) => matchesQuery(record, query.expression))
-      .sort(compareQueryBlocks);
+      .sort(compareRecords);
   } catch (error) {
     context.warnings.push({
       code: "bad-query-key",
@@ -294,17 +276,12 @@ function projectBlock(record: StoredRecord): SiteBlockNode {
   return {
     id: record.id,
     type: stringValue(record.values.type) ?? "",
-    title: stringValue(record.values.title) ?? "",
-    ...optionalStringField("label", record.values.label),
-    ...optionalStringField("subtitle", record.values.subtitle),
+    label: stringValue(record.values.label) ?? "",
     ...optionalStringField("body", record.values.body),
-    ...optionalStringField("slug", record.values.slug),
     ...optionalStringField("href", record.values.href),
     ...optionalStringField("icon", record.values.icon),
     ...optionalStringField("color", record.values.color),
     ...optionalStringField("templateKey", record.values.templateKey),
-    ...optionalStringField("assetKey", record.values.assetKey),
-    ...optionalStringField("alt", record.values.alt),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
     placements: [],
@@ -314,10 +291,7 @@ function projectBlock(record: StoredRecord): SiteBlockNode {
 function projectPlacement(placement: StoredRecord, childBlock: SiteBlockNode): SitePlacementNode {
   return {
     id: placement.id,
-    ...optionalStringField("slot", placement.values.slot),
     order: numberValue(placement.values.order) ?? 0,
-    visible: placement.values.visible === true,
-    ...optionalStringField("variant", placement.values.variant),
     ...optionalStringField("label", placement.values.label),
     block: childBlock,
   };
@@ -352,35 +326,15 @@ function isBlockQuery(query: CollectionQuerySchema | undefined): query is Collec
   return query?.entity === "block";
 }
 
-function isPublicBlock(record: StoredRecord): boolean {
-  return record.entity === "block" && !record.deletedAt && record.values.status === "published";
+function isLiveBlock(record: StoredRecord): boolean {
+  return record.entity === "block" && !record.deletedAt;
 }
 
 function comparePlacements(a: StoredRecord, b: StoredRecord): number {
   return (
     compareNumbers(numberValue(a.values.order), numberValue(b.values.order)) ||
-    compareStrings(stringValue(a.values.slot) ?? "", stringValue(b.values.slot) ?? "") ||
     compareRecords(a, b)
   );
-}
-
-function compareQueryBlocks(a: StoredRecord, b: StoredRecord): number {
-  const aPublishedAt = stringValue(a.values.publishedAt);
-  const bPublishedAt = stringValue(b.values.publishedAt);
-
-  if (aPublishedAt && bPublishedAt && aPublishedAt !== bPublishedAt) {
-    return compareStrings(bPublishedAt, aPublishedAt);
-  }
-
-  if (aPublishedAt && !bPublishedAt) {
-    return -1;
-  }
-
-  if (!aPublishedAt && bPublishedAt) {
-    return 1;
-  }
-
-  return compareRecords(a, b);
 }
 
 function compareRecords(a: StoredRecord, b: StoredRecord): number {
@@ -423,12 +377,6 @@ function numberValue(value: FieldValue | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function nonNegativeNumberValue(value: FieldValue | undefined): number | undefined {
-  const number = numberValue(value);
-
-  return number === undefined || number < 0 ? undefined : number;
-}
-
 function optionalStringField<Key extends string>(
   key: Key,
   value: FieldValue | undefined,
@@ -453,4 +401,30 @@ function normalizeMaxDepth(maxDepth: number | undefined): number {
   }
 
   return Math.max(0, Math.floor(maxDepth));
+}
+
+function hrefMatchesRoute(href: string | undefined, slug: string): boolean {
+  if (!href) {
+    return false;
+  }
+
+  const hrefPath = normalizeHrefPath(href);
+  const routePath = normalizeRoutePath(slug);
+  const previewPath = `/pages/${routePath}`;
+  const publishedPath = routePath === "home" ? "/" : `/${routePath}`;
+
+  return hrefPath === previewPath || hrefPath === publishedPath;
+}
+
+function normalizeHrefPath(href: string): string {
+  const path = href.split(/[?#]/, 1)[0] ?? "";
+  const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
+
+  return withLeadingSlash.length > 1 ? withLeadingSlash.replace(/\/+$/, "") : withLeadingSlash;
+}
+
+function normalizeRoutePath(slug: string): string {
+  const trimmed = slug.trim().replace(/^\/+/, "").replace(/\/+$/, "");
+
+  return trimmed === "" ? "home" : trimmed;
 }

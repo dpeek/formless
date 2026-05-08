@@ -3,60 +3,40 @@ import { getRecordReadinessWarnings } from "./readiness.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 
 describe("record readiness warnings", () => {
-  it("lets draft content stay incomplete", () => {
-    const warnings = getRecordReadinessWarnings(
-      record("draft-post", "block", {
-        type: "post",
-        title: "Draft",
-        status: "draft",
-      }),
-    );
-
-    expect(warnings).toEqual([]);
-  });
-
-  it("warns when published posts are missing route, body, or date data", () => {
+  it("warns when post blocks are missing a route or body", () => {
     const warnings = getRecordReadinessWarnings(
       record("post-1", "block", {
         type: "post",
-        title: "Published without metadata",
-        status: "published",
+        label: "Post without metadata",
       }),
     );
 
-    expect(warnings.map((warning) => warning.code)).toEqual([
-      "published-block-route",
-      "published-post-body",
-      "published-post-date",
-    ]);
+    expect(warnings.map((warning) => warning.code)).toEqual(["block-route", "post-body"]);
   });
 
-  it("warns when published projects have no summary or body", () => {
+  it("warns when project blocks have no body", () => {
     const warnings = getRecordReadinessWarnings(
       record("project-1", "block", {
         type: "project",
-        title: "Project",
-        slug: "projects/project",
-        status: "published",
+        label: "Project",
+        href: "/pages/projects/project",
       }),
     );
 
     expect(warnings).toEqual([
       {
-        code: "published-project-summary",
-        message: "Published project should include a summary or body.",
+        code: "project-summary",
+        message: "Project block should include body content.",
       },
     ]);
   });
 
-  it("warns when visible placements do not resolve to a child block", () => {
+  it("warns when placements do not resolve to a child block", () => {
     const warnings = getRecordReadinessWarnings(
       record("placement-1", "blockPlacement", {
         parent: "group-1",
-        slot: "header",
         block: "missing-block",
         order: 0,
-        visible: true,
       }),
       {},
     );
@@ -64,21 +44,18 @@ describe("record readiness warnings", () => {
     expect(warnings.map((warning) => warning.code)).toEqual(["placement-block-child"]);
   });
 
-  it("accepts visible placements with a live child block", () => {
+  it("accepts placements with a live child block", () => {
     const warnings = getRecordReadinessWarnings(
       record("placement-1", "blockPlacement", {
         parent: "group-1",
-        slot: "header",
         block: "link-1",
         order: 0,
-        visible: true,
       }),
       {
         "link-1": record("link-1", "block", {
           type: "link",
-          title: "Example",
+          label: "Example",
           href: "https://example.com",
-          status: "published",
         }),
       },
     );
@@ -86,30 +63,22 @@ describe("record readiness warnings", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("warns when media blocks have no alt text", () => {
+  it("accepts media labels as accessible text", () => {
     const warnings = getRecordReadinessWarnings(
       record("media-1", "block", {
         type: "image",
-        title: "Hero",
-        assetKey: "hero",
-        status: "published",
+        label: "Hero",
       }),
     );
 
-    expect(warnings).toEqual([
-      {
-        code: "block-media-alt",
-        message: "Media block should include alt text.",
-      },
-    ]);
+    expect(warnings).toEqual([]);
   });
 
   it("warns when query-backed blocks have no query key", () => {
     const warnings = getRecordReadinessWarnings(
       record("block-1", "block", {
         type: "contentList",
-        title: "Recent posts",
-        status: "published",
+        label: "Recent posts",
       }),
     );
 
@@ -121,18 +90,16 @@ describe("record readiness warnings", () => {
     ]);
   });
 
-  it("ignores hidden placements with missing child blocks", () => {
+  it("warns for every placement with a missing child block", () => {
     const warnings = getRecordReadinessWarnings(
       record("placement-1", "blockPlacement", {
         parent: "block-1",
-        slot: "main",
         block: "missing-block",
         order: 0,
-        visible: false,
       }),
     );
 
-    expect(warnings).toEqual([]);
+    expect(warnings.map((warning) => warning.code)).toEqual(["placement-block-child"]);
   });
 
   it("ignores records outside the site authoring entities", () => {

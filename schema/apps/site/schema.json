@@ -59,21 +59,10 @@
             }
           }
         },
-        "title": {
-          "type": "text",
-          "required": true,
-          "label": "Title"
-        },
         "label": {
           "type": "text",
-          "required": false,
+          "required": true,
           "label": "Label"
-        },
-        "subtitle": {
-          "type": "text",
-          "required": false,
-          "label": "Subtitle",
-          "format": "longText"
         },
         "body": {
           "type": "text",
@@ -81,17 +70,17 @@
           "label": "Body",
           "format": "markdown"
         },
-        "slug": {
-          "type": "text",
-          "required": false,
-          "label": "Slug",
-          "format": "slug"
-        },
         "href": {
           "type": "text",
           "required": false,
           "label": "Link",
           "format": "href"
+        },
+        "templateKey": {
+          "type": "text",
+          "required": false,
+          "label": "Template key",
+          "format": "slug"
         },
         "icon": {
           "type": "text",
@@ -105,46 +94,6 @@
           "label": "Color",
           "format": "color"
         },
-        "status": {
-          "type": "enum",
-          "required": true,
-          "label": "Status",
-          "default": "draft",
-          "values": {
-            "draft": {
-              "label": "Draft"
-            },
-            "published": {
-              "label": "Published"
-            },
-            "archived": {
-              "label": "Archived"
-            }
-          }
-        },
-        "publishedAt": {
-          "type": "date",
-          "required": false,
-          "label": "Published at"
-        },
-        "templateKey": {
-          "type": "text",
-          "required": false,
-          "label": "Template key",
-          "format": "slug"
-        },
-        "assetKey": {
-          "type": "text",
-          "required": false,
-          "label": "Asset key",
-          "format": "slug"
-        },
-        "alt": {
-          "type": "text",
-          "required": false,
-          "label": "Alt text",
-          "format": "longText"
-        },
         "width": {
           "type": "number",
           "required": false,
@@ -156,13 +105,6 @@
           "type": "number",
           "required": false,
           "label": "Height",
-          "integer": true,
-          "min": 0
-        },
-        "limit": {
-          "type": "number",
-          "required": false,
-          "label": "Limit",
           "integer": true,
           "min": 0
         }
@@ -187,20 +129,14 @@
           "required": true,
           "label": "Parent block",
           "to": "block",
-          "displayField": "title"
+          "displayField": "label"
         },
         "block": {
           "type": "reference",
           "required": true,
           "label": "Child block",
           "to": "block",
-          "displayField": "title"
-        },
-        "slot": {
-          "type": "text",
-          "required": false,
-          "label": "Slot",
-          "format": "slug"
+          "displayField": "label"
         },
         "order": {
           "type": "number",
@@ -208,18 +144,6 @@
           "label": "Order",
           "default": 1000,
           "min": 0
-        },
-        "visible": {
-          "type": "boolean",
-          "required": true,
-          "label": "Visible",
-          "default": true
-        },
-        "variant": {
-          "type": "text",
-          "required": false,
-          "label": "Variant",
-          "format": "slug"
         },
         "label": {
           "type": "text",
@@ -296,32 +220,6 @@
       "entity": "block",
       "expression": {
         "kind": "all"
-      }
-    },
-    "blockDraft": {
-      "label": "Draft",
-      "entity": "block",
-      "expression": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "status"
-        },
-        "op": "eq",
-        "value": "draft"
-      }
-    },
-    "blockPublished": {
-      "label": "Published",
-      "entity": "block",
-      "expression": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "status"
-        },
-        "op": "eq",
-        "value": "published"
       }
     },
     "blockPages": {
@@ -482,60 +380,6 @@
         "value": "file"
       }
     },
-    "publishedPosts": {
-      "label": "Published posts",
-      "entity": "block",
-      "expression": {
-        "kind": "and",
-        "expressions": [
-          {
-            "kind": "where",
-            "ref": {
-              "kind": "value",
-              "name": "type"
-            },
-            "op": "eq",
-            "value": "post"
-          },
-          {
-            "kind": "where",
-            "ref": {
-              "kind": "value",
-              "name": "status"
-            },
-            "op": "eq",
-            "value": "published"
-          }
-        ]
-      }
-    },
-    "publishedProjects": {
-      "label": "Published projects",
-      "entity": "block",
-      "expression": {
-        "kind": "and",
-        "expressions": [
-          {
-            "kind": "where",
-            "ref": {
-              "kind": "value",
-              "name": "type"
-            },
-            "op": "eq",
-            "value": "project"
-          },
-          {
-            "kind": "where",
-            "ref": {
-              "kind": "value",
-              "name": "status"
-            },
-            "op": "eq",
-            "value": "published"
-          }
-        ]
-      }
-    },
     "placementsForSelectedBlock": {
       "label": "Selected block",
       "entity": "blockPlacement",
@@ -557,15 +401,11 @@
     "blockListItem": {
       "entity": "block",
       "fields": {
-        "title": {
+        "label": {
           "editor": "text",
           "commit": "field-commit"
         },
         "type": {
-          "editor": "enum",
-          "commit": "immediate"
-        },
-        "status": {
           "editor": "enum",
           "commit": "immediate"
         }
@@ -574,11 +414,11 @@
     "blockContextItem": {
       "entity": "block",
       "fields": {
-        "type": {
-          "editor": "enum",
-          "commit": "immediate"
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
         },
-        "status": {
+        "type": {
           "editor": "enum",
           "commit": "immediate"
         }
@@ -587,32 +427,16 @@
     "blockRootDetail": {
       "entity": "block",
       "fields": {
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
-        },
         "label": {
           "editor": "text",
-          "commit": "field-commit"
-        },
-        "subtitle": {
-          "editor": "textarea",
           "commit": "field-commit"
         },
         "body": {
           "editor": "markdown",
           "commit": "field-commit"
         },
-        "slug": {
-          "editor": "slug",
-          "commit": "field-commit"
-        },
-        "status": {
-          "editor": "enum",
-          "commit": "immediate"
-        },
-        "publishedAt": {
-          "editor": "date",
+        "href": {
+          "editor": "href",
           "commit": "field-commit"
         },
         "templateKey": {
@@ -635,17 +459,10 @@
         },
         {
           "type": "field",
-          "field": "title",
-          "editor": "text",
-          "commit": "field-commit",
-          "width": "lg"
-        },
-        {
-          "type": "field",
           "field": "label",
           "editor": "text",
           "commit": "field-commit",
-          "width": "md"
+          "width": "lg"
         },
         {
           "type": "field",
@@ -656,31 +473,10 @@
         },
         {
           "type": "field",
-          "field": "status",
-          "editor": "enum",
-          "commit": "immediate",
-          "width": "sm"
-        },
-        {
-          "type": "field",
-          "field": "slug",
-          "editor": "slug",
-          "commit": "field-commit",
-          "width": "md"
-        },
-        {
-          "type": "field",
           "field": "href",
           "editor": "href",
           "commit": "field-commit",
           "width": "md"
-        },
-        {
-          "type": "field",
-          "field": "publishedAt",
-          "editor": "date",
-          "commit": "field-commit",
-          "width": "sm"
         },
         {
           "type": "field",
@@ -691,17 +487,17 @@
         },
         {
           "type": "field",
-          "field": "assetKey",
-          "editor": "slug",
+          "field": "icon",
+          "editor": "icon",
           "commit": "field-commit",
-          "width": "md"
+          "width": "sm"
         },
         {
           "type": "field",
-          "field": "alt",
-          "editor": "textarea",
+          "field": "color",
+          "editor": "color",
           "commit": "field-commit",
-          "width": "lg"
+          "width": "sm"
         },
         {
           "type": "field",
@@ -715,15 +511,6 @@
         {
           "type": "field",
           "field": "height",
-          "editor": "number",
-          "commit": "field-commit",
-          "align": "end",
-          "width": "xs",
-          "format": "number"
-        },
-        {
-          "type": "field",
-          "field": "limit",
           "editor": "number",
           "commit": "field-commit",
           "align": "end",
@@ -751,25 +538,17 @@
           {
             "kind": "field",
             "field": "parent"
-          },
-          {
-            "kind": "field",
-            "field": "slot"
           }
         ],
-        "presentations": ["dragHandle", "moveMenu"]
+        "presentations": [
+          "dragHandle",
+          "moveMenu"
+        ]
       },
       "columns": [
         {
           "type": "orderingHandle",
           "width": "xs"
-        },
-        {
-          "type": "field",
-          "field": "slot",
-          "editor": "slug",
-          "commit": "field-commit",
-          "width": "sm"
         },
         {
           "type": "field",
@@ -784,20 +563,6 @@
           "editor": "text",
           "commit": "field-commit",
           "width": "md"
-        },
-        {
-          "type": "field",
-          "field": "variant",
-          "editor": "slug",
-          "commit": "field-commit",
-          "width": "sm"
-        },
-        {
-          "type": "field",
-          "field": "visible",
-          "editor": "boolean",
-          "commit": "immediate",
-          "width": "xs"
         },
         {
           "type": "invokeAction",
@@ -820,18 +585,6 @@
       "queries": [
         {
           "query": "blockAll",
-          "count": {
-            "type": "count"
-          }
-        },
-        {
-          "query": "blockDraft",
-          "count": {
-            "type": "count"
-          }
-        },
-        {
-          "query": "blockPublished",
           "count": {
             "type": "count"
           }
@@ -883,18 +636,6 @@
           "count": {
             "type": "count"
           }
-        },
-        {
-          "query": "publishedPosts",
-          "count": {
-            "type": "count"
-          }
-        },
-        {
-          "query": "publishedProjects",
-          "count": {
-            "type": "count"
-          }
         }
       ],
       "defaultQuery": "blockAll",
@@ -920,7 +661,7 @@
         "name": "block",
         "entity": "block",
         "query": "blockPages",
-        "labelField": "title",
+        "labelField": "label",
         "relationship": "blockPlacements",
         "itemView": "blockRootDetail",
         "presentation": "listDetail"
@@ -957,7 +698,7 @@
         "name": "block",
         "entity": "block",
         "query": "blockHeaderRoot",
-        "labelField": "title",
+        "labelField": "label",
         "relationship": "blockPlacements",
         "itemView": "blockRootDetail",
         "presentation": "listDetail"
@@ -994,7 +735,7 @@
         "name": "block",
         "entity": "block",
         "query": "blockFooterRoot",
-        "labelField": "title",
+        "labelField": "label",
         "relationship": "blockPlacements",
         "itemView": "blockRootDetail",
         "presentation": "listDetail"
@@ -1027,29 +768,17 @@
         "type": {
           "editor": "enum"
         },
-        "title": {
-          "editor": "text"
-        },
         "label": {
           "editor": "text"
-        },
-        "subtitle": {
-          "editor": "textarea"
         },
         "body": {
           "editor": "markdown"
         },
-        "status": {
-          "editor": "enum"
-        },
-        "publishedAt": {
-          "editor": "date"
-        },
-        "slug": {
-          "editor": "slug"
-        },
         "href": {
           "editor": "href"
+        },
+        "templateKey": {
+          "editor": "slug"
         },
         "icon": {
           "editor": "icon"
@@ -1057,22 +786,10 @@
         "color": {
           "editor": "color"
         },
-        "templateKey": {
-          "editor": "slug"
-        },
-        "assetKey": {
-          "editor": "slug"
-        },
-        "alt": {
-          "editor": "textarea"
-        },
         "width": {
           "editor": "number"
         },
         "height": {
-          "editor": "number"
-        },
-        "limit": {
           "editor": "number"
         }
       }
@@ -1085,36 +802,20 @@
           "editor": "enum",
           "commit": "immediate"
         },
-        "title": {
-          "editor": "text",
-          "commit": "field-commit"
-        },
         "label": {
           "editor": "text",
-          "commit": "field-commit"
-        },
-        "subtitle": {
-          "editor": "textarea",
           "commit": "field-commit"
         },
         "body": {
           "editor": "markdown",
           "commit": "field-commit"
         },
-        "status": {
-          "editor": "enum",
-          "commit": "immediate"
-        },
-        "publishedAt": {
-          "editor": "date",
-          "commit": "field-commit"
-        },
-        "slug": {
-          "editor": "slug",
-          "commit": "field-commit"
-        },
         "href": {
           "editor": "href",
+          "commit": "field-commit"
+        },
+        "templateKey": {
+          "editor": "slug",
           "commit": "field-commit"
         },
         "icon": {
@@ -1125,27 +826,11 @@
           "editor": "color",
           "commit": "field-commit"
         },
-        "templateKey": {
-          "editor": "slug",
-          "commit": "field-commit"
-        },
-        "assetKey": {
-          "editor": "slug",
-          "commit": "field-commit"
-        },
-        "alt": {
-          "editor": "textarea",
-          "commit": "field-commit"
-        },
         "width": {
           "editor": "number",
           "commit": "field-commit"
         },
         "height": {
-          "editor": "number",
-          "commit": "field-commit"
-        },
-        "limit": {
           "editor": "number",
           "commit": "field-commit"
         }
@@ -1162,7 +847,7 @@
         "name": "block",
         "entity": "block",
         "query": "blockAll",
-        "labelField": "title",
+        "labelField": "label",
         "relationship": "blockPlacements",
         "itemView": "blockContextItem"
       },
@@ -1191,20 +876,11 @@
       "type": "create",
       "entity": "blockPlacement",
       "fields": {
-        "slot": {
-          "editor": "slug"
-        },
         "block": {
           "editor": "reference"
         },
         "label": {
           "editor": "text"
-        },
-        "variant": {
-          "editor": "slug"
-        },
-        "visible": {
-          "editor": "boolean"
         }
       },
       "defaults": {

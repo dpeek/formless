@@ -441,7 +441,9 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/pages/resume"');
     expect(html).toContain("Resume");
     expect(html).toContain("Schema-backed software for content-heavy products");
-    expect(html).toContain("Selected writing, projects, and durable systems work.");
+    expect(html).toContain(
+      "I design and build schema-backed software for teams that need their tools to keep up with the work.",
+    );
   });
 
   it("renders published Site links at top-level paths", () => {
@@ -458,27 +460,28 @@ describe("public site renderer", () => {
     expect(html).not.toContain('href="/pages/blog"');
   });
 
-  it("renders content list and grid query results without draft blocks", () => {
+  it("renders all content list and grid query results", () => {
     const html = renderSitePage("home");
 
     expect(html).toContain("Recent posts");
     expect(html).toContain("Shipping schema-backed authoring");
-    expect(html).toContain("Why the content model starts flat");
+    expect(html).toContain("Draft notes on generated editorial tools");
     expect(html).toContain("Featured projects");
     expect(html).toContain("Estii");
     expect(html).toContain("OpenSurf");
-    expect(html).toContain("Schema-backed application authoring");
-    expect(html).not.toContain("Draft notes on generated editorial tools");
+    expect(html).toContain("Formless makes app schema describe enough behavior");
   });
 
-  it("renders media blocks from public metadata without requiring stored assets", () => {
+  it("renders media blocks from href and label metadata", () => {
     const html = renderSitePage("home");
 
     expect(html).toContain("Site owner portrait");
-    expect(html).toContain("site-owner-portrait");
+    expect(html).toContain('alt="Site owner portrait"');
+    expect(html).toContain('src="data:image/svg+xml');
     expect(html).toContain("Intro video");
-    expect(html).toContain("site-intro-video");
+    expect(html).toContain('aria-label="Intro video"');
     expect(html).toContain('src="https://example.com/intro.mp4"');
+    expect(html).not.toContain("data-asset-key");
   });
 
   it("renders nested footer sections and external footer links", () => {
@@ -498,7 +501,7 @@ describe("public site renderer", () => {
     );
 
     expect(html).toContain("Page not found");
-    expect(html).toContain("No published site page exists for");
+    expect(html).toContain("No site page exists for");
     expect(html).toContain("<code>missing</code>");
     expect(html).toContain('href="/pages/home"');
   });
@@ -519,7 +522,7 @@ describe("public site renderer", () => {
     const unknownBlock = {
       id: "rec_site_block_unknown",
       type: "mystery",
-      title: "Unsupported block should be hidden",
+      label: "Unsupported block should be hidden",
       placements: [],
     };
 
@@ -534,7 +537,6 @@ describe("public site renderer", () => {
               {
                 id: "rec_site_place_unknown",
                 order: 99,
-                visible: true,
                 block: unknownBlock,
               },
             ],
@@ -922,9 +924,8 @@ describe("generated collection home", () => {
       [
         siteBlockRecord("rec_site_content_page_unannounced", {
           type: "page",
-          title: "Unannounced page",
-          status: "published",
-          slug: "unannounced",
+          label: "Unannounced page",
+          href: "/pages/unannounced",
           templateKey: "standard",
         }),
       ],
@@ -946,8 +947,7 @@ describe("generated collection home", () => {
       entity: "block",
       values: {
         type: "post",
-        title: "Published without metadata",
-        status: "published",
+        label: "Post without metadata",
       },
       createdAt: "2026-05-05T00:00:00.000Z",
     };
@@ -962,10 +962,9 @@ describe("generated collection home", () => {
     });
 
     expect(html).toContain('aria-label="Readiness warnings"');
-    expect(html).toContain("Published post block should have a slug or link.");
-    expect(html).toContain("Published post should include body content.");
-    expect(html).toContain("Published post should have a published date.");
-    expect(html).toContain("Published without metadata");
+    expect(html).toContain("Post block should have a link.");
+    expect(html).toContain("Post block should include body content.");
+    expect(html).toContain("Post without metadata");
     expect(html).toMatch(/<textarea[^>]*aria-label="Body"/);
     expect(html).not.toMatch(/aria-label="Body"[^>]*disabled/);
   });
@@ -1854,10 +1853,7 @@ describe("generated forms and records", () => {
     const ordering: TableOrderingConfig = {
       fieldName: "order",
       field: orderField,
-      scope: [
-        { kind: "field", fieldName: "parent", field: blockPlacement.fields.parent },
-        { kind: "field", fieldName: "slot", field: blockPlacement.fields.slot },
-      ],
+      scope: [{ kind: "field", fieldName: "parent", field: blockPlacement.fields.parent }],
       presentations: ["moveMenu"],
     };
 
@@ -2486,22 +2482,14 @@ describe("generated forms and records", () => {
     const action = requiredCreateAction(siteSourceSchema, "blockHome");
     const formData = new FormData();
     formData.set("type", "post");
-    formData.set("title", "Field behavior note");
-    formData.set("label", "Field behavior");
-    formData.set("subtitle", "Regression coverage");
+    formData.set("label", "Field behavior note");
     formData.set("body", "## Note\n\nCreate and edit stay wired.");
-    formData.set("status", "published");
-    formData.set("publishedAt", "2026-05-06");
-    formData.set("slug", "blog/field-behavior-note");
     formData.set("href", "https://example.com/field-behavior");
     formData.set("icon", "note");
     formData.set("color", "#336699");
     formData.set("templateKey", "post");
-    formData.set("assetKey", "field-behavior-note");
-    formData.set("alt", "Field behavior note image");
     formData.set("width", "1200");
     formData.set("height", "630");
-    formData.set("limit", "3");
 
     bootstrapSiteEditor();
     const createHtml = renderToStaticMarkup(
@@ -2521,8 +2509,8 @@ describe("generated forms and records", () => {
     expect(createHtml).toMatch(inputWithNameAndType("body", "hidden"));
     expect(createHtml).toContain('data-web-markdown-editor="plate"');
     expect(createHtml).not.toContain('name="featured"');
-    expect(createHtml).toContain('name="publishedAt"');
-    expect(createHtml).toContain('aria-label="Select date"');
+    expect(createHtml).not.toContain('name="publishedAt"');
+    expect(createHtml).not.toContain('aria-label="Select date"');
     expect(createHtml).not.toMatch(inputWithNameAndType("order", "hidden"));
     expect(createHtml).not.toMatch(inputWithAriaLabelAndType("Order", "text"));
     expect(createHtml).toContain('data-web-formatted-number-input="true"');
@@ -2530,39 +2518,30 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('step="1"');
     expect(createHtml).toContain('name="color"');
     expect(createHtml).toContain('aria-label="Choose Color"');
-    expect(createHtml).toContain('name="assetKey"');
-    expect(createHtml).toContain('name="alt"');
+    expect(createHtml).not.toContain('name="assetKey"');
+    expect(createHtml).not.toContain('name="alt"');
     expect(createHtml).toContain('name="width"');
     expect(createHtml).toContain('name="height"');
-    expect(createHtml).toContain('name="limit"');
+    expect(createHtml).not.toContain('name="limit"');
     expect(resolveCreateValues(formData, action)).toEqual({
       type: "post",
-      title: "Field behavior note",
-      label: "Field behavior",
-      subtitle: "Regression coverage",
+      label: "Field behavior note",
       body: "## Note\n\nCreate and edit stay wired.",
-      status: "published",
-      publishedAt: "2026-05-06",
-      slug: "blog/field-behavior-note",
       href: "https://example.com/field-behavior",
       icon: "note",
       color: "#336699",
       templateKey: "post",
-      assetKey: "field-behavior-note",
-      alt: "Field behavior note image",
       width: 1200,
       height: 630,
-      limit: 3,
     });
     expect(editHtml).toContain("Shipping schema-backed authoring");
     expect(editHtml).toContain('aria-label="Body"');
     expect(editHtml).toContain("<textarea");
     expect(editHtml).not.toContain('aria-label="Featured"');
-    expect(editHtml).toContain('aria-label="Published at"');
-    expect(editHtml).toContain('type="date"');
+    expect(editHtml).not.toContain('aria-label="Published at"');
+    expect(editHtml).not.toContain('type="date"');
     expect(editHtml).not.toContain('aria-label="Order"');
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
-    expect(editHtml).toContain("Published");
   });
 
   it("still resolves scoped create defaults for views that use them", () => {
@@ -2601,13 +2580,13 @@ describe("generated forms and records", () => {
       <GeneratedCreateDialogForm action={placementAction} renderDialogCancel={false} />,
     );
     const placementFormData = new FormData();
-    placementFormData.set("slot", "main");
     placementFormData.set("block", "rec_site_block_home_recent_posts");
     placementFormData.set("label", "Recent posts");
-    placementFormData.set("variant", "contentList");
-    placementFormData.set("visible", "on");
 
     expect(html).not.toContain('name="parent"');
+    expect(html).not.toContain('name="slot"');
+    expect(html).not.toContain('name="variant"');
+    expect(html).not.toContain('name="visible"');
     expect(
       resolveCreateValues(placementFormData, placementAction, {
         today: "2026-05-05",
@@ -2615,11 +2594,8 @@ describe("generated forms and records", () => {
       }),
     ).toMatchObject({
       parent: "rec_site_content_home",
-      slot: "main",
       block: "rec_site_block_home_recent_posts",
       label: "Recent posts",
-      variant: "contentList",
-      visible: true,
     });
   });
 

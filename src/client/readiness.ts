@@ -26,45 +26,26 @@ export function getRecordReadinessWarnings(
 
 function getBlockWarnings(record: StoredRecord): RecordReadinessWarning[] {
   const type = stringValue(record, "type");
-  const status = stringValue(record, "status");
   const warnings: RecordReadinessWarning[] = [];
 
-  if (status === "published" && ["page", "post", "project"].includes(type)) {
-    if (!hasTextValue(record, "slug") && !hasTextValue(record, "href")) {
-      warnings.push({
-        code: "published-block-route",
-        message: `Published ${type} block should have a slug or link.`,
-      });
-    }
-
-    if (type === "post") {
-      if (!hasTextValue(record, "body")) {
-        warnings.push({
-          code: "published-post-body",
-          message: "Published post should include body content.",
-        });
-      }
-
-      if (!hasTextValue(record, "publishedAt")) {
-        warnings.push({
-          code: "published-post-date",
-          message: "Published post should have a published date.",
-        });
-      }
-    }
-
-    if (type === "project" && !hasTextValue(record, "subtitle") && !hasTextValue(record, "body")) {
-      warnings.push({
-        code: "published-project-summary",
-        message: "Published project should include a summary or body.",
-      });
-    }
+  if (["page", "post", "project"].includes(type) && !hasTextValue(record, "href")) {
+    warnings.push({
+      code: "block-route",
+      message: `${blockTypeLabel(type)} block should have a link.`,
+    });
   }
 
-  if (["image", "video"].includes(type) && !hasTextValue(record, "alt")) {
+  if (type === "post" && !hasTextValue(record, "body")) {
     warnings.push({
-      code: "block-media-alt",
-      message: "Media block should include alt text.",
+      code: "post-body",
+      message: "Post block should include body content.",
+    });
+  }
+
+  if (type === "project" && !hasTextValue(record, "body")) {
+    warnings.push({
+      code: "project-summary",
+      message: "Project block should include body content.",
     });
   }
 
@@ -82,15 +63,11 @@ function getBlockPlacementWarnings(
   record: StoredRecord,
   recordsById: Record<string, StoredRecord>,
 ): RecordReadinessWarning[] {
-  if (record.values.visible === false) {
-    return [];
-  }
-
   const warnings: RecordReadinessWarning[] = [];
 
   warnWhenMissingReference(warnings, record, recordsById, "block", "block", {
     code: "placement-block-child",
-    message: "Visible placement should point to a child block.",
+    message: "Placement should point to a live child block.",
   });
 
   return warnings;

@@ -29,13 +29,13 @@ describe("worker schema app definitions", () => {
     expect(new Set(estii.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["card", "resource", "rate"]),
     );
-    expect(site.seedRecords).toHaveLength(48);
+    expect(site.seedRecords).toHaveLength(47);
     expect(new Set(site.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["block", "blockPlacement"]),
     );
     expect(site.seedRecords.filter((record) => record.entity === "block")).toHaveLength(28);
     expect(site.seedRecords.filter((record) => record.entity === "blockPlacement")).toHaveLength(
-      20,
+      19,
     );
     expect(
       site.seedRecords
@@ -45,6 +45,34 @@ describe("worker schema app definitions", () => {
         )
         .map((record) => record.values.type),
     ).toEqual(["image", "video"]);
+  });
+
+  it("keeps site source seed records on the first-release block fields", () => {
+    const site = getWorkerSchemaAppDefinition("site");
+    const removedBlockFields = [
+      "title",
+      "subtitle",
+      "alt",
+      "slug",
+      "status",
+      "publishedAt",
+      "assetKey",
+      "limit",
+    ];
+    const removedPlacementFields = ["slot", "visible", "variant"];
+
+    for (const record of site.seedRecords) {
+      const removedFields =
+        record.entity === "block"
+          ? removedBlockFields
+          : record.entity === "blockPlacement"
+            ? removedPlacementFields
+            : [];
+
+      for (const field of removedFields) {
+        expect(record.values).not.toHaveProperty(field);
+      }
+    }
   });
 
   it("returns undefined for unknown worker schema keys", () => {

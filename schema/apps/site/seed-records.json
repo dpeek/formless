@@ -4,11 +4,8 @@
     "entity": "block",
     "values": {
       "type": "image",
-      "title": "Site owner portrait",
       "label": "Site owner portrait",
-      "status": "published",
-      "assetKey": "site-owner-portrait",
-      "alt": "Portrait of the site owner",
+      "href": "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 1200 1200%27%3E%3Crect width=%271200%27 height=%271200%27 fill=%27%230f766e%27/%3E%3Ctext x=%27600%27 y=%27620%27 font-size=%2796%27 text-anchor=%27middle%27 fill=%27white%27%3ESite owner%3C/text%3E%3C/svg%3E",
       "width": 1200,
       "height": 1200
     },
@@ -19,12 +16,8 @@
     "entity": "block",
     "values": {
       "type": "video",
-      "title": "Intro video",
       "label": "Intro video",
-      "status": "published",
       "href": "https://example.com/intro.mp4",
-      "assetKey": "site-intro-video",
-      "alt": "Short introduction video for the site owner",
       "width": 1920,
       "height": 1080
     },
@@ -35,10 +28,8 @@
     "entity": "block",
     "values": {
       "type": "profile",
-      "title": "Intro",
-      "subtitle": "Independent product engineer",
+      "label": "Intro",
       "body": "I design and build schema-backed software for teams that need their tools to keep up with the work.",
-      "status": "published",
       "templateKey": "profile-intro"
     },
     "createdAt": "2026-05-05T00:00:03.000Z"
@@ -48,12 +39,9 @@
     "entity": "block",
     "values": {
       "type": "page",
-      "title": "Home",
-      "subtitle": "Selected writing and projects",
+      "label": "Home",
       "body": "A concise personal site for current work, writing, and project notes.",
-      "slug": "home",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "href": "/pages/home",
       "templateKey": "home"
     },
     "createdAt": "2026-05-05T00:00:04.000Z"
@@ -63,11 +51,9 @@
     "entity": "block",
     "values": {
       "type": "page",
-      "title": "Blog",
-      "subtitle": "Notes on product engineering",
-      "slug": "blog",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "label": "Blog",
+      "body": "Notes on product engineering",
+      "href": "/pages/blog",
       "templateKey": "post-index"
     },
     "createdAt": "2026-05-05T00:00:05.000Z"
@@ -77,12 +63,9 @@
     "entity": "block",
     "values": {
       "type": "page",
-      "title": "Resume",
-      "subtitle": "Experience, selected work, and operating notes",
+      "label": "Resume",
       "body": "A practical summary of roles, projects, and strengths.",
-      "slug": "resume",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "href": "/pages/resume",
       "templateKey": "resume"
     },
     "createdAt": "2026-05-05T00:00:06.000Z"
@@ -92,11 +75,9 @@
     "entity": "block",
     "values": {
       "type": "page",
-      "title": "Projects",
-      "subtitle": "Current and recent product work",
-      "slug": "projects",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "label": "Projects",
+      "body": "Current and recent product work",
+      "href": "/pages/projects",
       "templateKey": "project-index"
     },
     "createdAt": "2026-05-05T00:00:07.000Z"
@@ -106,12 +87,9 @@
     "entity": "block",
     "values": {
       "type": "project",
-      "title": "Estii",
-      "subtitle": "Commercial planning and rate-card workflows",
+      "label": "Estii",
       "body": "Estii helps teams turn operational assumptions into clear, reusable pricing structures.",
-      "slug": "projects/estii",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "href": "/pages/projects/estii",
       "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:08.000Z"
@@ -121,12 +99,9 @@
     "entity": "block",
     "values": {
       "type": "project",
-      "title": "OpenSurf",
-      "subtitle": "Shared vocabulary for surf data and sessions",
+      "label": "OpenSurf",
       "body": "OpenSurf explores portable data models for sessions, spots, boards, and conditions.",
-      "slug": "projects/opensurf",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "href": "/pages/projects/opensurf",
       "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:09.000Z"
@@ -136,12 +111,9 @@
     "entity": "block",
     "values": {
       "type": "project",
-      "title": "Formless",
-      "subtitle": "Schema-backed application authoring",
+      "label": "Formless",
       "body": "Formless makes app schema describe enough behavior to produce useful generated software.",
-      "slug": "projects/formless",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "href": "/pages/projects/formless",
       "templateKey": "project"
     },
     "createdAt": "2026-05-05T00:00:10.000Z"
@@ -151,12 +123,9 @@
     "entity": "block",
     "values": {
       "type": "post",
-      "title": "Shipping schema-backed authoring",
-      "subtitle": "Why the content model starts flat",
+      "label": "Shipping schema-backed authoring",
       "body": "The first useful content app should keep records flat and move composition into relationships and views.",
-      "slug": "blog/shipping-schema-backed-authoring",
-      "status": "published",
-      "publishedAt": "2026-05-05",
+      "href": "/pages/blog/shipping-schema-backed-authoring",
       "templateKey": "post"
     },
     "createdAt": "2026-05-05T00:00:11.000Z"
@@ -166,11 +135,9 @@
     "entity": "block",
     "values": {
       "type": "post",
-      "title": "Draft notes on generated editorial tools",
-      "subtitle": "Working notes before publishing",
+      "label": "Draft notes on generated editorial tools",
       "body": "Draft thoughts on where generic generated admin surfaces are helpful and where authoring affordances need more shape.",
-      "slug": "blog/generated-editorial-tools",
-      "status": "draft",
+      "href": "/pages/blog/generated-editorial-tools",
       "templateKey": "post"
     },
     "createdAt": "2026-05-05T00:00:12.000Z"
@@ -180,9 +147,8 @@
     "entity": "block",
     "values": {
       "type": "link",
-      "title": "Home",
-      "href": "/pages/home",
-      "status": "published"
+      "label": "Home",
+      "href": "/pages/home"
     },
     "createdAt": "2026-05-05T00:00:12.100Z"
   },
@@ -191,9 +157,8 @@
     "entity": "block",
     "values": {
       "type": "link",
-      "title": "Blog",
-      "href": "/pages/blog",
-      "status": "published"
+      "label": "Blog",
+      "href": "/pages/blog"
     },
     "createdAt": "2026-05-05T00:00:12.200Z"
   },
@@ -202,9 +167,8 @@
     "entity": "block",
     "values": {
       "type": "link",
-      "title": "Projects",
-      "href": "/pages/projects",
-      "status": "published"
+      "label": "Projects",
+      "href": "/pages/projects"
     },
     "createdAt": "2026-05-05T00:00:12.300Z"
   },
@@ -213,9 +177,8 @@
     "entity": "block",
     "values": {
       "type": "link",
-      "title": "Resume",
-      "href": "/pages/resume",
-      "status": "published"
+      "label": "Resume",
+      "href": "/pages/resume"
     },
     "createdAt": "2026-05-05T00:00:12.400Z"
   },
@@ -224,10 +187,9 @@
     "entity": "block",
     "values": {
       "type": "link",
-      "title": "GitHub",
+      "label": "GitHub",
       "href": "https://github.com/example",
-      "icon": "github",
-      "status": "published"
+      "icon": "github"
     },
     "createdAt": "2026-05-05T00:00:13.000Z"
   },
@@ -236,10 +198,9 @@
     "entity": "block",
     "values": {
       "type": "link",
-      "title": "LinkedIn",
+      "label": "LinkedIn",
       "href": "https://linkedin.com/in/example",
-      "icon": "linkedin",
-      "status": "published"
+      "icon": "linkedin"
     },
     "createdAt": "2026-05-05T00:00:14.000Z"
   },
@@ -248,9 +209,8 @@
     "entity": "block",
     "values": {
       "type": "profile",
-      "title": "Copyright",
+      "label": "Copyright",
       "body": "Copyright 2026 Site owner. All rights reserved.",
-      "status": "published",
       "templateKey": "copyright"
     },
     "createdAt": "2026-05-05T00:00:15.000Z"
@@ -260,9 +220,7 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "title": "Header",
       "label": "Header",
-      "status": "published",
       "templateKey": "header"
     },
     "createdAt": "2026-05-05T00:00:16.000Z"
@@ -272,9 +230,7 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "title": "Footer",
       "label": "Footer",
-      "status": "published",
       "templateKey": "footer"
     },
     "createdAt": "2026-05-05T00:00:16.500Z"
@@ -284,9 +240,7 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "title": "Explore",
       "label": "Explore",
-      "status": "published",
       "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:17.000Z"
@@ -296,9 +250,7 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "title": "Social",
       "label": "Social",
-      "status": "published",
       "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:18.000Z"
@@ -308,11 +260,8 @@
     "entity": "block",
     "values": {
       "type": "hero",
-      "title": "Schema-backed software for content-heavy products",
-      "label": "Home hero",
-      "subtitle": "Selected writing, projects, and durable systems work.",
+      "label": "Schema-backed software for content-heavy products",
       "body": "I design and build schema-backed software for teams that need their tools to keep up with the work.",
-      "status": "published",
       "templateKey": "home-hero"
     },
     "createdAt": "2026-05-05T00:00:18.100Z"
@@ -322,10 +271,8 @@
     "entity": "block",
     "values": {
       "type": "contentList",
-      "title": "Recent posts",
-      "status": "published",
-      "templateKey": "publishedPosts",
-      "limit": 3
+      "label": "Recent posts",
+      "templateKey": "blockPosts"
     },
     "createdAt": "2026-05-05T00:00:18.200Z"
   },
@@ -334,10 +281,8 @@
     "entity": "block",
     "values": {
       "type": "contentGrid",
-      "title": "Featured projects",
-      "status": "published",
-      "templateKey": "publishedProjects",
-      "limit": 3
+      "label": "Featured projects",
+      "templateKey": "blockProjects"
     },
     "createdAt": "2026-05-05T00:00:18.300Z"
   },
@@ -346,9 +291,8 @@
     "entity": "block",
     "values": {
       "type": "markdown",
-      "title": "Body",
+      "label": "Body",
       "body": "The first useful content app should keep records flat and move composition into relationships and views.",
-      "status": "published",
       "templateKey": "post-body"
     },
     "createdAt": "2026-05-05T00:00:18.400Z"
@@ -358,10 +302,8 @@
     "entity": "block",
     "values": {
       "type": "contentList",
-      "title": "More posts",
-      "status": "published",
-      "templateKey": "publishedPosts",
-      "limit": 3
+      "label": "More posts",
+      "templateKey": "blockPosts"
     },
     "createdAt": "2026-05-05T00:00:18.500Z"
   },
@@ -372,8 +314,6 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_home",
       "order": 1000,
-      "visible": true,
-      "variant": "link",
       "label": "Home"
     },
     "createdAt": "2026-05-05T00:00:19.000Z"
@@ -385,8 +325,6 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_blog",
       "order": 2000,
-      "visible": true,
-      "variant": "link",
       "label": "Blog"
     },
     "createdAt": "2026-05-05T00:00:20.000Z"
@@ -398,8 +336,6 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_projects",
       "order": 3000,
-      "visible": true,
-      "variant": "link",
       "label": "Projects"
     },
     "createdAt": "2026-05-05T00:00:21.000Z"
@@ -411,8 +347,6 @@
       "parent": "rec_site_content_group_header",
       "block": "rec_site_content_link_resume",
       "order": 4000,
-      "visible": true,
-      "variant": "link",
       "label": "Resume"
     },
     "createdAt": "2026-05-05T00:00:22.000Z"
@@ -424,8 +358,6 @@
       "parent": "rec_site_content_group_footer_main",
       "block": "rec_site_content_link_projects",
       "order": 1000,
-      "visible": true,
-      "variant": "link",
       "label": "Projects"
     },
     "createdAt": "2026-05-05T00:00:23.000Z"
@@ -437,8 +369,6 @@
       "parent": "rec_site_content_group_footer_main",
       "block": "rec_site_content_link_resume",
       "order": 2000,
-      "visible": true,
-      "variant": "link",
       "label": "Resume"
     },
     "createdAt": "2026-05-05T00:00:24.000Z"
@@ -450,8 +380,6 @@
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_github",
       "order": 1000,
-      "visible": true,
-      "variant": "link",
       "label": "GitHub"
     },
     "createdAt": "2026-05-05T00:00:25.000Z"
@@ -463,8 +391,6 @@
       "parent": "rec_site_content_group_footer_social",
       "block": "rec_site_content_link_linkedin",
       "order": 2000,
-      "visible": true,
-      "variant": "link",
       "label": "LinkedIn"
     },
     "createdAt": "2026-05-05T00:00:26.000Z"
@@ -476,8 +402,6 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_content_group_header",
       "order": 1000,
-      "visible": true,
-      "variant": "header",
       "label": "Header"
     },
     "createdAt": "2026-05-05T00:00:26.100Z"
@@ -489,8 +413,6 @@
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_main",
       "order": 1000,
-      "visible": true,
-      "variant": "section",
       "label": "Explore"
     },
     "createdAt": "2026-05-05T00:00:26.200Z"
@@ -502,8 +424,6 @@
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_social",
       "order": 2000,
-      "visible": true,
-      "variant": "section",
       "label": "Social"
     },
     "createdAt": "2026-05-05T00:00:26.300Z"
@@ -515,8 +435,6 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_content_group_footer",
       "order": 5000,
-      "visible": true,
-      "variant": "footer",
       "label": "Footer"
     },
     "createdAt": "2026-05-05T00:00:26.400Z"
@@ -528,8 +446,6 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_hero",
       "order": 2000,
-      "visible": true,
-      "variant": "hero",
       "label": "Schema-backed software for content-heavy products"
     },
     "createdAt": "2026-05-05T00:00:27.000Z"
@@ -541,8 +457,6 @@
       "parent": "rec_site_block_home_hero",
       "block": "rec_site_media_avatar",
       "order": 1000,
-      "visible": true,
-      "variant": "image",
       "label": "Portrait"
     },
     "createdAt": "2026-05-05T00:00:27.100Z"
@@ -554,8 +468,6 @@
       "parent": "rec_site_block_home_hero",
       "block": "rec_site_media_intro_video",
       "order": 2000,
-      "visible": true,
-      "variant": "video",
       "label": "Intro video"
     },
     "createdAt": "2026-05-05T00:00:27.200Z"
@@ -567,8 +479,6 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_recent_posts",
       "order": 3000,
-      "visible": true,
-      "variant": "contentList",
       "label": "Recent posts"
     },
     "createdAt": "2026-05-05T00:00:28.000Z"
@@ -580,8 +490,6 @@
       "parent": "rec_site_content_home",
       "block": "rec_site_block_home_projects",
       "order": 4000,
-      "visible": true,
-      "variant": "contentGrid",
       "label": "Featured projects"
     },
     "createdAt": "2026-05-05T00:00:29.000Z"
@@ -593,8 +501,6 @@
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_block_post_body",
       "order": 1000,
-      "visible": true,
-      "variant": "markdown",
       "label": "Body"
     },
     "createdAt": "2026-05-05T00:00:30.000Z"
@@ -606,23 +512,8 @@
       "parent": "rec_site_content_post_shipped_schema",
       "block": "rec_site_content_profile_intro",
       "order": 2000,
-      "visible": true,
-      "variant": "contentCard",
       "label": "Profile"
     },
     "createdAt": "2026-05-05T00:00:31.000Z"
-  },
-  {
-    "id": "rec_site_place_post_related",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_post_shipped_schema",
-      "block": "rec_site_block_post_related_posts",
-      "order": 3000,
-      "visible": false,
-      "variant": "contentList",
-      "label": "More posts"
-    },
-    "createdAt": "2026-05-05T00:00:32.000Z"
   }
 ]

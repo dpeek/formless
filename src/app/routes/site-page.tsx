@@ -131,7 +131,7 @@ export function normalizeSitePageSlug(slug: string | undefined): string {
 
 class SitePageNotFoundError extends Error {
   constructor(slug: string) {
-    super(`No published site page found for "${slug}".`);
+    super(`No site page found for "${slug}".`);
   }
 }
 
@@ -149,7 +149,7 @@ function SitePageNotFound({ linkMode, slug }: { linkMode: SitePageLinkMode; slug
     <section className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-semibold">Page not found</h1>
       <p className="mt-2 text-sm text-slate-600">
-        No published site page exists for <code>{slug}</code>.
+        No site page exists for <code>{slug}</code>.
       </p>
       <a
         className="mt-4 inline-flex text-sm font-medium underline"

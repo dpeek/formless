@@ -158,17 +158,12 @@ export type SiteTreeMeta = {
 export type SiteBlockNode = {
   id: string;
   type: string;
-  title: string;
-  label?: string;
-  subtitle?: string;
+  label: string;
   body?: string;
-  slug?: string;
   href?: string;
   icon?: string;
   color?: string;
   templateKey?: string;
-  assetKey?: string;
-  alt?: string;
   width?: number;
   height?: number;
   placements: SitePlacementNode[];
@@ -180,10 +175,7 @@ export type SiteBlockNode = {
 
 export type SitePlacementNode = {
   id: string;
-  slot?: string;
   order: number;
-  visible: boolean;
-  variant?: string;
   label?: string;
   block: SiteBlockNode;
 };

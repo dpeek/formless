@@ -104,8 +104,8 @@ describe("authority", () => {
     expect(body.page).toMatchObject({
       id: "rec_site_content_home",
       type: "page",
-      title: "Home",
-      slug: "home",
+      label: "Home",
+      href: "/pages/home",
     });
     expect(body.meta).toEqual({
       slug: "home",
@@ -121,22 +121,33 @@ describe("authority", () => {
     ]);
     expect(recentPosts?.query?.items.map((item) => item.id)).toEqual([
       "rec_site_content_post_shipped_schema",
+      "rec_site_content_post_draft_notes",
     ]);
-    expect(blockIds).not.toContain("rec_site_content_post_draft_notes");
     expect(body).not.toHaveProperty("schema");
     expect(body).not.toHaveProperty("records");
   });
 
-  it("returns 404 for a draft-only site page slug", async () => {
+  it("returns a public page tree for any live site page href", async () => {
     useSchemaApp("site");
-    await postMutationForEntity("mutation-site-draft-page", "block", {
+    await postMutationForEntity("mutation-site-extra-page", "block", {
       type: "page",
-      title: "Draft page",
-      slug: "draft-page",
-      status: "draft",
+      label: "Extra page",
+      href: "/pages/extra-page",
     });
 
-    const response = await harness.fetch(apiPath("/api/tree/draft-page"));
+    const body = await getJson<SitePageTreeResponse>("/api/tree/extra-page");
+
+    expect(body.page).toMatchObject({
+      type: "page",
+      label: "Extra page",
+      href: "/pages/extra-page",
+    });
+  });
+
+  it("returns 404 for a missing site page href", async () => {
+    useSchemaApp("site");
+
+    const response = await harness.fetch(apiPath("/api/tree/missing-page"));
 
     expect(response.status).toBe(404);
     expect((await response.json()) as { error: string }).toEqual({

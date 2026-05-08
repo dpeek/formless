@@ -3113,15 +3113,7 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
-        "field",
-        "field",
-        "field",
-        "field",
-        "field",
         "orderingHandle",
-        "field",
-        "field",
-        "field",
         "field",
         "field",
         "invokeAction",
@@ -3346,7 +3338,7 @@ describe("personal site sample schema", () => {
     });
     expect(schema.entities.block?.fields.label).toEqual({
       type: "text",
-      required: false,
+      required: true,
       label: "Label",
     });
     expect(schema.entities.block?.fields.body).toEqual({
@@ -3355,26 +3347,21 @@ describe("personal site sample schema", () => {
       label: "Body",
       format: "markdown",
     });
-    expect(schema.entities.block?.fields.slug).toMatchObject({
-      type: "text",
-      format: "slug",
-    });
     expect(schema.entities.block?.fields.href).toMatchObject({
       type: "text",
       format: "href",
     });
-    expect(schema.entities.block?.fields.assetKey).toEqual({
-      type: "text",
-      required: false,
-      label: "Asset key",
-      format: "slug",
-    });
-    expect(schema.entities.block?.fields.alt).toEqual({
-      type: "text",
-      required: false,
-      label: "Alt text",
-      format: "longText",
-    });
+    expect(Object.keys(schema.entities.block?.fields ?? {})).toEqual([
+      "type",
+      "label",
+      "body",
+      "href",
+      "templateKey",
+      "icon",
+      "color",
+      "width",
+      "height",
+    ]);
     expect(schema.entities.block?.fields).not.toHaveProperty("featured");
     expect(schema.entities.block?.fields).not.toHaveProperty("order");
     expect(schema.entities.blockPlacement?.label).toBe("Placement");
@@ -3382,20 +3369,20 @@ describe("personal site sample schema", () => {
       type: "reference",
       required: true,
       to: "block",
-      displayField: "title",
+      displayField: "label",
     });
     expect(schema.entities.blockPlacement?.fields.block).toMatchObject({
       type: "reference",
       required: true,
       to: "block",
-      displayField: "title",
+      displayField: "label",
     });
-    expect(schema.entities.blockPlacement?.fields.slot).toEqual({
-      type: "text",
-      required: false,
-      label: "Slot",
-      format: "slug",
-    });
+    expect(Object.keys(schema.entities.blockPlacement?.fields ?? {})).toEqual([
+      "parent",
+      "block",
+      "order",
+      "label",
+    ]);
     expect(schema.relationships).toMatchObject({
       placementParent: {
         kind: "toOne",
@@ -3422,14 +3409,8 @@ describe("personal site sample schema", () => {
         inverse: "placementBlock",
       },
     });
-    expect(schema.entities.blockPlacement?.fields.variant).toMatchObject({
-      type: "text",
-      required: false,
-    });
     expect(Object.keys(schema.queries)).toEqual([
       "blockAll",
-      "blockDraft",
-      "blockPublished",
       "blockPages",
       "blockHeaderRoot",
       "blockFooterRoot",
@@ -3440,23 +3421,17 @@ describe("personal site sample schema", () => {
       "blockImages",
       "blockVideos",
       "blockFiles",
-      "publishedPosts",
-      "publishedProjects",
       "placementsForSelectedBlock",
     ]);
-    expect(schema.queries.publishedPosts?.expression).toMatchObject({
-      kind: "and",
-      expressions: [
-        { ref: { kind: "value", name: "type" }, op: "eq", value: "post" },
-        { ref: { kind: "value", name: "status" }, op: "eq", value: "published" },
-      ],
+    expect(schema.queries.blockPosts?.expression).toMatchObject({
+      ref: { kind: "value", name: "type" },
+      op: "eq",
+      value: "post",
     });
-    expect(schema.queries.publishedProjects?.expression).toMatchObject({
-      kind: "and",
-      expressions: [
-        { ref: { kind: "value", name: "type" }, op: "eq", value: "project" },
-        { ref: { kind: "value", name: "status" }, op: "eq", value: "published" },
-      ],
+    expect(schema.queries.blockProjects?.expression).toMatchObject({
+      ref: { kind: "value", name: "type" },
+      op: "eq",
+      value: "project",
     });
     expect(schema.queries.placementsForSelectedBlock?.expression).toMatchObject({
       ref: { kind: "value", name: "parent" },
@@ -3490,8 +3465,9 @@ describe("personal site sample schema", () => {
       entity: "block",
       fields: {
         type: { editor: "enum" },
+        label: { editor: "text" },
         body: { editor: "markdown" },
-        assetKey: { editor: "slug" },
+        href: { editor: "href" },
       },
     });
     expect(schema.views.blockEdit).toMatchObject({
@@ -3499,8 +3475,9 @@ describe("personal site sample schema", () => {
       entity: "block",
       fields: {
         type: { editor: "enum", commit: "immediate" },
+        label: { editor: "text", commit: "field-commit" },
         body: { editor: "markdown", commit: "field-commit" },
-        assetKey: { editor: "slug", commit: "field-commit" },
+        href: { editor: "href", commit: "field-commit" },
       },
     });
     expect(schema.tableViews.blockPlacementTable?.actions?.editChildBlock).toMatchObject({
@@ -3518,7 +3495,7 @@ describe("personal site sample schema", () => {
         name: "block",
         entity: "block",
         query: "blockAll",
-        labelField: "title",
+        labelField: "label",
         relationship: "blockPlacements",
         itemView: "blockContextItem",
       },
@@ -3534,7 +3511,7 @@ describe("personal site sample schema", () => {
         name: "block",
         entity: "block",
         query: "blockPages",
-        labelField: "title",
+        labelField: "label",
         relationship: "blockPlacements",
         itemView: "blockRootDetail",
         presentation: "listDetail",

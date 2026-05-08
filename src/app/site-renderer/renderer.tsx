@@ -82,15 +82,14 @@ function PageBlock({ block }: { block: SiteBlockNode }) {
 function PageIntro({ block }: { block: SiteBlockNode }) {
   return (
     <header className="max-w-3xl space-y-4">
-      <h1 className="text-4xl font-semibold tracking-normal text-zinc-950">{block.title}</h1>
-      {block.subtitle ? <p className="text-xl text-zinc-700">{block.subtitle}</p> : null}
+      <h1 className="text-4xl font-semibold tracking-normal text-zinc-950">{block.label}</h1>
       {block.body ? <PlainText text={block.body} className="text-base text-zinc-600" /> : null}
     </header>
   );
 }
 
 function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: SitePlacementNode }) {
-  if (block.templateKey === "header" || placement?.variant === "header") {
+  if (block.templateKey === "header") {
     return <HeaderGroup block={block} />;
   }
 
@@ -98,13 +97,13 @@ function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: Si
     return <FooterSection block={block} />;
   }
 
-  if (block.templateKey === "footer" || placement?.variant === "footer") {
+  if (block.templateKey === "footer") {
     return <FooterGroup block={block} />;
   }
 
   return (
     <section className="space-y-4" data-block-type={block.type}>
-      <h2 className="text-xl font-semibold">{block.label ?? block.title}</h2>
+      <h2 className="text-xl font-semibold">{displayLabel(block, placement)}</h2>
       {block.body ? <PlainText text={block.body} className="text-sm text-zinc-600" /> : null}
       {block.placements.map((placement) => (
         <SitePlacementRenderer key={placement.id} placement={placement} />
@@ -125,8 +124,8 @@ function HeaderGroup({ block }: { block: SiteBlockNode }) {
         >
           Formless
         </a>
-        <nav aria-label={block.label ?? block.title} className="flex flex-wrap items-center gap-4">
-          <SitePlacementList placements={placementsForSlotOrDefault(block, "header")} />
+        <nav aria-label={block.label} className="flex flex-wrap items-center gap-4">
+          <SitePlacementList placements={block.placements} />
         </nav>
       </div>
     </header>
@@ -134,14 +133,14 @@ function HeaderGroup({ block }: { block: SiteBlockNode }) {
 }
 
 function FooterGroup({ block }: { block: SiteBlockNode }) {
-  const footerSections = placementsForSlotOrDefault(block, "footer");
+  const footerSections = block.placements;
   const claimed = placementIdSet(footerSections);
 
   return (
     <footer className="border-t border-zinc-200 bg-zinc-950 text-white">
       <div className="mx-auto grid max-w-5xl gap-8 px-6 py-10 md:grid-cols-[1fr_2fr]">
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">{block.label ?? block.title}</h2>
+          <h2 className="text-lg font-semibold">{block.label}</h2>
           <p className="max-w-sm text-sm text-zinc-300">
             Schema-backed software for content-heavy products.
           </p>
@@ -161,10 +160,10 @@ function FooterSection({ block }: { block: SiteBlockNode }) {
   return (
     <section className="space-y-3">
       <h3 className="text-sm font-semibold uppercase tracking-normal text-amber-200">
-        {block.label ?? block.title}
+        {block.label}
       </h3>
-      <nav aria-label={block.label ?? block.title} className="flex flex-col items-start gap-2">
-        <SitePlacementList placements={placementsForSlotOrDefault(block, "link")} />
+      <nav aria-label={block.label} className="flex flex-col items-start gap-2">
+        <SitePlacementList placements={block.placements} />
       </nav>
     </section>
   );
@@ -177,13 +176,7 @@ function HeroBlock({ block }: { block: SiteBlockNode }) {
   return (
     <section className="grid items-center gap-8 py-4 md:grid-cols-[1.2fr_0.8fr]">
       <div className="space-y-5">
-        {block.label ? (
-          <p className="text-sm font-medium uppercase tracking-normal text-teal-700">
-            {block.label}
-          </p>
-        ) : null}
-        <h1 className="text-5xl font-semibold tracking-normal text-zinc-950">{block.title}</h1>
-        {block.subtitle ? <p className="text-xl text-zinc-700">{block.subtitle}</p> : null}
+        <h1 className="text-5xl font-semibold tracking-normal text-zinc-950">{block.label}</h1>
         {block.body ? <PlainText text={block.body} className="text-base text-zinc-600" /> : null}
       </div>
       {media.length > 0 ? (
@@ -201,8 +194,8 @@ function HeroBlock({ block }: { block: SiteBlockNode }) {
 function MarkdownBlock({ block }: { block: SiteBlockNode }) {
   return (
     <section className="max-w-3xl space-y-3">
-      {block.title && block.title !== "Body" ? (
-        <h2 className="text-2xl font-semibold">{block.title}</h2>
+      {block.label && block.label !== "Body" ? (
+        <h2 className="text-2xl font-semibold">{block.label}</h2>
       ) : null}
       {block.body ? (
         <PlainText text={block.body} className="text-base leading-7 text-zinc-700" />
@@ -227,7 +220,7 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
       rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
       target={isExternalSiteHref(href) ? "_blank" : undefined}
     >
-      {placement?.label ?? block.label ?? block.title}
+      {displayLabel(block, placement)}
     </a>
   );
 }
@@ -239,11 +232,10 @@ function ContentQueryBlock({ block, layout }: { block: SiteBlockNode; layout: "g
   return (
     <section className="space-y-4" data-block-type={block.type}>
       <div className="space-y-1">
-        <h2 className="text-2xl font-semibold">{block.title}</h2>
-        {block.subtitle ? <p className="text-sm text-zinc-600">{block.subtitle}</p> : null}
+        <h2 className="text-2xl font-semibold">{block.label}</h2>
       </div>
       {items.length === 0 ? (
-        <p className="text-sm text-zinc-500">No published items.</p>
+        <p className="text-sm text-zinc-500">No items.</p>
       ) : (
         <div className={listClassName}>
           {items.map((item) => (
@@ -266,10 +258,10 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
           className="underline decoration-transparent underline-offset-4 hover:decoration-current"
           href={href}
         >
-          {block.title}
+          {block.label}
         </a>
       ) : (
-        block.title
+        block.label
       )}
     </h3>
   );
@@ -280,13 +272,7 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
       data-block-type={block.type}
     >
       <div className="space-y-2">
-        {block.label ? (
-          <p className="text-xs font-medium uppercase tracking-normal text-teal-700">
-            {block.label}
-          </p>
-        ) : null}
         {title}
-        {block.subtitle ? <p className="text-sm text-zinc-600">{block.subtitle}</p> : null}
         {block.body ? <PlainText text={block.body} className="text-sm text-zinc-600" /> : null}
       </div>
     </article>
@@ -297,13 +283,10 @@ function ImageBlock({ block }: { block: SiteBlockNode }) {
   const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "4 / 3";
 
   return (
-    <figure
-      className="overflow-hidden rounded-md border border-zinc-200 bg-teal-50"
-      data-asset-key={block.assetKey}
-    >
+    <figure className="overflow-hidden rounded-md border border-zinc-200 bg-teal-50">
       {block.href ? (
         <img
-          alt={block.alt ?? block.title}
+          alt={block.label}
           className="h-full w-full object-cover"
           height={block.height}
           src={block.href}
@@ -312,16 +295,14 @@ function ImageBlock({ block }: { block: SiteBlockNode }) {
         />
       ) : (
         <div
-          aria-label={block.alt ?? block.title}
+          aria-label={block.label}
           className="flex min-h-64 items-center justify-center bg-teal-100 p-6 text-center text-sm text-teal-900"
           style={{ aspectRatio }}
         >
-          <span>{block.assetKey ?? block.title}</span>
+          <span>{block.label}</span>
         </div>
       )}
-      <figcaption className="px-4 py-3 text-sm text-zinc-600">
-        {block.label ?? block.title}
-      </figcaption>
+      <figcaption className="px-4 py-3 text-sm text-zinc-600">{block.label}</figcaption>
     </figure>
   );
 }
@@ -330,13 +311,10 @@ function VideoBlock({ block }: { block: SiteBlockNode }) {
   const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "16 / 9";
 
   return (
-    <figure
-      className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 text-white"
-      data-asset-key={block.assetKey}
-    >
+    <figure className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 text-white">
       {block.href ? (
         <video
-          aria-label={block.alt ?? block.title}
+          aria-label={block.label}
           className="w-full bg-zinc-950"
           controls
           style={{ aspectRatio }}
@@ -345,16 +323,14 @@ function VideoBlock({ block }: { block: SiteBlockNode }) {
         </video>
       ) : (
         <div
-          aria-label={block.alt ?? block.title}
+          aria-label={block.label}
           className="flex min-h-48 items-center justify-center p-6 text-center text-sm text-zinc-300"
           style={{ aspectRatio }}
         >
-          <span>{block.assetKey ?? block.title}</span>
+          <span>{block.label}</span>
         </div>
       )}
-      <figcaption className="px-4 py-3 text-sm text-zinc-300">
-        {block.label ?? block.title}
-      </figcaption>
+      <figcaption className="px-4 py-3 text-sm text-zinc-300">{block.label}</figcaption>
     </figure>
   );
 }
@@ -366,12 +342,12 @@ function CtaBlock({ block }: { block: SiteBlockNode }) {
   return (
     <section className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-zinc-200 bg-teal-50 p-5">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">{block.title}</h2>
+        <h2 className="text-xl font-semibold">{block.label}</h2>
         {block.body ? <PlainText text={block.body} className="text-sm text-zinc-600" /> : null}
       </div>
       {href ? (
         <a className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white" href={href}>
-          {block.label ?? "Open"}
+          {block.label}
         </a>
       ) : null}
       {renderUnclaimedPlacements(block)}
@@ -457,33 +433,9 @@ function renderUnclaimedPlacements(
     .map((placement) => <SitePlacementRenderer key={placement.id} placement={placement} />);
 }
 
-function placementsForSlot(block: SiteBlockNode, slot: string): SitePlacementNode[] {
-  return block.placements.filter((placement) => placement.slot === slot);
-}
-
-function placementsForSlotOrDefault(block: SiteBlockNode, slot: string): SitePlacementNode[] {
-  const slotPlacements = placementsForSlot(block, slot);
-
-  return slotPlacements.length > 0 ? slotPlacements : unSlottedPlacements(block);
-}
-
-function unSlottedPlacements(block: SiteBlockNode): SitePlacementNode[] {
-  return block.placements.filter((placement) => placement.slot === undefined);
-}
-
 function mediaPlacements(block: SiteBlockNode): SitePlacementNode[] {
-  const slotPlacements = placementsForSlot(block, "media");
-
-  if (slotPlacements.length > 0) {
-    return slotPlacements;
-  }
-
   return block.placements.filter(
-    (placement) =>
-      placement.block.type === "image" ||
-      placement.block.type === "video" ||
-      placement.variant === "image" ||
-      placement.variant === "video",
+    (placement) => placement.block.type === "image" || placement.block.type === "video",
   );
 }
 
@@ -496,19 +448,11 @@ function isPageChromePlacement(placement: SitePlacementNode): boolean {
 }
 
 function isPageHeaderPlacement(placement: SitePlacementNode): boolean {
-  return (
-    placement.slot === "header" ||
-    placement.variant === "header" ||
-    placement.block.templateKey === "header"
-  );
+  return placement.block.templateKey === "header";
 }
 
 function isPageFooterPlacement(placement: SitePlacementNode): boolean {
-  return (
-    placement.slot === "footer" ||
-    placement.variant === "footer" ||
-    placement.block.templateKey === "footer"
-  );
+  return placement.block.templateKey === "footer";
 }
 
 function PlainText({ className, text }: { className?: string; text: string }) {
@@ -532,9 +476,9 @@ function blockHref(block: SiteBlockNode, linkMode: SitePageLinkMode): string | u
     return profileAwareSiteHref(block.href, linkMode);
   }
 
-  if (block.slug) {
-    return sitePagePathForSlug(block.slug, linkMode);
-  }
-
   return undefined;
+}
+
+function displayLabel(block: SiteBlockNode, placement?: SitePlacementNode): string {
+  return placement?.label ?? block.label;
 }

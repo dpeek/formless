@@ -32,10 +32,8 @@ export function sitePlacementRecord(id: string, label: string, order: number): S
     values: {
       parent: "page-1",
       block: "block-1",
-      slot: "main",
       label,
       order,
-      visible: true,
     },
     createdAt: "2026-05-05T00:00:40.000Z",
   };

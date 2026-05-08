@@ -2,7 +2,7 @@
 
 Status: shipped
 Current chunk: none
-Last updated: 2026-05-06
+Last updated: 2026-05-08
 
 ## Goal
 
@@ -374,6 +374,11 @@ The exact slot names can change during implementation. The important rule is tha
 | STR-D12 | Hide the seeded related-post placement for now.         | Query exclusion is not available, so visible self-query recurses.                                      | `rec_site_place_post_related.visible = false`          |
 | STR-D13 | Use `/pages/*` for public site rendering.               | `/site` remains generated admin and site slugs can contain slashes.                                    | `src/app.tsx`, `src/app/routes/site-page.tsx`          |
 | STR-D14 | Keep ordering and curation off `block`.                 | Composition order lives on placements; public query lists use published date plus stable fallback.     | `schema/apps/site/schema.json`, `src/site/tree.ts`     |
+| STR-D15 | Use `block.label` as the canonical display text.        | First-release Site blocks should not split title, caption, alt text, and link text across fields.      | User direction 2026-05-08; `schema/apps/site/schema.json` |
+| STR-D16 | Keep `blockPlacement.label` as contextual display override only. | Placement-specific text still needs an override without making placement rows own rendering state. | User direction 2026-05-08; `src/app/site-renderer/renderer.tsx` |
+| STR-D17 | Use `block.href` for public page lookup.                | `slug` is removed; renderer links already store app-profile-aware page hrefs.                          | `src/site/tree.ts`, `schema/apps/site/seed-records.json` |
+| STR-D18 | Treat every live block and placement as public for now. | `status` and `visible` are removed from the first-release schema.                                      | `src/site/tree.ts`, `src/client/readiness.ts`          |
+| STR-D19 | Drive public templates from child block type, template key, and order. | `slot` and `variant` are removed from placement rows.                                          | `src/app/site-renderer/renderer.tsx`                   |
 
 ## Chunks
 
@@ -618,6 +623,17 @@ Maintenance 2026-05-06:
 - `blockPlacement.order` remains the placement sibling ordering field.
 - Query-backed project lists use `publishedProjects` instead of `featuredProjects`.
 
+Maintenance 2026-05-08:
+
+- Site `block` first-release fields are `type`, `label`, `body`, `href`, `templateKey`, `icon`, `color`, `width`, and `height`.
+- Site `blockPlacement` first-release fields are `parent`, `block`, `order`, and optional `label`.
+- Public render display text uses `blockPlacement.label ?? block.label`.
+- Public page lookup uses `block.href` paths such as `/pages/home`.
+- Public tree output filters tombstones only; draft/published/archived and placement visibility filtering are removed.
+- Query-backed `contentList` and `contentGrid` render all live matching query records; `limit` behavior is removed.
+- Renderer template choices use child block `type`, child block `templateKey`, and placement order.
+- Media renders from `block.href`; image/video accessible text falls back to `block.label`.
+
 ## PRD status notes
 
 - PRD drafted 2026-05-06.
@@ -673,3 +689,9 @@ Maintenance 2026-05-06:
 - Maintenance checks 2026-05-07: `./tmp/test.txt` latest rerun shows 2 files and 96 tests passing after affected changes; agent harness status is pass.
 - Maintenance checks 2026-05-07: `./tmp/check.txt` shows formatting, lint, and type checks passing.
 - Maintenance browser smoke 2026-05-07: reset Site seed returned zero seeded placement slots; `/pages/home` rendered header links, footer links, hero content, portrait media, and intro video source with no page errors.
+- Maintenance 2026-05-08 simplified the Site block schema around `label`, `href`, live placements, and block-driven rendering.
+- Maintenance 2026-05-08 removed the previously hidden related-post placement from source seeds because `visible` is no longer a field.
+- Maintenance checks 2026-05-08: `./tmp/agent-dev.json` shows dev ready, tests pass, and checks pass.
+- Maintenance checks 2026-05-08: `./tmp/test.txt` latest rerun shows 14 files and 402 tests passing after affected changes; agent harness status is pass.
+- Maintenance checks 2026-05-08: `./tmp/check.txt` shows formatting, lint, and type checks passing.
+- Maintenance browser smoke 2026-05-08: reset Site seed to source; source schema and records had no removed fields; `/pages/home` rendered header links, hero, content list/grid, footer links, image/video media from `href`, and no page errors.
