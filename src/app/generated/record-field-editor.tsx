@@ -31,6 +31,7 @@ export function RecordFieldEditor({
   density = "default",
   entityName,
   fieldConfig,
+  presentation = "default",
   recordId,
   showLabel = false,
 }: {
@@ -38,6 +39,7 @@ export function RecordFieldEditor({
   density?: "default" | "compact";
   entityName: string;
   fieldConfig: RecordFieldConfig;
+  presentation?: "default" | "heading";
   recordId: string;
   showLabel?: boolean;
 }) {
@@ -46,7 +48,8 @@ export function RecordFieldEditor({
   const adapter = selectGeneratedFieldEditorAdapter(field, editor);
   const numberFormat = fieldConfig.format ?? "plain";
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
-  const labelClass = showLabel ? "text-xs font-medium text-slate-600" : "sr-only";
+  const labelClass =
+    showLabel && presentation !== "heading" ? "text-xs font-medium text-slate-600" : "sr-only";
   const recordValue = useRecordField(recordId, fieldName);
   const valueUnitConfig = fieldConfig.valueUnit;
   const unitRecordValue = useRecordField(recordId, valueUnitConfig?.unitFieldName ?? fieldName);
@@ -241,12 +244,19 @@ export function RecordFieldEditor({
   const isDateEditor = control.kind === "input" && control.inputType === "date";
   const isNumberEditor = adapter.kind === "number";
   const isValueUnitEditor = isNumberEditor && valueUnitConfig !== undefined;
-  const isAutosizeTextEditor =
+  const isHeadingTextEditor =
+    presentation === "heading" &&
     adapter.kind === "text" &&
     adapter.editor === "text" &&
     control.kind === "input" &&
-    control.inputType === "text" &&
-    (density === "compact" || (!showLabel && isTitleLikeTextField(fieldName, field)));
+    control.inputType === "text";
+  const isAutosizeTextEditor =
+    isHeadingTextEditor ||
+    (adapter.kind === "text" &&
+      adapter.editor === "text" &&
+      control.kind === "input" &&
+      control.inputType === "text" &&
+      (density === "compact" || (!showLabel && isTitleLikeTextField(fieldName, field))));
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -354,10 +364,20 @@ export function RecordFieldEditor({
             aria-invalid={error !== null ? true : undefined}
             aria-label={label}
             autoSelect
-            className={density === "compact" ? "w-full min-w-0" : "min-w-[8ch] max-w-full"}
+            className={
+              isHeadingTextEditor
+                ? "w-full min-w-0"
+                : density === "compact"
+                  ? "w-full min-w-0"
+                  : "min-w-[8ch] max-w-full"
+            }
             commitOnBlur={commitPolicy === "field-commit"}
             controlClassName={
-              density === "compact" ? "h-6 w-full text-xs" : "h-7 w-full text-sm font-medium"
+              isHeadingTextEditor
+                ? "h-9 w-full text-2xl font-semibold"
+                : density === "compact"
+                  ? "h-6 w-full text-xs"
+                  : "h-7 w-full text-sm font-medium"
             }
             disabled={!canPatch || isPending}
             onValueChange={setDraft}

@@ -11,11 +11,31 @@ export function sitePagePathForSlug(slug: string, linkMode: SitePageLinkMode): `
 }
 
 export function profileAwareSiteHref(href: string, linkMode: SitePageLinkMode): string {
-  if (linkMode !== "published" || isExternalSiteHref(href)) {
+  if (isExternalSiteHref(href)) {
     return href;
   }
 
   const { path, suffix } = splitHrefSuffix(href);
+
+  if (linkMode === "preview") {
+    if (path === "/pages" || path === "/pages/") {
+      return `${sitePagePathForSlug("home", linkMode)}${suffix}`;
+    }
+
+    if (path.startsWith("/pages/")) {
+      return href;
+    }
+
+    if (path === "/") {
+      return `${sitePagePathForSlug("home", linkMode)}${suffix}`;
+    }
+
+    if (path.startsWith("/") && !path.startsWith("//")) {
+      return `${sitePagePathForSlug(path.slice(1), linkMode)}${suffix}`;
+    }
+
+    return href;
+  }
 
   if (path === "/pages" || path === "/pages/") {
     return `/${suffix}`;

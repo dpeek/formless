@@ -341,7 +341,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `29 passed (29)`, `506 passed (506)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
 
@@ -375,7 +375,7 @@ Acceptance:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `29 passed (29)`, `506 passed (506)`; latest focused rerun `src/worker/authority.test.ts` passed `85 passed (85)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
 - Browser smoke: `bun browser --session rps-02 open .../estii` loaded Estii shell with `Rates` workspace and `Cursor 17`.
@@ -413,7 +413,7 @@ Acceptance:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: initial full watch `29 passed (29)`, `506 passed (506)`; latest affected reruns `src/shared/schema.test.ts` passed `85 passed (85)` and `src/client/views.test.ts` passed `38 passed (38)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
 
@@ -445,7 +445,7 @@ Acceptance:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: full watcher run showed `29 passed (29)`, `511 passed (511)`; latest focused rerun `src/client/views.test.ts` passed `38 passed (38)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
 - Browser smoke reset source schema and seed data for `tasks`, `estii`, and `site` through `/api/:schemaKey/reset/schema` and `/api/:schemaKey/reset/seed`; all six reset calls returned `200`.
@@ -476,7 +476,7 @@ Acceptance:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `30 passed (30)`, `521 passed (521)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 168 files.
 - `src/app/runtime-profile.test.ts`: covers dev, app, and published Site profile resolution and root-mounted app screen paths.
@@ -509,7 +509,7 @@ Acceptance:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `30 passed (30)`, `525 passed (525)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 169 files.
 - Browser smoke: reset Site source schema and seed data through `/api/site/reset/schema` and `/api/site/reset/seed`; both returned `200`.
@@ -527,7 +527,7 @@ Goal: verify route profile behavior and update the PRD.
 
 Tasks:
 
-- Shipped: read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
+- Shipped: read `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
 - Shipped: confirmed final dev/test/check output is green after restoring the default dev profile.
 - Shipped: reset source schema and seed data for `tasks`, `estii`, and `site` before dev route smoke.
 - Shipped: ran browser smoke for dev app routes, Estii screen routes, Site editor routes, dev public preview, and published Site top-level routes.
@@ -542,7 +542,7 @@ Acceptance:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `30 passed (30)`, `525 passed (525)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 169 files.
 - Browser smoke: source schema and seed resets for `tasks`, `estii`, and `site` returned `200` through `/api/:schemaKey/reset/schema` and `/api/:schemaKey/reset/seed`.

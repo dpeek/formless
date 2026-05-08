@@ -597,7 +597,7 @@ Evidence:
 - REL-01 changed no storage, seed, sync, authority, or generated UI behavior.
 - No new decisions in REL-01; REL-D3, REL-D4, and REL-D5 stand.
 - No blockers.
-- Global doc promotion is pending for REL-01 in a docs/steward pass.
+- Global doc promotion is pending for REL-01 in a doc/steward pass.
 - Current source apps already prove the storage model.
 - Estii proves this PRD is necessary but not sufficient for full app generation.
 - REL-02 should adopt relationship metadata in source schemas without changing queries or views.

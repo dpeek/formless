@@ -290,7 +290,7 @@ Evidence:
 - 2026-05-06: `Home` and `Schema` are content tabs for the active app route.
 - 2026-05-06: Schema route reset UI exposes one combined `Reset schema and seed data` control.
 - 2026-05-06 evidence: `src/app.test.tsx` covers sidebar app links, content tabs, and the single reset control.
-- 2026-05-06 evidence: `./tmp/agent-dev.json` shows tests pass and checks pass after `bun start`.
+- 2026-05-06 evidence: `./tmp/devstate.json` shows tests pass and checks pass after `bun start`.
 
 ## Later chunks
 

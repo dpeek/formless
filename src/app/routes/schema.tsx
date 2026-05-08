@@ -11,7 +11,6 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
 import { parseAppSchema, stringifySchema } from "../../shared/schema.ts";
-import { DevActions } from "../dev-actions.tsx";
 
 export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   const app = getSchemaAppDefinition(schemaKey);
@@ -93,18 +92,6 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
           </p>
         </div>
       </header>
-
-      <DevActions
-        schemaKey={schemaKey}
-        showReset={false}
-        onRestoreSnapshot={(response) => {
-          setEditorText(stringifySchema(response.schema));
-          setSyncStatus({
-            state: "idle",
-            message: `Restored store snapshot at ${response.schemaUpdatedAt}.`,
-          });
-        }}
-      />
 
       <form className="space-y-4" onSubmit={submitSchema}>
         <textarea

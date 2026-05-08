@@ -1,0 +1,43 @@
+{
+  "$schema": "https://unpkg.com/devstate/schema/v1.json",
+  "version": 1,
+  "primaryService": "web",
+  "setup": {
+    "install": {
+      "command": "bun",
+      "args": ["install"]
+    }
+  },
+  "checks": {
+    "vite": {
+      "command": "vp",
+      "args": ["check", "--fix"]
+    }
+  },
+  "services": {
+    "web": {
+      "command": "portless",
+      "args": ["run", "vp", "dev"],
+      "url": {
+        "from": "log",
+        "match": "(https?://(?:[a-z0-9-]+\\.)*formless\\.local(?::\\d+)?)"
+      },
+      "ready": [
+        {
+          "type": "log",
+          "match": "(?:ready in|Local:|Network:)"
+        }
+      ]
+    },
+    "test": {
+      "command": "vp",
+      "args": ["test", "--watch", "--reporter=agent"],
+      "ready": [
+        {
+          "type": "log",
+          "match": "(?:(?:Test Files|Tests)\\s+\\d+\\s+passed|PASS\\s+Waiting for file changes)"
+        }
+      ]
+    }
+  }
+}

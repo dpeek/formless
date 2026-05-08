@@ -244,11 +244,66 @@ describe("query parsing", () => {
     });
   });
 
+  it("parses valid or queries", () => {
+    expect(
+      parseQueryExpression(
+        {
+          kind: "or",
+          expressions: [
+            {
+              kind: "where",
+              ref: { kind: "value", name: "kind" },
+              op: "eq",
+              value: "role",
+            },
+            {
+              kind: "where",
+              ref: { kind: "value", name: "kind" },
+              op: "eq",
+              value: "stream",
+            },
+          ],
+        },
+        catalog,
+        "task kinds",
+      ),
+    ).toEqual({
+      kind: "or",
+      expressions: [
+        {
+          kind: "where",
+          ref: { kind: "value", name: "kind" },
+          op: "eq",
+          value: "role",
+        },
+        {
+          kind: "where",
+          ref: { kind: "value", name: "kind" },
+          op: "eq",
+          value: "stream",
+        },
+      ],
+    });
+  });
+
   it("rejects empty and queries", () => {
     expect(() =>
       parseQueryExpression(
         {
           kind: "and",
+          expressions: [],
+        },
+        catalog,
+        "bad query",
+      ),
+    ).toThrow("expressions must be a non-empty array");
+  });
+
+  it("rejects empty or queries", () => {
+    expect(() =>
+      parseQueryExpression(
+        {
+          kind: "or",
           expressions: [],
         },
         catalog,
@@ -570,13 +625,24 @@ describe("query parsing", () => {
   it("collects required context names", () => {
     expect(
       collectQueryContextNames({
-        kind: "and",
+        kind: "or",
         expressions: [
           {
-            kind: "where",
-            ref: { kind: "value", name: "resource" },
-            op: "eq",
-            value: { kind: "context", name: "resource" },
+            kind: "and",
+            expressions: [
+              {
+                kind: "where",
+                ref: { kind: "value", name: "resource" },
+                op: "eq",
+                value: { kind: "context", name: "resource" },
+              },
+              {
+                kind: "where",
+                ref: { kind: "value", name: "resource" },
+                op: "eq",
+                value: { kind: "context", name: "resource" },
+              },
+            ],
           },
           {
             kind: "where",
@@ -749,6 +815,48 @@ describe("query evaluation", () => {
     ).toBe(true);
   });
 
+  it("matches or queries", () => {
+    expect(
+      matchesQuery(record, {
+        kind: "or",
+        expressions: [
+          {
+            kind: "where",
+            ref: { kind: "value", name: "kind" },
+            op: "eq",
+            value: "stream",
+          },
+          {
+            kind: "where",
+            ref: { kind: "value", name: "kind" },
+            op: "eq",
+            value: "role",
+          },
+        ],
+      }),
+    ).toBe(true);
+
+    expect(
+      matchesQuery(record, {
+        kind: "or",
+        expressions: [
+          {
+            kind: "where",
+            ref: { kind: "value", name: "kind" },
+            op: "eq",
+            value: "stream",
+          },
+          {
+            kind: "where",
+            ref: { kind: "value", name: "done" },
+            op: "eq",
+            value: true,
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("does not match tombstoned records", () => {
     expect(
       matchesQuery(
@@ -826,6 +934,28 @@ describe("query capabilities", () => {
               ref: { kind: "value", name: "dueDate" },
               op: "before",
               value: { kind: "today" },
+            },
+          ],
+        },
+        portableCapabilities,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertQuerySupported(
+        {
+          kind: "or",
+          expressions: [
+            {
+              kind: "where",
+              ref: { kind: "value", name: "kind" },
+              op: "eq",
+              value: "role",
+            },
+            {
+              kind: "where",
+              ref: { kind: "value", name: "kind" },
+              op: "eq",
+              value: "stream",
             },
           ],
         },
@@ -975,7 +1105,7 @@ const catalog = getEntityFieldCatalog(taskEntity);
 const portableCapabilities = {
   operators: ["eq", "before"],
   fieldKinds: ["value", "system"],
-  expressionKinds: ["all", "where", "and"],
+  expressionKinds: ["all", "where", "and", "or"],
   dynamicValues: ["today", "context"],
 } satisfies QueryCapabilities;
 

@@ -270,6 +270,7 @@ function ListDetailScopedHomeCollection({
   const activeOption = contextOptions.find((option) => option.id === activeContextRecordId);
   const isSingletonContext = contextOptions.length === 1;
   const detailLabel = activeOption?.label ?? context.label;
+  const contextFieldsRenderHeading = (context.recordFields ?? []).some(isHeadingRecordField);
 
   return (
     <section
@@ -296,7 +297,7 @@ function ListDetailScopedHomeCollection({
               aria-label={`${detailLabel} detail`}
               className="space-y-3 border-b border-slate-200 pb-4"
             >
-              {isSingletonContext ? null : (
+              {isSingletonContext || contextFieldsRenderHeading ? null : (
                 <h2 className="text-base font-semibold">{detailLabel}</h2>
               )}
               <ContextRecordEditor
@@ -584,24 +585,41 @@ function ContextRecordEditor({
   return (
     <div
       className={
-        density === "compact"
-          ? "grid min-w-0 gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3"
-          : "flex flex-wrap items-end gap-3 pt-1"
+        density === "compact" ? "grid min-w-0 gap-3 pt-1" : "flex flex-wrap items-end gap-3 pt-1"
       }
     >
-      {recordFields.map((fieldConfig) => (
-        <RecordFieldEditor
-          canPatch={context.entity.mutations.patch.enabled}
-          density={density}
-          entityName={context.entityName}
-          fieldConfig={fieldConfig}
-          key={fieldConfig.fieldName}
-          recordId={recordId}
-          showLabel={true}
-        />
-      ))}
+      {recordFields.map((fieldConfig) => {
+        const isHeading = isHeadingRecordField(fieldConfig);
+
+        return (
+          <RecordFieldEditor
+            canPatch={context.entity.mutations.patch.enabled}
+            density={isHeading || isRichMarkdownRecordField(fieldConfig) ? "default" : density}
+            entityName={context.entityName}
+            fieldConfig={fieldConfig}
+            key={fieldConfig.fieldName}
+            presentation={isHeading ? "heading" : "default"}
+            recordId={recordId}
+            showLabel={!isHeading}
+          />
+        );
+      })}
     </div>
   );
+}
+
+function isHeadingRecordField(fieldConfig: RecordFieldConfig) {
+  return (
+    fieldConfig.field.type === "text" &&
+    fieldConfig.editor === "text" &&
+    (fieldConfig.fieldName === "label" ||
+      fieldConfig.fieldName === "title" ||
+      fieldConfig.fieldName === "name")
+  );
+}
+
+function isRichMarkdownRecordField(fieldConfig: RecordFieldConfig) {
+  return fieldConfig.field.type === "text" && fieldConfig.editor === "markdown";
 }
 
 function HomeQueryTabTrigger({

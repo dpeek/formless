@@ -24,6 +24,12 @@
             "group": {
               "label": "Group"
             },
+            "header": {
+              "label": "Header"
+            },
+            "footer": {
+              "label": "Footer"
+            },
             "link": {
               "label": "Link"
             },
@@ -235,53 +241,26 @@
         "value": "page"
       }
     },
-    "blockHeaderRoot": {
-      "label": "Header",
+    "blockNavigationRoots": {
+      "label": "Navigation",
       "entity": "block",
       "expression": {
-        "kind": "and",
+        "kind": "or",
         "expressions": [
           {
             "kind": "where",
             "ref": {
               "kind": "value",
               "name": "type"
-            },
-            "op": "eq",
-            "value": "group"
-          },
-          {
-            "kind": "where",
-            "ref": {
-              "kind": "value",
-              "name": "templateKey"
             },
             "op": "eq",
             "value": "header"
-          }
-        ]
-      }
-    },
-    "blockFooterRoot": {
-      "label": "Footer",
-      "entity": "block",
-      "expression": {
-        "kind": "and",
-        "expressions": [
-          {
-            "kind": "where",
-            "ref": {
-              "kind": "value",
-              "name": "type"
-            },
-            "op": "eq",
-            "value": "group"
           },
           {
             "kind": "where",
             "ref": {
               "kind": "value",
-              "name": "templateKey"
+              "name": "type"
             },
             "op": "eq",
             "value": "footer"
@@ -438,10 +417,6 @@
         "href": {
           "editor": "href",
           "commit": "field-commit"
-        },
-        "templateKey": {
-          "editor": "slug",
-          "commit": "field-commit"
         }
       }
     }
@@ -540,10 +515,7 @@
             "field": "parent"
           }
         ],
-        "presentations": [
-          "dragHandle",
-          "moveMenu"
-        ]
+        "presentations": ["dragHandle", "moveMenu"]
       },
       "columns": [
         {
@@ -687,9 +659,9 @@
         }
       ]
     },
-    "headerCompositionHome": {
+    "navigationCompositionHome": {
       "type": "collection",
-      "label": "Header",
+      "label": "Navigation",
       "entity": "blockPlacement",
       "navigation": {
         "primary": true
@@ -697,44 +669,7 @@
       "context": {
         "name": "block",
         "entity": "block",
-        "query": "blockHeaderRoot",
-        "labelField": "label",
-        "relationship": "blockPlacements",
-        "itemView": "blockRootDetail",
-        "presentation": "listDetail"
-      },
-      "queries": [
-        {
-          "query": "placementsForSelectedBlock",
-          "count": {
-            "type": "count"
-          }
-        }
-      ],
-      "defaultQuery": "placementsForSelectedBlock",
-      "result": {
-        "type": "table",
-        "tableView": "blockPlacementTable"
-      },
-      "actions": [
-        {
-          "type": "create",
-          "createView": "blockPlacementCreate",
-          "label": "Add placement"
-        }
-      ]
-    },
-    "footerCompositionHome": {
-      "type": "collection",
-      "label": "Footer",
-      "entity": "blockPlacement",
-      "navigation": {
-        "primary": true
-      },
-      "context": {
-        "name": "block",
-        "entity": "block",
-        "query": "blockFooterRoot",
+        "query": "blockNavigationRoots",
         "labelField": "label",
         "relationship": "blockPlacements",
         "itemView": "blockRootDetail",
@@ -921,14 +856,9 @@
         "type": "stack",
         "sections": [
           {
-            "id": "header",
+            "id": "navigation",
             "type": "collection",
-            "view": "headerCompositionHome"
-          },
-          {
-            "id": "footer",
-            "type": "collection",
-            "view": "footerCompositionHome"
+            "view": "navigationCompositionHome"
           }
         ]
       }

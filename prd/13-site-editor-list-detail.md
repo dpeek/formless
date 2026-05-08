@@ -272,7 +272,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `27 passed (27)`, `473 passed (473)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
 
@@ -287,7 +287,7 @@ Acceptance:
 
 Evidence to record:
 
-- `./tmp/agent-dev.json`.
+- `./tmp/devstate.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
 
@@ -307,7 +307,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: full startup pass `27 passed (27)`, `473 passed (473)`; latest reruns pass including `src/shared/schema-views.ts` and `src/client/views.test.ts`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
 - Browser smoke not run; SED-02 changed parser and view-model facts only.
@@ -342,7 +342,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: latest rerun `src/app.test.tsx`, `81 passed (81)`; startup pass `27 passed (27)`, `476 passed (476)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
 - Browser smoke: `bun browser --ignore-https-errors batch --bail "open https://13-site-editor-list-detail.formless.local/rates" "wait 1000" "get text body"` returned the Rates screen with rate card context, summary, table, Create Resource, and Regenerate missing rates.
@@ -377,7 +377,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: latest rerun `src/app.test.tsx`, `81 passed (81)`; managed state reports tests pass.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
 - Browser smoke: `bun browser --ignore-https-errors batch --bail "open https://13-site-editor-list-detail.formless.local/site" "wait 1000" "get text body"` returned the Site editor with `Pages`, `Header`, `Footer`, page root list, Home detail fields, placement rows, and `Create Block placement`.
@@ -410,11 +410,11 @@ Outcome:
 - PRD status is `shipped`.
 - Chunk table marks SED-01 through SED-05 shipped.
 - Blockers are clear.
-- Promote notes are ready for a docs/steward pass.
+- Promote notes are ready for a doc/steward pass.
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `27 passed (27)`, `480 passed (480)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 163 files.
 - Browser smoke: `bun browser --ignore-https-errors batch --bail "open https://13-site-editor-list-detail.formless.local/site" "wait 1000" "get text body"` returned the Site editor with `Pages`, `Header`, `Footer`, page root list, Home detail fields, placement rows, and `Create Block placement`.
@@ -423,7 +423,7 @@ Evidence:
 
 Acceptance:
 
-- `./tmp/agent-dev.json` shows dev ready, tests pass, and checks pass.
+- `./tmp/devstate.json` shows dev ready, tests pass, and checks pass.
 - `./tmp/test.txt` shows passing tests after `bun start`.
 - `./tmp/check.txt` shows passing checks after `bun start`.
 - `bun browser` smoke covers `/site`.
@@ -431,7 +431,7 @@ Acceptance:
 - Smoke confirms `/site` exposes Pages, Header, and Footer as primary editor surfaces.
 - Smoke confirms public site rendering is unchanged.
 - No blockers remain open.
-- Promote notes are ready for a docs/steward pass.
+- Promote notes are ready for a doc/steward pass.
 
 ## Non-goals
 
@@ -548,7 +548,7 @@ SED-05:
 
 - `/site` browser smoke verifies Pages, Header, and Footer are the primary Site editor surfaces.
 - `/pages` and `/pages/home` browser smoke verify public rendering still works.
-- PRD 13 is ready for docs/steward promotion.
+- PRD 13 is ready for doc/steward promotion.
 
 When this PRD ships, update `doc/current.md`:
 
@@ -573,4 +573,4 @@ When this PRD ships, update `doc/roadmap.md` only if the first-release target sh
 - SED-02 shipped 2026-05-06. Next ready chunk is SED-03 generated list/detail renderer.
 - SED-03 shipped 2026-05-06. Next ready chunk is SED-04 Site source schema.
 - SED-04 shipped 2026-05-06. Next ready chunk is SED-05 closeout smoke.
-- SED-05 shipped 2026-05-06. PRD 13 is complete and ready for docs/steward promotion.
+- SED-05 shipped 2026-05-06. PRD 13 is complete and ready for doc/steward promotion.

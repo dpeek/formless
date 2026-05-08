@@ -371,7 +371,7 @@ Blockers:
 
 ### WS-07 PRD status and promotion notes
 
-Goal: record shipped facts for a later docs/steward pass.
+Goal: record shipped facts for a later doc/steward pass.
 
 Tasks:
 

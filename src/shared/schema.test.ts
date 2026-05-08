@@ -3323,6 +3323,8 @@ describe("personal site sample schema", () => {
         project: { label: "Project" },
         profile: { label: "Profile" },
         group: { label: "Group" },
+        header: { label: "Header" },
+        footer: { label: "Footer" },
         link: { label: "Link" },
         markdown: { label: "Markdown" },
         hero: { label: "Hero" },
@@ -3412,8 +3414,7 @@ describe("personal site sample schema", () => {
     expect(Object.keys(schema.queries)).toEqual([
       "blockAll",
       "blockPages",
-      "blockHeaderRoot",
-      "blockFooterRoot",
+      "blockNavigationRoots",
       "blockPosts",
       "blockProjects",
       "blockLinks",
@@ -3437,18 +3438,11 @@ describe("personal site sample schema", () => {
       ref: { kind: "value", name: "parent" },
       value: { kind: "context", name: "block" },
     });
-    expect(schema.queries.blockHeaderRoot?.expression).toMatchObject({
-      kind: "and",
+    expect(schema.queries.blockNavigationRoots?.expression).toMatchObject({
+      kind: "or",
       expressions: [
-        { ref: { kind: "value", name: "type" }, op: "eq", value: "group" },
-        { ref: { kind: "value", name: "templateKey" }, op: "eq", value: "header" },
-      ],
-    });
-    expect(schema.queries.blockFooterRoot?.expression).toMatchObject({
-      kind: "and",
-      expressions: [
-        { ref: { kind: "value", name: "type" }, op: "eq", value: "group" },
-        { ref: { kind: "value", name: "templateKey" }, op: "eq", value: "footer" },
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "header" },
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "footer" },
       ],
     });
     expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
@@ -3519,24 +3513,13 @@ describe("personal site sample schema", () => {
       result: { type: "table", tableView: "blockPlacementTable" },
       actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
-    expect(schema.views.headerCompositionHome).toMatchObject({
+    expect(schema.views.navigationCompositionHome).toMatchObject({
       type: "collection",
-      label: "Header",
+      label: "Navigation",
       entity: "blockPlacement",
       navigation: { primary: true },
       context: {
-        query: "blockHeaderRoot",
-        presentation: "listDetail",
-      },
-      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
-    });
-    expect(schema.views.footerCompositionHome).toMatchObject({
-      type: "collection",
-      label: "Footer",
-      entity: "blockPlacement",
-      navigation: { primary: true },
-      context: {
-        query: "blockFooterRoot",
+        query: "blockNavigationRoots",
         presentation: "listDetail",
       },
       actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
@@ -3562,10 +3545,7 @@ describe("personal site sample schema", () => {
         label: "Navigation",
         navigation: { primary: true },
         layout: {
-          sections: [
-            { id: "header", type: "collection", view: "headerCompositionHome" },
-            { id: "footer", type: "collection", view: "footerCompositionHome" },
-          ],
+          sections: [{ id: "navigation", type: "collection", view: "navigationCompositionHome" }],
         },
       },
     });

@@ -19,7 +19,7 @@ describe("record readiness warnings", () => {
       record("project-1", "block", {
         type: "project",
         label: "Project",
-        href: "/pages/projects/project",
+        href: "/projects/project",
       }),
     );
 

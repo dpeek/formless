@@ -41,6 +41,10 @@ function SiteBlockRenderer({
   switch (block.type) {
     case "page":
       return <PageBlock block={block} />;
+    case "header":
+      return <HeaderGroup block={block} />;
+    case "footer":
+      return <FooterGroup block={block} />;
     case "group":
       return <GroupBlock block={block} placement={placement} />;
     case "hero":
@@ -448,11 +452,11 @@ function isPageChromePlacement(placement: SitePlacementNode): boolean {
 }
 
 function isPageHeaderPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.templateKey === "header";
+  return placement.block.type === "header" || placement.block.templateKey === "header";
 }
 
 function isPageFooterPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.templateKey === "footer";
+  return placement.block.type === "footer" || placement.block.templateKey === "footer";
 }
 
 function PlainText({ className, text }: { className?: string; text: string }) {

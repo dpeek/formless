@@ -369,7 +369,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: latest affected reruns passed, including `src/app.test.tsx` 64 tests, `src/shared/schema.test.ts` 67 tests, `src/client/views.test.ts` 23 tests, `src/client/store.test.ts` 23 tests, and `src/shared/read-model.test.ts` 12 tests.
 - `./tmp/check.txt`: formatting, lint, and type checks passed for 154 files.
 - `bun browser --session cr-05-rates --ignore-https-errors open https://12-computed-read-model.formless.local/rates` and `snapshot -i`: `/rates` rendered the rate table.
@@ -388,7 +388,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: 23 files passed, 437 tests passed.
 - `./tmp/check.txt`: formatting, lint, and type checks passed for 154 files.
 - `bun browser --session cr-06-rates --ignore-https-errors open https://12-computed-read-model.formless.local/rates`; source reset in schema UI; `snapshot -i`: `/rates` rendered `Margin` column and rate rows.
@@ -402,14 +402,14 @@ Outcome:
 - `/rates` browser smoke renders the rate-card workspace.
 - `/rates` browser smoke renders the `Margin` computed table column.
 - `/rates` browser smoke renders `Cost total`, `Price total`, and `Average margin` aggregate summaries.
-- `tmp/state.txt` is not present in this workspace; harness state is tracked in `./tmp/agent-dev.json`.
+- `tmp/state.txt` is not present in this workspace; harness state is tracked in `./tmp/devstate.json`.
 - No blockers remain open.
-- Promote notes are ready for a docs/steward pass.
+- Promote notes are ready for a doc/steward pass.
 - PRD status reflects shipped chunks, blockers, and decisions.
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: 23 files passed, 437 tests passed.
 - `./tmp/check.txt`: formatting, lint, and type checks passed for 154 files.
 - `bun browser --session cr-07-rates --ignore-https-errors open https://12-computed-read-model.formless.local/rates`
@@ -433,7 +433,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: dev ready, tests pass, check pass.
+- `./tmp/devstate.json`: dev ready, tests pass, check pass.
 - `./tmp/test.txt`: latest watcher reruns passed `src/app.test.tsx` and `src/client/views.test.ts`; full agent state reports `testStatus: "pass"`.
 - `./tmp/check.txt`: formatting pass; no warnings, lint errors, or type errors in 164 files.
 - `bun browser eval "fetch(\"/api/rates/reset/seed\", { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: \"{}\" }).then((response) => response.status)"`: reset source rate schema and seed data.
@@ -579,7 +579,7 @@ CR-06:
 CR-07:
 
 - `/rates` browser smoke verifies rate-card read-model output renders after `bun start`.
-- PRD 12 is shipped and ready for docs/steward promotion.
+- PRD 12 is shipped and ready for doc/steward promotion.
 
 CR-08:
 

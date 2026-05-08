@@ -171,7 +171,7 @@ Recommended order:
 - FB-02: `doc/current.md`: note that `src/shared/field-types.ts` owns scalar validation, default, create input conversion, inline input conversion, number input attributes, and display helpers; generated format/create/editor paths call those helpers.
 - FB-03: `doc/current.md`: note that `src/shared/field-types.ts` owns generated editor control metadata, and `src/app/generated/field-ui-adapters.ts` exposes control/default/required/input-attribute facts for create and inline editors.
 - FB-04: no global doc promotion. Regression-test coverage only; runtime behavior unchanged.
-- FB-05: no global doc promotion. PRD closeout only; FB-02 and FB-03 promote notes remain ready for a docs/steward pass.
+- FB-05: no global doc promotion. PRD closeout only; FB-02 and FB-03 promote notes remain ready for a doc/steward pass.
 - `doc/roadmap.md`: no change unless a new release-scope field type is added.
 
 ## PRD status notes

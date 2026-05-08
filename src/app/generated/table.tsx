@@ -187,7 +187,7 @@ export function RecordTable({
       {recordIds.length === 0 ? (
         <p className="text-sm text-slate-600">No records yet.</p>
       ) : (
-        <Table className="min-w-max table-fixed text-xs">
+        <Table className="min-w-full table-auto text-xs">
           <TableHeader>
             <TableRow>
               {visibleColumns.map((column) => (
@@ -802,11 +802,11 @@ function ReferencedRecordEditorDialog({
 }
 
 function tableHeadClass(column: TableColumnConfig) {
-  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} h-8 px-1.5`;
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} h-8 ${tablePaddingClass(column)}`;
 }
 
 function tableCellClass(column: TableColumnConfig) {
-  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} px-1.5 py-1`;
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} ${tablePaddingClass(column)} py-1`;
 }
 
 function tableAlignClass(align: TableColumnConfig["align"]) {
@@ -822,6 +822,10 @@ function tableAlignClass(align: TableColumnConfig["align"]) {
 }
 
 function tableWidthClass(column: TableColumnConfig) {
+  if (isIconUtilityColumn(column)) {
+    return "w-6 min-w-6 max-w-6";
+  }
+
   const width = column.width;
 
   if (
@@ -850,4 +854,15 @@ function tableWidthClass(column: TableColumnConfig) {
   }
 
   return "";
+}
+
+function tablePaddingClass(column: TableColumnConfig) {
+  return isIconUtilityColumn(column) ? "px-1" : "px-1.5";
+}
+
+function isIconUtilityColumn(column: TableColumnConfig) {
+  return (
+    column.type === "orderingHandle" ||
+    (column.type === "invokeAction" && column.presentation === "dropdown" && column.label === "")
+  );
 }

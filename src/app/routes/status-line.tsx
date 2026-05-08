@@ -2,7 +2,15 @@ import { useActiveSchemaKey, useCursor, useLastSyncedAt, useSchema } from "../..
 import { useSyncStatus, type SyncStatus } from "../../client/sync-status.ts";
 import type { SchemaKey } from "../../shared/schema-apps.ts";
 
-export function SyncStatusControl({ appKey }: { appKey?: SchemaKey }) {
+type SyncStatusTone = "default" | "dark";
+
+export function SyncStatusControl({
+  appKey,
+  tone = "default",
+}: {
+  appKey?: SchemaKey;
+  tone?: SyncStatusTone;
+}) {
   const activeSchemaKey = useActiveSchemaKey();
   const schema = useSchema();
   const lastSyncedAt = useLastSyncedAt();
@@ -20,7 +28,7 @@ export function SyncStatusControl({ appKey }: { appKey?: SchemaKey }) {
     <details className="group relative" data-sync-status-control>
       <summary
         aria-label={`Sync status: ${syncStatus.message}`}
-        className={syncStatusSummaryClassName(syncStatus)}
+        className={syncStatusSummaryClassName(syncStatus, tone)}
       >
         <span className={syncStatusDotClassName(syncStatus)} aria-hidden="true" />
         <span>{summary}</span>
@@ -84,9 +92,20 @@ function syncStatusSummary(status: SyncStatus) {
   }
 }
 
-function syncStatusSummaryClassName(status: SyncStatus) {
+function syncStatusSummaryClassName(status: SyncStatus, tone: SyncStatusTone) {
   const base =
     "flex h-7 cursor-pointer list-none items-center gap-1.5 rounded border px-2 text-xs font-medium transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden";
+
+  if (tone === "dark") {
+    switch (status.state) {
+      case "error":
+        return `${base} border-red-500/60 bg-red-950/60 text-red-200 hover:bg-red-950`;
+      case "syncing":
+        return `${base} border-amber-500/60 bg-amber-950/60 text-amber-100 hover:bg-amber-950`;
+      case "idle":
+        return `${base} border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800`;
+    }
+  }
 
   switch (status.state) {
     case "error":

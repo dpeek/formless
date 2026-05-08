@@ -236,8 +236,8 @@ Last updated: 2026-05-07
 
 - Agent instructions: `AGENTS.md`.
 - Domain context: `CONTEXT.md`.
-- Agent skill config: `docs/agents/`.
-- ADR home: `docs/adr/`.
+- Agent skill config: `doc/agents/`.
+- ADR home: `doc/adr/`.
 - Workstream PRDs: `prd/*.md`.
 
 ## Tests
@@ -263,8 +263,8 @@ Last updated: 2026-05-07
 ## Checks
 
 - Agent dev command: `bun start`.
-- Dev state and process IDs: `./tmp/agent-dev.json`.
-- Dev URL: `url` in `./tmp/agent-dev.json`.
+- Dev state and process IDs: `./tmp/devstate.json`.
+- Dev URL: `url` in `./tmp/devstate.json`.
 - Dev URL source: portless stdout in `./tmp/dev.txt`.
 - Agent dev pid files are not used.
 - Stdout logs stay as `./tmp/*.txt`.

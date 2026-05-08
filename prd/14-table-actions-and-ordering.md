@@ -343,7 +343,7 @@ Acceptance:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T03:39:55.864Z`.
+- `./tmp/devstate.json`: dev ready, tests pass, checks pass, updated `2026-05-07T03:39:55.864Z`.
 - `./tmp/test.txt`: final post-rebase rerun passed 3 files and 190 tests.
 - `./tmp/check.txt`: formatting, lint, and type checks pass.
 
@@ -381,7 +381,7 @@ Evidence:
 - View model tests: `src/client/views.test.ts`.
 - Generated table render tests: `src/app.test.tsx`.
 - Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/rates`; `bun browser snapshot -i` showed the rate table and collection actions.
-- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T03:48:16.104Z`.
+- `./tmp/devstate.json`: dev ready, tests pass, checks pass, updated `2026-05-07T03:48:16.104Z`.
 - `./tmp/test.txt`: table render rerun passed 2 files and 85 tests; final schema/view reruns passed 12 files and 358 tests plus client view 33 tests.
 - `./tmp/check.txt`: formatting, lint, and type checks pass.
 
@@ -420,7 +420,7 @@ Evidence:
 - View model tests: `src/client/views.test.ts`.
 - Generated app render tests: `src/app.test.tsx`.
 - Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/site`; snapshot showed the Site placement table Edit block column and buttons; focused first Edit block and `bun browser press Enter`; snapshot showed the Edit block dialog with Header fields and Done.
-- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:02:54.276Z`.
+- `./tmp/devstate.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:02:54.276Z`.
 - `./tmp/test.txt`: full restart run passed 28 files and 495 tests; final source-schema rerun passed 12 files and 363 tests.
 - `./tmp/check.txt`: formatting, lint, and type checks pass.
 
@@ -461,7 +461,7 @@ Evidence:
 - View model tests: `src/client/views.test.ts`.
 - Generated table render/action tests: `src/app.test.tsx`.
 - Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/site`; reset source schema/seed; snapshot showed no raw `Order` column, an `Actions` column, and Site placement move menu items; `Move down` reordered a main-slot placement.
-- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:30:55.805Z`.
+- `./tmp/devstate.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:30:55.805Z`.
 - `./tmp/test.txt`: full restart run passed 29 files and 504 tests.
 - `./tmp/check.txt`: formatting, lint, and type checks pass.
 
@@ -503,7 +503,7 @@ Evidence:
 - View model tests: `src/client/views.test.ts`.
 - Generated table render tests: `src/app.test.tsx`.
 - Browser smoke: `bun browser open https://14-table-actions-and-ordering.formless.local/site/schema`; reset source schema/seed; `bun browser open https://14-table-actions-and-ordering.formless.local/site`; snapshot showed Reorder and Actions as separate columns; mouse drag of the Featured projects Reorder handle over the first `main` Reorder handle moved Featured projects to the top of the `main` scope and advanced cursor to 49.
-- `./tmp/agent-dev.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:46:23.568Z`.
+- `./tmp/devstate.json`: dev ready, tests pass, checks pass, updated `2026-05-07T04:46:23.568Z`.
 - `./tmp/test.txt`: full restart run passed 29 files and 506 tests.
 - `./tmp/check.txt`: formatting, lint, and type checks pass.
 
@@ -534,11 +534,11 @@ Outcome:
 - PRD status is `shipped`.
 - Chunk table marks TAO-01 through TAO-06 shipped.
 - Blockers are clear.
-- Promote notes are ready for a docs/steward pass.
+- Promote notes are ready for a doc/steward pass.
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass, updated `2026-05-07T04:51:04.896Z`.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass, updated `2026-05-07T04:51:04.896Z`.
 - `./tmp/test.txt`: `29 passed (29)`, `506 passed (506)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
 - Browser smoke: `bun browser --session tao-06 eval 'fetch("/api/site/reset/schema",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.status)'` returned `200`.
@@ -553,7 +553,7 @@ Evidence:
 
 Acceptance:
 
-- `./tmp/agent-dev.json` shows dev ready, tests pass, and checks pass.
+- `./tmp/devstate.json` shows dev ready, tests pass, and checks pass.
 - `./tmp/test.txt` shows passing tests after `bun start`.
 - `./tmp/check.txt` shows passing checks after `bun start`.
 - `/site` browser smoke covers edit child block and ordering controls.
@@ -561,7 +561,7 @@ Acceptance:
 - `/rates` browser smoke confirms existing table editing still works/renders.
 - Public site route smoke passes if source Site schema or seeds changed.
 - PRD status is current.
-- Promote notes are ready for docs/steward pass.
+- Promote notes are ready for doc/steward pass.
 
 ## Non-goals
 
@@ -622,7 +622,7 @@ Can ship in parallel with:
 
 - worker-only sync or authority chunks that avoid generated table/action UI;
 - public site renderer work that avoids Site source schema and placement table shape;
-- docs/steward promotion work that coordinates roadmap/current updates.
+- doc/steward promotion work that coordinates roadmap/current updates.
 
 Should coordinate with:
 
@@ -695,7 +695,7 @@ TAO-06:
 
 - `/site` browser smoke verifies placement edit action and ordering controls.
 - `/tasks` and `/rates` browser smoke verify existing generated UI behavior still works.
-- PRD 14 is ready for docs/steward promotion.
+- PRD 14 is ready for doc/steward promotion.
 
 When this PRD ships, update `doc/current.md`:
 
@@ -720,7 +720,7 @@ When this PRD ships, update `doc/roadmap.md` only if first-release target detail
 - TAO-03 shipped 2026-05-07 with edit views, `editRecord` table actions, generated edit dialogs, and Site placement Edit block actions; no ordering behavior added.
 - TAO-04 shipped 2026-05-07 with table-local ordering, sparse rank moves, generated move menus, and Site placement ordering controls.
 - TAO-05 shipped 2026-05-07 with `@dnd-kit/react`, generated drag handles, scoped sortable rows, and drop-time sparse rank patches.
-- TAO-06 shipped 2026-05-07 with closeout browser smoke for `/site`, `/tasks`, `/rates`, and `/pages`; PRD 14 is complete and ready for docs/steward promotion.
+- TAO-06 shipped 2026-05-07 with closeout browser smoke for `/site`, `/tasks`, `/rates`, and `/pages`; PRD 14 is complete and ready for doc/steward promotion.
 - User direction: keep collection views as scope containers and make tables the first record interaction surface.
 - User direction: use table-local named actions and an `invokeAction` table column.
 - User direction: add proper edit views for edit dialogs.

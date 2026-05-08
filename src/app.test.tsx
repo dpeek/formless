@@ -160,11 +160,19 @@ function selectRateHomeModel() {
   return model;
 }
 
-function expectWorkbenchTools(html: string, schemaRoute: string, schemaKey: string) {
-  expect(html).toContain('aria-label="Workbench tools"');
+function expectWorkbenchToolbar(html: string, schemaRoute: string, schemaKey: string) {
+  expect(html).toContain('data-frame="workbench-toolbar"');
+  expect(html).toContain("bg-background pb-[var(--workbench-toolbar-height)] text-foreground");
   expect(html).toContain(`href="${schemaRoute}"`);
-  expect(html).toContain(`Active world <code>${schemaKey}</code>.`);
-  expect(html).toContain("Reset restores the source schema and source seed data");
+  expect(html).toContain('aria-label="Workbench actions"');
+  expect(html).toContain("Export");
+  expect(html).toContain("Restore");
+  expect(html).toContain("Reset");
+  expect(html).toContain('type="file"');
+  expect(html).toContain(`aria-label="Sync status details for ${schemaKey}"`);
+  expect(html).not.toContain("data-workbench-tools");
+  expect(html).not.toContain("Tools");
+  expect(html).not.toContain("Dev profile");
 }
 
 function expectSyncStatusControl(html: string, schemaKey: string) {
@@ -173,6 +181,15 @@ function expectSyncStatusControl(html: string, schemaKey: string) {
   expect(html).toContain(`<code>${schemaKey}</code>`);
   expect(html).toContain("Push sync");
   expect(html).toContain("Cursor");
+}
+
+function expectGeneratedAppChromeLabels(
+  html: string,
+  { appTitle, screenTitle }: { appTitle: string; screenTitle: string },
+) {
+  expect(html).toContain(`<div class="px-2 py-1 text-sm font-semibold">${appTitle}</div>`);
+  expect(html).toContain(`<h1 class="truncate text-sm font-medium">${screenTitle}</h1>`);
+  expect(html).not.toContain('data-slot="sidebar-group-label"');
 }
 
 describe("App smoke routes", () => {
@@ -188,7 +205,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expectWorkbenchTools(html, "/tasks/schema", "tasks");
+    expectWorkbenchToolbar(html, "/tasks/schema", "tasks");
     expect(html).toContain('aria-label="Tasks screens"');
     expect(html).toContain("Loading Tasks...");
     expect(html).not.toContain("Create Task");
@@ -206,7 +223,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expectWorkbenchTools(html, "/estii/schema", "estii");
+    expectWorkbenchToolbar(html, "/estii/schema", "estii");
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain("Loading Estii...");
     expect(html).not.toContain("Create Resource");
@@ -224,7 +241,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expectWorkbenchTools(html, "/site/schema", "site");
+    expectWorkbenchToolbar(html, "/site/schema", "site");
     expectSyncStatusControl(html, "site");
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain("Loading Site...");
@@ -251,7 +268,7 @@ describe("App smoke routes", () => {
     expectSyncStatusControl(html, "site");
     expect(html).toContain("Sync issue");
     expect(html).toContain("Push sync unavailable.");
-    expect(html).toContain("text-red-700");
+    expect(html).toContain("text-red-200");
   });
 
   it('renders the "/tasks/schema" route', () => {
@@ -262,7 +279,7 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-frame="workbench-tool"');
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).toContain('aria-label="Workbench apps"');
-    expectWorkbenchTools(html, "/tasks/schema", "tasks");
+    expectWorkbenchToolbar(html, "/tasks/schema", "tasks");
     expect(html).not.toContain('aria-label="Tasks screens"');
     expect(html).toContain("Tasks Schema");
     expect(html).toContain("<code>tasks</code>");
@@ -270,10 +287,10 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Tasks source reset controls"');
     expect(html).toContain("Save schema");
     expect(html).not.toContain("Reset schema and seed data");
-    expect(html).toContain('aria-label="Tasks store snapshot controls"');
-    expect(html).toContain("Export store snapshot");
-    expect(html).toContain("Tasks snapshot file");
-    expect(html).toContain("Restore store snapshot");
+    expect(html).not.toContain('aria-label="Tasks store snapshot controls"');
+    expect(html).not.toContain("Export store snapshot");
+    expect(html).not.toContain("Tasks snapshot file");
+    expect(html).not.toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;screens&quot;");
     expect(html).toContain("&quot;task&quot;");
@@ -289,7 +306,7 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-frame="workbench-tool"');
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).toContain('aria-label="Workbench apps"');
-    expectWorkbenchTools(html, "/estii/schema", "estii");
+    expectWorkbenchToolbar(html, "/estii/schema", "estii");
     expect(html).not.toContain('aria-label="Estii screens"');
     expect(html).not.toContain('href="/estii/setup"');
     expect(html).toContain("Estii Schema");
@@ -298,10 +315,10 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Estii source reset controls"');
     expect(html).toContain("Save schema");
     expect(html).not.toContain("Reset schema and seed data");
-    expect(html).toContain('aria-label="Estii store snapshot controls"');
-    expect(html).toContain("Export store snapshot");
-    expect(html).toContain("Estii snapshot file");
-    expect(html).toContain("Restore store snapshot");
+    expect(html).not.toContain('aria-label="Estii store snapshot controls"');
+    expect(html).not.toContain("Export store snapshot");
+    expect(html).not.toContain("Estii snapshot file");
+    expect(html).not.toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;rateSetup&quot;");
     expect(html).toContain("&quot;rate&quot;");
@@ -318,7 +335,7 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-frame="workbench-tool"');
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).toContain('aria-label="Workbench apps"');
-    expectWorkbenchTools(html, "/site/schema", "site");
+    expectWorkbenchToolbar(html, "/site/schema", "site");
     expect(html).not.toContain('aria-label="Site screens"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
@@ -328,10 +345,10 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Site source reset controls"');
     expect(html).toContain("Save schema");
     expect(html).not.toContain("Reset schema and seed data");
-    expect(html).toContain('aria-label="Site store snapshot controls"');
-    expect(html).toContain("Export store snapshot");
-    expect(html).toContain("Site snapshot file");
-    expect(html).toContain("Restore store snapshot");
+    expect(html).not.toContain('aria-label="Site store snapshot controls"');
+    expect(html).not.toContain("Export store snapshot");
+    expect(html).not.toContain("Site snapshot file");
+    expect(html).not.toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;sitePages&quot;");
     expect(html).toContain("&quot;siteNavigation&quot;");
@@ -385,6 +402,7 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
     expectSyncStatusControl(html, "estii");
+    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Rates" });
     expect(html).toContain(">Rates</h1>");
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/setup"');
@@ -399,6 +417,7 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
     const html = renderRoute("/setup", createAppRuntimeProfile("estii"));
 
+    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Setup" });
     expect(html).toContain(">Setup</h1>");
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/"');
@@ -489,9 +508,9 @@ describe("public site renderer", () => {
 
     expect(html).toContain("Explore");
     expect(html).toContain("Social");
-    expect(html).toContain('href="https://github.com/example"');
+    expect(html).toContain('href="https://github.com/dpeek"');
     expect(html).toContain("GitHub");
-    expect(html).toContain('href="https://linkedin.com/in/example"');
+    expect(html).toContain('href="https://linkedin.com/in/dpeekdotcom"');
     expect(html).toContain("LinkedIn");
   });
 
@@ -666,13 +685,15 @@ describe("generated collection home", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
 
-    expect(html).toContain('class="mx-auto w-full max-w-[112rem] space-y-8"');
+    expect(html).toContain('class="mx-auto w-full max-w-[112rem]"');
     expect(html).toContain(
       "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]",
     );
-    expect(html).toContain("grid min-w-0 gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3");
+    expect(html).toContain("grid min-w-0 gap-3 pt-1");
+    expect(html).not.toContain("grid min-w-0 gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3");
     expect(html).toContain('data-slot="table"');
-    expect(html).toContain("min-w-max table-fixed");
+    expect(html).toContain("min-w-full table-auto");
+    expect(html).toContain("w-6 min-w-6 max-w-6 h-8 px-1");
   });
 
   it("renders synthetic stack sections in order with independent selected queries", () => {
@@ -833,6 +854,7 @@ describe("generated collection home", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
 
+    expectGeneratedAppChromeLabels(html, { appTitle: "Site", screenTitle: "Pages" });
     expect(html).toContain("<h1");
     expect(html).toContain(">Pages</h1>");
     expect(html).toContain('aria-label="Site screens"');
@@ -850,15 +872,19 @@ describe("generated collection home", () => {
     expect(html).not.toContain("Create Block<");
     expect(html).toContain('data-slot="table"');
     expect(html).toContain("Body");
-    expect(html).toContain("<textarea");
+    expect(html).toContain('data-web-autosize-text-input="true"');
+    expect(html).toContain("h-9 w-full text-2xl font-semibold");
+    expect(html).toContain('data-web-markdown-editor="plate"');
     expect(html).toContain('aria-label="Body"');
+    expect(html).not.toContain("Template key");
+    expect(html).not.toContain(">Home</h2>");
     expect(html).toContain("Home");
     expect(html).toContain("Blog");
     expect(html).toContain("Resume");
     expect(html).toContain("Projects");
     expect(html).toContain("A concise personal site for current work");
-    expect(html).toContain('value="Header"');
-    expect(html).toContain('value="Footer"');
+    expect(html).toContain('value="rec_site_content_group_header" selected="">Header</option>');
+    expect(html).toContain('value="rec_site_content_group_footer" selected="">Footer</option>');
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
   });
 
@@ -888,25 +914,31 @@ describe("generated collection home", () => {
     applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site/navigation");
 
+    expectGeneratedAppChromeLabels(html, { appTitle: "Site", screenTitle: "Navigation" });
     expect(html).toContain(">Navigation</h1>");
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain('href="/site"');
     expect(html).toContain('href="/site/navigation"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
-    expect(html).toContain(">Header</h2>");
-    expect(html).toContain(">Footer</h2>");
-    expect(html).toContain('aria-label="Header list detail"');
-    expect(html).toContain('aria-label="Footer list detail"');
+    expect(html).toContain('aria-label="Navigation list detail"');
+    expect(html).toContain('aria-label="Navigation records"');
+    expect(html).toContain('aria-label="Header detail"');
+    expect(html).toContain('aria-current="true"');
+    expect(html).not.toContain('aria-label="Header list detail"');
+    expect(html).not.toContain('aria-label="Footer list detail"');
     expect(html).not.toContain('aria-label="Block records"');
-    expect(html).not.toContain('aria-label="Header records"');
-    expect(html).not.toContain('aria-label="Footer records"');
-    expect(html).not.toContain('aria-label="Header Placements count"');
-    expect(html).not.toContain('aria-label="Footer Placements count"');
-    expect(html).toContain('value="Home"');
-    expect(html).toContain('value="Blog"');
-    expect(html).toContain('value="Explore"');
-    expect(html).toContain('value="Social"');
+    expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
+    expect(html).toMatch(/aria-label="Footer Placements count"[^>]*>2</);
+    expect(html).toMatch(/<button[^>]*>Add placement<\/button>/);
+    expect(html).toContain('value="rec_site_content_link_home" selected="">Home</option>');
+    expect(html).toContain('value="rec_site_content_link_blog" selected="">Blog</option>');
+    expect(html).not.toContain(
+      'value="rec_site_content_group_footer_main" selected="">Explore</option>',
+    );
+    expect(html).not.toContain(
+      'value="rec_site_content_group_footer_social" selected="">Social</option>',
+    );
   });
 
   it("does not route site header and footer as top-level screens", () => {
@@ -925,7 +957,7 @@ describe("generated collection home", () => {
         siteBlockRecord("rec_site_content_page_unannounced", {
           type: "page",
           label: "Unannounced page",
-          href: "/pages/unannounced",
+          href: "/unannounced",
           templateKey: "standard",
         }),
       ],
@@ -984,10 +1016,12 @@ describe("generated collection home", () => {
     expect(html).toContain("Home");
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
     expect(html).toContain("Add placement");
-    expect(html).toContain('value="Header"');
-    expect(html).toContain('value="Footer"');
+    expect(html).toContain('value="rec_site_content_group_header" selected="">Header</option>');
+    expect(html).toContain('value="rec_site_content_group_footer" selected="">Footer</option>');
     expect(html).toContain("Schema-backed software for content-heavy products");
-    expect(html).toContain('value="Recent posts"');
+    expect(html).toContain(
+      'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
+    );
     expect(html).toContain('value="contentList"');
     expect(html).toContain('value="contentGrid"');
   });
@@ -1006,10 +1040,10 @@ describe("generated collection home", () => {
     expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
     expect(html).toContain("Add placement");
     expect(html).toContain('value="link"');
-    expect(html).toContain('value="Home"');
-    expect(html).toContain('value="Blog"');
-    expect(html).toContain('value="Projects"');
-    expect(html).toContain('value="Resume"');
+    expect(html).toContain('value="rec_site_content_link_home" selected="">Home</option>');
+    expect(html).toContain('value="rec_site_content_link_blog" selected="">Blog</option>');
+    expect(html).toContain('value="rec_site_content_link_projects" selected="">Projects</option>');
+    expect(html).toContain('value="rec_site_content_link_resume" selected="">Resume</option>');
   });
 
   it("renders only primary rate-card collection navigation", () => {

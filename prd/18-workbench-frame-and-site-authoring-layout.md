@@ -2,7 +2,7 @@
 
 Status: shipped
 Current chunk: complete
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ## Goal
 
@@ -17,7 +17,7 @@ The first slice should:
 - move sync status out of page content and into unobtrusive chrome;
 - use Site screen routes for Pages and Navigation;
 - give Site list/detail authoring much more room;
-- improve Site labels and singleton-root behavior using existing schema/view primitives.
+- improve Site labels and Navigation root behavior using existing schema/view primitives.
 
 This PRD is about chrome placement and generated Site editor layout. It is not about new schema primitives, a visual page builder, preview panes, route params, permissions, or a full layout DSL.
 
@@ -150,6 +150,7 @@ Likely changed files:
 - Site authoring top-level screens are Pages and Navigation.
 - Pages is the default Site authoring screen.
 - Navigation groups Header and Footer editing into one screen.
+- Navigation roots can be selected by one query for `block.type = header` or `block.type = footer`.
 - Header and Footer are not top-level screens in this PRD.
 - Header and Footer can become top-level screens later if they become large editors.
 - Pages route comes from PRD 17 screen routing.
@@ -170,15 +171,16 @@ Likely changed files:
 - On narrow viewports, list/detail can stack.
 - Placement tables should be allowed to use horizontal space.
 - Page metadata should be compact and should not dominate the placement table.
-- Header/Footer singleton roots should not render a noisy one-item list selector.
-- Singleton root context should auto-select and render the detail directly.
-- Multi-root contexts, such as Pages, keep the list/detail selector.
+- Navigation has a two-root context, so it keeps the list/detail selector.
+- Selecting Header or Footer opens the same root detail and placements table used by Pages.
+- Single-record contexts can still auto-select when they exist, but Navigation is not one of them.
 
 ### Label and action behavior
 
 - Site authoring labels should use author terms, not storage terms, where existing schema labels allow it.
 - The Pages context list should be labeled `Pages`, not `Block`.
-- The Navigation screen should show Header and Footer section labels.
+- The Navigation screen should show Header and Footer as records in one Navigation list.
+- The Navigation screen should render Header and Footer from one root query, not from separate screen sections.
 - Create placement actions should use `Add placement` or another author-facing label through existing collection action labels.
 - Do not add a new label DSL in this PRD.
 - Do not rename `block` or `blockPlacement` entities in storage.
@@ -265,8 +267,7 @@ Site screens:
       "layout": {
         "type": "stack",
         "sections": [
-          { "id": "header", "type": "collection", "view": "headerCompositionHome" },
-          { "id": "footer", "type": "collection", "view": "footerCompositionHome" }
+          { "id": "navigation", "type": "collection", "view": "navigationCompositionHome" }
         ]
       }
     }
@@ -276,31 +277,47 @@ Site screens:
 
 ## Decisions
 
-| ID      | Decision                                                            | Reason                                                                            | Evidence                                                            |
-| ------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| WAF-D1  | Separate workbench chrome from generated app chrome.                | Dev tools should not pollute the app frame users will see.                        | `prd/17-runtime-profiles-and-screen-routes.md`, `src/app.tsx`       |
-| WAF-D2  | Keep Schema out of the generated app sidebar.                       | Schema is workbench tooling, not an app screen.                                   | user decision, PRD 17 profile direction                             |
-| WAF-D3  | Expose one Reset button only.                                       | Separate reset controls add noise and invite the wrong mental model.              | user decision, `src/app/dev-actions.tsx`                            |
-| WAF-D4  | Move sync status to chrome with a details dialog/popover.           | Sync status is useful diagnostics but should not dominate authoring content.      | `src/app/routes/status-line.tsx`, screenshot feedback               |
-| WAF-D5  | Use Pages and Navigation as Site top-level screens.                 | Header and Footer are singleton navigation roots, not independent app areas yet.  | `prd/13-site-editor-list-detail.md`, `schema/apps/site/schema.json` |
-| WAF-D6  | Use existing stack sections for Navigation.                         | Header and Footer can compose into one screen without new layout primitives.      | `src/app/generated/screen.tsx`                                      |
-| WAF-D7  | Widen generated workspace layout before adding new editor concepts. | The current UI wastes desktop width; the existing table/list-detail can improve.  | `src/app/routes/home.tsx`, `src/app/generated/collection.tsx`       |
-| WAF-D8  | Auto-render singleton list/detail contexts without a one-item list. | Header/Footer roots should not feel like a tab/list selector.                     | `schema/apps/site/schema.json`, `src/app/generated/collection.tsx`  |
-| WAF-D9  | Improve labels through existing schema labels and action labels.    | Better author language is possible without storage renames or new schema surface. | `src/shared/schema-types.ts`, `src/client/views.ts`                 |
-| WAF-D10 | Keep public Site behavior unchanged.                                | This PRD improves the admin/editor frame, not the public tree or renderer.        | `src/site/tree.ts`, `src/app/routes/site-page.tsx`                  |
+| ID      | Decision                                                            | Reason                                                                                         | Evidence                                                                                      |
+| ------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| WAF-D1  | Separate workbench chrome from generated app chrome.                | Dev tools should not pollute the app frame users will see.                                     | `prd/17-runtime-profiles-and-screen-routes.md`, `src/app.tsx`                                 |
+| WAF-D2  | Keep Schema out of the generated app sidebar.                       | Schema is workbench tooling, not an app screen.                                                | user decision, PRD 17 profile direction                                                       |
+| WAF-D3  | Expose one Reset button only.                                       | Separate reset controls add noise and invite the wrong mental model.                           | user decision, `src/app/dev-actions.tsx`                                                      |
+| WAF-D4  | Move sync status to chrome with a details dialog/popover.           | Sync status is useful diagnostics but should not dominate authoring content.                   | `src/app/routes/status-line.tsx`, screenshot feedback                                         |
+| WAF-D5  | Use Pages and Navigation as Site top-level screens.                 | Header and Footer are singleton navigation roots, not independent app areas yet.               | `prd/13-site-editor-list-detail.md`, `schema/apps/site/schema.json`                           |
+| WAF-D6  | Use the existing stack screen for Navigation.                       | Navigation can stay a normal generated screen without a new layout primitive.                  | `src/app/generated/screen.tsx`                                                                |
+| WAF-D7  | Widen generated workspace layout before adding new editor concepts. | The current UI wastes desktop width; the existing table/list-detail can improve.               | `src/app/routes/home.tsx`, `src/app/generated/collection.tsx`                                 |
+| WAF-D8  | Keep Navigation on the normal list/detail path.                     | Header and Footer are two navigation roots, so selection should work like Pages.               | `schema/apps/site/schema.json`, `src/app/generated/collection.tsx`                            |
+| WAF-D9  | Improve labels through existing schema labels and action labels.    | Better author language is possible without storage renames or new schema surface.              | `src/shared/schema-types.ts`, `src/client/views.ts`                                           |
+| WAF-D10 | Keep public Site behavior unchanged.                                | This PRD improves the admin/editor frame, not the public tree or renderer.                     | `src/site/tree.ts`, `src/app/routes/site-page.tsx`                                            |
+| WAF-D11 | Keep dev workbench toolbar at the bottom in dark chrome.            | Dev-only controls should stay visually separate from the generated app frame.                  | User direction 2026-05-08; `src/app.tsx`, `src/style.css`                                     |
+| WAF-D12 | Put snapshot export/restore in dev toolbar.                         | Store snapshot tooling is workbench-level, not schema editor content.                          | User direction 2026-05-08; `src/app/dev-actions.tsx`, `src/app.tsx`                           |
+| WAF-D13 | Show app name once and active screen title in generated app chrome. | Repeating the current schema name in sidebar groups and page header adds noise.                | User direction 2026-05-08; `src/app.tsx`                                                      |
+| WAF-D14 | Use app chrome as the screen heading.                               | Keeping `Pages` in both chrome and body repeats the active screen.                             | User direction 2026-05-08; `src/app.tsx`, `src/app/routes/home.tsx`                           |
+| WAF-D15 | Keep Site root metadata stacked above placements.                   | Page/Header/Footer fields read as a form, not a horizontal table row.                          | User direction 2026-05-08; `src/app/generated/collection.tsx`                                 |
+| WAF-D16 | Keep placement table utility columns content-sized.                 | Reorder and row action columns should fit their icon controls.                                 | User direction 2026-05-08; `src/app/generated/table.tsx`                                      |
+| WAF-D17 | Render Site root labels as editable headings.                       | The selected root label is the authoring title, not a separate labeled field.                  | User direction 2026-05-08; `src/app/generated/collection.tsx`                                 |
+| WAF-D18 | Keep root body editing on the shared markdown editor.               | Root body content should use the same rich markdown surface as other body fields.              | User direction 2026-05-08; `src/app/generated/record-field-editor.tsx`                        |
+| WAF-D19 | Hide template key from root authoring forms.                        | `templateKey` is narrow runtime metadata, not normal page/header/footer content.               | User direction 2026-05-08; `schema/apps/site/schema.json`                                     |
+| WAF-D20 | Drive Navigation from one Header/Footer root query.                 | Header and Footer are the same navigation-root concept and should not need duplicate sections. | User direction 2026-05-08; `schema/apps/site/schema.json`, `src/app/generated/collection.tsx` |
 
 ## Chunks
 
-| ID     | Status  | Depends on            | Main files                       | Acceptance                                                                                                |
-| ------ | ------- | --------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| WAF-01 | shipped | none                  | PRD                              | PRD captures workbench/app frame split, Site screen shape, one Reset, sync status, layout, and non-goals. |
-| WAF-02 | shipped | PRD 17 route profiles | app shell, route frame tests     | Dev workbench chrome wraps the generated app frame; app sidebar lists app screens only.                   |
-| WAF-03 | shipped | WAF-02                | dev tools, schema route/reset UI | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
-| WAF-04 | shipped | WAF-02                | sync status UI, tests            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
-| WAF-05 | shipped | PRD 17 screen paths   | Site source schema, app tests    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
-| WAF-06 | shipped | WAF-05                | generated screen/collection UI   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
-| WAF-07 | shipped | WAF-06                | generated collection UI, schema  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
-| WAF-08 | shipped | WAF-07                | browser smoke, PRD               | Checks pass; browser smoke covers Site Pages, Navigation, tools, reset dialog, and sync status details.   |
+| ID     | Status  | Depends on            | Main files                                       | Acceptance                                                                                                |
+| ------ | ------- | --------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| WAF-01 | shipped | none                  | PRD                                              | PRD captures workbench/app frame split, Site screen shape, one Reset, sync status, layout, and non-goals. |
+| WAF-02 | shipped | PRD 17 route profiles | app shell, route frame tests                     | Dev workbench chrome wraps the generated app frame; app sidebar lists app screens only.                   |
+| WAF-03 | shipped | WAF-02                | dev tools, schema route/reset UI                 | Schema and one Reset button move into workbench tools; reset remains active-world scoped.                 |
+| WAF-04 | shipped | WAF-02                | sync status UI, tests                            | Inline page sync status is replaced by a quiet chrome status control with details dialog/popover.         |
+| WAF-05 | shipped | PRD 17 screen paths   | Site source schema, app tests                    | Site source schema uses Pages and Navigation top-level screens; Header/Footer are Navigation sections.    |
+| WAF-06 | shipped | WAF-05                | generated screen/collection UI                   | Site authoring uses a wide workspace layout; list/detail gives detail/table content more room.            |
+| WAF-07 | shipped | WAF-06                | generated collection UI, schema                  | Singleton Header/Footer contexts auto-render detail; Site action/section labels are author-facing.        |
+| WAF-08 | shipped | WAF-07                | browser smoke, PRD                               | Checks pass; browser smoke covers Site Pages, Navigation, tools, reset dialog, and sync status details.   |
+| WAF-09 | shipped | WAF-08                | app shell, status UI, CSS                        | Dev workbench toolbar is bottom-fixed, dark, direct-action, and clear of the generated app sidebar.       |
+| WAF-10 | shipped | WAF-09                | dev actions, schema route                        | Snapshot Export/Restore live in the toolbar; Restore file input imports immediately after file selection. |
+| WAF-11 | shipped | WAF-10                | app shell, app tests, PRD                        | Generated app sidebar shows app name once; nav has no group label; header shows active screen title.      |
+| WAF-12 | shipped | WAF-11                | generated layout, table tests                    | Site Pages/Navigation show one screen heading, stacked root forms, and icon-sized table utility columns.  |
+| WAF-13 | shipped | WAF-12                | root form UI, schema, tests                      | Site root labels are editable headings, Body uses markdown editor, and Template key is hidden from roots. |
+| WAF-14 | shipped | WAF-13                | query runtime, generated collection, Site schema | Navigation uses one header/footer root query in a list/detail editor.                                     |
 
 ## Chunk details
 
@@ -322,7 +339,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `29 passed (29)`, `506 passed (506)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 166 files.
 
@@ -360,7 +377,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `32 passed (32)`, `543 passed (543)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
 - Browser smoke: `bun browser --session waf02 --ignore-https-errors open https://18-workbench-frame-and-site-authoring-layout.formless.local/site`; DOM eval showed `workbench:1`, `generated:1`, `siteSchema:0`, `siteScreens:1`.
@@ -407,7 +424,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: latest affected reruns passed; `src/app.test.tsx` showed `95 passed (95)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
 - Browser smoke: `/site` eval returned workbench and generated frames present, one workbench Schema link, Tools closed by default.
@@ -453,7 +470,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `32 passed (32)`, `545 passed (545)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
 - Browser smoke: `bun browser --session waf04 --ignore-https-errors open https://18-workbench-frame-and-site-authoring-layout.formless.local/site`.
@@ -493,13 +510,14 @@ Outcome:
 
 - `schema/apps/site/schema.json` defines `screens.sitePages` at `/` and `screens.siteNavigation` at `/navigation`.
 - `screens.siteNavigation` has `header` and `footer` stack sections backed by `headerCompositionHome` and `footerCompositionHome`.
+- WAF-14 later replaces those two sections with one `navigationCompositionHome` section backed by `blockNavigationRoots`.
 - `src/client/views.test.ts` characterizes Site primary screen models as Pages and Navigation.
 - `src/app.test.tsx` covers `/site/navigation` and confirms `/site/header` and `/site/footer` are not top-level screens.
 - `src/shared/schema.test.ts` characterizes the source schema screens.
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: latest affected rerun passed; final tail showed `src/shared/schema.test.ts` `85 passed (85)` and `PASS Waiting for file changes`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
 - Browser smoke reset source state: `fetch('/api/site/reset/seed')` returned screen names `sitePages` and `siteNavigation`.
@@ -544,7 +562,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: latest affected rerun passed; final tail showed `2 passed (2)` and `100 passed (100)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
 - Browser smoke: `bun browser --session waf06 --ignore-https-errors open https://18-workbench-frame-and-site-authoring-layout.formless.local/site`.
@@ -583,10 +601,11 @@ Outcome:
 - `schema/apps/site/schema.json` keeps storage entities unchanged, labels `blockPlacement` as `Placement`, and labels Site placement create actions `Add placement`.
 - `src/app.test.tsx` covers Pages labels, Header/Footer singleton rendering, and author-facing placement actions.
 - `src/client/views.test.ts`, `src/shared/schema.test.ts`, and `src/worker/schema-apps.test.ts` characterize the updated source schema/view facts.
+- WAF-14 later supersedes the Header/Footer singleton behavior with one two-record Navigation list/detail context.
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: latest affected rerun passed; final tail showed `src/app.test.tsx` `99 passed (99)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
 - Browser smoke reset source state with `fetch('/api/site/reset/schema')` and `fetch('/api/site/reset/seed')`.
@@ -598,7 +617,7 @@ Evidence:
 Promotion notes:
 
 - `doc/current.md`: Site authoring context selectors now use query-derived labels; Pages shows `Pages` instead of `Block`.
-- `doc/current.md`: singleton Site Header/Footer contexts render detail directly without a one-item selector.
+- Superseded after WAF-14: do not promote singleton Header/Footer behavior as current Navigation behavior.
 - `doc/current.md`: Site placement actions use `Add placement`, and the author-facing placement entity label is `Placement`.
 
 ### WAF-08 closeout
@@ -609,7 +628,7 @@ Goal: verify changed UI behavior and update this PRD.
 
 Tasks:
 
-- Shipped: read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
+- Shipped: read `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
 - Shipped: confirmed dev/test/check output is green.
 - Shipped: ran browser smoke for Site Pages, Site Navigation, workbench tools, Reset confirmation, and sync details.
 - Shipped: updated chunk status, blockers, evidence, and promote notes.
@@ -630,7 +649,7 @@ Outcome:
 
 Evidence:
 
-- `./tmp/agent-dev.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
 - `./tmp/test.txt`: `32 passed (32)`, `547 passed (547)`.
 - `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
 - Browser smoke: `bun browser --session waf08 .../site` rendered `h1` Pages with workbench frame `1`, generated app frame `1`, Pages list/detail `1`, Pages records `1`, one visible `Add placement`, and no `Create Block placement` text.
@@ -639,6 +658,248 @@ Evidence:
 - Browser smoke: clicking Reset opened a destructive confirmation with `This restores the source schema and source seed data for site`; confirmation was canceled.
 - Browser smoke: `bun browser --session waf08 .../site/navigation` rendered `h1` Navigation with Header/Footer list-detail sections, no Header/Footer/Block selector records, two `Add placement` buttons, and no `Create Block placement` text.
 - Browser smoke: `bun browser --session waf08 errors` returned no page errors.
+
+### WAF-09 bottom dev toolbar
+
+Status: shipped 2026-05-08.
+
+Goal: polish the dev-profile workbench shell.
+
+Tasks:
+
+- Shipped: moved dev workbench chrome from the top header to a bottom-fixed toolbar.
+- Shipped: removed the `Formless` title and `Dev profile` label from workbench chrome.
+- Shipped: moved app/schema switching buttons to the left side of the toolbar.
+- Shipped: changed workbench toolbar chrome to a dark scheme.
+- Shipped: moved Schema and Reset out of the Tools disclosure and removed the Tools disclosure.
+- Shipped: reserved bottom space so the generated app sidebar does not cover the toolbar.
+
+Acceptance:
+
+- Dev profile shows a bottom toolbar.
+- Workbench app buttons sit on the left.
+- Toolbar text does not include `Formless`, `Dev profile`, or `Tools`.
+- Schema and Reset are direct toolbar actions.
+- Generated app sidebar clears the toolbar.
+
+Outcome:
+
+- `src/app.tsx` renders `data-frame="workbench-toolbar"` as the dev shell toolbar.
+- `src/app.tsx` renders direct Schema and Reset toolbar actions.
+- `src/app.tsx` keeps the dark foreground color scoped to toolbar chrome and resets generated content to `text-foreground`.
+- `src/app/routes/status-line.tsx` supports dark toolbar status styling.
+- `src/main.tsx` imports app-local CSS.
+- `src/style.css` constrains the generated sidebar height inside dev profile.
+- `src/app.test.tsx` covers the toolbar, direct actions, dark error status, and no Tools disclosure.
+- `src/worker/authority.test.ts` removed a dead unused helper that blocked check.
+
+Evidence:
+
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `33 passed (33)`, `551 passed (551)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 184 files.
+- Browser smoke: `/site` toolbar eval returned bottom-fixed toolbar, app nav before actions, Schema link, Reset button, no Tools/Formless/Dev profile text, and sidebar bottom clearance `56`.
+- Browser smoke: `/site/schema` eval returned workbench tool frame `1`, generated app frame `0`, Schema link `1`, Reset button `1`, and Tools disclosure `0`.
+- Browser smoke: `/tasks` eval returned generated content and `main h1` computed color `oklch(0.141 0.005 285.823)` while toolbar stayed `text-slate-100`.
+- Browser smoke: `bun browser --session dev-shell-toolbar errors` returned no page errors.
+
+### WAF-10 toolbar snapshots
+
+Status: shipped 2026-05-08.
+
+Goal: make snapshot export and restore direct workbench actions.
+
+Tasks:
+
+- Shipped: moved store snapshot Export into the dev toolbar.
+- Shipped: moved store snapshot Restore into the dev toolbar.
+- Shipped: removed snapshot controls from the Schema screen.
+- Shipped: made Restore a file-input button.
+- Shipped: made selecting a snapshot JSON file immediately attempt restore.
+- Shipped: reported export/restore progress through the sync status control.
+
+Acceptance:
+
+- Toolbar has Schema, Export, Restore, and Reset.
+- Schema screen has no snapshot panel.
+- Restore uses one file button.
+- Restore starts after file selection without a second confirmation button.
+- Export and restore remain scoped to the active world.
+
+Outcome:
+
+- `src/app/dev-actions.tsx` exports `SnapshotExportControl` and `SnapshotRestoreControl`.
+- `SnapshotRestoreControl` restores from `input[type=file]` `onChange` and clears the input after completion.
+- `src/app.tsx` renders snapshot controls in `WorkbenchToolbarActions`.
+- `src/app/routes/schema.tsx` no longer renders `DevActions`.
+- `src/app.test.tsx` covers toolbar snapshot controls and absence of schema-screen snapshot controls.
+
+Evidence:
+
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `32 passed (32)`, `548 passed (548)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke: `/tasks` toolbar eval returned labels `Schema`, `Export`, `Restore`, `Reset`, a restore `input[type=file]`, accept `application/json,.json`, and no old snapshot panel text.
+- Browser smoke: `/tasks/schema` eval returned Schema screen present, no old store snapshot controls, and toolbar Export plus Restore file input present.
+- Browser smoke: dispatching a valid `tasks-snapshot.json` File to the Restore input returned sync status `Restored Tasks snapshot...` and cleared the input value.
+- Browser smoke: clicking Export returned sync status `Exported Tasks snapshot...`.
+- Browser smoke: `bun browser --session dev-shell-toolbar errors` returned no page errors.
+
+### WAF-11 generated app chrome labels
+
+Status: shipped 2026-05-08.
+
+Goal: reduce repeated current schema/app names in generated app chrome.
+
+Tasks:
+
+- Shipped: kept the schema/app name as the generated app sidebar title.
+- Shipped: removed the generated sidebar group label.
+- Shipped: changed the generated app header title to the active screen label.
+- Shipped: kept the schema/app label as the fallback before screen models load.
+
+Acceptance:
+
+- Sidebar title shows the active app name.
+- Sidebar nav items render without a repeated app/schema group name.
+- Page header shows `Pages`, `Navigation`, `Rates`, `Setup`, or the current active screen label.
+- Dev toolbar changes do not leak dark text styling into generated app chrome.
+
+Outcome:
+
+- `src/app.tsx` derives the generated app header title from the active screen model.
+- `src/app.tsx` keeps the app label in `SidebarHeader`.
+- `src/app.tsx` removes `SidebarGroupLabel` from generated app navigation.
+- `src/app.test.tsx` covers app-profile and Site route chrome labels.
+
+Evidence:
+
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `32 passed (32)`, `548 passed (548)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 183 files.
+- Browser smoke: `/site/navigation` eval returned sidebar title `Site`, no group label, header title `Navigation`, and `h1` `Navigation`.
+- Browser smoke: `/site` eval returned sidebar title `Site`, no group label, header title `Pages`, and `h1` `Pages`.
+
+### WAF-12 Site layout follow-up
+
+Status: shipped 2026-05-08.
+
+Goal: apply screenshot feedback to the Site Pages and Navigation list/detail layout.
+
+Tasks:
+
+- Shipped: changed the generated app header title from a `span` to the app chrome `h1`.
+- Shipped: removed the repeated screen heading from generated route content.
+- Shipped: kept compact list/detail context fields stacked vertically.
+- Shipped: changed generated tables to full-width auto layout.
+- Shipped: kept ordering-handle and dropdown action utility columns icon-sized.
+
+Acceptance:
+
+- `/site` shows `Pages` once as the generated app chrome heading.
+- `/site/navigation` shows `Navigation` once as the generated app chrome heading.
+- Site root metadata fields render as a vertical form.
+- Placement table reorder and action columns fit their icon controls.
+- Pages and Navigation browser smoke reports no page errors.
+
+Outcome:
+
+- `src/app.tsx` renders the active screen title as the generated app chrome `h1`.
+- `src/app/routes/home.tsx` no longer renders a duplicate body heading for generated screens.
+- `src/app/generated/collection.tsx` keeps compact context record editors as one-column forms.
+- `src/app/generated/table.tsx` uses `min-w-full table-auto` and icon-sized utility column classes for reorder/action cells.
+- `src/app.test.tsx` and `src/app/generated/table.test.tsx` cover the title, form, table layout, and utility column classes.
+
+Evidence:
+
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest affected rerun passed; final tail showed `2 passed (2)` and `101 passed (101)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 184 files.
+- Browser smoke `/site`: eval returned `chromeTitle` `Pages`, one `h1`, form class `grid min-w-0 gap-3 pt-1`, reorder/action widths `34`, and no utility overflow.
+- Browser smoke `/site/navigation`: eval returned `chromeTitle` `Navigation`, one `h1`, Header/Footer sections, stacked form classes, and reorder/action widths around `50`.
+- Browser smoke screenshot: `./tmp/site-layout-after.png`.
+- Browser smoke: `bun browser --session layout-after errors` returned no page errors.
+
+### WAF-13 root edit form polish
+
+Status: shipped 2026-05-08.
+
+Goal: make Site root editing feel like content authoring instead of field administration.
+
+Tasks:
+
+- Shipped: rendered Site root `label` fields as heading-style autosize inputs.
+- Shipped: suppressed the duplicate selected-root `h2` when the form itself renders the heading.
+- Shipped: kept compact markdown fields on the shared Plate markdown editor instead of textarea.
+- Shipped: removed `templateKey` from `blockRootDetail`.
+- Shipped: kept `templateKey` available in raw/debug block surfaces because it still drives header/footer chrome and content query blocks.
+
+Acceptance:
+
+- Pages root detail shows `Home` as an inline editable heading.
+- Pages root body uses the shared markdown editor.
+- Pages root detail does not show `Template key`.
+- Header/Footer root details follow the same heading/body behavior.
+- Template key policy is recorded.
+
+Outcome:
+
+- `src/app/generated/record-field-editor.tsx` supports heading presentation for text fields.
+- `src/app/generated/collection.tsx` uses heading presentation for label/title/name context fields and rich markdown for compact markdown context fields.
+- `lib/ui/src/markdown-floating-toolbar.tsx` keeps the shared markdown floating toolbar content-sized inside generated `Field` containers.
+- `schema/apps/site/schema.json` removes `templateKey` from `blockRootDetail`.
+- `src/app.test.tsx` and `src/client/views.test.ts` cover the root form and view-model contract.
+
+Evidence:
+
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: latest affected rerun passed; final tail showed `src/app.test.tsx` `99 passed (99)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 184 files.
+- Browser smoke `/site` after source schema and seed reset: `Home detail` returned heading value `Home`, heading class `h-9 w-full text-2xl font-semibold`, markdown Body editor present, no textareas, and no Template key.
+- Browser smoke `/site/navigation`: Header and Footer details returned heading values `Header` and `Footer`, markdown Body editor present, no textareas, and no Template key.
+- Browser smoke `/site`: selecting body text returned markdown toolbar width `444` at 1600px and 3200px viewport widths, with no page errors.
+- Browser smoke screenshot: `./tmp/site-edit-form-after.png`.
+- Browser smoke: `bun browser --session edit-form errors` returned no page errors.
+
+### WAF-14 single-query Navigation roots
+
+Status: shipped 2026-05-08.
+
+Goal: implement the Navigation page from one root query over Header and Footer blocks.
+
+Tasks:
+
+- Shipped: added `or` query expressions to the portable query runtime.
+- Shipped: reused `listDetail` collection context presentation for the combined Navigation roots.
+- Shipped: changed Site Header and Footer root records to `block.type = header` and `block.type = footer`.
+- Shipped: replaced separate Header/Footer Navigation sections with `navigationCompositionHome`.
+- Shipped: kept public header/footer rendering compatible with old `templateKey` records.
+
+Acceptance:
+
+- Navigation root query selects header/footer block types.
+- `/site/navigation` renders one Navigation collection.
+- `/site/navigation` shows Header and Footer root details.
+- Header and Footer each show placements and `Add placement`.
+- Public `/pages/home` header/footer rendering stays unchanged.
+
+Outcome:
+
+- `src/shared/query.ts` supports `or` parse, validation, context collection, capability checks, and local evaluation.
+- `src/app/generated/collection.tsx` renders the combined Navigation roots through the existing list/detail path.
+- `schema/apps/site/schema.json` defines `blockNavigationRoots` and `navigationCompositionHome`.
+- `schema/apps/site/seed-records.json` stores Header/Footer roots as `header` and `footer` block types.
+- `src/app/site-renderer/renderer.tsx` renders header/footer block types directly.
+
+Evidence:
+
+- `./tmp/devstate.json`: `devStatus` ready, `testStatus` pass, `checkStatus` pass.
+- `./tmp/test.txt`: `33 passed (33)`, `555 passed (555)`.
+- `./tmp/check.txt`: formatting pass; lint/type check pass for 184 files.
+- Browser smoke reset source schema and seed: `/api/site/reset/schema` and `/api/site/reset/seed` returned `200`.
+- Browser smoke `/site/navigation`: eval returned `h1` `Navigation`, one `Navigation list detail` region, `Navigation records`, selected `Header detail`, Header/Footer list records, one selected-root `Add placement` button, and no alerts.
+- Browser smoke `/pages/home`: eval returned populated `header` and `footer` text with no alerts.
+- Browser smoke: `bun browser --session nav-single errors` returned no page errors.
 
 ## Dependencies
 
@@ -677,8 +938,15 @@ Evidence:
 - `doc/current.md`: update sync status location after WAF-04 ships.
 - `doc/current.md`: update Site screens to Pages and Navigation after WAF-05 ships.
 - `doc/current.md`: note Site list/detail uses the wide generated workspace after WAF-06 ships.
-- `doc/current.md`: note singleton context behavior after WAF-07 ships.
-- WAF-08: no new global doc facts; docs/steward pass can promote the shipped WAF-02 through WAF-07 facts above.
+- WAF-07 singleton promotion note is superseded by WAF-14; do not promote it as current Navigation behavior.
+- WAF-08: no new global doc facts; doc/steward pass can promote the shipped WAF-02 through WAF-07 facts above.
+- `doc/current.md`: dev profile workbench toolbar sits at the bottom, uses dark chrome, and exposes Schema/Reset directly after WAF-09 ships.
+- `doc/current.md`: dev profile workbench toolbar exposes active-world snapshot Export and Restore; Restore imports immediately after JSON file selection after WAF-10 ships.
+- `doc/current.md`: generated app sidebar shows the app title once and the generated app header shows the active screen title after WAF-11 ships.
+- `doc/current.md`: generated app chrome owns the active screen `h1`, generated screen bodies do not repeat it, Site root metadata forms stack vertically, and placement table utility columns stay icon-sized after WAF-12 ships.
+- `doc/current.md`: Site root edit forms render label as an editable heading, body on the shared markdown editor, and hide template key from Pages/Header/Footer root forms after WAF-13 ships.
+- `doc/current.md`: shared markdown floating toolbar stays content-sized in generated field containers after WAF-13 follow-up ships.
+- `doc/current.md`: Site Navigation uses one `blockNavigationRoots` query over header/footer block types with list/detail rendering after WAF-14 ships.
 - `doc/roadmap.md`: update release target if this PRD is pulled into first-release scope.
 
 ## Status notes
@@ -689,5 +957,13 @@ Evidence:
 - 2026-05-07: WAF-04 shipped. Decision WAF-D4 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/routes/schema.tsx`, and `src/app/routes/status-line.tsx`: generated page content no longer renders inline sync diagnostics, workbench/header chrome owns a small sync details control, and app-profile generated chrome keeps the same status access. Next ready chunk is WAF-05.
 - 2026-05-07: WAF-05 shipped. Decision WAF-D5/WAF-D6 implemented in `schema/apps/site/schema.json`: Site top-level screens are Pages and Navigation, Header/Footer are Navigation stack sections, and `/site/header` plus `/site/footer` are no longer screen routes. Next ready chunk is WAF-06.
 - 2026-05-07: WAF-06 shipped. Decision WAF-D7 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/generated/collection.tsx`, and `src/app/generated/table.tsx`: generated workspaces use a wide app content area, list/detail gives most desktop width to detail/table content, compact context fields stay above related placements, and tables keep natural column width inside their scroller. Next ready chunk is WAF-07.
-- 2026-05-07: WAF-07 shipped. Decision WAF-D8/WAF-D9 implemented in `src/client/views.ts`, `src/app/generated/collection.tsx`, and `schema/apps/site/schema.json`: Site Pages uses a `Pages` context selector label, Header/Footer singleton contexts render detail directly with no one-item selector, and placement actions use `Add placement`. Next ready chunk is WAF-08.
-- 2026-05-07: WAF-08 shipped. Browser smoke covered Site Pages, Site Navigation, workbench Tools, Reset confirmation, and sync details with no page errors. PRD 18 is complete and ready for docs/steward promotion.
+- 2026-05-07: WAF-07 shipped. Decision WAF-D8/WAF-D9 implemented in `src/client/views.ts`, `src/app/generated/collection.tsx`, and `schema/apps/site/schema.json`: Site Pages uses a `Pages` context selector label and placement actions use `Add placement`. WAF-14 later supersedes the Header/Footer singleton behavior.
+- 2026-05-07: WAF-08 shipped. Browser smoke covered Site Pages, Site Navigation, workbench Tools, Reset confirmation, and sync details with no page errors. PRD 18 is complete and ready for doc/steward promotion.
+- 2026-05-08: WAF-09 shipped. Decision WAF-D11 implemented in `src/app.tsx`, `src/app/routes/status-line.tsx`, `src/main.tsx`, and `src/style.css`: dev workbench chrome is a dark bottom toolbar, app switching sits left, Schema/Reset are direct actions, Tools overlay is removed, and the generated app sidebar clears the toolbar.
+- 2026-05-08: WAF-09 follow-up fixed inherited dark-toolbar foreground leaking into generated app content. `src/app.tsx` now scopes dark text to toolbar chrome and sets workbench content to `text-foreground`; browser smoke on `/tasks` confirmed app headings render with foreground text again.
+- 2026-05-08: WAF-10 shipped. Decision WAF-D12 implemented in `src/app/dev-actions.tsx`, `src/app.tsx`, and `src/app/routes/schema.tsx`: snapshot Export/Restore moved to the bottom toolbar, Schema screen snapshot controls were removed, and Restore now uses a file input that imports immediately after JSON file selection.
+- 2026-05-08: WAF-11 shipped. Decision WAF-D13 implemented in `src/app.tsx`: generated app sidebars show the app/schema name once as the sidebar title, remove the repeated nav group label, and show the active screen title in generated app header chrome.
+- 2026-05-08: WAF-12 shipped. Decisions WAF-D14/WAF-D15/WAF-D16 implemented in `src/app.tsx`, `src/app/routes/home.tsx`, `src/app/generated/collection.tsx`, and `src/app/generated/table.tsx`: generated app chrome is the single active screen heading, Site root metadata forms stack vertically, and placement table reorder/action columns are icon-sized while data columns use remaining table width.
+- 2026-05-08: WAF-13 shipped. Decisions WAF-D17/WAF-D18/WAF-D19 implemented in `src/app/generated/record-field-editor.tsx`, `src/app/generated/collection.tsx`, and `schema/apps/site/schema.json`: Site root labels render as editable headings, root body fields use the shared markdown editor, and `templateKey` is hidden from Pages/Header/Footer root authoring while remaining available in raw/debug block surfaces for current runtime uses.
+- 2026-05-08: WAF-13 follow-up fixed the shared markdown floating toolbar stretching across the generated app frame when mounted inside a vertical `Field`; `lib/ui/src/markdown-floating-toolbar.tsx` now forces intrinsic toolbar width and browser smoke measured `444px` width on `/site`.
+- 2026-05-08: WAF-14 shipped. Decision WAF-D20 implemented in `src/shared/query.ts`, `schema/apps/site/schema.json`, and `schema/apps/site/seed-records.json`: Site Navigation now uses one `blockNavigationRoots` query over Header/Footer block types and renders those roots through the existing list/detail editor on `/site/navigation`.

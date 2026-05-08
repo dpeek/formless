@@ -6,23 +6,23 @@ Repo docs are the project memory. Keep them current and source-faithful.
 
 ### Issue tracker
 
-Issues use GitHub Issues for `dpeek/formless`; PRD workstreams stay in `prd/*.md`. See `docs/agents/issue-tracker.md`.
+Issues use GitHub Issues for `dpeek/formless`; PRD workstreams stay in `prd/*.md`. See `doc/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+Use the default five-label triage vocabulary. See `doc/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context repo: read root `CONTEXT.md` and `docs/adr/` when a skill needs domain memory. See `docs/agents/domain.md`.
+Single-context repo: read root `CONTEXT.md` and `doc/adr/` when a skill needs domain memory. See `doc/agents/domain.md`.
 
 ## Work
 
-1. Run `bun start` and read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`
+1. Run `devstate start` and read `./.devstate/status.md`
 1. Read `doc/overview.md`, `doc/current.md` and `doc/roadmap.md`
 1. Ship the next ready chunk from the assigned PRD.
 1. Update only the assigned PRD with status, decisions, blockers, and promotion notes.
-1. Read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt` and fix issues
+1. Read `./devstate/status.md` and fix issues
 1. Test app with `bun browser ...` if app behavior changed
 1. End turn with changed files, checks, and PRD status.
 
@@ -36,7 +36,7 @@ Single-context repo: read root `CONTEXT.md` and `docs/adr/` when a skill needs d
 - A PRD owns its decisions, chunks, blockers, dependencies, acceptance checks, and status.
 - A normal PRD agent does not edit `doc/current.md` or `doc/roadmap.md`.
 - Put shipped facts for global docs under the PRD's `Promote after ship` section.
-- Update `doc/current.md` and `doc/roadmap.md` only in a docs/steward pass or when the user asks.
+- Update `doc/current.md` and `doc/roadmap.md` only in a doc/steward pass or when the user asks.
 
 ## Parallel Work
 
@@ -50,18 +50,16 @@ Single-context repo: read root `CONTEXT.md` and `docs/adr/` when a skill needs d
 When user says `done`:
 
 - Update assigned PRD
-- Run `bun stop` and fix issues.
+- Run `devstate stop` and fix issues.
 - Commit.
 - Rebase on main and merge.
 
 ## Rules
 
-- Bun scripts only.
-- `bun start` owns dev, test, and check output.
-- Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually during normal agent work.
-- Use `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt` as check evidence.
-- Keep stdout logs in `./tmp/*.txt`.
-- Do not use `./tmp/*.pid`; process IDs live in `./tmp/agent-dev.json`.
+- Bun scripts only
+- `devstate` owns dev, test, and check output
+- Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually during normal agent work
+- Use `./.devstate/status.md` as check evidence.
 - Preserve user changes.
 - Keep data model flat; compose in view/query layer.
 - Claims in docs must point to code, schema, tests, or shipped behavior.

@@ -12,11 +12,11 @@ The first slice should:
 
 - wait for PRD 14 table actions and ordering to ship;
 - add repo-local agent memory for engineering skills;
-- promote shipped PRD facts into current docs in one docs/steward pass;
+- promote shipped PRD facts into current docs in one doc/steward pass;
 - deepen generated table code after TAO adds row actions, edit views, ordering, and drag reorder;
 - deepen authority validation outside the route handler;
 - add reusable test builders for schema, generated UI, authority, and site editor flows;
-- keep runtime behavior unchanged except where docs/tooling behavior is the work.
+- keep runtime behavior unchanged except where doc/tooling behavior is the work.
 
 This PRD is about post-TAO technical debt and agent throughput. It is not about new product behavior.
 
@@ -27,7 +27,7 @@ PRD 14 is the right next feature stream, but it will add pressure to already bro
 Current friction:
 
 - Agent memory is split across `AGENTS.md`, `doc/current.md`, `doc/roadmap.md`, and many PRDs.
-- There is no `CONTEXT.md`, no `docs/agents/`, and no `docs/adr/`.
+- There is no `CONTEXT.md`, no `doc/agents/`, and no `doc/adr/`.
 - Shipped PRD promote notes are not all reflected in global docs.
 - Generated table behavior will span schema parsing, view-model selection, rendering, edit dialogs, row actions, ordering, and drag behavior after TAO.
 - Authority route code still owns mutation validation, record value validation, reference checks, and schema compatibility checks.
@@ -66,10 +66,10 @@ Likely changed files:
 
 - `AGENTS.md`.
 - `CONTEXT.md`.
-- `docs/agents/issue-tracker.md`.
-- `docs/agents/triage-labels.md`.
-- `docs/agents/domain.md`.
-- `docs/adr/` only if a real decision needs recording.
+- `doc/agents/issue-tracker.md`.
+- `doc/agents/triage-labels.md`.
+- `doc/agents/domain.md`.
+- `doc/adr/` only if a real decision needs recording.
 - `doc/current.md`.
 - `doc/roadmap.md` only if release scope wording is stale.
 - `src/shared/schema-views.ts`.
@@ -93,7 +93,7 @@ Likely changed files:
 - Start after PRD 14 is shipped.
 - Do not edit active TAO implementation files while PRD 14 is still in flight.
 - Coordinate with PRD 15 if snapshot restore work is touching authority validation or storage restore paths.
-- Prefer docs/steward changes before code refactors.
+- Prefer doc/steward changes before code refactors.
 - Keep behavior-preserving refactors separate from behavior changes.
 
 ### Agent memory behavior
@@ -103,7 +103,7 @@ Likely changed files:
 - Record triage label vocabulary for this repo.
 - Record domain-doc layout for this repo.
 - Add a single `CONTEXT.md` unless a multi-context repo shape becomes real.
-- Add `docs/adr/` only as the home for future decisions; do not invent ADRs without a decision.
+- Add `doc/adr/` only as the home for future decisions; do not invent ADRs without a decision.
 - Preserve existing `AGENTS.md` rules.
 - Promote shipped facts from completed PRDs into `doc/current.md` in current-doc style.
 - Keep `doc/current.md` short, concrete, and source-faithful.
@@ -150,20 +150,20 @@ Likely changed files:
 
 ## Decisions
 
-| ID      | Decision                                                            | Reason                                                                  | Evidence                                            |
-| ------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
-| AEC-D1  | Ship after PRD 14.                                                  | TAO will define the table behavior this PRD should clean up.            | `prd/14-table-actions-and-ordering.md`              |
-| AEC-D2  | Treat this as a docs/steward plus refactor PRD.                     | It needs global doc updates and behavior-preserving module cleanup.     | `AGENTS.md`, `doc/current.md`, `doc/roadmap.md`     |
-| AEC-D3  | Add single-context agent memory first.                              | Formless is one app/runtime repo today, not a multi-context monorepo.   | repo layout, `doc/overview.md`                      |
-| AEC-D4  | Keep PRDs as workstream owners.                                     | Existing repo memory model already works for shipped chunks.            | `AGENTS.md`, `prd/*.md`                             |
-| AEC-D5  | Deepen table modules after TAO instead of during TAO.               | TAO should ship behavior; this PRD should improve locality afterwards.  | `src/shared/schema-views.ts`, `src/client/views.ts` |
-| AEC-D6  | Keep collection/table roles separate.                               | Collections own scope/query/context; tables own row interaction.        | `prd/14-table-actions-and-ordering.md`              |
-| AEC-D7  | Deepen authority validation without changing write shape.           | Validation locality can improve without new API or storage behavior.    | `src/worker/authority.ts`, `src/worker/storage.ts`  |
-| AEC-D8  | Extract test helpers only when they remove repeated setup.          | Helper indirection should buy real leverage and locality.               | `src/app.test.tsx`, `src/shared/schema.test.ts`     |
-| AEC-D9  | Do not add ADRs for obvious or temporary preferences.               | ADRs should record decisions future agents would otherwise re-litigate. | missing `docs/adr/`, skill setup rules              |
-| AEC-D10 | Preserve current runtime behavior unless a chunk says docs/tooling. | This PRD is technical debt cleanup, not feature scope.                  | `doc/roadmap.md`                                    |
-| AEC-D11 | Use GitHub Issues for issue-tracker skill config.                   | Repo remote is GitHub; PRD workstreams remain local markdown docs.      | `docs/agents/issue-tracker.md`, `prd/*.md`          |
-| AEC-D12 | Use one root context and default triage labels.                     | Repo is one runtime context; no existing label override was present.    | `CONTEXT.md`, `docs/agents/triage-labels.md`        |
+| ID      | Decision                                                           | Reason                                                                  | Evidence                                            |
+| ------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------------- |
+| AEC-D1  | Ship after PRD 14.                                                 | TAO will define the table behavior this PRD should clean up.            | `prd/14-table-actions-and-ordering.md`              |
+| AEC-D2  | Treat this as a doc/steward plus refactor PRD.                     | It needs global doc updates and behavior-preserving module cleanup.     | `AGENTS.md`, `doc/current.md`, `doc/roadmap.md`     |
+| AEC-D3  | Add single-context agent memory first.                             | Formless is one app/runtime repo today, not a multi-context monorepo.   | repo layout, `doc/overview.md`                      |
+| AEC-D4  | Keep PRDs as workstream owners.                                    | Existing repo memory model already works for shipped chunks.            | `AGENTS.md`, `prd/*.md`                             |
+| AEC-D5  | Deepen table modules after TAO instead of during TAO.              | TAO should ship behavior; this PRD should improve locality afterwards.  | `src/shared/schema-views.ts`, `src/client/views.ts` |
+| AEC-D6  | Keep collection/table roles separate.                              | Collections own scope/query/context; tables own row interaction.        | `prd/14-table-actions-and-ordering.md`              |
+| AEC-D7  | Deepen authority validation without changing write shape.          | Validation locality can improve without new API or storage behavior.    | `src/worker/authority.ts`, `src/worker/storage.ts`  |
+| AEC-D8  | Extract test helpers only when they remove repeated setup.         | Helper indirection should buy real leverage and locality.               | `src/app.test.tsx`, `src/shared/schema.test.ts`     |
+| AEC-D9  | Do not add ADRs for obvious or temporary preferences.              | ADRs should record decisions future agents would otherwise re-litigate. | missing `doc/adr/`, skill setup rules               |
+| AEC-D10 | Preserve current runtime behavior unless a chunk says doc/tooling. | This PRD is technical debt cleanup, not feature scope.                  | `doc/roadmap.md`                                    |
+| AEC-D11 | Use GitHub Issues for issue-tracker skill config.                  | Repo remote is GitHub; PRD workstreams remain local markdown docs.      | `doc/agents/issue-tracker.md`, `prd/*.md`           |
+| AEC-D12 | Use one root context and default triage labels.                    | Repo is one runtime context; no existing label override was present.    | `CONTEXT.md`, `doc/agents/triage-labels.md`         |
 
 ## Chunks
 
@@ -190,17 +190,17 @@ Tasks:
 - Make PRD 14 the upstream dependency.
 - Preserve existing PRD 15 snapshot work.
 - Define chunks that can ship independently.
-- Define promote notes for docs/steward work.
+- Define promote notes for doc/steward work.
 
 Acceptance:
 
 - PRD exists as a numbered workstream after existing PRDs.
-- PRD says no runtime behavior changes are intended outside docs/tooling.
+- PRD says no runtime behavior changes are intended outside doc/tooling.
 - PRD records coordination needs with PRD 14 and PRD 15.
 
 Evidence to record:
 
-- `./tmp/agent-dev.json`.
+- `./tmp/devstate.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
 
@@ -213,11 +213,11 @@ Goal: make repo memory easier for agents to consume.
 Tasks:
 
 - Add an `## Agent skills` block to `AGENTS.md`.
-- Add `docs/agents/issue-tracker.md`.
-- Add `docs/agents/triage-labels.md`.
-- Add `docs/agents/domain.md`.
+- Add `doc/agents/issue-tracker.md`.
+- Add `doc/agents/triage-labels.md`.
+- Add `doc/agents/domain.md`.
 - Add root `CONTEXT.md`.
-- Add `docs/adr/` with a minimal README if no ADR exists yet.
+- Add `doc/adr/` with a minimal README if no ADR exists yet.
 - Promote shipped PRD facts into `doc/current.md`.
 - Touch `doc/roadmap.md` only for release-scope drift.
 
@@ -231,7 +231,7 @@ Acceptance:
 
 Evidence to record:
 
-- `./tmp/agent-dev.json`.
+- `./tmp/devstate.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
 
@@ -239,11 +239,11 @@ Shipped:
 
 - Added `AGENTS.md` Agent skills block.
 - Added `CONTEXT.md`.
-- Added `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/domain.md`.
-- Added `docs/adr/README.md`.
+- Added `doc/agents/issue-tracker.md`, `doc/agents/triage-labels.md`, and `doc/agents/domain.md`.
+- Added `doc/adr/README.md`.
 - Promoted shipped relationship, action, read-model footer, field editor, Site editor, and table action/ordering facts into `doc/current.md`.
 - Aligned `doc/roadmap.md` generated-table release scope with shipped table row actions, edit dialogs, ordering controls, and drag handles.
-- Browser smoke not run; docs/tooling only, no app behavior changed.
+- Browser smoke not run; doc/tooling only, no app behavior changed.
 
 ### AEC-03 post-TAO generated table deepening
 
@@ -275,7 +275,7 @@ Evidence to record:
 - View model tests.
 - Generated table/app tests.
 - Browser smoke only if rendered behavior changes.
-- `./tmp/agent-dev.json`.
+- `./tmp/devstate.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
 
@@ -319,7 +319,7 @@ Evidence to record:
 
 - Authority tests.
 - Storage tests if storage-facing validation helpers move.
-- `./tmp/agent-dev.json`.
+- `./tmp/devstate.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
 
@@ -361,7 +361,7 @@ Evidence to record:
 - View model tests.
 - App tests.
 - Authority tests.
-- `./tmp/agent-dev.json`.
+- `./tmp/devstate.json`.
 - `./tmp/test.txt`.
 - `./tmp/check.txt`.
 
@@ -383,7 +383,7 @@ Goal: verify and close the cleanup stream.
 
 Tasks:
 
-- Read `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
+- Read `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`.
 - Run browser smoke only if rendered app behavior changed.
 - Update this PRD status and chunk table.
 - Record blockers.
@@ -391,17 +391,17 @@ Tasks:
 
 Acceptance:
 
-- `./tmp/agent-dev.json` shows dev ready, tests pass, and checks pass.
+- `./tmp/devstate.json` shows dev ready, tests pass, and checks pass.
 - `./tmp/test.txt` shows passing tests after `bun start`.
 - `./tmp/check.txt` shows passing checks after `bun start`.
 - Browser smoke evidence exists if app behavior changed.
 - PRD status is current.
-- Promote notes are ready for docs/steward follow-up if any remain.
+- Promote notes are ready for doc/steward follow-up if any remain.
 
 Shipped:
 
 - Fixed closeout check failure by typing `src/test/authority-write.ts` against the Miniflare worker harness fetch shape.
-- Verified `./tmp/agent-dev.json`, `./tmp/test.txt`, and `./tmp/check.txt` after `bun start`.
+- Verified `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` after `bun start`.
 - Recorded final PRD status, evidence, blocker state, and promote notes.
 - Browser smoke not run; only test helper typing, formatting, and PRD closeout changed.
 
@@ -433,7 +433,7 @@ Shipped:
 | ------------------------------------ | ---------- | ----------------------------------------------------------------------------------- |
 | PRD 14 table actions and ordering    | upstream   | Defines table action, edit, ordering, and drag behavior to deepen after ship.       |
 | PRD 15 store snapshot export/restore | adjacent   | May touch authority/storage validation paths; coordinate before AEC-04.             |
-| Completed PRDs 05-13                 | upstream   | Their promote notes are source material for AEC-02 docs/steward work.               |
+| Completed PRDs 05-13                 | upstream   | Their promote notes are source material for AEC-02 doc/steward work.                |
 | Future feature PRDs                  | downstream | Should benefit from agent memory, table locality, validation locality, and helpers. |
 
 ## Parallel shipping
@@ -470,7 +470,7 @@ Recommended order:
 
 - Mark exactly one AEC chunk as `doing` when implementation starts.
 - Do not mark a chunk `doing` while PRD 14 is active.
-- Update only this PRD during normal AEC chunk work unless the chunk is explicitly docs/steward.
+- Update only this PRD during normal AEC chunk work unless the chunk is explicitly doc/steward.
 - Preserve user changes.
 - Keep behavior claims backed by code, schema, tests, docs, or shipped behavior.
 - Run `bun browser` only if rendered app behavior changes.
@@ -484,7 +484,7 @@ AEC-01:
 AEC-02:
 
 - Promoted 2026-05-07.
-- `doc/current.md` notes `CONTEXT.md`, `docs/agents/`, and `docs/adr/` as repo memory.
+- `doc/current.md` notes `CONTEXT.md`, `doc/agents/`, and `doc/adr/` as repo memory.
 - `doc/current.md` promotes missing shipped facts from completed PRDs.
 - `doc/roadmap.md` keeps release-scope wording aligned with shipped table action and ordering behavior.
 
@@ -492,52 +492,52 @@ AEC-03:
 
 - `doc/current.md`: note post-TAO table parser/model/renderer module locations if extracted.
 - `doc/current.md`: note generated table behavior remains table-owned.
-- Ready for docs/steward promotion: `src/shared/schema-table-views.ts`, `src/client/table-model.ts`, `src/app/generated/table-actions.tsx`, and `src/app/generated/table-ordering-ui.ts`.
+- Ready for doc/steward promotion: `src/shared/schema-table-views.ts`, `src/client/table-model.ts`, `src/app/generated/table-actions.tsx`, and `src/app/generated/table-ordering-ui.ts`.
 
 AEC-04:
 
 - `doc/current.md`: note authority validation module location if extracted.
 - `doc/current.md`: note authority route keeps HTTP shape while validation lives behind a deeper module.
-- Ready for docs/steward promotion: `src/worker/authority-validation.ts` owns mutation, record value, reference, and schema compatibility validation.
+- Ready for doc/steward promotion: `src/worker/authority-validation.ts` owns mutation, record value, reference, and schema compatibility validation.
 
 AEC-05:
 
 - `doc/current.md`: note shared test helper locations only if they become important agent anchors.
-- Ready for docs/steward promotion: `src/test/schema-builders.ts`, `src/test/protocol-builders.ts`, `src/test/generated-table.tsx`, `src/test/site-editor.ts`, and `src/test/authority-write.ts`.
+- Ready for doc/steward promotion: `src/test/schema-builders.ts`, `src/test/protocol-builders.ts`, `src/test/generated-table.tsx`, `src/test/site-editor.ts`, and `src/test/authority-write.ts`.
 
 AEC-06:
 
-- PRD 16 shipped and is ready for docs/steward promotion.
+- PRD 16 shipped and is ready for doc/steward promotion.
 - Remaining global-doc promote candidates are the AEC-03, AEC-04, and AEC-05 module/test-helper anchors listed above.
 
 ## Evidence
 
 - 2026-05-07 AEC-01: PRD drafted from architecture review candidates and checked against `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, `prd/14-table-actions-and-ordering.md`, and existing untracked `prd/15-store-snapshot-export-restore.md`.
 - 2026-05-07 AEC-01: PRD 14 is shipped in `prd/14-table-actions-and-ordering.md`; AEC-B1 closed and AEC-02 is the next chunk.
-- 2026-05-07 AEC-01: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-01: `./tmp/devstate.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-01: `./tmp/test.txt` shows 29 files and 506 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
-- 2026-05-07 AEC-02: `AGENTS.md`, `CONTEXT.md`, `docs/agents/`, and `docs/adr/README.md` added repo-local agent memory.
+- 2026-05-07 AEC-02: `AGENTS.md`, `CONTEXT.md`, `doc/agents/`, and `doc/adr/README.md` added repo-local agent memory.
 - 2026-05-07 AEC-02: `doc/current.md` promoted missing shipped facts from completed PRDs; `doc/roadmap.md` received only generated-table release-scope alignment.
-- 2026-05-07 AEC-02: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-02: `./tmp/devstate.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-02: `./tmp/test.txt` shows 29 files and 506 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
 - 2026-05-07 AEC-02: browser smoke not run because no app behavior changed.
 - 2026-05-07 AEC-03: Extracted table parser, table model, table action, and table ordering modules while keeping table schema and rendered behavior unchanged.
 - 2026-05-07 AEC-03: Added direct parser/model interface coverage in `src/shared/schema-table-views.test.ts` and `src/client/table-model.test.ts`; existing generated table/app tests still pass.
-- 2026-05-07 AEC-03: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-03: `./tmp/devstate.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-03: `./tmp/test.txt` shows 31 files and 509 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed.
 - 2026-05-07 AEC-03: browser smoke not run because this was a behavior-preserving refactor.
 - 2026-05-07 AEC-04: PRD 15 coordination checked `prd/15-store-snapshot-export-restore.md`; it remains planned and no snapshot restore validation code was present before authority validation edits.
 - 2026-05-07 AEC-04: Extracted `src/worker/authority-validation.ts` from `src/worker/authority.ts` while preserving route parsing, HTTP status mapping, committed write notification, and existing mutation/schema/reference validation messages.
-- 2026-05-07 AEC-04: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-04: `./tmp/devstate.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-04: `./tmp/test.txt` shows 31 files and 509 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed across 175 files.
 - 2026-05-07 AEC-04: browser smoke not run because this was a worker validation refactor with no intended app behavior change.
 - 2026-05-07 AEC-05: Added shared schema, protocol bootstrap, generated table, Site editor, and authority write test helpers under `src/test/`.
 - 2026-05-07 AEC-05: Updated schema parser, table model, generated table, app, and authority tests to use the helpers where setup was repeated.
-- 2026-05-07 AEC-05: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-05: `./tmp/devstate.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-05: `./tmp/test.txt` shows touched watcher reruns passing, including authority, schema parser, app, and generated table coverage; `./tmp/check.txt` shows formatting, lint, and type checks passed across 175 files.
 - 2026-05-07 AEC-05: browser smoke not run because only test helpers and tests changed.
 - 2026-05-07 AEC-06: Initial closeout `bun start` found a TypeScript mismatch between `createAuthorityWriteHelpers` and the Miniflare harness fetch type; fixed in `src/test/authority-write.ts`.
-- 2026-05-07 AEC-06: `./tmp/agent-dev.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
+- 2026-05-07 AEC-06: `./tmp/devstate.json` shows `devStatus: ready`, `testStatus: pass`, `checkStatus: pass`, and dev URL `https://16-post-tao-architecture-efficiency.formless.local`.
 - 2026-05-07 AEC-06: `./tmp/test.txt` shows 31 files and 510 tests passed; `./tmp/check.txt` shows formatting, lint, and type checks passed across 180 files.
 - 2026-05-07 AEC-06: browser smoke not run because no rendered app behavior changed.
 
@@ -547,11 +547,11 @@ AEC-06:
 - User direction: ship after TAO.
 - Existing `prd/15-store-snapshot-export-restore.md` was present and preserved; this PRD uses number 16.
 - AEC-01 shipped 2026-05-07 after PRD 14 was marked shipped.
-- AEC-02 shipped 2026-05-07 as a docs/steward chunk.
+- AEC-02 shipped 2026-05-07 as a doc/steward chunk.
 - AEC-03 shipped 2026-05-07 as a post-TAO table parser/model/renderer deepening chunk.
 - AEC-04 shipped 2026-05-07 as an authority validation module extraction.
 - AEC-05 shipped 2026-05-07 as a test helper deepening chunk.
 - AEC-06 shipped 2026-05-07 as PRD closeout.
 - Next chunk: none; PRD 16 is complete.
-- Main risk: none for this PRD; downstream docs/steward work should promote the listed anchors source-faithfully.
+- Main risk: none for this PRD; downstream doc/steward work should promote the listed anchors source-faithfully.
 - Current blocker: none.

@@ -42,5 +42,5 @@ Formless is a schema-as-data app runtime.
 - First-release target: `doc/roadmap.md`.
 - Workstream plans and status: `prd/*.md`.
 - Agent instructions: `AGENTS.md`.
-- Agent skill config: `docs/agents/`.
-- ADR home: `docs/adr/`.
+- Agent skill config: `doc/agents/`.
+- ADR home: `doc/adr/`.

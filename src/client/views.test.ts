@@ -1024,25 +1024,22 @@ describe("home view model collections", () => {
 
     expect(models.map((model) => model.viewName)).toEqual([
       "pageCompositionHome",
-      "headerCompositionHome",
-      "footerCompositionHome",
+      "navigationCompositionHome",
     ]);
-    expect(models.map((model) => model.label)).toEqual(["Pages", "Header", "Footer"]);
-    expect(models.map((model) => model.navigation.primary)).toEqual([true, true, true]);
+    expect(models.map((model) => model.label)).toEqual(["Pages", "Navigation"]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([true, true]);
     expect(models.map((model) => model.context?.queryName)).toEqual([
       "blockPages",
-      "blockHeaderRoot",
-      "blockFooterRoot",
+      "blockNavigationRoots",
     ]);
-    expect(models.map((model) => model.context?.label)).toEqual(["Pages", "Header", "Footer"]);
+    expect(models.map((model) => model.context?.label)).toEqual(["Pages", "Navigation"]);
     expect(models.map((model) => model.context?.presentation)).toEqual([
-      "listDetail",
       "listDetail",
       "listDetail",
     ]);
     expect(
       models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
-    ).toEqual(["blockPlacementTable", "blockPlacementTable", "blockPlacementTable"]);
+    ).toEqual(["blockPlacementTable", "blockPlacementTable"]);
     expect(requiredCollectionModel(siteSourceSchema, "blockHome").navigation.primary).toBe(false);
     expect(
       requiredCollectionModel(siteSourceSchema, "blockCompositionHome").navigation.primary,
@@ -1072,7 +1069,7 @@ describe("home view model collections", () => {
           },
           createAction: null,
           itemViewName: "blockRootDetail",
-          recordFields: ["label", "body", "href", "templateKey"],
+          recordFields: ["label", "body", "href"],
         },
         queries: [
           {
@@ -1106,14 +1103,14 @@ describe("home view model collections", () => {
         ],
       },
       {
-        viewName: "headerCompositionHome",
-        label: "Header",
+        viewName: "navigationCompositionHome",
+        label: "Navigation",
         entityName: "blockPlacement",
         navigationPrimary: true,
         context: {
           name: "block",
           entityName: "block",
-          queryName: "blockHeaderRoot",
+          queryName: "blockNavigationRoots",
           labelField: "label",
           presentation: "listDetail",
           relatedCollection: {
@@ -1124,59 +1121,7 @@ describe("home view model collections", () => {
           },
           createAction: null,
           itemViewName: "blockRootDetail",
-          recordFields: ["label", "body", "href", "templateKey"],
-        },
-        queries: [
-          {
-            queryName: "placementsForSelectedBlock",
-            label: "Selected block",
-            count: "count",
-            expressionKind: "where",
-          },
-        ],
-        defaultQueryName: "placementsForSelectedBlock",
-        result: {
-          type: "table",
-          tableViewName: "blockPlacementTable",
-          columns: [
-            "orderingHandle",
-            "field:block",
-            "field:label",
-            "invokeAction:editChildBlock,ordering",
-          ],
-          footer: undefined,
-        },
-        actions: [
-          {
-            type: "create",
-            label: "Add placement",
-            entityName: "blockPlacement",
-            fields: ["block", "label"],
-            defaults: ["parent"],
-            enabled: true,
-          },
-        ],
-      },
-      {
-        viewName: "footerCompositionHome",
-        label: "Footer",
-        entityName: "blockPlacement",
-        navigationPrimary: true,
-        context: {
-          name: "block",
-          entityName: "block",
-          queryName: "blockFooterRoot",
-          labelField: "label",
-          presentation: "listDetail",
-          relatedCollection: {
-            relationshipName: "blockPlacements",
-            label: "Placements",
-            entityName: "blockPlacement",
-            referenceFieldName: "parent",
-          },
-          createAction: null,
-          itemViewName: "blockRootDetail",
-          recordFields: ["label", "body", "href", "templateKey"],
+          recordFields: ["label", "body", "href"],
         },
         queries: [
           {
@@ -1323,17 +1268,7 @@ describe("home view model collections", () => {
     ]);
     expect(
       contentModel?.result.type === "table" ? tableColumnEditors(contentModel.result.columns) : [],
-    ).toEqual([
-      "enum",
-      "text",
-      "markdown",
-      "href",
-      "slug",
-      "icon",
-      "color",
-      "number",
-      "number",
-    ]);
+    ).toEqual(["enum", "text", "markdown", "href", "slug", "icon", "color", "number", "number"]);
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "type",
       "label",
@@ -1547,15 +1482,9 @@ describe("home view model collections", () => {
         layoutType: "stack",
         sections: [
           {
-            id: "header",
-            label: "Header",
-            viewName: "headerCompositionHome",
-            entityName: "blockPlacement",
-          },
-          {
-            id: "footer",
-            label: "Footer",
-            viewName: "footerCompositionHome",
+            id: "navigation",
+            label: "Navigation",
+            viewName: "navigationCompositionHome",
             entityName: "blockPlacement",
           },
         ],
@@ -1573,7 +1502,7 @@ describe("home view model collections", () => {
     );
     expect(
       selectPrimaryScreenModels(schemaWithoutScreens).map((model) => model.screenName),
-    ).toEqual(["pageCompositionHome", "headerCompositionHome", "footerCompositionHome"]);
+    ).toEqual(["pageCompositionHome", "navigationCompositionHome"]);
     expect(screenModels.map(summarizeScreenModel)).toEqual([
       {
         screenName: "pageCompositionHome",
@@ -1590,29 +1519,15 @@ describe("home view model collections", () => {
         ],
       },
       {
-        screenName: "headerCompositionHome",
-        label: "Header",
+        screenName: "navigationCompositionHome",
+        label: "Navigation",
         primary: true,
         layoutType: "stack",
         sections: [
           {
-            id: "headerCompositionHome",
-            label: "Header",
-            viewName: "headerCompositionHome",
-            entityName: "blockPlacement",
-          },
-        ],
-      },
-      {
-        screenName: "footerCompositionHome",
-        label: "Footer",
-        primary: true,
-        layoutType: "stack",
-        sections: [
-          {
-            id: "footerCompositionHome",
-            label: "Footer",
-            viewName: "footerCompositionHome",
+            id: "navigationCompositionHome",
+            label: "Navigation",
+            viewName: "navigationCompositionHome",
             entityName: "blockPlacement",
           },
         ],

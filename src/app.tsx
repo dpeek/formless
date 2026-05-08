@@ -1,11 +1,10 @@
-import { type ReactNode, useMemo } from "react";
+import { type CSSProperties, type ReactNode, useMemo } from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -14,7 +13,11 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@formless/ui/sidebar";
-import { SourceResetControl } from "./app/dev-actions.tsx";
+import {
+  SnapshotExportControl,
+  SnapshotRestoreControl,
+  SourceResetControl,
+} from "./app/dev-actions.tsx";
 import { HomeRoute } from "./app/routes/home.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { SchemaRoute } from "./app/routes/schema.tsx";
@@ -107,25 +110,24 @@ function WorkbenchFrame({
   const routeApp = routeWorld?.app;
 
   return (
-    <div className="min-h-dvh bg-slate-100" data-frame="workbench">
-      <header className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link
-            className="text-sm font-semibold text-foreground"
-            href={runtimeProfile.defaultRedirect ?? "/"}
-          >
-            Formless
-          </Link>
-          <span className="rounded border border-border px-2 py-0.5 text-xs text-slate-600">
-            Dev profile
-          </span>
-          <span className="truncate text-xs text-slate-600">
-            {routeApp ? routeApp.label : "No active world"}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SyncStatusControl appKey={routeApp?.key} />
-          <nav aria-label="Workbench apps" className="flex flex-wrap items-center gap-1">
+    <div
+      className="min-h-dvh bg-slate-950"
+      data-frame="workbench"
+      style={{ "--workbench-toolbar-height": "3.5rem" } as CSSProperties}
+    >
+      <div
+        className="min-h-[calc(100dvh-var(--workbench-toolbar-height))] bg-background pb-[var(--workbench-toolbar-height)] text-foreground"
+        data-frame="workbench-content"
+      >
+        {children}
+      </div>
+      <footer
+        aria-label="Workbench toolbar"
+        className="fixed inset-x-0 bottom-0 z-[60] overflow-x-auto border-t border-slate-800 bg-slate-950 text-slate-100 shadow-lg shadow-black/25"
+        data-frame="workbench-toolbar"
+      >
+        <div className="flex h-14 min-w-max items-center justify-between gap-4 px-3 sm:px-4">
+          <nav aria-label="Workbench apps" className="flex items-center gap-1">
             {runtimeProfile.worlds.map(({ app, route }) => (
               <Link
                 className={workbenchAppLinkClassName(routeApp?.key === app.key)}
@@ -136,74 +138,59 @@ function WorkbenchFrame({
               </Link>
             ))}
           </nav>
-          <WorkbenchTools world={routeWorld} />
+          <div className="flex items-center gap-2">
+            <SyncStatusControl appKey={routeApp?.key} tone="dark" />
+            <WorkbenchToolbarActions world={routeWorld} />
+          </div>
         </div>
-      </header>
-      <div className="bg-background" data-frame="workbench-content">
-        {children}
-      </div>
+      </footer>
     </div>
   );
 }
 
-function WorkbenchTools({ world }: { world: RuntimeWorldMount | undefined }) {
+function WorkbenchToolbarActions({ world }: { world: RuntimeWorldMount | undefined }) {
   const app = world?.app;
 
   return (
-    <details className="group relative" data-workbench-tools>
-      <summary className="flex h-7 cursor-pointer list-none items-center gap-1 rounded border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted [&::-webkit-details-marker]:hidden">
-        <span>Tools</span>
-      </summary>
-      <div
-        aria-label="Workbench tools"
-        className="absolute right-0 z-40 mt-2 w-72 rounded border border-border bg-popover p-3 text-popover-foreground shadow-md"
-      >
-        <div className="space-y-1 border-b border-border pb-3">
-          <p className="text-xs font-medium">{app ? `${app.label} tools` : "Workbench tools"}</p>
-          <p className="text-xs text-slate-600">
-            {app ? (
-              <>
-                Active world <code>{app.key}</code>.
-              </>
-            ) : (
-              "No active world."
-            )}
-          </p>
-        </div>
+    <div aria-label="Workbench actions" className="flex items-center gap-2">
+      {world?.schemaRoute ? (
+        <Link className={workbenchActionLinkClassName()} href={world.schemaRoute}>
+          Schema
+        </Link>
+      ) : (
+        <span className={workbenchUnavailableActionClassName()}>Schema</span>
+      )}
 
-        <div className="mt-3 grid gap-3">
-          {world?.schemaRoute ? (
-            <Link
-              className="flex h-7 items-center gap-2 rounded border border-border px-2 text-xs font-medium hover:bg-muted"
-              href={world.schemaRoute}
-            >
-              <span>Schema</span>
-            </Link>
-          ) : (
-            <span className="flex h-7 items-center rounded border border-border px-2 text-xs text-slate-500">
-              Schema unavailable
-            </span>
-          )}
-
-          <div className="space-y-2">
-            <p className="text-xs text-slate-600">
-              Reset restores the source schema and source seed data for the active world.
-            </p>
-            {app ? (
-              <SourceResetControl buttonLabel="Reset" schemaKey={app.key} />
-            ) : (
-              <button
-                className="h-7 rounded border border-border px-2 text-xs text-slate-500"
-                disabled
-                type="button"
-              >
-                Reset
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </details>
+      {app ? (
+        <>
+          <SnapshotExportControl
+            buttonClassName={workbenchActionLinkClassName()}
+            className="[&>p]:sr-only"
+            messageClassName="sr-only"
+            schemaKey={app.key}
+          />
+          <SnapshotRestoreControl
+            buttonClassName={workbenchActionLinkClassName()}
+            className="[&>p]:sr-only"
+            messageClassName="sr-only"
+            schemaKey={app.key}
+          />
+          <SourceResetControl buttonLabel="Reset" className="[&>p]:sr-only" schemaKey={app.key} />
+        </>
+      ) : (
+        <>
+          <button className={workbenchUnavailableActionClassName()} disabled type="button">
+            Export
+          </button>
+          <button className={workbenchUnavailableActionClassName()} disabled type="button">
+            Restore
+          </button>
+          <button className={workbenchUnavailableActionClassName()} disabled type="button">
+            Reset
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -222,6 +209,12 @@ function GeneratedAppFrame({
   screenModels: HomeScreenModel[];
   showSyncStatus: boolean;
 }) {
+  const headerTitle = generatedAppHeaderTitle({
+    activeScreenPath,
+    routeAppLabel: routeApp?.label,
+    screenModels,
+  });
+
   return (
     <SidebarProvider data-frame="generated-app">
       <Sidebar collapsible="offcanvas">
@@ -242,7 +235,7 @@ function GeneratedAppFrame({
         <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger />
-            <span className="truncate text-sm font-medium">{routeApp?.label ?? "Formless"}</span>
+            <h1 className="truncate text-sm font-medium">{headerTitle}</h1>
           </div>
           {showSyncStatus ? <SyncStatusControl appKey={routeApp?.key} /> : null}
         </header>
@@ -252,11 +245,36 @@ function GeneratedAppFrame({
   );
 }
 
-function workbenchAppLinkClassName(isActive: boolean) {
-  const base =
-    "rounded px-2 py-1 text-xs font-medium transition-colors hover:bg-muted hover:text-foreground";
+function generatedAppHeaderTitle({
+  activeScreenPath,
+  routeAppLabel,
+  screenModels,
+}: {
+  activeScreenPath: string | undefined;
+  routeAppLabel: string | undefined;
+  screenModels: HomeScreenModel[];
+}) {
+  return (
+    screenModels.find((model) => model.path === activeScreenPath)?.label ??
+    routeAppLabel ??
+    "Formless"
+  );
+}
 
-  return isActive ? `${base} bg-muted text-foreground` : `${base} text-slate-600`;
+function workbenchAppLinkClassName(isActive: boolean) {
+  const base = "flex h-7 items-center rounded px-2 text-xs font-medium transition-colors";
+
+  return isActive
+    ? `${base} bg-slate-100 text-slate-950`
+    : `${base} text-slate-300 hover:bg-slate-800 hover:text-white`;
+}
+
+function workbenchActionLinkClassName() {
+  return "flex h-7 cursor-pointer items-center rounded border border-slate-700 px-2 text-xs font-medium text-slate-100 transition-colors hover:border-slate-500 hover:bg-slate-800";
+}
+
+function workbenchUnavailableActionClassName() {
+  return "flex h-7 items-center rounded border border-slate-800 px-2 text-xs font-medium text-slate-500";
 }
 
 function AppScreenNavigation({
@@ -274,7 +292,6 @@ function AppScreenNavigation({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{world.app.label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu aria-label={`${world.app.label} screens`}>
           {screenLinks.map((model) => (

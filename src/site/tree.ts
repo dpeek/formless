@@ -332,8 +332,7 @@ function isLiveBlock(record: StoredRecord): boolean {
 
 function comparePlacements(a: StoredRecord, b: StoredRecord): number {
   return (
-    compareNumbers(numberValue(a.values.order), numberValue(b.values.order)) ||
-    compareRecords(a, b)
+    compareNumbers(numberValue(a.values.order), numberValue(b.values.order)) || compareRecords(a, b)
   );
 }
 

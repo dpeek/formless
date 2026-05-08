@@ -16,7 +16,8 @@ export type QueryValue = string | boolean | number | QueryDynamicValue;
 export type QueryExpression =
   | { kind: "all" }
   | { kind: "where"; ref: FieldRef; op: QueryOperator; value: QueryValue }
-  | { kind: "and"; expressions: QueryExpression[] };
+  | { kind: "and"; expressions: QueryExpression[] }
+  | { kind: "or"; expressions: QueryExpression[] };
 
 export type QueryEvaluationContext = {
   today: string;
@@ -35,7 +36,7 @@ export type QueryCapabilities = {
 export const portableQueryCapabilities = {
   operators: ["eq", "before"],
   fieldKinds: ["value", "system"],
-  expressionKinds: ["all", "where", "and"],
+  expressionKinds: ["all", "where", "and", "or"],
   dynamicValues: ["today", "context"],
 } satisfies QueryCapabilities;
 
@@ -58,7 +59,7 @@ export function parseQueryExpression(
     return { kind: "all" };
   }
 
-  if (value.kind === "and") {
+  if (value.kind === "and" || value.kind === "or") {
     assertExactKeys(value, ["kind", "expressions"], contextLabel);
 
     if (!Array.isArray(value.expressions) || value.expressions.length === 0) {
@@ -66,11 +67,11 @@ export function parseQueryExpression(
     }
 
     return {
-      kind: "and",
+      kind: value.kind,
       expressions: value.expressions.map((expression, index) =>
         parseQueryExpression(expression, catalog, `${contextLabel}.expressions[${index}]`),
       ),
-    };
+    } satisfies QueryExpression;
   }
 
   if (value.kind === "where") {
@@ -110,7 +111,7 @@ export function assertQuerySupported(
     return;
   }
 
-  if (query.kind === "and") {
+  if (query.kind === "and" || query.kind === "or") {
     for (const expression of query.expressions) {
       assertQuerySupported(expression, capabilities, contextLabel);
     }
@@ -162,6 +163,10 @@ export function matchesQuery(
 
   if (query.kind === "and") {
     return query.expressions.every((expression) => matchesQuery(record, expression, context));
+  }
+
+  if (query.kind === "or") {
+    return query.expressions.some((expression) => matchesQuery(record, expression, context));
   }
 
   const fieldValue = resolveRecordFieldValue(record, query.ref);
@@ -402,7 +407,7 @@ function isQueryDynamicValue(value: QueryValue): value is QueryDynamicValue {
 }
 
 function collectQueryContextNamesInto(query: QueryExpression, names: Set<string>) {
-  if (query.kind === "and") {
+  if (query.kind === "and" || query.kind === "or") {
     for (const expression of query.expressions) {
       collectQueryContextNamesInto(expression, names);
     }

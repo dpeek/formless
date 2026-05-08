@@ -24,7 +24,7 @@ describe("site page tree projection", () => {
       id: "rec_site_content_home",
       type: "page",
       label: "Home",
-      href: "/pages/home",
+      href: "/",
       templateKey: "home",
     });
 
@@ -38,7 +38,7 @@ describe("site page tree projection", () => {
     const header = childForPlacement(tree.page, "rec_site_place_home_header");
     expect(header).toMatchObject({
       id: "rec_site_content_group_header",
-      type: "group",
+      type: "header",
       label: "Header",
     });
     expect(header.placements.map((placement) => placement.block.label)).toEqual([
@@ -54,10 +54,10 @@ describe("site page tree projection", () => {
       "link",
     ]);
     expect(header.placements.map((placement) => placement.block.href)).toEqual([
-      "/pages/home",
-      "/pages/blog",
-      "/pages/projects",
-      "/pages/resume",
+      "/",
+      "/blog",
+      "/projects",
+      "/resume",
     ]);
 
     const footer = childForPlacement(tree.page, "rec_site_place_home_footer");
@@ -258,7 +258,7 @@ describe("site page tree projection", () => {
     const unmatchedRoot = blockRecord("rec_site_content_unmatched", {
       type: "page",
       label: "Unmatched",
-      href: "/pages/elsewhere",
+      href: "/elsewhere",
     });
     const result = buildSitePageTree(
       siteSourceSchema,

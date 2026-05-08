@@ -795,7 +795,7 @@ function validateContextPredicateTargets(
   entity: EntitySchema,
   collectionContext: CollectionContextSchema,
 ) {
-  if (query.kind === "and") {
+  if (query.kind === "and" || query.kind === "or") {
     for (const expression of query.expressions) {
       validateContextPredicateTargets(context, expression, entity, collectionContext);
     }
@@ -847,6 +847,12 @@ function queryFiltersRelationshipField(
 ): boolean {
   if (query.kind === "and") {
     return query.expressions.some((expression) =>
+      queryFiltersRelationshipField(expression, fieldName, contextName),
+    );
+  }
+
+  if (query.kind === "or") {
+    return query.expressions.every((expression) =>
       queryFiltersRelationshipField(expression, fieldName, contextName),
     );
   }

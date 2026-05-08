@@ -5,7 +5,6 @@ import type {
   MutationResponse,
   SchemaResponse,
   SchemaUpdateResponse,
-  SiteBlockNode,
   SitePageTreeResponse,
   StoreSnapshot,
   StoredRecord,
@@ -96,7 +95,6 @@ describe("authority", () => {
     useSchemaApp("site");
 
     const body = await getJson<SitePageTreeResponse>("/api/tree/home");
-    const blockIds = collectSiteTreeBlockIds(body.page);
     const recentPosts = body.page.placements.find(
       (placement) => placement.id === "rec_site_place_home_recent_posts",
     )?.block;
@@ -105,7 +103,7 @@ describe("authority", () => {
       id: "rec_site_content_home",
       type: "page",
       label: "Home",
-      href: "/pages/home",
+      href: "/",
     });
     expect(body.meta).toEqual({
       slug: "home",
@@ -132,7 +130,7 @@ describe("authority", () => {
     await postMutationForEntity("mutation-site-extra-page", "block", {
       type: "page",
       label: "Extra page",
-      href: "/pages/extra-page",
+      href: "/extra-page",
     });
 
     const body = await getJson<SitePageTreeResponse>("/api/tree/extra-page");
@@ -140,7 +138,7 @@ describe("authority", () => {
     expect(body.page).toMatchObject({
       type: "page",
       label: "Extra page",
-      href: "/pages/extra-page",
+      href: "/extra-page",
     });
   });
 
@@ -3560,14 +3558,6 @@ function captureSyncSocketMessages(socket: Awaited<ReturnType<typeof openSyncSoc
 async function expectNoCapturedMessages(capture: ReturnType<typeof captureSyncSocketMessages>) {
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(capture.messages).toEqual([]);
-}
-
-function collectSiteTreeBlockIds(root: SiteBlockNode): string[] {
-  return [
-    root.id,
-    ...root.placements.flatMap((placement) => collectSiteTreeBlockIds(placement.block)),
-    ...(root.query?.items.flatMap((item) => collectSiteTreeBlockIds(item)) ?? []),
-  ];
 }
 
 async function getJson<T>(path: string) {

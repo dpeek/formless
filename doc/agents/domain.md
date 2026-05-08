@@ -7,7 +7,7 @@ Read these before domain-sensitive engineering work:
 - `CONTEXT.md`
 - relevant `doc/*.md`
 - relevant `prd/*.md`
-- relevant ADRs under `docs/adr/`
+- relevant ADRs under `doc/adr/`
 
 ## Rules
 

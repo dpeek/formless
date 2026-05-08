@@ -216,7 +216,7 @@ Recommended order:
 - No blockers.
 - Next ready chunk: HVM-05.
 - HVM-05 shipped 2026-05-06.
-- HVM-05 marked this PRD shipped and kept global promotion notes in this PRD for a docs/steward pass.
+- HVM-05 marked this PRD shipped and kept global promotion notes in this PRD for a doc/steward pass.
 - HVM-05 changed no runtime behavior, schema syntax, storage, sync, authority code, or generated UI.
 - Browser Use not run; app behavior did not change.
 - Evidence: `bun run check` passed 2026-05-06.
