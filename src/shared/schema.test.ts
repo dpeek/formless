@@ -3496,28 +3496,53 @@ describe("personal site sample schema", () => {
       result: { type: "table", tableView: "blockPlacementTable" },
       actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
-    expect(schema.views.pageCompositionHome).toMatchObject({
+    expect(schema.views.siteCompositionHome).toMatchObject({
       type: "collection",
-      label: "Pages",
+      label: "Site",
       entity: "blockPlacement",
       navigation: { primary: true },
       context: {
         name: "block",
         entity: "block",
-        query: "blockPages",
+        query: "blockSiteRoots",
         labelField: "label",
         relationship: "blockPlacements",
         itemView: "blockRootDetail",
         presentation: "listDetail",
+        navigation: {
+          placement: "sidebar",
+          groups: [
+            { label: "Pages", query: "blockPages" },
+            { label: "Navigation", query: "blockNavigationRoots" },
+          ],
+        },
+      },
+      result: {
+        type: "tree",
+        relationship: "blockPlacements",
+        childField: "block",
+        childItemView: "blockTreeNode",
+        placementItemView: "blockPlacementTreeItem",
+        maxDepth: 8,
+      },
+      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
+    });
+    expect(schema.views.pageCompositionHome).toMatchObject({
+      type: "collection",
+      label: "Pages",
+      entity: "blockPlacement",
+      navigation: { primary: false },
+      context: {
+        query: "blockPages",
+        presentation: "listDetail",
       },
       result: { type: "table", tableView: "blockPlacementTable" },
-      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
     expect(schema.views.navigationCompositionHome).toMatchObject({
       type: "collection",
       label: "Navigation",
       entity: "blockPlacement",
-      navigation: { primary: true },
+      navigation: { primary: false },
       context: {
         query: "blockNavigationRoots",
         presentation: "listDetail",
@@ -3532,20 +3557,12 @@ describe("personal site sample schema", () => {
       },
     });
     expect(schema.screens).toMatchObject({
-      sitePages: {
+      siteEditor: {
         type: "workspace",
-        label: "Pages",
+        label: "Site",
         navigation: { primary: true },
         layout: {
-          sections: [{ id: "pages", type: "collection", view: "pageCompositionHome" }],
-        },
-      },
-      siteNavigation: {
-        type: "workspace",
-        label: "Navigation",
-        navigation: { primary: true },
-        layout: {
-          sections: [{ id: "navigation", type: "collection", view: "navigationCompositionHome" }],
+          sections: [{ id: "site", type: "collection", view: "siteCompositionHome" }],
         },
       },
     });

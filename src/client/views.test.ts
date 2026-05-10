@@ -1022,25 +1022,23 @@ describe("home view model collections", () => {
   it("selects the site root authoring collections as primary collection models", () => {
     const models = selectPrimaryCollectionModels(siteSourceSchema);
 
-    expect(models.map((model) => model.viewName)).toEqual([
-      "pageCompositionHome",
-      "navigationCompositionHome",
-    ]);
-    expect(models.map((model) => model.label)).toEqual(["Pages", "Navigation"]);
-    expect(models.map((model) => model.navigation.primary)).toEqual([true, true]);
-    expect(models.map((model) => model.context?.queryName)).toEqual([
-      "blockPages",
-      "blockNavigationRoots",
-    ]);
-    expect(models.map((model) => model.context?.label)).toEqual(["Pages", "Navigation"]);
-    expect(models.map((model) => model.context?.presentation)).toEqual([
-      "listDetail",
-      "listDetail",
-    ]);
+    expect(models.map((model) => model.viewName)).toEqual(["siteCompositionHome"]);
+    expect(models.map((model) => model.label)).toEqual(["Site"]);
+    expect(models.map((model) => model.navigation.primary)).toEqual([true]);
+    expect(models.map((model) => model.context?.queryName)).toEqual(["blockSiteRoots"]);
+    expect(models.map((model) => model.context?.label)).toEqual(["Site roots"]);
+    expect(models.map((model) => model.context?.presentation)).toEqual(["listDetail"]);
     expect(
-      models.map((model) => (model.result.type === "table" ? model.result.tableViewName : "")),
-    ).toEqual(["blockPlacementTable", "blockPlacementTable"]);
+      models.map((model) => model.context?.navigation?.groups.map((group) => group.label)),
+    ).toEqual([["Pages", "Navigation"]]);
+    expect(models.map((model) => model.result.type)).toEqual(["tree"]);
     expect(requiredCollectionModel(siteSourceSchema, "blockHome").navigation.primary).toBe(false);
+    expect(
+      requiredCollectionModel(siteSourceSchema, "pageCompositionHome").navigation.primary,
+    ).toBe(false);
+    expect(
+      requiredCollectionModel(siteSourceSchema, "navigationCompositionHome").navigation.primary,
+    ).toBe(false);
     expect(
       requiredCollectionModel(siteSourceSchema, "blockCompositionHome").navigation.primary,
     ).toBe(false);
@@ -1051,14 +1049,14 @@ describe("home view model collections", () => {
 
     expect(models.map(summarizeHomeModel)).toEqual([
       {
-        viewName: "pageCompositionHome",
-        label: "Pages",
+        viewName: "siteCompositionHome",
+        label: "Site",
         entityName: "blockPlacement",
         navigationPrimary: true,
         context: {
           name: "block",
           entityName: "block",
-          queryName: "blockPages",
+          queryName: "blockSiteRoots",
           labelField: "label",
           presentation: "listDetail",
           relatedCollection: {
@@ -1081,67 +1079,25 @@ describe("home view model collections", () => {
         ],
         defaultQueryName: "placementsForSelectedBlock",
         result: {
-          type: "table",
-          tableViewName: "blockPlacementTable",
-          columns: [
-            "orderingHandle",
-            "field:block",
-            "field:label",
-            "invokeAction:editChildBlock,ordering",
+          type: "tree",
+          relationshipName: "blockPlacements",
+          childFieldName: "block",
+          childItemViewName: "blockTreeNode",
+          childFields: [
+            "label",
+            "type",
+            "body",
+            "href",
+            "templateKey",
+            "icon",
+            "color",
+            "width",
+            "height",
           ],
-          footer: undefined,
-        },
-        actions: [
-          {
-            type: "create",
-            label: "Add placement",
-            entityName: "blockPlacement",
-            fields: ["block", "label"],
-            defaults: ["parent"],
-            enabled: true,
-          },
-        ],
-      },
-      {
-        viewName: "navigationCompositionHome",
-        label: "Navigation",
-        entityName: "blockPlacement",
-        navigationPrimary: true,
-        context: {
-          name: "block",
-          entityName: "block",
-          queryName: "blockNavigationRoots",
-          labelField: "label",
-          presentation: "listDetail",
-          relatedCollection: {
-            relationshipName: "blockPlacements",
-            label: "Placements",
-            entityName: "blockPlacement",
-            referenceFieldName: "parent",
-          },
-          createAction: null,
-          itemViewName: "blockRootDetail",
-          recordFields: ["label", "body", "href"],
-        },
-        queries: [
-          {
-            queryName: "placementsForSelectedBlock",
-            label: "Selected block",
-            count: "count",
-            expressionKind: "where",
-          },
-        ],
-        defaultQueryName: "placementsForSelectedBlock",
-        result: {
-          type: "table",
-          tableViewName: "blockPlacementTable",
-          columns: [
-            "orderingHandle",
-            "field:block",
-            "field:label",
-            "invokeAction:editChildBlock,ordering",
-          ],
-          footer: undefined,
+          placementItemViewName: "blockPlacementTreeItem",
+          placementFields: ["label"],
+          orderingField: "order",
+          maxDepth: 8,
         },
         actions: [
           {
@@ -1453,38 +1409,23 @@ describe("home view model collections", () => {
     });
   });
 
-  it("selects site Pages and Navigation as primary screen models", () => {
+  it("selects site editor as the primary screen model", () => {
     const models = selectPrimaryScreenModels(siteSourceSchema);
 
     expect(models.map((model) => ({ screenName: model.screenName, path: model.path }))).toEqual([
-      { screenName: "sitePages", path: "/" },
-      { screenName: "siteNavigation", path: "/navigation" },
+      { screenName: "siteEditor", path: "/" },
     ]);
     expect(models.map(summarizeScreenModel)).toEqual([
       {
-        screenName: "sitePages",
-        label: "Pages",
+        screenName: "siteEditor",
+        label: "Site",
         primary: true,
         layoutType: "stack",
         sections: [
           {
-            id: "pages",
-            label: "Pages",
-            viewName: "pageCompositionHome",
-            entityName: "blockPlacement",
-          },
-        ],
-      },
-      {
-        screenName: "siteNavigation",
-        label: "Navigation",
-        primary: true,
-        layoutType: "stack",
-        sections: [
-          {
-            id: "navigation",
-            label: "Navigation",
-            viewName: "navigationCompositionHome",
+            id: "site",
+            label: "Site",
+            viewName: "siteCompositionHome",
             entityName: "blockPlacement",
           },
         ],
@@ -1502,32 +1443,18 @@ describe("home view model collections", () => {
     );
     expect(
       selectPrimaryScreenModels(schemaWithoutScreens).map((model) => model.screenName),
-    ).toEqual(["pageCompositionHome", "navigationCompositionHome"]);
+    ).toEqual(["siteCompositionHome"]);
     expect(screenModels.map(summarizeScreenModel)).toEqual([
       {
-        screenName: "pageCompositionHome",
-        label: "Pages",
+        screenName: "siteCompositionHome",
+        label: "Site",
         primary: true,
         layoutType: "stack",
         sections: [
           {
-            id: "pageCompositionHome",
-            label: "Pages",
-            viewName: "pageCompositionHome",
-            entityName: "blockPlacement",
-          },
-        ],
-      },
-      {
-        screenName: "navigationCompositionHome",
-        label: "Navigation",
-        primary: true,
-        layoutType: "stack",
-        sections: [
-          {
-            id: "navigationCompositionHome",
-            label: "Navigation",
-            viewName: "navigationCompositionHome",
+            id: "siteCompositionHome",
+            label: "Site",
+            viewName: "siteCompositionHome",
             entityName: "blockPlacement",
           },
         ],
@@ -1798,16 +1725,29 @@ function summarizeHomeModel(model: HomeViewModel) {
             itemViewName: collection.result.itemViewName,
             fields: collection.result.recordFields.map((field) => field.fieldName),
           }
-        : {
-            type: "table",
-            tableViewName: collection.result.tableViewName,
-            columns: collection.result.columns.map((column) => column.key),
-            footer: collection.result.footer?.map((slot) => ({
-              columnKey: slot.columnKey,
-              aggregateName: slot.aggregateName,
-              label: slot.label,
-            })),
-          },
+        : collection.result.type === "tree"
+          ? {
+              type: "tree",
+              relationshipName: collection.result.relationshipName,
+              childFieldName: collection.result.childFieldName,
+              childItemViewName: collection.result.childItemViewName,
+              childFields: collection.result.childRecordFields.map((field) => field.fieldName),
+              placementItemViewName: collection.result.placementItemViewName,
+              placementFields:
+                collection.result.placementRecordFields?.map((field) => field.fieldName) ?? [],
+              orderingField: collection.result.ordering?.fieldName ?? null,
+              maxDepth: collection.result.maxDepth,
+            }
+          : {
+              type: "table",
+              tableViewName: collection.result.tableViewName,
+              columns: collection.result.columns.map((column) => column.key),
+              footer: collection.result.footer?.map((slot) => ({
+                columnKey: slot.columnKey,
+                aggregateName: slot.aggregateName,
+                label: slot.label,
+              })),
+            },
     actions: collection.actions.map(summarizeHomeAction),
   };
 }

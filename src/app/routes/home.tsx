@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
@@ -24,12 +33,15 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
     () => (schema ? selectScreenModelByPath(schema, screenPath) : undefined),
     [schema, screenPath],
   );
-  const [selectionState, setSelectionState] = useState(createHomeRouteSelectionState);
+  const [localSelectionState, setLocalSelectionState] = useState(createHomeRouteSelectionState);
+  const routeSelectionStore = useHomeRouteSelectionStore();
+  const selectionState = routeSelectionStore?.selectionState ?? localSelectionState;
+  const setSelectionState = routeSelectionStore?.setSelectionState ?? setLocalSelectionState;
   const today = useTodayDateString();
 
   useEffect(() => {
     setSelectionState(createHomeRouteSelectionState());
-  }, [schemaKey]);
+  }, [schemaKey, setSelectionState]);
 
   useEffect(() => {
     selectClientStoreSchemaKey(schemaKey);
@@ -137,6 +149,27 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
       </SchemaAppProvider>
     </section>
   );
+}
+
+export type HomeRouteSelectionStore = {
+  selectionState: HomeRouteSelectionState;
+  setSelectionState: Dispatch<SetStateAction<HomeRouteSelectionState>>;
+};
+
+const HomeRouteSelectionContext = createContext<HomeRouteSelectionStore | null>(null);
+
+export function HomeRouteSelectionProvider({ children }: { children: ReactNode }) {
+  const [selectionState, setSelectionState] = useState(createHomeRouteSelectionState);
+
+  return (
+    <HomeRouteSelectionContext.Provider value={{ selectionState, setSelectionState }}>
+      {children}
+    </HomeRouteSelectionContext.Provider>
+  );
+}
+
+export function useHomeRouteSelectionStore(): HomeRouteSelectionStore | null {
+  return useContext(HomeRouteSelectionContext);
 }
 
 export type HomeRouteSelectionState = {

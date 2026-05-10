@@ -5,9 +5,11 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -18,7 +20,13 @@ import {
   SnapshotRestoreControl,
   SourceResetControl,
 } from "./app/dev-actions.tsx";
-import { HomeRoute } from "./app/routes/home.tsx";
+import {
+  HomeRoute,
+  HomeRouteSelectionProvider,
+  selectHomeRouteSectionContextRecordId,
+  useHomeRouteSelectionStore,
+  withHomeRouteSelectedSectionContextRecordId,
+} from "./app/routes/home.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { SchemaRoute } from "./app/routes/schema.tsx";
 import { normalizeSitePageSlug, SitePageRoute } from "./app/routes/site-page.tsx";
@@ -33,8 +41,19 @@ import {
   type RuntimeProfile,
   type RuntimeWorldMount,
 } from "./app/runtime-profile.ts";
-import { useActiveSchemaKey, useSchema } from "./client/store.ts";
-import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.ts";
+import {
+  useActiveSchemaKey,
+  useEntityRecordCountReferencingField,
+  useEntityRecordOptionsMatchingQuery,
+  useSchema,
+} from "./client/store.ts";
+import { todayDateString } from "./shared/date.ts";
+import {
+  selectPrimaryScreenModels,
+  type HomeContextConfig,
+  type HomeScreenCollectionSectionModel,
+  type HomeScreenModel,
+} from "./client/views.ts";
 
 export function App({
   runtimeProfile: runtimeProfileProp,
@@ -216,32 +235,34 @@ function GeneratedAppFrame({
   });
 
   return (
-    <SidebarProvider data-frame="generated-app">
-      <Sidebar collapsible="offcanvas">
-        <SidebarHeader>
-          <div className="px-2 py-1 text-sm font-semibold">{routeApp?.label ?? "Formless"}</div>
-        </SidebarHeader>
-        <SidebarContent>
-          {routeWorld ? (
-            <AppScreenNavigation
-              activeScreenPath={activeScreenPath}
-              world={routeWorld}
-              screenModels={screenModels}
-            />
-          ) : null}
-        </SidebarContent>
-      </Sidebar>
-      <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <SidebarTrigger />
-            <h1 className="truncate text-sm font-medium">{headerTitle}</h1>
-          </div>
-          {showSyncStatus ? <SyncStatusControl appKey={routeApp?.key} /> : null}
-        </header>
-        <div className="min-w-0 flex-1 p-4 sm:p-6">{children}</div>
-      </SidebarInset>
-    </SidebarProvider>
+    <HomeRouteSelectionProvider>
+      <SidebarProvider data-frame="generated-app">
+        <Sidebar collapsible="offcanvas">
+          <SidebarHeader>
+            <div className="px-2 py-1 text-sm font-semibold">{routeApp?.label ?? "Formless"}</div>
+          </SidebarHeader>
+          <SidebarContent>
+            {routeWorld ? (
+              <AppScreenNavigation
+                activeScreenPath={activeScreenPath}
+                world={routeWorld}
+                screenModels={screenModels}
+              />
+            ) : null}
+          </SidebarContent>
+        </Sidebar>
+        <SidebarInset>
+          <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <SidebarTrigger />
+              <h1 className="truncate text-sm font-medium">{headerTitle}</h1>
+            </div>
+            {showSyncStatus ? <SyncStatusControl appKey={routeApp?.key} /> : null}
+          </header>
+          <div className="min-w-0 flex-1 p-4 sm:p-6">{children}</div>
+        </SidebarInset>
+      </SidebarProvider>
+    </HomeRouteSelectionProvider>
   );
 }
 
@@ -286,6 +307,13 @@ function AppScreenNavigation({
   screenModels: HomeScreenModel[];
   world: RuntimeWorldMount;
 }) {
+  const activeScreen = screenModels.find((model) => model.path === activeScreenPath);
+  const rootNavigation = activeScreen ? selectScreenRootNavigation(activeScreen) : undefined;
+
+  if (rootNavigation) {
+    return <AppRootRecordNavigation rootNavigation={rootNavigation} />;
+  }
+
   const screenLinks = screenModels.filter(
     (model): model is HomeScreenModel & { path: string } => model.path !== undefined,
   );
@@ -307,6 +335,151 @@ function AppScreenNavigation({
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
+  );
+}
+
+type ScreenRootNavigation = {
+  screen: HomeScreenModel;
+  section: HomeScreenCollectionSectionModel;
+  context: HomeContextConfig & { navigation: NonNullable<HomeContextConfig["navigation"]> };
+};
+
+function selectScreenRootNavigation(screen: HomeScreenModel): ScreenRootNavigation | undefined {
+  const section = screen.layout.sections.find(
+    (candidate): candidate is HomeScreenCollectionSectionModel =>
+      candidate.type === "collection" && candidate.collection.context?.navigation !== undefined,
+  );
+  const context = section?.collection.context;
+
+  if (!section || !context?.navigation) {
+    return undefined;
+  }
+
+  return {
+    screen,
+    section,
+    context: context as ScreenRootNavigation["context"],
+  };
+}
+
+function AppRootRecordNavigation({ rootNavigation }: { rootNavigation: ScreenRootNavigation }) {
+  const routeSelectionStore = useHomeRouteSelectionStore();
+  const today = todayDateString();
+  const { context, screen, section } = rootNavigation;
+  const allOptions = useEntityRecordOptionsMatchingQuery(
+    context.entityName,
+    context.query,
+    context.labelField,
+    { today },
+  );
+  const selectedRecordId =
+    routeSelectionStore === null
+      ? null
+      : selectHomeRouteSectionContextRecordId(
+          routeSelectionStore.selectionState,
+          screen.screenName,
+          section.id,
+        );
+  const activeRecordId = allOptions.some((option) => option.id === selectedRecordId)
+    ? selectedRecordId
+    : (allOptions[0]?.id ?? null);
+
+  function selectRecord(recordId: string) {
+    routeSelectionStore?.setSelectionState((current) =>
+      withHomeRouteSelectedSectionContextRecordId(current, screen.screenName, section.id, recordId),
+    );
+  }
+
+  return (
+    <>
+      {context.navigation.groups.map((group) => (
+        <AppRootRecordNavigationGroup
+          activeRecordId={activeRecordId}
+          context={context}
+          group={group}
+          key={group.queryName}
+          onSelectRecord={selectRecord}
+          today={today}
+        />
+      ))}
+    </>
+  );
+}
+
+function AppRootRecordNavigationGroup({
+  activeRecordId,
+  context,
+  group,
+  onSelectRecord,
+  today,
+}: {
+  activeRecordId: string | null;
+  context: ScreenRootNavigation["context"];
+  group: ScreenRootNavigation["context"]["navigation"]["groups"][number];
+  onSelectRecord: (recordId: string) => void;
+  today: string;
+}) {
+  const options = useEntityRecordOptionsMatchingQuery(
+    context.entityName,
+    group.query,
+    context.labelField,
+    {
+      today,
+    },
+  );
+
+  if (options.length === 0) {
+    return null;
+  }
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu aria-label={`${group.label} roots`}>
+          {options.map((option) => (
+            <SidebarMenuItem key={option.id}>
+              <SidebarMenuButton
+                isActive={option.id === activeRecordId}
+                onClick={() => onSelectRecord(option.id)}
+                type="button"
+              >
+                <span>{option.label}</span>
+              </SidebarMenuButton>
+              {context.relatedCollection ? (
+                <AppRootRecordCountBadge context={context} option={option} />
+              ) : null}
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+function AppRootRecordCountBadge({
+  context,
+  option,
+}: {
+  context: ScreenRootNavigation["context"];
+  option: { id: string; label: string };
+}) {
+  const relatedCollection = context.relatedCollection;
+
+  if (!relatedCollection) {
+    return null;
+  }
+
+  const count = useEntityRecordCountReferencingField(
+    relatedCollection.entityName,
+    relatedCollection.referenceFieldName,
+    option.id,
+  );
+
+  return (
+    <SidebarMenuBadge aria-label={`${option.label} ${relatedCollection.label} count`}>
+      {count}
+    </SidebarMenuBadge>
   );
 }
 

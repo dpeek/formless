@@ -16,6 +16,7 @@ import { parseFieldCommitPolicy, parseFieldEditor } from "./schema-view-field-pa
 import type {
   AggregateSchema,
   CollectionActionSlotSchema,
+  CollectionContextNavigationSchema,
   CollectionContextPresentation,
   CollectionContextSchema,
   CollectionNavigationSchema,
@@ -476,10 +477,14 @@ function parseCollectionView(
   const result = parseCollectionResult(
     viewName,
     value.entity,
+    entity,
     value.result,
+    entities,
     itemViews,
     tableViews,
     querySlots,
+    context,
+    relationships,
     readModels?.aggregates ?? {},
   );
   const actions = parseCollectionActionSlots(viewName, value.entity, entity, value.actions);
@@ -629,7 +634,7 @@ function parseCollectionContext(
     context,
     value,
     ["name", "entity", "query", "labelField"],
-    ["presentation", "relationship", "createView", "itemView"],
+    ["presentation", "navigation", "relationship", "createView", "itemView"],
   );
 
   const name = parseRequiredNonEmptyString(`${context} name`, value.name);
@@ -639,6 +644,12 @@ function parseCollectionContext(
   const presentation = parseCollectionContextPresentation(
     `${context} presentation`,
     value.presentation,
+  );
+  const navigation = parseCollectionContextNavigation(
+    context,
+    value.navigation,
+    entityName,
+    queries,
   );
   const relationship = parseCollectionContextRelationship(
     context,
@@ -698,9 +709,80 @@ function parseCollectionContext(
     query: queryName,
     labelField,
     presentation,
+    ...(navigation === undefined ? {} : { navigation }),
     ...(relationship === undefined ? {} : { relationship }),
     ...(createView === undefined ? {} : { createView }),
     ...(itemViewName === undefined ? {} : { itemView: itemViewName }),
+  };
+}
+
+function parseCollectionContextNavigation(
+  context: string,
+  value: unknown,
+  contextEntityName: string,
+  queries: Record<string, CollectionQuerySchema>,
+): CollectionContextNavigationSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} navigation must be an object.`);
+  }
+
+  assertExactKeys(`${context} navigation`, value, ["placement", "groups"]);
+
+  if (value.placement !== "sidebar") {
+    throw new Error(`${context} navigation placement must be "sidebar".`);
+  }
+
+  if (!Array.isArray(value.groups) || value.groups.length === 0) {
+    throw new Error(`${context} navigation groups must be a non-empty array.`);
+  }
+
+  return {
+    placement: "sidebar",
+    groups: value.groups.map((group, index) =>
+      parseCollectionContextNavigationGroup(context, index, group, contextEntityName, queries),
+    ),
+  };
+}
+
+function parseCollectionContextNavigationGroup(
+  context: string,
+  index: number,
+  value: unknown,
+  contextEntityName: string,
+  queries: Record<string, CollectionQuerySchema>,
+): CollectionContextNavigationSchema["groups"][number] {
+  const groupContext = `${context} navigation group ${index}`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${groupContext} must be an object.`);
+  }
+
+  assertExactKeys(groupContext, value, ["label", "query"]);
+
+  const label = parseRequiredNonEmptyString(`${groupContext} label`, value.label);
+  const queryName = parseRequiredNonEmptyString(`${groupContext} query`, value.query);
+  const query = queries[queryName];
+
+  if (!query) {
+    throw new Error(`${groupContext} references unknown query "${queryName}".`);
+  }
+
+  if (query.entity !== contextEntityName) {
+    throw new Error(`${groupContext} query "${queryName}" must use entity "${contextEntityName}".`);
+  }
+
+  const requiredContextNames = collectQueryContextNames(query.expression);
+  if (requiredContextNames.length > 0) {
+    throw new Error(`${groupContext} query "${queryName}" must not require context.`);
+  }
+
+  return {
+    label,
+    query: queryName,
   };
 }
 
@@ -888,10 +970,14 @@ function getCollectionContextRelationship(
 function parseCollectionResult(
   viewName: string,
   entityName: string,
+  entity: EntitySchema,
   value: unknown,
+  entities: Record<string, EntitySchema>,
   itemViews: Record<string, ItemViewSchema>,
   tableViews: Record<string, TableViewSchema>,
   querySlots: CollectionViewQuerySlotSchema[],
+  collectionContext: CollectionContextSchema | undefined,
+  relationships: Record<string, RelationshipSchema> | undefined,
   aggregates: Record<string, AggregateSchema>,
 ): CollectionResultSchema {
   if (!isRecord(value)) {
@@ -965,7 +1051,141 @@ function parseCollectionResult(
     };
   }
 
-  throw new Error(`Collection view "${viewName}" result type must be "list" or "table".`);
+  if (value.type === "tree") {
+    assertExactKeys(
+      `Collection view "${viewName}" result`,
+      value,
+      ["type", "relationship", "childField", "childItemView"],
+      ["placementItemView", "maxDepth"],
+    );
+
+    if (!collectionContext) {
+      throw new Error(`Collection view "${viewName}" result tree requires a collection context.`);
+    }
+
+    const relationshipName = parseRequiredNonEmptyString(
+      `Collection view "${viewName}" result relationship`,
+      value.relationship,
+    );
+    const relationship = relationships?.[relationshipName];
+
+    if (!relationship) {
+      throw new Error(
+        `Collection view "${viewName}" result references unknown relationship "${relationshipName}".`,
+      );
+    }
+
+    if (relationship.kind !== "toMany") {
+      throw new Error(
+        `Collection view "${viewName}" result relationship "${relationshipName}" must be a toMany relationship.`,
+      );
+    }
+
+    if (relationship.from.entity !== collectionContext.entity) {
+      throw new Error(
+        `Collection view "${viewName}" result relationship "${relationshipName}" must start from context entity "${collectionContext.entity}".`,
+      );
+    }
+
+    if (relationship.to.entity !== entityName) {
+      throw new Error(
+        `Collection view "${viewName}" result relationship "${relationshipName}" must target collection entity "${entityName}".`,
+      );
+    }
+
+    const childFieldName = parseRequiredNonEmptyString(
+      `Collection view "${viewName}" result childField`,
+      value.childField,
+    );
+    const childField = entity.fields[childFieldName];
+
+    if (!childField) {
+      throw new Error(
+        `Collection view "${viewName}" result childField references unknown field "${entityName}.${childFieldName}".`,
+      );
+    }
+
+    if (childField.type !== "reference") {
+      throw new Error(`Collection view "${viewName}" result childField must be a reference field.`);
+    }
+
+    if (childField.to !== collectionContext.entity) {
+      throw new Error(
+        `Collection view "${viewName}" result childField must reference context entity "${collectionContext.entity}".`,
+      );
+    }
+
+    const childItemViewName = parseRequiredNonEmptyString(
+      `Collection view "${viewName}" result childItemView`,
+      value.childItemView,
+    );
+    const childItemView = itemViews[childItemViewName];
+
+    if (!childItemView) {
+      throw new Error(
+        `Collection view "${viewName}" result references unknown child item view "${childItemViewName}".`,
+      );
+    }
+
+    if (!entities[childField.to]) {
+      throw new Error(`Missing child entity "${childField.to}".`);
+    }
+
+    if (childItemView.entity !== childField.to) {
+      throw new Error(
+        `Collection view "${viewName}" result child item view "${childItemViewName}" must use entity "${childField.to}".`,
+      );
+    }
+
+    const placementItemViewName = parseOptionalNonEmptyString(
+      `Collection view "${viewName}" result placementItemView`,
+      value.placementItemView,
+    );
+
+    if (placementItemViewName !== undefined) {
+      const placementItemView = itemViews[placementItemViewName];
+
+      if (!placementItemView) {
+        throw new Error(
+          `Collection view "${viewName}" result references unknown placement item view "${placementItemViewName}".`,
+        );
+      }
+
+      if (placementItemView.entity !== entityName) {
+        throw new Error(
+          `Collection view "${viewName}" result placement item view "${placementItemViewName}" must use entity "${entityName}".`,
+        );
+      }
+    }
+
+    const maxDepth = parseOptionalTreeMaxDepth(
+      `Collection view "${viewName}" result maxDepth`,
+      value.maxDepth,
+    );
+
+    return {
+      type: "tree",
+      relationship: relationshipName,
+      childField: childFieldName,
+      childItemView: childItemViewName,
+      ...(placementItemViewName === undefined ? {} : { placementItemView: placementItemViewName }),
+      ...(maxDepth === undefined ? {} : { maxDepth }),
+    };
+  }
+
+  throw new Error(`Collection view "${viewName}" result type must be "list", "table", or "tree".`);
+}
+
+function parseOptionalTreeMaxDepth(context: string, value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`${context} must be a non-negative integer.`);
+  }
+
+  return value;
 }
 
 function parseCollectionTableFooterSlots(

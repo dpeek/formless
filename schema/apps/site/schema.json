@@ -268,6 +268,42 @@
         ]
       }
     },
+    "blockSiteRoots": {
+      "label": "Site roots",
+      "entity": "block",
+      "expression": {
+        "kind": "or",
+        "expressions": [
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "type"
+            },
+            "op": "eq",
+            "value": "page"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "type"
+            },
+            "op": "eq",
+            "value": "header"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "type"
+            },
+            "op": "eq",
+            "value": "footer"
+          }
+        ]
+      }
+    },
     "blockPosts": {
       "label": "Posts",
       "entity": "block",
@@ -416,6 +452,56 @@
         },
         "href": {
           "editor": "href",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "blockTreeNode": {
+      "entity": "block",
+      "fields": {
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "type": {
+          "editor": "enum",
+          "commit": "immediate"
+        },
+        "body": {
+          "editor": "markdown",
+          "commit": "field-commit"
+        },
+        "href": {
+          "editor": "href",
+          "commit": "field-commit"
+        },
+        "templateKey": {
+          "editor": "slug",
+          "commit": "field-commit"
+        },
+        "icon": {
+          "editor": "icon",
+          "commit": "field-commit"
+        },
+        "color": {
+          "editor": "color",
+          "commit": "field-commit"
+        },
+        "width": {
+          "editor": "number",
+          "commit": "field-commit"
+        },
+        "height": {
+          "editor": "number",
+          "commit": "field-commit"
+        }
+      }
+    },
+    "blockPlacementTreeItem": {
+      "entity": "blockPlacement",
+      "fields": {
+        "label": {
+          "editor": "text",
           "commit": "field-commit"
         }
       }
@@ -622,12 +708,66 @@
         }
       ]
     },
+    "siteCompositionHome": {
+      "type": "collection",
+      "label": "Site",
+      "entity": "blockPlacement",
+      "navigation": {
+        "primary": true
+      },
+      "context": {
+        "name": "block",
+        "entity": "block",
+        "query": "blockSiteRoots",
+        "labelField": "label",
+        "relationship": "blockPlacements",
+        "itemView": "blockRootDetail",
+        "presentation": "listDetail",
+        "navigation": {
+          "placement": "sidebar",
+          "groups": [
+            {
+              "label": "Pages",
+              "query": "blockPages"
+            },
+            {
+              "label": "Navigation",
+              "query": "blockNavigationRoots"
+            }
+          ]
+        }
+      },
+      "queries": [
+        {
+          "query": "placementsForSelectedBlock",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "placementsForSelectedBlock",
+      "result": {
+        "type": "tree",
+        "relationship": "blockPlacements",
+        "childField": "block",
+        "childItemView": "blockTreeNode",
+        "placementItemView": "blockPlacementTreeItem",
+        "maxDepth": 8
+      },
+      "actions": [
+        {
+          "type": "create",
+          "createView": "blockPlacementCreate",
+          "label": "Add placement"
+        }
+      ]
+    },
     "pageCompositionHome": {
       "type": "collection",
       "label": "Pages",
       "entity": "blockPlacement",
       "navigation": {
-        "primary": true
+        "primary": false
       },
       "context": {
         "name": "block",
@@ -664,7 +804,7 @@
       "label": "Navigation",
       "entity": "blockPlacement",
       "navigation": {
-        "primary": true
+        "primary": false
       },
       "context": {
         "name": "block",
@@ -827,9 +967,9 @@
     }
   },
   "screens": {
-    "sitePages": {
+    "siteEditor": {
       "type": "workspace",
-      "label": "Pages",
+      "label": "Site",
       "path": "/",
       "navigation": {
         "primary": true
@@ -838,27 +978,9 @@
         "type": "stack",
         "sections": [
           {
-            "id": "pages",
+            "id": "site",
             "type": "collection",
-            "view": "pageCompositionHome"
-          }
-        ]
-      }
-    },
-    "siteNavigation": {
-      "type": "workspace",
-      "label": "Navigation",
-      "path": "/navigation",
-      "navigation": {
-        "primary": true
-      },
-      "layout": {
-        "type": "stack",
-        "sections": [
-          {
-            "id": "navigation",
-            "type": "collection",
-            "view": "navigationCompositionHome"
+            "view": "siteCompositionHome"
           }
         ]
       }

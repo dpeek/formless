@@ -27,6 +27,7 @@ import { formatAggregateDisplayValue } from "./format.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTable } from "./table.tsx";
+import { RecordTree } from "./tree.tsx";
 
 export function HomeCollection({
   collection,
@@ -94,6 +95,7 @@ export function HomeCollection({
       />
 
       <CollectionResult
+        context={undefined}
         entity={entity}
         entityName={entityName}
         query={selectedQuery.query}
@@ -215,6 +217,7 @@ function ScopedHomeCollection({
           />
 
           <CollectionResult
+            context={context}
             entity={entity}
             entityName={entityName}
             query={selectedQuery.query}
@@ -269,6 +272,7 @@ function ListDetailScopedHomeCollection({
 }) {
   const activeOption = contextOptions.find((option) => option.id === activeContextRecordId);
   const isSingletonContext = contextOptions.length === 1;
+  const hasSidebarNavigation = context.navigation?.placement === "sidebar";
   const detailLabel = activeOption?.label ?? context.label;
   const contextFieldsRenderHeading = (context.recordFields ?? []).some(isHeadingRecordField);
 
@@ -276,12 +280,12 @@ function ListDetailScopedHomeCollection({
     <section
       aria-label={`${context.label} list detail`}
       className={
-        isSingletonContext
+        isSingletonContext || hasSidebarNavigation
           ? "min-w-0 space-y-6"
           : "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]"
       }
     >
-      {isSingletonContext ? null : (
+      {isSingletonContext || hasSidebarNavigation ? null : (
         <ContextListDetailSelector
           context={context}
           onSelectContext={onSelectContext}
@@ -297,7 +301,7 @@ function ListDetailScopedHomeCollection({
               aria-label={`${detailLabel} detail`}
               className="space-y-3 border-b border-slate-200 pb-4"
             >
-              {isSingletonContext || contextFieldsRenderHeading ? null : (
+              {isSingletonContext || hasSidebarNavigation || contextFieldsRenderHeading ? null : (
                 <h2 className="text-base font-semibold">{detailLabel}</h2>
               )}
               <ContextRecordEditor
@@ -337,6 +341,7 @@ function ListDetailScopedHomeCollection({
             />
 
             <CollectionResult
+              context={context}
               entity={entity}
               entityName={entityName}
               query={selectedQuery.query}
@@ -731,6 +736,7 @@ function AggregateSummarySlot({
 }
 
 function CollectionResult({
+  context,
   entity,
   entityName,
   query,
@@ -738,6 +744,7 @@ function CollectionResult({
   queryContext,
   result,
 }: {
+  context: HomeContextConfig | undefined;
   entity: EntitySchema;
   entityName: string;
   query: HomeQueryTabConfig["query"];
@@ -758,6 +765,10 @@ function CollectionResult({
         queryContext={queryContext}
       />
     );
+  }
+
+  if (result.type === "tree") {
+    return <RecordTree context={context} queryContext={queryContext} result={result} />;
   }
 
   return (

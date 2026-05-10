@@ -288,6 +288,14 @@ export type CollectionResultSchema =
       type: "table";
       tableView: string;
       footer?: CollectionTableFooterSlotSchema[];
+    }
+  | {
+      type: "tree";
+      relationship: string;
+      childField: string;
+      childItemView: string;
+      placementItemView?: string;
+      maxDepth?: number;
     };
 
 export type CollectionTableFooterSlotSchema = {
@@ -305,12 +313,23 @@ export type CollectionNavigationSchema = {
 
 export type CollectionContextPresentation = "tabs" | "listDetail";
 
+export type CollectionContextNavigationGroupSchema = {
+  label: string;
+  query: string;
+};
+
+export type CollectionContextNavigationSchema = {
+  placement: "sidebar";
+  groups: CollectionContextNavigationGroupSchema[];
+};
+
 export type CollectionContextSchema = {
   name: string;
   entity: string;
   query: string;
   labelField: string;
   presentation: CollectionContextPresentation;
+  navigation?: CollectionContextNavigationSchema;
   relationship?: string;
   createView?: string;
   itemView?: string;

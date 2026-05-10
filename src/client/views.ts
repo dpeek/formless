@@ -211,7 +211,33 @@ export type HomeResultConfig =
       columns: TableColumnConfig[];
       ordering?: TableOrderingConfig;
       footer?: TableFooterSlotConfig[];
+    }
+  | {
+      type: "tree";
+      relationshipName: string;
+      relationship: ToManyRelationshipSchema;
+      childFieldName: string;
+      childField: Extract<FieldSchema, { type: "reference" }>;
+      childEntityName: string;
+      childEntity: EntitySchema;
+      childItemViewName: string;
+      childRecordFields: RecordFieldConfig[];
+      placementItemViewName?: string;
+      placementRecordFields?: RecordFieldConfig[];
+      ordering?: TableOrderingConfig;
+      maxDepth: number;
     };
+
+export type HomeContextNavigationGroupConfig = {
+  label: string;
+  queryName: string;
+  query: QueryExpression;
+};
+
+export type HomeContextNavigationConfig = {
+  placement: "sidebar";
+  groups: HomeContextNavigationGroupConfig[];
+};
 
 export type HomeContextConfig = {
   name: string;
@@ -222,6 +248,7 @@ export type HomeContextConfig = {
   query: QueryExpression;
   labelField: string;
   presentation: CollectionContextPresentation;
+  navigation?: HomeContextNavigationConfig;
   relatedCollection?: RelatedCollectionConfig;
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
   itemViewName?: string;
@@ -599,6 +626,26 @@ function selectContext(
     query: contextQuery.expression,
     labelField: collectionView.context.labelField,
     presentation: collectionView.context.presentation,
+    ...(collectionView.context.navigation === undefined
+      ? {}
+      : {
+          navigation: {
+            placement: collectionView.context.navigation.placement,
+            groups: collectionView.context.navigation.groups.map((group) => {
+              const query = schema.queries[group.query];
+
+              if (!query) {
+                throw new Error(`Missing context navigation query "${group.query}".`);
+              }
+
+              return {
+                label: group.label,
+                queryName: group.query,
+                query: query.expression,
+              };
+            }),
+          },
+        }),
     ...(relatedCollection === undefined ? {} : { relatedCollection }),
     ...(createAction === undefined ? {} : { createAction }),
     ...(itemViewName === undefined
@@ -683,6 +730,56 @@ function selectResult(
     };
   }
 
+  if (collectionView.result.type === "tree") {
+    const relationship = selectToManyRelationship(schema, collectionView.result.relationship);
+    const childField = entity.fields[collectionView.result.childField];
+
+    if (!childField || childField.type !== "reference") {
+      throw new Error(`Missing tree child field "${collectionView.result.childField}".`);
+    }
+
+    const childEntity = schema.entities[childField.to];
+    const childItemView = schema.itemViews[collectionView.result.childItemView];
+
+    if (!childEntity) {
+      throw new Error(`Missing child entity "${childField.to}".`);
+    }
+
+    if (!childItemView) {
+      throw new Error(`Missing child item view "${collectionView.result.childItemView}".`);
+    }
+
+    const placementItemViewName = collectionView.result.placementItemView;
+    const placementItemView =
+      placementItemViewName === undefined ? undefined : schema.itemViews[placementItemViewName];
+
+    if (placementItemViewName !== undefined && placementItemView === undefined) {
+      throw new Error(`Missing placement item view "${placementItemViewName}".`);
+    }
+
+    const ordering = selectTreeOrdering(entity, relationship);
+
+    return {
+      type: "tree",
+      relationshipName: collectionView.result.relationship,
+      relationship,
+      childFieldName: collectionView.result.childField,
+      childField,
+      childEntityName: childField.to,
+      childEntity,
+      childItemViewName: collectionView.result.childItemView,
+      childRecordFields: selectRecordFields(childItemView, childEntity),
+      ...(placementItemViewName === undefined || placementItemView === undefined
+        ? {}
+        : {
+            placementItemViewName,
+            placementRecordFields: selectRecordFields(placementItemView, entity),
+          }),
+      ...(ordering === undefined ? {} : { ordering }),
+      maxDepth: collectionView.result.maxDepth ?? 8,
+    };
+  }
+
   const itemView = schema.itemViews[collectionView.result.itemView];
 
   if (!itemView) {
@@ -693,6 +790,31 @@ function selectResult(
     type: "list",
     itemViewName: collectionView.result.itemView,
     recordFields: selectRecordFields(itemView, entity),
+  };
+}
+
+function selectTreeOrdering(
+  entity: EntitySchema,
+  relationship: ToManyRelationshipSchema,
+): TableOrderingConfig | undefined {
+  const orderField = entity.fields.order;
+  const scopeField = entity.fields[relationship.to.field];
+
+  if (!orderField || orderField.type !== "number" || !scopeField) {
+    return undefined;
+  }
+
+  return {
+    fieldName: "order",
+    field: orderField,
+    scope: [
+      {
+        kind: "field",
+        fieldName: relationship.to.field,
+        field: scopeField,
+      },
+    ],
+    presentations: ["moveMenu"],
   };
 }
 
