@@ -20,20 +20,22 @@ import type {
   TableOrderingConfig,
   ValueUnitFieldConfig,
 } from "./views.ts";
+import { selectResultOrderingConfig, type ResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 import { fieldLabel, humanizeFieldName } from "./view-labels.ts";
 
 export type TableResultModel = {
   columns: TableColumnConfig[];
-  ordering?: TableOrderingConfig;
+  ordering?: ResultOrderingConfig;
 };
 
 export function selectTableResultModel(
   schema: AppSchema,
   tableView: TableViewSchema,
   entity: EntitySchema,
+  resultOrdering?: ResultOrderingConfig,
 ): TableResultModel {
-  const ordering = selectTableOrderingConfig(tableView, entity);
+  const ordering = resultOrdering ?? selectResultOrderingConfig(tableView.ordering, entity);
   const columns = selectTableColumns(schema, tableView, entity, ordering);
 
   return {
@@ -180,40 +182,6 @@ function selectTableColumns(
   }
 
   return columnsWithOrderingHandle;
-}
-
-function selectTableOrderingConfig(
-  view: TableViewSchema,
-  entity: EntitySchema,
-): TableOrderingConfig | undefined {
-  if (!view.ordering) {
-    return undefined;
-  }
-
-  const field = entity.fields[view.ordering.field];
-
-  if (!field || field.type !== "number") {
-    throw new Error(`Missing ordering field "${view.ordering.field}".`);
-  }
-
-  return {
-    fieldName: view.ordering.field,
-    field,
-    scope: (view.ordering.scope ?? []).map((scopeField) => {
-      const field = entity.fields[scopeField.field];
-
-      if (!field) {
-        throw new Error(`Missing ordering scope field "${scopeField.field}".`);
-      }
-
-      return {
-        kind: "field",
-        fieldName: scopeField.field,
-        field,
-      };
-    }),
-    presentations: view.ordering.presentations ?? ["moveMenu"],
-  };
 }
 
 function selectSyntheticOrderingMenuColumn(

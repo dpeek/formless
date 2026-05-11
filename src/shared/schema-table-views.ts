@@ -4,6 +4,7 @@ import {
   parseOptionalNonEmptyString,
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
+import { parseOptionalResultOrdering } from "./schema-ordering.ts";
 import type {
   ComputedValueSchema,
   EntitySchema,
@@ -20,9 +21,7 @@ import type {
   TableColumnSchema,
   TableColumnWidth,
   TableEditRecordTargetSchema,
-  TableOrderingPresentation,
   TableOrderingSchema,
-  TableOrderingScopeSchema,
   TableViewSchema,
   ViewSchema,
 } from "./schema-types.ts";
@@ -81,7 +80,12 @@ function parseTableView(
   }
 
   const actions = parseOptionalTableActions(tableViewName, value.actions, entityName, entity);
-  const ordering = parseOptionalTableOrdering(tableViewName, value.ordering, entityName, entity);
+  const ordering = parseOptionalResultOrdering(
+    `Table view "${tableViewName}" ordering`,
+    value.ordering,
+    entityName,
+    entity,
+  );
   const columns = parseTableColumns(
     tableViewName,
     entityName,
@@ -100,139 +104,6 @@ function parseTableView(
     ...(ordering === undefined ? {} : { ordering }),
     columns,
   };
-}
-
-function parseOptionalTableOrdering(
-  tableViewName: string,
-  value: unknown,
-  entityName: string,
-  entity: EntitySchema,
-): TableOrderingSchema | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  const context = `Table view "${tableViewName}" ordering`;
-
-  if (!isRecord(value)) {
-    throw new Error(`${context} must be an object.`);
-  }
-
-  assertExactKeys(context, value, ["field"], ["scope", "presentations"]);
-
-  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
-  const field = entity.fields[fieldName];
-
-  if (!field) {
-    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
-  }
-
-  if (field.type !== "number") {
-    throw new Error(`${context} field "${entityName}.${fieldName}" must be a number field.`);
-  }
-
-  if (field.integer === true) {
-    throw new Error(`${context} field "${entityName}.${fieldName}" must not be integer.`);
-  }
-
-  const scope = parseOptionalTableOrderingScope(context, value.scope, entityName, entity);
-  const presentations = parseOptionalTableOrderingPresentations(context, value.presentations);
-
-  return {
-    field: fieldName,
-    ...(scope === undefined ? {} : { scope }),
-    ...(presentations === undefined ? {} : { presentations }),
-  };
-}
-
-function parseOptionalTableOrderingScope(
-  context: string,
-  value: unknown,
-  entityName: string,
-  entity: EntitySchema,
-): TableOrderingScopeSchema[] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${context} scope must be a non-empty array.`);
-  }
-
-  const scope = value.map((candidate, index) =>
-    parseTableOrderingScopeField(`${context} scope ${index}`, candidate, entityName, entity),
-  );
-  const duplicate = scope.find(
-    (candidate, index) => scope.findIndex((item) => item.field === candidate.field) !== index,
-  );
-
-  if (duplicate) {
-    throw new Error(`${context} scope references duplicate field "${duplicate.field}".`);
-  }
-
-  return scope;
-}
-
-function parseTableOrderingScopeField(
-  context: string,
-  value: unknown,
-  entityName: string,
-  entity: EntitySchema,
-): TableOrderingScopeSchema {
-  if (!isRecord(value)) {
-    throw new Error(`${context} must be an object.`);
-  }
-
-  assertExactKeys(context, value, ["kind", "field"]);
-
-  if (value.kind !== "field") {
-    throw new Error(`${context} kind must be "field".`);
-  }
-
-  const fieldName = parseRequiredNonEmptyString(`${context} field`, value.field);
-
-  if (!entity.fields[fieldName]) {
-    throw new Error(`${context} references unknown field "${entityName}.${fieldName}".`);
-  }
-
-  return { kind: "field", field: fieldName };
-}
-
-function parseOptionalTableOrderingPresentations(
-  context: string,
-  value: unknown,
-): TableOrderingPresentation[] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${context} presentations must be a non-empty array.`);
-  }
-
-  const presentations = value.map((candidate, index) =>
-    parseTableOrderingPresentation(`${context} presentations ${index}`, candidate),
-  );
-  const duplicate = presentations.find(
-    (candidate, index) => presentations.indexOf(candidate) !== index,
-  );
-
-  if (duplicate) {
-    throw new Error(`${context} presentations references duplicate "${duplicate}".`);
-  }
-
-  return presentations;
-}
-
-function parseTableOrderingPresentation(
-  context: string,
-  value: unknown,
-): TableOrderingPresentation {
-  if (value === "moveMenu" || value === "dragHandle") {
-    return value;
-  }
-
-  throw new Error(`${context} must be "moveMenu" or "dragHandle".`);
 }
 
 function parseOptionalTableActions(

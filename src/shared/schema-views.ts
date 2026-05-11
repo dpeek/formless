@@ -7,6 +7,7 @@ import {
   parseOptionalNonEmptyString,
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
+import { parseOptionalResultOrdering, resultOrderingsAreEquivalent } from "./schema-ordering.ts";
 import {
   assertTableActionEditViews,
   parseOptionalTableColumnFormat,
@@ -1040,7 +1041,12 @@ function parseCollectionResult(
   }
 
   if (value.type === "list") {
-    assertExactKeys(`Collection view "${viewName}" result`, value, ["type", "itemView"]);
+    assertExactKeys(
+      `Collection view "${viewName}" result`,
+      value,
+      ["type", "itemView"],
+      ["ordering"],
+    );
 
     if (typeof value.itemView !== "string" || value.itemView.trim() === "") {
       throw new Error(`Collection view "${viewName}" result itemView must be a non-empty string.`);
@@ -1059,9 +1065,17 @@ function parseCollectionResult(
       );
     }
 
+    const ordering = parseOptionalResultOrdering(
+      `Collection view "${viewName}" result ordering`,
+      value.ordering,
+      entityName,
+      entity,
+    );
+
     return {
       type: "list",
       itemView: value.itemView,
+      ...(ordering === undefined ? {} : { ordering }),
     };
   }
 
@@ -1070,7 +1084,7 @@ function parseCollectionResult(
       `Collection view "${viewName}" result`,
       value,
       ["type", "tableView"],
-      ["footer"],
+      ["footer", "ordering"],
     );
 
     if (typeof value.tableView !== "string" || value.tableView.trim() === "") {
@@ -1090,6 +1104,23 @@ function parseCollectionResult(
       );
     }
 
+    const ordering = parseOptionalResultOrdering(
+      `Collection view "${viewName}" result ordering`,
+      value.ordering,
+      entityName,
+      entity,
+    );
+
+    if (
+      ordering !== undefined &&
+      tableView.ordering !== undefined &&
+      !resultOrderingsAreEquivalent(ordering, tableView.ordering)
+    ) {
+      throw new Error(
+        `Collection view "${viewName}" result ordering conflicts with table view "${value.tableView}" ordering.`,
+      );
+    }
+
     const footer = parseCollectionTableFooterSlots(
       viewName,
       entityName,
@@ -1102,6 +1133,7 @@ function parseCollectionResult(
     return {
       type: "table",
       tableView: value.tableView,
+      ...(ordering === undefined ? {} : { ordering }),
       ...(footer === undefined ? {} : { footer }),
     };
   }
@@ -1111,7 +1143,7 @@ function parseCollectionResult(
       `Collection view "${viewName}" result`,
       value,
       ["type", "relationship", "childField", "childItemView"],
-      ["placementItemView", "maxDepth"],
+      ["placementItemView", "ordering", "maxDepth"],
     );
 
     if (!collectionContext) {
@@ -1217,6 +1249,12 @@ function parseCollectionResult(
       `Collection view "${viewName}" result maxDepth`,
       value.maxDepth,
     );
+    const ordering = parseOptionalResultOrdering(
+      `Collection view "${viewName}" result ordering`,
+      value.ordering,
+      entityName,
+      entity,
+    );
 
     return {
       type: "tree",
@@ -1224,6 +1262,7 @@ function parseCollectionResult(
       childField: childFieldName,
       childItemView: childItemViewName,
       ...(placementItemViewName === undefined ? {} : { placementItemView: placementItemViewName }),
+      ...(ordering === undefined ? {} : { ordering }),
       ...(maxDepth === undefined ? {} : { maxDepth }),
     };
   }

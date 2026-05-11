@@ -100,7 +100,8 @@ export type TableColumnFormat = "plain" | "number" | "currency" | "percent";
 export type TableActionVariant = "default" | "destructive";
 export type TableActionAvailabilityState = "visible" | "hidden" | "disabled";
 export type TableActionPresentation = "button" | "dropdown";
-export type TableOrderingPresentation = "moveMenu" | "dragHandle";
+export type ResultOrderingPresentation = "moveMenu" | "dragHandle";
+export type TableOrderingPresentation = ResultOrderingPresentation;
 
 export type TableActionAvailabilitySchema = {
   state: TableActionAvailabilityState;
@@ -134,16 +135,20 @@ export type EditRecordTableActionSchema = TableActionBaseSchema & {
 
 export type TableActionSchema = StaticTableActionSchema | EditRecordTableActionSchema;
 
-export type TableOrderingScopeSchema = {
+export type ResultOrderingScopeSchema = {
   kind: "field";
   field: string;
 };
 
-export type TableOrderingSchema = {
+export type TableOrderingScopeSchema = ResultOrderingScopeSchema;
+
+export type ResultOrderingSchema = {
   field: string;
-  scope?: TableOrderingScopeSchema[];
-  presentations?: TableOrderingPresentation[];
+  scope?: ResultOrderingScopeSchema[];
+  presentations?: ResultOrderingPresentation[];
 };
+
+export type TableOrderingSchema = ResultOrderingSchema;
 
 export type ValueUnitEditorSchema = {
   unitField: string;
@@ -340,10 +345,12 @@ export type CollectionResultSchema =
   | {
       type: "list";
       itemView: string;
+      ordering?: ResultOrderingSchema;
     }
   | {
       type: "table";
       tableView: string;
+      ordering?: ResultOrderingSchema;
       footer?: CollectionTableFooterSlotSchema[];
     }
   | {
@@ -352,6 +359,7 @@ export type CollectionResultSchema =
       childField: string;
       childItemView: string;
       placementItemView?: string;
+      ordering?: ResultOrderingSchema;
       maxDepth?: number;
     };
 

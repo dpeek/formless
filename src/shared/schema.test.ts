@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
-import { sourceLikeSchemas } from "../test/schema-builders.ts";
+import { sourceLikeSchemas, sourceLikeSiteSchema } from "../test/schema-builders.ts";
 import { parseAppSchema, stringifySchema } from "./schema.ts";
 
 describe("schema text fields", () => {
@@ -1493,6 +1493,68 @@ describe("schema table views", () => {
     expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
   });
 
+  it("parses collection result ordering for list, table, and tree results", () => {
+    const ordering = {
+      field: "sortOrder",
+      scope: [{ kind: "field", field: "card" }],
+      presentations: ["dragHandle"],
+    };
+    const listSchema = parseAppSchema(
+      scopedRateSchema({
+        entities: scopedRateEntitiesWithSortOrder(),
+        views: scopedRateViews({
+          result: { type: "list", itemView: "rateListItem", ordering },
+        }),
+      }),
+    );
+    const tableSchema = parseAppSchema(
+      scopedRateSchema({
+        entities: scopedRateEntitiesWithSortOrder(),
+        views: scopedRateViews({
+          result: { type: "table", tableView: "rateTable", ordering },
+        }),
+      }),
+    );
+    const siteSchema = sourceLikeSiteSchema();
+    const siteHome = siteSchema.views.siteCompositionHome;
+
+    if (siteHome?.type !== "collection" || siteHome.result.type !== "tree") {
+      throw new Error("Missing site tree fixture.");
+    }
+
+    siteHome.result = {
+      ...siteHome.result,
+      ordering: {
+        field: "order",
+        scope: [{ kind: "field", field: "parent" }],
+        presentations: ["moveMenu"],
+      },
+    };
+
+    const treeSchema = parseAppSchema(siteSchema);
+
+    expect(listSchema.views.rateHome).toMatchObject({
+      type: "collection",
+      result: { type: "list", ordering },
+    });
+    expect(tableSchema.views.rateHome).toMatchObject({
+      type: "collection",
+      result: { type: "table", ordering },
+    });
+    expect(treeSchema.views.siteCompositionHome).toMatchObject({
+      type: "collection",
+      result: {
+        type: "tree",
+        ordering: {
+          field: "order",
+          scope: [{ kind: "field", field: "parent" }],
+          presentations: ["moveMenu"],
+        },
+      },
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(tableSchema)))).toEqual(tableSchema);
+  });
+
   it("validates editRecord targets and edit view references", () => {
     expect(() =>
       parseAppSchema(
@@ -1903,6 +1965,45 @@ describe("schema table views", () => {
         }),
       ),
     ).toThrow("orderingHandle requires dragHandle ordering presentation");
+  });
+
+  it("validates collection result ordering fields and table ordering conflicts", () => {
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          views: scopedRateViews({
+            result: { type: "list", itemView: "rateListItem", ordering: { field: "missing" } },
+          }),
+        }),
+      ),
+    ).toThrow('result ordering references unknown field "rate.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
+          entities: scopedRateEntitiesWithSortOrder(),
+          tableViews: {
+            rateTable: {
+              ...scopedRateTableViews().rateTable,
+              ordering: {
+                field: "sortOrder",
+                scope: [{ kind: "field", field: "card" }],
+              },
+            },
+          },
+          views: scopedRateViews({
+            result: {
+              type: "table",
+              tableView: "rateTable",
+              ordering: {
+                field: "sortOrder",
+                scope: [{ kind: "field", field: "resource" }],
+              },
+            },
+          }),
+        }),
+      ),
+    ).toThrow('result ordering conflicts with table view "rateTable" ordering');
   });
 
   it("parses and validates computed table columns", () => {

@@ -703,6 +703,70 @@ describe("home view model collections", () => {
     expect(result.columns.some((column) => column.key === "invokeAction:ordering")).toBe(false);
   });
 
+  it("resolves result-level ordering models for list, table, and tree results", () => {
+    const ordering = {
+      field: "sortOrder",
+      scope: [{ kind: "field" as const, field: "card" }],
+      presentations: ["moveMenu" as const],
+    };
+    const listSchema = rateCardSchemaWithRateHomeResult({
+      type: "list",
+      itemView: "rateListItem",
+      ordering,
+    });
+    const tableSchema = rateCardSchemaWithRateHomeResult({
+      type: "table",
+      tableView: "rateTable",
+      ordering,
+    });
+    const siteHome = siteSourceSchema.views.siteCompositionHome;
+
+    if (siteHome?.type !== "collection" || siteHome.result.type !== "tree") {
+      throw new Error("Missing site tree fixture.");
+    }
+
+    const treeSchema = parseAppSchema({
+      ...siteSourceSchema,
+      views: {
+        ...siteSourceSchema.views,
+        siteCompositionHome: {
+          ...siteHome,
+          result: {
+            ...siteHome.result,
+            ordering: {
+              field: "order",
+              scope: [{ kind: "field", field: "parent" }],
+              presentations: ["dragHandle"],
+            },
+          },
+        },
+      },
+    });
+    const listResult = requiredCollectionModel(listSchema, "rateHome").result;
+    const tableResult = requiredCollectionModel(tableSchema, "rateHome").result;
+    const treeResult = requiredCollectionModel(treeSchema, "siteCompositionHome").result;
+
+    expect(listResult.type === "list" ? listResult.ordering : undefined).toMatchObject({
+      fieldName: "sortOrder",
+      scope: [{ fieldName: "card" }],
+      presentations: ["moveMenu"],
+    });
+    expect(tableResult.type === "table" ? tableResult.ordering : undefined).toMatchObject({
+      fieldName: "sortOrder",
+      scope: [{ fieldName: "card" }],
+      presentations: ["moveMenu"],
+    });
+    expect(tableResult.type === "table" ? tableResult.columns.at(-1) : undefined).toMatchObject({
+      type: "invokeAction",
+      key: "invokeAction:ordering",
+    });
+    expect(treeResult.type === "tree" ? treeResult.ordering : undefined).toMatchObject({
+      fieldName: "order",
+      scope: [{ fieldName: "parent" }],
+      presentations: ["dragHandle"],
+    });
+  });
+
   it("resolves the source rate-card read-model slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",
@@ -1677,6 +1741,44 @@ function rateCardSchemaWithDragOrdering(): AppSchema {
           scope: [{ kind: "field", field: "card" }],
           presentations: ["dragHandle"],
         },
+      },
+    },
+  });
+}
+
+function rateCardSchemaWithRateHomeResult(
+  result: Extract<AppSchema["views"][string], { type: "collection" }>["result"],
+): AppSchema {
+  const rateHome = rateCardSchema.views.rateHome;
+  const rateEntity = rateCardSchema.entities.rate;
+
+  if (rateHome?.type !== "collection") {
+    throw new Error("Missing rate home fixture.");
+  }
+
+  return parseAppSchema({
+    ...rateCardSchema,
+    entities: {
+      ...rateCardSchema.entities,
+      rate: {
+        ...rateEntity,
+        fields: {
+          ...rateEntity.fields,
+          sortOrder: {
+            type: "number",
+            required: true,
+            label: "Sort order",
+            default: 1000,
+            min: 0,
+          },
+        },
+      },
+    },
+    views: {
+      ...rateCardSchema.views,
+      rateHome: {
+        ...rateHome,
+        result,
       },
     },
   });

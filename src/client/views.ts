@@ -27,10 +27,14 @@ import type {
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
-  TableOrderingPresentation,
   ViewSchema,
 } from "../shared/schema.ts";
 import type { QueryExpression } from "../shared/query.ts";
+import {
+  selectResultOrderingConfig,
+  type ResultOrderingConfig,
+  type ResultOrderingScopeConfig,
+} from "./result-ordering-model.ts";
 import { selectTableResultModel } from "./table-model.ts";
 import {
   selectCreateUnionPresentation,
@@ -133,18 +137,9 @@ export type EditViewConfig = {
   union?: RecordUnionPresentationConfig;
 };
 
-export type TableOrderingScopeConfig = {
-  kind: "field";
-  fieldName: string;
-  field: FieldSchema;
-};
-
-export type TableOrderingConfig = {
-  fieldName: string;
-  field: Extract<FieldSchema, { type: "number" }>;
-  scope: TableOrderingScopeConfig[];
-  presentations: TableOrderingPresentation[];
-};
+export type { ResultOrderingConfig, ResultOrderingScopeConfig };
+export type TableOrderingScopeConfig = ResultOrderingScopeConfig;
+export type TableOrderingConfig = ResultOrderingConfig;
 
 export type InvokeActionTableColumnConfig = TableColumnBaseConfig & {
   type: "invokeAction";
@@ -281,12 +276,13 @@ export type HomeResultConfig =
       itemViewName: string;
       recordFields: RecordFieldConfig[];
       recordUnion?: RecordUnionPresentationConfig;
+      ordering?: ResultOrderingConfig;
     }
   | {
       type: "table";
       tableViewName: string;
       columns: TableColumnConfig[];
-      ordering?: TableOrderingConfig;
+      ordering?: ResultOrderingConfig;
       footer?: TableFooterSlotConfig[];
     }
   | {
@@ -303,7 +299,7 @@ export type HomeResultConfig =
       placementItemViewName?: string;
       placementRecordFields?: RecordFieldConfig[];
       placementRecordUnion?: RecordUnionPresentationConfig;
-      ordering?: TableOrderingConfig;
+      ordering?: ResultOrderingConfig;
       maxDepth: number;
     };
 
@@ -803,7 +799,8 @@ function selectResult(
     if (!tableView) {
       throw new Error(`Missing table view "${collectionView.result.tableView}".`);
     }
-    const tableResult = selectTableResultModel(schema, tableView, entity);
+    const resultOrdering = selectResultOrderingConfig(collectionView.result.ordering, entity);
+    const tableResult = selectTableResultModel(schema, tableView, entity, resultOrdering);
     const { columns, ordering } = tableResult;
     const footer = selectTableFooterSlots(schema, collectionView.result.footer ?? [], columns);
 
@@ -843,7 +840,9 @@ function selectResult(
       throw new Error(`Missing placement item view "${placementItemViewName}".`);
     }
 
-    const ordering = selectTreeOrdering(entity, relationship);
+    const ordering =
+      selectResultOrderingConfig(collectionView.result.ordering, entity) ??
+      selectTreeOrdering(entity, relationship);
     const childRecordUnion = selectRecordUnionPresentation(schema, childItemView, childEntity);
     const placementRecordUnion =
       placementItemView === undefined
@@ -880,18 +879,21 @@ function selectResult(
   }
   const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
 
+  const ordering = selectResultOrderingConfig(collectionView.result.ordering, entity);
+
   return {
     type: "list",
     itemViewName: collectionView.result.itemView,
     recordFields: selectRecordFields(itemView, entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
+    ...(ordering === undefined ? {} : { ordering }),
   };
 }
 
 function selectTreeOrdering(
   entity: EntitySchema,
   relationship: ToManyRelationshipSchema,
-): TableOrderingConfig | undefined {
+): ResultOrderingConfig | undefined {
   const orderField = entity.fields.order;
   const scopeField = entity.fields[relationship.to.field];
 

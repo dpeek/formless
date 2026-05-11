@@ -1,7 +1,7 @@
 # PRD 21: View result ordering
 
 Status: ready
-Current chunk: VRO-01
+Current chunk: VRO-02
 Last updated: 2026-05-11
 
 ## Goal
@@ -152,6 +152,7 @@ Likely changed files:
 | VRO-D13 | Keep result renderers responsible for presentation-specific markup.         | Table rows, tree nodes, and list items have different DOM and accessibility needs. | Current table and tree renderers already have different structures.             |
 | VRO-D14 | Keep dnd-kit usage in generated app code.                                   | The shared UI package should stay primitive and presentation-neutral.              | PRD 16 explicitly kept dnd-kit in generated app code.                           |
 | VRO-D15 | Treat rebalance as a visible blocker, not an automatic multi-patch write.   | Atomic batch mutation transport is out of first-release scope.                     | Roadmap keeps atomic batch mutations later.                                     |
+| VRO-D16 | Resolve result-level ordering before table-level or implicit tree fallback. | Result schemas should own new ordering declarations while old table schemas work.  | VRO-01 model selectors prefer collection result ordering when present.          |
 
 ## Requirements
 
@@ -220,13 +221,13 @@ Likely changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on     | Main files                                 | Acceptance                                                                                                     |
-| ------ | ------ | -------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| VRO-01 | ready  | none           | schema parser, types, models               | Collection result ordering parses and resolves for table, tree, and list; existing table schemas keep working. |
-| VRO-02 | ready  | VRO-01         | generated ordering helpers, table renderer | Table renderer uses generic ordering helpers with no intended behavior change.                                 |
-| VRO-03 | ready  | VRO-02         | tree renderer, Site schema, tests          | Site tree sibling placements support explicit generic ordering and drag reorder without reparenting.           |
-| VRO-04 | ready  | VRO-02         | list renderer, tests                       | Ordered list results render in rank order and can opt into drag handles.                                       |
-| VRO-05 | ready  | VRO-03, VRO-04 | docs and cleanup                           | Legacy table/tree ordering names are documented or narrowed; promote notes are ready for steward docs.         |
+| ID     | Status  | Depends on     | Main files                                 | Acceptance                                                                                                     |
+| ------ | ------- | -------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| VRO-01 | shipped | none           | schema parser, types, models               | Collection result ordering parses and resolves for table, tree, and list; existing table schemas keep working. |
+| VRO-02 | ready   | VRO-01         | generated ordering helpers, table renderer | Table renderer uses generic ordering helpers with no intended behavior change.                                 |
+| VRO-03 | ready   | VRO-02         | tree renderer, Site schema, tests          | Site tree sibling placements support explicit generic ordering and drag reorder without reparenting.           |
+| VRO-04 | ready   | VRO-02         | list renderer, tests                       | Ordered list results render in rank order and can opt into drag handles.                                       |
+| VRO-05 | ready   | VRO-03, VRO-04 | docs and cleanup                           | Legacy table/tree ordering names are documented or narrowed; promote notes are ready for steward docs.         |
 
 ## Testing Decisions
 
@@ -289,6 +290,8 @@ Coordinate before touching:
 
 ## Promote After Ship
 
+- `doc/current.md`: collection result schemas can declare ordering for list, table, and tree results.
+- `doc/current.md`: result-level ordering resolves before table-level compatibility ordering and before the implicit tree `order` fallback.
 - `doc/current.md`: collection result ordering is generic across table, tree, and list result presentations.
 - `doc/current.md`: table ordering remains backward-compatible and uses generic ordering helpers.
 - `doc/current.md`: Site tree sibling placements support generated drag reorder.
@@ -304,8 +307,16 @@ Coordinate before touching:
 ## Status Notes
 
 - 2026-05-11: Drafted from review of current table ordering, collection result models, and Site tree ordering behavior.
+- 2026-05-11: VRO-01 shipped. Added result-level ordering schema/types/parser support, generic client ordering model selection, table compatibility fallback, and list/table/tree model coverage. Next ready chunk is VRO-02.
+
+## Blockers
+
+- None for VRO-01.
 
 ## Evidence
 
 - `devstate start`: checks ok, services running.
 - Current state review: table ordering has shared sparse rank helpers, table-local dnd-kit rendering, and tree-only inferred `order` move controls.
+- `devstate check`: checks ok, services running.
+- `.devstate/logs/service-test.txt`: 14 test files passed, 406 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 186 files.
