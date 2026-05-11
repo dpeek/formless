@@ -50,7 +50,8 @@ Single-context repo: read root `CONTEXT.md` and `doc/adr/` when a skill needs do
 When user says `done`:
 
 - Update assigned PRD
-- Run `devstate stop` and fix issues.
+- Run `devstate check` and fix issues.
+- Run `devstate stop`
 - Commit.
 - Rebase on main and merge.
 
