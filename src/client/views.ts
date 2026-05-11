@@ -271,6 +271,16 @@ export type TableFooterSlotConfig = HomeSummarySlotConfig & {
   columnKey: string;
 };
 
+export type TreeVariantBranchPolicyConfig = {
+  discriminatorFieldName: string;
+  discriminatorField: Extract<FieldSchema, { type: "enum" }>;
+  leafVariantValues: string[];
+};
+
+export type TreeBranchPolicyConfig = {
+  variants: TreeVariantBranchPolicyConfig;
+};
+
 export type HomeResultConfig =
   | {
       type: "list";
@@ -301,6 +311,7 @@ export type HomeResultConfig =
       placementRecordFields?: RecordFieldConfig[];
       placementRecordUnion?: RecordUnionPresentationConfig;
       ordering?: ResultOrderingConfig;
+      branches?: TreeBranchPolicyConfig;
       maxDepth: number;
     };
 
@@ -849,6 +860,7 @@ function selectResult(
       placementItemView === undefined
         ? undefined
         : selectRecordUnionPresentation(schema, placementItemView, entity);
+    const branches = selectTreeBranchPolicyConfig(collectionView.result.branches, childRecordUnion);
 
     return {
       type: "tree",
@@ -869,6 +881,7 @@ function selectResult(
             ...(placementRecordUnion === undefined ? {} : { placementRecordUnion }),
           }),
       ...(ordering === undefined ? {} : { ordering }),
+      ...(branches === undefined ? {} : { branches }),
       maxDepth: collectionView.result.maxDepth ?? 8,
     };
   }
@@ -888,6 +901,29 @@ function selectResult(
     recordFields: selectRecordFields(itemView, entity),
     ...(recordUnion === undefined ? {} : { recordUnion }),
     ...(ordering === undefined ? {} : { ordering }),
+  };
+}
+
+function selectTreeBranchPolicyConfig(
+  branches: Extract<CollectionViewSchema["result"], { type: "tree" }>["branches"],
+  childRecordUnion: RecordUnionPresentationConfig | undefined,
+): TreeBranchPolicyConfig | undefined {
+  if (branches === undefined) {
+    return undefined;
+  }
+
+  if (childRecordUnion === undefined) {
+    throw new Error("Tree branch policy requires a child record union.");
+  }
+
+  return {
+    variants: {
+      discriminatorFieldName: childRecordUnion.discriminatorFieldName,
+      discriminatorField: childRecordUnion.discriminatorField,
+      leafVariantValues: Object.entries(branches.variants)
+        .filter(([, action]) => action === "leaf")
+        .map(([variantValue]) => variantValue),
+    },
   };
 }
 

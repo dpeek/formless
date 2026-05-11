@@ -46,6 +46,8 @@ import type {
   ReadModelSchema,
   ToManyRelationshipSchema,
   TableViewSchema,
+  TreeBranchActionSchema,
+  TreeBranchPolicySchema,
   ViewVariantFieldsPresentationSchema,
   ViewFieldSchema,
   ViewSchema,
@@ -384,6 +386,7 @@ function parseView(
       tableViews,
       relationships,
       readModels,
+      unions,
     );
   }
 
@@ -479,6 +482,7 @@ function parseCollectionView(
   tableViews: Record<string, TableViewSchema>,
   relationships: Record<string, RelationshipSchema> | undefined,
   readModels?: ReadModelSchema,
+  unions?: Record<string, EntityUnionSchema>,
 ): CollectionViewSchema {
   assertExactKeys(
     `Collection view "${viewName}"`,
@@ -542,6 +546,7 @@ function parseCollectionView(
     context,
     relationships,
     readModels?.aggregates ?? {},
+    unions,
   );
   const actions = parseCollectionActionSlots(viewName, value.entity, entity, value.actions);
   const summary = parseCollectionSummarySlots(
@@ -1035,6 +1040,7 @@ function parseCollectionResult(
   collectionContext: CollectionContextSchema | undefined,
   relationships: Record<string, RelationshipSchema> | undefined,
   aggregates: Record<string, AggregateSchema>,
+  unions: Record<string, EntityUnionSchema> | undefined,
 ): CollectionResultSchema {
   if (!isRecord(value)) {
     throw new Error(`Collection view "${viewName}" result must be an object.`);
@@ -1143,7 +1149,7 @@ function parseCollectionResult(
       `Collection view "${viewName}" result`,
       value,
       ["type", "relationship", "childField", "childItemView"],
-      ["placementItemView", "ordering", "maxDepth"],
+      ["placementItemView", "ordering", "branches", "maxDepth"],
     );
 
     if (!collectionContext) {
@@ -1255,6 +1261,13 @@ function parseCollectionResult(
       entityName,
       entity,
     );
+    const branches = parseOptionalTreeBranchPolicy(
+      `Collection view "${viewName}" result branches`,
+      value.branches,
+      childItemViewName,
+      childItemView,
+      unions,
+    );
 
     return {
       type: "tree",
@@ -1263,6 +1276,7 @@ function parseCollectionResult(
       childItemView: childItemViewName,
       ...(placementItemViewName === undefined ? {} : { placementItemView: placementItemViewName }),
       ...(ordering === undefined ? {} : { ordering }),
+      ...(branches === undefined ? {} : { branches }),
       ...(maxDepth === undefined ? {} : { maxDepth }),
     };
   }
@@ -1280,6 +1294,78 @@ function parseOptionalTreeMaxDepth(context: string, value: unknown): number | un
   }
 
   return value;
+}
+
+function parseOptionalTreeBranchPolicy(
+  context: string,
+  value: unknown,
+  childItemViewName: string,
+  childItemView: ItemViewSchema,
+  unions: Record<string, EntityUnionSchema> | undefined,
+): TreeBranchPolicySchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["variants"]);
+
+  if (childItemView.union === undefined) {
+    throw new Error(
+      `${context} requires child item view "${childItemViewName}" to define a union.`,
+    );
+  }
+
+  const union = unions?.[childItemView.union];
+
+  if (!union) {
+    throw new Error(
+      `${context} references missing child item view union "${childItemView.union}".`,
+    );
+  }
+
+  return {
+    variants: parseTreeBranchVariantPolicy(`${context} variants`, value.variants, union),
+  };
+}
+
+function parseTreeBranchVariantPolicy(
+  context: string,
+  value: unknown,
+  union: EntityUnionSchema,
+): Record<string, TreeBranchActionSchema> {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+
+  if (entries.length === 0) {
+    throw new Error(`${context} must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([variantName, action]) => {
+      if (variantName.trim() === "") {
+        throw new Error(`${context} variant keys must be non-empty strings.`);
+      }
+
+      if (union.variants[variantName] === undefined) {
+        throw new Error(
+          `${context} variant "${variantName}" must match a variant in union "${union.entity}.${union.discriminator}".`,
+        );
+      }
+
+      if (action !== "leaf") {
+        throw new Error(`${context} variant "${variantName}" action must be "leaf".`);
+      }
+
+      return [variantName, action];
+    }),
+  );
 }
 
 function parseCollectionTableFooterSlots(

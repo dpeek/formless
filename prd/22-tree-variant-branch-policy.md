@@ -1,8 +1,8 @@
 # PRD 22: Tree variant branch policy
 
 Status: ready
-Current chunk: TVB-01
-Last updated: 2026-05-11
+Current chunk: TVB-02
+Last updated: 2026-05-12
 
 ## Problem Statement
 
@@ -201,11 +201,11 @@ Do not put this under the union definition. The same union can be expanded in on
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files                         | Acceptance                                                                     |
-| ------ | ------ | ---------- | ---------------------------------- | ------------------------------------------------------------------------------ |
-| TVB-01 | ready  | PRD 20     | schema types/parser, view model    | Tree branch policy parses, validates variant keys, and exposes model facts.    |
-| TVB-02 | later  | TVB-01     | generated tree renderer, app tests | Tree renderer treats configured child variants as leaves.                      |
-| TVB-03 | later  | TVB-02     | Site source schema, browser smoke  | `/site` page trees hide Header/Footer descendants; Header/Footer roots expand. |
+| ID     | Status  | Depends on | Main files                         | Acceptance                                                                     |
+| ------ | ------- | ---------- | ---------------------------------- | ------------------------------------------------------------------------------ |
+| TVB-01 | shipped | PRD 20     | schema types/parser, view model    | Tree branch policy parses, validates variant keys, and exposes model facts.    |
+| TVB-02 | ready   | TVB-01     | generated tree renderer, app tests | Tree renderer treats configured child variants as leaves.                      |
+| TVB-03 | later   | TVB-02     | Site source schema, browser smoke  | `/site` page trees hide Header/Footer descendants; Header/Footer roots expand. |
 
 ## Testing Decisions
 
@@ -265,6 +265,8 @@ Do not put this under the union definition. The same union can be expanded in on
 
 ## Promote after ship
 
+- TVB-01 promote note: generated tree result schemas can declare `branches.variants` policies, and tree result models expose child discriminator plus leaf variant values.
+- TVB-01 promote note: no generated renderer or Site source schema behavior changed yet; Header/Footer editor hiding waits for TVB-02 and TVB-03.
 - `doc/current.md`: generated tree results can treat configured child union variants as leaf nodes.
 - `doc/current.md`: Site page-root trees show Header/Footer nodes without expanding Header/Footer children.
 - `doc/current.md`: Header/Footer roots still expand when selected directly.
@@ -279,9 +281,19 @@ Do not put this under the union definition. The same union can be expanded in on
 ## Status Notes
 
 - 2026-05-11: Created PRD from discussion about hiding Header/Footer descendants when those variants appear inside a page tree.
+- 2026-05-12: TVB-01 shipped. Added tree result `branches.variants` schema support with `leaf` action validation, child item view union validation, stringify preservation, and view-model branch facts from the child union discriminator. No generated tree renderer, Site source schema, storage, sync, authority, public tree, or public renderer behavior changed.
+
+## Blockers
+
+- None.
 
 ## Evidence
 
 - `devstate start`: checks ok, services running.
 - `devstate check`: checks ok, services running.
 - `.devstate/status.md`: checks ok, services running.
+- 2026-05-12 TVB-01: `.devstate/status.md` reports checks ok and services running after `devstate check`.
+- 2026-05-12 TVB-01: `.devstate/logs/service-test.txt` reports 15 test files passing with 429 tests.
+- 2026-05-12 TVB-01: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 190 files.
+- 2026-05-12 TVB-01: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
+- 2026-05-12 TVB-01: browser smoke skipped because app behavior did not change.

@@ -1555,6 +1555,77 @@ describe("schema table views", () => {
     expect(parseAppSchema(JSON.parse(stringifySchema(tableSchema)))).toEqual(tableSchema);
   });
 
+  it("parses tree branch policy and preserves it through stringify", () => {
+    const siteSchema = siteSchemaWithTreeBranches({
+      variants: {
+        header: "leaf",
+        footer: "leaf",
+      },
+    });
+    const schema = parseAppSchema(siteSchema);
+    const siteHome = schema.views.siteCompositionHome;
+    const unchangedSchema = parseAppSchema(sourceLikeSiteSchema());
+    const unchangedSiteHome = unchangedSchema.views.siteCompositionHome;
+
+    if (siteHome?.type !== "collection" || siteHome.result.type !== "tree") {
+      throw new Error("Missing site tree fixture.");
+    }
+
+    if (unchangedSiteHome?.type !== "collection" || unchangedSiteHome.result.type !== "tree") {
+      throw new Error("Missing unchanged site tree fixture.");
+    }
+
+    expect(siteHome.result.branches).toEqual({
+      variants: {
+        header: "leaf",
+        footer: "leaf",
+      },
+    });
+    expect(unchangedSiteHome.result).not.toHaveProperty("branches");
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects malformed tree branch policies", () => {
+    const schemaWithoutUnion = siteSchemaWithTreeBranches({
+      variants: {
+        header: "leaf",
+      },
+    });
+
+    schemaWithoutUnion.itemViews.blockTreeNode = {
+      entity: "block",
+      fields: {
+        label: { editor: "text", commit: "field-commit" },
+      },
+    };
+
+    expect(() => parseAppSchema(schemaWithoutUnion)).toThrow(
+      'Collection view "siteCompositionHome" result branches requires child item view "blockTreeNode" to define a union.',
+    );
+    expect(() =>
+      parseAppSchema(
+        siteSchemaWithTreeBranches({
+          variants: {
+            missing: "leaf",
+          },
+        }),
+      ),
+    ).toThrow(
+      'Collection view "siteCompositionHome" result branches variants variant "missing" must match a variant in union "block.type".',
+    );
+    expect(() =>
+      parseAppSchema(
+        siteSchemaWithTreeBranches({
+          variants: {
+            header: "collapse",
+          },
+        }),
+      ),
+    ).toThrow(
+      'Collection view "siteCompositionHome" result branches variants variant "header" action must be "leaf".',
+    );
+  });
+
   it("validates editRecord targets and edit view references", () => {
     expect(() =>
       parseAppSchema(
@@ -5035,6 +5106,20 @@ function baseSchema(overrides: Record<string, unknown> = {}) {
     views: defaultViews(),
     ...overrides,
   };
+}
+
+function siteSchemaWithTreeBranches(branches: unknown) {
+  const schema = sourceLikeSiteSchema() as unknown as {
+    itemViews: Record<string, unknown>;
+    views: {
+      siteCompositionHome: {
+        result: Record<string, unknown>;
+      };
+    };
+  };
+
+  schema.views.siteCompositionHome.result.branches = branches;
+  return schema;
 }
 
 function defaultEntities() {

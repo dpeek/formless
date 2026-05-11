@@ -767,6 +767,50 @@ describe("home view model collections", () => {
     });
   });
 
+  it("resolves tree branch policy model facts from the child item view union", () => {
+    const siteHome = siteSourceSchema.views.siteCompositionHome;
+
+    if (siteHome?.type !== "collection" || siteHome.result.type !== "tree") {
+      throw new Error("Missing site tree fixture.");
+    }
+
+    const treeSchema = parseAppSchema({
+      ...siteSourceSchema,
+      views: {
+        ...siteSourceSchema.views,
+        siteCompositionHome: {
+          ...siteHome,
+          result: {
+            ...siteHome.result,
+            branches: {
+              variants: {
+                header: "leaf",
+                footer: "leaf",
+              },
+            },
+          },
+        },
+      },
+    });
+    const treeResult = requiredCollectionModel(treeSchema, "siteCompositionHome").result;
+
+    expect(treeResult.type === "tree" ? treeResult.childRecordUnion?.unionName : undefined).toBe(
+      "blockByType",
+    );
+    expect(treeResult.type === "tree" ? treeResult.branches : undefined).toMatchObject({
+      variants: {
+        discriminatorFieldName: "type",
+        leafVariantValues: ["header", "footer"],
+      },
+    });
+    expect(
+      treeResult.type === "tree" ? treeResult.branches?.variants.discriminatorField.values : {},
+    ).toMatchObject({
+      header: { label: "Header" },
+      footer: { label: "Footer" },
+    });
+  });
+
   it("resolves the source rate-card read-model slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",

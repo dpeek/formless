@@ -342,6 +342,12 @@ export type CollectionViewQuerySlotSchema = {
   count?: CountDisplaySchema;
 };
 
+export type TreeBranchActionSchema = "leaf";
+
+export type TreeBranchPolicySchema = {
+  variants: Record<string, TreeBranchActionSchema>;
+};
+
 export type CollectionResultSchema =
   | {
       type: "list";
@@ -361,6 +367,7 @@ export type CollectionResultSchema =
       childItemView: string;
       placementItemView?: string;
       ordering?: ResultOrderingSchema;
+      branches?: TreeBranchPolicySchema;
       maxDepth?: number;
     };
 
