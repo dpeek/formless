@@ -1,7 +1,7 @@
 # PRD 21: View result ordering
 
 Status: ready
-Current chunk: VRO-03
+Current chunk: VRO-04
 Last updated: 2026-05-11
 
 ## Goal
@@ -154,6 +154,7 @@ Likely changed files:
 | VRO-D15 | Treat rebalance as a visible blocker, not an automatic multi-patch write.        | Atomic batch mutation transport is out of first-release scope.                                             | Roadmap keeps atomic batch mutations later.                                                   |
 | VRO-D16 | Resolve result-level ordering before table-level or implicit tree fallback.      | Result schemas should own new ordering declarations while old table schemas work.                          | VRO-01 model selectors prefer collection result ordering when present.                        |
 | VRO-D17 | Keep generated result ordering UI helpers in `src/app/generated/ordering-ui.ts`. | Tree and list renderers need the same generated drag, move, and patch helpers without taking table markup. | VRO-02 table renderer and action cells consume `ResultOrderingContext` from `ordering-ui.ts`. |
+| VRO-D18 | Scope tree drag providers to sibling placement lists.                            | Tree drag reorder must move siblings without reparenting records across parent scopes.                     | VRO-03 tree renderer creates sibling ordering contexts and rejects cross-scope drag groups.   |
 
 ## Requirements
 
@@ -226,7 +227,7 @@ Likely changed files:
 | ------ | ------- | -------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | VRO-01 | shipped | none           | schema parser, types, models               | Collection result ordering parses and resolves for table, tree, and list; existing table schemas keep working. |
 | VRO-02 | shipped | VRO-01         | generated ordering helpers, table renderer | Table renderer uses generic ordering helpers with no intended behavior change.                                 |
-| VRO-03 | ready   | VRO-02         | tree renderer, Site schema, tests          | Site tree sibling placements support explicit generic ordering and drag reorder without reparenting.           |
+| VRO-03 | shipped | VRO-02         | tree renderer, Site schema, tests          | Site tree sibling placements support explicit generic ordering and drag reorder without reparenting.           |
 | VRO-04 | ready   | VRO-02         | list renderer, tests                       | Ordered list results render in rank order and can opt into drag handles.                                       |
 | VRO-05 | ready   | VRO-03, VRO-04 | docs and cleanup                           | Legacy table/tree ordering names are documented or narrowed; promote notes are ready for steward docs.         |
 
@@ -295,6 +296,7 @@ Coordinate before touching:
 - `doc/current.md`: result-level ordering resolves before table-level compatibility ordering and before the implicit tree `order` fallback.
 - `doc/current.md`: collection result ordering is generic across table, tree, and list result presentations.
 - `doc/current.md`: table ordering remains backward-compatible and uses generic ordering helpers.
+- `doc/current.md`: Site tree results declare `blockPlacement.order` ordering scoped by `blockPlacement.parent` with drag and move presentations.
 - `doc/current.md`: Site tree sibling placements support generated drag reorder.
 - `doc/roadmap.md`: generated collection result ordering is release scope; cross-scope reparenting and batch rebalance stay out of first release.
 
@@ -310,11 +312,13 @@ Coordinate before touching:
 - 2026-05-11: Drafted from review of current table ordering, collection result models, and Site tree ordering behavior.
 - 2026-05-11: VRO-01 shipped. Added result-level ordering schema/types/parser support, generic client ordering model selection, table compatibility fallback, and list/table/tree model coverage. Next ready chunk is VRO-02.
 - 2026-05-11: VRO-02 shipped. Added generated `ordering-ui.ts`, moved table ordering context, drag facts, move menu planning, drag move planning, and patch submission behind generic result-ordering helpers. Table rendering and action cells now consume those helpers with no intended behavior change. Next ready chunk is VRO-03.
+- 2026-05-11: VRO-03 shipped. Site tree results now declare explicit `blockPlacement.order` ordering scoped by `parent`, tree sibling lists use generic result ordering contexts, and same-scope tree drag reorder submits generic patch mutations without reparenting. Next ready chunk is VRO-04.
 
 ## Blockers
 
 - None for VRO-01.
 - None for VRO-02.
+- None for VRO-03.
 
 ## Evidence
 
@@ -327,3 +331,8 @@ Coordinate before touching:
 - `.devstate/logs/service-test.txt`: generated ordering/table rerun passed, 3 test files passed, 103 tests passed.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 187 files.
 - Browser smoke not run for VRO-02; table rendering was refactored with no intended app behavior change.
+- `devstate check`: checks ok, services running after VRO-03.
+- `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: not present in this checkout; devstate evidence is in `.devstate/status.md` and `.devstate/logs/`.
+- `.devstate/logs/service-test.txt`: tree/app rerun passed, 1 test file passed, 100 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 187 files.
+- `bun browser --session vro-03`: `/site` rendered 17 sortable tree placements and 17 ordering handles; same-scope drag completed with no page errors and sync returned to `Synced`.

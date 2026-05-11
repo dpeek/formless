@@ -1,7 +1,9 @@
+import { useState } from "react";
+import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
+import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@formless/ui/button";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitPatchMutation } from "../../client/sync.ts";
 import type {
   HomeContextConfig,
   HomeResultConfig,
@@ -10,7 +12,20 @@ import type {
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { FieldValue, StoredRecord } from "../../shared/protocol.ts";
-import { calculateOrderingDragMovePlan } from "../../shared/table-ordering.ts";
+import type { EntitySchema } from "../../shared/schema.ts";
+import {
+  ORDERING_DND_TYPE,
+  calculateOrderingDragMovePlanForContext,
+  parseOrderingDragData,
+  selectOrderingDragFacts,
+  selectOrderingMoveMenuItems,
+  selectOrderedResultRecordIds,
+  selectResultOrderingContext,
+  submitOrderingPatch,
+  type ResultOrderingContext,
+  type ResultOrderingDragData,
+  type ResultOrderingDragFact,
+} from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
@@ -22,12 +37,16 @@ import {
 type TreeResultConfig = Extract<HomeResultConfig, { type: "tree" }>;
 
 export function RecordTree({
+  entity,
+  entityName,
   context,
   onSelectContext,
   queryContext,
   result,
   selectableContextRecordIds,
 }: {
+  entity?: EntitySchema;
+  entityName?: string;
   context: HomeContextConfig | undefined;
   onSelectContext?: (recordId: string | null) => void;
   queryContext?: QueryEvaluationContext;
@@ -35,6 +54,8 @@ export function RecordTree({
   selectableContextRecordIds?: Set<string>;
 }) {
   const recordsById = useRecordsById();
+  const canPatch = entity?.mutations.patch.enabled ?? true;
+  const placementEntityName = entityName ?? result.relationship.to.entity;
   const parentRecordId = context ? stringValue(queryContext?.values?.[context.name]) : undefined;
 
   if (!parentRecordId) {
@@ -48,47 +69,278 @@ export function RecordTree({
       {placements.length === 0 ? (
         <p className="text-sm text-slate-600">No records yet.</p>
       ) : (
-        <ol className="space-y-3">
-          {placements.map((placement, index) => (
-            <PlacementTreeItem
-              ancestors={new Set([parentRecordId])}
-              context={context}
-              depth={0}
-              index={index}
-              key={placement.id}
-              onSelectContext={onSelectContext}
-              placement={placement}
-              result={result}
-              selectableContextRecordIds={selectableContextRecordIds}
-              siblingPlacements={placements}
-            />
-          ))}
-        </ol>
+        <PlacementSiblingList
+          ancestors={new Set([parentRecordId])}
+          canPatch={canPatch}
+          className="space-y-3"
+          context={context}
+          depth={0}
+          entityName={placementEntityName}
+          onSelectContext={onSelectContext}
+          placements={placements}
+          result={result}
+          selectableContextRecordIds={selectableContextRecordIds}
+        />
       )}
     </section>
   );
 }
 
-function PlacementTreeItem({
+function PlacementSiblingList({
   ancestors,
+  canPatch,
+  className,
   context,
   depth,
+  onSelectContext,
+  entityName,
+  placements,
+  result,
+  selectableContextRecordIds,
+}: {
+  ancestors: Set<string>;
+  canPatch: boolean;
+  className: string;
+  context: HomeContextConfig | undefined;
+  depth: number;
+  entityName: string;
+  onSelectContext?: (recordId: string | null) => void;
+  placements: StoredRecord[];
+  result: TreeResultConfig;
+  selectableContextRecordIds?: Set<string>;
+}) {
+  const schemaKey = useSchemaKey();
+  const recordsById = useRecordsById();
+  const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
+  const recordIds = placements.map((placement) => placement.id);
+  const orderingContext = selectResultOrderingContext({
+    canPatch,
+    entityName,
+    ordering: result.ordering,
+    recordIds,
+    recordsById,
+  });
+  const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
+  const orderedPlacements = orderedRecordIds
+    .map((recordId) => recordsById[recordId])
+    .filter((record): record is StoredRecord => record?.entity === entityName);
+  const orderingDragFacts = selectOrderingDragFacts(orderingContext);
+
+  async function handleOrderingDragEnd(event: DragEndEvent) {
+    if (!orderingContext || event.canceled || !isSortableOperation(event.operation)) {
+      return;
+    }
+
+    const { source } = event.operation;
+
+    if (!source) {
+      return;
+    }
+
+    const dragData = parseOrderingDragData(source.data);
+
+    if (!dragData) {
+      return;
+    }
+
+    if (source.sortable.initialGroup !== source.sortable.group) {
+      setSyncStatus({ state: "idle", message: "Cross-scope placement move ignored." });
+      return;
+    }
+
+    const plan = calculateOrderingDragMovePlanForContext({
+      orderingContext,
+      recordId: dragData.recordId,
+      targetIndex: source.sortable.index,
+    });
+
+    if (plan.kind !== "patch") {
+      if (plan.kind === "rebalance") {
+        setSyncStatus({
+          state: "error",
+          message: "Rebalance required before drag reorder.",
+        });
+      }
+      return;
+    }
+
+    const suspendedDrop = event.suspend();
+    setPendingDragRecordId(dragData.recordId);
+    setSyncStatus({ state: "syncing", message: "Moving placement..." });
+
+    try {
+      await submitOrderingPatch(schemaKey, orderingContext, plan);
+      setSyncStatus({ state: "idle", message: "Placement moved and synced." });
+    } catch (error) {
+      setSyncStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Drag reorder failed.",
+      });
+    } finally {
+      setPendingDragRecordId(null);
+      suspendedDrop.resume();
+    }
+  }
+
+  const list = (
+    <ol className={className}>
+      {orderedPlacements.map((placement, index) =>
+        orderingContext && orderingDragFacts ? (
+          <SortablePlacementTreeItem
+            ancestors={ancestors}
+            canPatch={canPatch}
+            context={context}
+            depth={depth}
+            dragFact={orderingDragFacts.get(placement.id)}
+            entityName={entityName}
+            index={index}
+            key={placement.id}
+            onSelectContext={onSelectContext}
+            orderingContext={orderingContext}
+            pendingDragRecordId={pendingDragRecordId}
+            placement={placement}
+            result={result}
+            selectableContextRecordIds={selectableContextRecordIds}
+            siblingCount={orderedPlacements.length}
+          />
+        ) : (
+          <PlacementTreeItem
+            ancestors={ancestors}
+            canPatch={canPatch}
+            context={context}
+            depth={depth}
+            entityName={entityName}
+            index={index}
+            key={placement.id}
+            onSelectContext={onSelectContext}
+            orderingContext={orderingContext}
+            placement={placement}
+            result={result}
+            selectableContextRecordIds={selectableContextRecordIds}
+            siblingCount={orderedPlacements.length}
+          />
+        ),
+      )}
+    </ol>
+  );
+
+  return orderingContext && orderingDragFacts ? (
+    <DragDropProvider onDragEnd={handleOrderingDragEnd}>{list}</DragDropProvider>
+  ) : (
+    list
+  );
+}
+
+function SortablePlacementTreeItem({
+  ancestors,
+  canPatch,
+  context,
+  depth,
+  dragFact,
+  entityName,
   index,
   onSelectContext,
+  orderingContext,
+  pendingDragRecordId,
   placement,
   result,
   selectableContextRecordIds,
-  siblingPlacements,
+  siblingCount,
 }: {
   ancestors: Set<string>;
+  canPatch: boolean;
   context: HomeContextConfig | undefined;
   depth: number;
+  dragFact: ResultOrderingDragFact | undefined;
+  entityName: string;
   index: number;
   onSelectContext?: (recordId: string | null) => void;
+  orderingContext: ResultOrderingContext;
+  pendingDragRecordId: string | null;
   placement: StoredRecord;
   result: TreeResultConfig;
   selectableContextRecordIds?: Set<string>;
-  siblingPlacements: StoredRecord[];
+  siblingCount: number;
+}) {
+  const disabled = !dragFact || !orderingContext.canPatch || pendingDragRecordId !== null;
+  const { handleRef, isDragSource, isDropTarget, ref } = useSortable<ResultOrderingDragData>({
+    id: `tree-ordering:${placement.id}`,
+    data: {
+      type: ORDERING_DND_TYPE,
+      recordId: placement.id,
+      scopeKey: dragFact?.scopeKey ?? "",
+    },
+    group: dragFact?.scopeKey,
+    index: dragFact?.index ?? 0,
+    type: ORDERING_DND_TYPE,
+    accept: (source) => {
+      const sourceData = parseOrderingDragData(source.data);
+
+      return sourceData?.scopeKey === dragFact?.scopeKey;
+    },
+    disabled,
+    transition: { idle: true },
+  });
+  const itemStateClass = [isDragSource ? "opacity-60" : "", isDropTarget ? "bg-muted/40" : ""]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <PlacementTreeItem
+      ancestors={ancestors}
+      canPatch={canPatch}
+      context={context}
+      depth={depth}
+      entityName={entityName}
+      index={index}
+      itemClassName={itemStateClass || undefined}
+      itemRef={ref}
+      onSelectContext={onSelectContext}
+      orderingContext={orderingContext}
+      orderingHandleDisabled={disabled}
+      orderingHandleRef={handleRef}
+      placement={placement}
+      result={result}
+      selectableContextRecordIds={selectableContextRecordIds}
+      siblingCount={siblingCount}
+    />
+  );
+}
+
+function PlacementTreeItem({
+  ancestors,
+  canPatch,
+  context,
+  depth,
+  entityName,
+  index,
+  itemClassName,
+  itemRef,
+  onSelectContext,
+  orderingContext,
+  orderingHandleDisabled,
+  orderingHandleRef,
+  placement,
+  result,
+  selectableContextRecordIds,
+  siblingCount,
+}: {
+  ancestors: Set<string>;
+  canPatch: boolean;
+  context: HomeContextConfig | undefined;
+  depth: number;
+  entityName: string;
+  index: number;
+  itemClassName?: string;
+  itemRef?: (element: Element | null) => void;
+  onSelectContext?: (recordId: string | null) => void;
+  orderingContext?: ResultOrderingContext;
+  orderingHandleDisabled?: boolean;
+  orderingHandleRef?: (element: Element | null) => void;
+  placement: StoredRecord;
+  result: TreeResultConfig;
+  selectableContextRecordIds?: Set<string>;
+  siblingCount: number;
 }) {
   const recordsById = useRecordsById();
   const childRecordId = stringValue(placement.values[result.childFieldName]);
@@ -100,18 +352,24 @@ function PlacementTreeItem({
   const nextAncestors = childRecord ? new Set([...ancestors, childRecord.id]) : ancestors;
 
   return (
-    <li className="space-y-3">
+    <li
+      className={["space-y-3", itemClassName].filter(Boolean).join(" ")}
+      data-formless-sortable-tree-placement={placement.id}
+      ref={itemRef}
+    >
       <div className="rounded border border-slate-200 bg-white">
         <div className="grid min-w-0 gap-3 p-3">
           <div className="flex min-w-0 items-start gap-2">
-            <PlacementMoveControls
+            <PlacementOrderingControls
               index={index}
+              orderingContext={orderingContext}
+              orderingHandleDisabled={orderingHandleDisabled}
+              orderingHandleRef={orderingHandleRef}
               placement={placement}
-              result={result}
-              siblingPlacements={siblingPlacements}
+              siblingCount={siblingCount}
             />
             <div className="min-w-0 flex-1 space-y-3">
-              <PlacementRecordFields placement={placement} result={result} />
+              <PlacementRecordFields canPatch={canPatch} placement={placement} result={result} />
               {childRecord ? (
                 <ChildRecordEditor
                   childRecord={childRecord}
@@ -134,69 +392,56 @@ function PlacementTreeItem({
         </div>
       </div>
       {childPlacements.length > 0 ? (
-        <ol className="ml-5 space-y-3 border-l border-slate-200 pl-4">
-          {childPlacements.map((childPlacement, childIndex) => (
-            <PlacementTreeItem
-              ancestors={nextAncestors}
-              context={context}
-              depth={depth + 1}
-              index={childIndex}
-              key={childPlacement.id}
-              onSelectContext={onSelectContext}
-              placement={childPlacement}
-              result={result}
-              selectableContextRecordIds={selectableContextRecordIds}
-              siblingPlacements={childPlacements}
-            />
-          ))}
-        </ol>
+        <PlacementSiblingList
+          ancestors={nextAncestors}
+          canPatch={canPatch}
+          className="ml-5 space-y-3 border-l border-slate-200 pl-4"
+          context={context}
+          depth={depth + 1}
+          entityName={entityName}
+          onSelectContext={onSelectContext}
+          placements={childPlacements}
+          result={result}
+          selectableContextRecordIds={selectableContextRecordIds}
+        />
       ) : null}
     </li>
   );
 }
 
-function PlacementMoveControls({
+function PlacementOrderingControls({
   index,
+  orderingContext,
+  orderingHandleDisabled,
+  orderingHandleRef,
   placement,
-  result,
-  siblingPlacements,
+  siblingCount,
 }: {
   index: number;
+  orderingContext: ResultOrderingContext | undefined;
+  orderingHandleDisabled?: boolean;
+  orderingHandleRef?: (element: Element | null) => void;
   placement: StoredRecord;
-  result: TreeResultConfig;
-  siblingPlacements: StoredRecord[];
+  siblingCount: number;
 }) {
   const schemaKey = useSchemaKey();
-  const recordsById = useRecordsById();
-  const ordering = result.ordering;
+  const showDragHandle = orderingContext?.ordering.presentations.includes("dragHandle") === true;
+  const moveItems = selectOrderingMoveMenuItems({
+    includeOrdering: orderingContext?.ordering.presentations.includes("moveMenu") === true,
+    orderingContext,
+    sourceRecordId: placement.id,
+  }).filter((item) => item.direction === "up" || item.direction === "down");
 
-  if (!ordering || siblingPlacements.length <= 1) {
+  if ((!showDragHandle && moveItems.length === 0) || siblingCount <= 1) {
     return <div className="w-7 shrink-0" />;
   }
 
-  async function moveTo(targetIndex: number) {
-    if (!ordering) {
-      return;
-    }
-
-    const plan = calculateOrderingDragMovePlan({
-      fieldName: ordering.fieldName,
-      orderedRecordIds: siblingPlacements.map((candidate) => candidate.id),
-      recordId: placement.id,
-      recordsById,
-      scopeFields: ordering.scope.map((field) => field.fieldName),
-      targetIndex,
-      rankOptions: {
-        ...(ordering.field.min === undefined ? {} : { min: ordering.field.min }),
-        ...(ordering.field.max === undefined ? {} : { max: ordering.field.max }),
-      },
-    });
-
-    if (plan.kind !== "patch") {
+  async function runMove(item: (typeof moveItems)[number]) {
+    if (!orderingContext || item.plan.kind !== "patch") {
       setSyncStatus({
-        state: plan.kind === "rebalance" ? "error" : "idle",
+        state: item.plan.kind === "rebalance" ? "error" : "idle",
         message:
-          plan.kind === "rebalance"
+          item.plan.kind === "rebalance"
             ? "Rebalance required before moving placement."
             : "Placement already in position.",
       });
@@ -206,9 +451,7 @@ function PlacementMoveControls({
     setSyncStatus({ state: "syncing", message: "Moving placement..." });
 
     try {
-      await submitPatchMutation(schemaKey, result.relationship.to.entity, plan.recordId, {
-        [ordering.fieldName]: plan.rank,
-      });
+      await submitOrderingPatch(schemaKey, orderingContext, item.plan);
       setSyncStatus({ state: "idle", message: "Placement moved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -220,34 +463,44 @@ function PlacementMoveControls({
 
   return (
     <div className="flex w-7 shrink-0 flex-col gap-1 pt-0.5">
-      <Button
-        aria-label="Move placement up"
-        disabled={index === 0}
-        onClick={() => void moveTo(index - 1)}
-        size="icon-xs"
-        type="button"
-        variant="ghost"
-      >
-        <span aria-hidden="true">↑</span>
-      </Button>
-      <Button
-        aria-label="Move placement down"
-        disabled={index >= siblingPlacements.length - 1}
-        onClick={() => void moveTo(index + 1)}
-        size="icon-xs"
-        type="button"
-        variant="ghost"
-      >
-        <span aria-hidden="true">↓</span>
-      </Button>
+      {showDragHandle ? (
+        <Button
+          aria-label="Drag placement"
+          data-formless-ordering-handle="true"
+          disabled={orderingHandleDisabled ?? true}
+          ref={orderingHandleRef}
+          size="icon-xs"
+          type="button"
+          variant="ghost"
+        >
+          <span aria-hidden="true">::</span>
+        </Button>
+      ) : null}
+      {moveItems.map((item) => (
+        <Button
+          aria-label={item.direction === "up" ? "Move placement up" : "Move placement down"}
+          disabled={
+            item.disabled || (item.direction === "up" ? index === 0 : index >= siblingCount - 1)
+          }
+          key={item.direction}
+          onClick={() => void runMove(item)}
+          size="icon-xs"
+          type="button"
+          variant="ghost"
+        >
+          <span aria-hidden="true">{item.direction === "up" ? "↑" : "↓"}</span>
+        </Button>
+      ))}
     </div>
   );
 }
 
 function PlacementRecordFields({
+  canPatch,
   placement,
   result,
 }: {
+  canPatch: boolean;
   placement: StoredRecord;
   result: TreeResultConfig;
 }) {
@@ -265,7 +518,7 @@ function PlacementRecordFields({
     <div className="grid min-w-0 gap-2">
       {recordFields.map((fieldConfig) => (
         <RecordFieldEditor
-          canPatch={true}
+          canPatch={canPatch}
           density="compact"
           entityName={result.relationship.to.entity}
           fieldConfig={fieldConfig}
@@ -384,22 +637,23 @@ function childPlacementsForParent(
   recordsById: Record<string, StoredRecord>,
   result: TreeResultConfig,
 ): StoredRecord[] {
-  return Object.values(recordsById)
+  const placements = Object.values(recordsById)
     .filter(
       (record) =>
         record.entity === result.relationship.to.entity &&
         !record.deletedAt &&
         record.values[result.relationship.to.field] === parentRecordId,
     )
-    .sort(comparePlacementRecords);
-}
-
-function comparePlacementRecords(a: StoredRecord, b: StoredRecord): number {
-  return (
-    compareNumbers(numberValue(a.values.order), numberValue(b.values.order)) ||
-    compareStrings(a.createdAt, b.createdAt) ||
-    compareStrings(a.id, b.id)
+    .sort(compareStablePlacementRecords);
+  const orderedRecordIds = selectOrderedResultRecordIds(
+    placements.map((placement) => placement.id),
+    recordsById,
+    result.ordering,
   );
+
+  return orderedRecordIds
+    .map((recordId) => recordsById[recordId])
+    .filter((record): record is StoredRecord => record?.entity === result.relationship.to.entity);
 }
 
 function isHeadingRecordField(fieldConfig: RecordFieldConfig) {
@@ -420,24 +674,8 @@ function stringValue(value: FieldValue | undefined): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-function numberValue(value: FieldValue | undefined): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function compareNumbers(a: number | undefined, b: number | undefined): number {
-  if (a === undefined && b === undefined) {
-    return 0;
-  }
-
-  if (a === undefined) {
-    return 1;
-  }
-
-  if (b === undefined) {
-    return -1;
-  }
-
-  return a - b;
+function compareStablePlacementRecords(a: StoredRecord, b: StoredRecord): number {
+  return compareStrings(a.createdAt, b.createdAt) || compareStrings(a.id, b.id);
 }
 
 function compareStrings(a: string, b: string): number {

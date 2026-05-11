@@ -704,9 +704,34 @@ describe("generated collection home", () => {
     expect(html).toContain("grid min-w-0 gap-3 pt-1");
     expect(html).not.toContain("grid min-w-0 gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3");
     expect(html).toContain('aria-label="Placement tree"');
+    expect(html).toContain('aria-label="Drag placement"');
+    expect(html).toContain('data-formless-ordering-handle="true"');
+    expect(html).toContain("data-formless-sortable-tree-placement=");
     expect(html).toContain("Move placement up");
     expect(html).toContain("Move placement down");
     expect(html).not.toContain('data-slot="table"');
+  });
+
+  it("sorts generated Site tree siblings by result ordering rank", () => {
+    const collection = requiredSiteCollectionModel("siteCompositionHome");
+
+    bootstrapSiteEditor([
+      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
+      siteBlockRecord("block-1", { type: "group", label: "Shared child" }),
+      sitePlacementRecord("placement-3", "Third", 3000),
+      sitePlacementRecord("placement-1", "First", 1000),
+      sitePlacementRecord("placement-2", "Second", 2000),
+    ]);
+
+    const html = renderGeneratedHomeCollection(collection, {
+      selectedContextRecordId: "page-1",
+      today: "2026-05-02",
+    });
+
+    expect(html.indexOf("First")).toBeLessThan(html.indexOf("Second"));
+    expect(html.indexOf("Second")).toBeLessThan(html.indexOf("Third"));
+    expect(html).toContain('aria-label="Drag placement"');
+    expect(html).toContain("data-formless-sortable-tree-placement=");
   });
 
   it("renders synthetic stack sections in order with independent selected queries", () => {

@@ -4202,6 +4202,11 @@ describe("personal site sample schema", () => {
         childField: "block",
         childItemView: "blockTreeNode",
         placementItemView: "blockPlacementTreeItem",
+        ordering: {
+          field: "order",
+          scope: [{ kind: "field", field: "parent" }],
+          presentations: ["dragHandle", "moveMenu"],
+        },
         maxDepth: 8,
       },
       actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],

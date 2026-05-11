@@ -785,6 +785,8 @@ function CollectionResult({
     return (
       <RecordTree
         context={context}
+        entity={entity}
+        entityName={entityName}
         onSelectContext={onSelectContext}
         queryContext={queryContext}
         result={result}

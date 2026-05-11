@@ -1240,6 +1240,7 @@ describe("home view model collections", () => {
           placementItemViewName: "blockPlacementTreeItem",
           placementFields: ["label"],
           orderingField: "order",
+          orderingPresentations: ["dragHandle", "moveMenu"],
           maxDepth: 8,
         },
         actions: [
@@ -2120,6 +2121,7 @@ function summarizeHomeModel(model: HomeViewModel) {
               placementFields:
                 collection.result.placementRecordFields?.map((field) => field.fieldName) ?? [],
               orderingField: collection.result.ordering?.fieldName ?? null,
+              orderingPresentations: collection.result.ordering?.presentations ?? [],
               maxDepth: collection.result.maxDepth,
             }
           : {
