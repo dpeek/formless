@@ -3415,6 +3415,7 @@ describe("personal site sample schema", () => {
       "blockAll",
       "blockPages",
       "blockNavigationRoots",
+      "blockSiteRoots",
       "blockPosts",
       "blockProjects",
       "blockLinks",
