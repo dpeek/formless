@@ -1156,7 +1156,7 @@ describe("home view model collections", () => {
           },
           createAction: null,
           itemViewName: "blockRootDetail",
-          recordFields: ["label", "body", "href"],
+          recordFields: ["type", "label"],
         },
         queries: [
           {
@@ -1172,17 +1172,7 @@ describe("home view model collections", () => {
           relationshipName: "blockPlacements",
           childFieldName: "block",
           childItemViewName: "blockTreeNode",
-          childFields: [
-            "label",
-            "type",
-            "body",
-            "href",
-            "templateKey",
-            "icon",
-            "color",
-            "width",
-            "height",
-          ],
+          childFields: ["label"],
           placementItemViewName: "blockPlacementTreeItem",
           placementFields: ["label"],
           orderingField: "order",
@@ -1279,11 +1269,19 @@ describe("home view model collections", () => {
     ]);
   });
 
-  it("resolves site content table columns and expanded create fields", () => {
+  it("resolves site content table columns and variant-aware create fields", () => {
     const contentModel = selectCollectionModels(siteSourceSchema).find(
       (model) => model.viewName === "blockHome",
     );
     const create = contentModel?.actions.find((action) => action.type === "create");
+    const createVariantFields = Object.fromEntries(
+      create?.type === "create"
+        ? (create.union?.variants.map((variant) => [
+            variant.variantValue,
+            variant.presentation.fields.map((field) => field.fieldName),
+          ]) ?? [])
+        : [],
+    );
 
     expect(contentModel?.queryTabs.map((tab) => tab.queryName)).toEqual([
       "blockAll",
@@ -1317,14 +1315,13 @@ describe("home view model collections", () => {
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "type",
       "label",
-      "body",
-      "href",
-      "templateKey",
-      "icon",
-      "color",
-      "width",
-      "height",
     ]);
+    expect(create?.type === "create" ? create.union?.unionName : undefined).toBe("blockByType");
+    expect(createVariantFields).toMatchObject({
+      link: ["href", "icon", "color"],
+      markdown: ["body", "templateKey"],
+      image: ["href", "width", "height"],
+    });
   });
 
   it("characterizes site authoring rich text fields as string-backed editor hints", () => {
@@ -1337,6 +1334,16 @@ describe("home view model collections", () => {
       create?.type === "create"
         ? Object.fromEntries(create.fields.map((field) => [field.fieldName, field.editor]))
         : {};
+    const createVariantEditors = Object.fromEntries(
+      create?.type === "create"
+        ? (create.union?.variants.map((variant) => [
+            variant.variantValue,
+            Object.fromEntries(
+              variant.presentation.fields.map((field) => [field.fieldName, field.editor]),
+            ),
+          ]) ?? [])
+        : [],
+    );
     const tableEditors =
       contentModel?.result.type === "table"
         ? Object.fromEntries(
@@ -1352,10 +1359,17 @@ describe("home view model collections", () => {
     expect(block.fields.icon).toMatchObject({ type: "text", format: "icon" });
     expect(createEditors).toMatchObject({
       label: "text",
-      body: "markdown",
-      href: "href",
-      icon: "icon",
-      color: "color",
+      type: "enum",
+    });
+    expect(createVariantEditors).toMatchObject({
+      link: {
+        href: "href",
+        icon: "icon",
+        color: "color",
+      },
+      markdown: {
+        body: "markdown",
+      },
     });
     expect(tableEditors).toMatchObject({
       label: "text",

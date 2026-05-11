@@ -2708,11 +2708,19 @@ describe("generated forms and records", () => {
     formData.set("label", "Field behavior note");
     formData.set("body", "## Note\n\nCreate and edit stay wired.");
     formData.set("href", "https://example.com/field-behavior");
-    formData.set("icon", "note");
-    formData.set("color", "#336699");
     formData.set("templateKey", "post");
-    formData.set("width", "1200");
-    formData.set("height", "630");
+    const imageFormData = new FormData();
+    imageFormData.set("type", "image");
+    imageFormData.set("label", "Cover image");
+    imageFormData.set("href", "https://example.com/cover.png");
+    imageFormData.set("width", "1200");
+    imageFormData.set("height", "630");
+    const linkFormData = new FormData();
+    linkFormData.set("type", "link");
+    linkFormData.set("label", "Field behavior link");
+    linkFormData.set("href", "https://example.com/field-behavior");
+    linkFormData.set("icon", "note");
+    linkFormData.set("color", "#336699");
 
     bootstrapSiteEditor();
     const createHtml = renderToStaticMarkup(
@@ -2736,26 +2744,34 @@ describe("generated forms and records", () => {
     expect(createHtml).not.toContain('aria-label="Select date"');
     expect(createHtml).not.toMatch(inputWithNameAndType("order", "hidden"));
     expect(createHtml).not.toMatch(inputWithAriaLabelAndType("Order", "text"));
-    expect(createHtml).toContain('data-web-formatted-number-input="true"');
-    expect(createHtml).toContain('min="0"');
-    expect(createHtml).toContain('step="1"');
-    expect(createHtml).toContain('name="color"');
-    expect(createHtml).toContain('aria-label="Choose Color"');
+    expect(createHtml).not.toContain('data-web-formatted-number-input="true"');
+    expect(createHtml).not.toContain('name="color"');
+    expect(createHtml).not.toContain('aria-label="Choose Color"');
     expect(createHtml).not.toContain('name="assetKey"');
     expect(createHtml).not.toContain('name="alt"');
-    expect(createHtml).toContain('name="width"');
-    expect(createHtml).toContain('name="height"');
+    expect(createHtml).not.toContain('name="width"');
+    expect(createHtml).not.toContain('name="height"');
     expect(createHtml).not.toContain('name="limit"');
     expect(resolveCreateValues(formData, action)).toEqual({
       type: "post",
       label: "Field behavior note",
       body: "## Note\n\nCreate and edit stay wired.",
       href: "https://example.com/field-behavior",
-      icon: "note",
-      color: "#336699",
       templateKey: "post",
+    });
+    expect(resolveCreateValues(imageFormData, action)).toEqual({
+      type: "image",
+      label: "Cover image",
+      href: "https://example.com/cover.png",
       width: 1200,
       height: 630,
+    });
+    expect(resolveCreateValues(linkFormData, action)).toEqual({
+      type: "link",
+      label: "Field behavior link",
+      href: "https://example.com/field-behavior",
+      icon: "note",
+      color: "#336699",
     });
     expect(editHtml).toContain("Shipping schema-backed authoring");
     expect(editHtml).toContain('aria-label="Body"');

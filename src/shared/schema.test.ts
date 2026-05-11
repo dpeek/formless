@@ -3855,6 +3855,26 @@ describe("personal site sample schema", () => {
       "order",
       "label",
     ]);
+    expect(schema.unions?.blockByType).toMatchObject({
+      entity: "block",
+      discriminator: "type",
+      variants: {
+        header: { label: "Header", fields: ["label", "templateKey"] },
+        footer: { label: "Footer", fields: ["label", "templateKey"] },
+        link: {
+          label: "Link",
+          fields: ["label", "href", "icon", "color"],
+          requiredFields: ["label", "href"],
+        },
+        markdown: { label: "Markdown", fields: ["label", "body", "templateKey"] },
+        image: {
+          label: "Image",
+          fields: ["label", "href", "width", "height"],
+          requiredFields: ["label", "href"],
+        },
+      },
+      fallback: { label: "Block", fields: ["label", "type"] },
+    });
     expect(schema.relationships).toMatchObject({
       placementParent: {
         kind: "toOne",
@@ -3917,6 +3937,45 @@ describe("personal site sample schema", () => {
       ],
     });
     expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
+    expect(schema.itemViews.blockTreeNode).toMatchObject({
+      entity: "block",
+      fields: {
+        label: { editor: "text", commit: "field-commit" },
+      },
+      union: "blockByType",
+      variants: {
+        header: {
+          presentation: "contextLink",
+          labelField: "label",
+          target: { kind: "selectContext", context: "block", record: "self" },
+        },
+        footer: {
+          presentation: "contextLink",
+          labelField: "label",
+          target: { kind: "selectContext", context: "block", record: "self" },
+        },
+        link: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "href", commit: "field-commit" },
+            icon: { editor: "icon", commit: "field-commit" },
+            color: { editor: "color", commit: "field-commit" },
+          },
+        },
+        markdown: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+          },
+        },
+      },
+      fallback: {
+        presentation: "fields",
+        fields: {
+          type: { editor: "enum", commit: "immediate" },
+        },
+      },
+    });
     expect(schema.views.blockHome).toMatchObject({
       type: "collection",
       label: "Blocks",
@@ -3931,8 +3990,32 @@ describe("personal site sample schema", () => {
       fields: {
         type: { editor: "enum" },
         label: { editor: "text" },
-        body: { editor: "markdown" },
-        href: { editor: "href" },
+      },
+      union: "blockByType",
+      variants: {
+        link: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "href" },
+            icon: { editor: "icon" },
+            color: { editor: "color" },
+          },
+        },
+        markdown: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown" },
+            templateKey: { editor: "slug" },
+          },
+        },
+        image: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "href" },
+            width: { editor: "number" },
+            height: { editor: "number" },
+          },
+        },
       },
     });
     expect(schema.views.blockEdit).toMatchObject({
@@ -3941,8 +4024,32 @@ describe("personal site sample schema", () => {
       fields: {
         type: { editor: "enum", commit: "immediate" },
         label: { editor: "text", commit: "field-commit" },
-        body: { editor: "markdown", commit: "field-commit" },
-        href: { editor: "href", commit: "field-commit" },
+      },
+      union: "blockByType",
+      variants: {
+        link: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "href", commit: "field-commit" },
+            icon: { editor: "icon", commit: "field-commit" },
+            color: { editor: "color", commit: "field-commit" },
+          },
+        },
+        markdown: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+            templateKey: { editor: "slug", commit: "field-commit" },
+          },
+        },
+        image: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "href", commit: "field-commit" },
+            width: { editor: "number", commit: "field-commit" },
+            height: { editor: "number", commit: "field-commit" },
+          },
+        },
       },
     });
     expect(schema.tableViews.blockPlacementTable?.actions?.editChildBlock).toMatchObject({
