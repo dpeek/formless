@@ -1,0 +1,138 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import type { ResultOrderingConfig } from "../../client/views.ts";
+import type { StoredRecord } from "../../shared/protocol.ts";
+import {
+  ORDERING_DND_TYPE,
+  calculateOrderingDragMovePlanForContext,
+  parseOrderingDragData,
+  selectOrderingDragFacts,
+  selectOrderingMoveMenuItems,
+  selectResultOrderingContext,
+} from "./ordering-ui.ts";
+
+describe("generated result ordering helpers", () => {
+  it("builds ordered context, scoped drag facts, move items, and drag plans", () => {
+    const recordsById = recordsByIdFrom([
+      placementRecord("a", { parent: "page-1", order: 2000 }),
+      placementRecord("b", { parent: "page-1", order: 1000 }),
+      placementRecord("c", { parent: "page-2", order: 1000 }),
+      placementRecord("d", { parent: "page-1", order: 3000 }),
+    ]);
+    const context = selectResultOrderingContext({
+      canPatch: true,
+      entityName: "blockPlacement",
+      ordering: placementOrdering,
+      recordIds: ["a", "b", "c", "d"],
+      recordsById,
+    });
+
+    if (!context) {
+      throw new Error("Expected ordering context.");
+    }
+
+    expect(context.orderedRecordIds).toEqual(["b", "a", "d", "c"]);
+
+    const dragFacts = selectOrderingDragFacts(context);
+
+    expect(dragFacts?.get("b")).toMatchObject({ index: 0 });
+    expect(dragFacts?.get("a")).toMatchObject({ index: 1 });
+    expect(dragFacts?.get("d")).toMatchObject({ index: 2 });
+    expect(dragFacts?.get("c")).toMatchObject({ index: 0 });
+    expect(dragFacts?.get("b")?.scopeKey).toBe(dragFacts?.get("a")?.scopeKey);
+    expect(dragFacts?.get("b")?.scopeKey).not.toBe(dragFacts?.get("c")?.scopeKey);
+
+    expect(
+      selectOrderingMoveMenuItems({
+        includeOrdering: true,
+        orderingContext: context,
+        sourceRecordId: "a",
+      }).map((item) => ({ direction: item.direction, disabled: item.disabled })),
+    ).toEqual([
+      { direction: "top", disabled: false },
+      { direction: "up", disabled: false },
+      { direction: "down", disabled: false },
+      { direction: "bottom", disabled: false },
+    ]);
+    expect(
+      calculateOrderingDragMovePlanForContext({
+        orderingContext: context,
+        recordId: "b",
+        targetIndex: 2,
+      }),
+    ).toEqual({ kind: "patch", recordId: "b", rank: 4000 });
+  });
+
+  it("keeps drag data parsing generic and rejects disabled move menus", () => {
+    expect(
+      parseOrderingDragData({
+        type: ORDERING_DND_TYPE,
+        recordId: "placement-1",
+        scopeKey: 'blockPlacement:order:["page-1"]',
+      }),
+    ).toEqual({
+      type: ORDERING_DND_TYPE,
+      recordId: "placement-1",
+      scopeKey: 'blockPlacement:order:["page-1"]',
+    });
+    expect(parseOrderingDragData({ type: "other" })).toBeUndefined();
+
+    const recordsById = recordsByIdFrom([
+      placementRecord("a", { parent: "page-1", order: 1000 }),
+      placementRecord("b", { parent: "page-1", order: 2000 }),
+    ]);
+    const context = selectResultOrderingContext({
+      canPatch: false,
+      entityName: "blockPlacement",
+      ordering: placementOrdering,
+      recordIds: ["a", "b"],
+      recordsById,
+    });
+
+    expect(
+      selectOrderingMoveMenuItems({
+        includeOrdering: true,
+        orderingContext: context,
+        sourceRecordId: "a",
+      }).map((item) => item.disabledReason),
+    ).toEqual([
+      "Editing is disabled",
+      "Editing is disabled",
+      "Editing is disabled",
+      "Editing is disabled",
+    ]);
+    expect(
+      selectOrderingMoveMenuItems({
+        includeOrdering: false,
+        orderingContext: context,
+        sourceRecordId: "a",
+      }),
+    ).toEqual([]);
+  });
+});
+
+const placementOrdering: ResultOrderingConfig = {
+  fieldName: "order",
+  field: { type: "number", required: true, min: 0 },
+  scope: [
+    {
+      kind: "field",
+      fieldName: "parent",
+      field: { type: "reference", required: false, to: "block" },
+    },
+  ],
+  presentations: ["dragHandle", "moveMenu"],
+};
+
+function recordsByIdFrom(records: StoredRecord[]) {
+  return Object.fromEntries(records.map((record) => [record.id, record]));
+}
+
+function placementRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity: "blockPlacement",
+    values,
+    createdAt: `2026-05-11T00:00:00.000Z`,
+  };
+}

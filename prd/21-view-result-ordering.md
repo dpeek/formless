@@ -1,7 +1,7 @@
 # PRD 21: View result ordering
 
 Status: ready
-Current chunk: VRO-02
+Current chunk: VRO-03
 Last updated: 2026-05-11
 
 ## Goal
@@ -135,24 +135,25 @@ Likely changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                                    | Reason                                                                             | Evidence                                                                        |
-| ------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| VRO-D1  | Treat ordering as a collection result capability.                           | Tables, trees, and lists all render ordered record sets.                           | Current `HomeResultConfig` already carries ordering for table and tree results. |
-| VRO-D2  | Keep table view ordering as compatibility input.                            | Existing table schemas should parse and render unchanged.                          | PRD 14 shipped `tableViews.*.ordering`.                                         |
-| VRO-D3  | Prefer result-level ordering for new schemas.                               | Collection views own scope, query, context, and result selection.                  | PRD 16 keeps collection views as scope/query/context controllers.               |
-| VRO-D4  | Reject conflicting table-level and result-level ordering declarations.      | Two incompatible ordering sources would make reorder behavior unclear.             | Parser already validates bad table ordering at schema parse time.               |
-| VRO-D5  | Keep ordering writes as generic patch mutations.                            | Storage, authority, sync, and protocol do not need new write paths.                | Table row reordering already patches one numeric rank field.                    |
-| VRO-D6  | Keep sparse numeric ranks and existing rank planning behavior.              | It minimizes writes and preserves current table semantics.                         | Shared rank helpers already cover move, drag, scope, and rebalance plans.       |
-| VRO-D7  | Keep ordering fields as non-integer number fields.                          | Fractional ranks need safe gaps between neighbors.                                 | Current table parser rejects integer ordering fields.                           |
-| VRO-D8  | Keep ordering scope field-based first.                                      | Scope by flat record fields is enough for table rows and tree siblings.            | Current table ordering scope uses field references.                             |
-| VRO-D9  | Do not allow drag reorder across scope boundaries.                          | Cross-scope moves imply relationship changes or reparenting.                       | Current table drag already guards dnd-kit groups and Formless scope.            |
-| VRO-D10 | Make Site tree ordering explicit in the source schema.                      | Implicit `order` field inference is not a durable generic contract.                | Current tree model hardcodes `order` when present.                              |
-| VRO-D11 | Keep an implicit tree ordering fallback only as a short compatibility path. | Existing behavior should not disappear before source schemas migrate.              | Current Site root tree already relies on inferred placement order.              |
-| VRO-D12 | Extract generic generated ordering helpers before adding tree/list drag.    | Table drag code already contains reusable scope, drag data, and submit plumbing.   | Current `table-ordering-ui` is table-named but partly generic.                  |
-| VRO-D13 | Keep result renderers responsible for presentation-specific markup.         | Table rows, tree nodes, and list items have different DOM and accessibility needs. | Current table and tree renderers already have different structures.             |
-| VRO-D14 | Keep dnd-kit usage in generated app code.                                   | The shared UI package should stay primitive and presentation-neutral.              | PRD 16 explicitly kept dnd-kit in generated app code.                           |
-| VRO-D15 | Treat rebalance as a visible blocker, not an automatic multi-patch write.   | Atomic batch mutation transport is out of first-release scope.                     | Roadmap keeps atomic batch mutations later.                                     |
-| VRO-D16 | Resolve result-level ordering before table-level or implicit tree fallback. | Result schemas should own new ordering declarations while old table schemas work.  | VRO-01 model selectors prefer collection result ordering when present.          |
+| ID      | Decision                                                                         | Reason                                                                                                     | Evidence                                                                                      |
+| ------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| VRO-D1  | Treat ordering as a collection result capability.                                | Tables, trees, and lists all render ordered record sets.                                                   | Current `HomeResultConfig` already carries ordering for table and tree results.               |
+| VRO-D2  | Keep table view ordering as compatibility input.                                 | Existing table schemas should parse and render unchanged.                                                  | PRD 14 shipped `tableViews.*.ordering`.                                                       |
+| VRO-D3  | Prefer result-level ordering for new schemas.                                    | Collection views own scope, query, context, and result selection.                                          | PRD 16 keeps collection views as scope/query/context controllers.                             |
+| VRO-D4  | Reject conflicting table-level and result-level ordering declarations.           | Two incompatible ordering sources would make reorder behavior unclear.                                     | Parser already validates bad table ordering at schema parse time.                             |
+| VRO-D5  | Keep ordering writes as generic patch mutations.                                 | Storage, authority, sync, and protocol do not need new write paths.                                        | Table row reordering already patches one numeric rank field.                                  |
+| VRO-D6  | Keep sparse numeric ranks and existing rank planning behavior.                   | It minimizes writes and preserves current table semantics.                                                 | Shared rank helpers already cover move, drag, scope, and rebalance plans.                     |
+| VRO-D7  | Keep ordering fields as non-integer number fields.                               | Fractional ranks need safe gaps between neighbors.                                                         | Current table parser rejects integer ordering fields.                                         |
+| VRO-D8  | Keep ordering scope field-based first.                                           | Scope by flat record fields is enough for table rows and tree siblings.                                    | Current table ordering scope uses field references.                                           |
+| VRO-D9  | Do not allow drag reorder across scope boundaries.                               | Cross-scope moves imply relationship changes or reparenting.                                               | Current table drag already guards dnd-kit groups and Formless scope.                          |
+| VRO-D10 | Make Site tree ordering explicit in the source schema.                           | Implicit `order` field inference is not a durable generic contract.                                        | Current tree model hardcodes `order` when present.                                            |
+| VRO-D11 | Keep an implicit tree ordering fallback only as a short compatibility path.      | Existing behavior should not disappear before source schemas migrate.                                      | Current Site root tree already relies on inferred placement order.                            |
+| VRO-D12 | Extract generic generated ordering helpers before adding tree/list drag.         | Table drag code already contains reusable scope, drag data, and submit plumbing.                           | Current `table-ordering-ui` is table-named but partly generic.                                |
+| VRO-D13 | Keep result renderers responsible for presentation-specific markup.              | Table rows, tree nodes, and list items have different DOM and accessibility needs.                         | Current table and tree renderers already have different structures.                           |
+| VRO-D14 | Keep dnd-kit usage in generated app code.                                        | The shared UI package should stay primitive and presentation-neutral.                                      | PRD 16 explicitly kept dnd-kit in generated app code.                                         |
+| VRO-D15 | Treat rebalance as a visible blocker, not an automatic multi-patch write.        | Atomic batch mutation transport is out of first-release scope.                                             | Roadmap keeps atomic batch mutations later.                                                   |
+| VRO-D16 | Resolve result-level ordering before table-level or implicit tree fallback.      | Result schemas should own new ordering declarations while old table schemas work.                          | VRO-01 model selectors prefer collection result ordering when present.                        |
+| VRO-D17 | Keep generated result ordering UI helpers in `src/app/generated/ordering-ui.ts`. | Tree and list renderers need the same generated drag, move, and patch helpers without taking table markup. | VRO-02 table renderer and action cells consume `ResultOrderingContext` from `ordering-ui.ts`. |
 
 ## Requirements
 
@@ -224,7 +225,7 @@ Likely changed files:
 | ID     | Status  | Depends on     | Main files                                 | Acceptance                                                                                                     |
 | ------ | ------- | -------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | VRO-01 | shipped | none           | schema parser, types, models               | Collection result ordering parses and resolves for table, tree, and list; existing table schemas keep working. |
-| VRO-02 | ready   | VRO-01         | generated ordering helpers, table renderer | Table renderer uses generic ordering helpers with no intended behavior change.                                 |
+| VRO-02 | shipped | VRO-01         | generated ordering helpers, table renderer | Table renderer uses generic ordering helpers with no intended behavior change.                                 |
 | VRO-03 | ready   | VRO-02         | tree renderer, Site schema, tests          | Site tree sibling placements support explicit generic ordering and drag reorder without reparenting.           |
 | VRO-04 | ready   | VRO-02         | list renderer, tests                       | Ordered list results render in rank order and can opt into drag handles.                                       |
 | VRO-05 | ready   | VRO-03, VRO-04 | docs and cleanup                           | Legacy table/tree ordering names are documented or narrowed; promote notes are ready for steward docs.         |
@@ -308,10 +309,12 @@ Coordinate before touching:
 
 - 2026-05-11: Drafted from review of current table ordering, collection result models, and Site tree ordering behavior.
 - 2026-05-11: VRO-01 shipped. Added result-level ordering schema/types/parser support, generic client ordering model selection, table compatibility fallback, and list/table/tree model coverage. Next ready chunk is VRO-02.
+- 2026-05-11: VRO-02 shipped. Added generated `ordering-ui.ts`, moved table ordering context, drag facts, move menu planning, drag move planning, and patch submission behind generic result-ordering helpers. Table rendering and action cells now consume those helpers with no intended behavior change. Next ready chunk is VRO-03.
 
 ## Blockers
 
 - None for VRO-01.
+- None for VRO-02.
 
 ## Evidence
 
@@ -320,3 +323,7 @@ Coordinate before touching:
 - `devstate check`: checks ok, services running.
 - `.devstate/logs/service-test.txt`: 14 test files passed, 406 tests passed.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 186 files.
+- `devstate check`: checks ok, services running after VRO-02.
+- `.devstate/logs/service-test.txt`: generated ordering/table rerun passed, 3 test files passed, 103 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 187 files.
+- Browser smoke not run for VRO-02; table rendering was refactored with no intended app behavior change.

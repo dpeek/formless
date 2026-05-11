@@ -18,7 +18,6 @@ import {
 } from "@formless/ui/dropdown-menu";
 import { useRecord, useRecordField } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitPatchMutation } from "../../client/sync.ts";
 import type {
   EditRecordTableActionConfig,
   EditViewConfig,
@@ -26,16 +25,17 @@ import type {
   TableActionConfig,
 } from "../../client/views.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
-import type { OrderingMoveDirection } from "../../shared/table-ordering.ts";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
   orderingMoveAriaLabel,
   selectOrderingMoveMenuItems,
+  submitOrderingPatch,
+  type OrderingMoveDirection,
   type OrderingMoveMenuItem,
-  type TableOrderingContext,
-} from "./table-ordering-ui.ts";
+  type ResultOrderingContext,
+} from "./ordering-ui.ts";
 
 type ReferenceEditRecordTableActionConfig = EditRecordTableActionConfig & {
   target: Extract<EditRecordTableActionConfig["target"], { kind: "reference" }>;
@@ -47,14 +47,18 @@ export function InvokeActionTableCell({
   sourceRecordId,
 }: {
   column: InvokeActionTableColumnConfig;
-  orderingContext?: TableOrderingContext;
+  orderingContext?: ResultOrderingContext;
   sourceRecordId: string;
 }) {
   const schemaKey = useSchemaKey();
   const [openActionName, setOpenActionName] = useState<string | null>(null);
   const [pendingOrderingDirection, setPendingOrderingDirection] =
     useState<OrderingMoveDirection | null>(null);
-  const orderingItems = selectOrderingMoveMenuItems(column, sourceRecordId, orderingContext);
+  const orderingItems = selectOrderingMoveMenuItems({
+    includeOrdering: column.includeOrdering && column.ordering !== undefined,
+    orderingContext,
+    sourceRecordId,
+  });
 
   if (column.actions.length === 0 && orderingItems.length === 0) {
     return null;
@@ -80,9 +84,7 @@ export function InvokeActionTableCell({
     setSyncStatus({ state: "syncing", message: `${item.label}...` });
 
     try {
-      await submitPatchMutation(schemaKey, orderingContext.entityName, item.plan.recordId, {
-        [orderingContext.ordering.fieldName]: item.plan.rank,
-      });
+      await submitOrderingPatch(schemaKey, orderingContext, item.plan);
       setSyncStatus({ state: "idle", message: "Row moved and synced." });
     } catch (error) {
       setSyncStatus({

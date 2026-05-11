@@ -29,38 +29,36 @@ import {
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
-import { submitPatchMutation } from "../../client/sync.ts";
 import type {
   ComputedTableColumnConfig,
   FieldTableColumnConfig,
   HomeQueryTabConfig,
   OrderingHandleTableColumnConfig,
+  ResultOrderingConfig,
   ReferenceFieldTableColumnConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
-  TableOrderingConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { evaluateNumericExpression } from "../../shared/read-model.ts";
-import {
-  calculateOrderingDragMovePlan,
-  sortRecordIdsByOrdering,
-} from "../../shared/table-ordering.ts";
 import { formatAggregateDisplayValue, formatComputedDisplayValue } from "./format.ts";
+import {
+  ORDERING_DND_TYPE,
+  calculateOrderingDragMovePlanForContext,
+  parseOrderingDragData,
+  selectOrderingDragFacts,
+  selectResultOrderingContext,
+  submitOrderingPatch,
+  type ResultOrderingContext,
+  type ResultOrderingDragData,
+  type ResultOrderingDragFact,
+} from "./ordering-ui.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 import { InvokeActionTableCell } from "./table-actions.tsx";
-import {
-  ORDERING_DND_TYPE,
-  parseOrderingDragData,
-  selectOrderingDragFacts,
-  type TableOrderingContext,
-  type TableOrderingDragData,
-  type TableOrderingDragFact,
-} from "./table-ordering-ui.ts";
 
 export function RecordTable({
   columns,
@@ -76,7 +74,7 @@ export function RecordTable({
   entity: EntitySchema;
   entityName: string;
   footer?: TableFooterSlotConfig[];
-  ordering?: TableOrderingConfig;
+  ordering?: ResultOrderingConfig;
   query: HomeQueryTabConfig["query"];
   queryName?: string;
   queryContext?: QueryEvaluationContext;
@@ -86,27 +84,15 @@ export function RecordTable({
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const recordsById = useRecordsById();
-  const orderedRecordIds = ordering
-    ? sortRecordIdsByOrdering(
-        recordIds,
-        recordsById,
-        ordering.fieldName,
-        ordering.scope.map((field) => field.fieldName),
-      )
-    : recordIds;
-  const orderingContext = ordering
-    ? {
-        canPatch,
-        entityName,
-        orderedRecordIds,
-        ordering,
-        recordsById,
-      }
-    : undefined;
-  const orderingDragFacts =
-    ordering && ordering.presentations.includes("dragHandle")
-      ? selectOrderingDragFacts(orderedRecordIds, recordsById, entityName, ordering)
-      : undefined;
+  const orderingContext = selectResultOrderingContext({
+    canPatch,
+    entityName,
+    ordering,
+    recordIds,
+    recordsById,
+  });
+  const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
+  const orderingDragFacts = selectOrderingDragFacts(orderingContext);
   const visibleColumns = columns.filter((column) => column.display !== "hidden");
   const visibleFooter = footer.filter(
     (slot) => queryName === undefined || slot.aggregate.query === queryName,
@@ -134,21 +120,10 @@ export function RecordTable({
       return;
     }
 
-    const plan = calculateOrderingDragMovePlan({
-      fieldName: orderingContext.ordering.fieldName,
-      orderedRecordIds: orderingContext.orderedRecordIds,
+    const plan = calculateOrderingDragMovePlanForContext({
+      orderingContext,
       recordId: dragData.recordId,
-      recordsById: orderingContext.recordsById,
-      scopeFields: orderingContext.ordering.scope.map((field) => field.fieldName),
       targetIndex: source.sortable.index,
-      rankOptions: {
-        ...(orderingContext.ordering.field.min === undefined
-          ? {}
-          : { min: orderingContext.ordering.field.min }),
-        ...(orderingContext.ordering.field.max === undefined
-          ? {}
-          : { max: orderingContext.ordering.field.max }),
-      },
     });
 
     if (plan.kind !== "patch") {
@@ -163,9 +138,7 @@ export function RecordTable({
     setSyncStatus({ state: "syncing", message: "Moving row..." });
 
     try {
-      await submitPatchMutation(schemaKey, orderingContext.entityName, plan.recordId, {
-        [orderingContext.ordering.fieldName]: plan.rank,
-      });
+      await submitOrderingPatch(schemaKey, orderingContext, plan);
       setSyncStatus({ state: "idle", message: "Row moved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -251,7 +224,7 @@ function StaticRecordTableRows({
   canPatch: boolean;
   columns: TableColumnConfig[];
   entityName: string;
-  orderingContext?: TableOrderingContext;
+  orderingContext?: ResultOrderingContext;
   recordId: string;
 }) {
   return (
@@ -281,14 +254,14 @@ function SortableRecordTableRows({
 }: {
   canPatch: boolean;
   columns: TableColumnConfig[];
-  dragFact: TableOrderingDragFact | undefined;
+  dragFact: ResultOrderingDragFact | undefined;
   entityName: string;
-  orderingContext: TableOrderingContext;
+  orderingContext: ResultOrderingContext;
   pendingDragRecordId: string | null;
   recordId: string;
 }) {
   const disabled = !dragFact || !orderingContext.canPatch || pendingDragRecordId !== null;
-  const { handleRef, isDragSource, isDropTarget, ref } = useSortable<TableOrderingDragData>({
+  const { handleRef, isDragSource, isDropTarget, ref } = useSortable<ResultOrderingDragData>({
     id: `ordering:${recordId}`,
     data: {
       type: ORDERING_DND_TYPE,
@@ -345,7 +318,7 @@ function RecordTableCells({
   canPatch: boolean;
   columns: TableColumnConfig[];
   entityName: string;
-  orderingContext?: TableOrderingContext;
+  orderingContext?: ResultOrderingContext;
   orderingHandleDisabled?: boolean;
   orderingHandleRef?: (element: Element | null) => void;
   recordId: string;
@@ -502,7 +475,7 @@ function RecordTableCell({
   canPatch: boolean;
   column: TableColumnConfig;
   entityName: string;
-  orderingContext?: TableOrderingContext;
+  orderingContext?: ResultOrderingContext;
   orderingHandleDisabled?: boolean;
   orderingHandleRef?: (element: Element | null) => void;
   recordId: string;
