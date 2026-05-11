@@ -1,7 +1,7 @@
 # PRD 21: View result ordering
 
 Status: ready
-Current chunk: VRO-04
+Current chunk: VRO-05
 Last updated: 2026-05-11
 
 ## Goal
@@ -228,7 +228,7 @@ Likely changed files:
 | VRO-01 | shipped | none           | schema parser, types, models               | Collection result ordering parses and resolves for table, tree, and list; existing table schemas keep working. |
 | VRO-02 | shipped | VRO-01         | generated ordering helpers, table renderer | Table renderer uses generic ordering helpers with no intended behavior change.                                 |
 | VRO-03 | shipped | VRO-02         | tree renderer, Site schema, tests          | Site tree sibling placements support explicit generic ordering and drag reorder without reparenting.           |
-| VRO-04 | ready   | VRO-02         | list renderer, tests                       | Ordered list results render in rank order and can opt into drag handles.                                       |
+| VRO-04 | shipped | VRO-02         | list renderer, tests                       | Ordered list results render in rank order and can opt into drag handles.                                       |
 | VRO-05 | ready   | VRO-03, VRO-04 | docs and cleanup                           | Legacy table/tree ordering names are documented or narrowed; promote notes are ready for steward docs.         |
 
 ## Testing Decisions
@@ -298,6 +298,7 @@ Coordinate before touching:
 - `doc/current.md`: table ordering remains backward-compatible and uses generic ordering helpers.
 - `doc/current.md`: Site tree results declare `blockPlacement.order` ordering scoped by `blockPlacement.parent` with drag and move presentations.
 - `doc/current.md`: Site tree sibling placements support generated drag reorder.
+- `doc/current.md`: ordered list results render in rank order and can render generated drag handles.
 - `doc/roadmap.md`: generated collection result ordering is release scope; cross-scope reparenting and batch rebalance stay out of first release.
 
 ## Further Notes
@@ -313,12 +314,14 @@ Coordinate before touching:
 - 2026-05-11: VRO-01 shipped. Added result-level ordering schema/types/parser support, generic client ordering model selection, table compatibility fallback, and list/table/tree model coverage. Next ready chunk is VRO-02.
 - 2026-05-11: VRO-02 shipped. Added generated `ordering-ui.ts`, moved table ordering context, drag facts, move menu planning, drag move planning, and patch submission behind generic result-ordering helpers. Table rendering and action cells now consume those helpers with no intended behavior change. Next ready chunk is VRO-03.
 - 2026-05-11: VRO-03 shipped. Site tree results now declare explicit `blockPlacement.order` ordering scoped by `parent`, tree sibling lists use generic result ordering contexts, and same-scope tree drag reorder submits generic patch mutations without reparenting. Next ready chunk is VRO-04.
+- 2026-05-11: VRO-04 shipped. Generated list results now consume generic result ordering contexts, render ordered record ids, and opt into dnd-kit drag handles when result ordering declares `dragHandle`. Next ready chunk is VRO-05.
 
 ## Blockers
 
 - None for VRO-01.
 - None for VRO-02.
 - None for VRO-03.
+- None for VRO-04.
 
 ## Evidence
 
@@ -336,3 +339,8 @@ Coordinate before touching:
 - `.devstate/logs/service-test.txt`: tree/app rerun passed, 1 test file passed, 100 tests passed.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 187 files.
 - `bun browser --session vro-03`: `/site` rendered 17 sortable tree placements and 17 ordering handles; same-scope drag completed with no page errors and sync returned to `Synced`.
+- `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: not present in this checkout during VRO-04; devstate evidence is in `.devstate/status.md` and `.devstate/logs/`.
+- `.devstate/status.md`: checks ok, services running after VRO-04.
+- `.devstate/logs/service-test.txt`: app rerun passed, 1 test file passed, 101 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 187 files.
+- `bun browser --session vro-04 --ignore-https-errors`: `/tasks` rendered task list rows and `bun browser errors` returned no page errors.

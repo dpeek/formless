@@ -47,6 +47,7 @@ import {
   type HomeQueryTabConfig,
   type HomeViewModel,
   type RecordFieldConfig,
+  type ResultOrderingConfig,
   type TableColumnConfig,
   type TableOrderingConfig,
 } from "./client/views.ts";
@@ -847,6 +848,32 @@ describe("generated collection home", () => {
     expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('aria-label="Estimate"');
     expect(html).not.toContain(record.createdAt);
+  });
+
+  it("sorts generated list rows by result ordering and renders drag handles", () => {
+    const schema = taskListOrderingSchema();
+    const model = requiredCollectionModel(schema, "taskHome");
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          orderedTaskRecord("record-3", "Third", 3000),
+          orderedTaskRecord("record-1", "First", 1000),
+          orderedTaskRecord("record-2", "Second", 2000),
+        ],
+        schema,
+      ),
+    );
+    const html = renderGeneratedHomeCollection(model, { today: "2026-05-02" });
+    const firstIndex = html.indexOf('value="First"');
+    const secondIndex = html.indexOf('value="Second"');
+    const thirdIndex = html.indexOf('value="Third"');
+
+    expect(firstIndex).toBeGreaterThan(-1);
+    expect(firstIndex).toBeLessThan(secondIndex);
+    expect(secondIndex).toBeLessThan(thirdIndex);
+    expect(html).toContain('data-formless-sortable-list-item="record-1"');
+    expect(html.match(/data-formless-ordering-handle="true"/g) ?? []).toHaveLength(3);
   });
 
   it("renders clear-completed target count and keeps the button enabled at zero", () => {
@@ -3373,6 +3400,49 @@ function taskStackScreenSchema(): AppSchema {
   };
 }
 
+function taskListOrderingSchema(): AppSchema {
+  const taskHome = appSchema.views.taskHome;
+  const orderField: EntitySchema["fields"][string] = {
+    type: "number",
+    required: false,
+    label: "Order",
+  };
+  const ordering: ResultOrderingConfig = {
+    fieldName: "order",
+    field: orderField,
+    scope: [],
+    presentations: ["dragHandle"],
+  };
+
+  if (taskHome?.type !== "collection" || taskHome.result.type !== "list") {
+    throw new Error("Missing task list collection.");
+  }
+
+  return {
+    ...appSchema,
+    entities: {
+      ...appSchema.entities,
+      task: {
+        ...appSchema.entities.task,
+        fields: {
+          ...appSchema.entities.task.fields,
+          order: orderField,
+        },
+      },
+    },
+    views: {
+      ...appSchema.views,
+      taskHome: {
+        ...taskHome,
+        result: {
+          ...taskHome.result,
+          ordering: { field: ordering.fieldName, presentations: ordering.presentations },
+        },
+      },
+    },
+  };
+}
+
 function taskNavigationScreenSchema(): AppSchema {
   const taskHome = appSchema.views.taskHome;
 
@@ -3581,6 +3651,18 @@ function taskRecord(
     entity: "task",
     values: { title, done, dueDate },
     createdAt: `2026-04-29T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function orderedTaskRecord(id: string, title: string, order: number): StoredRecord {
+  const record = taskRecord(id, title, false);
+
+  return {
+    ...record,
+    values: {
+      ...record.values,
+      order,
+    },
   };
 }
 

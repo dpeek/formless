@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
+import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Badge } from "@formless/ui/badge";
 import { Button } from "@formless/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
@@ -9,8 +11,10 @@ import {
   useEntityRecordIdsMatchingQuery,
   useEntityRecordOptionsMatchingQuery,
   useRecord,
+  useRecordsById,
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
+import { setSyncStatus } from "../../client/sync-status.ts";
 import type {
   HomeCollectionConfig,
   HomeContextConfig,
@@ -20,14 +24,27 @@ import type {
   RecordFieldConfig,
   RelatedCollectionConfig,
   RecordUnionPresentationConfig,
+  ResultOrderingConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { HomeActionRow } from "./actions.tsx";
 import { GeneratedCreateDialog } from "./create.tsx";
 import { formatAggregateDisplayValue } from "./format.ts";
+import {
+  ORDERING_DND_TYPE,
+  calculateOrderingDragMovePlanForContext,
+  parseOrderingDragData,
+  selectOrderingDragFacts,
+  selectResultOrderingContext,
+  submitOrderingPatch,
+  type ResultOrderingContext,
+  type ResultOrderingDragData,
+  type ResultOrderingDragFact,
+} from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
+import { useSchemaKey } from "./schema-app-context.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
@@ -799,6 +816,7 @@ function CollectionResult({
     <RecordList
       entity={entity}
       entityName={entityName}
+      ordering={result.ordering}
       query={query}
       queryContext={queryContext}
       recordFields={result.recordFields}
@@ -810,6 +828,7 @@ function CollectionResult({
 export function RecordList({
   entity,
   entityName,
+  ordering,
   query,
   queryContext,
   recordFields,
@@ -817,13 +836,108 @@ export function RecordList({
 }: {
   entity: EntitySchema;
   entityName: string;
+  ordering?: ResultOrderingConfig;
   query: HomeQueryTabConfig["query"];
   queryContext?: QueryEvaluationContext;
   recordFields: RecordFieldConfig[];
   recordUnion?: RecordUnionPresentationConfig;
 }) {
+  const schemaKey = useSchemaKey();
   const canPatch = entity.mutations.patch.enabled;
+  const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
+  const recordsById = useRecordsById();
+  const orderingContext = selectResultOrderingContext({
+    canPatch,
+    entityName,
+    ordering,
+    recordIds,
+    recordsById,
+  });
+  const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
+  const orderingDragFacts = selectOrderingDragFacts(orderingContext);
+
+  async function handleOrderingDragEnd(event: DragEndEvent) {
+    if (!orderingContext || event.canceled || !isSortableOperation(event.operation)) {
+      return;
+    }
+
+    const { source } = event.operation;
+
+    if (!source) {
+      return;
+    }
+
+    const dragData = parseOrderingDragData(source.data);
+
+    if (!dragData) {
+      return;
+    }
+
+    if (source.sortable.initialGroup !== source.sortable.group) {
+      setSyncStatus({ state: "idle", message: "Cross-scope list item move ignored." });
+      return;
+    }
+
+    const plan = calculateOrderingDragMovePlanForContext({
+      orderingContext,
+      recordId: dragData.recordId,
+      targetIndex: source.sortable.index,
+    });
+
+    if (plan.kind !== "patch") {
+      if (plan.kind === "rebalance") {
+        setSyncStatus({ state: "error", message: "Rebalance required before drag reorder." });
+      }
+      return;
+    }
+
+    const suspendedDrop = event.suspend();
+    setPendingDragRecordId(dragData.recordId);
+    setSyncStatus({ state: "syncing", message: "Moving list item..." });
+
+    try {
+      await submitOrderingPatch(schemaKey, orderingContext, plan);
+      setSyncStatus({ state: "idle", message: "List item moved and synced." });
+    } catch (error) {
+      setSyncStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Drag reorder failed.",
+      });
+    } finally {
+      setPendingDragRecordId(null);
+      suspendedDrop.resume();
+    }
+  }
+
+  const list = (
+    <ul className="divide-y divide-slate-200 rounded border border-slate-200">
+      {orderedRecordIds.map((recordId) =>
+        orderingContext && orderingDragFacts ? (
+          <SortableRecordRow
+            canPatch={canPatch}
+            dragFact={orderingDragFacts.get(recordId)}
+            entityName={entityName}
+            key={recordId}
+            orderingContext={orderingContext}
+            pendingDragRecordId={pendingDragRecordId}
+            recordFields={recordFields}
+            recordUnion={recordUnion}
+            recordId={recordId}
+          />
+        ) : (
+          <RecordRow
+            canPatch={canPatch}
+            entityName={entityName}
+            key={recordId}
+            recordFields={recordFields}
+            recordUnion={recordUnion}
+            recordId={recordId}
+          />
+        ),
+      )}
+    </ul>
+  );
 
   return (
     <section className="space-y-3">
@@ -833,53 +947,132 @@ export function RecordList({
 
       {recordIds.length === 0 ? (
         <p className="text-sm text-slate-600">No records yet.</p>
+      ) : orderingContext && orderingDragFacts ? (
+        <DragDropProvider onDragEnd={handleOrderingDragEnd}>{list}</DragDropProvider>
       ) : (
-        <ul className="divide-y divide-slate-200 rounded border border-slate-200">
-          {recordIds.map((recordId) => (
-            <RecordRow
-              canPatch={canPatch}
-              entityName={entityName}
-              key={recordId}
-              recordFields={recordFields}
-              recordUnion={recordUnion}
-              recordId={recordId}
-            />
-          ))}
-        </ul>
+        list
       )}
     </section>
+  );
+}
+
+function SortableRecordRow({
+  canPatch,
+  dragFact,
+  entityName,
+  orderingContext,
+  pendingDragRecordId,
+  recordFields,
+  recordUnion,
+  recordId,
+}: {
+  canPatch: boolean;
+  dragFact: ResultOrderingDragFact | undefined;
+  entityName: string;
+  orderingContext: ResultOrderingContext;
+  pendingDragRecordId: string | null;
+  recordFields: RecordFieldConfig[];
+  recordUnion?: RecordUnionPresentationConfig;
+  recordId: string;
+}) {
+  const disabled = !dragFact || !orderingContext.canPatch || pendingDragRecordId !== null;
+  const { handleRef, isDragSource, isDropTarget, ref } = useSortable<ResultOrderingDragData>({
+    id: `list-ordering:${recordId}`,
+    data: {
+      type: ORDERING_DND_TYPE,
+      recordId,
+      scopeKey: dragFact?.scopeKey ?? "",
+    },
+    group: dragFact?.scopeKey,
+    index: dragFact?.index ?? 0,
+    type: ORDERING_DND_TYPE,
+    accept: (source) => {
+      const sourceData = parseOrderingDragData(source.data);
+
+      return sourceData?.scopeKey === dragFact?.scopeKey;
+    },
+    disabled,
+    transition: { idle: true },
+  });
+  const itemStateClass = [isDragSource ? "opacity-60" : "", isDropTarget ? "bg-muted/40" : ""]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <RecordRow
+      canPatch={canPatch}
+      entityName={entityName}
+      itemClassName={itemStateClass || undefined}
+      itemRef={ref}
+      orderingHandleDisabled={disabled}
+      orderingHandleRef={handleRef}
+      recordFields={recordFields}
+      recordUnion={recordUnion}
+      recordId={recordId}
+      showOrderingHandle={true}
+    />
   );
 }
 
 function RecordRow({
   canPatch,
   entityName,
+  itemClassName,
+  itemRef,
+  orderingHandleDisabled,
+  orderingHandleRef,
   recordFields,
   recordUnion,
   recordId,
+  showOrderingHandle = false,
 }: {
   canPatch: boolean;
   entityName: string;
+  itemClassName?: string;
+  itemRef?: (element: Element | null) => void;
+  orderingHandleDisabled?: boolean;
+  orderingHandleRef?: (element: Element | null) => void;
   recordFields: RecordFieldConfig[];
   recordUnion?: RecordUnionPresentationConfig;
   recordId: string;
+  showOrderingHandle?: boolean;
 }) {
   const record = useRecord(recordId);
   const warnings = useRecordReadinessWarnings(recordId);
   const visibleFields = selectRecordFieldsForActiveUnion(recordFields, recordUnion, record);
+  const rowClassName = ["p-3", itemClassName].filter(Boolean).join(" ");
 
   return (
-    <li className="p-3">
-      <div className="flex flex-wrap items-start gap-2">
-        {visibleFields.map((fieldConfig) => (
-          <RecordFieldEditor
-            canPatch={canPatch}
-            entityName={entityName}
-            fieldConfig={fieldConfig}
-            key={fieldConfig.fieldName}
-            recordId={recordId}
-          />
-        ))}
+    <li
+      className={rowClassName}
+      data-formless-sortable-list-item={showOrderingHandle ? recordId : undefined}
+      ref={itemRef}
+    >
+      <div className="flex items-start gap-2">
+        {showOrderingHandle ? (
+          <Button
+            aria-label="Drag record"
+            data-formless-ordering-handle="true"
+            disabled={orderingHandleDisabled ?? true}
+            ref={orderingHandleRef}
+            size="icon-xs"
+            type="button"
+            variant="ghost"
+          >
+            <span aria-hidden="true">::</span>
+          </Button>
+        ) : null}
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+          {visibleFields.map((fieldConfig) => (
+            <RecordFieldEditor
+              canPatch={canPatch}
+              entityName={entityName}
+              fieldConfig={fieldConfig}
+              key={fieldConfig.fieldName}
+              recordId={recordId}
+            />
+          ))}
+        </div>
       </div>
       {warnings.length > 0 ? (
         <div className="mt-3">
