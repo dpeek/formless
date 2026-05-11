@@ -59,6 +59,7 @@ import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 import { InvokeActionTableCell } from "./table-actions.tsx";
+import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 
 export function RecordTable({
   columns,
@@ -722,7 +723,7 @@ function EmptyReferenceFieldCell({
   );
 }
 
-function ReferencedRecordEditorDialog({
+export function ReferencedRecordEditorDialog({
   column,
   onOpenChange,
   open,
@@ -749,18 +750,10 @@ function ReferencedRecordEditorDialog({
             {referenceItem.entity.label.toLowerCase()}.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap items-end gap-3">
-          {referenceItem.recordFields.map((fieldConfig) => (
-            <RecordFieldEditor
-              canPatch={referenceItem.entity.mutations.patch.enabled}
-              entityName={referenceItem.entityName}
-              fieldConfig={fieldConfig}
-              key={fieldConfig.fieldName}
-              recordId={referenceRecordId}
-              showLabel={true}
-            />
-          ))}
-        </div>
+        <ReferencedRecordEditorFields
+          referenceItem={referenceItem}
+          referenceRecordId={referenceRecordId}
+        />
         {!referenceItem.entity.mutations.patch.enabled ? (
           <p className="text-sm text-slate-600">
             Editing is disabled for {referenceItem.entity.label}.
@@ -771,6 +764,36 @@ function ReferencedRecordEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function ReferencedRecordEditorFields({
+  referenceItem,
+  referenceRecordId,
+}: {
+  referenceItem: NonNullable<FieldTableColumnConfig["referenceItem"]>;
+  referenceRecordId: string;
+}) {
+  const referenceRecord = useRecord(referenceRecordId);
+  const visibleFields = selectRecordFieldsForActiveUnion(
+    referenceItem.recordFields,
+    referenceItem.recordUnion,
+    referenceRecord,
+  );
+
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      {visibleFields.map((fieldConfig) => (
+        <RecordFieldEditor
+          canPatch={referenceItem.entity.mutations.patch.enabled}
+          entityName={referenceItem.entityName}
+          fieldConfig={fieldConfig}
+          key={fieldConfig.fieldName}
+          recordId={referenceRecordId}
+          showLabel={true}
+        />
+      ))}
+    </div>
   );
 }
 

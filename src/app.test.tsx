@@ -9,7 +9,7 @@ import {
   resolveCreateValues,
 } from "./app/generated/create.tsx";
 import { HomeScreen } from "./app/generated/screen.tsx";
-import { RecordTable } from "./app/generated/table.tsx";
+import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table.tsx";
 import { EditViewFields } from "./app/generated/table-actions.tsx";
 import { RecordTree } from "./app/generated/tree.tsx";
 import { SitePageRouteView } from "./app/routes/site-page.tsx";
@@ -1852,6 +1852,51 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toContain('aria-label="Kind"');
+    expect(html).toContain('aria-label="Done"');
+    expect(html).toContain("checked");
+    expect(html).not.toContain("Hidden title");
+  });
+
+  it("renders referenced-record dialog fields for the active union discriminator", () => {
+    const schema = generatedDiscriminatedTaskSchema();
+    const model = requiredCollectionModel(schema, "taskHome");
+
+    if (model.result.type !== "list") {
+      throw new Error("Task home should render a list.");
+    }
+
+    const task = schema.entities.task;
+    const taskPlacement = schema.entities.taskPlacement;
+    const column: Extract<TableColumnConfig, { type: "field" }> = {
+      type: "field",
+      key: "field:task",
+      fieldName: "task",
+      field: taskPlacement.fields.task,
+      editor: "reference",
+      commit: "immediate",
+      label: "Task",
+      display: "readOnly",
+      format: "plain",
+      referenceItem: {
+        itemViewName: "taskVariantItem",
+        entityName: "task",
+        entity: task,
+        recordFields: model.result.recordFields,
+        recordUnion: model.result.recordUnion,
+      },
+    };
+    const streamRecord = discriminatedTaskRecord("record-1", "stream", "Hidden title", true);
+    const referenceItem = column.referenceItem;
+
+    if (!referenceItem) {
+      throw new Error("Missing reference item config.");
+    }
+
+    applyBootstrapResponse(bootstrap([streamRecord], schema));
+    const html = renderToStaticMarkup(
+      <ReferencedRecordEditorFields referenceItem={referenceItem} referenceRecordId="record-1" />,
+    );
+
     expect(html).toContain('aria-label="Done"');
     expect(html).toContain("checked");
     expect(html).not.toContain("Hidden title");

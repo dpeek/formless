@@ -1,8 +1,8 @@
 # PRD 20: Discriminated entity unions
 
-Status: in-progress
-Current chunk: none ready; DU-06 later
-Last updated: 2026-05-11
+Status: shipped
+Current chunk: complete; DU-06 and DU-07 deferred
+Last updated: 2026-05-12
 
 ## Goal
 
@@ -342,15 +342,15 @@ Notes:
 
 ## Chunks
 
-| ID    | Status | Depends on | Main files                               | Acceptance                                                                                 |
-| ----- | ------ | ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
-| DU-01 | done   | none       | schema types/parser/tests, PRD           | App schemas parse top-level unions and reject malformed union definitions.                 |
-| DU-02 | done   | DU-01      | view parser, view models, tests          | Item/edit/create views can reference unions and expose render-ready variant facts.         |
-| DU-03 | done   | DU-02      | generated tree/edit/create UI, app tests | Generated UI renders variant field presentations and updates when the discriminator moves. |
-| DU-04 | done   | DU-03      | generated tree UI, route selection tests | Header/Footer nodes render compact context links that select the matching root.            |
-| DU-05 | done   | DU-04      | Site source schema, browser smoke, PRD   | `/site` tree uses block variants; public `/pages/*` behavior remains unchanged.            |
-| DU-06 | later  | DU-05      | authority validation, mutation tests     | Optional union-required-field validation is enforced during create and patch.              |
-| DU-07 | later  | DU-01      | typegen workstream                       | Future TypeScript generation can emit discriminated unions from schema metadata.           |
+| ID    | Status   | Depends on | Main files                               | Acceptance                                                                                 |
+| ----- | -------- | ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| DU-01 | done     | none       | schema types/parser/tests, PRD           | App schemas parse top-level unions and reject malformed union definitions.                 |
+| DU-02 | done     | DU-01      | view parser, view models, tests          | Item/edit/create views can reference unions and expose render-ready variant facts.         |
+| DU-03 | done     | DU-02      | generated tree/edit/create UI, app tests | Generated UI renders variant field presentations and updates when the discriminator moves. |
+| DU-04 | done     | DU-03      | generated tree UI, route selection tests | Header/Footer nodes render compact context links that select the matching root.            |
+| DU-05 | done     | DU-04      | Site source schema, browser smoke, PRD   | `/site` tree uses block variants; public `/pages/*` behavior remains unchanged.            |
+| DU-06 | deferred | DU-05      | authority validation, mutation tests     | Optional union-required-field validation is enforced during create and patch.              |
+| DU-07 | deferred | DU-01      | typegen workstream                       | Future TypeScript generation can emit discriminated unions from schema metadata.           |
 
 ## Testing decisions
 
@@ -377,6 +377,7 @@ Notes:
 - Site tree Link blocks render `label` and `href` as compact unlabeled inline fields.
 - Site tree shows Markdown blocks with body editing.
 - Site tree shows Header and Footer as compact links.
+- Table reference item dialogs render active union fields.
 - Selecting Header/Footer compact links changes the Site root selection.
 - Site tree keeps drag handles and does not render move up/down buttons.
 - Reordering tree placements still patches `blockPlacement.order`.
@@ -413,6 +414,7 @@ Notes:
 
 - `doc/current.md`: app schemas can declare top-level discriminated entity unions.
 - `doc/current.md`: generated item/edit/create views can render fields by union variant.
+- `doc/current.md`: generated table reference item dialogs can render fields by union variant.
 - `doc/current.md`: generated tree item variants can render compact context links that select the active collection context record.
 - `doc/current.md`: Site `block.type` drives generated editor variants while records stay flat.
 - `doc/current.md`: Site Header and Footer child nodes can link to the selected root editor.
@@ -428,10 +430,11 @@ Notes:
 - 2026-05-11: DU-04 shipped. Generated tree child item views render active `contextLink` union presentations as compact selection controls. The controls select the current section context through existing route selection state when the child entity matches the active context entity and the record is selectable; otherwise they render disabled. No storage, sync, authority, public Site tree, public Site renderer, or Site source schema changed.
 - 2026-05-11: DU-05 shipped. Site source schema now declares `blockByType` over flat `block.type`, uses variant-aware Site tree child nodes, and uses variant-aware block root detail/create/edit views. Header/Footer tree nodes render compact context links; Link, Markdown, media, Hero, content list/grid, CTA, Subscribe, and Custom blocks render scoped fields through generated variants. Public Site tree projection and renderer code stayed unchanged.
 - 2026-05-11: DU-05 follow-up shipped from screenshot feedback. Site tree link children no longer render placement labels, icon, color editors, or move up/down buttons; link children render compact unlabeled `label` and `href` inputs. Site create/edit link variants also submit only `label` and `href` through generated union fields. Public Site tree projection and renderer code stayed unchanged.
+- 2026-05-12: PRD 20 closeout shipped. Table reference item dialogs now reuse active union field selection for referenced records, so union-aware reference item views do not fall back to static fields. DU-06 authority validation and DU-07 typegen remain deferred future work.
 
 ## Blockers
 
-- None for DU-05.
+- None.
 
 ## Evidence
 
@@ -466,6 +469,11 @@ Notes:
 - 2026-05-11 DU-05 follow-up: `.devstate/status.md` reports checks ok and services running after `devstate check`.
 - 2026-05-11 DU-05 follow-up: `bun browser --session link-fields` reset Site schema and seed on `https://formless.local`, opened `/site`, and returned `linkLabel: true`, `linkHref: true`, `iconEditors: 0`, `colorPickers: 0`, `placementLabel: false`, `dragHandles: 17`, `moveUp: false`, `moveDown: false`.
 - 2026-05-11 DU-05 follow-up: `bun browser --session link-fields errors` returned no page errors.
+- 2026-05-12 closeout: `.devstate/status.md` reports checks ok and services running after `devstate check`.
+- 2026-05-12 closeout: `.devstate/logs/service-test.txt` reports `src/app.test.tsx` passing with 110 tests after adding referenced-record dialog union coverage.
+- 2026-05-12 closeout: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 190 files.
+- 2026-05-12 closeout: `bun browser --session prd20-finalize --ignore-https-errors batch --bail "open https://formless.local/site" "wait 1000" "get text body" "open https://formless.local/pages/home" "wait 1000" "get text body"` rendered the variant-aware Site editor and public home page.
+- 2026-05-12 closeout: `bun browser --session prd20-finalize errors` returned no page errors.
 - 2026-05-11 DU-05: `bun browser --session du05 --ignore-https-errors eval 'fetch("https://20-discriminated-entity-unions.formless.local/api/site/reset/seed",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.status)'` returned `200`.
 - 2026-05-11 DU-05: `bun browser --session du05 --ignore-https-errors batch --bail "open https://20-discriminated-entity-unions.formless.local/site" "wait 1000" "get text body" "open https://20-discriminated-entity-unions.formless.local/pages/home" "wait 1000" "get text body"` rendered the variant-aware Site tree and public home page.
 - 2026-05-11 DU-05: `bun browser --session du05 errors` returned no page errors.
