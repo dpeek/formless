@@ -5,6 +5,7 @@ import { parseReadModels } from "./schema-read-models.ts";
 import { parseRelationships } from "./schema-relationships.ts";
 import { parseScreens } from "./schema-screens.ts";
 import { parseTableViews } from "./schema-table-views.ts";
+import { parseUnions } from "./schema-unions.ts";
 import { parseCollectionQueries, parseItemViews, parseViews } from "./schema-views.ts";
 import type { AppSchema } from "./schema-types.ts";
 
@@ -19,7 +20,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     "Schema",
     value,
     ["version", "entities", "queries", "itemViews", "tableViews", "views"],
-    ["relationships", "readModels", "screens"],
+    ["relationships", "readModels", "screens", "unions"],
   );
 
   const version = value.version;
@@ -41,6 +42,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     relationships,
   );
   const readModels = parseReadModels(value.readModels, entities, queries);
+  const unions = parseUnions(value.unions, entities);
   const itemViews = parseItemViews(value.itemViews, entities);
   const tableViews = parseTableViews(value.tableViews, entities, itemViews, readModels);
   const views = parseViews(
@@ -61,6 +63,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     ...(relationships === undefined ? {} : { relationships }),
     queries,
     ...(readModels === undefined ? {} : { readModels }),
+    ...(unions === undefined ? {} : { unions }),
     itemViews,
     tableViews,
     views,

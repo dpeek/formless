@@ -237,6 +237,237 @@ describe("schema enum fields", () => {
   });
 });
 
+describe("schema entity unions", () => {
+  it("parses top-level unions and preserves them through stringify", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: taskEntityWithKindEnum(),
+        },
+        unions: {
+          taskByKind: {
+            entity: "task",
+            discriminator: "kind",
+            variants: {
+              role: {
+                label: "Role",
+                fields: ["title", "kind"],
+                requiredFields: ["title"],
+              },
+              stream: {
+                label: "Stream",
+                fields: ["title", "done"],
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.unions?.taskByKind).toEqual({
+      entity: "task",
+      discriminator: "kind",
+      variants: {
+        role: {
+          label: "Role",
+          fields: ["title", "kind"],
+          requiredFields: ["title"],
+        },
+        stream: {
+          label: "Stream",
+          fields: ["title", "done"],
+        },
+      },
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("accepts a fallback for uncovered discriminator values", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: taskEntityWithKindEnum(),
+        },
+        unions: {
+          taskByKind: {
+            entity: "task",
+            discriminator: "kind",
+            variants: {
+              role: {
+                label: "Role",
+                fields: ["title"],
+              },
+            },
+            fallback: {
+              label: "Task",
+              fields: ["title", "kind"],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.unions?.taskByKind?.fallback).toEqual({
+      label: "Task",
+      fields: ["title", "kind"],
+    });
+  });
+
+  it("rejects malformed union registries and discriminator references", () => {
+    expect(() => parseAppSchema(baseSchema({ unions: [] }))).toThrow(
+      "Schema unions must be an object",
+    );
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          unions: {
+            "": unionForTaskKind(),
+          },
+        }),
+      ),
+    ).toThrow("Union names must be non-empty");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              entity: "missing",
+            },
+          },
+        }),
+      ),
+    ).toThrow('Union "taskByKind" references unknown entity "missing"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              discriminator: "missing",
+            },
+          },
+        }),
+      ),
+    ).toThrow('discriminator references unknown field "task.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              discriminator: "title",
+            },
+          },
+        }),
+      ),
+    ).toThrow('discriminator field "task.title" must be an enum field');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum({
+              required: false,
+            }),
+          },
+          unions: {
+            taskByKind: unionForTaskKind(),
+          },
+        }),
+      ),
+    ).toThrow('discriminator field "task.kind" must be required');
+  });
+
+  it("rejects bad union variants, fields, and missing fallback coverage", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              variants: {
+                role: { label: "Role", fields: ["title"] },
+                missing: { label: "Missing", fields: ["title"] },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('variant "missing" must match a discriminator enum value');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              variants: {
+                role: { label: "Role", fields: ["missing"] },
+                stream: { label: "Stream", fields: ["title"] },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "task.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              variants: {
+                role: {
+                  label: "Role",
+                  fields: ["title"],
+                  requiredFields: ["missing"],
+                },
+                stream: { label: "Stream", fields: ["title"] },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('references unknown field "task.missing"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              variants: {
+                role: { label: "Role", fields: ["title"] },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('must define variants for discriminator values "stream" or a fallback');
+  });
+});
+
 describe("schema number fields", () => {
   it("parses number fields, query values, and generated editors", () => {
     const schema = parseAppSchema(
@@ -4386,7 +4617,7 @@ function defaultEntities() {
   };
 }
 
-function taskEntityWithKindEnum() {
+function taskEntityWithKindEnum(overrides: Record<string, unknown> = {}) {
   return {
     ...defaultEntities().task,
     fields: {
@@ -4400,6 +4631,24 @@ function taskEntityWithKindEnum() {
           role: { label: "Role" },
           stream: { label: "Stream" },
         },
+        ...overrides,
+      },
+    },
+  };
+}
+
+function unionForTaskKind() {
+  return {
+    entity: "task",
+    discriminator: "kind",
+    variants: {
+      role: {
+        label: "Role",
+        fields: ["title"],
+      },
+      stream: {
+        label: "Stream",
+        fields: ["title"],
       },
     },
   };

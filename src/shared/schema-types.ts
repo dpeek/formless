@@ -263,6 +263,19 @@ export type ReadModelSchema = {
   aggregates?: Record<string, AggregateSchema>;
 };
 
+export type EntityUnionVariantSchema = {
+  label: string;
+  fields: string[];
+  requiredFields?: string[];
+};
+
+export type EntityUnionSchema = {
+  entity: string;
+  discriminator: string;
+  variants: Record<string, EntityUnionVariantSchema>;
+  fallback?: EntityUnionVariantSchema;
+};
+
 export type ItemViewSchema = {
   entity: string;
   fields: Record<string, ViewFieldSchema>;
@@ -561,6 +574,7 @@ export type AppSchema = {
   relationships?: Record<string, RelationshipSchema>;
   queries: Record<string, CollectionQuerySchema>;
   readModels?: ReadModelSchema;
+  unions?: Record<string, EntityUnionSchema>;
   itemViews: Record<string, ItemViewSchema>;
   tableViews: Record<string, TableViewSchema>;
   views: Record<string, ViewSchema>;

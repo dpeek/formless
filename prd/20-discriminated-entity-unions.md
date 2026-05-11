@@ -1,7 +1,7 @@
 # PRD 20: Discriminated entity unions
 
-Status: ready
-Current chunk: DU-01
+Status: in-progress
+Current chunk: DU-02
 Last updated: 2026-05-11
 
 ## Goal
@@ -342,7 +342,7 @@ Notes:
 
 | ID    | Status | Depends on | Main files                               | Acceptance                                                                                 |
 | ----- | ------ | ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
-| DU-01 | ready  | none       | schema types/parser/tests, PRD           | App schemas parse top-level unions and reject malformed union definitions.                 |
+| DU-01 | done   | none       | schema types/parser/tests, PRD           | App schemas parse top-level unions and reject malformed union definitions.                 |
 | DU-02 | ready  | DU-01      | view parser, view models, tests          | Item/edit/create views can reference unions and expose render-ready variant facts.         |
 | DU-03 | ready  | DU-02      | generated tree/edit/create UI, app tests | Generated UI renders variant field presentations and updates when the discriminator moves. |
 | DU-04 | ready  | DU-03      | generated tree UI, route selection tests | Header/Footer nodes render compact context links that select the matching root.            |
@@ -416,8 +416,17 @@ Notes:
 ## Status Notes
 
 - 2026-05-11: Created PRD from user request for discriminated unions over existing entity types, using Site `block.type` as the motivating example.
+- 2026-05-11: DU-01 shipped. Added parser-only top-level `unions` metadata over flat entities. No storage, sync, authority, public Site tree, or generated UI behavior changed.
+
+## Blockers
+
+- None for DU-01.
 
 ## Evidence
 
 - `devstate start`: checks ok, services running.
 - `devstate check`: checks ok, services running.
+- 2026-05-11 DU-01: `.devstate/status.md` reports checks ok and services running.
+- 2026-05-11 DU-01: `.devstate/logs/service-test.txt` reports 14 test files passing with 407 tests.
+- 2026-05-11 DU-01: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 185 files.
+- 2026-05-11 DU-01: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent after `devstate start`; available devstate evidence is under `.devstate/`.
