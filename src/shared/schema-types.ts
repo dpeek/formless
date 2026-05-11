@@ -276,10 +276,54 @@ export type EntityUnionSchema = {
   fallback?: EntityUnionVariantSchema;
 };
 
-export type ItemViewSchema = {
+export type ContextSelectionTargetSchema = {
+  kind: "selectContext";
+  context: string;
+  record: "self";
+};
+
+export type ViewVariantFieldsPresentationSchema = {
+  presentation: "fields";
+  fields: Record<string, ViewFieldSchema>;
+};
+
+export type ViewVariantContextLinkPresentationSchema = {
+  presentation: "contextLink";
+  labelField: string;
+  target: ContextSelectionTargetSchema;
+};
+
+export type ItemViewVariantPresentationSchema =
+  | ViewVariantFieldsPresentationSchema
+  | ViewVariantContextLinkPresentationSchema;
+
+export type EditViewVariantPresentationSchema = ViewVariantFieldsPresentationSchema;
+
+export type CreateViewVariantFieldsPresentationSchema = {
+  presentation: "fields";
+  fields: Record<string, CreateViewFieldSchema>;
+};
+
+export type CreateViewVariantPresentationSchema = CreateViewVariantFieldsPresentationSchema;
+
+export type BaseItemViewSchema = {
   entity: string;
   fields: Record<string, ViewFieldSchema>;
 };
+
+export type StaticItemViewSchema = BaseItemViewSchema & {
+  union?: undefined;
+  variants?: undefined;
+  fallback?: undefined;
+};
+
+export type UnionItemViewSchema = BaseItemViewSchema & {
+  union: string;
+  variants: Record<string, ItemViewVariantPresentationSchema>;
+  fallback?: ItemViewVariantPresentationSchema;
+};
+
+export type ItemViewSchema = StaticItemViewSchema | UnionItemViewSchema;
 
 export type CountDisplaySchema = {
   type: "count";
@@ -387,13 +431,35 @@ export type CreateViewSchema = {
   entity: string;
   fields: Record<string, CreateViewFieldSchema>;
   defaults?: Record<string, CreateDefaultValueSchema>;
-};
+} & (
+  | {
+      union?: undefined;
+      variants?: undefined;
+      fallback?: undefined;
+    }
+  | {
+      union: string;
+      variants: Record<string, CreateViewVariantPresentationSchema>;
+      fallback?: CreateViewVariantPresentationSchema;
+    }
+);
 
 export type EditViewSchema = {
   type: "edit";
   entity: string;
   fields: Record<string, ViewFieldSchema>;
-};
+} & (
+  | {
+      union?: undefined;
+      variants?: undefined;
+      fallback?: undefined;
+    }
+  | {
+      union: string;
+      variants: Record<string, EditViewVariantPresentationSchema>;
+      fallback?: EditViewVariantPresentationSchema;
+    }
+);
 
 export type ViewSchema = CollectionViewSchema | CreateViewSchema | EditViewSchema;
 

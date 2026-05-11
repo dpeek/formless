@@ -20,6 +20,7 @@ import type {
   TableOrderingConfig,
   ValueUnitFieldConfig,
 } from "./views.ts";
+import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 import { fieldLabel, humanizeFieldName } from "./view-labels.ts";
 
 export type TableResultModel = {
@@ -339,12 +340,14 @@ function selectEditViewConfig(schema: AppSchema, editViewName: string): EditView
   if (!entity) {
     throw new Error(`Missing edit view entity "${view.entity}".`);
   }
+  const union = selectRecordUnionPresentation(schema, view, entity);
 
   return {
     viewName: editViewName,
     entityName: view.entity,
     entity,
     fields: selectEditFields(view, entity),
+    ...(union === undefined ? {} : { union }),
   };
 }
 
@@ -415,11 +418,13 @@ function selectReferenceItem(
   if (!entity || !itemView) {
     return undefined;
   }
+  const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
 
   return {
     itemViewName,
     entityName: field.to,
     entity,
     recordFields: selectRecordFields(itemView, entity),
+    ...(recordUnion === undefined ? {} : { recordUnion }),
   };
 }

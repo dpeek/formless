@@ -43,7 +43,7 @@ export function parseAppSchema(value: unknown): AppSchema {
   );
   const readModels = parseReadModels(value.readModels, entities, queries);
   const unions = parseUnions(value.unions, entities);
-  const itemViews = parseItemViews(value.itemViews, entities);
+  const itemViews = parseItemViews(value.itemViews, entities, unions);
   const tableViews = parseTableViews(value.tableViews, entities, itemViews, readModels);
   const views = parseViews(
     value.views,
@@ -53,6 +53,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     tableViews,
     relationships,
     readModels,
+    unions,
     { requirePrimaryCollection: value.screens === undefined },
   );
   const screens = parseScreens(value.screens, views);

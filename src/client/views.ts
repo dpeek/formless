@@ -12,6 +12,8 @@ import type {
   CreateViewSchema,
   EntityActionSchema,
   EntitySchema,
+  EntityUnionSchema,
+  EntityUnionVariantSchema,
   FieldCommitPolicy,
   FieldEditor,
   FieldSchema,
@@ -30,6 +32,10 @@ import type {
 } from "../shared/schema.ts";
 import type { QueryExpression } from "../shared/query.ts";
 import { selectTableResultModel } from "./table-model.ts";
+import {
+  selectCreateUnionPresentation,
+  selectRecordUnionPresentation,
+} from "./union-presentation-model.ts";
 import { humanizeFieldName } from "./view-labels.ts";
 
 export { fieldLabel } from "./view-labels.ts";
@@ -67,6 +73,7 @@ export type FieldTableColumnConfig = RecordFieldConfig &
       entityName: string;
       entity: EntitySchema;
       recordFields: RecordFieldConfig[];
+      recordUnion?: RecordUnionPresentationConfig;
     };
   };
 
@@ -123,6 +130,7 @@ export type EditViewConfig = {
   entityName: string;
   entity: EntitySchema;
   fields: RecordFieldConfig[];
+  union?: RecordUnionPresentationConfig;
 };
 
 export type TableOrderingScopeConfig = {
@@ -171,6 +179,74 @@ export type CreateDefaultConfig = {
   value: CreateDefaultValueSchema;
 };
 
+export type ContextSelectionTargetConfig = {
+  kind: "selectContext";
+  contextName: string;
+  record: "self";
+};
+
+export type RecordVariantFieldsPresentationConfig = {
+  type: "fields";
+  fields: RecordFieldConfig[];
+};
+
+export type RecordVariantContextLinkPresentationConfig = {
+  type: "contextLink";
+  labelFieldName: string;
+  labelField: FieldSchema;
+  target: ContextSelectionTargetConfig;
+};
+
+export type RecordVariantPresentationConfig = {
+  variantValue: string;
+  label: string;
+  unionVariant: EntityUnionVariantSchema;
+  presentation: RecordVariantFieldsPresentationConfig | RecordVariantContextLinkPresentationConfig;
+};
+
+export type RecordFallbackPresentationConfig = {
+  label: string;
+  unionVariant?: EntityUnionVariantSchema;
+  presentation: RecordVariantFieldsPresentationConfig | RecordVariantContextLinkPresentationConfig;
+};
+
+export type RecordUnionPresentationConfig = {
+  unionName: string;
+  union: EntityUnionSchema;
+  discriminatorFieldName: string;
+  discriminatorField: Extract<FieldSchema, { type: "enum" }>;
+  variants: RecordVariantPresentationConfig[];
+  fallback?: RecordFallbackPresentationConfig;
+};
+
+export type CreateVariantPresentationConfig = {
+  variantValue: string;
+  label: string;
+  unionVariant: EntityUnionVariantSchema;
+  presentation: {
+    type: "fields";
+    fields: CreateFieldConfig[];
+  };
+};
+
+export type CreateFallbackPresentationConfig = {
+  label: string;
+  unionVariant?: EntityUnionVariantSchema;
+  presentation: {
+    type: "fields";
+    fields: CreateFieldConfig[];
+  };
+};
+
+export type CreateUnionPresentationConfig = {
+  unionName: string;
+  union: EntityUnionSchema;
+  discriminatorFieldName: string;
+  discriminatorField: Extract<FieldSchema, { type: "enum" }>;
+  variants: CreateVariantPresentationConfig[];
+  fallback?: CreateFallbackPresentationConfig;
+};
+
 export type HomeQueryTabConfig = {
   queryName: string;
   label: string;
@@ -204,6 +280,7 @@ export type HomeResultConfig =
       type: "list";
       itemViewName: string;
       recordFields: RecordFieldConfig[];
+      recordUnion?: RecordUnionPresentationConfig;
     }
   | {
       type: "table";
@@ -222,8 +299,10 @@ export type HomeResultConfig =
       childEntity: EntitySchema;
       childItemViewName: string;
       childRecordFields: RecordFieldConfig[];
+      childRecordUnion?: RecordUnionPresentationConfig;
       placementItemViewName?: string;
       placementRecordFields?: RecordFieldConfig[];
+      placementRecordUnion?: RecordUnionPresentationConfig;
       ordering?: TableOrderingConfig;
       maxDepth: number;
     };
@@ -253,6 +332,7 @@ export type HomeContextConfig = {
   createAction?: Extract<HomeActionConfig, { type: "create" }>;
   itemViewName?: string;
   recordFields?: RecordFieldConfig[];
+  recordUnion?: RecordUnionPresentationConfig;
 };
 
 export type RelatedCollectionConfig = {
@@ -320,6 +400,7 @@ export type HomeActionConfig =
       entity: EntitySchema;
       fields: CreateFieldConfig[];
       defaults: CreateDefaultConfig[];
+      union?: CreateUnionPresentationConfig;
       enabled: boolean;
     }
   | {
@@ -616,6 +697,10 @@ function selectContext(
 
   const recordFields =
     itemView === undefined ? undefined : selectRecordFields(itemView, contextEntity);
+  const recordUnion =
+    itemView === undefined
+      ? undefined
+      : selectRecordUnionPresentation(schema, itemView, contextEntity);
 
   return {
     name: collectionView.context.name,
@@ -653,6 +738,7 @@ function selectContext(
       : {
           itemViewName,
           recordFields,
+          ...(recordUnion === undefined ? {} : { recordUnion }),
         }),
   };
 }
@@ -758,6 +844,11 @@ function selectResult(
     }
 
     const ordering = selectTreeOrdering(entity, relationship);
+    const childRecordUnion = selectRecordUnionPresentation(schema, childItemView, childEntity);
+    const placementRecordUnion =
+      placementItemView === undefined
+        ? undefined
+        : selectRecordUnionPresentation(schema, placementItemView, entity);
 
     return {
       type: "tree",
@@ -769,11 +860,13 @@ function selectResult(
       childEntity,
       childItemViewName: collectionView.result.childItemView,
       childRecordFields: selectRecordFields(childItemView, childEntity),
+      ...(childRecordUnion === undefined ? {} : { childRecordUnion }),
       ...(placementItemViewName === undefined || placementItemView === undefined
         ? {}
         : {
             placementItemViewName,
             placementRecordFields: selectRecordFields(placementItemView, entity),
+            ...(placementRecordUnion === undefined ? {} : { placementRecordUnion }),
           }),
       ...(ordering === undefined ? {} : { ordering }),
       maxDepth: collectionView.result.maxDepth ?? 8,
@@ -785,11 +878,13 @@ function selectResult(
   if (!itemView) {
     throw new Error(`Missing item view "${collectionView.result.itemView}".`);
   }
+  const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
 
   return {
     type: "list",
     itemViewName: collectionView.result.itemView,
     recordFields: selectRecordFields(itemView, entity),
+    ...(recordUnion === undefined ? {} : { recordUnion }),
   };
 }
 
@@ -992,6 +1087,7 @@ function selectCreateAction(
   if (!entity) {
     throw new Error(`Missing create view entity "${createView.entity}".`);
   }
+  const union = selectCreateUnionPresentation(schema, createView, entity);
 
   return {
     type: "create",
@@ -1000,6 +1096,7 @@ function selectCreateAction(
     entity,
     fields: selectCreateFields(createView, entity),
     defaults: selectCreateDefaults(createView, entity),
+    ...(union === undefined ? {} : { union }),
     enabled: entity.mutations.create.enabled,
   };
 }

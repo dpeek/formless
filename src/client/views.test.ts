@@ -57,6 +57,95 @@ describe("home view model collections", () => {
     ).toEqual(["title", "done", "dueDate", "estimate", "priority"]);
   });
 
+  it("exposes render-ready union variant facts for item, create, and edit views", () => {
+    const schema = discriminatedTaskSchema();
+    const listModel = requiredCollectionModel(schema, "taskHome");
+    const editModel = requiredCollectionModel(schema, "taskEditHome");
+    const createAction = listModel.actions.find((action) => action.type === "create");
+    const editColumn =
+      editModel.result.type === "table"
+        ? editModel.result.columns.find((column) => column.type === "invokeAction")
+        : undefined;
+    const editAction =
+      editColumn?.type === "invokeAction"
+        ? editColumn.actions.find((action) => action.type === "editRecord")
+        : undefined;
+
+    expect(
+      listModel.result.type === "list" ? listModel.result.recordUnion : undefined,
+    ).toMatchObject({
+      unionName: "taskByKind",
+      discriminatorFieldName: "kind",
+      variants: [
+        {
+          variantValue: "role",
+          label: "Role",
+          presentation: {
+            type: "fields",
+            fields: [{ fieldName: "title", editor: "text", commit: "field-commit" }],
+          },
+        },
+        {
+          variantValue: "stream",
+          label: "Stream",
+          presentation: {
+            type: "contextLink",
+            labelFieldName: "title",
+            target: { kind: "selectContext", contextName: "task", record: "self" },
+          },
+        },
+      ],
+      fallback: {
+        label: "Task",
+        presentation: {
+          type: "fields",
+          fields: [{ fieldName: "kind", editor: "enum", commit: "immediate" }],
+        },
+      },
+    });
+    expect(createAction?.type === "create" ? createAction.union : undefined).toMatchObject({
+      unionName: "taskByKind",
+      discriminatorFieldName: "kind",
+      variants: [
+        {
+          variantValue: "role",
+          presentation: {
+            type: "fields",
+            fields: [{ fieldName: "title", editor: "text" }],
+          },
+        },
+        {
+          variantValue: "stream",
+          presentation: {
+            type: "fields",
+            fields: [{ fieldName: "done", editor: "boolean" }],
+          },
+        },
+      ],
+    });
+    expect(editAction?.type === "editRecord" ? editAction.editView.union : undefined).toMatchObject(
+      {
+        unionName: "taskByKind",
+        variants: [
+          {
+            variantValue: "role",
+            presentation: {
+              type: "fields",
+              fields: [{ fieldName: "title", editor: "text", commit: "field-commit" }],
+            },
+          },
+          {
+            variantValue: "stream",
+            presentation: {
+              type: "fields",
+              fields: [{ fieldName: "done", editor: "boolean", commit: "immediate" }],
+            },
+          },
+        ],
+      },
+    );
+  });
+
   it("resolves collection actions and clear-completed target query", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 
@@ -1679,6 +1768,185 @@ function findFieldTableColumn(columns: TableColumnConfig[], fieldName: string) {
     (column): column is FieldTableColumnConfig =>
       column.type === "field" && column.fieldName === fieldName,
   );
+}
+
+function discriminatedTaskSchema(): AppSchema {
+  return parseAppSchema({
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          title: { type: "text", required: true },
+          done: { type: "boolean", required: true, default: false },
+          kind: {
+            type: "enum",
+            required: true,
+            default: "role",
+            values: {
+              role: { label: "Role" },
+              stream: { label: "Stream" },
+              custom: { label: "Custom" },
+            },
+          },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+      },
+    },
+    unions: {
+      taskByKind: {
+        entity: "task",
+        discriminator: "kind",
+        variants: {
+          role: {
+            label: "Role",
+            fields: ["title"],
+          },
+          stream: {
+            label: "Stream",
+            fields: ["title", "done"],
+          },
+        },
+        fallback: {
+          label: "Task",
+          fields: ["title", "kind"],
+        },
+      },
+    },
+    queries: {
+      taskAll: {
+        label: "All",
+        entity: "task",
+        expression: { kind: "all" },
+      },
+    },
+    itemViews: {
+      taskVariantItem: {
+        entity: "task",
+        fields: {
+          kind: { editor: "enum", commit: "immediate" },
+        },
+        union: "taskByKind",
+        variants: {
+          role: {
+            presentation: "fields",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+            },
+          },
+          stream: {
+            presentation: "contextLink",
+            labelField: "title",
+            target: { kind: "selectContext", context: "task", record: "self" },
+          },
+        },
+        fallback: {
+          presentation: "fields",
+          fields: {
+            kind: { editor: "enum", commit: "immediate" },
+          },
+        },
+      },
+    },
+    tableViews: {
+      taskEditTable: {
+        entity: "task",
+        actions: {
+          editTask: {
+            type: "editRecord",
+            label: "Edit task",
+            target: { kind: "row" },
+            editView: "taskEdit",
+          },
+        },
+        columns: [
+          { type: "field", field: "title" },
+          { type: "invokeAction", action: "editTask" },
+        ],
+      },
+    },
+    views: {
+      taskHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "list", itemView: "taskVariantItem" },
+        actions: [{ type: "create", createView: "taskCreate" }],
+      },
+      taskEditHome: {
+        type: "collection",
+        label: "Task edits",
+        entity: "task",
+        navigation: { primary: false },
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskEditTable" },
+      },
+      taskCreate: {
+        type: "create",
+        entity: "task",
+        fields: {
+          title: { editor: "text" },
+          kind: { editor: "enum" },
+        },
+        union: "taskByKind",
+        variants: {
+          role: {
+            presentation: "fields",
+            fields: {
+              title: { editor: "text" },
+            },
+          },
+          stream: {
+            presentation: "fields",
+            fields: {
+              done: { editor: "boolean" },
+            },
+          },
+        },
+        fallback: {
+          presentation: "fields",
+          fields: {
+            kind: { editor: "enum" },
+          },
+        },
+      },
+      taskEdit: {
+        type: "edit",
+        entity: "task",
+        fields: {
+          kind: { editor: "enum", commit: "immediate" },
+        },
+        union: "taskByKind",
+        variants: {
+          role: {
+            presentation: "fields",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+            },
+          },
+          stream: {
+            presentation: "fields",
+            fields: {
+              done: { editor: "boolean", commit: "immediate" },
+            },
+          },
+        },
+        fallback: {
+          presentation: "fields",
+          fields: {
+            kind: { editor: "enum", commit: "immediate" },
+          },
+        },
+      },
+    },
+  });
 }
 
 function summarizeHomeModel(model: HomeViewModel) {

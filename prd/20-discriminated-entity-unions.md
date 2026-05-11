@@ -1,7 +1,7 @@
 # PRD 20: Discriminated entity unions
 
 Status: in-progress
-Current chunk: DU-02
+Current chunk: DU-03
 Last updated: 2026-05-11
 
 ## Goal
@@ -327,23 +327,24 @@ Notes:
 
 ## Decisions
 
-| ID    | Decision                                                      | Reason                                                                  | Evidence                                      |
-| ----- | ------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------- |
-| DU-D1 | Keep entity unions as metadata over flat records.             | Flat records are a core runtime bet and Site already uses this model.   | `doc/overview.md`, `schema/apps/site/*`       |
-| DU-D2 | Use required enum fields as first discriminators.             | `block.type` already has the right shape and gives finite variants.     | `schema/apps/site/schema.json`                |
-| DU-D3 | Put union definitions at top level.                           | The variant vocabulary should be reusable across views and typegen.     | `relationships`, `readModels`, `screens`      |
-| DU-D4 | Keep presentation in views, not in the union definition.      | A variant can need different UI in a tree, dialog, create form, or row. | `itemViews`, `views`, `tableViews`            |
-| DU-D5 | Do not clear hidden fields in the first slice.                | Clearing data during view switching is destructive and needs policy.    | Generic patch behavior                        |
-| DU-D6 | Add context links as generated selection actions.             | Header/Footer should jump to existing root selection, not mutate data.  | `src/app/routes/home.tsx`, `src/app.tsx`      |
-| DU-D7 | Make authority enforcement a later optional layer.            | UI usefulness can ship before stricter invariant semantics.             | Existing scalar validation and mutation paths |
-| DU-D8 | Keep typegen conservative until authority enforcement exists. | Generated TypeScript must not imply invariants the authority lacks.     | Future type generation direction              |
+| ID    | Decision                                                      | Reason                                                                  | Evidence                                            |
+| ----- | ------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
+| DU-D1 | Keep entity unions as metadata over flat records.             | Flat records are a core runtime bet and Site already uses this model.   | `doc/overview.md`, `schema/apps/site/*`             |
+| DU-D2 | Use required enum fields as first discriminators.             | `block.type` already has the right shape and gives finite variants.     | `schema/apps/site/schema.json`                      |
+| DU-D3 | Put union definitions at top level.                           | The variant vocabulary should be reusable across views and typegen.     | `relationships`, `readModels`, `screens`            |
+| DU-D4 | Keep presentation in views, not in the union definition.      | A variant can need different UI in a tree, dialog, create form, or row. | `itemViews`, `views`, `tableViews`                  |
+| DU-D5 | Do not clear hidden fields in the first slice.                | Clearing data during view switching is destructive and needs policy.    | Generic patch behavior                              |
+| DU-D6 | Add context links as generated selection actions.             | Header/Footer should jump to existing root selection, not mutate data.  | `src/app/routes/home.tsx`, `src/app.tsx`            |
+| DU-D7 | Make authority enforcement a later optional layer.            | UI usefulness can ship before stricter invariant semantics.             | Existing scalar validation and mutation paths       |
+| DU-D8 | Keep typegen conservative until authority enforcement exists. | Generated TypeScript must not imply invariants the authority lacks.     | Future type generation direction                    |
+| DU-D9 | Keep static view fields as base fields beside union variants. | Existing renderers stay stable while DU-03 can consume variant facts.   | `src/shared/schema-views.ts`, `src/client/views.ts` |
 
 ## Chunks
 
 | ID    | Status | Depends on | Main files                               | Acceptance                                                                                 |
 | ----- | ------ | ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
 | DU-01 | done   | none       | schema types/parser/tests, PRD           | App schemas parse top-level unions and reject malformed union definitions.                 |
-| DU-02 | ready  | DU-01      | view parser, view models, tests          | Item/edit/create views can reference unions and expose render-ready variant facts.         |
+| DU-02 | done   | DU-01      | view parser, view models, tests          | Item/edit/create views can reference unions and expose render-ready variant facts.         |
 | DU-03 | ready  | DU-02      | generated tree/edit/create UI, app tests | Generated UI renders variant field presentations and updates when the discriminator moves. |
 | DU-04 | ready  | DU-03      | generated tree UI, route selection tests | Header/Footer nodes render compact context links that select the matching root.            |
 | DU-05 | ready  | DU-04      | Site source schema, browser smoke, PRD   | `/site` tree uses block variants; public `/pages/*` behavior remains unchanged.            |
@@ -417,10 +418,11 @@ Notes:
 
 - 2026-05-11: Created PRD from user request for discriminated unions over existing entity types, using Site `block.type` as the motivating example.
 - 2026-05-11: DU-01 shipped. Added parser-only top-level `unions` metadata over flat entities. No storage, sync, authority, public Site tree, or generated UI behavior changed.
+- 2026-05-11: DU-02 shipped. Item/edit/create views can attach union presentation metadata beside static fields. Parser validates union entity match, variant coverage, fallback coverage, variant fields, and item-view context links. View models expose discriminator, variant, fallback, field, and context-link facts for list/tree/context item views, create actions, table reference item views, and table edit dialogs. No storage, sync, authority, public Site tree, or generated UI behavior changed.
 
 ## Blockers
 
-- None for DU-01.
+- None for DU-02.
 
 ## Evidence
 
@@ -430,3 +432,8 @@ Notes:
 - 2026-05-11 DU-01: `.devstate/logs/service-test.txt` reports 14 test files passing with 407 tests.
 - 2026-05-11 DU-01: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 185 files.
 - 2026-05-11 DU-01: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent after `devstate start`; available devstate evidence is under `.devstate/`.
+- 2026-05-11 DU-02: `.devstate/status.md` reports checks ok and services running.
+- 2026-05-11 DU-02: `.devstate/logs/service-test.txt` reports 14 test files passing with 410 tests.
+- 2026-05-11 DU-02: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 186 files.
+- 2026-05-11 DU-02: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
+- 2026-05-11 DU-02: browser smoke skipped because app behavior did not change.

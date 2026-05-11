@@ -313,6 +313,245 @@ describe("schema entity unions", () => {
     });
   });
 
+  it("parses variant-aware item, edit, and create view presentations", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: taskEntityWithKindEnum(),
+        },
+        unions: {
+          taskByKind: unionForTaskKind(),
+        },
+        itemViews: {
+          taskListItem: {
+            entity: "task",
+            fields: {
+              kind: { editor: "enum", commit: "immediate" },
+            },
+            union: "taskByKind",
+            variants: {
+              role: {
+                presentation: "fields",
+                fields: {
+                  title: { editor: "text", commit: "field-commit" },
+                },
+              },
+              stream: {
+                presentation: "contextLink",
+                labelField: "title",
+                target: { kind: "selectContext", context: "task", record: "self" },
+              },
+            },
+          },
+        },
+        views: {
+          taskHome: defaultCollectionView(),
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text" },
+              kind: { editor: "enum" },
+            },
+            union: "taskByKind",
+            variants: {
+              role: {
+                presentation: "fields",
+                fields: {
+                  title: { editor: "text" },
+                },
+              },
+              stream: {
+                presentation: "fields",
+                fields: {
+                  done: { editor: "boolean" },
+                },
+              },
+            },
+          },
+          taskEdit: {
+            type: "edit",
+            entity: "task",
+            fields: {
+              kind: { editor: "enum", commit: "immediate" },
+            },
+            union: "taskByKind",
+            variants: {
+              role: {
+                presentation: "fields",
+                fields: {
+                  title: { editor: "text", commit: "field-commit" },
+                },
+              },
+              stream: {
+                presentation: "fields",
+                fields: {
+                  done: { editor: "boolean", commit: "immediate" },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.itemViews.taskListItem).toMatchObject({
+      entity: "task",
+      union: "taskByKind",
+      variants: {
+        role: {
+          presentation: "fields",
+          fields: { title: { editor: "text", commit: "field-commit" } },
+        },
+        stream: {
+          presentation: "contextLink",
+          labelField: "title",
+          target: { kind: "selectContext", context: "task", record: "self" },
+        },
+      },
+    });
+    expect(schema.views.taskCreate).toMatchObject({
+      type: "create",
+      union: "taskByKind",
+      variants: {
+        stream: {
+          presentation: "fields",
+          fields: { done: { editor: "boolean" } },
+        },
+      },
+    });
+    expect(schema.views.taskEdit).toMatchObject({
+      type: "edit",
+      union: "taskByKind",
+      variants: {
+        stream: {
+          presentation: "fields",
+          fields: { done: { editor: "boolean", commit: "immediate" } },
+        },
+      },
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects malformed variant-aware view presentations", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+            note: noteEntity(),
+          },
+          unions: {
+            taskByKind: unionForTaskKind(),
+          },
+          itemViews: {
+            taskListItem: {
+              entity: "note",
+              fields: {
+                title: { editor: "text", commit: "field-commit" },
+              },
+              union: "taskByKind",
+              variants: {
+                role: {
+                  presentation: "fields",
+                  fields: {
+                    title: { editor: "text", commit: "field-commit" },
+                  },
+                },
+                stream: {
+                  presentation: "fields",
+                  fields: {
+                    title: { editor: "text", commit: "field-commit" },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('Item view "taskListItem" union "taskByKind" must use entity "note"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          unions: {
+            taskByKind: unionForTaskKind(),
+          },
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                kind: { editor: "enum", commit: "immediate" },
+              },
+              union: "taskByKind",
+              variants: {
+                role: {
+                  presentation: "fields",
+                  fields: {
+                    title: { editor: "text", commit: "field-commit" },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('union "taskByKind" must define variant presentations for "stream" or a fallback');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          unions: {
+            taskByKind: {
+              ...unionForTaskKind(),
+              variants: {
+                role: {
+                  label: "Role",
+                  fields: ["title"],
+                },
+              },
+              fallback: {
+                label: "Task",
+                fields: ["title", "kind"],
+              },
+            },
+          },
+          views: {
+            ...defaultViews(),
+            taskCreate: {
+              type: "create",
+              entity: "task",
+              fields: {
+                title: { editor: "text" },
+                kind: { editor: "enum" },
+              },
+              union: "taskByKind",
+              variants: {
+                role: {
+                  presentation: "contextLink",
+                  labelField: "title",
+                  target: { kind: "selectContext", context: "task", record: "self" },
+                },
+              },
+              fallback: {
+                presentation: "fields",
+                fields: {
+                  title: { editor: "text" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('View "taskCreate" variant "role" presentation must be "fields"');
+  });
+
   it("rejects malformed union registries and discriminator references", () => {
     expect(() => parseAppSchema(baseSchema({ unions: [] }))).toThrow(
       "Schema unions must be an object",
