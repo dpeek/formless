@@ -708,8 +708,8 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Drag placement"');
     expect(html).toContain('data-formless-ordering-handle="true"');
     expect(html).toContain("data-formless-sortable-tree-placement=");
-    expect(html).toContain("Move placement up");
-    expect(html).toContain("Move placement down");
+    expect(html).not.toContain("Move placement up");
+    expect(html).not.toContain("Move placement down");
     expect(html).not.toContain('data-slot="table"');
   });
 
@@ -729,10 +729,63 @@ describe("generated collection home", () => {
       today: "2026-05-02",
     });
 
-    expect(html.indexOf("First")).toBeLessThan(html.indexOf("Second"));
-    expect(html.indexOf("Second")).toBeLessThan(html.indexOf("Third"));
+    expect(html.indexOf('data-formless-sortable-tree-placement="placement-1"')).toBeLessThan(
+      html.indexOf('data-formless-sortable-tree-placement="placement-2"'),
+    );
+    expect(html.indexOf('data-formless-sortable-tree-placement="placement-2"')).toBeLessThan(
+      html.indexOf('data-formless-sortable-tree-placement="placement-3"'),
+    );
     expect(html).toContain('aria-label="Drag placement"');
     expect(html).toContain("data-formless-sortable-tree-placement=");
+  });
+
+  it("renders Site link tree nodes as compact label and href editors", () => {
+    const collection = requiredSiteCollectionModel("siteCompositionHome");
+
+    if (!collection.context || collection.result.type !== "tree") {
+      throw new Error("Site composition home should render a context tree.");
+    }
+
+    bootstrapSiteEditor([
+      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
+      siteBlockRecord("link-1", {
+        type: "link",
+        label: "Docs",
+        href: "/docs",
+        icon: "book",
+        color: "#336699",
+      }),
+      {
+        id: "placement-1",
+        entity: "blockPlacement",
+        values: {
+          parent: "page-1",
+          block: "link-1",
+          label: "Placement label",
+          order: 1000,
+        },
+        createdAt: "2026-05-05T00:00:40.000Z",
+      },
+    ]);
+    const html = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Label"');
+    expect(html).toContain('value="Docs"');
+    expect(html).toContain('aria-label="Link"');
+    expect(html).toContain('value="/docs"');
+    expect(html).not.toContain("Placement label");
+    expect(html).not.toContain('aria-label="Icon"');
+    expect(html).not.toContain('aria-label="Choose Color"');
+    expect(html).not.toContain("text-2xl font-semibold");
+    expect(html).not.toContain("text-xs font-medium text-slate-600");
   });
 
   it("renders synthetic stack sections in order with independent selected queries", () => {
@@ -2822,8 +2875,6 @@ describe("generated forms and records", () => {
       type: "link",
       label: "Field behavior link",
       href: "https://example.com/field-behavior",
-      icon: "note",
-      color: "#336699",
     });
     expect(editHtml).toContain("Shipping schema-backed authoring");
     expect(editHtml).toContain('aria-label="Body"');

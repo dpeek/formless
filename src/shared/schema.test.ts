@@ -3964,7 +3964,7 @@ describe("personal site sample schema", () => {
         footer: { label: "Footer", fields: ["label", "templateKey"] },
         link: {
           label: "Link",
-          fields: ["label", "href", "icon", "color"],
+          fields: ["label", "href"],
           requiredFields: ["label", "href"],
         },
         markdown: { label: "Markdown", fields: ["label", "body", "templateKey"] },
@@ -4059,8 +4059,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "href", commit: "field-commit" },
-            icon: { editor: "icon", commit: "field-commit" },
-            color: { editor: "color", commit: "field-commit" },
           },
         },
         markdown: {
@@ -4098,8 +4096,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "href" },
-            icon: { editor: "icon" },
-            color: { editor: "color" },
           },
         },
         markdown: {
@@ -4132,8 +4128,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "href", commit: "field-commit" },
-            icon: { editor: "icon", commit: "field-commit" },
-            color: { editor: "color", commit: "field-commit" },
           },
         },
         markdown: {
@@ -4201,11 +4195,10 @@ describe("personal site sample schema", () => {
         relationship: "blockPlacements",
         childField: "block",
         childItemView: "blockTreeNode",
-        placementItemView: "blockPlacementTreeItem",
         ordering: {
           field: "order",
           scope: [{ kind: "field", field: "parent" }],
-          presentations: ["dragHandle", "moveMenu"],
+          presentations: ["dragHandle"],
         },
         maxDepth: 8,
       },

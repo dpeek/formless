@@ -563,22 +563,27 @@ function ChildRecordEditor({
     result.childRecordUnion,
     childRecord,
   );
+  const renderAsInlineStack = isInlineLinkFieldStack(recordFields);
 
   return (
     <div className="grid min-w-0 gap-3">
       {recordFields.map((fieldConfig) => {
-        const isHeading = isHeadingRecordField(fieldConfig);
+        const isHeading = !renderAsInlineStack && isHeadingRecordField(fieldConfig);
 
         return (
           <RecordFieldEditor
             canPatch={result.childEntity.mutations.patch.enabled}
-            density={isHeading || isRichMarkdownRecordField(fieldConfig) ? "default" : "compact"}
+            density={
+              renderAsInlineStack || (!isHeading && !isRichMarkdownRecordField(fieldConfig))
+                ? "compact"
+                : "default"
+            }
             entityName={result.childEntityName}
             fieldConfig={fieldConfig}
             key={fieldConfig.fieldName}
             presentation={isHeading ? "heading" : "default"}
             recordId={childRecord.id}
-            showLabel={!isHeading}
+            showLabel={!renderAsInlineStack && !isHeading}
           />
         );
       })}
@@ -663,6 +668,24 @@ function isHeadingRecordField(fieldConfig: RecordFieldConfig) {
     (fieldConfig.fieldName === "label" ||
       fieldConfig.fieldName === "title" ||
       fieldConfig.fieldName === "name")
+  );
+}
+
+function isInlineLinkFieldStack(recordFields: RecordFieldConfig[]) {
+  if (recordFields.length !== 2) {
+    return false;
+  }
+
+  const fieldNames = new Set(recordFields.map((fieldConfig) => fieldConfig.fieldName));
+
+  return (
+    fieldNames.has("label") &&
+    fieldNames.has("href") &&
+    recordFields.every(
+      (fieldConfig) =>
+        fieldConfig.field.type === "text" &&
+        (fieldConfig.editor === "text" || fieldConfig.editor === "href"),
+    )
   );
 }
 

@@ -258,7 +258,7 @@
         },
         "link": {
           "label": "Link",
-          "fields": ["label", "href", "icon", "color"],
+          "fields": ["label", "href"],
           "requiredFields": ["label", "href"]
         },
         "markdown": {
@@ -637,14 +637,6 @@
             "href": {
               "editor": "href",
               "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
-              "commit": "field-commit"
             }
           }
         },
@@ -829,14 +821,6 @@
           "fields": {
             "href": {
               "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
               "commit": "field-commit"
             }
           }
@@ -1239,7 +1223,6 @@
         "relationship": "blockPlacements",
         "childField": "block",
         "childItemView": "blockTreeNode",
-        "placementItemView": "blockPlacementTreeItem",
         "ordering": {
           "field": "order",
           "scope": [
@@ -1248,7 +1231,7 @@
               "field": "parent"
             }
           ],
-          "presentations": ["dragHandle", "moveMenu"]
+          "presentations": ["dragHandle"]
         },
         "maxDepth": 8
       },
@@ -1429,12 +1412,6 @@
           "fields": {
             "href": {
               "editor": "href"
-            },
-            "icon": {
-              "editor": "icon"
-            },
-            "color": {
-              "editor": "color"
             }
           }
         },
@@ -1673,14 +1650,6 @@
           "fields": {
             "href": {
               "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
               "commit": "field-commit"
             }
           }

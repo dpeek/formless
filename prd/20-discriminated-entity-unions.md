@@ -327,17 +327,18 @@ Notes:
 
 ## Decisions
 
-| ID    | Decision                                                      | Reason                                                                  | Evidence                                            |
-| ----- | ------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
-| DU-D1 | Keep entity unions as metadata over flat records.             | Flat records are a core runtime bet and Site already uses this model.   | `doc/overview.md`, `schema/apps/site/*`             |
-| DU-D2 | Use required enum fields as first discriminators.             | `block.type` already has the right shape and gives finite variants.     | `schema/apps/site/schema.json`                      |
-| DU-D3 | Put union definitions at top level.                           | The variant vocabulary should be reusable across views and typegen.     | `relationships`, `readModels`, `screens`            |
-| DU-D4 | Keep presentation in views, not in the union definition.      | A variant can need different UI in a tree, dialog, create form, or row. | `itemViews`, `views`, `tableViews`                  |
-| DU-D5 | Do not clear hidden fields in the first slice.                | Clearing data during view switching is destructive and needs policy.    | Generic patch behavior                              |
-| DU-D6 | Add context links as generated selection actions.             | Header/Footer should jump to existing root selection, not mutate data.  | `src/app/routes/home.tsx`, `src/app.tsx`            |
-| DU-D7 | Make authority enforcement a later optional layer.            | UI usefulness can ship before stricter invariant semantics.             | Existing scalar validation and mutation paths       |
-| DU-D8 | Keep typegen conservative until authority enforcement exists. | Generated TypeScript must not imply invariants the authority lacks.     | Future type generation direction                    |
-| DU-D9 | Keep static view fields as base fields beside union variants. | Existing renderers stay stable while DU-03 can consume variant facts.   | `src/shared/schema-views.ts`, `src/client/views.ts` |
+| ID     | Decision                                                      | Reason                                                                  | Evidence                                            |
+| ------ | ------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
+| DU-D1  | Keep entity unions as metadata over flat records.             | Flat records are a core runtime bet and Site already uses this model.   | `doc/overview.md`, `schema/apps/site/*`             |
+| DU-D2  | Use required enum fields as first discriminators.             | `block.type` already has the right shape and gives finite variants.     | `schema/apps/site/schema.json`                      |
+| DU-D3  | Put union definitions at top level.                           | The variant vocabulary should be reusable across views and typegen.     | `relationships`, `readModels`, `screens`            |
+| DU-D4  | Keep presentation in views, not in the union definition.      | A variant can need different UI in a tree, dialog, create form, or row. | `itemViews`, `views`, `tableViews`                  |
+| DU-D5  | Do not clear hidden fields in the first slice.                | Clearing data during view switching is destructive and needs policy.    | Generic patch behavior                              |
+| DU-D6  | Add context links as generated selection actions.             | Header/Footer should jump to existing root selection, not mutate data.  | `src/app/routes/home.tsx`, `src/app.tsx`            |
+| DU-D7  | Make authority enforcement a later optional layer.            | UI usefulness can ship before stricter invariant semantics.             | Existing scalar validation and mutation paths       |
+| DU-D8  | Keep typegen conservative until authority enforcement exists. | Generated TypeScript must not imply invariants the authority lacks.     | Future type generation direction                    |
+| DU-D9  | Keep static view fields as base fields beside union variants. | Existing renderers stay stable while DU-03 can consume variant facts.   | `src/shared/schema-views.ts`, `src/client/views.ts` |
+| DU-D10 | Keep Site tree link editing compact.                          | Header/footer links should be quick inline edits, not full block forms. | User screenshot feedback                            |
 
 ## Chunks
 
@@ -373,9 +374,11 @@ Notes:
 - Existing static create views render unchanged.
 - Site `block` union parses from source schema.
 - Site tree shows Link blocks with link fields only.
+- Site tree Link blocks render `label` and `href` as compact unlabeled inline fields.
 - Site tree shows Markdown blocks with body editing.
 - Site tree shows Header and Footer as compact links.
 - Selecting Header/Footer compact links changes the Site root selection.
+- Site tree keeps drag handles and does not render move up/down buttons.
 - Reordering tree placements still patches `blockPlacement.order`.
 - Missing child and cycle warnings still render.
 - `/pages/home` public rendering is unchanged.
@@ -413,6 +416,7 @@ Notes:
 - `doc/current.md`: generated tree item variants can render compact context links that select the active collection context record.
 - `doc/current.md`: Site `block.type` drives generated editor variants while records stay flat.
 - `doc/current.md`: Site Header and Footer child nodes can link to the selected root editor.
+- `doc/current.md`: Site tree Link blocks render only compact `label` and `href` editors, with drag handles but no move buttons.
 - `doc/roadmap.md`: discriminated entity unions are part of first-release generated UI if shipped before release.
 
 ## Status Notes
@@ -423,6 +427,7 @@ Notes:
 - 2026-05-11: DU-03 shipped. Generated list, tree, context detail, table edit, and create UIs render base fields plus active union variant fields. Create forms choose active variant fields from draft/form discriminator values, and submit only visible create fields plus resolved defaults. No storage, sync, authority, public Site tree, Site source schema, or context-link selection behavior changed.
 - 2026-05-11: DU-04 shipped. Generated tree child item views render active `contextLink` union presentations as compact selection controls. The controls select the current section context through existing route selection state when the child entity matches the active context entity and the record is selectable; otherwise they render disabled. No storage, sync, authority, public Site tree, public Site renderer, or Site source schema changed.
 - 2026-05-11: DU-05 shipped. Site source schema now declares `blockByType` over flat `block.type`, uses variant-aware Site tree child nodes, and uses variant-aware block root detail/create/edit views. Header/Footer tree nodes render compact context links; Link, Markdown, media, Hero, content list/grid, CTA, Subscribe, and Custom blocks render scoped fields through generated variants. Public Site tree projection and renderer code stayed unchanged.
+- 2026-05-11: DU-05 follow-up shipped from screenshot feedback. Site tree link children no longer render placement labels, icon, color editors, or move up/down buttons; link children render compact unlabeled `label` and `href` inputs. Site create/edit link variants also submit only `label` and `href` through generated union fields. Public Site tree projection and renderer code stayed unchanged.
 
 ## Blockers
 
@@ -458,6 +463,9 @@ Notes:
 - 2026-05-11 DU-05: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 187 files.
 - 2026-05-11 DU-05: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
 - 2026-05-11 DU-05: `bun browser --session du05 --ignore-https-errors eval 'fetch("https://20-discriminated-entity-unions.formless.local/api/site/reset/schema",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.status)'` returned `200`.
+- 2026-05-11 DU-05 follow-up: `.devstate/status.md` reports checks ok and services running after `devstate check`.
+- 2026-05-11 DU-05 follow-up: `bun browser --session link-fields` reset Site schema and seed on `https://formless.local`, opened `/site`, and returned `linkLabel: true`, `linkHref: true`, `iconEditors: 0`, `colorPickers: 0`, `placementLabel: false`, `dragHandles: 17`, `moveUp: false`, `moveDown: false`.
+- 2026-05-11 DU-05 follow-up: `bun browser --session link-fields errors` returned no page errors.
 - 2026-05-11 DU-05: `bun browser --session du05 --ignore-https-errors eval 'fetch("https://20-discriminated-entity-unions.formless.local/api/site/reset/seed",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.status)'` returned `200`.
 - 2026-05-11 DU-05: `bun browser --session du05 --ignore-https-errors batch --bail "open https://20-discriminated-entity-unions.formless.local/site" "wait 1000" "get text body" "open https://20-discriminated-entity-unions.formless.local/pages/home" "wait 1000" "get text body"` rendered the variant-aware Site tree and public home page.
 - 2026-05-11 DU-05: `bun browser --session du05 errors` returned no page errors.

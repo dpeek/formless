@@ -1237,10 +1237,10 @@ describe("home view model collections", () => {
           childFieldName: "block",
           childItemViewName: "blockTreeNode",
           childFields: ["label"],
-          placementItemViewName: "blockPlacementTreeItem",
-          placementFields: ["label"],
+          placementItemViewName: undefined,
+          placementFields: [],
           orderingField: "order",
-          orderingPresentations: ["dragHandle", "moveMenu"],
+          orderingPresentations: ["dragHandle"],
           maxDepth: 8,
         },
         actions: [
@@ -1383,7 +1383,7 @@ describe("home view model collections", () => {
     ]);
     expect(create?.type === "create" ? create.union?.unionName : undefined).toBe("blockByType");
     expect(createVariantFields).toMatchObject({
-      link: ["href", "icon", "color"],
+      link: ["href"],
       markdown: ["body", "templateKey"],
       image: ["href", "width", "height"],
     });
@@ -1429,8 +1429,6 @@ describe("home view model collections", () => {
     expect(createVariantEditors).toMatchObject({
       link: {
         href: "href",
-        icon: "icon",
-        color: "color",
       },
       markdown: {
         body: "markdown",
