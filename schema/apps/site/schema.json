@@ -1223,6 +1223,12 @@
         "relationship": "blockPlacements",
         "childField": "block",
         "childItemView": "blockTreeNode",
+        "branches": {
+          "variants": {
+            "header": "leaf",
+            "footer": "leaf"
+          }
+        },
         "ordering": {
           "field": "order",
           "scope": [

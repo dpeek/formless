@@ -1,7 +1,7 @@
 # PRD 22: Tree variant branch policy
 
-Status: ready
-Current chunk: TVB-03
+Status: shipped
+Current chunk: none
 Last updated: 2026-05-12
 
 ## Problem Statement
@@ -162,19 +162,20 @@ Likely changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                            | Reason                                                                 | Evidence                                            |
-| ------- | --------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------- |
-| TVB-D1  | Model branch hiding as tree result policy.          | Recursion behavior belongs to the tree view, not the stored record.    | Tree result already owns relationship recursion.    |
-| TVB-D2  | Use `leaf` instead of `hide`.                       | The child node is visible; only descendants are hidden.                | Header/Footer nodes should remain selectable.       |
-| TVB-D3  | Key the first policy by child union variant.        | Site already has `blockByType`; Header/Footer are variants.            | PRD 20 introduced child variant presentations.      |
-| TVB-D4  | Keep branch policy independent from `contextLink`.  | Link presentation and recursion policy are separate decisions.         | A variant may link and expand in different trees.   |
-| TVB-D5  | Validate policy through the child item view union.  | The tree result knows which child item view controls node variants.    | Tree result already references `childItemView`.     |
-| TVB-D6  | Do not change public Site projection or renderer.   | This is generated admin UI behavior only.                              | Public pages need Header/Footer children published. |
-| TVB-D7  | Treat selected root as outside child branch policy. | The selected root is the tree starting point, not a child node.        | Header root editing should show Header placements.  |
-| TVB-D8  | Evaluate policy before descendant placement lookup. | Hidden branches should not compute or warn about descendants.          | Renderer currently fetches descendants per child.   |
-| TVB-D9  | Keep unknown variants expanding in the first slice. | Silent hiding of unknown content would be risky.                       | Fallback branch policy can be a later extension.    |
-| TVB-D10 | Keep visible sibling ordering unchanged.            | Branch hiding does not alter the ordered placement list at that level. | PRD 21 owns result ordering behavior.               |
-| TVB-D11 | Keep the pure selector small and testable.          | Recursion policy should be easy to validate outside rendering details. | Existing union selectors are already pure helpers.  |
+| ID      | Decision                                                       | Reason                                                                                              | Evidence                                            |
+| ------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| TVB-D1  | Model branch hiding as tree result policy.                     | Recursion behavior belongs to the tree view, not the stored record.                                 | Tree result already owns relationship recursion.    |
+| TVB-D2  | Use `leaf` instead of `hide`.                                  | The child node is visible; only descendants are hidden.                                             | Header/Footer nodes should remain selectable.       |
+| TVB-D3  | Key the first policy by child union variant.                   | Site already has `blockByType`; Header/Footer are variants.                                         | PRD 20 introduced child variant presentations.      |
+| TVB-D4  | Keep branch policy independent from `contextLink`.             | Link presentation and recursion policy are separate decisions.                                      | A variant may link and expand in different trees.   |
+| TVB-D5  | Validate policy through the child item view union.             | The tree result knows which child item view controls node variants.                                 | Tree result already references `childItemView`.     |
+| TVB-D6  | Do not change public Site projection or renderer.              | This is generated admin UI behavior only.                                                           | Public pages need Header/Footer children published. |
+| TVB-D7  | Treat selected root as outside child branch policy.            | The selected root is the tree starting point, not a child node.                                     | Header root editing should show Header placements.  |
+| TVB-D8  | Evaluate policy before descendant placement lookup.            | Hidden branches should not compute or warn about descendants.                                       | Renderer currently fetches descendants per child.   |
+| TVB-D9  | Keep unknown variants expanding in the first slice.            | Silent hiding of unknown content would be risky.                                                    | Fallback branch policy can be a later extension.    |
+| TVB-D10 | Keep visible sibling ordering unchanged.                       | Branch hiding does not alter the ordered placement list at that level.                              | PRD 21 owns result ordering behavior.               |
+| TVB-D11 | Keep the pure selector small and testable.                     | Recursion policy should be easy to validate outside rendering details.                              | Existing union selectors are already pure helpers.  |
+| TVB-D12 | Apply Header/Footer leaf policy to `siteCompositionHome` only. | This is the primary generated Site editor tree; public rendering and non-tree views stay unchanged. | `schema/apps/site/schema.json`.                     |
 
 ## Suggested Schema Shape
 
@@ -205,7 +206,7 @@ Do not put this under the union definition. The same union can be expanded in on
 | ------ | ------- | ---------- | ---------------------------------- | ------------------------------------------------------------------------------ |
 | TVB-01 | shipped | PRD 20     | schema types/parser, view model    | Tree branch policy parses, validates variant keys, and exposes model facts.    |
 | TVB-02 | shipped | TVB-01     | generated tree renderer, app tests | Tree renderer treats configured child variants as leaves.                      |
-| TVB-03 | ready   | TVB-02     | Site source schema, browser smoke  | `/site` page trees hide Header/Footer descendants; Header/Footer roots expand. |
+| TVB-03 | shipped | TVB-02     | Site source schema, browser smoke  | `/site` page trees hide Header/Footer descendants; Header/Footer roots expand. |
 
 ## Testing Decisions
 
@@ -270,6 +271,8 @@ Do not put this under the union definition. The same union can be expanded in on
 - TVB-02 promote note: generated tree rendering now treats configured child union variants as leaf nodes and skips descendant lookup/warnings for those hidden branches.
 - TVB-02 promote note: selected roots remain outside child branch policy, so a configured leaf variant still expands when selected as the tree root.
 - TVB-02 promote note: Site source schema still has no Header/Footer leaf policy; Site editor hiding waits for TVB-03.
+- TVB-03 promote note: Site source schema now marks Header and Footer child variants as leaf nodes in the primary Site composition tree.
+- TVB-03 promote note: `/site` page-root editing shows Header/Footer nodes without Header/Footer descendants, while Header/Footer roots still expand when selected directly.
 - `doc/current.md`: generated tree results can treat configured child union variants as leaf nodes.
 - `doc/current.md`: Site page-root trees show Header/Footer nodes without expanding Header/Footer children.
 - `doc/current.md`: Header/Footer roots still expand when selected directly.
@@ -286,6 +289,7 @@ Do not put this under the union definition. The same union can be expanded in on
 - 2026-05-11: Created PRD from discussion about hiding Header/Footer descendants when those variants appear inside a page tree.
 - 2026-05-12: TVB-01 shipped. Added tree result `branches.variants` schema support with `leaf` action validation, child item view union validation, stringify preservation, and view-model branch facts from the child union discriminator. No generated tree renderer, Site source schema, storage, sync, authority, public tree, or public renderer behavior changed.
 - 2026-05-12: TVB-02 shipped. Generated tree renderer now uses view-model branch facts to stop recursion for configured child variants, while selected roots still expand. Added app tests for leaf child rendering and selected-root expansion. No Site source schema, storage, sync, authority, public tree, or public renderer behavior changed.
+- 2026-05-12: TVB-03 shipped. Site source schema now declares Header/Footer child variants as leaves for `siteCompositionHome`; parser tests were adjusted so the no-branch compatibility fixture explicitly removes the source policy. Browser smoke confirmed `/site` hides Header/Footer descendants in Home's tree, Header/Footer roots expand directly, and `/pages/home` still renders public Header/Footer content.
 
 ## Blockers
 
@@ -307,3 +311,10 @@ Do not put this under the union definition. The same union can be expanded in on
 - 2026-05-12 TVB-02: `.devstate/logs/service-test.txt` reports `src/app.test.tsx` passing with 112 tests after renderer test changes.
 - 2026-05-12 TVB-02: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 190 files.
 - 2026-05-12 TVB-02: `bun browser --session tvb-02 open https://22-tree-variant-branch-policy.formless.local/site` loaded `/site`; snapshot showed Site roots and Placement tree; `bun browser --session tvb-02 errors` reported no page errors.
+- 2026-05-12 TVB-03: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
+- 2026-05-12 TVB-03: `devstate check` reports checks ok and services running after the PRD update.
+- 2026-05-12 TVB-03: `.devstate/status.md` reports checks ok and services running after the Site schema and parser fixture changes.
+- 2026-05-12 TVB-03: `.devstate/logs/service-test.txt` reports `src/shared/schema.test.ts` passing with 95 tests after the source schema changed.
+- 2026-05-12 TVB-03: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 190 files.
+- 2026-05-12 TVB-03: `bun browser --session tvb-03` reset Site schema and seed through `/api/site/reset/schema` and `/api/site/reset/seed`, opened `/site`, and confirmed Home's placement tree shows `Select Header` and `Select Footer` without Header/Footer descendant select links.
+- 2026-05-12 TVB-03: `bun browser --session tvb-03` confirmed selecting Header renders Home/Blog/Projects/Resume child links, selecting Footer renders Explore/Social children, `/pages/home` still contains Header/Footer public links, and `bun browser --session tvb-03 errors` reported no page errors.

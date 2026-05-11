@@ -1564,7 +1564,7 @@ describe("schema table views", () => {
     });
     const schema = parseAppSchema(siteSchema);
     const siteHome = schema.views.siteCompositionHome;
-    const unchangedSchema = parseAppSchema(sourceLikeSiteSchema());
+    const unchangedSchema = parseAppSchema(siteSchemaWithoutTreeBranches());
     const unchangedSiteHome = unchangedSchema.views.siteCompositionHome;
 
     if (siteHome?.type !== "collection" || siteHome.result.type !== "tree") {
@@ -5119,6 +5119,19 @@ function siteSchemaWithTreeBranches(branches: unknown) {
   };
 
   schema.views.siteCompositionHome.result.branches = branches;
+  return schema;
+}
+
+function siteSchemaWithoutTreeBranches() {
+  const schema = sourceLikeSiteSchema() as unknown as {
+    views: {
+      siteCompositionHome: {
+        result: Record<string, unknown>;
+      };
+    };
+  };
+
+  delete schema.views.siteCompositionHome.result.branches;
   return schema;
 }
 
