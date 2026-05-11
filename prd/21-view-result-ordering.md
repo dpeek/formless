@@ -1,7 +1,7 @@
 # PRD 21: View result ordering
 
-Status: ready
-Current chunk: VRO-05
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-11
 
 ## Goal
@@ -67,12 +67,12 @@ Existing anchors:
 - Schema types: `src/shared/schema-types.ts`.
 - General view parser: `src/shared/schema-views.ts`.
 - Table view parser: `src/shared/schema-table-views.ts`.
-- Shared ordering rank helpers: `src/shared/table-ordering.ts`.
+- Shared ordering rank helpers: `src/shared/result-ordering.ts`.
 - View and screen model selection: `src/client/views.ts`.
 - Table result model: `src/client/table-model.ts`.
 - Generated collection renderer: `src/app/generated/collection.tsx`.
 - Generated table renderer: `src/app/generated/table.tsx`.
-- Generated table ordering helper: `src/app/generated/table-ordering-ui.ts`.
+- Generated result ordering helper: `src/app/generated/ordering-ui.ts`.
 - Generated tree renderer: `src/app/generated/tree.tsx`.
 - Sync client mutations: `src/client/sync.ts`.
 - Site source schema: `schema/apps/site/schema.json`.
@@ -80,7 +80,7 @@ Existing anchors:
 - Table parser tests: `src/shared/schema-table-views.test.ts`.
 - View model tests: `src/client/views.test.ts`.
 - Table model tests: `src/client/table-model.test.ts`.
-- Shared ordering tests: `src/shared/table-ordering.test.ts`.
+- Shared ordering tests: `src/shared/result-ordering.test.ts`.
 - Generated table tests: `src/app/generated/table.test.tsx`.
 - App tests: `src/app.test.tsx`.
 
@@ -94,8 +94,8 @@ Likely changed files:
 - `src/shared/schema-views.ts`.
 - `src/shared/schema-table-views.ts`.
 - `src/shared/schema.test.ts`.
-- `src/shared/table-ordering.ts` or successor generic module.
-- `src/shared/table-ordering.test.ts` or successor generic tests.
+- `src/shared/result-ordering.ts`.
+- `src/shared/result-ordering.test.ts`.
 - `src/client/views.ts`.
 - `src/client/table-model.ts`.
 - new client ordering model helper if extraction improves locality.
@@ -103,7 +103,7 @@ Likely changed files:
 - `src/client/table-model.test.ts`.
 - `src/app/generated/collection.tsx`.
 - `src/app/generated/table.tsx`.
-- `src/app/generated/table-ordering-ui.ts` or successor generic module.
+- `src/app/generated/ordering-ui.ts`.
 - `src/app/generated/tree.tsx`.
 - generated list ordering helper if extraction improves locality.
 - `src/app/generated/table.test.tsx`.
@@ -148,7 +148,7 @@ Likely changed files:
 | VRO-D9  | Do not allow drag reorder across scope boundaries.                               | Cross-scope moves imply relationship changes or reparenting.                                               | Current table drag already guards dnd-kit groups and Formless scope.                          |
 | VRO-D10 | Make Site tree ordering explicit in the source schema.                           | Implicit `order` field inference is not a durable generic contract.                                        | Current tree model hardcodes `order` when present.                                            |
 | VRO-D11 | Keep an implicit tree ordering fallback only as a short compatibility path.      | Existing behavior should not disappear before source schemas migrate.                                      | Current Site root tree already relies on inferred placement order.                            |
-| VRO-D12 | Extract generic generated ordering helpers before adding tree/list drag.         | Table drag code already contains reusable scope, drag data, and submit plumbing.                           | Current `table-ordering-ui` is table-named but partly generic.                                |
+| VRO-D12 | Extract generic generated ordering helpers before adding tree/list drag.         | Table drag code already contains reusable scope, drag data, and submit plumbing.                           | VRO-02 moved reusable generated ordering helpers into `src/app/generated/ordering-ui.ts`.     |
 | VRO-D13 | Keep result renderers responsible for presentation-specific markup.              | Table rows, tree nodes, and list items have different DOM and accessibility needs.                         | Current table and tree renderers already have different structures.                           |
 | VRO-D14 | Keep dnd-kit usage in generated app code.                                        | The shared UI package should stay primitive and presentation-neutral.                                      | PRD 16 explicitly kept dnd-kit in generated app code.                                         |
 | VRO-D15 | Treat rebalance as a visible blocker, not an automatic multi-patch write.        | Atomic batch mutation transport is out of first-release scope.                                             | Roadmap keeps atomic batch mutations later.                                                   |
@@ -229,7 +229,7 @@ Likely changed files:
 | VRO-02 | shipped | VRO-01         | generated ordering helpers, table renderer | Table renderer uses generic ordering helpers with no intended behavior change.                                 |
 | VRO-03 | shipped | VRO-02         | tree renderer, Site schema, tests          | Site tree sibling placements support explicit generic ordering and drag reorder without reparenting.           |
 | VRO-04 | shipped | VRO-02         | list renderer, tests                       | Ordered list results render in rank order and can opt into drag handles.                                       |
-| VRO-05 | ready   | VRO-03, VRO-04 | docs and cleanup                           | Legacy table/tree ordering names are documented or narrowed; promote notes are ready for steward docs.         |
+| VRO-05 | shipped | VRO-03, VRO-04 | docs and cleanup                           | Legacy table/tree ordering names are documented or narrowed; promote notes are ready for steward docs.         |
 
 ## Testing Decisions
 
@@ -246,7 +246,7 @@ Likely changed files:
 
 Prior test anchors:
 
-- Shared ordering rank coverage exists in `src/shared/table-ordering.test.ts`.
+- Shared ordering rank coverage exists in `src/shared/result-ordering.test.ts`.
 - Table parser interface coverage exists in `src/shared/schema-table-views.test.ts`.
 - Table model interface coverage exists in `src/client/table-model.test.ts`.
 - Collection model coverage exists in `src/client/views.test.ts`.
@@ -299,11 +299,14 @@ Coordinate before touching:
 - `doc/current.md`: Site tree results declare `blockPlacement.order` ordering scoped by `blockPlacement.parent` with drag and move presentations.
 - `doc/current.md`: Site tree sibling placements support generated drag reorder.
 - `doc/current.md`: ordered list results render in rank order and can render generated drag handles.
+- `doc/current.md`: shared sparse rank helpers live in `src/shared/result-ordering.ts`.
+- `doc/current.md`: generated ordering helpers live in `src/app/generated/ordering-ui.ts`.
+- `doc/current.md`: implicit tree `order` fallback remains compatibility-only in `selectImplicitTreeOrderingFallback`.
 - `doc/roadmap.md`: generated collection result ordering is release scope; cross-scope reparenting and batch rebalance stay out of first release.
 
 ## Further Notes
 
-- The current file name `table-ordering.ts` describes the original caller, not the real abstraction. Renaming can happen if it improves locality, but behavior should move first.
+- VRO-05 renamed the shared rank module from `table-ordering.ts` to `result-ordering.ts`.
 - The serialized presentation names can stay stable in the first slice. Internal names can become generic without forcing schema churn.
 - Tree drag should treat a sibling list as the sortable group. Reparenting requires a separate relationship-editing design.
 - A rank rebalance endpoint or atomic patch batch can be a later PRD if sparse gaps become a real operational problem.
@@ -315,6 +318,7 @@ Coordinate before touching:
 - 2026-05-11: VRO-02 shipped. Added generated `ordering-ui.ts`, moved table ordering context, drag facts, move menu planning, drag move planning, and patch submission behind generic result-ordering helpers. Table rendering and action cells now consume those helpers with no intended behavior change. Next ready chunk is VRO-03.
 - 2026-05-11: VRO-03 shipped. Site tree results now declare explicit `blockPlacement.order` ordering scoped by `parent`, tree sibling lists use generic result ordering contexts, and same-scope tree drag reorder submits generic patch mutations without reparenting. Next ready chunk is VRO-04.
 - 2026-05-11: VRO-04 shipped. Generated list results now consume generic result ordering contexts, render ordered record ids, and opt into dnd-kit drag handles when result ordering declares `dragHandle`. Next ready chunk is VRO-05.
+- 2026-05-11: VRO-05 shipped. Renamed shared rank helpers and tests to `result-ordering`, changed the generated DnD type to `formless-result-ordering`, documented remaining table ordering aliases as compatibility names, and named the implicit tree ordering path as `selectImplicitTreeOrderingFallback`. PRD complete.
 
 ## Blockers
 
@@ -322,6 +326,7 @@ Coordinate before touching:
 - None for VRO-02.
 - None for VRO-03.
 - None for VRO-04.
+- None for VRO-05.
 
 ## Evidence
 
@@ -344,3 +349,8 @@ Coordinate before touching:
 - `.devstate/logs/service-test.txt`: app rerun passed, 1 test file passed, 101 tests passed.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 187 files.
 - `bun browser --session vro-04 --ignore-https-errors`: `/tasks` rendered task list rows and `bun browser errors` returned no page errors.
+- `devstate check`: checks ok, services running after VRO-05 and after local `main` rebase.
+- `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: not present in this checkout during VRO-05; devstate evidence is in `.devstate/status.md` and `.devstate/logs/`.
+- `.devstate/logs/service-test.txt`: post-rebase rerun passed, 5 test files passed, 150 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 187 files.
+- Browser smoke not run for VRO-05; cleanup renamed internal helpers and compatibility labels with no intended app behavior change.

@@ -5,9 +5,9 @@ import {
   calculateOrderingMovePlan,
   rebalanceOrderingRanks,
   sortRecordIdsByOrdering,
-} from "./table-ordering.ts";
+} from "./result-ordering.ts";
 
-describe("table ordering ranks", () => {
+describe("result ordering ranks", () => {
   it("sorts records by numeric rank with stable fallback", () => {
     const recordsById = recordsByIdFrom([
       placementRecord("a", { order: 2000 }),

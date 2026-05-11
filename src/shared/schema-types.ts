@@ -101,6 +101,7 @@ export type TableActionVariant = "default" | "destructive";
 export type TableActionAvailabilityState = "visible" | "hidden" | "disabled";
 export type TableActionPresentation = "button" | "dropdown";
 export type ResultOrderingPresentation = "moveMenu" | "dragHandle";
+// Table ordering aliases stay for table view compatibility; new schemas should use result ordering.
 export type TableOrderingPresentation = ResultOrderingPresentation;
 
 export type TableActionAvailabilitySchema = {

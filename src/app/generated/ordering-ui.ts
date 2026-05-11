@@ -10,7 +10,7 @@ import {
   type OrderingMovePatchPlan,
   type OrderingMovePlan,
   type OrderingRankOptions,
-} from "../../shared/table-ordering.ts";
+} from "../../shared/result-ordering.ts";
 
 export type { OrderingMoveDirection };
 
@@ -41,7 +41,7 @@ export type ResultOrderingDragData = {
   scopeKey: string;
 };
 
-export const ORDERING_DND_TYPE = "formless-table-ordering";
+export const ORDERING_DND_TYPE = "formless-result-ordering";
 
 export function selectOrderedResultRecordIds(
   recordIds: string[],

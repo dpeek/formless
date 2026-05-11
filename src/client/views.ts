@@ -138,6 +138,7 @@ export type EditViewConfig = {
 };
 
 export type { ResultOrderingConfig, ResultOrderingScopeConfig };
+// Table ordering aliases stay for table result compatibility; generic result models use ResultOrdering.
 export type TableOrderingScopeConfig = ResultOrderingScopeConfig;
 export type TableOrderingConfig = ResultOrderingConfig;
 
@@ -842,7 +843,7 @@ function selectResult(
 
     const ordering =
       selectResultOrderingConfig(collectionView.result.ordering, entity) ??
-      selectTreeOrdering(entity, relationship);
+      selectImplicitTreeOrderingFallback(entity, relationship);
     const childRecordUnion = selectRecordUnionPresentation(schema, childItemView, childEntity);
     const placementRecordUnion =
       placementItemView === undefined
@@ -890,7 +891,8 @@ function selectResult(
   };
 }
 
-function selectTreeOrdering(
+// Compatibility fallback for tree results that predate result-level ordering.
+function selectImplicitTreeOrderingFallback(
   entity: EntitySchema,
   relationship: ToManyRelationshipSchema,
 ): ResultOrderingConfig | undefined {
