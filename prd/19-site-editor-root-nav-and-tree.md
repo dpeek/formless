@@ -29,8 +29,8 @@ The slice should:
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files                         | Acceptance                                            |
-| ------ | ------ | ---------- | ---------------------------------- | ----------------------------------------------------- |
+| ID     | Status  | Depends on | Main files                         | Acceptance                                            |
+| ------ | ------- | ---------- | ---------------------------------- | ----------------------------------------------------- |
 | SRT-01 | shipped | none       | schema, views, generated UI, tests | `/site` has root sidebar nav and nested tree editing. |
 
 ## Requirements
