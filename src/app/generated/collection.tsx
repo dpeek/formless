@@ -223,10 +223,12 @@ function ScopedHomeCollection({
             context={context}
             entity={entity}
             entityName={entityName}
+            onSelectContext={onSelectContext}
             query={selectedQuery.query}
             queryName={selectedQuery.queryName}
             queryContext={queryContext}
             result={result}
+            selectableContextRecordIds={new Set(contextOptions.map((option) => option.id))}
           />
         </>
       ) : null}
@@ -347,10 +349,12 @@ function ListDetailScopedHomeCollection({
               context={context}
               entity={entity}
               entityName={entityName}
+              onSelectContext={onSelectContext}
               query={selectedQuery.query}
               queryName={selectedQuery.queryName}
               queryContext={queryContext}
               result={result}
+              selectableContextRecordIds={new Set(contextOptions.map((option) => option.id))}
             />
           </>
         ) : contextOptions.length === 0 ? null : (
@@ -745,18 +749,22 @@ function CollectionResult({
   context,
   entity,
   entityName,
+  onSelectContext,
   query,
   queryName,
   queryContext,
   result,
+  selectableContextRecordIds,
 }: {
   context: HomeContextConfig | undefined;
   entity: EntitySchema;
   entityName: string;
+  onSelectContext?: (recordId: string | null) => void;
   query: HomeQueryTabConfig["query"];
   queryName: string;
   queryContext?: QueryEvaluationContext;
   result: HomeResultConfig;
+  selectableContextRecordIds?: Set<string>;
 }) {
   if (result.type === "table") {
     return (
@@ -774,7 +782,15 @@ function CollectionResult({
   }
 
   if (result.type === "tree") {
-    return <RecordTree context={context} queryContext={queryContext} result={result} />;
+    return (
+      <RecordTree
+        context={context}
+        onSelectContext={onSelectContext}
+        queryContext={queryContext}
+        result={result}
+        selectableContextRecordIds={selectableContextRecordIds}
+      />
+    );
   }
 
   return (

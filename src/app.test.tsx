@@ -1668,6 +1668,74 @@ describe("generated forms and records", () => {
     expect(html).not.toContain("Hidden child title");
   });
 
+  it("renders tree child context links for active union context-link presentations", () => {
+    const schema = generatedDiscriminatedTaskSchema({ streamItemPresentation: "contextLink" });
+    const model = requiredCollectionModel(schema, "taskTreeHome");
+
+    if (!model.collection.context || model.result.type !== "tree") {
+      throw new Error("Task tree home should render a context tree.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          discriminatedTaskRecord("task-parent", "role", "Parent", false),
+          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
+          taskPlacementRecord("placement-1", "task-parent", "task-child"),
+        ],
+        schema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTree
+        context={model.collection.context}
+        onSelectContext={() => {}}
+        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
+        result={model.result}
+        selectableContextRecordIds={new Set(["task-parent", "task-child"])}
+      />,
+    );
+
+    expect(html).toContain("Stream child");
+    expect(html).toContain('aria-label="Select Stream child"');
+    expect(html).toContain(">Open</button>");
+    expect(html).not.toContain('aria-label="Done"');
+    expect(html).not.toContain("checked");
+  });
+
+  it("disables tree child context links outside the selectable context records", () => {
+    const schema = generatedDiscriminatedTaskSchema({ streamItemPresentation: "contextLink" });
+    const model = requiredCollectionModel(schema, "taskTreeHome");
+
+    if (!model.collection.context || model.result.type !== "tree") {
+      throw new Error("Task tree home should render a context tree.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          discriminatedTaskRecord("task-parent", "role", "Parent", false),
+          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
+          taskPlacementRecord("placement-1", "task-parent", "task-child"),
+        ],
+        schema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTree
+        context={model.collection.context}
+        onSelectContext={() => {}}
+        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
+        result={model.result}
+        selectableContextRecordIds={new Set(["task-parent"])}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Select Stream child"');
+    expect(html).toContain('disabled=""');
+    expect(html).not.toContain('aria-label="Done"');
+  });
+
   it("renders edit view fields for the active union discriminator", () => {
     const schema = generatedDiscriminatedTaskSchema();
     const editView = requiredEditView(schema, "taskEditHome");
@@ -2934,7 +3002,10 @@ function requiredEditView(schema: AppSchema, viewName: string): EditViewConfig {
 }
 
 function generatedDiscriminatedTaskSchema(
-  options: { defaultKind?: "role" | "stream" } = {},
+  options: {
+    defaultKind?: "role" | "stream";
+    streamItemPresentation?: "fields" | "contextLink";
+  } = {},
 ): AppSchema {
   return parseAppSchema({
     version: 1,
@@ -3029,12 +3100,19 @@ function generatedDiscriminatedTaskSchema(
               title: { editor: "text", commit: "field-commit" },
             },
           },
-          stream: {
-            presentation: "fields",
-            fields: {
-              done: { editor: "boolean", commit: "immediate" },
-            },
-          },
+          stream:
+            options.streamItemPresentation === "contextLink"
+              ? {
+                  presentation: "contextLink",
+                  labelField: "title",
+                  target: { kind: "selectContext", context: "task", record: "self" },
+                }
+              : {
+                  presentation: "fields",
+                  fields: {
+                    done: { editor: "boolean", commit: "immediate" },
+                  },
+                },
         },
       },
     },

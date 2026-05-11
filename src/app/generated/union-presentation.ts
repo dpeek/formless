@@ -1,6 +1,7 @@
 import type {
   CreateFieldConfig,
   CreateUnionPresentationConfig,
+  RecordVariantContextLinkPresentationConfig,
   RecordFieldConfig,
   RecordUnionPresentationConfig,
 } from "../../client/views.ts";
@@ -26,6 +27,15 @@ export function selectRecordFieldsForActiveUnion(
   }
 
   return appendNewFields(baseFields, presentation.presentation.fields);
+}
+
+export function selectRecordContextLinkForActiveUnion(
+  union: RecordUnionPresentationConfig | undefined,
+  record: StoredRecord | undefined,
+): RecordVariantContextLinkPresentationConfig | undefined {
+  const presentation = selectActiveRecordUnionPresentation(union, record);
+
+  return presentation?.presentation.type === "contextLink" ? presentation.presentation : undefined;
 }
 
 export function selectCreateFieldsForDiscriminator(

@@ -2,25 +2,37 @@ import { Button } from "@formless/ui/button";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
-import type { HomeContextConfig, HomeResultConfig, RecordFieldConfig } from "../../client/views.ts";
+import type {
+  HomeContextConfig,
+  HomeResultConfig,
+  RecordFieldConfig,
+  RecordVariantContextLinkPresentationConfig,
+} from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { FieldValue, StoredRecord } from "../../shared/protocol.ts";
 import { calculateOrderingDragMovePlan } from "../../shared/table-ordering.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
-import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
+import {
+  selectRecordContextLinkForActiveUnion,
+  selectRecordFieldsForActiveUnion,
+} from "./union-presentation.ts";
 
 type TreeResultConfig = Extract<HomeResultConfig, { type: "tree" }>;
 
 export function RecordTree({
   context,
+  onSelectContext,
   queryContext,
   result,
+  selectableContextRecordIds,
 }: {
   context: HomeContextConfig | undefined;
+  onSelectContext?: (recordId: string | null) => void;
   queryContext?: QueryEvaluationContext;
   result: TreeResultConfig;
+  selectableContextRecordIds?: Set<string>;
 }) {
   const recordsById = useRecordsById();
   const parentRecordId = context ? stringValue(queryContext?.values?.[context.name]) : undefined;
@@ -40,11 +52,14 @@ export function RecordTree({
           {placements.map((placement, index) => (
             <PlacementTreeItem
               ancestors={new Set([parentRecordId])}
+              context={context}
               depth={0}
               index={index}
               key={placement.id}
+              onSelectContext={onSelectContext}
               placement={placement}
               result={result}
+              selectableContextRecordIds={selectableContextRecordIds}
               siblingPlacements={placements}
             />
           ))}
@@ -56,17 +71,23 @@ export function RecordTree({
 
 function PlacementTreeItem({
   ancestors,
+  context,
   depth,
   index,
+  onSelectContext,
   placement,
   result,
+  selectableContextRecordIds,
   siblingPlacements,
 }: {
   ancestors: Set<string>;
+  context: HomeContextConfig | undefined;
   depth: number;
   index: number;
+  onSelectContext?: (recordId: string | null) => void;
   placement: StoredRecord;
   result: TreeResultConfig;
+  selectableContextRecordIds?: Set<string>;
   siblingPlacements: StoredRecord[];
 }) {
   const recordsById = useRecordsById();
@@ -92,7 +113,13 @@ function PlacementTreeItem({
             <div className="min-w-0 flex-1 space-y-3">
               <PlacementRecordFields placement={placement} result={result} />
               {childRecord ? (
-                <ChildRecordEditor childRecord={childRecord} result={result} />
+                <ChildRecordEditor
+                  childRecord={childRecord}
+                  context={context}
+                  onSelectContext={onSelectContext}
+                  result={result}
+                  selectableContextRecordIds={selectableContextRecordIds}
+                />
               ) : (
                 <p className="text-sm text-amber-700">Missing child block.</p>
               )}
@@ -111,11 +138,14 @@ function PlacementTreeItem({
           {childPlacements.map((childPlacement, childIndex) => (
             <PlacementTreeItem
               ancestors={nextAncestors}
+              context={context}
               depth={depth + 1}
               index={childIndex}
               key={childPlacement.id}
+              onSelectContext={onSelectContext}
               placement={childPlacement}
               result={result}
+              selectableContextRecordIds={selectableContextRecordIds}
               siblingPlacements={childPlacements}
             />
           ))}
@@ -249,11 +279,32 @@ function PlacementRecordFields({
 
 function ChildRecordEditor({
   childRecord,
+  context,
+  onSelectContext,
   result,
+  selectableContextRecordIds,
 }: {
   childRecord: StoredRecord;
+  context: HomeContextConfig | undefined;
+  onSelectContext?: (recordId: string | null) => void;
   result: TreeResultConfig;
+  selectableContextRecordIds?: Set<string>;
 }) {
+  const contextLink = selectRecordContextLinkForActiveUnion(result.childRecordUnion, childRecord);
+
+  if (contextLink) {
+    return (
+      <ChildRecordContextLink
+        childRecord={childRecord}
+        context={context}
+        contextLink={contextLink}
+        onSelectContext={onSelectContext}
+        result={result}
+        selectableContextRecordIds={selectableContextRecordIds}
+      />
+    );
+  }
+
   const recordFields = selectRecordFieldsForActiveUnion(
     result.childRecordFields,
     result.childRecordUnion,
@@ -278,6 +329,46 @@ function ChildRecordEditor({
           />
         );
       })}
+    </div>
+  );
+}
+
+function ChildRecordContextLink({
+  childRecord,
+  context,
+  contextLink,
+  onSelectContext,
+  result,
+  selectableContextRecordIds,
+}: {
+  childRecord: StoredRecord;
+  context: HomeContextConfig | undefined;
+  contextLink: RecordVariantContextLinkPresentationConfig;
+  onSelectContext?: (recordId: string | null) => void;
+  result: TreeResultConfig;
+  selectableContextRecordIds?: Set<string>;
+}) {
+  const label = stringValue(childRecord.values[contextLink.labelFieldName]) ?? childRecord.id;
+  const canSelect =
+    context !== undefined &&
+    context.name === contextLink.target.contextName &&
+    context.entityName === result.childEntityName &&
+    selectableContextRecordIds?.has(childRecord.id) === true &&
+    onSelectContext !== undefined;
+
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+      <span className="min-w-0 truncate text-sm font-medium text-slate-900">{label}</span>
+      <Button
+        aria-label={`Select ${label}`}
+        disabled={!canSelect}
+        onClick={() => onSelectContext?.(childRecord.id)}
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        Open
+      </Button>
     </div>
   );
 }
