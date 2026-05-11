@@ -8,6 +8,7 @@ import {
   useEntityRecordCountReferencingField,
   useEntityRecordIdsMatchingQuery,
   useEntityRecordOptionsMatchingQuery,
+  useRecord,
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
 import type {
@@ -18,6 +19,7 @@ import type {
   HomeSummarySlotConfig,
   RecordFieldConfig,
   RelatedCollectionConfig,
+  RecordUnionPresentationConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
@@ -28,6 +30,7 @@ import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
+import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 
 export function HomeCollection({
   collection,
@@ -582,10 +585,13 @@ function ContextRecordEditor({
   recordId: string | null;
 }) {
   const recordFields = context.recordFields ?? [];
+  const record = useRecord(recordId ?? "");
 
   if (!recordId || recordFields.length === 0) {
     return null;
   }
+
+  const visibleFields = selectRecordFieldsForActiveUnion(recordFields, context.recordUnion, record);
 
   return (
     <div
@@ -593,7 +599,7 @@ function ContextRecordEditor({
         density === "compact" ? "grid min-w-0 gap-3 pt-1" : "flex flex-wrap items-end gap-3 pt-1"
       }
     >
-      {recordFields.map((fieldConfig) => {
+      {visibleFields.map((fieldConfig) => {
         const isHeading = isHeadingRecordField(fieldConfig);
 
         return (
@@ -778,6 +784,7 @@ function CollectionResult({
       query={query}
       queryContext={queryContext}
       recordFields={result.recordFields}
+      recordUnion={result.recordUnion}
     />
   );
 }
@@ -788,12 +795,14 @@ export function RecordList({
   query,
   queryContext,
   recordFields,
+  recordUnion,
 }: {
   entity: EntitySchema;
   entityName: string;
   query: HomeQueryTabConfig["query"];
   queryContext?: QueryEvaluationContext;
   recordFields: RecordFieldConfig[];
+  recordUnion?: RecordUnionPresentationConfig;
 }) {
   const canPatch = entity.mutations.patch.enabled;
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
@@ -814,6 +823,7 @@ export function RecordList({
               entityName={entityName}
               key={recordId}
               recordFields={recordFields}
+              recordUnion={recordUnion}
               recordId={recordId}
             />
           ))}
@@ -827,19 +837,23 @@ function RecordRow({
   canPatch,
   entityName,
   recordFields,
+  recordUnion,
   recordId,
 }: {
   canPatch: boolean;
   entityName: string;
   recordFields: RecordFieldConfig[];
+  recordUnion?: RecordUnionPresentationConfig;
   recordId: string;
 }) {
+  const record = useRecord(recordId);
   const warnings = useRecordReadinessWarnings(recordId);
+  const visibleFields = selectRecordFieldsForActiveUnion(recordFields, recordUnion, record);
 
   return (
     <li className="p-3">
       <div className="flex flex-wrap items-start gap-2">
-        {recordFields.map((fieldConfig) => (
+        {visibleFields.map((fieldConfig) => (
           <RecordFieldEditor
             canPatch={canPatch}
             entityName={entityName}

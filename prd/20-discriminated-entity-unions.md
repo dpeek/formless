@@ -1,7 +1,7 @@
 # PRD 20: Discriminated entity unions
 
 Status: in-progress
-Current chunk: DU-03
+Current chunk: DU-04
 Last updated: 2026-05-11
 
 ## Goal
@@ -345,7 +345,7 @@ Notes:
 | ----- | ------ | ---------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
 | DU-01 | done   | none       | schema types/parser/tests, PRD           | App schemas parse top-level unions and reject malformed union definitions.                 |
 | DU-02 | done   | DU-01      | view parser, view models, tests          | Item/edit/create views can reference unions and expose render-ready variant facts.         |
-| DU-03 | ready  | DU-02      | generated tree/edit/create UI, app tests | Generated UI renders variant field presentations and updates when the discriminator moves. |
+| DU-03 | done   | DU-02      | generated tree/edit/create UI, app tests | Generated UI renders variant field presentations and updates when the discriminator moves. |
 | DU-04 | ready  | DU-03      | generated tree UI, route selection tests | Header/Footer nodes render compact context links that select the matching root.            |
 | DU-05 | ready  | DU-04      | Site source schema, browser smoke, PRD   | `/site` tree uses block variants; public `/pages/*` behavior remains unchanged.            |
 | DU-06 | later  | DU-05      | authority validation, mutation tests     | Optional union-required-field validation is enforced during create and patch.              |
@@ -419,10 +419,11 @@ Notes:
 - 2026-05-11: Created PRD from user request for discriminated unions over existing entity types, using Site `block.type` as the motivating example.
 - 2026-05-11: DU-01 shipped. Added parser-only top-level `unions` metadata over flat entities. No storage, sync, authority, public Site tree, or generated UI behavior changed.
 - 2026-05-11: DU-02 shipped. Item/edit/create views can attach union presentation metadata beside static fields. Parser validates union entity match, variant coverage, fallback coverage, variant fields, and item-view context links. View models expose discriminator, variant, fallback, field, and context-link facts for list/tree/context item views, create actions, table reference item views, and table edit dialogs. No storage, sync, authority, public Site tree, or generated UI behavior changed.
+- 2026-05-11: DU-03 shipped. Generated list, tree, context detail, table edit, and create UIs render base fields plus active union variant fields. Create forms choose active variant fields from draft/form discriminator values, and submit only visible create fields plus resolved defaults. No storage, sync, authority, public Site tree, Site source schema, or context-link selection behavior changed.
 
 ## Blockers
 
-- None for DU-02.
+- None for DU-03.
 
 ## Evidence
 
@@ -437,3 +438,9 @@ Notes:
 - 2026-05-11 DU-02: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 186 files.
 - 2026-05-11 DU-02: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
 - 2026-05-11 DU-02: browser smoke skipped because app behavior did not change.
+- 2026-05-11 DU-03: `.devstate/status.md` reports checks ok and services running after `devstate check`.
+- 2026-05-11 DU-03: `.devstate/logs/service-test.txt` reports 2 test files passing with 106 tests after generated union UI coverage was added.
+- 2026-05-11 DU-03: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 187 files.
+- 2026-05-11 DU-03: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
+- 2026-05-11 DU-03: `bun browser --session du03 --ignore-https-errors batch --bail "open https://20-discriminated-entity-unions.formless.local/tasks" "wait 1000" "get text body" "open https://20-discriminated-entity-unions.formless.local/site" "wait 1000" "get text body"` rendered Tasks and Site generated UIs.
+- 2026-05-11 DU-03: `bun browser --session du03 errors` returned no page errors.

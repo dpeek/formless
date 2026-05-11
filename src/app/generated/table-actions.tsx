@@ -25,9 +25,11 @@ import type {
   InvokeActionTableColumnConfig,
   TableActionConfig,
 } from "../../client/views.ts";
+import type { StoredRecord } from "../../shared/protocol.ts";
 import type { OrderingMoveDirection } from "../../shared/table-ordering.ts";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
+import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
   orderingMoveAriaLabel,
   selectOrderingMoveMenuItems,
@@ -284,7 +286,11 @@ function RecordEditDialog({
           <DialogDescription>{action.editView.entity.label}</DialogDescription>
         </DialogHeader>
         {targetRecord && targetRecordId ? (
-          <EditViewFields editView={action.editView} targetRecordId={targetRecordId} />
+          <EditViewFields
+            editView={action.editView}
+            targetRecord={targetRecord}
+            targetRecordId={targetRecordId}
+          />
         ) : (
           <p className="text-sm text-slate-600">Record unavailable.</p>
         )}
@@ -301,16 +307,20 @@ function RecordEditDialog({
   );
 }
 
-function EditViewFields({
+export function EditViewFields({
   editView,
+  targetRecord,
   targetRecordId,
 }: {
   editView: EditViewConfig;
+  targetRecord: StoredRecord;
   targetRecordId: string;
 }) {
+  const fields = selectRecordFieldsForActiveUnion(editView.fields, editView.union, targetRecord);
+
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      {editView.fields.map((fieldConfig) => (
+      {fields.map((fieldConfig) => (
         <div className={editFieldClass(fieldConfig)} key={fieldConfig.fieldName}>
           <RecordFieldEditor
             canPatch={editView.entity.mutations.patch.enabled}

@@ -9,6 +9,7 @@ import { calculateOrderingDragMovePlan } from "../../shared/table-ordering.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
+import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 
 type TreeResultConfig = Extract<HomeResultConfig, { type: "tree" }>;
 
@@ -220,7 +221,11 @@ function PlacementRecordFields({
   placement: StoredRecord;
   result: TreeResultConfig;
 }) {
-  const recordFields = result.placementRecordFields ?? [];
+  const recordFields = selectRecordFieldsForActiveUnion(
+    result.placementRecordFields ?? [],
+    result.placementRecordUnion,
+    placement,
+  );
 
   if (recordFields.length === 0) {
     return null;
@@ -249,9 +254,15 @@ function ChildRecordEditor({
   childRecord: StoredRecord;
   result: TreeResultConfig;
 }) {
+  const recordFields = selectRecordFieldsForActiveUnion(
+    result.childRecordFields,
+    result.childRecordUnion,
+    childRecord,
+  );
+
   return (
     <div className="grid min-w-0 gap-3">
-      {result.childRecordFields.map((fieldConfig) => {
+      {recordFields.map((fieldConfig) => {
         const isHeading = isHeadingRecordField(fieldConfig);
 
         return (

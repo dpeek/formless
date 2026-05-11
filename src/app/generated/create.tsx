@@ -21,7 +21,12 @@ import { Textarea } from "@formless/ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitCreateMutation } from "../../client/sync.ts";
-import { fieldLabel, type CreateFieldConfig, type HomeActionConfig } from "../../client/views.ts";
+import {
+  fieldLabel,
+  type CreateFieldConfig,
+  type CreateUnionPresentationConfig,
+  type HomeActionConfig,
+} from "../../client/views.ts";
 import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
@@ -33,6 +38,11 @@ import {
   numberInputValueToFieldValue,
 } from "./format.ts";
 import { useSchemaKey } from "./schema-app-context.tsx";
+import {
+  initialCreateDiscriminatorValue,
+  selectCreateFieldsForDiscriminator,
+  selectCreateFieldsForFormData,
+} from "./union-presentation.ts";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
@@ -40,14 +50,28 @@ export function GeneratedCreateForm({
   createFields,
   entity,
   entityName,
+  union,
 }: {
   createFields: CreateFieldConfig[];
   entity: EntitySchema;
   entityName: string;
+  union?: CreateUnionPresentationConfig;
 }) {
   const schemaKey = useSchemaKey();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [discriminatorValue, setDiscriminatorValue] = useState(() =>
+    initialCreateDiscriminatorValue(union),
+  );
   const canCreate = entity.mutations.create.enabled;
+  const visibleCreateFields = selectCreateFieldsForDiscriminator(
+    createFields,
+    union,
+    discriminatorValue,
+  );
+
+  useEffect(() => {
+    setDiscriminatorValue(initialCreateDiscriminatorValue(union));
+  }, [union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,7 +82,10 @@ export function GeneratedCreateForm({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = getVisibleCreateValues(formData, createFields);
+    const values = getVisibleCreateValues(
+      formData,
+      selectCreateFieldsForFormData(createFields, union, formData),
+    );
 
     setIsSubmitting(true);
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
@@ -66,6 +93,7 @@ export function GeneratedCreateForm({
     try {
       await submitCreateMutation(schemaKey, entityName, values);
       form.reset();
+      setDiscriminatorValue(initialCreateDiscriminatorValue(union));
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -86,8 +114,16 @@ export function GeneratedCreateForm({
       ) : null}
 
       <FieldSet className="space-y-4" disabled={!canCreate || isSubmitting}>
-        {createFields.map((fieldConfig) => (
-          <CreateFieldInput fieldConfig={fieldConfig} key={fieldConfig.fieldName} />
+        {visibleCreateFields.map((fieldConfig) => (
+          <CreateFieldInput
+            fieldConfig={fieldConfig}
+            key={fieldConfig.fieldName}
+            onValueChange={(value) => {
+              if (fieldConfig.fieldName === union?.discriminatorFieldName) {
+                setDiscriminatorValue(value);
+              }
+            }}
+          />
         ))}
       </FieldSet>
 
@@ -143,7 +179,19 @@ export function GeneratedCreateDialogForm({
 }) {
   const schemaKey = useSchemaKey();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [discriminatorValue, setDiscriminatorValue] = useState(() =>
+    initialCreateDiscriminatorValue(action.union),
+  );
   const canSubmit = action.enabled && createDefaultsAreResolved(action, queryContext);
+  const visibleFields = selectCreateFieldsForDiscriminator(
+    action.fields,
+    action.union,
+    discriminatorValue,
+  );
+
+  useEffect(() => {
+    setDiscriminatorValue(initialCreateDiscriminatorValue(action.union));
+  }, [action.union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,6 +213,7 @@ export function GeneratedCreateDialogForm({
     try {
       const response = await submitCreateMutation(schemaKey, action.entityName, values);
       form.reset();
+      setDiscriminatorValue(initialCreateDiscriminatorValue(action.union));
       onSuccess?.(response.record.id);
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
@@ -184,8 +233,16 @@ export function GeneratedCreateDialogForm({
       ) : null}
 
       <FieldSet className="space-y-4" disabled={!canSubmit || isSubmitting}>
-        {action.fields.map((fieldConfig) => (
-          <CreateFieldInput fieldConfig={fieldConfig} key={fieldConfig.fieldName} />
+        {visibleFields.map((fieldConfig) => (
+          <CreateFieldInput
+            fieldConfig={fieldConfig}
+            key={fieldConfig.fieldName}
+            onValueChange={(value) => {
+              if (fieldConfig.fieldName === action.union?.discriminatorFieldName) {
+                setDiscriminatorValue(value);
+              }
+            }}
+          />
         ))}
       </FieldSet>
 
@@ -205,7 +262,13 @@ export function GeneratedCreateDialogForm({
   );
 }
 
-function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
+function CreateFieldInput({
+  fieldConfig,
+  onValueChange,
+}: {
+  fieldConfig: CreateFieldConfig;
+  onValueChange?: (value: string) => void;
+}) {
   const { field, fieldName, editor } = fieldConfig;
   const adapter = selectGeneratedFieldEditorAdapter(field, editor);
   const label = fieldLabel(fieldName, field);
@@ -282,6 +345,7 @@ function CreateFieldInput({ fieldConfig }: { fieldConfig: CreateFieldConfig }) {
           className="w-full"
           defaultValue={adapter.createDefaultValue}
           name={fieldName}
+          onChange={(event) => onValueChange?.(event.currentTarget.value)}
           required={adapter.required}
         >
           {adapter.required ? null : <NativeSelectOption value="" />}
@@ -509,7 +573,10 @@ export function resolveCreateValues(
   action: CreateHomeActionConfig,
   queryContext?: QueryEvaluationContext,
 ): RecordValues {
-  const values = getVisibleCreateValues(formData, action.fields);
+  const values = getVisibleCreateValues(
+    formData,
+    selectCreateFieldsForFormData(action.fields, action.union, formData),
+  );
 
   for (const defaultConfig of action.defaults) {
     if (Object.hasOwn(values, defaultConfig.fieldName)) {

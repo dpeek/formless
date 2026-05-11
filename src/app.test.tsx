@@ -10,6 +10,8 @@ import {
 } from "./app/generated/create.tsx";
 import { HomeScreen } from "./app/generated/screen.tsx";
 import { RecordTable } from "./app/generated/table.tsx";
+import { EditViewFields } from "./app/generated/table-actions.tsx";
+import { RecordTree } from "./app/generated/tree.tsx";
 import { SitePageRouteView } from "./app/routes/site-page.tsx";
 import { SitePageRenderer } from "./app/site-renderer/renderer.tsx";
 import {
@@ -39,6 +41,7 @@ import {
   selectPrimaryCollectionModels,
   selectScreenModels,
   type CreateFieldConfig,
+  type EditViewConfig,
   type HomeActionConfig,
   type HomeScreenModel,
   type HomeQueryTabConfig,
@@ -49,7 +52,7 @@ import {
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { SitePageTree } from "./shared/protocol.ts";
-import type { AppSchema, EntitySchema } from "./shared/schema.ts";
+import { parseAppSchema, type AppSchema, type EntitySchema } from "./shared/schema.ts";
 import type { NumericExpression } from "./shared/read-model.ts";
 import {
   rateSeedRecords as rateCardSeedRecords,
@@ -1569,6 +1572,118 @@ describe("generated forms and records", () => {
     expect(html).toContain("Stream");
   });
 
+  it("renders create fields for the active union discriminator", () => {
+    const roleAction = requiredCreateAction(generatedDiscriminatedTaskSchema(), "taskHome");
+    const streamAction = requiredCreateAction(
+      generatedDiscriminatedTaskSchema({ defaultKind: "stream" }),
+      "taskHome",
+    );
+    const roleHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={roleAction} renderDialogCancel={false} />,
+    );
+    const streamHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={streamAction} renderDialogCancel={false} />,
+    );
+
+    expect(roleHtml).toContain('name="kind"');
+    expect(roleHtml).toContain('name="title"');
+    expect(roleHtml).not.toContain('name="done"');
+    expect(streamHtml).toContain('name="kind"');
+    expect(streamHtml).toContain('name="done"');
+    expect(streamHtml).not.toContain('name="title"');
+  });
+
+  it("renders record fields for the active union discriminator", () => {
+    const schema = generatedDiscriminatedTaskSchema();
+    const model = requiredCollectionModel(schema, "taskHome");
+    const task = schema.entities.task;
+
+    if (model.result.type !== "list") {
+      throw new Error("Task home should render a list.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap([discriminatedTaskRecord("record-1", "role", "Role title", true)], schema),
+    );
+    const roleHtml = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={model.result.recordFields}
+        recordUnion={model.result.recordUnion}
+      />,
+    );
+
+    resetClientStore();
+    applyBootstrapResponse(
+      bootstrap([discriminatedTaskRecord("record-1", "stream", "Hidden title", true)], schema),
+    );
+    const streamHtml = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={model.result.recordFields}
+        recordUnion={model.result.recordUnion}
+      />,
+    );
+
+    expect(roleHtml).toContain("Role title");
+    expect(roleHtml).not.toContain('aria-label="Done"');
+    expect(streamHtml).toContain('aria-label="Done"');
+    expect(streamHtml).toContain("checked");
+    expect(streamHtml).not.toContain("Hidden title");
+  });
+
+  it("renders tree child fields for the active union discriminator", () => {
+    const schema = generatedDiscriminatedTaskSchema();
+    const model = requiredCollectionModel(schema, "taskTreeHome");
+
+    if (!model.collection.context || model.result.type !== "tree") {
+      throw new Error("Task tree home should render a context tree.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          discriminatedTaskRecord("task-parent", "role", "Parent", false),
+          discriminatedTaskRecord("task-child", "stream", "Hidden child title", true),
+          taskPlacementRecord("placement-1", "task-parent", "task-child"),
+        ],
+        schema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTree
+        context={model.collection.context}
+        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
+        result={model.result}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Placement tree"');
+    expect(html).toContain('aria-label="Done"');
+    expect(html).toContain("checked");
+    expect(html).not.toContain("Hidden child title");
+  });
+
+  it("renders edit view fields for the active union discriminator", () => {
+    const schema = generatedDiscriminatedTaskSchema();
+    const editView = requiredEditView(schema, "taskEditHome");
+    const streamRecord = discriminatedTaskRecord("record-1", "stream", "Hidden title", true);
+
+    applyBootstrapResponse(bootstrap([streamRecord], schema));
+    const html = renderToStaticMarkup(
+      <EditViewFields editView={editView} targetRecord={streamRecord} targetRecordId="record-1" />,
+    );
+
+    expect(html).toContain('aria-label="Kind"');
+    expect(html).toContain('aria-label="Done"');
+    expect(html).toContain("checked");
+    expect(html).not.toContain("Hidden title");
+  });
+
   it("renders markdown create controls as rich editors with hidden string inputs", () => {
     const task = taskEntityWithMarkdownBody();
     const action: Extract<HomeActionConfig, { type: "create" }> = {
@@ -2396,6 +2511,20 @@ describe("generated forms and records", () => {
     });
   });
 
+  it("resolves create values from active union fields only", () => {
+    const action = requiredCreateAction(generatedDiscriminatedTaskSchema(), "taskHome");
+    const formData = new FormData();
+
+    formData.set("kind", "stream");
+    formData.set("title", "Hidden title");
+    formData.set("done", "on");
+
+    expect(resolveCreateValues(formData, action)).toEqual({
+      kind: "stream",
+      done: true,
+    });
+  });
+
   it("keeps source task create and edit flows wired through field behavior", () => {
     const action = requiredCreateAction(appSchema, "taskHome");
     const createHtml = renderToStaticMarkup(
@@ -2780,6 +2909,262 @@ function requiredCreateAction(
   }
 
   return action;
+}
+
+function requiredEditView(schema: AppSchema, viewName: string): EditViewConfig {
+  const model = requiredCollectionModel(schema, viewName);
+
+  if (model.result.type !== "table") {
+    throw new Error(`Collection ${viewName} does not render a table.`);
+  }
+
+  const actionColumn = model.result.columns.find((column) => column.type === "invokeAction");
+
+  if (!actionColumn || actionColumn.type !== "invokeAction") {
+    throw new Error(`Collection ${viewName} does not expose edit actions.`);
+  }
+
+  const action = actionColumn.actions.find((candidate) => candidate.type === "editRecord");
+
+  if (!action || action.type !== "editRecord") {
+    throw new Error(`Collection ${viewName} does not expose an edit record action.`);
+  }
+
+  return action.editView;
+}
+
+function generatedDiscriminatedTaskSchema(
+  options: { defaultKind?: "role" | "stream" } = {},
+): AppSchema {
+  return parseAppSchema({
+    version: 1,
+    entities: {
+      task: {
+        label: "Task",
+        fields: {
+          kind: {
+            type: "enum",
+            required: true,
+            label: "Kind",
+            default: options.defaultKind ?? "role",
+            values: {
+              role: { label: "Role" },
+              stream: { label: "Stream" },
+            },
+          },
+          title: { type: "text", required: false, label: "Title" },
+          done: { type: "boolean", required: true, label: "Done", default: false },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+      },
+      taskPlacement: {
+        label: "Task placement",
+        fields: {
+          parent: { type: "reference", required: true, label: "Parent", to: "task" },
+          task: { type: "reference", required: true, label: "Task", to: "task" },
+          order: { type: "number", required: true, label: "Order" },
+        },
+        mutations: {
+          create: { enabled: true },
+          patch: { enabled: true },
+          delete: { enabled: false },
+        },
+      },
+    },
+    relationships: {
+      taskPlacements: {
+        kind: "toMany",
+        from: { entity: "task" },
+        to: { entity: "taskPlacement", field: "parent" },
+      },
+    },
+    unions: {
+      taskByKind: {
+        entity: "task",
+        discriminator: "kind",
+        variants: {
+          role: {
+            label: "Role",
+            fields: ["title"],
+          },
+          stream: {
+            label: "Stream",
+            fields: ["done"],
+          },
+        },
+      },
+    },
+    queries: {
+      taskAll: {
+        label: "All",
+        entity: "task",
+        expression: { kind: "all" },
+      },
+      placementsForSelectedTask: {
+        label: "Selected task",
+        entity: "taskPlacement",
+        expression: {
+          kind: "where",
+          ref: { kind: "value", name: "parent" },
+          op: "eq",
+          value: { kind: "context", name: "task" },
+        },
+      },
+    },
+    itemViews: {
+      taskVariantItem: {
+        entity: "task",
+        fields: {
+          kind: { editor: "enum", commit: "immediate" },
+        },
+        union: "taskByKind",
+        variants: {
+          role: {
+            presentation: "fields",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+            },
+          },
+          stream: {
+            presentation: "fields",
+            fields: {
+              done: { editor: "boolean", commit: "immediate" },
+            },
+          },
+        },
+      },
+    },
+    tableViews: {
+      taskEditTable: {
+        entity: "task",
+        actions: {
+          editTask: {
+            type: "editRecord",
+            label: "Edit task",
+            target: { kind: "row" },
+            editView: "taskEdit",
+          },
+        },
+        columns: [
+          { type: "field", field: "title" },
+          { type: "invokeAction", action: "editTask" },
+        ],
+      },
+    },
+    views: {
+      taskHome: {
+        type: "collection",
+        label: "Tasks",
+        entity: "task",
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "list", itemView: "taskVariantItem" },
+        actions: [{ type: "create", createView: "taskCreate" }],
+      },
+      taskEditHome: {
+        type: "collection",
+        label: "Task edits",
+        entity: "task",
+        navigation: { primary: false },
+        queries: [{ query: "taskAll" }],
+        defaultQuery: "taskAll",
+        result: { type: "table", tableView: "taskEditTable" },
+      },
+      taskTreeHome: {
+        type: "collection",
+        label: "Task tree",
+        entity: "taskPlacement",
+        navigation: { primary: false },
+        context: {
+          name: "task",
+          entity: "task",
+          query: "taskAll",
+          labelField: "title",
+          presentation: "listDetail",
+          relationship: "taskPlacements",
+        },
+        queries: [{ query: "placementsForSelectedTask" }],
+        defaultQuery: "placementsForSelectedTask",
+        result: {
+          type: "tree",
+          relationship: "taskPlacements",
+          childField: "task",
+          childItemView: "taskVariantItem",
+        },
+      },
+      taskCreate: {
+        type: "create",
+        entity: "task",
+        fields: {
+          kind: { editor: "enum" },
+        },
+        union: "taskByKind",
+        variants: {
+          role: {
+            presentation: "fields",
+            fields: {
+              title: { editor: "text" },
+            },
+          },
+          stream: {
+            presentation: "fields",
+            fields: {
+              done: { editor: "boolean" },
+            },
+          },
+        },
+      },
+      taskEdit: {
+        type: "edit",
+        entity: "task",
+        fields: {
+          kind: { editor: "enum", commit: "immediate" },
+        },
+        union: "taskByKind",
+        variants: {
+          role: {
+            presentation: "fields",
+            fields: {
+              title: { editor: "text", commit: "field-commit" },
+            },
+          },
+          stream: {
+            presentation: "fields",
+            fields: {
+              done: { editor: "boolean", commit: "immediate" },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function discriminatedTaskRecord(
+  id: string,
+  kind: "role" | "stream",
+  title: string,
+  done: boolean,
+): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: { kind, title, done },
+    createdAt: "2026-05-11T00:00:00.000Z",
+  };
+}
+
+function taskPlacementRecord(id: string, parent: string, task: string): StoredRecord {
+  return {
+    id,
+    entity: "taskPlacement",
+    values: { parent, task, order: 1 },
+    createdAt: "2026-05-11T00:00:01.000Z",
+  };
 }
 
 function listRecordFieldsFor(schema: AppSchema, viewName: string): RecordFieldConfig[] {
