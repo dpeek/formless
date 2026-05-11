@@ -1,7 +1,7 @@
 # PRD 22: Tree variant branch policy
 
 Status: ready
-Current chunk: TVB-02
+Current chunk: TVB-03
 Last updated: 2026-05-12
 
 ## Problem Statement
@@ -204,8 +204,8 @@ Do not put this under the union definition. The same union can be expanded in on
 | ID     | Status  | Depends on | Main files                         | Acceptance                                                                     |
 | ------ | ------- | ---------- | ---------------------------------- | ------------------------------------------------------------------------------ |
 | TVB-01 | shipped | PRD 20     | schema types/parser, view model    | Tree branch policy parses, validates variant keys, and exposes model facts.    |
-| TVB-02 | ready   | TVB-01     | generated tree renderer, app tests | Tree renderer treats configured child variants as leaves.                      |
-| TVB-03 | later   | TVB-02     | Site source schema, browser smoke  | `/site` page trees hide Header/Footer descendants; Header/Footer roots expand. |
+| TVB-02 | shipped | TVB-01     | generated tree renderer, app tests | Tree renderer treats configured child variants as leaves.                      |
+| TVB-03 | ready   | TVB-02     | Site source schema, browser smoke  | `/site` page trees hide Header/Footer descendants; Header/Footer roots expand. |
 
 ## Testing Decisions
 
@@ -267,6 +267,9 @@ Do not put this under the union definition. The same union can be expanded in on
 
 - TVB-01 promote note: generated tree result schemas can declare `branches.variants` policies, and tree result models expose child discriminator plus leaf variant values.
 - TVB-01 promote note: no generated renderer or Site source schema behavior changed yet; Header/Footer editor hiding waits for TVB-02 and TVB-03.
+- TVB-02 promote note: generated tree rendering now treats configured child union variants as leaf nodes and skips descendant lookup/warnings for those hidden branches.
+- TVB-02 promote note: selected roots remain outside child branch policy, so a configured leaf variant still expands when selected as the tree root.
+- TVB-02 promote note: Site source schema still has no Header/Footer leaf policy; Site editor hiding waits for TVB-03.
 - `doc/current.md`: generated tree results can treat configured child union variants as leaf nodes.
 - `doc/current.md`: Site page-root trees show Header/Footer nodes without expanding Header/Footer children.
 - `doc/current.md`: Header/Footer roots still expand when selected directly.
@@ -282,6 +285,7 @@ Do not put this under the union definition. The same union can be expanded in on
 
 - 2026-05-11: Created PRD from discussion about hiding Header/Footer descendants when those variants appear inside a page tree.
 - 2026-05-12: TVB-01 shipped. Added tree result `branches.variants` schema support with `leaf` action validation, child item view union validation, stringify preservation, and view-model branch facts from the child union discriminator. No generated tree renderer, Site source schema, storage, sync, authority, public tree, or public renderer behavior changed.
+- 2026-05-12: TVB-02 shipped. Generated tree renderer now uses view-model branch facts to stop recursion for configured child variants, while selected roots still expand. Added app tests for leaf child rendering and selected-root expansion. No Site source schema, storage, sync, authority, public tree, or public renderer behavior changed.
 
 ## Blockers
 
@@ -297,3 +301,9 @@ Do not put this under the union definition. The same union can be expanded in on
 - 2026-05-12 TVB-01: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 190 files.
 - 2026-05-12 TVB-01: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
 - 2026-05-12 TVB-01: browser smoke skipped because app behavior did not change.
+- 2026-05-12 TVB-02: `devstate check` reports checks ok and services running.
+- 2026-05-12 TVB-02: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
+- 2026-05-12 TVB-02: `.devstate/status.md` reports checks ok and services running.
+- 2026-05-12 TVB-02: `.devstate/logs/service-test.txt` reports `src/app.test.tsx` passing with 112 tests after renderer test changes.
+- 2026-05-12 TVB-02: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 190 files.
+- 2026-05-12 TVB-02: `bun browser --session tvb-02 open https://22-tree-variant-branch-policy.formless.local/site` loaded `/site`; snapshot showed Site roots and Placement tree; `bun browser --session tvb-02 errors` reported no page errors.

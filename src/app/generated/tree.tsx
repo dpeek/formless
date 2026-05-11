@@ -345,9 +345,12 @@ function PlacementTreeItem({
   const recordsById = useRecordsById();
   const childRecordId = stringValue(placement.values[result.childFieldName]);
   const childRecord = childRecordId ? recordsById[childRecordId] : undefined;
-  const isCycle = childRecordId ? ancestors.has(childRecordId) : false;
+  const isLeafBranch = childRecord ? isTreeBranchLeaf(result, childRecord) : false;
+  const isCycle = !isLeafBranch && childRecordId ? ancestors.has(childRecordId) : false;
   const descendantPlacements =
-    childRecord && !isCycle ? childPlacementsForParent(childRecord.id, recordsById, result) : [];
+    childRecord && !isLeafBranch && !isCycle
+      ? childPlacementsForParent(childRecord.id, recordsById, result)
+      : [];
   const childPlacements = depth < result.maxDepth ? descendantPlacements : [];
   const nextAncestors = childRecord ? new Set([...ancestors, childRecord.id]) : ancestors;
 
@@ -659,6 +662,18 @@ function childPlacementsForParent(
   return orderedRecordIds
     .map((recordId) => recordsById[recordId])
     .filter((record): record is StoredRecord => record?.entity === result.relationship.to.entity);
+}
+
+function isTreeBranchLeaf(result: TreeResultConfig, childRecord: StoredRecord): boolean {
+  const variantPolicy = result.branches?.variants;
+
+  if (!variantPolicy) {
+    return false;
+  }
+
+  const variantValue = stringValue(childRecord.values[variantPolicy.discriminatorFieldName]);
+
+  return variantValue !== undefined && variantPolicy.leafVariantValues.includes(variantValue);
 }
 
 function isHeadingRecordField(fieldConfig: RecordFieldConfig) {

@@ -1808,6 +1808,80 @@ describe("generated forms and records", () => {
     expect(html).not.toContain("checked");
   });
 
+  it("treats configured tree child variants as leaf nodes", () => {
+    const schema = generatedDiscriminatedTaskSchema({
+      streamItemPresentation: "contextLink",
+      treeBranchVariants: { stream: "leaf" },
+    });
+    const model = requiredCollectionModel(schema, "taskTreeHome");
+
+    if (!model.collection.context || model.result.type !== "tree") {
+      throw new Error("Task tree home should render a context tree.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          discriminatedTaskRecord("task-parent", "role", "Parent", false),
+          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
+          discriminatedTaskRecord("task-grandchild", "role", "Nested role", false),
+          taskPlacementRecord("placement-1", "task-parent", "task-child"),
+          taskPlacementRecord("placement-2", "task-child", "task-grandchild"),
+        ],
+        schema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTree
+        context={model.collection.context}
+        onSelectContext={() => {}}
+        queryContext={{ today: "2026-05-01", values: { task: "task-parent" } }}
+        result={model.result}
+        selectableContextRecordIds={new Set(["task-parent", "task-child"])}
+      />,
+    );
+
+    expect(html).toContain("Stream child");
+    expect(html).toContain('aria-label="Select Stream child"');
+    expect(html).not.toContain("Nested role");
+  });
+
+  it("expands a configured leaf variant when it is the selected tree root", () => {
+    const schema = generatedDiscriminatedTaskSchema({
+      streamItemPresentation: "contextLink",
+      treeBranchVariants: { stream: "leaf" },
+    });
+    const model = requiredCollectionModel(schema, "taskTreeHome");
+
+    if (!model.collection.context || model.result.type !== "tree") {
+      throw new Error("Task tree home should render a context tree.");
+    }
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          discriminatedTaskRecord("task-parent", "role", "Parent", false),
+          discriminatedTaskRecord("task-child", "stream", "Stream child", true),
+          discriminatedTaskRecord("task-grandchild", "role", "Nested role", false),
+          taskPlacementRecord("placement-1", "task-parent", "task-child"),
+          taskPlacementRecord("placement-2", "task-child", "task-grandchild"),
+        ],
+        schema,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      <RecordTree
+        context={model.collection.context}
+        onSelectContext={() => {}}
+        queryContext={{ today: "2026-05-01", values: { task: "task-child" } }}
+        result={model.result}
+        selectableContextRecordIds={new Set(["task-parent", "task-child"])}
+      />,
+    );
+
+    expect(html).toContain("Nested role");
+  });
+
   it("disables tree child context links outside the selectable context records", () => {
     const schema = generatedDiscriminatedTaskSchema({ streamItemPresentation: "contextLink" });
     const model = requiredCollectionModel(schema, "taskTreeHome");
@@ -3169,6 +3243,7 @@ function generatedDiscriminatedTaskSchema(
   options: {
     defaultKind?: "role" | "stream";
     streamItemPresentation?: "fields" | "contextLink";
+    treeBranchVariants?: Partial<Record<"role" | "stream", "leaf">>;
   } = {},
 ): AppSchema {
   return parseAppSchema({
@@ -3336,6 +3411,9 @@ function generatedDiscriminatedTaskSchema(
           relationship: "taskPlacements",
           childField: "task",
           childItemView: "taskVariantItem",
+          ...(options.treeBranchVariants === undefined
+            ? {}
+            : { branches: { variants: options.treeBranchVariants } }),
         },
       },
       taskCreate: {
