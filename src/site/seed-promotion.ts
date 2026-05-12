@@ -56,7 +56,7 @@ function normalizeSeedRecord(record: StoredRecord, schema: AppSchema): StoredRec
   };
 }
 
-function validateSiteSeedRecords(records: StoredRecord[], schema: AppSchema) {
+export function validateSiteSeedRecords(records: StoredRecord[], schema: AppSchema) {
   const recordsById = new Map<string, StoredRecord>();
 
   for (const [index, record] of records.entries()) {
