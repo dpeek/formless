@@ -50,6 +50,7 @@ import type {
   TreeBranchActionSchema,
   TreeBranchPolicySchema,
   TreeBranchVariantPolicySchema,
+  TreeCompositionActionSchema,
   ViewVariantFieldsPresentationSchema,
   ViewFieldSchema,
   ViewSchema,
@@ -1157,7 +1158,7 @@ function parseCollectionResult(
       `Collection view "${viewName}" result`,
       value,
       ["type", "relationship", "childField", "childItemView"],
-      ["placementItemView", "ordering", "branches", "maxDepth"],
+      ["placementItemView", "ordering", "branches", "composition", "maxDepth"],
     );
 
     if (!collectionContext) {
@@ -1276,6 +1277,13 @@ function parseCollectionResult(
       childItemView,
       unions,
     );
+    const composition = parseOptionalTreeCompositionActions(
+      `Collection view "${viewName}" result composition`,
+      value.composition,
+      entity,
+      relationshipName,
+      childFieldName,
+    );
 
     return {
       type: "tree",
@@ -1285,6 +1293,7 @@ function parseCollectionResult(
       ...(placementItemViewName === undefined ? {} : { placementItemView: placementItemViewName }),
       ...(ordering === undefined ? {} : { ordering }),
       ...(branches === undefined ? {} : { branches }),
+      ...(composition === undefined ? {} : { composition }),
       ...(maxDepth === undefined ? {} : { maxDepth }),
     };
   }
@@ -1456,6 +1465,78 @@ function parseOptionalTreeBranchChildren(
 
     return childVariant;
   });
+}
+
+function parseOptionalTreeCompositionActions(
+  context: string,
+  value: unknown,
+  entity: EntitySchema,
+  relationshipName: string,
+  childFieldName: string,
+): TreeCompositionActionSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, [], ["createAction", "removeAction"]);
+
+  const createActionName = parseOptionalNonEmptyString(
+    `${context} createAction`,
+    value.createAction,
+  );
+  const removeActionName = parseOptionalNonEmptyString(
+    `${context} removeAction`,
+    value.removeAction,
+  );
+
+  if (createActionName === undefined && removeActionName === undefined) {
+    throw new Error(`${context} must include createAction or removeAction.`);
+  }
+
+  if (createActionName !== undefined) {
+    const action = entity.actions?.[createActionName];
+
+    if (!action) {
+      throw new Error(`${context} createAction references unknown action "${createActionName}".`);
+    }
+
+    if (action.kind !== "create-tree-child") {
+      throw new Error(`${context} createAction must use kind "create-tree-child".`);
+    }
+
+    if (action.relationship !== relationshipName) {
+      throw new Error(`${context} createAction must use relationship "${relationshipName}".`);
+    }
+
+    if (action.childField !== childFieldName) {
+      throw new Error(`${context} createAction must use childField "${childFieldName}".`);
+    }
+  }
+
+  if (removeActionName !== undefined) {
+    const action = entity.actions?.[removeActionName];
+
+    if (!action) {
+      throw new Error(`${context} removeAction references unknown action "${removeActionName}".`);
+    }
+
+    if (action.kind !== "remove-tree-placement") {
+      throw new Error(`${context} removeAction must use kind "remove-tree-placement".`);
+    }
+
+    if (action.relationship !== relationshipName) {
+      throw new Error(`${context} removeAction must use relationship "${relationshipName}".`);
+    }
+  }
+
+  return {
+    ...(createActionName === undefined ? {} : { createAction: createActionName }),
+    ...(removeActionName === undefined ? {} : { removeAction: removeActionName }),
+  };
 }
 
 function parseCollectionTableFooterSlots(

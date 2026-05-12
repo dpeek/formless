@@ -360,6 +360,11 @@ export type TreeBranchPolicySchema = {
   variants: Record<string, TreeBranchVariantPolicySchema>;
 };
 
+export type TreeCompositionActionSchema = {
+  createAction?: string;
+  removeAction?: string;
+};
+
 export type CollectionResultSchema =
   | {
       type: "list";
@@ -380,6 +385,7 @@ export type CollectionResultSchema =
       placementItemView?: string;
       ordering?: ResultOrderingSchema;
       branches?: TreeBranchPolicySchema;
+      composition?: TreeCompositionActionSchema;
       maxDepth?: number;
     };
 
@@ -611,7 +617,9 @@ export type EntityActionKind =
   | "clear-completed"
   | "create-missing-join-records"
   | "create-selected-join-record"
-  | "remove-selected-join-records";
+  | "remove-selected-join-records"
+  | "create-tree-child"
+  | "remove-tree-placement";
 
 export type EntityActionCapabilities = {
   createAfterCreateHook: boolean;
@@ -641,11 +649,27 @@ export type RemoveSelectedJoinRecordsEntityActionSchema = {
   relationship: string;
 };
 
+export type CreateTreeChildEntityActionSchema = {
+  label: string;
+  kind: "create-tree-child";
+  relationship: string;
+  childField: string;
+  orderField?: string;
+};
+
+export type RemoveTreePlacementEntityActionSchema = {
+  label: string;
+  kind: "remove-tree-placement";
+  relationship: string;
+};
+
 export type EntityActionSchema =
   | ClearCompletedEntityActionSchema
   | CreateMissingJoinRecordsEntityActionSchema
   | CreateSelectedJoinRecordEntityActionSchema
-  | RemoveSelectedJoinRecordsEntityActionSchema;
+  | RemoveSelectedJoinRecordsEntityActionSchema
+  | CreateTreeChildEntityActionSchema
+  | RemoveTreePlacementEntityActionSchema;
 
 export type UniqueConstraintSchema = {
   kind: "unique";

@@ -4206,6 +4206,20 @@ describe("personal site sample schema", () => {
       "order",
       "label",
     ]);
+    expect(schema.entities.blockPlacement?.actions).toMatchObject({
+      addTreeChild: {
+        label: "Add child",
+        kind: "create-tree-child",
+        relationship: "blockPlacements",
+        childField: "block",
+        orderField: "order",
+      },
+      removeTreePlacement: {
+        label: "Remove child",
+        kind: "remove-tree-placement",
+        relationship: "blockPlacements",
+      },
+    });
     expect(schema.unions?.blockByType).toMatchObject({
       entity: "block",
       discriminator: "type",
@@ -4477,6 +4491,10 @@ describe("personal site sample schema", () => {
           scope: [{ kind: "field", field: "parent" }],
           presentations: ["dragHandle"],
         },
+        composition: {
+          createAction: "addTreeChild",
+          removeAction: "removeTreePlacement",
+        },
         maxDepth: 8,
       },
       actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
@@ -4676,6 +4694,10 @@ describe("personal site sample schema", () => {
             children: ["group", "link"],
           },
         },
+      },
+      composition: {
+        createAction: "addTreeChild",
+        removeAction: "removeTreePlacement",
       },
     });
     expect(siteCompositionHome.actions).toEqual([

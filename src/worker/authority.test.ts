@@ -892,6 +892,83 @@ describe("authority", () => {
     expect(recreated.changes[0]?.payload.values).toEqual(created.changes[0]?.payload.values);
   });
 
+  it("creates Site tree child blocks with placement edges and removes only the placement", async () => {
+    useSchemaApp("site");
+
+    const input = {
+      input: {
+        parentRecordId: "rec_site_content_home",
+        childValues: {
+          type: "markdown",
+          label: "Inline note",
+          body: "Tree-created content",
+        },
+      },
+    };
+    const added = await postActionForEntity(
+      "action-site-tree-add-child",
+      "blockPlacement",
+      "addTreeChild",
+      input,
+    );
+    const replay = await postActionForEntity(
+      "action-site-tree-add-child",
+      "blockPlacement",
+      "addTreeChild",
+      input,
+    );
+    const child = added.changes.find((change) => change.payload.entity === "block")?.payload;
+    const placement = added.changes.find(
+      (change) => change.payload.entity === "blockPlacement",
+    )?.payload;
+
+    if (!child || !placement) {
+      throw new Error("Site tree child action did not create both records.");
+    }
+
+    expect(added.changes).toHaveLength(2);
+    expect(added.changes.every((change) => change.op === "action")).toBe(true);
+    expect(child.values).toEqual({
+      type: "markdown",
+      label: "Inline note",
+      body: "Tree-created content",
+    });
+    expect(placement.values).toEqual({
+      parent: "rec_site_content_home",
+      block: child.id,
+      order: 6000,
+    });
+    expect(replay).toEqual(added);
+
+    const removed = await postActionForEntity(
+      "action-site-tree-remove-placement",
+      "blockPlacement",
+      "removeTreePlacement",
+      { input: { placementId: placement.id } },
+    );
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const storedChild = bootstrap.records.find((record) => record.id === child.id);
+    const storedPlacement = bootstrap.records.find((record) => record.id === placement.id);
+
+    expect(removed.changes).toHaveLength(1);
+    expect(removed.changes[0]?.payload).toMatchObject({
+      id: placement.id,
+      entity: "blockPlacement",
+      deletedAt: expect.any(String),
+    });
+    expect(storedChild).toMatchObject({
+      id: child.id,
+      entity: "block",
+      values: child.values,
+    });
+    expect(storedChild).not.toHaveProperty("deletedAt");
+    expect(storedPlacement).toMatchObject({
+      id: placement.id,
+      entity: "blockPlacement",
+      deletedAt: expect.any(String),
+    });
+  });
+
   it("rejects selected join creation with missing or tombstoned endpoints", async () => {
     useSchemaApp("estii");
     await postJson<SchemaUpdateResponse>("/api/schema", {

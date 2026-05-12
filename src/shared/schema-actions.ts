@@ -1,12 +1,18 @@
 import { fieldRefsEqual } from "./fields.ts";
 import { fieldHasCreateDefault } from "./field-types.ts";
 import { collectQueryContextNames, type QueryExpression } from "./query.ts";
-import { assertExactKeys, isRecord, parseRequiredNonEmptyString } from "./schema-parse-helpers.ts";
+import {
+  assertExactKeys,
+  isRecord,
+  parseOptionalNonEmptyString,
+  parseRequiredNonEmptyString,
+} from "./schema-parse-helpers.ts";
 import type {
   ClearCompletedEntityActionSchema,
   CollectionQuerySchema,
   CreateMissingJoinRecordsEntityActionSchema,
   CreateSelectedJoinRecordEntityActionSchema,
+  CreateTreeChildEntityActionSchema,
   EntityActionCapabilities,
   EntityActionJoinSchema,
   EntityActionJoinSourceSchema,
@@ -16,6 +22,7 @@ import type {
   EntitySchema,
   RelationshipSchema,
   RemoveSelectedJoinRecordsEntityActionSchema,
+  RemoveTreePlacementEntityActionSchema,
 } from "./schema-types.ts";
 
 type EntityActionParseContext = {
@@ -52,6 +59,16 @@ const entityActionKindModules = [
     kind: "remove-selected-join-records",
     capabilities: { createAfterCreateHook: false },
     parse: parseRemoveSelectedJoinRecordsEntityAction,
+  },
+  {
+    kind: "create-tree-child",
+    capabilities: { createAfterCreateHook: false },
+    parse: parseCreateTreeChildEntityAction,
+  },
+  {
+    kind: "remove-tree-placement",
+    capabilities: { createAfterCreateHook: false },
+    parse: parseRemoveTreePlacementEntityAction,
   },
 ] satisfies EntityActionKindModule[];
 
@@ -267,6 +284,105 @@ function parseRemoveSelectedJoinRecordsEntityAction(
   };
 }
 
+function parseCreateTreeChildEntityAction(
+  context: EntityActionParseContext,
+  value: Record<string, unknown>,
+): CreateTreeChildEntityActionSchema {
+  const { actionName, entity, entityName, relationships } = context;
+
+  assertExactKeys(
+    `Entity action "${entityName}.${actionName}"`,
+    value,
+    ["label", "kind", "relationship", "childField"],
+    ["orderField"],
+  );
+
+  const relationshipName = parseRequiredNonEmptyString(
+    `Entity action "${entityName}.${actionName}" relationship`,
+    value.relationship,
+  );
+  const relationship = requireToManyActionRelationship(
+    entityName,
+    actionName,
+    relationshipName,
+    relationships,
+  );
+  const childFieldName = parseRequiredNonEmptyString(
+    `Entity action "${entityName}.${actionName}" childField`,
+    value.childField,
+  );
+  const childField = entity.fields[childFieldName];
+
+  if (!childField) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" childField references unknown field "${childFieldName}".`,
+    );
+  }
+
+  if (childField.type !== "reference") {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" childField must be a reference field.`,
+    );
+  }
+
+  if (childField.to !== relationship.from.entity) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" childField must reference entity "${relationship.from.entity}".`,
+    );
+  }
+
+  const orderFieldName = parseOptionalNonEmptyString(
+    `Entity action "${entityName}.${actionName}" orderField`,
+    value.orderField,
+  );
+  const orderField = orderFieldName === undefined ? undefined : entity.fields[orderFieldName];
+
+  if (orderFieldName !== undefined && !orderField) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" orderField references unknown field "${orderFieldName}".`,
+    );
+  }
+
+  if (orderFieldName !== undefined && orderField?.type !== "number") {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" orderField must be a number field.`,
+    );
+  }
+
+  return {
+    label: value.label as string,
+    kind: "create-tree-child",
+    relationship: relationshipName,
+    childField: childFieldName,
+    ...(orderFieldName === undefined ? {} : { orderField: orderFieldName }),
+  };
+}
+
+function parseRemoveTreePlacementEntityAction(
+  context: EntityActionParseContext,
+  value: Record<string, unknown>,
+): RemoveTreePlacementEntityActionSchema {
+  const { actionName, entityName, relationships } = context;
+
+  assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
+    "label",
+    "kind",
+    "relationship",
+  ]);
+
+  const relationshipName = parseRequiredNonEmptyString(
+    `Entity action "${entityName}.${actionName}" relationship`,
+    value.relationship,
+  );
+  requireToManyActionRelationship(entityName, actionName, relationshipName, relationships);
+
+  return {
+    label: value.label as string,
+    kind: "remove-tree-placement",
+    relationship: relationshipName,
+  };
+}
+
 function parseEntityActionJoin(
   entityName: string,
   actionName: string,
@@ -426,6 +542,35 @@ function requireManyToManyActionRelationship(
   if (relationship.through.entity !== entityName) {
     throw new Error(
       `Entity action "${entityName}.${actionName}" relationship "${relationshipName}" uses through entity "${relationship.through.entity}", not "${entityName}".`,
+    );
+  }
+
+  return relationship;
+}
+
+function requireToManyActionRelationship(
+  entityName: string,
+  actionName: string,
+  relationshipName: string,
+  relationships: Record<string, RelationshipSchema> | undefined,
+): Extract<RelationshipSchema, { kind: "toMany" }> {
+  const relationship = relationships?.[relationshipName];
+
+  if (!relationship) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" references unknown relationship "${relationshipName}".`,
+    );
+  }
+
+  if (relationship.kind !== "toMany") {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" relationship "${relationshipName}" must be toMany.`,
+    );
+  }
+
+  if (relationship.to.entity !== entityName) {
+    throw new Error(
+      `Entity action "${entityName}.${actionName}" relationship "${relationshipName}" targets entity "${relationship.to.entity}", not "${entityName}".`,
     );
   }
 

@@ -2,8 +2,10 @@ import type {
   ActionRequest,
   ActionRequestInput,
   ActionResponse,
+  CreateTreeChildActionInput,
   CreateSelectedJoinRecordActionInput,
   RemoveSelectedJoinRecordsActionInput,
+  RemoveTreePlacementActionInput,
   CreateMutation,
   RecordValues,
   StoredRecord,
@@ -17,11 +19,15 @@ import type {
   EntityActionSchema,
   EntitySchema,
   ManyToManyRelationshipSchema,
+  ToManyRelationshipSchema,
 } from "../shared/schema.ts";
+import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import {
+  createRecordSetForActionOutcome,
   createRecordsForActionOutcome,
+  type ActionRecordCreatePlan,
   type CreateMutationCausedRecordWriter,
   getActionResponseById,
   getActiveRecordsByEntity,
@@ -93,6 +99,16 @@ const entityActionKindRuntimeModules = [
     kind: "remove-selected-join-records",
     validateInput: validateRemoveSelectedJoinRecordsActionInput,
     execute: executeRemoveSelectedJoinRecordsAction,
+  },
+  {
+    kind: "create-tree-child",
+    validateInput: validateCreateTreeChildActionInput,
+    execute: executeCreateTreeChildAction,
+  },
+  {
+    kind: "remove-tree-placement",
+    validateInput: validateRemoveTreePlacementActionInput,
+    execute: executeRemoveTreePlacementAction,
   },
 ] satisfies EntityActionKindRuntimeModuleUnion[];
 
@@ -288,6 +304,43 @@ function executeRemoveSelectedJoinRecordsAction(
   return executeActionEffect(context.storage, context.request, records);
 }
 
+function executeCreateTreeChildAction(
+  context: EntityActionExecutionContext<Extract<EntityActionSchema, { kind: "create-tree-child" }>>,
+) {
+  const plans = selectTreeChildCreatePlans(
+    context.storage,
+    context.request,
+    context.schema,
+    context.action,
+  );
+
+  return createRecordSetForActionOutcome(
+    context.storage,
+    context.request.actionId,
+    context.request.entity,
+    context.request.action,
+    plans,
+    (entity, recordValues, options) => {
+      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
+    },
+  );
+}
+
+function executeRemoveTreePlacementAction(
+  context: EntityActionExecutionContext<
+    Extract<EntityActionSchema, { kind: "remove-tree-placement" }>
+  >,
+) {
+  const record = selectTreePlacementRecord(
+    context.storage,
+    context.request,
+    context.schema,
+    context.action,
+  );
+
+  return executeActionEffect(context.storage, context.request, [record]);
+}
+
 function executeCreateMissingJoinRecordsAfterCreateHook(
   context: EntityActionCreateAfterCreateHookContext<
     Extract<EntityActionSchema, { kind: "create-missing-join-records" }>
@@ -390,6 +443,57 @@ function validateRemoveSelectedJoinRecordsActionInput(
   });
 
   return { recordIds };
+}
+
+function validateCreateTreeChildActionInput(
+  context: EntityActionRequestInputValidationContext<
+    Extract<EntityActionSchema, { kind: "create-tree-child" }>
+  >,
+): CreateTreeChildActionInput {
+  const value = context.value;
+
+  if (!isRecord(value) || !isRecord(value.childValues)) {
+    throw new BadRequestError(
+      `Action "${context.actionName}" requires input with parentRecordId and childValues.`,
+    );
+  }
+
+  if (typeof value.parentRecordId !== "string" || value.parentRecordId.trim() === "") {
+    throw new BadRequestError(
+      `Action "${context.actionName}" input parentRecordId must be non-empty.`,
+    );
+  }
+
+  if (!Object.values(value.childValues).every(isFieldValue)) {
+    throw new BadRequestError(
+      `Action "${context.actionName}" input childValues must contain scalar field values.`,
+    );
+  }
+
+  return {
+    parentRecordId: value.parentRecordId,
+    childValues: value.childValues as RecordValues,
+  };
+}
+
+function validateRemoveTreePlacementActionInput(
+  context: EntityActionRequestInputValidationContext<
+    Extract<EntityActionSchema, { kind: "remove-tree-placement" }>
+  >,
+): RemoveTreePlacementActionInput {
+  const value = context.value;
+
+  if (!isRecord(value)) {
+    throw new BadRequestError(`Action "${context.actionName}" requires input with placementId.`);
+  }
+
+  if (typeof value.placementId !== "string" || value.placementId.trim() === "") {
+    throw new BadRequestError(
+      `Action "${context.actionName}" input placementId must be non-empty.`,
+    );
+  }
+
+  return { placementId: value.placementId };
 }
 
 function selectActionTargetRecords(
@@ -585,6 +689,176 @@ function selectSelectedJoinRecords(
   return records;
 }
 
+function selectTreeChildCreatePlans(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  schema: AppSchema,
+  action: Extract<EntityActionSchema, { kind: "create-tree-child" }>,
+): ActionRecordCreatePlan[] {
+  const placementEntity = schema.entities[request.entity];
+
+  if (!placementEntity) {
+    throw new Error(`Missing entity "${request.entity}".`);
+  }
+
+  if (!placementEntity.mutations.create.enabled) {
+    throw new BadRequestError(`Create mutations are disabled for entity "${request.entity}".`);
+  }
+
+  const relationship = getToManyActionRelationship(schema, request, action.relationship);
+  const childField = placementEntity.fields[action.childField];
+
+  if (childField?.type !== "reference") {
+    throw new Error(`Action "${request.action}" references invalid child field.`);
+  }
+
+  const childEntityName = childField.to;
+  const childEntity = schema.entities[childEntityName];
+
+  if (!childEntity) {
+    throw new Error(`Action "${request.action}" references unknown child entity.`);
+  }
+
+  if (!childEntity.mutations.create.enabled) {
+    throw new BadRequestError(`Create mutations are disabled for entity "${childEntityName}".`);
+  }
+
+  const input = requireCreateTreeChildInput(request);
+  const parentRecord = requireActiveEndpointRecord(
+    storage,
+    request,
+    relationship.from.entity,
+    input.parentRecordId,
+  );
+  const childValues = validateRecordValues(input.childValues, childEntity, storage);
+
+  return [
+    {
+      entity: childEntityName,
+      values: childValues,
+    },
+    {
+      entity: request.entity,
+      values: (createdRecords) => {
+        const childRecord = createdRecords[0];
+
+        if (!childRecord) {
+          throw new Error(`Action "${request.action}" did not create a child record.`);
+        }
+
+        return validateRecordValues(
+          createTreePlacementValues(
+            storage,
+            request.entity,
+            placementEntity,
+            relationship,
+            action,
+            parentRecord.id,
+            childRecord.id,
+          ),
+          placementEntity,
+          storage,
+        );
+      },
+    },
+  ];
+}
+
+function createTreePlacementValues(
+  storage: DurableObjectStorage,
+  placementEntityName: string,
+  placementEntity: EntitySchema,
+  relationship: ToManyRelationshipSchema,
+  action: Extract<EntityActionSchema, { kind: "create-tree-child" }>,
+  parentRecordId: string,
+  childRecordId: string,
+): RecordValues {
+  const relationshipField = relationship.to.field;
+  const values: RecordValues = {};
+
+  for (const [fieldName, field] of Object.entries(placementEntity.fields)) {
+    if (fieldName === relationshipField) {
+      values[fieldName] = parentRecordId;
+      continue;
+    }
+
+    if (fieldName === action.childField) {
+      values[fieldName] = childRecordId;
+      continue;
+    }
+
+    if (action.orderField !== undefined && fieldName === action.orderField) {
+      values[fieldName] = nextTreePlacementOrder(
+        storage,
+        placementEntityName,
+        relationshipField,
+        parentRecordId,
+        action.orderField,
+        field,
+      );
+      continue;
+    }
+
+    const defaultValue = fieldCreateDefaultValue(field);
+    if (defaultValue !== undefined) {
+      values[fieldName] = defaultValue;
+    }
+  }
+
+  return values;
+}
+
+function nextTreePlacementOrder(
+  storage: DurableObjectStorage,
+  placementEntityName: string,
+  parentFieldName: string,
+  parentRecordId: string,
+  orderFieldName: string,
+  orderField: EntitySchema["fields"][string],
+): number {
+  const defaultOrder = fieldCreateDefaultValue(orderField);
+  const step = typeof defaultOrder === "number" && defaultOrder > 0 ? defaultOrder : 1000;
+  const siblingOrders = getActiveRecordsByEntity(storage, placementEntityName)
+    .filter((record) => record.values[parentFieldName] === parentRecordId)
+    .map((record) => record.values[orderFieldName])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const maxOrder = siblingOrders.length === 0 ? undefined : Math.max(...siblingOrders);
+
+  return maxOrder === undefined ? step : maxOrder + step;
+}
+
+function selectTreePlacementRecord(
+  storage: DurableObjectStorage,
+  request: ActionRequest,
+  schema: AppSchema,
+  action: Extract<EntityActionSchema, { kind: "remove-tree-placement" }>,
+): StoredRecord {
+  getToManyActionRelationship(schema, request, action.relationship);
+
+  const input = requireRemoveTreePlacementInput(request);
+  const record = getStoredRecord(storage, input.placementId);
+
+  if (!record) {
+    throw new BadRequestError(
+      `Action "${request.action}" references unknown placement record "${input.placementId}".`,
+    );
+  }
+
+  if (record.entity !== request.entity) {
+    throw new BadRequestError(
+      `Action "${request.action}" placement record "${input.placementId}" must belong to entity "${request.entity}".`,
+    );
+  }
+
+  if (record.deletedAt) {
+    throw new BadRequestError(
+      `Action "${request.action}" cannot remove tombstoned placement record "${input.placementId}".`,
+    );
+  }
+
+  return record;
+}
+
 function getManyToManyActionRelationship(
   schema: AppSchema,
   request: ActionRequest,
@@ -607,6 +881,34 @@ function getManyToManyActionRelationship(
   if (relationship.through.entity !== request.entity) {
     throw new Error(
       `Action "${request.action}" relationship "${relationshipName}" uses through entity "${relationship.through.entity}", not "${request.entity}".`,
+    );
+  }
+
+  return relationship;
+}
+
+function getToManyActionRelationship(
+  schema: AppSchema,
+  request: ActionRequest,
+  relationshipName: string,
+): ToManyRelationshipSchema {
+  const relationship = schema.relationships?.[relationshipName];
+
+  if (!relationship) {
+    throw new Error(
+      `Action "${request.action}" references unknown relationship "${relationshipName}".`,
+    );
+  }
+
+  if (relationship.kind !== "toMany") {
+    throw new Error(
+      `Action "${request.action}" relationship "${relationshipName}" must be toMany.`,
+    );
+  }
+
+  if (relationship.to.entity !== request.entity) {
+    throw new Error(
+      `Action "${request.action}" relationship "${relationshipName}" targets entity "${relationship.to.entity}", not "${request.entity}".`,
     );
   }
 
@@ -646,6 +948,37 @@ function requireRemoveSelectedJoinRecordsInput(
   }
 
   return { recordIds: input.recordIds };
+}
+
+function requireCreateTreeChildInput(request: ActionRequest): CreateTreeChildActionInput {
+  const input = request.input;
+
+  if (
+    !input ||
+    !("parentRecordId" in input) ||
+    !("childValues" in input) ||
+    typeof input.parentRecordId !== "string" ||
+    !isRecord(input.childValues)
+  ) {
+    throw new BadRequestError(
+      `Action "${request.action}" requires input with parentRecordId and childValues.`,
+    );
+  }
+
+  return {
+    parentRecordId: input.parentRecordId,
+    childValues: input.childValues as RecordValues,
+  };
+}
+
+function requireRemoveTreePlacementInput(request: ActionRequest): RemoveTreePlacementActionInput {
+  const input = request.input;
+
+  if (!input || !("placementId" in input) || typeof input.placementId !== "string") {
+    throw new BadRequestError(`Action "${request.action}" requires input with placementId.`);
+  }
+
+  return { placementId: input.placementId };
 }
 
 function requireActiveEndpointRecord(
@@ -707,4 +1040,12 @@ function getEntityActionKindRuntimeModule<TAction extends EntityActionSchema>(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFieldValue(value: unknown): value is RecordValues[string] {
+  return typeof value === "string" || typeof value === "boolean" || isFiniteNumber(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }

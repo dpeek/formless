@@ -317,7 +317,7 @@ function validatePatchValues(values: Record<string, unknown>, entity: EntitySche
   return patchValues;
 }
 
-function validateRecordValues(
+export function validateRecordValues(
   values: Record<string, unknown>,
   entity: EntitySchema,
   storage: DurableObjectStorage,

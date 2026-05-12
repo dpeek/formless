@@ -207,12 +207,16 @@ export async function submitAction(
   schemaKey: SchemaKey,
   entity: EntityName,
   actionName: string,
-  fetcher: typeof fetch = fetch,
+  inputOrFetcher?: ActionRequest["input"] | typeof fetch,
+  maybeFetcher?: typeof fetch,
 ) {
+  const input = typeof inputOrFetcher === "function" ? undefined : inputOrFetcher;
+  const fetcher = typeof inputOrFetcher === "function" ? inputOrFetcher : (maybeFetcher ?? fetch);
   const action: ActionRequest = {
     actionId: createActionId(),
     entity,
     action: actionName,
+    ...(input === undefined ? {} : { input }),
   };
 
   const response = await postJson<ActionResponse>(fetcher, apiPath(schemaKey, "actions"), action);

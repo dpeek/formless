@@ -171,11 +171,13 @@ export function GeneratedCreateDialogForm({
   onSuccess,
   queryContext,
   renderDialogCancel = true,
+  submitValues,
 }: {
   action: CreateHomeActionConfig;
   onSuccess?: (recordId: string) => void;
   queryContext?: QueryEvaluationContext;
   renderDialogCancel?: boolean;
+  submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
 }) {
   const schemaKey = useSchemaKey();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -211,10 +213,16 @@ export function GeneratedCreateDialogForm({
     });
 
     try {
-      const response = await submitCreateMutation(schemaKey, action.entityName, values);
+      const response =
+        submitValues === undefined
+          ? {
+              recordId: (await submitCreateMutation(schemaKey, action.entityName, values)).record
+                .id,
+            }
+          : await submitValues(values);
       form.reset();
       setDiscriminatorValue(initialCreateDiscriminatorValue(action.union, action.defaults));
-      onSuccess?.(response.record.id);
+      onSuccess?.(response.recordId);
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({

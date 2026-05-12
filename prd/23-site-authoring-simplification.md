@@ -1,7 +1,7 @@
 # PRD 23: Site authoring simplification
 
 Status: in progress
-Current chunk: SAS-05 ready
+Current chunk: SAS-06 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -277,7 +277,7 @@ Owned files:
 | SAS-02 | shipped | SAS-01     | schema parser, create defaults, view models, generated create UI | Literal defaults parse/resolve, and fixed-type create forms hide `type` while submitting it.                                 |
 | SAS-03 | shipped | SAS-02     | Site source schema, generated block views, tests                 | Site block authoring hides `type`, hides `templateKey`, hides page `body`, and removes deprecated block variants from views. |
 | SAS-04 | shipped | SAS-03     | tree policy parser/view model/generated tree UI                  | Tree child policy controls add buttons for allowed parent variants, including empty parents.                                 |
-| SAS-05 | ready   | SAS-04     | authority actions/storage integration/generated tree UI          | Tree add creates block plus placement, and tree remove tombstones placement edges without deleting child blocks.             |
+| SAS-05 | shipped | SAS-04     | authority actions/storage integration/generated tree UI          | Tree add creates block plus placement, and tree remove tombstones placement edges without deleting child blocks.             |
 | SAS-06 | planned | SAS-03     | Site source schema/seeds/readiness/public renderer               | Removed block types are gone from source schema, seeds, readiness checks, and renderer branches.                             |
 | SAS-07 | planned | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
 | SAS-08 | planned | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
@@ -292,23 +292,24 @@ Owned files:
 - 2026-05-12: SAS-03 kept the stored `block.type` enum values, `templateKey` field, raw block table columns, source seeds, readiness checks, and public renderer branches intact. Full source enum/seed/renderer removal remains SAS-06.
 - 2026-05-12: SAS-04 shipped tree child policy. Tree branch policies now support object variants with `action: "leaf"` and allowed `children`; tree view models expose allowed child variant facts; generated Site tree UI renders disabled add buttons for selected roots and nested records when the parent variant allows children, including empty parents.
 - 2026-05-12: SAS-04 Site policy allows page and group parents to add page-content blocks, Header roots to add links, and Footer roots to add groups or links. Header/Footer placements still keep leaf behavior when they appear as child context links.
-- 2026-05-12: Next ready chunk is SAS-05 tree add/remove authority actions/storage integration/generated tree UI.
+- 2026-05-12: SAS-05 shipped tree composition actions. `blockPlacement.addTreeChild` creates a child `block` plus `blockPlacement` edge in one authority action; `blockPlacement.removeTreePlacement` tombstones only the placement edge.
+- 2026-05-12: SAS-05 generated Site tree add buttons now open fixed-type child create dialogs using hidden literal `block.type` defaults, and placement cards expose a remove action when tree composition remove is configured.
+- 2026-05-12: Next ready chunk is SAS-06 source schema/seed/readiness/public renderer cleanup for removed block types.
 
 ## Blockers
 
-- None for SAS-04.
+- None for SAS-05.
 
 ## Evidence
 
 - `devstate start`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
 - `devstate check`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
-- `.devstate/logs/service-test.txt`: watcher reran affected tests; 3 files passed with 158 tests.
+- `.devstate/logs/service-test.txt`: 15 files passed with 439 tests.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 190 files.
-- `bun browser --session sas04-site --ignore-https-errors open https://23-site-authoring-simplification.formless.local/site`: Site admin opened.
-- `bun browser --session sas04-site errors`: no browser errors reported.
-- `bun browser --session sas04-pages --ignore-https-errors open https://23-site-authoring-simplification.formless.local/pages/home`: public home page opened.
-- `bun browser --session sas04-pages errors`: no browser errors reported.
-- Requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent in this repo; devstate evidence exists under `.devstate/status.md` and `.devstate/logs/`.
+- `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
+- `curl -sk -X POST https://23-site-authoring-simplification.formless.local/api/site/reset/schema`: returned Site schema with `blockPlacement.addTreeChild`, `blockPlacement.removeTreePlacement`, and tree composition action config.
+- `bun browser --session sas05-site --ignore-https-errors open https://23-site-authoring-simplification.formless.local/site`: Site admin opened.
+- `bun browser --session sas05-site errors`: no browser errors reported.
 
 ## Out of Scope
 

@@ -167,6 +167,20 @@
         "delete": {
           "enabled": false
         }
+      },
+      "actions": {
+        "addTreeChild": {
+          "label": "Add child",
+          "kind": "create-tree-child",
+          "relationship": "blockPlacements",
+          "childField": "block",
+          "orderField": "order"
+        },
+        "removeTreePlacement": {
+          "label": "Remove child",
+          "kind": "remove-tree-placement",
+          "relationship": "blockPlacements"
+        }
       }
     }
   },
@@ -943,6 +957,10 @@
               "children": ["group", "link"]
             }
           }
+        },
+        "composition": {
+          "createAction": "addTreeChild",
+          "removeAction": "removeTreePlacement"
         },
         "ordering": {
           "field": "order",

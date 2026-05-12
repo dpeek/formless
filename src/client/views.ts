@@ -289,6 +289,17 @@ export type TreeBranchPolicyConfig = {
   variants: TreeVariantBranchPolicyConfig;
 };
 
+export type TreeCompositionActionConfig = {
+  create?: {
+    actionName: string;
+    action: Extract<EntityActionSchema, { kind: "create-tree-child" }>;
+  };
+  remove?: {
+    actionName: string;
+    action: Extract<EntityActionSchema, { kind: "remove-tree-placement" }>;
+  };
+};
+
 export type HomeResultConfig =
   | {
       type: "list";
@@ -320,6 +331,7 @@ export type HomeResultConfig =
       placementRecordUnion?: RecordUnionPresentationConfig;
       ordering?: ResultOrderingConfig;
       branches?: TreeBranchPolicyConfig;
+      composition?: TreeCompositionActionConfig;
       maxDepth: number;
     };
 
@@ -472,6 +484,14 @@ const entityActionUiModules = [
   },
   {
     kind: "remove-selected-join-records",
+    selectUi: selectDefaultEntityActionUi,
+  },
+  {
+    kind: "create-tree-child",
+    selectUi: selectDefaultEntityActionUi,
+  },
+  {
+    kind: "remove-tree-placement",
     selectUi: selectDefaultEntityActionUi,
   },
 ] satisfies EntityActionUiModuleUnion[];
@@ -869,6 +889,10 @@ function selectResult(
         ? undefined
         : selectRecordUnionPresentation(schema, placementItemView, entity);
     const branches = selectTreeBranchPolicyConfig(collectionView.result.branches, childRecordUnion);
+    const composition = selectTreeCompositionActionConfig(
+      collectionView.result.composition,
+      entity,
+    );
 
     return {
       type: "tree",
@@ -890,6 +914,7 @@ function selectResult(
           }),
       ...(ordering === undefined ? {} : { ordering }),
       ...(branches === undefined ? {} : { branches }),
+      ...(composition === undefined ? {} : { composition }),
       maxDepth: collectionView.result.maxDepth ?? 8,
     };
   }
@@ -972,6 +997,39 @@ function selectAllowedChildVariantsByParentVariant(
 
 function treeBranchVariantPolicyIsLeaf(policy: TreeBranchVariantPolicySchema): boolean {
   return policy === "leaf" || (typeof policy === "object" && policy.action === "leaf");
+}
+
+function selectTreeCompositionActionConfig(
+  composition: Extract<CollectionViewSchema["result"], { type: "tree" }>["composition"],
+  entity: EntitySchema,
+): TreeCompositionActionConfig | undefined {
+  if (composition === undefined) {
+    return undefined;
+  }
+
+  const createAction =
+    composition.createAction === undefined ? undefined : entity.actions?.[composition.createAction];
+  const removeAction =
+    composition.removeAction === undefined ? undefined : entity.actions?.[composition.removeAction];
+
+  return {
+    ...(composition.createAction !== undefined && createAction?.kind === "create-tree-child"
+      ? {
+          create: {
+            actionName: composition.createAction,
+            action: createAction,
+          },
+        }
+      : {}),
+    ...(composition.removeAction !== undefined && removeAction?.kind === "remove-tree-placement"
+      ? {
+          remove: {
+            actionName: composition.removeAction,
+            action: removeAction,
+          },
+        }
+      : {}),
+  };
 }
 
 // Compatibility fallback for tree results that predate result-level ordering.

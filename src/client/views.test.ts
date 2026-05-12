@@ -875,6 +875,29 @@ describe("home view model collections", () => {
     });
   });
 
+  it("resolves Site tree composition action facts", () => {
+    const treeResult = requiredCollectionModel(siteSourceSchema, "siteCompositionHome").result;
+
+    expect(treeResult.type === "tree" ? treeResult.composition : undefined).toMatchObject({
+      create: {
+        actionName: "addTreeChild",
+        action: {
+          kind: "create-tree-child",
+          relationship: "blockPlacements",
+          childField: "block",
+          orderField: "order",
+        },
+      },
+      remove: {
+        actionName: "removeTreePlacement",
+        action: {
+          kind: "remove-tree-placement",
+          relationship: "blockPlacements",
+        },
+      },
+    });
+  });
+
   it("resolves the source rate-card read-model slots", () => {
     const rateModel = selectCollectionModels(rateCardSchema).find(
       (model) => model.viewName === "rateHome",

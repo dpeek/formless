@@ -851,6 +851,8 @@ describe("generated collection home", () => {
 
     expect(nestedHtml).toContain('data-formless-tree-add-parent="group-1"');
     expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
+    expect(nestedHtml).toContain('data-formless-tree-remove-placement="placement-1"');
+    expect(nestedHtml).toContain('aria-label="Remove child placement"');
   });
 
   it("renders synthetic stack sections in order with independent selected queries", () => {

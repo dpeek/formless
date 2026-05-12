@@ -90,6 +90,11 @@ export type RecordConstraintValidator = (
   options?: { ignoreRecordId?: string },
 ) => void;
 
+export type ActionRecordCreatePlan = {
+  entity: string;
+  values: RecordValues | ((createdRecords: StoredRecord[]) => RecordValues);
+};
+
 type ApplyCreateMutationSideEffects = (context: {
   storage: DurableObjectStorage;
   mutation: CreateMutation;
@@ -806,6 +811,66 @@ export function createRecordsForActionOutcome(
     return committedWrite({
       actionId,
       changes,
+      cursor,
+    });
+  });
+}
+
+export function createRecordSetForActionOutcome(
+  storage: DurableObjectStorage,
+  actionId: string,
+  entity: string,
+  action: string,
+  plans: ActionRecordCreatePlan[],
+  validateConstraints?: RecordConstraintValidator,
+): WriteOutcome<ActionResponse> {
+  return storage.transactionSync(() => {
+    const existingExecution = findActionExecution(storage, actionId);
+
+    if (existingExecution) {
+      return replayedWrite({
+        actionId,
+        changes: findChangesByMutationId(storage, actionId),
+        cursor: existingExecution.cursor,
+      });
+    }
+
+    const createdAt = nowIsoString();
+    const createdRecords: StoredRecord[] = [];
+
+    for (const plan of plans) {
+      const values =
+        typeof plan.values === "function" ? plan.values([...createdRecords]) : plan.values;
+      const record = insertCreatedRecordChange(
+        storage,
+        actionId,
+        "action",
+        plan.entity,
+        values,
+        createdAt,
+        validateConstraints,
+      );
+
+      createdRecords.push(record);
+    }
+
+    const cursor = getCurrentCursor(storage);
+
+    storage.sql.exec(
+      `
+        INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+      actionId,
+      entity,
+      action,
+      cursor,
+      createdAt,
+    );
+
+    return committedWrite({
+      actionId,
+      changes: findChangesByMutationId(storage, actionId),
       cursor,
     });
   });

@@ -2,9 +2,13 @@ import { useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@formless/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@formless/ui/dialog";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
+import { submitAction } from "../../client/sync.ts";
 import type {
+  CreateDefaultConfig,
+  CreateFieldConfig,
   HomeContextConfig,
   HomeResultConfig,
   RecordFieldConfig,
@@ -12,8 +16,15 @@ import type {
   RecordVariantContextLinkPresentationConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
-import type { FieldValue, StoredRecord } from "../../shared/protocol.ts";
+import type {
+  ActionResponse,
+  FieldValue,
+  RecordValues,
+  StoredRecord,
+} from "../../shared/protocol.ts";
+import type { SchemaKey } from "../../shared/schema-apps.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
+import { GeneratedCreateDialogForm, type CreateHomeActionConfig } from "./create.tsx";
 import {
   ORDERING_DND_TYPE,
   calculateOrderingDragMovePlanForContext,
@@ -409,6 +420,11 @@ function PlacementTreeItem({
               ) : null}
               <TreeReadinessWarnings recordId={placement.id} />
               {childRecord ? <TreeReadinessWarnings recordId={childRecord.id} /> : null}
+              <TreePlacementRemoveButton
+                entityName={entityName}
+                placement={placement}
+                result={result}
+              />
             </div>
           </div>
         </div>
@@ -441,7 +457,12 @@ function TreeChildAddControls({
   parentRecord: StoredRecord;
   result: TreeResultConfig;
 }) {
+  const schemaKey = useSchemaKey();
+  const [activeVariant, setActiveVariant] = useState<TreeAllowedChildVariantConfig | null>(null);
   const allowedChildVariants = selectAllowedTreeChildVariants(result, parentRecord);
+  const createAction = activeVariant
+    ? createTreeChildCreateAction(result, activeVariant)
+    : undefined;
 
   if (allowedChildVariants.length === 0) {
     return null;
@@ -456,8 +477,13 @@ function TreeChildAddControls({
         <Button
           aria-label={`Add ${variant.label} child`}
           data-formless-tree-add-variant={variant.variantValue}
-          disabled
+          disabled={!result.composition?.create}
           key={variant.variantValue}
+          onClick={() => {
+            if (result.composition?.create) {
+              setActiveVariant(variant);
+            }
+          }}
           size="xs"
           type="button"
           variant="outline"
@@ -465,6 +491,86 @@ function TreeChildAddControls({
           Add {variant.label}
         </Button>
       ))}
+      {activeVariant && createAction ? (
+        <Dialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              setActiveVariant(null);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{createAction.label}</DialogTitle>
+            </DialogHeader>
+            <GeneratedCreateDialogForm
+              action={createAction}
+              onSuccess={() => setActiveVariant(null)}
+              submitValues={(values) =>
+                submitTreeChildCreateAction(schemaKey, result, parentRecord, values)
+              }
+            />
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
+  );
+}
+
+function TreePlacementRemoveButton({
+  entityName,
+  placement,
+  result,
+}: {
+  entityName: string;
+  placement: StoredRecord;
+  result: TreeResultConfig;
+}) {
+  const schemaKey = useSchemaKey();
+  const [isRemoving, setIsRemoving] = useState(false);
+  const removeAction = result.composition?.remove;
+
+  if (!removeAction) {
+    return null;
+  }
+
+  async function removePlacement() {
+    if (isRemoving || !removeAction) {
+      return;
+    }
+
+    setIsRemoving(true);
+    setSyncStatus({ state: "syncing", message: "Removing placement..." });
+
+    try {
+      await submitAction(schemaKey, entityName, removeAction.actionName, {
+        placementId: placement.id,
+      });
+      setSyncStatus({ state: "idle", message: "Placement removed and synced." });
+    } catch (error) {
+      setSyncStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Remove failed.",
+      });
+    } finally {
+      setIsRemoving(false);
+    }
+  }
+
+  return (
+    <div className="flex justify-end">
+      <Button
+        aria-label="Remove child placement"
+        data-formless-tree-remove-placement={placement.id}
+        disabled={isRemoving}
+        onClick={() => void removePlacement()}
+        size="xs"
+        type="button"
+        variant="outline"
+      >
+        {isRemoving ? "Removing..." : "Remove"}
+      </Button>
     </div>
   );
 }
@@ -738,6 +844,120 @@ function selectAllowedTreeChildVariants(
   }
 
   return variantPolicy.allowedChildVariantsByParentVariant[variantValue] ?? [];
+}
+
+function createTreeChildCreateAction(
+  result: TreeResultConfig,
+  variant: TreeAllowedChildVariantConfig,
+): CreateHomeActionConfig | undefined {
+  const createAction = result.composition?.create;
+  const discriminatorFieldName = result.branches?.variants.discriminatorFieldName;
+  const discriminatorField = result.branches?.variants.discriminatorField;
+
+  if (!createAction || !discriminatorFieldName || !discriminatorField) {
+    return undefined;
+  }
+
+  const fields = uniqueCreateFields([
+    ...recordFieldsToCreateFields(result.childRecordFields),
+    ...recordFieldsToCreateFields(selectTreeChildVariantFields(result, variant.variantValue)),
+  ]).filter((field) => field.fieldName !== discriminatorFieldName);
+  const defaults: CreateDefaultConfig[] = [
+    {
+      fieldName: discriminatorFieldName,
+      field: discriminatorField,
+      value: {
+        kind: "literal",
+        value: variant.variantValue,
+      },
+    },
+  ];
+
+  return {
+    type: "create",
+    label: `Add ${variant.label}`,
+    entityName: result.childEntityName,
+    entity: result.childEntity,
+    fields,
+    defaults,
+    enabled: result.childEntity.mutations.create.enabled,
+  };
+}
+
+function selectTreeChildVariantFields(
+  result: TreeResultConfig,
+  variantValue: string,
+): RecordFieldConfig[] {
+  const variant = result.childRecordUnion?.variants.find(
+    (candidate) => candidate.variantValue === variantValue,
+  );
+
+  return variant?.presentation.type === "fields" ? variant.presentation.fields : [];
+}
+
+function recordFieldsToCreateFields(fields: RecordFieldConfig[]): CreateFieldConfig[] {
+  return fields.map((field) => ({
+    fieldName: field.fieldName,
+    field: field.field,
+    editor: field.editor,
+  }));
+}
+
+function uniqueCreateFields(fields: CreateFieldConfig[]): CreateFieldConfig[] {
+  const seen = new Set<string>();
+  const uniqueFields: CreateFieldConfig[] = [];
+
+  for (const field of fields) {
+    if (seen.has(field.fieldName)) {
+      continue;
+    }
+
+    seen.add(field.fieldName);
+    uniqueFields.push(field);
+  }
+
+  return uniqueFields;
+}
+
+async function submitTreeChildCreateAction(
+  schemaKey: SchemaKey,
+  result: TreeResultConfig,
+  parentRecord: StoredRecord,
+  childValues: RecordValues,
+): Promise<{ recordId: string }> {
+  const createAction = result.composition?.create;
+
+  if (!createAction) {
+    throw new Error("Tree child creation is not configured.");
+  }
+
+  const response = await submitAction(
+    schemaKey,
+    result.relationship.to.entity,
+    createAction.actionName,
+    {
+      parentRecordId: parentRecord.id,
+      childValues,
+    },
+  );
+  const childRecord = selectCreatedTreeChildRecord(response, result.childEntityName);
+
+  return { recordId: childRecord.id };
+}
+
+function selectCreatedTreeChildRecord(
+  response: ActionResponse,
+  childEntityName: string,
+): StoredRecord {
+  const record = response.changes.find(
+    (change) => change.payload.entity === childEntityName && !change.payload.deletedAt,
+  )?.payload;
+
+  if (!record) {
+    throw new Error("Tree child action did not create a child record.");
+  }
+
+  return record;
 }
 
 function isTreeBranchLeaf(result: TreeResultConfig, childRecord: StoredRecord): boolean {
