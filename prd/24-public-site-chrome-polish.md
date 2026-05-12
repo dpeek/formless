@@ -1,7 +1,7 @@
 # PRD 24: Public site chrome polish
 
 Status: in progress
-Current chunk: PSC-02 ready
+Current chunk: PSC-03 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -178,6 +178,7 @@ Possible changed files:
 | PSC-D8  | Defer SSR but keep chrome SSR-compatible.                | Client rendering is acceptable now, but public Site markup should not close off SSR. | User direction 2026-05-12                     |
 | PSC-D9  | Treat Kent C. Dodds' site as a style reference only.     | It clarifies tone and information architecture without copying a brand.              | `https://kentcdodds.com/`                     |
 | PSC-D10 | Scope theme state to the public renderer root.           | Public dark mode must not affect generated admin routes or stored Site records.      | `src/app/site-renderer/renderer.tsx`          |
+| PSC-D11 | Let footer chrome inherit the public page background.    | The footer should be quiet chrome with light/dark text, not a separate dark panel.   | `src/app/site-renderer/renderer.tsx`          |
 
 ### Deep Modules
 
@@ -207,8 +208,8 @@ These modules should stay small and renderer-local unless another public Site re
 | ID     | Status  | Depends on | Main files          | Acceptance                                                                                                               |
 | ------ | ------- | ---------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | PSC-01 | done    | none       | renderer, app tests | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu. |
-| PSC-02 | ready   | PSC-01     | renderer, app tests | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
-| PSC-03 | planned | PSC-02     | browser smoke, PRD  | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
+| PSC-02 | done    | PSC-01     | renderer, app tests | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
+| PSC-03 | ready   | PSC-02     | browser smoke, PRD  | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
 
 ## Out of Scope
 
@@ -243,3 +244,7 @@ These modules should stay small and renderer-local unless another public Site re
 - 2026-05-12: PSC-01 shipped renderer-local seeded header nav, scoped public dark toggle, and mobile first-link plus overflow menu in `src/app/site-renderer/renderer.tsx`.
 - 2026-05-12: PSC-01 tests updated in `src/app.test.tsx`; `devstate` watcher passed 118 tests.
 - 2026-05-12: PSC-01 browser smoke opened `/pages/home`, toggled theme to `light`, and verified mobile menu shows Home directly with Blog/Projects/Resume in overflow.
+- 2026-05-12: PSC-02 shipped inherited-background public footer chrome with subtle top border and light/dark readable text in `src/app/site-renderer/renderer.tsx`.
+- 2026-05-12: PSC-02 tests updated in `src/app.test.tsx`; `devstate` watcher passed 118 tests and `.devstate/logs/check-vite.txt` reported no formatting, lint, or type errors.
+- 2026-05-12: PSC-02 browser smoke opened `https://24-public-site-chrome-polish.formless.local/pages/home`; footer eval returned transparent background, solid top border, Explore label, GitHub link, and no `bg-*` footer class; `bun browser --session psc-02 errors` returned no page errors.
+- 2026-05-12: PSC-02 check files requested under `tmp/` were absent; this branch's devstate evidence is in root `devstate.json` and `.devstate/`.

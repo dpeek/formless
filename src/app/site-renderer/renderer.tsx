@@ -245,11 +245,14 @@ function FooterGroup({ block }: { block: SiteBlockNode }) {
   const claimed = placementIdSet(footerSections);
 
   return (
-    <footer className="border-t border-zinc-200 bg-zinc-950 text-white">
+    <footer
+      className="border-t border-zinc-200 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300"
+      data-site-footer
+    >
       <div className="mx-auto grid max-w-5xl gap-8 px-6 py-10 md:grid-cols-[1fr_2fr]">
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">{block.label}</h2>
-          <p className="max-w-sm text-sm text-zinc-300">
+          <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
+          <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
             Schema-backed software for content-heavy products.
           </p>
         </div>
@@ -267,7 +270,7 @@ function FooterGroup({ block }: { block: SiteBlockNode }) {
 function FooterSection({ block }: { block: SiteBlockNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-sm font-semibold uppercase tracking-normal text-amber-200">
+      <h3 className="text-sm font-semibold uppercase tracking-normal text-zinc-500 dark:text-zinc-400">
         {block.label}
       </h3>
       <nav aria-label={block.label} className="flex flex-col items-start gap-2">

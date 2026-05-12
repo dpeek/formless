@@ -592,7 +592,22 @@ describe("public site renderer", () => {
 
   it("renders nested footer sections and external footer links", () => {
     const html = renderSitePage("home");
+    const footerStart = html.indexOf("<footer");
+    const footerEnd = html.indexOf("</footer>", footerStart);
 
+    expect(footerStart).toBeGreaterThan(-1);
+    expect(footerEnd).toBeGreaterThan(footerStart);
+
+    const footerHtml = html.slice(footerStart, footerEnd);
+
+    expect(footerHtml).toContain("data-site-footer");
+    expect(footerHtml).toContain("border-t border-zinc-200");
+    expect(footerHtml).toContain("dark:border-zinc-800");
+    expect(footerHtml).toContain("text-zinc-700");
+    expect(footerHtml).toContain("dark:text-zinc-300");
+    expect(footerHtml).not.toMatch(/\bbg-/);
+    expect(footerHtml).not.toContain("text-white");
+    expect(footerHtml).not.toContain("text-amber-200");
     expect(html).toContain("Explore");
     expect(html).toContain("Social");
     expect(html).toContain('href="https://github.com/dpeek"');
