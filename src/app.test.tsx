@@ -1379,6 +1379,34 @@ describe("generated collection home", () => {
     expect(html).not.toContain('value="$900.00"');
   });
 
+  it("falls back to the first scoped context option when the selected context is stale", () => {
+    const rateModel = selectRateHomeModel();
+
+    applyBootstrapResponse(
+      bootstrap(
+        [
+          cardRecord("card-1", "Default"),
+          cardRecord("card-2", "Backup"),
+          resourceRecord("resource-1", "Designer"),
+          rateCardRateRecord("rate-1", "resource-1", "card-1", 475),
+          rateCardRateRecord("rate-2", "resource-1", "card-2", 900),
+        ],
+        rateCardSchema,
+      ),
+    );
+    const html = renderGeneratedHomeCollection(rateModel, {
+      selectedContextRecordId: "missing-card",
+      today: "2026-05-01",
+    });
+
+    expect(html).toContain('aria-label="Rate card records"');
+    expect(html).toContain("Default");
+    expect(html).toContain("Backup");
+    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('value="$475.00"');
+    expect(html).not.toContain('value="$900.00"');
+  });
+
   it("keeps collection actions below the current generated table result", () => {
     const rateModel = selectRateHomeModel();
 

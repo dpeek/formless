@@ -1,7 +1,7 @@
 # PRD 27: Generated authoring primitives
 
-Status: planned
-Current chunk: GAP-01 ready
+Status: in progress
+Current chunk: GAP-02 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -59,12 +59,36 @@ That makes future generated authoring changes feel like UI edits, even when they
 - Keep generated create defaults independent from React so they can be tested without rendering the app.
 - Keep context selection independent from root app navigation so collection views and root routes can share the same facts without importing each other.
 - Use existing schema parsers and view-model types. Add a new abstraction only where it removes repeated policy.
+- GAP-01 confirmed PRD 23 is complete. GAP-02 can preserve shipped PRD 23 behavior.
+- GAP-01 module names: `src/shared/create-defaults.ts` should own create-default parsing, validation, resolution, and submitted value shaping; `src/client/generated-authoring.ts` should own context fallback and root-navigation facts.
+
+## Characterized Behavior
+
+- Create defaults parse in `src/shared/schema-views.ts` and resolve in `src/app/generated/create.tsx`.
+- Create defaults support context defaults and scalar literal defaults.
+- Literal defaults are validated against target scalar field types.
+- A defaulted create field is hidden from the create form and cannot also be visible.
+- Fixed discriminator creates use a literal default to choose the active union variant.
+- `resolveCreateValues` converts visible form values by field type, keeps only active union fields, fills missing defaulted fields, includes literal defaults, and throws when a required context default is unresolved.
+- Collection context options come from the context query in `src/app/generated/collection.tsx`.
+- A selected context id is preserved only when it still exists in the current option set.
+- A missing or stale selected context id falls back to the first current context option.
+- Empty context option sets keep active context null and render the empty context state.
+- Scoped query context includes `today` plus `{ [context.name]: activeContextRecordId }` when an active context exists.
+- List/detail context presentation renders the selected context record fields and hides the local selector for singleton or sidebar-navigation contexts.
+- Context create actions select the created context record on success.
+- Root generated navigation lives in `src/app.tsx`.
+- Root navigation uses the first active screen collection section whose context has `navigation`.
+- Root navigation replaces normal screen links with navigation groups from `context.navigation.groups`.
+- Root navigation computes active record from route selection if still valid, otherwise from the first context option.
+- Root navigation group options use each group's query and related count badges use `context.relatedCollection`.
+- Site root navigation is not routed as `/site/navigation`, `/site/header`, or `/site/footer`.
 
 ## Chunks
 
 ### GAP-01: Characterize post-PRD 23 authoring behavior
 
-Status: ready
+Status: shipped
 
 Tasks:
 
@@ -81,7 +105,7 @@ Acceptance:
 
 ### GAP-02: Extract create default primitive
 
-Status: planned
+Status: ready
 
 Tasks:
 
@@ -152,9 +176,25 @@ Acceptance:
 
 ## Blockers
 
-- PRD 23 must finish or reach a stable implementation shape.
+- None. PRD 23 is complete.
+
+## Status Notes
+
+- 2026-05-12: GAP-01 shipped as characterization only. PRD 23 is complete, and the preserved create-default, context-selection, and generated root-navigation rules are listed in this PRD.
+- 2026-05-12: Existing create default characterization stays in `src/shared/schema.test.ts` and `src/app.test.tsx`: literal and context defaults parse, fixed-discriminator creates hide and submit literal defaults, scoped defaults submit selected context values, and unresolved context defaults throw.
+- 2026-05-12: Added `src/app.test.tsx` coverage for stale scoped context selection falling back to the first available context option.
+- 2026-05-12: No production behavior changed in GAP-01.
+
+## Evidence
+
+- `devstate start`: checks ok; web service ready at `https://27-generated-authoring-primitives.formless.local`; test watcher passing.
+- `.devstate/status.md`: checks ok; services running.
+- `.devstate/logs/service-test.txt`: latest rerun passed `src/app.test.tsx`; 119 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 193 files.
+- `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent in this repo; devstate evidence is under `.devstate/`.
 
 ## Promote after ship
 
+- GAP-01: no global doc promotion. Characterization only; no runtime behavior changed.
 - `doc/current.md`: generated authoring primitives and their file locations, once shipped.
 - `doc/roadmap.md`: only if this changes first-release scope wording.
