@@ -1,7 +1,7 @@
 # PRD 28: Browser replica projection module
 
-Status: in progress
-Current chunk: BRP-05 ready
+Status: complete
+Current chunk: BRP-05 shipped
 Last updated: 2026-05-12
 
 ## Goal
@@ -67,6 +67,8 @@ That coupling makes derived browser data harder to test without React store setu
 - BRP-03 keeps `src/client/store.ts` hooks as projection adapters for aggregate and readiness consumers.
 - BRP-04 keeps selector behavior tests in `src/client/projections.test.ts`; `src/client/store.test.ts` now covers state, reconciliation, and subscription behavior only.
 - BRP-04 keeps `useEntityRecordIds` as a store-state passthrough hook with a store-local stable empty result.
+- BRP-05 closes PRD 28 with no runtime behavior change; global doc updates remain a doc/steward pass and are listed only in `Promote after ship`.
+- Do not add browser projection indexes without a measured use case.
 
 ## BRP-01 Characterization
 
@@ -175,7 +177,7 @@ Acceptance:
 
 ### BRP-05: Closeout and promotion notes
 
-Status: planned
+Status: shipped
 
 Tasks:
 
@@ -197,22 +199,25 @@ Acceptance:
 - BRP-01 confirmed existing `src/client/store.test.ts` coverage for query options, query counts, aggregate values, context changes, tombstoned records, and selector notifications.
 - BRP-02 added `src/client/projections.test.ts` coverage for entity filters, context filters, missing-entity empty results, tombstoned snapshot records, reference counts, and stable array reuse.
 - BRP-03 added `src/client/projections.test.ts` coverage for aggregate query context, computed aggregate values, invalid runtime aggregate values, and readiness warning array reuse.
+- BRP-04 moved selector identity, fallback, and tombstone coverage out of `src/client/store.test.ts` and into `src/client/projections.test.ts`.
+- BRP-05 changed only this PRD; no production or test code changed.
 
 ## Blockers
 
-- None hard.
-- Prefer shipping after PRD 26 unless preview or publish work exposes projection bugs.
+- None.
+- PRD 26 is complete; BRP-01 found no preview or publish blocker in browser replica projections.
 - BRP-01 blocker check: none found.
 - BRP-02 blocker check: none found.
 - BRP-04 blocker check: none found.
+- BRP-05 blocker check: none found.
 
 ## Promote after ship
 
-- `doc/current.md`: browser replica projection module `src/client/projections.ts` owns query ids, query options, query counts, reference options, and reference counts.
-- `doc/current.md`: browser replica projection module `src/client/projections.ts` owns aggregate values and record readiness warnings.
-- `doc/current.md`: store hooks in `src/client/store.ts` adapt to projection selectors while store mutation, hydration, and reconciliation stay in the store.
+- `doc/current.md`: browser replica projection module `src/client/projections.ts` owns query ids, query options, query counts, reference options, reference counts, aggregate values, and record readiness warnings.
+- `doc/current.md`: projection inputs are plain browser replica snapshots shaped as `BrowserReplicaProjectionSnapshot` in `src/client/projections.ts`.
+- `doc/current.md`: store hooks in `src/client/store.ts` adapt to projection selectors while store mutation, hydration, merge, delete reconciliation, and subscriptions stay in the store.
 - `doc/current.md`: projection behavior tests live in `src/client/projections.test.ts`; store tests focus on browser replica state, reconciliation, and subscription behavior.
-- `doc/roadmap.md`: only if this changes first-release scope wording.
+- `doc/roadmap.md`: no promotion needed; PRD 28 changed browser projection module ownership, not first-release scope.
 
 ## Status Log
 
@@ -236,3 +241,7 @@ Acceptance:
 - 2026-05-12: BRP-04 check evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 212 files.
 - 2026-05-12: BRP-04 loop evidence: `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; `.devstate/status.md` reports checks ok and services running.
 - 2026-05-12: BRP-04 browser smoke skipped because this chunk only cleaned store/projection test boundaries and preserved rendered app behavior.
+- 2026-05-12: BRP-05 shipped closeout only. All PRD 28 chunks are shipped; remaining follow-up is to promote the listed facts into global docs in a doc/steward pass.
+- 2026-05-12: BRP-05 evidence: `devstate start` and `devstate check` report `.devstate/status.md` checks ok, web service ready at `https://28-browser-replica-projection-module.formless.local`, and watcher tests passing.
+- 2026-05-12: BRP-05 loop evidence: `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; devstate evidence is under `.devstate/`.
+- 2026-05-12: BRP-05 browser smoke skipped because this chunk changed only the PRD closeout and no app behavior changed.
