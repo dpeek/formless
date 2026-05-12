@@ -2393,6 +2393,74 @@ describe("authority", () => {
     expect(sync.changes).toEqual(deleted.changes);
   });
 
+  it("blocks generic delete while active records reference the target", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskProjectReferenceDeleteEnabled(),
+    });
+    const project = await postMutationForEntity("mutation-referenced-project", "project", {
+      name: "Buildout",
+      code: "BLD",
+    });
+    const task = await postMutation("mutation-referencing-task", {
+      title: "Scoped",
+      project: project.record.id,
+    });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-delete-referenced-project",
+        entity: "project",
+        op: "delete",
+        recordId: project.record.id,
+      },
+      `Cannot delete record "${project.record.id}" because active task record "${task.record.id}" references it through field "task.project".`,
+    );
+
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${task.cursor}`);
+
+    expect(bootstrap.records.find((record) => record.id === project.record.id)).not.toHaveProperty(
+      "deletedAt",
+    );
+    expect(sync.changes).toEqual([]);
+  });
+
+  it("allows generic delete when only tombstoned records reference the target", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskProjectReferenceDeleteEnabled(),
+    });
+    const project = await postMutationForEntity("mutation-tombstone-reference-project", "project", {
+      name: "Archive",
+      code: "ARC",
+    });
+    const task = await postMutation("mutation-tombstoned-referencing-task", {
+      title: "Done",
+      done: true,
+      project: project.record.id,
+    });
+    await postAction("action-tombstone-referencing-task", "clearCompletedTasks");
+
+    const deleted = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-delete-tombstone-referenced-project",
+      entity: "project",
+      op: "delete",
+      recordId: project.record.id,
+    });
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(bootstrap.records.find((record) => record.id === task.record.id)).toHaveProperty(
+      "deletedAt",
+    );
+    expect(deleted.record).toEqual({
+      ...project.record,
+      deletedAt: expect.any(String),
+    });
+    expect(bootstrap.records.find((record) => record.id === project.record.id)).toEqual(
+      deleted.record,
+    );
+  });
+
   it("rejects invalid generic delete mutations after policy enables delete", async () => {
     const active = await postMutation("mutation-active", { title: "First", done: false });
     const completed = await postMutation("mutation-completed", { title: "Done", done: true });
@@ -3374,6 +3442,26 @@ function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
         fields: {
           name: { type: "text", required: true },
         },
+        mutations: deleteEnabledMutations(),
+      },
+    },
+  };
+}
+
+function schemaWithTaskProjectReferenceDeleteEnabled(): AppSchema {
+  const schema = schemaWithTaskProjectReference({ required: false });
+  const project = schema.entities.project;
+
+  if (!project) {
+    throw new Error("Expected task project reference schema to include project entity.");
+  }
+
+  return {
+    ...schema,
+    entities: {
+      ...schema.entities,
+      project: {
+        ...project,
         mutations: deleteEnabledMutations(),
       },
     },

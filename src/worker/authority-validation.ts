@@ -18,6 +18,7 @@ import { parseStoreSnapshot } from "../shared/protocol.ts";
 import { assertExistingRecordsSatisfyUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import {
+  getBootstrapRecords,
   getMutationResponseById,
   getStoredRecord,
   replayedWrite,
@@ -96,6 +97,8 @@ export function validateMutationRequest(
     if (existingRecord.deletedAt) {
       throw new BadRequestError(`Cannot delete tombstoned record "${value.recordId}".`);
     }
+
+    assertNoActiveInboundReferences(existingRecord, schema, storage);
 
     return {
       mutation: {
@@ -408,6 +411,36 @@ export function validateRecordValues(
   }
 
   return validated;
+}
+
+function assertNoActiveInboundReferences(
+  targetRecord: StoredRecord,
+  schema: AppSchema,
+  storage: DurableObjectStorage,
+) {
+  for (const record of getBootstrapRecords(storage)) {
+    if (record.deletedAt) {
+      continue;
+    }
+
+    const entity = schema.entities[record.entity];
+
+    if (!entity) {
+      continue;
+    }
+
+    for (const [fieldName, field] of Object.entries(entity.fields)) {
+      if (
+        field.type === "reference" &&
+        field.to === targetRecord.entity &&
+        record.values[fieldName] === targetRecord.id
+      ) {
+        throw new BadRequestError(
+          `Cannot delete record "${targetRecord.id}" because active ${record.entity} record "${record.id}" references it through field "${record.entity}.${fieldName}".`,
+        );
+      }
+    }
+  }
 }
 
 function validateAuthorityRecordFieldValue(
