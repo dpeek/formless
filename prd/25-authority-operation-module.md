@@ -1,7 +1,7 @@
 # PRD 25: Authority operation module
 
 Status: active
-Current chunk: AOM-02 ready
+Current chunk: AOM-03 ready
 Last updated: 2026-05-12
 
 Start after PRD 24 public Site chrome polish.
@@ -147,17 +147,18 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID     | Decision                                                    | Reason                                                                 | Evidence                                         |
-| ------ | ----------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------ |
-| AOM-D1 | Keep `FormlessAuthority` as the HTTP adapter.               | Cloudflare still owns `fetch` and WebSocket lifecycle entrypoints.     | `src/worker/authority.ts`                        |
-| AOM-D2 | Put operation selection and execution behind one module.    | Production write safety needs one operation seam before PRD 26.        | `prd/26-site-editing-publish-workflow.md`        |
-| AOM-D3 | Preserve `AuthorityWriteModule` notification semantics.     | Push sync depends on committed versus replayed write outcomes.         | `prd/05-authority-write-module.md`               |
-| AOM-D4 | Keep validation in `authority-validation` where it is deep. | It already owns mutation, schema, snapshot, and record validation.     | `src/worker/authority-validation.ts`             |
-| AOM-D5 | Keep public tree projection in the Site tree module.        | Tree behavior is projection logic, not route plumbing.                 | `src/site/tree.ts`                               |
-| AOM-D6 | Do not add the production admin guard here.                 | The guard is a policy consumer of operation metadata in PRD 26.        | User direction 2026-05-12                        |
-| AOM-D7 | Keep API and storage behavior unchanged.                    | This is a locality refactor, not product behavior.                     | `doc/current.md`, `src/worker/authority.test.ts` |
-| AOM-D8 | Test through route behavior and operation interface seams.  | The interface is the test surface; private helper order is not stable. | `src/test/authority-write.ts`                    |
-| AOM-D9 | Lock operation metadata as route-selected facts.            | PRD 26 needs read/write classification before protected write work.    | Operation Metadata Contract below                |
+| ID      | Decision                                                    | Reason                                                                 | Evidence                                         |
+| ------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------ |
+| AOM-D1  | Keep `FormlessAuthority` as the HTTP adapter.               | Cloudflare still owns `fetch` and WebSocket lifecycle entrypoints.     | `src/worker/authority.ts`                        |
+| AOM-D2  | Put operation selection and execution behind one module.    | Production write safety needs one operation seam before PRD 26.        | `prd/26-site-editing-publish-workflow.md`        |
+| AOM-D3  | Preserve `AuthorityWriteModule` notification semantics.     | Push sync depends on committed versus replayed write outcomes.         | `prd/05-authority-write-module.md`               |
+| AOM-D4  | Keep validation in `authority-validation` where it is deep. | It already owns mutation, schema, snapshot, and record validation.     | `src/worker/authority-validation.ts`             |
+| AOM-D5  | Keep public tree projection in the Site tree module.        | Tree behavior is projection logic, not route plumbing.                 | `src/site/tree.ts`                               |
+| AOM-D6  | Do not add the production admin guard here.                 | The guard is a policy consumer of operation metadata in PRD 26.        | User direction 2026-05-12                        |
+| AOM-D7  | Keep API and storage behavior unchanged.                    | This is a locality refactor, not product behavior.                     | `doc/current.md`, `src/worker/authority.test.ts` |
+| AOM-D8  | Test through route behavior and operation interface seams.  | The interface is the test surface; private helper order is not stable. | `src/test/authority-write.ts`                    |
+| AOM-D9  | Lock operation metadata as route-selected facts.            | PRD 26 needs read/write classification before protected write work.    | Operation Metadata Contract below                |
+| AOM-D10 | Keep WebSocket sync adapter-owned.                          | Cloudflare owns WebSocket upgrade and lifecycle hooks.                 | `src/worker/authority.ts`                        |
 
 ### Deep Modules
 
@@ -168,19 +169,19 @@ Possible changed files:
 
 AOM-02 should expose these route-selected facts before storage writes run:
 
-| Kind            | Method and path           | Mode  | Request facts owned by adapter |
-| --------------- | ------------------------- | ----- | ------------------------------ |
-| `bootstrap`     | `GET /bootstrap`          | read  | none                           |
-| `readSchema`    | `GET /schema`             | read  | none                           |
-| `exportSnapshot`| `GET /snapshot`           | read  | none                           |
-| `siteTree`      | `GET /tree/:slug`         | read  | slug from path                 |
-| `sync`          | `GET /sync`               | read  | `after`, `schemaUpdatedAt`     |
-| `writeSchema`   | `POST /schema`            | write | parsed JSON body               |
+| Kind              | Method and path          | Mode  | Request facts owned by adapter |
+| ----------------- | ------------------------ | ----- | ------------------------------ |
+| `bootstrap`       | `GET /bootstrap`         | read  | none                           |
+| `readSchema`      | `GET /schema`            | read  | none                           |
+| `exportSnapshot`  | `GET /snapshot`          | read  | none                           |
+| `siteTree`        | `GET /tree/:slug`        | read  | slug from path                 |
+| `sync`            | `GET /sync`              | read  | `after`, `schemaUpdatedAt`     |
+| `writeSchema`     | `POST /schema`           | write | parsed JSON body               |
 | `restoreSnapshot` | `POST /snapshot/restore` | write | parsed JSON body               |
-| `mutation`      | `POST /mutations`         | write | parsed JSON body               |
-| `action`        | `POST /actions`           | write | parsed JSON body               |
-| `resetSchema`   | `POST /reset/schema`      | write | parsed JSON body               |
-| `resetSeed`     | `POST /reset/seed`        | write | parsed JSON body               |
+| `mutation`        | `POST /mutations`        | write | parsed JSON body               |
+| `action`          | `POST /actions`          | write | parsed JSON body               |
+| `resetSchema`     | `POST /reset/schema`     | write | parsed JSON body               |
+| `resetSeed`       | `POST /reset/seed`       | write | parsed JSON body               |
 
 Metadata must include `kind`, route path, and `mode`.
 Write metadata must be available before write storage reads or mutations.
@@ -204,8 +205,8 @@ Write metadata must be available before write storage reads or mutations.
 | ID     | Status  | Depends on | Main files                    | Acceptance                                                                                                       |
 | ------ | ------- | ---------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | AOM-01 | shipped | none       | tests, PRD                    | Current Authority route/write behavior is characterized and operation metadata requirements are locked.          |
-| AOM-02 | ready   | AOM-01     | authority operation module    | Authority route branches delegate operation selection/execution with unchanged responses and write semantics.    |
-| AOM-03 | planned | AOM-02     | authority tests, test helpers | Route tests and operation tests prove committed, replayed, failed, read-only, and Site tree behavior.            |
+| AOM-02 | shipped | AOM-01     | authority operation module    | Authority route branches delegate operation selection/execution with unchanged responses and write semantics.    |
+| AOM-03 | ready   | AOM-02     | authority tests, test helpers | Route tests and operation tests prove committed, replayed, failed, read-only, and Site tree behavior.            |
 | AOM-04 | planned | AOM-03     | PRD                           | `devstate check` passes; browser smoke is skipped unless rendered app behavior changed; PRD evidence is current. |
 
 ## Parallel Shipping
@@ -229,6 +230,10 @@ Avoid parallel edits with:
 - broad authority validation rewrites;
 - storage table rewrites.
 
+## Blockers
+
+- None.
+
 ## Out of Scope
 
 - Do not add production authorization.
@@ -245,9 +250,9 @@ Avoid parallel edits with:
 
 ## Promote after ship
 
-- `doc/current.md`: note Authority operation module location if shipped.
-- `doc/current.md`: note Authority route adapter keeps HTTP response mapping while operation dispatch lives behind the module.
-- `doc/current.md`: note operation metadata is available for production write guards if shipped.
+- `doc/current.md`: note Authority operation module location: `src/worker/authority-operations.ts`.
+- `doc/current.md`: note `src/worker/authority.ts` keeps HTTP response mapping and WebSocket handling while HTTP operation dispatch lives behind the module.
+- `doc/current.md`: note operation metadata from `selectAuthorityOperation` exposes `kind`, route `path`, and read/write `mode` before write execution.
 - `prd/26-site-editing-publish-workflow.md`: update dependency evidence after AOM ships.
 
 ## Evidence
@@ -255,3 +260,5 @@ Avoid parallel edits with:
 - 2026-05-12: PRD created from architecture review sequencing. User direction: PRD 23 is in flight, add Authority operation module as PRD 25, and renumber the Site publish workflow to PRD 26.
 - 2026-05-12: AOM-01 shipped. Added read-only HTTP broadcast characterization in `src/worker/authority.test.ts`; locked operation metadata contract above for AOM-02 and PRD 26.
 - 2026-05-12: Devstate evidence after AOM-01: `.devstate/logs/service-test.txt` shows `src/worker/authority.test.ts` 93 passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass.
+- 2026-05-12: AOM-02 shipped. Added `src/worker/authority-operations.ts`; `src/worker/authority.ts` now delegates non-WebSocket HTTP operation selection/execution and keeps JSON body parsing, `BadRequestError` HTTP mapping, response creation, and WebSocket sync handling.
+- 2026-05-12: AOM-02 evidence: `devstate check` passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass; `.devstate/logs/service-test.txt` shows `src/worker/authority.test.ts` 93 passed. Browser smoke skipped because no rendered app behavior changed.
