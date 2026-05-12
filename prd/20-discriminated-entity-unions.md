@@ -419,6 +419,7 @@ Notes:
 - `doc/current.md`: Site `block.type` drives generated editor variants while records stay flat.
 - `doc/current.md`: Site Header and Footer child nodes can link to the selected root editor.
 - `doc/current.md`: Site tree Link blocks render only compact `label` and `href` editors, with drag handles but no move buttons.
+- `doc/current.md`: Site tree inline child creation uses one `+` dropdown whose items come from allowed child variants.
 - `doc/roadmap.md`: discriminated entity unions are part of first-release generated UI if shipped before release.
 
 ## Status Notes
@@ -431,6 +432,7 @@ Notes:
 - 2026-05-11: DU-05 shipped. Site source schema now declares `blockByType` over flat `block.type`, uses variant-aware Site tree child nodes, and uses variant-aware block root detail/create/edit views. Header/Footer tree nodes render compact context links; Link, Markdown, media, Hero, content list/grid, CTA, Subscribe, and Custom blocks render scoped fields through generated variants. Public Site tree projection and renderer code stayed unchanged.
 - 2026-05-11: DU-05 follow-up shipped from screenshot feedback. Site tree link children no longer render placement labels, icon, color editors, or move up/down buttons; link children render compact unlabeled `label` and `href` inputs. Site create/edit link variants also submit only `label` and `href` through generated union fields. Public Site tree projection and renderer code stayed unchanged.
 - 2026-05-12: PRD 20 closeout shipped. Table reference item dialogs now reuse active union field selection for referenced records, so union-aware reference item views do not fall back to static fields. DU-06 authority validation and DU-07 typegen remain deferred future work.
+- 2026-05-12: Screenshot follow-up shipped. Site tree inline child creation now renders one `+` trigger with a `@formless/ui` dropdown menu. Menu items come from the same allowed child variant policy and still open the existing variant create dialog with literal discriminator defaults. Public Site renderer, public Site tree protocol, storage, sync, and authority code stayed unchanged.
 
 ## Blockers
 
@@ -458,6 +460,8 @@ Notes:
 - 2026-05-11 DU-04: `.devstate/status.md` reports checks ok and services running after `devstate check`.
 - 2026-05-11 DU-04: `.devstate/logs/service-test.txt` reports 1 test file passing with 106 tests after generated tree context-link coverage was added.
 - 2026-05-11 DU-04: `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passed across 187 files.
+- 2026-05-12 screenshot follow-up: `.devstate/status.md` reports checks ok and services running after `devstate check`.
+- 2026-05-12 screenshot follow-up: `bun browser --session tree-add-dropdown batch --bail "click @e23" "wait [role='menu']" "get text [role='menu']" "errors"` showed `Group`, `Hero`, `Markdown`, `Image`, and `Link` in the opened add-child menu with no page errors.
 - 2026-05-11 DU-04: requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; available devstate evidence is under `.devstate/`.
 - 2026-05-11 DU-04: `bun browser --session du04 --ignore-https-errors batch --bail "open https://20-discriminated-entity-unions.formless.local/tasks" "wait 1000" "get text body" "open https://20-discriminated-entity-unions.formless.local/site" "wait 1000" "get text body"` rendered Tasks and Site generated UIs.
 - 2026-05-11 DU-04: `bun browser --session du04 errors` returned no page errors.

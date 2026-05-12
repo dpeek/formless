@@ -3,6 +3,12 @@ import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@formless/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@formless/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@formless/ui/dropdown-menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";
@@ -470,27 +476,45 @@ function TreeChildAddControls({
 
   return (
     <div
-      className={["flex flex-wrap gap-2", className].filter(Boolean).join(" ")}
+      className={["flex", className].filter(Boolean).join(" ")}
       data-formless-tree-add-parent={parentRecord.id}
+      data-formless-tree-add-variants={allowedChildVariants
+        .map((variant) => variant.variantValue)
+        .join(" ")}
     >
-      {allowedChildVariants.map((variant) => (
-        <Button
-          aria-label={`Add ${variant.label} child`}
-          data-formless-tree-add-variant={variant.variantValue}
-          disabled={!result.composition?.create}
-          key={variant.variantValue}
-          onClick={() => {
-            if (result.composition?.create) {
-              setActiveVariant(variant);
-            }
-          }}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          Add {variant.label}
-        </Button>
-      ))}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              aria-label="Add child"
+              data-formless-tree-add-trigger={parentRecord.id}
+              disabled={!result.composition?.create}
+              size="icon-xs"
+              type="button"
+              variant="outline"
+            >
+              <span aria-hidden="true">+</span>
+            </Button>
+          }
+        />
+        <DropdownMenuContent className="w-auto min-w-36">
+          {allowedChildVariants.map((variant) => (
+            <DropdownMenuItem
+              aria-label={`Add ${variant.label} child`}
+              data-formless-tree-add-variant={variant.variantValue}
+              disabled={!result.composition?.create}
+              key={variant.variantValue}
+              onClick={() => {
+                if (result.composition?.create) {
+                  setActiveVariant(variant);
+                }
+              }}
+            >
+              {variant.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       {activeVariant && createAction ? (
         <Dialog
           open={true}
