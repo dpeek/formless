@@ -1,10 +1,10 @@
-# PRD 25: Site editing preview and publish workflow
+# PRD 26: Site editing preview and publish workflow
 
 Status: planned
 Current chunk: SWF-01 planned
 Last updated: 2026-05-12
 
-Start after PRD 24 public Site chrome polish.
+Start after PRD 25 authority operation module.
 
 ## Goal
 
@@ -34,6 +34,7 @@ Current behavior:
 - `bun run deploy` deploys code/assets, but live Durable Object data persists separately.
 - Source seed changes do not automatically update an already-initialized live Worker authority instance.
 - Live snapshot restore/reset routes need production safety before they become part of a publish workflow.
+- Authority operation metadata exists before production guard work starts.
 
 The author wants a simpler loop:
 
@@ -50,6 +51,7 @@ Existing anchors:
 - Release target docs: `doc/roadmap.md`.
 - Snapshot export/restore PRD: `prd/15-store-snapshot-export-restore.md`.
 - Public Site renderer PRD: `prd/24-public-site-chrome-polish.md`.
+- Authority operation module PRD: `prd/25-authority-operation-module.md`.
 - Client sync: `src/client/sync.ts`.
 - Client local DB: `src/client/db.ts`.
 - Client store: `src/client/store.ts`.
@@ -68,7 +70,7 @@ Existing anchors:
 
 Owned files:
 
-- `prd/25-site-editing-publish-workflow.md`.
+- `prd/26-site-editing-publish-workflow.md`.
 
 Likely changed files:
 
@@ -174,25 +176,25 @@ Likely changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                             | Reason                                                                                  | Evidence                                           |
-| ------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| SWF-D1  | Keep the authority as the source of edited local Site records.       | Browser IndexedDB is a replica; snapshots already export from authority.                | `prd/15-store-snapshot-export-restore.md`          |
-| SWF-D2  | Keep `seed-records.json` as the reviewed source artifact.            | Source app seeds already bootstrap and reset schema-keyed authorities.                  | `doc/roadmap.md`                                   |
-| SWF-D3  | Add seed promotion as a script, not a product UI.                    | This is developer workflow, not general import/export.                                  | `doc/roadmap.md` Not First Release                 |
-| SWF-D4  | Use push sync as preview invalidation, not as a second public store. | Public tree projection should remain authority-backed.                                  | `src/app/routes/site-page.tsx`, `src/site/tree.ts` |
-| SWF-D5  | Keep public preview tree fetches HTTP read-only.                     | HTTP tree reads already own public projection and warning behavior.                     | `src/worker/authority.ts`                          |
-| SWF-D6  | Build live data restore from source schema plus source seed records. | Deploying source code does not reset an existing Durable Object instance.               | `src/worker/storage.ts`                            |
-| SWF-D7  | Back up live authority state before restore.                         | Snapshot restore is intentionally whole-store for one schema key.                       | `prd/15-store-snapshot-export-restore.md`          |
-| SWF-D8  | Add production auth before relying on live restore.                  | Current developer endpoints are too powerful for an unauthenticated public Worker flow. | User workflow requirement 2026-05-12               |
-| SWF-D9  | Use `devstate` as check evidence.                                    | Repo instructions say `devstate` owns dev, test, and check output.                      | `AGENTS.md`                                        |
-| SWF-D10 | Keep this workflow Site-specific first.                              | General app marketplace/import/export is out of first-release scope.                    | `doc/roadmap.md`                                   |
+| ID      | Decision                                                             | Reason                                                                                  | Evidence                                                                     |
+| ------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| SWF-D1  | Keep the authority as the source of edited local Site records.       | Browser IndexedDB is a replica; snapshots already export from authority.                | `prd/15-store-snapshot-export-restore.md`                                    |
+| SWF-D2  | Keep `seed-records.json` as the reviewed source artifact.            | Source app seeds already bootstrap and reset schema-keyed authorities.                  | `doc/roadmap.md`                                                             |
+| SWF-D3  | Add seed promotion as a script, not a product UI.                    | This is developer workflow, not general import/export.                                  | `doc/roadmap.md` Not First Release                                           |
+| SWF-D4  | Use push sync as preview invalidation, not as a second public store. | Public tree projection should remain authority-backed.                                  | `src/app/routes/site-page.tsx`, `src/site/tree.ts`                           |
+| SWF-D5  | Keep public preview tree fetches HTTP read-only.                     | HTTP tree reads already own public projection and warning behavior.                     | `src/worker/authority.ts`                                                    |
+| SWF-D6  | Build live data restore from source schema plus source seed records. | Deploying source code does not reset an existing Durable Object instance.               | `src/worker/storage.ts`                                                      |
+| SWF-D7  | Back up live authority state before restore.                         | Snapshot restore is intentionally whole-store for one schema key.                       | `prd/15-store-snapshot-export-restore.md`                                    |
+| SWF-D8  | Add production auth before relying on live restore.                  | Current developer endpoints are too powerful for an unauthenticated public Worker flow. | User workflow requirement 2026-05-12, `prd/25-authority-operation-module.md` |
+| SWF-D9  | Use `devstate` as check evidence.                                    | Repo instructions say `devstate` owns dev, test, and check output.                      | `AGENTS.md`                                                                  |
+| SWF-D10 | Keep this workflow Site-specific first.                              | General app marketplace/import/export is out of first-release scope.                    | `doc/roadmap.md`                                                             |
 
 ### Deep Modules
 
 - **Site preview invalidation client:** opens or reuses a Site push-sync subscription and exposes a small callback when the current public tree should refetch.
 - **Site seed snapshot adapter:** converts a validated Site store snapshot into deterministic source seed records.
 - **Site source snapshot builder:** builds a restore-ready Site snapshot envelope from source schema and seed files.
-- **Authority admin guard:** centralizes production authorization checks for developer write endpoints.
+- **Authority admin guard:** uses PRD 25 operation metadata to centralize production authorization checks for developer write endpoints.
 - **Site publish client:** orchestrates check, build/deploy, backup, restore, and smoke with explicit dry-run behavior.
 
 ## Testing Decisions
@@ -218,7 +220,7 @@ Likely changed files:
 
 | ID     | Status  | Depends on | Main files                                 | Acceptance                                                                                                            |
 | ------ | ------- | ---------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| SWF-01 | planned | PRD 24     | tests, PRD                                 | Current manual snapshot, preview, seed, and deploy workflow is characterized; script contracts are locked.            |
+| SWF-01 | planned | PRD 25     | tests, PRD                                 | Current manual snapshot, preview, seed, and deploy workflow is characterized; script contracts are locked.            |
 | SWF-02 | planned | SWF-01     | public route, sync client, app tests       | `/pages/*` local preview refetches active tree after pushed Site writes and cleans up on route changes/unmount.       |
 | SWF-03 | planned | SWF-01     | seed adapter script, package script, tests | `bun run site:pull-seed` writes deterministic `schema/apps/site/seed-records.json` from local Site authority state.   |
 | SWF-04 | planned | SWF-03     | source snapshot builder, tests             | Source schema plus source seed records produce a restore-ready Site snapshot envelope with validation.                |
@@ -235,6 +237,7 @@ Can ship in parallel with:
 
 Should not ship in parallel with:
 
+- PRD 25 authority operation module chunks.
 - Snapshot export/restore route rewrites.
 - Authority storage table rewrites.
 - Push sync protocol rewrites.
@@ -264,3 +267,4 @@ Should not ship in parallel with:
 ## Evidence
 
 - 2026-05-12: PRD created from user direction to refine the personal Site editing workflow after public Site chrome polish.
+- 2026-05-12: Renumbered from PRD 25 to PRD 26 after adding PRD 25 for the Authority operation module. Start condition now depends on PRD 25.
