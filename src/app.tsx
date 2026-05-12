@@ -47,13 +47,15 @@ import {
   useEntityRecordOptionsMatchingQuery,
   useSchema,
 } from "./client/store.ts";
-import { todayDateString } from "./shared/date.ts";
 import {
-  selectPrimaryScreenModels,
-  type HomeContextConfig,
-  type HomeScreenCollectionSectionModel,
-  type HomeScreenModel,
-} from "./client/views.ts";
+  selectGeneratedRootNavigationFacts,
+  selectGeneratedRootNavigationGroupFacts,
+  selectGeneratedRootNavigationStateFacts,
+  type GeneratedRootNavigationContext,
+  type GeneratedRootNavigationFacts,
+} from "./client/generated-authoring.ts";
+import { todayDateString } from "./shared/date.ts";
+import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.ts";
 
 export function App({
   runtimeProfile: runtimeProfileProp,
@@ -308,7 +310,9 @@ function AppScreenNavigation({
   world: RuntimeWorldMount;
 }) {
   const activeScreen = screenModels.find((model) => model.path === activeScreenPath);
-  const rootNavigation = activeScreen ? selectScreenRootNavigation(activeScreen) : undefined;
+  const rootNavigation = activeScreen
+    ? selectGeneratedRootNavigationFacts(activeScreen)
+    : undefined;
 
   if (rootNavigation) {
     return <AppRootRecordNavigation rootNavigation={rootNavigation} />;
@@ -338,31 +342,11 @@ function AppScreenNavigation({
   );
 }
 
-type ScreenRootNavigation = {
-  screen: HomeScreenModel;
-  section: HomeScreenCollectionSectionModel;
-  context: HomeContextConfig & { navigation: NonNullable<HomeContextConfig["navigation"]> };
-};
-
-function selectScreenRootNavigation(screen: HomeScreenModel): ScreenRootNavigation | undefined {
-  const section = screen.layout.sections.find(
-    (candidate): candidate is HomeScreenCollectionSectionModel =>
-      candidate.type === "collection" && candidate.collection.context?.navigation !== undefined,
-  );
-  const context = section?.collection.context;
-
-  if (!section || !context?.navigation) {
-    return undefined;
-  }
-
-  return {
-    screen,
-    section,
-    context: context as ScreenRootNavigation["context"],
-  };
-}
-
-function AppRootRecordNavigation({ rootNavigation }: { rootNavigation: ScreenRootNavigation }) {
+function AppRootRecordNavigation({
+  rootNavigation,
+}: {
+  rootNavigation: GeneratedRootNavigationFacts;
+}) {
   const routeSelectionStore = useHomeRouteSelectionStore();
   const today = todayDateString();
   const { context, screen, section } = rootNavigation;
@@ -380,9 +364,10 @@ function AppRootRecordNavigation({ rootNavigation }: { rootNavigation: ScreenRoo
           screen.screenName,
           section.id,
         );
-  const activeRecordId = allOptions.some((option) => option.id === selectedRecordId)
-    ? selectedRecordId
-    : (allOptions[0]?.id ?? null);
+  const { activeRecordId } = selectGeneratedRootNavigationStateFacts({
+    options: allOptions,
+    selectedRecordId,
+  });
 
   function selectRecord(recordId: string) {
     routeSelectionStore?.setSelectionState((current) =>
@@ -392,7 +377,7 @@ function AppRootRecordNavigation({ rootNavigation }: { rootNavigation: ScreenRoo
 
   return (
     <>
-      {context.navigation.groups.map((group) => (
+      {rootNavigation.groups.map((group) => (
         <AppRootRecordNavigationGroup
           activeRecordId={activeRecordId}
           context={context}
@@ -414,8 +399,8 @@ function AppRootRecordNavigationGroup({
   today,
 }: {
   activeRecordId: string | null;
-  context: ScreenRootNavigation["context"];
-  group: ScreenRootNavigation["context"]["navigation"]["groups"][number];
+  context: GeneratedRootNavigationContext;
+  group: GeneratedRootNavigationFacts["groups"][number];
   onSelectRecord: (recordId: string) => void;
   today: string;
 }) {
@@ -427,8 +412,12 @@ function AppRootRecordNavigationGroup({
       today,
     },
   );
+  const groupFacts = selectGeneratedRootNavigationGroupFacts({
+    activeRecordId,
+    options,
+  });
 
-  if (options.length === 0) {
+  if (groupFacts.isEmpty) {
     return null;
   }
 
@@ -437,10 +426,10 @@ function AppRootRecordNavigationGroup({
       <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu aria-label={`${group.label} roots`}>
-          {options.map((option) => (
+          {groupFacts.items.map(({ isActive, option }) => (
             <SidebarMenuItem key={option.id}>
               <SidebarMenuButton
-                isActive={option.id === activeRecordId}
+                isActive={isActive}
                 onClick={() => onSelectRecord(option.id)}
                 type="button"
               >
@@ -461,7 +450,7 @@ function AppRootRecordCountBadge({
   context,
   option,
 }: {
-  context: ScreenRootNavigation["context"];
+  context: GeneratedRootNavigationContext;
   option: { id: string; label: string };
 }) {
   const relatedCollection = context.relatedCollection;

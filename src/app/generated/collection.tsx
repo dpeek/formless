@@ -15,6 +15,10 @@ import {
   useRecordReadinessWarnings,
 } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
+import {
+  selectGeneratedContextSelectionFacts,
+  type GeneratedContextSelectionFacts,
+} from "../../client/generated-authoring.ts";
 import type {
   HomeCollectionConfig,
   HomeContextConfig,
@@ -160,33 +164,30 @@ function ScopedHomeCollection({
     context.labelField,
     { today },
   );
-  const activeContextRecordId = contextOptions.some(
-    (option) => option.id === selectedContextRecordId,
-  )
-    ? selectedContextRecordId
-    : (contextOptions[0]?.id ?? null);
-  const queryContext = activeContextRecordId
-    ? { today, values: { [context.name]: activeContextRecordId } }
-    : undefined;
+  const contextSelection = selectGeneratedContextSelectionFacts({
+    context,
+    options: contextOptions,
+    selectedRecordId: selectedContextRecordId,
+    today,
+  });
 
   useEffect(() => {
-    if (selectedContextRecordId !== activeContextRecordId) {
-      onSelectContext?.(activeContextRecordId);
+    if (selectedContextRecordId !== contextSelection.activeRecordId) {
+      onSelectContext?.(contextSelection.activeRecordId);
     }
-  }, [activeContextRecordId, onSelectContext, selectedContextRecordId]);
+  }, [contextSelection.activeRecordId, onSelectContext, selectedContextRecordId]);
 
   if (context.presentation === "listDetail") {
     return (
       <ListDetailScopedHomeCollection
         actions={actions}
-        activeContextRecordId={activeContextRecordId}
         context={context}
         contextOptions={contextOptions}
+        contextSelection={contextSelection}
         entity={entity}
         entityName={entityName}
         onSelectContext={onSelectContext}
         onSelectQuery={onSelectQuery}
-        queryContext={queryContext}
         queryTabs={queryTabs}
         result={result}
         selectedQuery={selectedQuery}
@@ -202,7 +203,7 @@ function ScopedHomeCollection({
         context={context}
         onSelectContext={onSelectContext}
         options={contextOptions}
-        selectedContextRecordId={activeContextRecordId}
+        selectedContextRecordId={contextSelection.activeRecordId}
       />
 
       {queryTabs.length <= 1 ? null : (
@@ -219,7 +220,7 @@ function ScopedHomeCollection({
               <HomeQueryTabTrigger
                 entityName={entityName}
                 key={queryTab.queryName}
-                queryContext={queryContext}
+                queryContext={contextSelection.queryContext}
                 queryTab={queryTab}
               />
             ))}
@@ -227,11 +228,11 @@ function ScopedHomeCollection({
         </Tabs>
       )}
 
-      {queryContext ? (
+      {contextSelection.queryContext ? (
         <>
           <CollectionSummary
             entityName={entityName}
-            queryContext={queryContext}
+            queryContext={contextSelection.queryContext}
             selectedQuery={selectedQuery}
             summary={summary ?? []}
           />
@@ -243,9 +244,9 @@ function ScopedHomeCollection({
             onSelectContext={onSelectContext}
             query={selectedQuery.query}
             queryName={selectedQuery.queryName}
-            queryContext={queryContext}
+            queryContext={contextSelection.queryContext}
             result={result}
-            selectableContextRecordIds={new Set(contextOptions.map((option) => option.id))}
+            selectableContextRecordIds={contextSelection.selectableRecordIds}
           />
         </>
       ) : null}
@@ -254,7 +255,7 @@ function ScopedHomeCollection({
         <HomeActionRow
           actions={actions}
           ariaLabel={`${entity.label} actions`}
-          queryContext={queryContext ?? { today }}
+          queryContext={contextSelection.queryContext ?? { today }}
         />
       ) : null}
     </div>
@@ -263,14 +264,13 @@ function ScopedHomeCollection({
 
 function ListDetailScopedHomeCollection({
   actions,
-  activeContextRecordId,
   context,
   contextOptions,
+  contextSelection,
   entity,
   entityName,
   onSelectContext,
   onSelectQuery,
-  queryContext,
   queryTabs,
   result,
   selectedQuery,
@@ -278,59 +278,59 @@ function ListDetailScopedHomeCollection({
   today,
 }: {
   actions: HomeCollectionConfig["actions"];
-  activeContextRecordId: string | null;
   context: HomeContextConfig;
   contextOptions: Array<{ id: string; label: string }>;
+  contextSelection: GeneratedContextSelectionFacts;
   entity: EntitySchema;
   entityName: string;
   onSelectContext?: (recordId: string | null) => void;
   onSelectQuery: (queryName: string) => void;
-  queryContext?: QueryEvaluationContext;
   queryTabs: HomeQueryTabConfig[];
   result: HomeResultConfig;
   selectedQuery: HomeQueryTabConfig;
   summary: HomeSummarySlotConfig[];
   today: string;
 }) {
-  const activeOption = contextOptions.find((option) => option.id === activeContextRecordId);
-  const isSingletonContext = contextOptions.length === 1;
-  const hasSidebarNavigation = context.navigation?.placement === "sidebar";
-  const detailLabel = activeOption?.label ?? context.label;
   const contextFieldsRenderHeading = (context.recordFields ?? []).some(isHeadingRecordField);
+  const {
+    activeRecordId,
+    detailLabel,
+    isEmpty,
+    queryContext,
+    selectableRecordIds,
+    showLocalSelector,
+    showUnselectedState,
+  } = contextSelection;
 
   return (
     <section
       aria-label={`${context.label} list detail`}
       className={
-        isSingletonContext || hasSidebarNavigation
+        !showLocalSelector
           ? "min-w-0 space-y-6"
           : "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]"
       }
     >
-      {isSingletonContext || hasSidebarNavigation ? null : (
+      {showLocalSelector ? (
         <ContextListDetailSelector
           context={context}
           onSelectContext={onSelectContext}
           options={contextOptions}
-          selectedContextRecordId={activeContextRecordId}
+          selectedContextRecordId={activeRecordId}
         />
-      )}
+      ) : null}
 
       <div className="min-w-0 space-y-6">
-        {activeContextRecordId && queryContext ? (
+        {activeRecordId && queryContext ? (
           <>
             <section
               aria-label={`${detailLabel} detail`}
               className="space-y-3 border-b border-slate-200 pb-4"
             >
-              {isSingletonContext || hasSidebarNavigation || contextFieldsRenderHeading ? null : (
+              {!showLocalSelector || contextFieldsRenderHeading ? null : (
                 <h2 className="text-base font-semibold">{detailLabel}</h2>
               )}
-              <ContextRecordEditor
-                context={context}
-                density="compact"
-                recordId={activeContextRecordId}
-              />
+              <ContextRecordEditor context={context} density="compact" recordId={activeRecordId} />
             </section>
 
             {queryTabs.length <= 1 ? null : (
@@ -371,12 +371,12 @@ function ListDetailScopedHomeCollection({
               queryName={selectedQuery.queryName}
               queryContext={queryContext}
               result={result}
-              selectableContextRecordIds={new Set(contextOptions.map((option) => option.id))}
+              selectableContextRecordIds={selectableRecordIds}
             />
           </>
-        ) : contextOptions.length === 0 ? null : (
+        ) : isEmpty ? null : showUnselectedState ? (
           <p className="text-sm text-slate-600">No {context.label.toLowerCase()} selected.</p>
-        )}
+        ) : null}
 
         {actions.length > 0 ? (
           <HomeActionRow

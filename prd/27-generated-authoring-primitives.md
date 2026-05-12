@@ -1,7 +1,7 @@
 # PRD 27: Generated authoring primitives
 
 Status: in progress
-Current chunk: GAP-03 ready
+Current chunk: GAP-04 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -62,6 +62,7 @@ That makes future generated authoring changes feel like UI edits, even when they
 - GAP-01 confirmed PRD 23 is complete. GAP-02 can preserve shipped PRD 23 behavior.
 - GAP-01 module names: `src/shared/create-defaults.ts` should own create-default parsing, validation, resolution, and submitted value shaping; `src/client/generated-authoring.ts` should own context fallback and root-navigation facts.
 - GAP-02 shipped `src/shared/create-defaults.ts` as the create-default primitive. Generated create UI now delegates submit shaping and context-default readiness to that module.
+- GAP-03 shipped `src/client/generated-authoring.ts` as the generated context-selection and root-navigation primitive.
 
 ## Characterized Behavior
 
@@ -123,7 +124,7 @@ Acceptance:
 
 ### GAP-03: Extract context selection and generated navigation primitive
 
-Status: planned
+Status: shipped
 
 Tasks:
 
@@ -188,6 +189,9 @@ Acceptance:
 - 2026-05-12: GAP-02 moved create default parsing, required-field checks, context default readiness, active-union submit field selection, and submitted value shaping into `src/shared/create-defaults.ts`.
 - 2026-05-12: Generated create rendering remains in `src/app/generated/create.tsx`; it delegates default resolution to the shared primitive and keeps only form/rendering adapters.
 - 2026-05-12: `src/shared/create-defaults.test.ts` covers context defaults, literal defaults, unsupported field errors, fixed-discriminator submit shaping, and missing context errors.
+- 2026-05-12: GAP-03 moved generated context option fallback, query-context shaping, selectable-id facts, singleton/sidebar selector facts, root navigation selection, active-root fallback, and root group item facts into `src/client/generated-authoring.ts`.
+- 2026-05-12: Generated collection rendering in `src/app/generated/collection.tsx` now consumes generated authoring context facts. Root sidebar record navigation in `src/app.tsx` now consumes generated authoring root-navigation facts.
+- 2026-05-12: Added `src/client/generated-authoring.test.ts` coverage for preserved selected context ids, stale fallback to the first option, empty context option sets, singleton/sidebar local selector hiding, root navigation section selection, normal screen-link fallback, active-root fallback, and root group item facts.
 
 ## Evidence
 
@@ -195,16 +199,23 @@ Acceptance:
 - `devstate check`: checks ok; services running.
 - `.devstate/status.md`: checks ok; services running.
 - `.devstate/logs/service-test.txt`: latest rerun passed 17 test files; 460 tests passed.
-- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 195 files.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 197 files.
+- `.devstate/logs/service-test.txt`: latest rerun passed 2 affected test files; 127 tests passed.
+- `.devstate/logs/service-test.txt`: GAP-03 watcher rerun passed `src/client/generated-authoring.test.ts`; 8 generated authoring primitive tests passed.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent in this repo; devstate evidence is under `.devstate/`.
 - `bun browser --session prd-27-gap-02 --ignore-https-errors open https://27-generated-authoring-primitives.formless.local/rates`: opened the running generated rate-card app.
 - `bun browser --session prd-27-gap-02 snapshot -i`: confirmed the rate-card table and `Create Resource` action rendered.
 - `bun browser --session prd-27-gap-02 click @e13` plus `snapshot -i`: confirmed the generated `Create Resource` dialog rendered.
+- `bun browser --session prd-27-gap-03 --ignore-https-errors open https://27-generated-authoring-primitives.formless.local/site`: opened the running Site generated app.
+- `bun browser --session prd-27-gap-03 snapshot -i`: confirmed Site root sidebar records, `Site roots list detail`, `Home detail`, and `Placement tree` rendered.
+- `bun browser --session prd-27-gap-03 click @e21` plus `snapshot -i`: confirmed selecting `Header` in root sidebar updates the generated context detail and placement tree.
 
 ## Promote after ship
 
 - GAP-01: no global doc promotion. Characterization only; no runtime behavior changed.
 - GAP-02: promote `src/shared/create-defaults.ts` as the owner for create default parsing, validation, resolution, and submitted value shaping.
 - GAP-02: promote `src/shared/create-defaults.test.ts` as primitive coverage for context defaults, literal defaults, unsupported field errors, fixed-discriminator submit shaping, and missing context errors.
+- GAP-03: promote `src/client/generated-authoring.ts` as the owner for generated context option fallback, query-context facts, local selector/sidebar facts, root navigation selection, active-root fallback, and root navigation group item facts.
+- GAP-03: promote `src/client/generated-authoring.test.ts` as primitive coverage for context fallback and root navigation facts.
 - `doc/current.md`: generated authoring primitives and their file locations, once shipped.
 - `doc/roadmap.md`: only if this changes first-release scope wording.
