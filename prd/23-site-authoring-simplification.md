@@ -1,7 +1,7 @@
 # PRD 23: Site authoring simplification
 
-Status: in progress
-Current chunk: SAS-09 ready
+Status: complete
+Current chunk: SAS-09 shipped
 Last updated: 2026-05-12
 
 ## Goal
@@ -282,7 +282,7 @@ Owned files:
 | SAS-06 | shipped | SAS-03     | Site source schema/seeds/readiness/public renderer               | Removed block types are gone from source schema, seeds, readiness checks, and renderer branches.                             |
 | SAS-07 | shipped | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
 | SAS-08 | shipped | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
-| SAS-09 | planned | SAS-08     | browser smoke, PRD                                               | `/site`, `/pages/home`, `/pages/blog`, and a post route smoke pass; PRD status/evidence are current.                         |
+| SAS-09 | shipped | SAS-08     | browser smoke, PRD                                               | `/site`, `/pages/home`, `/pages/blog`, and a post route smoke pass; PRD status/evidence are current.                         |
 
 ## Status Notes
 
@@ -301,20 +301,28 @@ Owned files:
 - 2026-05-12: SAS-07 removed repeated Home Header/Footer placements from source seeds. Home page content now contains Hero, Recent posts, and Featured projects only; Header and Footer remain editable as Navigation roots and render around public pages through the Site frame.
 - 2026-05-12: SAS-08 shipped posts and blog routing. Public Site route resolution now emits route facts for page, generated post index, and post detail routes; `/blog` renders a generated post index from live post blocks without query-list blocks; `/blog/:slug` renders post detail pages through the Site frame.
 - 2026-05-12: SAS-08 keeps post index ordering deterministic by created time descending, omits tombstoned posts, and keeps post route matching on existing `block.href` values for this slice.
-- 2026-05-12: Next ready chunk is SAS-09 browser smoke and PRD closeout.
+- 2026-05-12: SAS-09 shipped browser smoke and PRD closeout. `/site`, `/pages/home`, `/pages/blog`, and `/pages/blog/shipping-schema-backed-authoring` render expected Site editor, public home, generated blog index, and post detail content with no browser page errors.
 
 ## Blockers
 
-- None for SAS-08.
+- None for SAS-09.
 
 ## Evidence
 
-- `devstate start`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
+- `devstate start`: reported checks ok; services running at `https://23-site-authoring-simplification.formless.local`; command returned exit code 1 despite ready status.
 - `devstate check`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
 - `.devstate/status.md`: checks ok; web service ready; test watcher passing.
-- `.devstate/logs/service-test.txt`: latest rerun passed `src/app.test.tsx` with 116 tests; status file reports test watcher passing.
+- `.devstate/status.json`: `checks.vite.state = "pass"`, `services.web.state = "ready"`, `services.test.state = "pass"`.
+- `.devstate/logs/service-test.txt`: latest rerun passed 7 test files and 261 tests; status file reports test watcher passing.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 191 files.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
+- `bun browser --session sas-09 ... fetch('/api/site/reset/schema')`: reset Site source schema in the browser session; response status 200.
+- `bun browser --session sas-09 ... fetch('/api/site/reset/seed')`: reset Site source seed in the browser session; response status 200.
+- `bun browser --session sas-09 ... /site`: Site admin rendered Pages, Navigation, Home, Header, and Footer.
+- `bun browser --session sas-09 ... /pages/home`: public Home rendered Header navigation, Home hero copy, Recent posts, Featured projects, and Footer.
+- `bun browser --session sas-09 ... /pages/blog`: generated blog index rendered Blog, seeded post summaries, and Footer.
+- `bun browser --session sas-09 ... /pages/blog/shipping-schema-backed-authoring`: post detail route rendered Header navigation, post title/body, nested Intro content, and Footer.
+- `bun browser --session sas-09 errors`: no page errors.
 - `bun browser --session sas-08 ... /pages/blog`: rendered Header, Blog index copy, generated post summaries, and Footer.
 - `bun browser --session sas-08 ... /pages/blog/shipping-schema-backed-authoring`: rendered Header, post detail content, nested profile content, and Footer.
 - `bun browser --session sas-08 errors`: no page errors.
