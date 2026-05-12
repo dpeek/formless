@@ -6,14 +6,12 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";
 import type { EntityActionTargetCountConfig, HomeActionConfig } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
-import {
-  createDefaultsAreResolved,
-  GeneratedCreateDialog,
-  type CreateHomeActionConfig,
-} from "./create.tsx";
+import { createDefaultsAreResolved } from "../../shared/create-defaults.ts";
+import { GeneratedCreateDialog } from "./create.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 
 type EntityHomeActionConfig = Extract<HomeActionConfig, { type: "entity-action" }>;
+type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
 export function HomeActionRow({
   actions,
@@ -58,7 +56,8 @@ export function HomeActionRow({
     <section aria-label={ariaLabel} className="flex flex-wrap gap-2">
       {actions.map((action) => {
         if (action.type === "create") {
-          const canOpen = action.enabled && createDefaultsAreResolved(action, queryContext);
+          const canOpen =
+            action.enabled && createDefaultsAreResolved(action.defaults, queryContext);
 
           return (
             <Button

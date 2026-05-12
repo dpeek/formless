@@ -1,16 +1,8 @@
 import type {
-  CreateDefaultConfig,
-  CreateFieldConfig,
-  CreateUnionPresentationConfig,
   RecordVariantContextLinkPresentationConfig,
   RecordFieldConfig,
   RecordUnionPresentationConfig,
 } from "../../client/views.ts";
-import {
-  initialCreateDiscriminatorValue as initialCreateDiscriminatorValuePrimitive,
-  selectCreateFieldsForDiscriminator as selectCreateFieldsForDiscriminatorPrimitive,
-  selectCreateFieldsForFormData as selectCreateFieldsForFormDataPrimitive,
-} from "../../shared/create-defaults.ts";
 import type { FieldValue, StoredRecord } from "../../shared/protocol.ts";
 
 type ActiveRecordUnionPresentation =
@@ -38,30 +30,6 @@ export function selectRecordContextLinkForActiveUnion(
   const presentation = selectActiveRecordUnionPresentation(union, record);
 
   return presentation?.presentation.type === "contextLink" ? presentation.presentation : undefined;
-}
-
-export function selectCreateFieldsForDiscriminator(
-  baseFields: CreateFieldConfig[],
-  union: CreateUnionPresentationConfig | undefined,
-  discriminatorValue: string | undefined,
-): CreateFieldConfig[] {
-  return selectCreateFieldsForDiscriminatorPrimitive(baseFields, union, discriminatorValue);
-}
-
-export function selectCreateFieldsForFormData(
-  baseFields: CreateFieldConfig[],
-  union: CreateUnionPresentationConfig | undefined,
-  formData: FormData,
-  defaults: CreateDefaultConfig[] = [],
-): CreateFieldConfig[] {
-  return selectCreateFieldsForFormDataPrimitive(baseFields, union, formData, defaults);
-}
-
-export function initialCreateDiscriminatorValue(
-  union: CreateUnionPresentationConfig | undefined,
-  defaults: CreateDefaultConfig[] = [],
-): string | undefined {
-  return initialCreateDiscriminatorValuePrimitive(union, defaults);
 }
 
 function selectActiveRecordUnionPresentation(

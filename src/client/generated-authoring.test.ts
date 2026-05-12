@@ -32,6 +32,10 @@ describe("generated authoring context selection", () => {
       today: "2026-05-12",
       values: { card: "card-2" },
     });
+    expect(facts.actionQueryContext).toEqual({
+      today: "2026-05-12",
+      values: { card: "card-2" },
+    });
     expect([...facts.selectableRecordIds]).toEqual(["card-1", "card-2"]);
     expect(facts.showLocalSelector).toBe(true);
     expect(facts.isEmpty).toBe(false);
@@ -65,6 +69,7 @@ describe("generated authoring context selection", () => {
 
     expect(facts.activeRecordId).toBeNull();
     expect(facts.queryContext).toBeUndefined();
+    expect(facts.actionQueryContext).toEqual({ today: "2026-05-12" });
     expect(facts.isEmpty).toBe(true);
     expect(facts.showUnselectedState).toBe(false);
   });

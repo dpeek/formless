@@ -32,8 +32,10 @@ import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
 import {
-  createDefaultsAreResolved as createDefaultValuesAreResolved,
-  resolveCreateValues as resolvePrimitiveCreateValues,
+  createDefaultsAreResolved,
+  initialCreateDiscriminatorValue,
+  resolveCreateValues as resolveCreateDefaultValues,
+  selectCreateFieldsForDiscriminator,
 } from "../../shared/create-defaults.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import {
@@ -42,10 +44,6 @@ import {
   numberInputValueToFieldValue,
 } from "./format.ts";
 import { useSchemaKey } from "./schema-app-context.tsx";
-import {
-  initialCreateDiscriminatorValue,
-  selectCreateFieldsForDiscriminator,
-} from "./union-presentation.ts";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
@@ -87,7 +85,12 @@ export function GeneratedCreateForm({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = resolveCreateValuesForFields(formData, createFields, union, defaults);
+    const values = resolveCreateDefaultValues({
+      formData,
+      fields: createFields,
+      union,
+      defaults,
+    });
 
     setIsSubmitting(true);
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
@@ -186,7 +189,7 @@ export function GeneratedCreateDialogForm({
   const [discriminatorValue, setDiscriminatorValue] = useState(() =>
     initialCreateDiscriminatorValue(action.union, action.defaults),
   );
-  const canSubmit = action.enabled && createDefaultsAreResolved(action, queryContext);
+  const canSubmit = action.enabled && createDefaultsAreResolved(action.defaults, queryContext);
   const visibleFields = selectCreateFieldsForDiscriminator(
     action.fields,
     action.union,
@@ -583,34 +586,11 @@ export function resolveCreateValues(
   action: CreateHomeActionConfig,
   queryContext?: QueryEvaluationContext,
 ): RecordValues {
-  return resolveCreateValuesForFields(
+  return resolveCreateDefaultValues({
     formData,
-    action.fields,
-    action.union,
-    action.defaults,
-    queryContext,
-  );
-}
-
-function resolveCreateValuesForFields(
-  formData: FormData,
-  fields: CreateFieldConfig[],
-  union: CreateUnionPresentationConfig | undefined,
-  defaults: CreateDefaultConfig[],
-  queryContext?: QueryEvaluationContext,
-): RecordValues {
-  return resolvePrimitiveCreateValues({
-    formData,
-    fields,
-    union,
-    defaults,
+    fields: action.fields,
+    union: action.union,
+    defaults: action.defaults,
     queryContext,
   });
-}
-
-export function createDefaultsAreResolved(
-  action: CreateHomeActionConfig,
-  queryContext?: QueryEvaluationContext,
-) {
-  return createDefaultValuesAreResolved(action.defaults, queryContext);
 }

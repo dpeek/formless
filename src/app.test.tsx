@@ -1531,6 +1531,33 @@ describe("generated collection home", () => {
     expect(selectedHtml).toMatch(/<button[^>]*>Create Rate<\/button>/);
     expect(selectedHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Create Rate<\/button>/);
 
+    const rateCreateAction = rateModel.actions.find(
+      (action) => action.type === "create" && action.entityName === "rate",
+    );
+
+    if (!rateCreateAction || rateCreateAction.type !== "create") {
+      throw new Error("Missing scoped rate create action.");
+    }
+
+    const rateFormData = new FormData();
+    rateFormData.set("resource", "resource-1");
+    rateFormData.set("cost", "325");
+    rateFormData.set("costUnit", "day");
+    rateFormData.set("price", "475");
+
+    expect(
+      resolveCreateValues(rateFormData, rateCreateAction, {
+        today: "2026-05-01",
+        values: { card: "card-1" },
+      }),
+    ).toEqual({
+      resource: "resource-1",
+      cost: 325,
+      costUnit: "day",
+      price: 475,
+      card: "card-1",
+    });
+
     applyBootstrapResponse(bootstrap([resourceRecord("resource-1", "Designer")], schema));
     const emptyHtml = renderGeneratedHomeCollection(rateModel, {
       selectedContextRecordId: null,
@@ -3233,15 +3260,18 @@ describe("generated forms and records", () => {
   });
 
   it("resolves site scoped create defaults for block placements", () => {
-    const models = selectCollectionModels(siteSourceSchema);
-    const placementAction = models
-      .find((model) => model.viewName === "blockCompositionHome")
-      ?.actions.find((action) => action.type === "create");
+    const collection = requiredSiteCollectionModel("siteCompositionHome");
+    const placementAction = collection.actions.find((action) => action.type === "create");
 
     if (!placementAction || placementAction.type !== "create") {
       throw new Error("Missing placement create action.");
     }
 
+    bootstrapSiteEditor();
+    const collectionHtml = renderGeneratedHomeCollection(collection, {
+      selectedContextRecordId: "rec_site_content_home",
+      today: "2026-05-05",
+    });
     const html = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={placementAction} renderDialogCancel={false} />,
     );
@@ -3249,6 +3279,8 @@ describe("generated forms and records", () => {
     placementFormData.set("block", "rec_site_block_home_recent_posts");
     placementFormData.set("label", "Recent posts");
 
+    expect(collectionHtml).toContain(">Add placement</button>");
+    expect(collectionHtml).not.toMatch(/<button[^>]*disabled=""[^>]*>Add placement<\/button>/);
     expect(html).not.toContain('name="parent"');
     expect(html).not.toContain('name="slot"');
     expect(html).not.toContain('name="variant"');

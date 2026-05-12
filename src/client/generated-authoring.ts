@@ -15,6 +15,7 @@ export type GeneratedContextOption = {
 export type GeneratedContextSelectionFacts = {
   activeOption: GeneratedContextOption | undefined;
   activeRecordId: string | null;
+  actionQueryContext: QueryEvaluationContext;
   detailLabel: string;
   hasSidebarNavigation: boolean;
   isEmpty: boolean;
@@ -47,6 +48,7 @@ export function selectGeneratedContextSelectionFacts({
   return {
     activeOption,
     activeRecordId,
+    actionQueryContext: queryContext ?? { today },
     detailLabel: activeOption?.label ?? context.label,
     hasSidebarNavigation,
     isEmpty: options.length === 0,

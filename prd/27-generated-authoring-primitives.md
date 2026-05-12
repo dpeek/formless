@@ -1,7 +1,7 @@
 # PRD 27: Generated authoring primitives
 
 Status: in progress
-Current chunk: GAP-04 ready
+Current chunk: GAP-05 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -63,6 +63,7 @@ That makes future generated authoring changes feel like UI edits, even when they
 - GAP-01 module names: `src/shared/create-defaults.ts` should own create-default parsing, validation, resolution, and submitted value shaping; `src/client/generated-authoring.ts` should own context fallback and root-navigation facts.
 - GAP-02 shipped `src/shared/create-defaults.ts` as the create-default primitive. Generated create UI now delegates submit shaping and context-default readiness to that module.
 - GAP-03 shipped `src/client/generated-authoring.ts` as the generated context-selection and root-navigation primitive.
+- GAP-04 removed create-default policy adapters from generated React modules and made scoped collection action context an explicit generated authoring fact.
 
 ## Characterized Behavior
 
@@ -140,7 +141,7 @@ Acceptance:
 
 ### GAP-04: Replace scattered policy with primitive calls
 
-Status: planned
+Status: shipped
 
 Tasks:
 
@@ -192,6 +193,10 @@ Acceptance:
 - 2026-05-12: GAP-03 moved generated context option fallback, query-context shaping, selectable-id facts, singleton/sidebar selector facts, root navigation selection, active-root fallback, and root group item facts into `src/client/generated-authoring.ts`.
 - 2026-05-12: Generated collection rendering in `src/app/generated/collection.tsx` now consumes generated authoring context facts. Root sidebar record navigation in `src/app.tsx` now consumes generated authoring root-navigation facts.
 - 2026-05-12: Added `src/client/generated-authoring.test.ts` coverage for preserved selected context ids, stale fallback to the first option, empty context option sets, singleton/sidebar local selector hiding, root navigation section selection, normal screen-link fallback, active-root fallback, and root group item facts.
+- 2026-05-12: GAP-04 removed create-default readiness and resolution wrappers from generated React modules. `src/app/generated/create.tsx` and `src/app/generated/actions.tsx` now call `src/shared/create-defaults.ts` directly.
+- 2026-05-12: GAP-04 moved scoped action query-context fallback into `GeneratedContextSelectionFacts.actionQueryContext` in `src/client/generated-authoring.ts`; collection renderers now consume that fact.
+- 2026-05-12: Added UI-adapter coverage in `src/app.test.tsx` for Site placement create defaults from the generated Site collection and non-Site scoped rate create defaults from a generated rate collection.
+- 2026-05-12: Added primitive coverage in `src/client/generated-authoring.test.ts` for `actionQueryContext` when context is selected and when context options are empty.
 
 ## Evidence
 
@@ -202,6 +207,10 @@ Acceptance:
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 197 files.
 - `.devstate/logs/service-test.txt`: latest rerun passed 2 affected test files; 127 tests passed.
 - `.devstate/logs/service-test.txt`: GAP-03 watcher rerun passed `src/client/generated-authoring.test.ts`; 8 generated authoring primitive tests passed.
+- `devstate check`: GAP-04 checks ok; services running.
+- `.devstate/status.md`: GAP-04 checks ok; services running.
+- `.devstate/logs/service-test.txt`: GAP-04 watcher rerun passed 3 affected test files; 129 tests passed.
+- `.devstate/logs/check-vite.txt`: GAP-04 formatting completed; no warnings, lint errors, or type errors in 197 files.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent in this repo; devstate evidence is under `.devstate/`.
 - `bun browser --session prd-27-gap-02 --ignore-https-errors open https://27-generated-authoring-primitives.formless.local/rates`: opened the running generated rate-card app.
 - `bun browser --session prd-27-gap-02 snapshot -i`: confirmed the rate-card table and `Create Resource` action rendered.
@@ -209,6 +218,9 @@ Acceptance:
 - `bun browser --session prd-27-gap-03 --ignore-https-errors open https://27-generated-authoring-primitives.formless.local/site`: opened the running Site generated app.
 - `bun browser --session prd-27-gap-03 snapshot -i`: confirmed Site root sidebar records, `Site roots list detail`, `Home detail`, and `Placement tree` rendered.
 - `bun browser --session prd-27-gap-03 click @e21` plus `snapshot -i`: confirmed selecting `Header` in root sidebar updates the generated context detail and placement tree.
+- `bun browser --session prd-27-gap-04 --ignore-https-errors open https://27-generated-authoring-primitives.formless.local/site`: opened the running Site generated app.
+- `bun browser --session prd-27-gap-04 snapshot -i`: confirmed Site root navigation, `Site roots list detail`, `Placement tree`, and `Add placement` rendered.
+- `bun browser --session prd-27-gap-04 click @e21` plus `snapshot -i`: confirmed selecting `Header` in root sidebar updates the generated context detail and placement tree.
 
 ## Promote after ship
 
@@ -217,5 +229,8 @@ Acceptance:
 - GAP-02: promote `src/shared/create-defaults.test.ts` as primitive coverage for context defaults, literal defaults, unsupported field errors, fixed-discriminator submit shaping, and missing context errors.
 - GAP-03: promote `src/client/generated-authoring.ts` as the owner for generated context option fallback, query-context facts, local selector/sidebar facts, root navigation selection, active-root fallback, and root navigation group item facts.
 - GAP-03: promote `src/client/generated-authoring.test.ts` as primitive coverage for context fallback and root navigation facts.
+- GAP-04: promote `GeneratedContextSelectionFacts.actionQueryContext` in `src/client/generated-authoring.ts` as the owner for scoped collection action query-context fallback.
+- GAP-04: promote `src/app/generated/create.tsx` and `src/app/generated/actions.tsx` as generated UI adapters that call `src/shared/create-defaults.ts` directly for create-default readiness and value resolution.
+- GAP-04: promote `src/app.test.tsx` coverage for Site placement create defaults and non-Site scoped rate create defaults through generated collection/action adapters.
 - `doc/current.md`: generated authoring primitives and their file locations, once shipped.
 - `doc/roadmap.md`: only if this changes first-release scope wording.

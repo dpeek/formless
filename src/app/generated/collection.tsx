@@ -192,7 +192,6 @@ function ScopedHomeCollection({
         result={result}
         selectedQuery={selectedQuery}
         summary={summary ?? []}
-        today={today}
       />
     );
   }
@@ -255,7 +254,7 @@ function ScopedHomeCollection({
         <HomeActionRow
           actions={actions}
           ariaLabel={`${entity.label} actions`}
-          queryContext={contextSelection.queryContext ?? { today }}
+          queryContext={contextSelection.actionQueryContext}
         />
       ) : null}
     </div>
@@ -275,7 +274,6 @@ function ListDetailScopedHomeCollection({
   result,
   selectedQuery,
   summary,
-  today,
 }: {
   actions: HomeCollectionConfig["actions"];
   context: HomeContextConfig;
@@ -289,11 +287,11 @@ function ListDetailScopedHomeCollection({
   result: HomeResultConfig;
   selectedQuery: HomeQueryTabConfig;
   summary: HomeSummarySlotConfig[];
-  today: string;
 }) {
   const contextFieldsRenderHeading = (context.recordFields ?? []).some(isHeadingRecordField);
   const {
     activeRecordId,
+    actionQueryContext,
     detailLabel,
     isEmpty,
     queryContext,
@@ -382,7 +380,7 @@ function ListDetailScopedHomeCollection({
           <HomeActionRow
             actions={actions}
             ariaLabel={`${entity.label} actions`}
-            queryContext={queryContext ?? { today }}
+            queryContext={actionQueryContext}
           />
         ) : null}
       </div>
