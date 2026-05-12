@@ -1,7 +1,7 @@
 # PRD 25: Authority operation module
 
 Status: active
-Current chunk: AOM-03 ready
+Current chunk: AOM-04 ready
 Last updated: 2026-05-12
 
 Start after PRD 24 public Site chrome polish.
@@ -206,8 +206,8 @@ Write metadata must be available before write storage reads or mutations.
 | ------ | ------- | ---------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | AOM-01 | shipped | none       | tests, PRD                    | Current Authority route/write behavior is characterized and operation metadata requirements are locked.          |
 | AOM-02 | shipped | AOM-01     | authority operation module    | Authority route branches delegate operation selection/execution with unchanged responses and write semantics.    |
-| AOM-03 | ready   | AOM-02     | authority tests, test helpers | Route tests and operation tests prove committed, replayed, failed, read-only, and Site tree behavior.            |
-| AOM-04 | planned | AOM-03     | PRD                           | `devstate check` passes; browser smoke is skipped unless rendered app behavior changed; PRD evidence is current. |
+| AOM-03 | shipped | AOM-02     | authority tests, test helpers | Route tests and operation tests prove committed, replayed, failed, read-only, and Site tree behavior.            |
+| AOM-04 | ready   | AOM-03     | PRD                           | `devstate check` passes; browser smoke is skipped unless rendered app behavior changed; PRD evidence is current. |
 
 ## Parallel Shipping
 
@@ -262,3 +262,5 @@ Avoid parallel edits with:
 - 2026-05-12: Devstate evidence after AOM-01: `.devstate/logs/service-test.txt` shows `src/worker/authority.test.ts` 93 passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass.
 - 2026-05-12: AOM-02 shipped. Added `src/worker/authority-operations.ts`; `src/worker/authority.ts` now delegates non-WebSocket HTTP operation selection/execution and keeps JSON body parsing, `BadRequestError` HTTP mapping, response creation, and WebSocket sync handling.
 - 2026-05-12: AOM-02 evidence: `devstate check` passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass; `.devstate/logs/service-test.txt` shows `src/worker/authority.test.ts` 93 passed. Browser smoke skipped because no rendered app behavior changed.
+- 2026-05-12: AOM-03 shipped. Added `src/worker/authority-operations.test.ts` coverage for `selectAuthorityOperation` read/write metadata, sync request facts, invalid sync cursor rejection, and adapter-owned WebSocket/unknown route non-selection. Existing `src/worker/authority.test.ts` route coverage proves committed, replayed, failed-validation, read-only, and Site tree behavior.
+- 2026-05-12: AOM-03 evidence: `devstate check` passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass across 193 files; `.devstate/logs/service-test.txt` shows `src/worker/authority-operations.test.ts` 5 passed. Browser smoke skipped because no rendered app behavior changed.
