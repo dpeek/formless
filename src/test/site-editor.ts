@@ -1,10 +1,11 @@
 import { applyBootstrapResponse } from "../client/store.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
-import { siteSeedRecords, siteSourceSchema } from "./schema-apps.ts";
+import { siteSourceSchema } from "./schema-apps.ts";
 import { requiredCollectionModel, requiredTableModel } from "./generated-table.tsx";
 import { bootstrapResponse } from "./protocol-builders.ts";
+import { testSiteSeedRecords } from "./site-records.ts";
 
-export function bootstrapSiteEditor(records: StoredRecord[] = siteSeedRecords) {
+export function bootstrapSiteEditor(records: StoredRecord[] = testSiteSeedRecords) {
   applyBootstrapResponse(bootstrapResponse(siteSourceSchema, records), "site");
 }
 

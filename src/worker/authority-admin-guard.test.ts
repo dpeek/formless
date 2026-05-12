@@ -117,7 +117,7 @@ describe("authority admin guard", () => {
 
     expect(tree.page.id).toBe("rec_site_content_home");
     expect(write.status).toBe(401);
-    expect(bootstrap.records).toEqual(siteSeedRecords);
+    expect(sortRecordsById(bootstrap.records)).toEqual(sortRecordsById(siteSeedRecords));
   });
 });
 
@@ -156,4 +156,8 @@ function adminHeaders() {
     Authorization: `Bearer ${adminToken}`,
     "Content-Type": "application/json",
   };
+}
+
+function sortRecordsById(records: BootstrapResponse["records"]) {
+  return [...records].sort((left, right) => left.id.localeCompare(right.id));
 }

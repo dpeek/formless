@@ -76,6 +76,7 @@ import {
   siteBlockRecord,
   sitePlacementRecord,
 } from "./test/site-editor.ts";
+import { testSiteSeedRecords } from "./test/site-records.ts";
 
 function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
   return renderToStaticMarkup(
@@ -85,11 +86,11 @@ function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
   );
 }
 
-function renderSitePage(slug = "home", records = siteSeedRecords) {
+function renderSitePage(slug = "home", records = testSiteSeedRecords) {
   return renderToStaticMarkup(<SitePageRenderer tree={sitePageTree(slug, records)} />);
 }
 
-function sitePageTree(slug = "home", records = siteSeedRecords): SitePageTree {
+function sitePageTree(slug = "home", records = testSiteSeedRecords): SitePageTree {
   const projection = buildSitePageTree(siteSourceSchema, records, slug, {
     generatedAt: "2026-05-06T00:00:00.000Z",
   });

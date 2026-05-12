@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
+import { siteSourceSchema } from "../test/schema-apps.ts";
+import { testSiteSeedRecords } from "../test/site-records.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
   buildSitePageTree,
@@ -353,7 +354,7 @@ describe("site page tree projection", () => {
     });
     const result = buildSitePageTree(
       siteSourceSchema,
-      [...siteSeedRecords, unmatchedRoot],
+      [...testSiteSeedRecords, unmatchedRoot],
       "missing-page",
       {
         generatedAt,
@@ -371,7 +372,7 @@ describe("site page tree projection", () => {
 });
 
 function baseTreeRecords(): StoredRecord[] {
-  return siteSeedRecords;
+  return testSiteSeedRecords;
 }
 
 function blockRecord(id: string, values: StoredRecord["values"]): StoredRecord {
