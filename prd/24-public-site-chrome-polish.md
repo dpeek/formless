@@ -1,7 +1,7 @@
 # PRD 24: Public site chrome polish
 
 Status: complete
-Current chunk: PSC-03 shipped
+Current chunk: PSC-04 shipped
 Last updated: 2026-05-12
 
 ## Goal
@@ -140,6 +140,8 @@ Possible changed files:
 - Footer keeps nested footer section behavior.
 - Footer keeps external footer link behavior.
 - Footer keeps footer section labels.
+- Footer does not render the Footer root label or body as public copy.
+- Footer copyright text renders as footer child content, not Footer root body.
 - Footer must not become a card or panel.
 
 ### Renderer Behavior
@@ -179,6 +181,7 @@ Possible changed files:
 | PSC-D9  | Treat Kent C. Dodds' site as a style reference only.     | It clarifies tone and information architecture without copying a brand.              | `https://kentcdodds.com/`                     |
 | PSC-D10 | Scope theme state to the public renderer root.           | Public dark mode must not affect generated admin routes or stored Site records.      | `src/app/site-renderer/renderer.tsx`          |
 | PSC-D11 | Let footer chrome inherit the public page background.    | The footer should be quiet chrome with light/dark text, not a separate dark panel.   | `src/app/site-renderer/renderer.tsx`          |
+| PSC-D12 | Treat Footer root fields as editor/frame metadata.       | Copyright is footer content, while the Footer root identifies the global frame root. | `src/app/site-renderer/renderer.tsx`          |
 
 ### Deep Modules
 
@@ -205,11 +208,12 @@ These modules should stay small and renderer-local unless another public Site re
 
 ## Chunks
 
-| ID     | Status  | Depends on | Main files          | Acceptance                                                                                                               |
-| ------ | ------- | ---------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| PSC-01 | done    | none       | renderer, app tests | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu. |
-| PSC-02 | done    | PSC-01     | renderer, app tests | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
-| PSC-03 | shipped | PSC-02     | browser smoke, PRD  | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
+| ID     | Status  | Depends on | Main files                | Acceptance                                                                                                               |
+| ------ | ------- | ---------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| PSC-01 | done    | none       | renderer, app tests       | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu. |
+| PSC-02 | done    | PSC-01     | renderer, app tests       | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
+| PSC-03 | shipped | PSC-02     | browser smoke, PRD        | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
+| PSC-04 | shipped | PSC-02     | renderer, seed, app tests | Footer root label/body do not render publicly; loose footer child content can render the copyright note.                 |
 
 ## Out of Scope
 
@@ -231,6 +235,7 @@ These modules should stay small and renderer-local unless another public Site re
 
 - `doc/current.md`: note public Site header uses seeded nav only, has a scoped dark-mode toggle, and mobile collapses to first nav item plus menu.
 - `doc/current.md`: note public Site footer uses inherited background with subtle top border.
+- `doc/current.md`: note public Site footer root label/body are editor metadata; copyright belongs in footer child content.
 - `doc/roadmap.md`: no required change unless the first-release target needs explicit public chrome polish language.
 
 ## Blockers
@@ -254,3 +259,5 @@ These modules should stay small and renderer-local unless another public Site re
 - 2026-05-12: PSC-03 `bun browser --session psc-03 errors` returned no page errors.
 - 2026-05-12: PSC-03 `devstate` evidence: `.devstate/status.md` reported checks ok, web ready, and test watcher passing at `https://24-public-site-chrome-polish.formless.local`; `.devstate/logs/service-test.txt` passed 118 tests; `.devstate/logs/check-vite.txt` reported no formatting, lint, or type errors in 191 files.
 - 2026-05-12: PSC-03 `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
+- 2026-05-12: PSC-04 shipped footer root metadata cleanup. Public footer no longer renders the Footer root label or body, removed the old unplaced copyright body seed block, and renders loose footer children as muted footer notes.
+- 2026-05-12: PSC-04 checks: `devstate check` reported checks ok, web ready, and test watcher passing. Browser smoke reset Site schema/seed, opened `https://formless.local/pages/home`, and footer eval returned `hasRootLabel: false`, `hasOldHardcodedCopy: false`, `hasCopyright: true`, and no page errors.

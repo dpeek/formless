@@ -706,7 +706,7 @@ describe("public site renderer", () => {
     expect(html).toContain(
       "I design and build schema-backed software for teams that need their tools to keep up with the work.",
     );
-    expect(html).toContain("Footer");
+    expect(html).toContain("GitHub");
   });
 
   it("renders image media blocks from href and label metadata", () => {
@@ -719,7 +719,39 @@ describe("public site renderer", () => {
   });
 
   it("renders nested footer sections and external footer links", () => {
-    const html = renderSitePage("home");
+    const records: StoredRecord[] = testSiteSeedRecords.map((record) =>
+      record.id === "rec_site_content_group_footer"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              body: "Internal footer body should stay private.",
+            },
+          }
+        : record,
+    );
+    records.push(
+      {
+        id: "rec_site_content_footer_copyright",
+        entity: "block",
+        values: {
+          type: "group",
+          label: "Copyright 2026 David Peek. All rights reserved.",
+        },
+        createdAt: "2026-05-05T00:00:32.000Z",
+      },
+      {
+        id: "rec_site_place_footer_copyright",
+        entity: "blockPlacement",
+        values: {
+          parent: "rec_site_content_group_footer",
+          block: "rec_site_content_footer_copyright",
+          order: 3000,
+        },
+        createdAt: "2026-05-05T00:00:33.000Z",
+      },
+    );
+    const html = renderSitePage("home", records);
     const footerStart = html.indexOf("<footer");
     const footerEnd = html.indexOf("</footer>", footerStart);
 
@@ -736,8 +768,12 @@ describe("public site renderer", () => {
     expect(footerHtml).not.toMatch(/\bbg-/);
     expect(footerHtml).not.toContain("text-white");
     expect(footerHtml).not.toContain("text-amber-200");
+    expect(footerHtml).not.toContain(">Footer<");
+    expect(footerHtml).not.toContain("Internal footer body should stay private.");
+    expect(footerHtml).not.toContain("Schema-backed software for content-heavy products");
     expect(html).toContain("Explore");
     expect(html).toContain("Social");
+    expect(footerHtml).toContain("Copyright 2026 David Peek. All rights reserved.");
     expect(html).toContain('href="https://github.com/dpeek"');
     expect(html).toContain("GitHub");
     expect(html).toContain('href="https://linkedin.com/in/dpeekdotcom"');

@@ -193,17 +193,6 @@
     "createdAt": "2026-05-05T00:00:14.000Z"
   },
   {
-    "id": "rec_site_content_copyright",
-    "entity": "block",
-    "values": {
-      "type": "profile",
-      "label": "Copyright",
-      "body": "Copyright 2026 David Peek. All rights reserved.",
-      "templateKey": "copyright"
-    },
-    "createdAt": "2026-05-05T00:00:15.000Z"
-  },
-  {
     "id": "rec_site_content_group_header",
     "entity": "block",
     "values": {

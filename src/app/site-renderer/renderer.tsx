@@ -241,30 +241,67 @@ function SiteThemeToggle() {
 }
 
 function FooterGroup({ block }: { block: SiteBlockNode }) {
-  const footerSections = block.placements;
-  const claimed = placementIdSet(footerSections);
+  const { notes, sections } = partitionFooterPlacements(block.placements);
 
   return (
     <footer
       className="border-t border-zinc-200 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300"
       data-site-footer
     >
-      <div className="mx-auto grid max-w-5xl gap-8 px-6 py-10 md:grid-cols-[1fr_2fr]">
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
-          <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
-            Schema-backed software for content-heavy products.
-          </p>
-        </div>
-        <div className="grid gap-6 sm:grid-cols-2">
-          {footerSections.map((placement) => (
-            <SitePlacementRenderer key={placement.id} placement={placement} />
-          ))}
-          {renderUnclaimedPlacements(block, claimed)}
-        </div>
+      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
+        {sections.length > 0 ? (
+          <div className="grid gap-6 sm:grid-cols-2">
+            {sections.map((placement) => (
+              <SitePlacementRenderer key={placement.id} placement={placement} />
+            ))}
+          </div>
+        ) : null}
+        {notes.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+            {notes.map((placement) => (
+              <FooterNote key={placement.id} placement={placement} />
+            ))}
+          </div>
+        ) : null}
       </div>
     </footer>
   );
+}
+
+function FooterNote({ placement }: { placement: SitePlacementNode }) {
+  const block = placement.block;
+
+  if (block.type === "group" && block.placements.length === 0) {
+    const text = block.body ?? displayLabel(block, placement);
+
+    return text ? (
+      <PlainText text={text} className="text-sm text-zinc-500 dark:text-zinc-400" />
+    ) : null;
+  }
+
+  return <SitePlacementRenderer placement={placement} />;
+}
+
+function partitionFooterPlacements(placements: SitePlacementNode[]): {
+  notes: SitePlacementNode[];
+  sections: SitePlacementNode[];
+} {
+  const sections: SitePlacementNode[] = [];
+  const notes: SitePlacementNode[] = [];
+
+  for (const placement of placements) {
+    if (isFooterSectionPlacement(placement)) {
+      sections.push(placement);
+    } else {
+      notes.push(placement);
+    }
+  }
+
+  return { notes, sections };
+}
+
+function isFooterSectionPlacement(placement: SitePlacementNode): boolean {
+  return placement.block.type === "group" && placement.block.placements.length > 0;
 }
 
 function FooterSection({ block }: { block: SiteBlockNode }) {
