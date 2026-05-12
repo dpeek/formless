@@ -4,6 +4,7 @@ import type {
   BootstrapResponse,
   MutationResponse,
   SitePageTreeResponse,
+  StoredRecord,
 } from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import { siteSeedRecords, taskSeedRecords } from "../test/schema-apps.ts";
@@ -117,7 +118,7 @@ describe("authority admin guard", () => {
 
     expect(tree.page.id).toBe("rec_site_content_home");
     expect(write.status).toBe(401);
-    expect(sortRecordsById(bootstrap.records)).toEqual(sortRecordsById(siteSeedRecords));
+    expectRecordsIgnoringOrder(bootstrap.records, siteSeedRecords);
   });
 });
 
@@ -158,6 +159,8 @@ function adminHeaders() {
   };
 }
 
-function sortRecordsById(records: BootstrapResponse["records"]) {
-  return [...records].sort((left, right) => left.id.localeCompare(right.id));
+function expectRecordsIgnoringOrder(actual: StoredRecord[], expected: StoredRecord[]) {
+  expect(Object.fromEntries(actual.map((record) => [record.id, record]))).toEqual(
+    Object.fromEntries(expected.map((record) => [record.id, record])),
+  );
 }

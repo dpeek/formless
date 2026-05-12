@@ -106,6 +106,7 @@ describe("authority", () => {
       generatedAt: expect.any(String),
       warnings: [],
     });
+    expect(body.page.placements.length).toBeGreaterThan(0);
     expect(body.frame.header?.id).toBe("rec_site_content_group_header");
     expect(body.frame.footer?.id).toBe("rec_site_content_group_footer");
     expect(body).not.toHaveProperty("schema");
@@ -4020,9 +4021,9 @@ async function expectNotFound(path: string) {
 }
 
 function expectRecordsIgnoringOrder(actual: StoredRecord[], expected: StoredRecord[]) {
-  expect(sortRecordsById(actual)).toEqual(sortRecordsById(expected));
+  expect(recordsById(actual)).toEqual(recordsById(expected));
 }
 
-function sortRecordsById(records: StoredRecord[]) {
-  return [...records].sort((left, right) => left.id.localeCompare(right.id));
+function recordsById(records: StoredRecord[]) {
+  return Object.fromEntries(records.map((record) => [record.id, record]));
 }

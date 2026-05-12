@@ -45,6 +45,7 @@ import {
   type ResultOrderingDragFact,
 } from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
+import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 import {
@@ -426,7 +427,8 @@ function PlacementTreeItem({
               ) : null}
               <TreeReadinessWarnings recordId={placement.id} />
               {childRecord ? <TreeReadinessWarnings recordId={childRecord.id} /> : null}
-              <TreePlacementRemoveButton
+              <TreePlacementActions
+                childRecord={childRecord}
                 entityName={entityName}
                 placement={placement}
                 result={result}
@@ -542,6 +544,44 @@ function TreeChildAddControls({
   );
 }
 
+function TreePlacementActions({
+  childRecord,
+  entityName,
+  placement,
+  result,
+}: {
+  childRecord: StoredRecord | undefined;
+  entityName: string;
+  placement: StoredRecord;
+  result: TreeResultConfig;
+}) {
+  const canDeleteChild = childRecord !== undefined && result.childEntity.mutations.delete.enabled;
+
+  if (!result.composition?.remove && !canDeleteChild) {
+    return null;
+  }
+
+  return (
+    <div className="flex justify-end gap-2">
+      <TreePlacementRemoveButton entityName={entityName} placement={placement} result={result} />
+      {childRecord && canDeleteChild ? (
+        <DeleteRecordButton
+          ariaLabel={`Delete child ${result.childEntity.label.toLowerCase()}`}
+          entityLabel={result.childEntity.label}
+          entityName={result.childEntityName}
+          labelFields={selectRecordFieldsForActiveUnion(
+            result.childRecordFields,
+            result.childRecordUnion,
+            childRecord,
+          )}
+          recordId={childRecord.id}
+          triggerData={{ "data-formless-tree-delete-child": childRecord.id }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function TreePlacementRemoveButton({
   entityName,
   placement,
@@ -583,19 +623,17 @@ function TreePlacementRemoveButton({
   }
 
   return (
-    <div className="flex justify-end">
-      <Button
-        aria-label="Remove child placement"
-        data-formless-tree-remove-placement={placement.id}
-        disabled={isRemoving}
-        onClick={() => void removePlacement()}
-        size="xs"
-        type="button"
-        variant="outline"
-      >
-        {isRemoving ? "Removing..." : "Remove"}
-      </Button>
-    </div>
+    <Button
+      aria-label="Remove child placement"
+      data-formless-tree-remove-placement={placement.id}
+      disabled={isRemoving}
+      onClick={() => void removePlacement()}
+      size="xs"
+      type="button"
+      variant="outline"
+    >
+      {isRemoving ? "Removing..." : "Remove"}
+    </Button>
   );
 }
 

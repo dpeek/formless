@@ -21,6 +21,7 @@ import type {
   ActionResponse,
   BootstrapResponse,
   CreateMutation,
+  DeleteMutation,
   EntityName,
   MutationResponse,
   PatchMutation,
@@ -189,6 +190,32 @@ export async function submitPatchMutation(
     op: "patch",
     recordId,
     values,
+  };
+
+  const response = await postJson<MutationResponse>(
+    fetcher,
+    apiPath(schemaKey, "mutations"),
+    mutation,
+  );
+
+  await mergeChanges(schemaKey, response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, schemaKey);
+  notifyLocalDataChanged(schemaKey);
+
+  return response;
+}
+
+export async function submitDeleteMutation(
+  schemaKey: SchemaKey,
+  entity: EntityName,
+  recordId: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const mutation: DeleteMutation = {
+    mutationId: createMutationId(),
+    entity,
+    op: "delete",
+    recordId,
   };
 
   const response = await postJson<MutationResponse>(

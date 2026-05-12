@@ -604,10 +604,10 @@ describe("public site renderer", () => {
     expect(html).toContain('data-site-theme="light"');
     expect(html).not.toMatch(/href="\/pages\/home"[^>]*>Formless<\/a>/);
     expect(html).not.toContain("border-b border-zinc-200 bg-white");
+    expect(html).toContain("Great software feels like magic");
+    expect(html).toContain("Let&#x27;s build some magic together.");
+    expect(html).toContain("Greetings, Robot!");
     expect(html).toContain("Schema-backed software for content-heavy products");
-    expect(html).toContain(
-      "I design and build schema-backed software for teams that need their tools to keep up with the work.",
-    );
   });
 
   it("renders mobile header overflow without duplicating the first seeded nav item", () => {
@@ -667,21 +667,18 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/blog"');
     expect(html).toContain('href="/projects"');
     expect(html).toContain('href="/resume"');
-    expect(html).toContain('href="/projects/estii"');
     expect(html).not.toContain('href="/pages/home"');
     expect(html).not.toContain('href="/pages/blog"');
   });
 
-  it("renders seeded post and project summaries from groups", () => {
+  it("renders seeded home author sections", () => {
     const html = renderSitePage("home");
 
-    expect(html).toContain("Recent posts");
-    expect(html).toContain("Shipping schema-backed authoring");
-    expect(html).toContain("Draft notes on generated editorial tools");
-    expect(html).toContain("Featured projects");
-    expect(html).toContain("Estii");
-    expect(html).toContain("OpenSurf");
-    expect(html).toContain("Formless makes app schema describe enough behavior");
+    expect(html).toContain("Great software feels like magic");
+    expect(html).toContain("Let&#x27;s build some magic together.");
+    expect(html).toContain("Greetings, Robot!");
+    expect(html).toContain("full-stack developer");
+    expect(html).toContain("Building software that lets small teams do ambitious things");
   });
 
   it("renders /blog as a generated post index", () => {
@@ -710,7 +707,32 @@ describe("public site renderer", () => {
   });
 
   it("renders image media blocks from href and label metadata", () => {
-    const html = renderSitePage("home");
+    const tree = sitePageTree("home");
+    const html = renderToStaticMarkup(
+      <SitePageRenderer
+        tree={{
+          ...tree,
+          page: {
+            ...tree.page,
+            placements: [
+              {
+                id: "test-image-placement",
+                order: 1,
+                block: {
+                  id: "rec_site_media_avatar",
+                  type: "image",
+                  label: "Site owner portrait",
+                  href: "data:image/svg+xml,%3Csvg%20/%3E",
+                  width: 1200,
+                  height: 1200,
+                  placements: [],
+                },
+              },
+            ],
+          },
+        }}
+      />,
+    );
 
     expect(html).toContain("Site owner portrait");
     expect(html).toContain('alt="Site owner portrait"');
@@ -1111,6 +1133,91 @@ describe("generated collection home", () => {
     expect(nestedHtml).toContain('aria-label="Remove child placement"');
   });
 
+  it("renders list/detail delete controls only when context entity policy enables them", () => {
+    const disabledCollection = requiredSiteCollectionModel("siteCompositionHome");
+    const enabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", true);
+    const enabledCollection = requiredCollectionModel(enabledSchema, "siteCompositionHome");
+
+    applyBootstrapResponse(
+      bootstrap(
+        [siteBlockRecord("page-1", { type: "page", label: "Disposable page" })],
+        siteSourceSchema,
+      ),
+      "site",
+    );
+    const disabledHtml = renderGeneratedHomeCollection(disabledCollection, {
+      selectedContextRecordId: "page-1",
+      today: "2026-05-02",
+    });
+
+    resetClientStore();
+    applyBootstrapResponse(
+      bootstrap(
+        [siteBlockRecord("page-1", { type: "page", label: "Disposable page" })],
+        enabledSchema,
+      ),
+      "site",
+    );
+    const enabledHtml = renderGeneratedHomeCollection(enabledCollection, {
+      selectedContextRecordId: "page-1",
+      today: "2026-05-02",
+    });
+
+    expect(disabledHtml).not.toContain('data-formless-delete-record="page-1"');
+    expect(enabledHtml).toContain('data-formless-delete-record="page-1"');
+    expect(enabledHtml).toContain('data-slot="alert-dialog-trigger"');
+    expect(enabledHtml).toContain('aria-label="Delete Disposable page"');
+  });
+
+  it("renders tree child delete controls separately from placement remove", () => {
+    const disabledCollection = requiredSiteCollectionModel("siteCompositionHome");
+    const enabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", true);
+    const enabledCollection = requiredCollectionModel(enabledSchema, "siteCompositionHome");
+    const records = [
+      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
+      siteBlockRecord("block-1", { type: "group", label: "Disposable group" }),
+      sitePlacementRecord("placement-1", "Placed group", 1000),
+    ];
+
+    if (!disabledCollection.context || disabledCollection.result.type !== "tree") {
+      throw new Error("Site composition home should render a context tree.");
+    }
+
+    if (!enabledCollection.context || enabledCollection.result.type !== "tree") {
+      throw new Error("Site composition home should render a context tree.");
+    }
+
+    applyBootstrapResponse(bootstrap(records, siteSourceSchema), "site");
+    const disabledHtml = renderToStaticMarkup(
+      <RecordTree
+        context={disabledCollection.context}
+        entity={disabledCollection.entity}
+        entityName={disabledCollection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
+        result={disabledCollection.result}
+      />,
+    );
+
+    resetClientStore();
+    applyBootstrapResponse(bootstrap(records, enabledSchema), "site");
+    const enabledHtml = renderToStaticMarkup(
+      <RecordTree
+        context={enabledCollection.context}
+        entity={enabledCollection.entity}
+        entityName={enabledCollection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
+        result={enabledCollection.result}
+      />,
+    );
+
+    expect(disabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
+    expect(disabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
+    expect(enabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
+    expect(enabledHtml).toContain('data-formless-tree-delete-child="block-1"');
+    expect(enabledHtml).toContain('aria-label="Remove child placement"');
+    expect(enabledHtml).toContain('aria-label="Delete child block"');
+  });
+
   it("renders synthetic stack sections in order with independent selected queries", () => {
     const schema = taskStackScreenSchema();
     const screen = requiredScreenModel(schema, "taskStack");
@@ -1327,10 +1434,9 @@ describe("generated collection home", () => {
     expect(html).toContain("Blog");
     expect(html).toContain("Resume");
     expect(html).toContain("Projects");
-    expect(html).not.toContain("A concise personal site for current work");
-    expect(html).toContain("Schema-backed software for content-heavy products");
-    expect(html).toContain("Site owner portrait");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
+    expect(html).toContain("Great software feels like magic");
+    expect(html).toContain("Greetings, Robot!");
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>2</);
   });
 
   it("renders the site route with root sidebar navigation", () => {
@@ -1435,13 +1541,14 @@ describe("generated collection home", () => {
     expect(html).toContain('data-slot="tabs-list"');
     expect(html).toContain('data-slot="tabs-trigger"');
     expect(html).toContain("Home");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>2</);
     expect(html).toContain("Add placement");
     expect(html).not.toContain('value="rec_site_content_group_header" selected="">Header</option>');
     expect(html).not.toContain('value="rec_site_content_group_footer" selected="">Footer</option>');
-    expect(html).toContain("Schema-backed software for content-heavy products");
+    expect(html).toContain("Great software feels like magic");
+    expect(html).toContain("Greetings, Robot!");
     expect(html).toContain(
-      'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
+      'value="record_bad74e4c-0a35-4514-a3fc-280d66a4d226" selected="">Great software feels like magic</option>',
     );
     for (const removedType of ["contentList", "contentGrid", "video", "file", "cta", "subscribe"]) {
       expect(html).not.toContain(`value="${removedType}"`);
@@ -3560,6 +3667,72 @@ describe("generated forms and records", () => {
     expect(html).not.toContain("Finished");
   });
 
+  it("renders generated list delete controls only when entity policy enables them", () => {
+    const model = selectPrimaryCollectionModels(appSchema)[0];
+    const task = appSchema.entities.task;
+    const taskWithDelete = withMutationPolicy(task, { delete: true });
+    const recordFields = model?.result.type === "list" ? model.result.recordFields : [];
+
+    applyBootstrapResponse(bootstrap([taskRecord("record-1", "Disposable task", false)]));
+    const disabledHtml = renderToStaticMarkup(
+      <RecordList
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={recordFields}
+      />,
+    );
+    const enabledHtml = renderToStaticMarkup(
+      <RecordList
+        entity={taskWithDelete}
+        entityName="task"
+        query={{ kind: "all" }}
+        recordFields={recordFields}
+      />,
+    );
+
+    expect(disabledHtml).not.toContain('data-formless-delete-record="record-1"');
+    expect(enabledHtml).toContain('data-formless-delete-record="record-1"');
+    expect(enabledHtml).toContain('data-slot="alert-dialog-trigger"');
+    expect(enabledHtml).toContain('aria-label="Delete Disposable task"');
+  });
+
+  it("renders generated table delete controls only when entity policy enables them", () => {
+    const task = appSchema.entities.task;
+    const taskWithDelete = withMutationPolicy(task, { delete: true });
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:title",
+        fieldName: "title",
+        field: task.fields.title,
+        editor: "text",
+        commit: "field-commit",
+        label: "Title",
+        display: "readOnly",
+        format: "plain",
+      },
+    ];
+
+    applyBootstrapResponse(bootstrap([taskRecord("record-1", "Disposable task", false)]));
+    const disabledHtml = renderToStaticMarkup(
+      <RecordTable columns={columns} entity={task} entityName="task" query={{ kind: "all" }} />,
+    );
+    const enabledHtml = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={taskWithDelete}
+        entityName="task"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(disabledHtml).not.toContain('data-formless-delete-record="record-1"');
+    expect(enabledHtml).toContain('data-formless-delete-record="record-1"');
+    expect(enabledHtml).toContain('data-slot="alert-dialog-trigger"');
+    expect(enabledHtml).toContain('aria-label="Delete Disposable task"');
+  });
+
   it("humanizes field names when labels are omitted", () => {
     const task: EntitySchema = {
       ...appSchema.entities.task,
@@ -3940,6 +4113,26 @@ function requiredScreenModel(schema: AppSchema, screenName: string) {
   }
 
   return model;
+}
+
+function schemaWithEntityDeletePolicy(
+  schema: AppSchema,
+  entityName: string,
+  enabled: boolean,
+): AppSchema {
+  const entity = schema.entities[entityName];
+
+  if (!entity) {
+    throw new Error(`Missing entity ${entityName}.`);
+  }
+
+  return {
+    ...schema,
+    entities: {
+      ...schema.entities,
+      [entityName]: withMutationPolicy(entity, { delete: enabled }),
+    },
+  };
 }
 
 function sliceSectionHtml(html: string, label: string, nextLabel?: string) {
@@ -4809,14 +5002,14 @@ function textareaWithAriaLabel(label: string) {
 
 function withMutationPolicy(
   entity: EntitySchema,
-  options: { create?: boolean; patch?: boolean },
+  options: { create?: boolean; patch?: boolean; delete?: boolean },
 ): EntitySchema {
   return {
     ...entity,
     mutations: {
       create: { enabled: options.create ?? entity.mutations.create.enabled },
       patch: { enabled: options.patch ?? entity.mutations.patch.enabled },
-      delete: { enabled: false },
+      delete: { enabled: options.delete ?? entity.mutations.delete.enabled },
     },
   };
 }

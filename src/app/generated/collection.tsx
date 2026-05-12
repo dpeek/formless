@@ -47,6 +47,7 @@ import {
   type ResultOrderingDragFact,
 } from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
+import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 import { RecordTable } from "./table.tsx";
@@ -328,7 +329,12 @@ function ListDetailScopedHomeCollection({
               {!showLocalSelector || contextFieldsRenderHeading ? null : (
                 <h2 className="text-base font-semibold">{detailLabel}</h2>
               )}
-              <ContextRecordEditor context={context} density="compact" recordId={activeRecordId} />
+              <ContextRecordEditor
+                context={context}
+                density="compact"
+                onDeleted={() => onSelectContext?.(null)}
+                recordId={activeRecordId}
+              />
             </section>
 
             {queryTabs.length <= 1 ? null : (
@@ -533,7 +539,11 @@ function ContextSelector({
         <p className="text-sm text-slate-600">No {context.label.toLowerCase()} records yet.</p>
       ) : null}
 
-      <ContextRecordEditor context={context} recordId={selectedContextRecordId} />
+      <ContextRecordEditor
+        context={context}
+        onDeleted={() => onSelectContext?.(null)}
+        recordId={selectedContextRecordId}
+      />
 
       {context.createAction && createDialogOpen ? (
         <GeneratedCreateDialog
@@ -597,20 +607,23 @@ function RelatedCollectionCountBadge({
 function ContextRecordEditor({
   context,
   density = "default",
+  onDeleted,
   recordId,
 }: {
   context: HomeContextConfig;
   density?: "default" | "compact";
+  onDeleted?: () => void;
   recordId: string | null;
 }) {
   const recordFields = context.recordFields ?? [];
   const record = useRecord(recordId ?? "");
 
-  if (!recordId || recordFields.length === 0) {
+  if (!recordId) {
     return null;
   }
 
   const visibleFields = selectRecordFieldsForActiveUnion(recordFields, context.recordUnion, record);
+  const canDelete = context.entity.mutations.delete.enabled;
 
   return (
     <div
@@ -634,6 +647,18 @@ function ContextRecordEditor({
           />
         );
       })}
+      {canDelete ? (
+        <div className={density === "compact" ? "pt-1" : "self-end"}>
+          <DeleteRecordButton
+            entityLabel={context.entity.label}
+            entityName={context.entityName}
+            labelFields={visibleFields}
+            onDeleted={onDeleted}
+            recordId={recordId}
+            triggerData={{ "data-formless-delete-record": recordId }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -842,6 +867,7 @@ export function RecordList({
 }) {
   const schemaKey = useSchemaKey();
   const canPatch = entity.mutations.patch.enabled;
+  const canDelete = entity.mutations.delete.enabled;
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const recordsById = useRecordsById();
@@ -913,8 +939,10 @@ export function RecordList({
       {orderedRecordIds.map((recordId) =>
         orderingContext && orderingDragFacts ? (
           <SortableRecordRow
+            canDelete={canDelete}
             canPatch={canPatch}
             dragFact={orderingDragFacts.get(recordId)}
+            entity={entity}
             entityName={entityName}
             key={recordId}
             orderingContext={orderingContext}
@@ -925,7 +953,9 @@ export function RecordList({
           />
         ) : (
           <RecordRow
+            canDelete={canDelete}
             canPatch={canPatch}
+            entity={entity}
             entityName={entityName}
             key={recordId}
             recordFields={recordFields}
@@ -955,8 +985,10 @@ export function RecordList({
 }
 
 function SortableRecordRow({
+  canDelete,
   canPatch,
   dragFact,
+  entity,
   entityName,
   orderingContext,
   pendingDragRecordId,
@@ -964,8 +996,10 @@ function SortableRecordRow({
   recordUnion,
   recordId,
 }: {
+  canDelete: boolean;
   canPatch: boolean;
   dragFact: ResultOrderingDragFact | undefined;
+  entity: EntitySchema;
   entityName: string;
   orderingContext: ResultOrderingContext;
   pendingDragRecordId: string | null;
@@ -998,7 +1032,9 @@ function SortableRecordRow({
 
   return (
     <RecordRow
+      canDelete={canDelete}
       canPatch={canPatch}
+      entity={entity}
       entityName={entityName}
       itemClassName={itemStateClass || undefined}
       itemRef={ref}
@@ -1013,7 +1049,9 @@ function SortableRecordRow({
 }
 
 function RecordRow({
+  canDelete,
   canPatch,
+  entity,
   entityName,
   itemClassName,
   itemRef,
@@ -1024,7 +1062,9 @@ function RecordRow({
   recordId,
   showOrderingHandle = false,
 }: {
+  canDelete: boolean;
   canPatch: boolean;
+  entity: EntitySchema;
   entityName: string;
   itemClassName?: string;
   itemRef?: (element: Element | null) => void;
@@ -1071,6 +1111,16 @@ function RecordRow({
             />
           ))}
         </div>
+        {canDelete ? (
+          <DeleteRecordButton
+            className="shrink-0"
+            entityLabel={entity.label}
+            entityName={entityName}
+            labelFields={visibleFields}
+            recordId={recordId}
+            triggerData={{ "data-formless-delete-record": recordId }}
+          />
+        ) : null}
       </div>
       {warnings.length > 0 ? (
         <div className="mt-3">

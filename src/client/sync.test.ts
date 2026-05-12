@@ -23,6 +23,7 @@ import {
   startPushSync,
   submitAction,
   submitCreateMutation,
+  submitDeleteMutation,
   submitPatchMutation,
   syncClient,
 } from "./sync.ts";
@@ -458,6 +459,56 @@ describe("client sync", () => {
 
     expect(response.record).toEqual(acceptedRecord);
     expect(snapshot.records).toEqual([acceptedRecord]);
+    expect(snapshot.cursor).toBe(2);
+  });
+
+  it("posts delete mutations and merges accepted tombstones", async () => {
+    const activeRecord = record("record-1", "First", false);
+    const tombstone = {
+      ...activeRecord,
+      deletedAt: "2026-04-28T00:01:00.000Z",
+    };
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [activeRecord],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    const response = await submitDeleteMutation(
+      "tasks",
+      "task",
+      "record-1",
+      async (input, init) => {
+        const mutation = parseRequestBody(init?.body);
+
+        expect(input).toBe("/api/tasks/mutations");
+        expect(init?.method).toBe("POST");
+        expect(mutation).toMatchObject({
+          entity: "task",
+          op: "delete",
+          recordId: "record-1",
+        });
+        expect(mutation).not.toHaveProperty("values");
+
+        return Response.json({
+          record: tombstone,
+          changes: [mutationChange(2, mutation.mutationId, tombstone, "delete")],
+          cursor: 2,
+          mutationId: mutation.mutationId,
+        } satisfies MutationResponse);
+      },
+    );
+
+    const snapshot = await readLocalSnapshot("tasks");
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(response.record).toEqual(tombstone);
+    expect(snapshot.records).toEqual([tombstone]);
+    expect(storeSnapshot.recordsById["record-1"]).toEqual(tombstone);
+    expect(storeSnapshot.recordIdsByEntity.task ?? []).toEqual([]);
     expect(snapshot.cursor).toBe(2);
   });
 
@@ -1153,7 +1204,7 @@ function mutationChange(
   seq: number,
   mutationId: string,
   payload: StoredRecord,
-  op: "create" | "patch" | "action",
+  op: "create" | "patch" | "delete" | "action",
 ): ChangeRow {
   return {
     seq,
