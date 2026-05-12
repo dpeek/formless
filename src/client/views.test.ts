@@ -824,7 +824,13 @@ describe("home view model collections", () => {
             ...siteHome.result,
             branches: {
               variants: {
-                header: "leaf",
+                page: {
+                  children: ["group", "markdown"],
+                },
+                header: {
+                  action: "leaf",
+                  children: ["link"],
+                },
                 footer: "leaf",
               },
             },
@@ -841,6 +847,24 @@ describe("home view model collections", () => {
       variants: {
         discriminatorFieldName: "type",
         leafVariantValues: ["header", "footer"],
+        allowedChildVariantsByParentVariant: {
+          page: [
+            {
+              variantValue: "group",
+              label: "Group",
+            },
+            {
+              variantValue: "markdown",
+              label: "Markdown",
+            },
+          ],
+          header: [
+            {
+              variantValue: "link",
+              label: "Link",
+            },
+          ],
+        },
       },
     });
     expect(

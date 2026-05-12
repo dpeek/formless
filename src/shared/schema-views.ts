@@ -49,6 +49,7 @@ import type {
   TableViewSchema,
   TreeBranchActionSchema,
   TreeBranchPolicySchema,
+  TreeBranchVariantPolicySchema,
   ViewVariantFieldsPresentationSchema,
   ViewFieldSchema,
   ViewSchema,
@@ -1343,7 +1344,7 @@ function parseTreeBranchVariantPolicy(
   context: string,
   value: unknown,
   union: EntityUnionSchema,
-): Record<string, TreeBranchActionSchema> {
+): Record<string, TreeBranchVariantPolicySchema> {
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
   }
@@ -1355,7 +1356,7 @@ function parseTreeBranchVariantPolicy(
   }
 
   return Object.fromEntries(
-    entries.map(([variantName, action]) => {
+    entries.map(([variantName, policy]) => {
       if (variantName.trim() === "") {
         throw new Error(`${context} variant keys must be non-empty strings.`);
       }
@@ -1366,13 +1367,95 @@ function parseTreeBranchVariantPolicy(
         );
       }
 
-      if (action !== "leaf") {
-        throw new Error(`${context} variant "${variantName}" action must be "leaf".`);
-      }
-
-      return [variantName, action];
+      return [
+        variantName,
+        parseTreeBranchVariantPolicyValue(`${context} variant "${variantName}"`, policy, union),
+      ];
     }),
   );
+}
+
+function parseTreeBranchVariantPolicyValue(
+  context: string,
+  value: unknown,
+  union: EntityUnionSchema,
+): TreeBranchVariantPolicySchema {
+  if (value === "leaf") {
+    return value;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} action must be "leaf" or an object.`);
+  }
+
+  assertExactKeys(context, value, [], ["action", "children"]);
+
+  if (value.action === undefined && value.children === undefined) {
+    throw new Error(`${context} must include "action" or "children".`);
+  }
+
+  const action = parseOptionalTreeBranchAction(`${context} action`, value.action);
+  const children = parseOptionalTreeBranchChildren(`${context} children`, value.children, union);
+
+  return {
+    ...(action === undefined ? {} : { action }),
+    ...(children === undefined ? {} : { children }),
+  };
+}
+
+function parseOptionalTreeBranchAction(
+  context: string,
+  value: unknown,
+): TreeBranchActionSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "leaf") {
+    throw new Error(`${context} must be "leaf".`);
+  }
+
+  return value;
+}
+
+function parseOptionalTreeBranchChildren(
+  context: string,
+  value: unknown,
+  union: EntityUnionSchema,
+): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`${context} must be an array.`);
+  }
+
+  if (value.length === 0) {
+    throw new Error(`${context} must not be empty.`);
+  }
+
+  const seen = new Set<string>();
+
+  return value.map((childVariant, index) => {
+    if (typeof childVariant !== "string" || childVariant.trim() === "") {
+      throw new Error(`${context} item ${index + 1} must be a non-empty string.`);
+    }
+
+    if (seen.has(childVariant)) {
+      throw new Error(`${context} variant "${childVariant}" must be unique.`);
+    }
+
+    seen.add(childVariant);
+
+    if (union.variants[childVariant] === undefined) {
+      throw new Error(
+        `${context} variant "${childVariant}" must match a variant in union "${union.entity}.${union.discriminator}".`,
+      );
+    }
+
+    return childVariant;
+  });
 }
 
 function parseCollectionTableFooterSlots(

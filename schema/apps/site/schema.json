@@ -928,8 +928,20 @@
         "childItemView": "blockTreeNode",
         "branches": {
           "variants": {
-            "header": "leaf",
-            "footer": "leaf"
+            "page": {
+              "children": ["group", "hero", "markdown", "image", "link"]
+            },
+            "group": {
+              "children": ["group", "hero", "markdown", "image", "link"]
+            },
+            "header": {
+              "action": "leaf",
+              "children": ["link"]
+            },
+            "footer": {
+              "action": "leaf",
+              "children": ["group", "link"]
+            }
           }
         },
         "ordering": {

@@ -8,6 +8,7 @@ import type {
   HomeContextConfig,
   HomeResultConfig,
   RecordFieldConfig,
+  TreeAllowedChildVariantConfig,
   RecordVariantContextLinkPresentationConfig,
 } from "../../client/views.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
@@ -62,25 +63,35 @@ export function RecordTree({
     return null;
   }
 
+  const parentRecord = recordsById[parentRecordId];
   const placements = childPlacementsForParent(parentRecordId, recordsById, result);
+  const rootAddControls = parentRecord ? (
+    <TreeChildAddControls parentRecord={parentRecord} result={result} />
+  ) : null;
 
   return (
     <section aria-label="Placement tree" className="space-y-3">
       {placements.length === 0 ? (
-        <p className="text-sm text-slate-600">No records yet.</p>
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">No records yet.</p>
+          {rootAddControls}
+        </div>
       ) : (
-        <PlacementSiblingList
-          ancestors={new Set([parentRecordId])}
-          canPatch={canPatch}
-          className="space-y-3"
-          context={context}
-          depth={0}
-          entityName={placementEntityName}
-          onSelectContext={onSelectContext}
-          placements={placements}
-          result={result}
-          selectableContextRecordIds={selectableContextRecordIds}
-        />
+        <>
+          <PlacementSiblingList
+            ancestors={new Set([parentRecordId])}
+            canPatch={canPatch}
+            className="space-y-3"
+            context={context}
+            depth={0}
+            entityName={placementEntityName}
+            onSelectContext={onSelectContext}
+            placements={placements}
+            result={result}
+            selectableContextRecordIds={selectableContextRecordIds}
+          />
+          {rootAddControls}
+        </>
       )}
     </section>
   );
@@ -353,6 +364,14 @@ function PlacementTreeItem({
       : [];
   const childPlacements = depth < result.maxDepth ? descendantPlacements : [];
   const nextAncestors = childRecord ? new Set([...ancestors, childRecord.id]) : ancestors;
+  const childAddControls =
+    childRecord && !isLeafBranch && !isCycle && depth < result.maxDepth ? (
+      <TreeChildAddControls
+        className="ml-5 border-l border-slate-200 pl-4"
+        parentRecord={childRecord}
+        result={result}
+      />
+    ) : null;
 
   return (
     <li
@@ -408,7 +427,45 @@ function PlacementTreeItem({
           selectableContextRecordIds={selectableContextRecordIds}
         />
       ) : null}
+      {childAddControls}
     </li>
+  );
+}
+
+function TreeChildAddControls({
+  className,
+  parentRecord,
+  result,
+}: {
+  className?: string;
+  parentRecord: StoredRecord;
+  result: TreeResultConfig;
+}) {
+  const allowedChildVariants = selectAllowedTreeChildVariants(result, parentRecord);
+
+  if (allowedChildVariants.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={["flex flex-wrap gap-2", className].filter(Boolean).join(" ")}
+      data-formless-tree-add-parent={parentRecord.id}
+    >
+      {allowedChildVariants.map((variant) => (
+        <Button
+          aria-label={`Add ${variant.label} child`}
+          data-formless-tree-add-variant={variant.variantValue}
+          disabled
+          key={variant.variantValue}
+          size="xs"
+          type="button"
+          variant="outline"
+        >
+          Add {variant.label}
+        </Button>
+      ))}
+    </div>
   );
 }
 
@@ -662,6 +719,25 @@ function childPlacementsForParent(
   return orderedRecordIds
     .map((recordId) => recordsById[recordId])
     .filter((record): record is StoredRecord => record?.entity === result.relationship.to.entity);
+}
+
+function selectAllowedTreeChildVariants(
+  result: TreeResultConfig,
+  parentRecord: StoredRecord,
+): TreeAllowedChildVariantConfig[] {
+  const variantPolicy = result.branches?.variants;
+
+  if (!variantPolicy) {
+    return [];
+  }
+
+  const variantValue = stringValue(parentRecord.values[variantPolicy.discriminatorFieldName]);
+
+  if (variantValue === undefined) {
+    return [];
+  }
+
+  return variantPolicy.allowedChildVariantsByParentVariant[variantValue] ?? [];
 }
 
 function isTreeBranchLeaf(result: TreeResultConfig, childRecord: StoredRecord): boolean {

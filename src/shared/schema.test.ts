@@ -1699,7 +1699,13 @@ describe("schema table views", () => {
   it("parses tree branch policy and preserves it through stringify", () => {
     const siteSchema = siteSchemaWithTreeBranches({
       variants: {
-        header: "leaf",
+        page: {
+          children: ["group", "markdown"],
+        },
+        header: {
+          action: "leaf",
+          children: ["link"],
+        },
         footer: "leaf",
       },
     });
@@ -1718,7 +1724,13 @@ describe("schema table views", () => {
 
     expect(siteHome.result.branches).toEqual({
       variants: {
-        header: "leaf",
+        page: {
+          children: ["group", "markdown"],
+        },
+        header: {
+          action: "leaf",
+          children: ["link"],
+        },
         footer: "leaf",
       },
     });
@@ -1763,7 +1775,33 @@ describe("schema table views", () => {
         }),
       ),
     ).toThrow(
+      'Collection view "siteCompositionHome" result branches variants variant "header" action must be "leaf" or an object.',
+    );
+    expect(() =>
+      parseAppSchema(
+        siteSchemaWithTreeBranches({
+          variants: {
+            header: {
+              action: "collapse",
+            },
+          },
+        }),
+      ),
+    ).toThrow(
       'Collection view "siteCompositionHome" result branches variants variant "header" action must be "leaf".',
+    );
+    expect(() =>
+      parseAppSchema(
+        siteSchemaWithTreeBranches({
+          variants: {
+            header: {
+              children: ["missing"],
+            },
+          },
+        }),
+      ),
+    ).toThrow(
+      'Collection view "siteCompositionHome" result branches variants variant "header" children variant "missing" must match a variant in union "block.type".',
     );
   });
 
@@ -4623,8 +4661,20 @@ describe("personal site sample schema", () => {
       childItemView: "blockTreeNode",
       branches: {
         variants: {
-          header: "leaf",
-          footer: "leaf",
+          page: {
+            children: ["group", "hero", "markdown", "image", "link"],
+          },
+          group: {
+            children: ["group", "hero", "markdown", "image", "link"],
+          },
+          header: {
+            action: "leaf",
+            children: ["link"],
+          },
+          footer: {
+            action: "leaf",
+            children: ["group", "link"],
+          },
         },
       },
     });

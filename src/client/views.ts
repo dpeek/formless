@@ -27,6 +27,7 @@ import type {
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
+  TreeBranchVariantPolicySchema,
   ViewSchema,
 } from "../shared/schema.ts";
 import type { QueryExpression } from "../shared/query.ts";
@@ -271,10 +272,17 @@ export type TableFooterSlotConfig = HomeSummarySlotConfig & {
   columnKey: string;
 };
 
+export type TreeAllowedChildVariantConfig = {
+  variantValue: string;
+  label: string;
+  unionVariant: EntityUnionVariantSchema;
+};
+
 export type TreeVariantBranchPolicyConfig = {
   discriminatorFieldName: string;
   discriminatorField: Extract<FieldSchema, { type: "enum" }>;
   leafVariantValues: string[];
+  allowedChildVariantsByParentVariant: Record<string, TreeAllowedChildVariantConfig[]>;
 };
 
 export type TreeBranchPolicyConfig = {
@@ -921,10 +929,49 @@ function selectTreeBranchPolicyConfig(
       discriminatorFieldName: childRecordUnion.discriminatorFieldName,
       discriminatorField: childRecordUnion.discriminatorField,
       leafVariantValues: Object.entries(branches.variants)
-        .filter(([, action]) => action === "leaf")
+        .filter(([, policy]) => treeBranchVariantPolicyIsLeaf(policy))
         .map(([variantValue]) => variantValue),
+      allowedChildVariantsByParentVariant: selectAllowedChildVariantsByParentVariant(
+        branches.variants,
+        childRecordUnion,
+      ),
     },
   };
+}
+
+function selectAllowedChildVariantsByParentVariant(
+  variants: Record<string, TreeBranchVariantPolicySchema>,
+  childRecordUnion: RecordUnionPresentationConfig,
+): Record<string, TreeAllowedChildVariantConfig[]> {
+  return Object.fromEntries(
+    Object.entries(variants)
+      .map(([parentVariantValue, policy]) => {
+        const childVariantValues =
+          typeof policy === "object" ? (policy.children ?? []) : ([] as string[]);
+
+        return [
+          parentVariantValue,
+          childVariantValues.map((childVariantValue) => {
+            const unionVariant = childRecordUnion.union.variants[childVariantValue];
+
+            if (!unionVariant) {
+              throw new Error(`Missing tree child variant "${childVariantValue}".`);
+            }
+
+            return {
+              variantValue: childVariantValue,
+              label: unionVariant.label,
+              unionVariant,
+            };
+          }),
+        ] as const;
+      })
+      .filter(([, childVariants]) => childVariants.length > 0),
+  );
+}
+
+function treeBranchVariantPolicyIsLeaf(policy: TreeBranchVariantPolicySchema): boolean {
+  return policy === "leaf" || (typeof policy === "object" && policy.action === "leaf");
 }
 
 // Compatibility fallback for tree results that predate result-level ordering.

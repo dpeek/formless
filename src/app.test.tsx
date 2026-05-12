@@ -788,6 +788,71 @@ describe("generated collection home", () => {
     expect(html).not.toContain("text-xs font-medium text-slate-600");
   });
 
+  it("renders Site tree add controls from allowed child policy", () => {
+    const collection = requiredSiteCollectionModel("siteCompositionHome");
+
+    if (!collection.context || collection.result.type !== "tree") {
+      throw new Error("Site composition home should render a context tree.");
+    }
+
+    bootstrapSiteEditor([siteBlockRecord("page-1", { type: "page", label: "Blank page" })]);
+    const emptyRootHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(emptyRootHtml).toContain("No records yet.");
+    expect(emptyRootHtml).toContain('data-formless-tree-add-parent="page-1"');
+    expect(emptyRootHtml).toContain('aria-label="Add Group child"');
+    expect(emptyRootHtml).toContain('data-formless-tree-add-variant="hero"');
+    expect(emptyRootHtml).not.toContain('data-formless-tree-add-variant="header"');
+    expect(emptyRootHtml).not.toContain('data-formless-tree-add-variant="footer"');
+
+    resetClientStore();
+    bootstrapSiteEditor([
+      siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
+      siteBlockRecord("group-1", { type: "group", label: "Empty group" }),
+      siteBlockRecord("link-1", { type: "link", label: "Docs", href: "/docs" }),
+      {
+        id: "placement-1",
+        entity: "blockPlacement",
+        values: {
+          parent: "page-1",
+          block: "group-1",
+          order: 1000,
+        },
+        createdAt: "2026-05-05T00:00:40.000Z",
+      },
+      {
+        id: "placement-2",
+        entity: "blockPlacement",
+        values: {
+          parent: "page-1",
+          block: "link-1",
+          order: 2000,
+        },
+        createdAt: "2026-05-05T00:00:41.000Z",
+      },
+    ]);
+    const nestedHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "page-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(nestedHtml).toContain('data-formless-tree-add-parent="group-1"');
+    expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
+  });
+
   it("renders synthetic stack sections in order with independent selected queries", () => {
     const schema = taskStackScreenSchema();
     const screen = requiredScreenModel(schema, "taskStack");
