@@ -550,10 +550,6 @@
             "href": {
               "editor": "href",
               "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
             }
           }
         },
@@ -566,10 +562,6 @@
             },
             "href": {
               "editor": "href",
-              "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
               "commit": "field-commit"
             }
           }
