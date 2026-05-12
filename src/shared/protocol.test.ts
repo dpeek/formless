@@ -60,6 +60,17 @@ describe("push sync protocol", () => {
     ).toBe(true);
     expect(
       isSyncSocketServerMessage({
+        type: "sync",
+        payload: {
+          changes: [
+            change(2, { ...record("record-2"), deletedAt: "2026-04-28T00:00:02.000Z" }, "delete"),
+          ],
+          cursor: 2,
+        } satisfies SyncResponse,
+      }),
+    ).toBe(true);
+    expect(
+      isSyncSocketServerMessage({
         type: "error",
         message: "Malformed sync message.",
       }),
@@ -200,11 +211,11 @@ function record(id: string): StoredRecord {
   };
 }
 
-function change(seq: number, payload: StoredRecord): ChangeRow {
+function change(seq: number, payload: StoredRecord, op: ChangeRow["op"] = "create"): ChangeRow {
   return {
     seq,
     mutationId: `mutation-${seq}`,
-    op: "create",
+    op,
     entity: payload.entity,
     recordId: payload.id,
     payload,

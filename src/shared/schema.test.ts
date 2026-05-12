@@ -5,32 +5,31 @@ import { sourceLikeSchemas, sourceLikeSiteSchema } from "../test/schema-builders
 import { parseAppSchema, stringifySchema } from "./schema.ts";
 
 describe("schema mutation policies", () => {
-  it("preserves disabled delete policy through stringify", () => {
+  it("preserves delete policy through stringify", () => {
     const schema = parseAppSchema(baseSchema());
+    const enabledSchema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: {
+            ...defaultEntities().task,
+            mutations: {
+              create: { enabled: true },
+              patch: { enabled: true },
+              delete: { enabled: true },
+            },
+          },
+        },
+      }),
+    );
     const serialized = JSON.parse(stringifySchema(schema));
+    const serializedEnabled = JSON.parse(stringifySchema(enabledSchema));
 
     expect(schema.entities.task?.mutations.delete).toEqual({ enabled: false });
     expect(serialized.entities.task.mutations.delete).toEqual({ enabled: false });
     expect(parseAppSchema(serialized)).toEqual(schema);
-  });
-
-  it("rejects enabled delete policy until generic delete mutations are implemented", () => {
-    expect(() =>
-      parseAppSchema(
-        baseSchema({
-          entities: {
-            task: {
-              ...defaultEntities().task,
-              mutations: {
-                create: { enabled: true },
-                patch: { enabled: true },
-                delete: { enabled: true },
-              },
-            },
-          },
-        }),
-      ),
-    ).toThrow("delete.enabled must be false until delete mutations are implemented");
+    expect(enabledSchema.entities.task?.mutations.delete).toEqual({ enabled: true });
+    expect(serializedEnabled.entities.task.mutations.delete).toEqual({ enabled: true });
+    expect(parseAppSchema(serializedEnabled)).toEqual(enabledSchema);
   });
 });
 

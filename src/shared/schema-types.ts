@@ -589,9 +589,7 @@ export type CreateMutationPolicy = GenericMutationPolicy & {
   afterCreate?: AfterCreateHookSchema[];
 };
 
-export type DeleteMutationPolicy = {
-  enabled: false;
-};
+export type DeleteMutationPolicy = GenericMutationPolicy;
 
 export type EntityMutationPolicy = {
   create: CreateMutationPolicy;

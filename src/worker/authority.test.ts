@@ -2308,18 +2308,18 @@ describe("authority", () => {
     });
   });
 
-  it("rejects generic delete mutation requests without writing tombstones yet", async () => {
+  it("rejects generic delete mutation requests when policy is disabled", async () => {
     const created = await postMutation("mutation-1", { title: "First", done: false });
 
     await expectError(
       "/api/mutations",
       {
-        mutationId: "mutation-delete-currently-unsupported",
+        mutationId: "mutation-delete-disabled",
         entity: "task",
         op: "delete",
         recordId: created.record.id,
       },
-      'Only "create" and "patch" mutations are supported.',
+      'Delete mutations are disabled for entity "task".',
     );
 
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
@@ -2330,6 +2330,106 @@ describe("authority", () => {
       "deletedAt",
     );
     expect(sync.changes).toEqual([]);
+  });
+
+  it("validates enabled generic delete mutation requests before storage execution", async () => {
+    const created = await postMutation("mutation-1", { title: "First", done: false });
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations(deleteEnabledMutations()),
+    });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-delete-ready",
+        entity: "task",
+        op: "delete",
+        recordId: created.record.id,
+      },
+      "Delete mutation execution is not implemented yet.",
+    );
+
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 1}`);
+
+    expect(bootstrap.records.find((record) => record.id === created.record.id)).not.toHaveProperty(
+      "deletedAt",
+    );
+    expect(sync.changes).toEqual([]);
+  });
+
+  it("rejects invalid generic delete mutations after policy enables delete", async () => {
+    const active = await postMutation("mutation-active", { title: "First", done: false });
+    const completed = await postMutation("mutation-completed", { title: "Done", done: true });
+    await postAction("action-tombstone-completed", "clearCompletedTasks");
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations(deleteEnabledMutations()),
+    });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-delete-values",
+        entity: "task",
+        op: "delete",
+        recordId: active.record.id,
+        values: { title: "Ignored" },
+      },
+      "Delete mutation must not include values.",
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-delete-missing",
+        entity: "task",
+        op: "delete",
+        recordId: "missing",
+      },
+      'Unknown record "missing".',
+    );
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-delete-tombstoned",
+        entity: "task",
+        op: "delete",
+        recordId: completed.record.id,
+      },
+      `Cannot delete tombstoned record "${completed.record.id}".`,
+    );
+
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskAndProjectDeleteEnabled(),
+    });
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-delete-wrong-entity",
+        entity: "project",
+        op: "delete",
+        recordId: active.record.id,
+      },
+      "Delete entity must match the stored record entity.",
+    );
+  });
+
+  it("replays delete mutation IDs without duplicating changes", async () => {
+    const created = await postMutation("mutation-replay-delete", {
+      title: "First",
+      done: false,
+    });
+
+    const replay = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-replay-delete",
+      entity: "task",
+      op: "delete",
+      recordId: "missing",
+    });
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length}`);
+
+    expect(replay).toEqual(created);
+    expect(sync.changes).toHaveLength(1);
+    expect(sync.changes[0]?.mutationId).toBe("mutation-replay-delete");
   });
 
   it("rejects invalid patch mutations", async () => {
@@ -2873,10 +2973,10 @@ describe("authority", () => {
         schema: schemaWithMutations({
           create: { enabled: true },
           patch: { enabled: true },
-          delete: { enabled: true },
+          delete: { enabled: "yes" },
         }),
       },
-      "delete.enabled must be false",
+      "delete.enabled must be a boolean.",
     );
   });
 
@@ -2971,6 +3071,13 @@ function defaultMutations(): AppSchema["entities"][string]["mutations"] {
     create: { enabled: true },
     patch: { enabled: true },
     delete: { enabled: false },
+  };
+}
+
+function deleteEnabledMutations(): AppSchema["entities"][string]["mutations"] {
+  return {
+    ...defaultMutations(),
+    delete: { enabled: true },
   };
 }
 
@@ -3207,6 +3314,25 @@ function schemaWithMutations(mutations: unknown) {
     itemViews: defaultItemViews(),
     tableViews: {},
     views: defaultViews(),
+  };
+}
+
+function schemaWithTaskAndProjectDeleteEnabled(): AppSchema {
+  return {
+    ...appSchema,
+    entities: {
+      task: {
+        ...appSchema.entities.task,
+        mutations: deleteEnabledMutations(),
+      },
+      project: {
+        label: "Project",
+        fields: {
+          name: { type: "text", required: true },
+        },
+        mutations: deleteEnabledMutations(),
+      },
+    },
   };
 }
 

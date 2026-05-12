@@ -6,6 +6,7 @@ import {
 import { parseAppSchema, type AppSchema, type EntitySchema } from "../shared/schema.ts";
 import type {
   CreateMutation,
+  DeleteMutation,
   Mutation,
   MutationResponse,
   PatchMutation,
@@ -44,8 +45,8 @@ export function validateMutationRequest(
     throw new BadRequestError("Mutation must include a non-empty mutationId.");
   }
 
-  if (value.op !== "create" && value.op !== "patch") {
-    throw new BadRequestError('Only "create" and "patch" mutations are supported.');
+  if (value.op !== "create" && value.op !== "patch" && value.op !== "delete") {
+    throw new BadRequestError('Only "create", "patch", and "delete" mutations are supported.');
   }
 
   if (typeof value.entity !== "string") {
@@ -68,6 +69,42 @@ export function validateMutationRequest(
 
   if (value.op === "patch" && !entity.mutations.patch.enabled) {
     throw new BadRequestError(`Patch mutations are disabled for entity "${value.entity}".`);
+  }
+
+  if (value.op === "delete" && !entity.mutations.delete.enabled) {
+    throw new BadRequestError(`Delete mutations are disabled for entity "${value.entity}".`);
+  }
+
+  if (value.op === "delete") {
+    if ("values" in value) {
+      throw new BadRequestError("Delete mutation must not include values.");
+    }
+
+    if (typeof value.recordId !== "string" || value.recordId.trim() === "") {
+      throw new BadRequestError("Delete mutation must include a recordId.");
+    }
+
+    const existingRecord = getStoredRecord(storage, value.recordId);
+    if (!existingRecord) {
+      throw new BadRequestError(`Unknown record "${value.recordId}".`);
+    }
+
+    if (existingRecord.entity !== value.entity) {
+      throw new BadRequestError("Delete entity must match the stored record entity.");
+    }
+
+    if (existingRecord.deletedAt) {
+      throw new BadRequestError(`Cannot delete tombstoned record "${value.recordId}".`);
+    }
+
+    return {
+      mutation: {
+        mutationId: value.mutationId,
+        entity: value.entity,
+        op: "delete",
+        recordId: value.recordId,
+      } satisfies DeleteMutation,
+    };
   }
 
   if (!isRecord(value.values)) {

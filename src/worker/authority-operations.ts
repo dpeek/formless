@@ -296,6 +296,10 @@ export function executeAuthorityOperation(
         return { body: response };
       }
 
+      if (mutation.op === "delete") {
+        throw new BadRequestError("Delete mutation execution is not implemented yet.");
+      }
+
       const response = input.writes.apply(() =>
         patchStoredRecordOutcome(
           input.storage,

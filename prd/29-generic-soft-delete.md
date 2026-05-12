@@ -1,7 +1,7 @@
 # PRD 29: Generic soft delete
 
 Status: in progress
-Current chunk: GSD-02 ready
+Current chunk: GSD-03 ready
 Last updated: 2026-05-12
 
 Start before PRD 26 if Site authoring cleanup needs block/post/page deletion.
@@ -183,6 +183,7 @@ Possible changed files:
 | GSD-D8  | Enable Site delete narrowly after generic behavior is proven.         | The immediate user problem is Site editor cleanup, but runtime behavior should be generic. | User direction 2026-05-12                                                                                  |
 | GSD-D9  | Treat hard delete as storage compaction, not authoring behavior.      | Physical removal would complicate sync, replay, snapshots, and references.                 | Existing change-log storage model                                                                          |
 | GSD-D10 | Characterize the current delete gap before enabling the path.         | GSD-02 can change parser and validation behavior against explicit current-behavior tests.  | `src/shared/schema.test.ts`, `src/worker/authority.test.ts`, `src/worker/storage.test.ts`                  |
+| GSD-D11 | Guard validated delete execution until storage writer lands.          | GSD-02 owns validation only; a validated delete must not fall through the patch writer.    | `src/worker/authority-operations.ts`, `src/worker/authority.test.ts`                                       |
 
 ### Deep Modules
 
@@ -207,8 +208,8 @@ Possible changed files:
 | ID     | Status  | Depends on | Main files                                    | Acceptance                                                                                                                       |
 | ------ | ------- | ---------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | GSD-01 | shipped | none       | tests, PRD                                    | Current tombstone, mutation-policy, and tree-remove behavior is characterized; delete mutation contract is locked.               |
-| GSD-02 | ready   | GSD-01     | schema parser, protocol, authority validation | `delete.enabled: true` parses and `op: "delete"` validates with disabled, unknown, wrong-entity, tombstone, and replay coverage. |
-| GSD-03 | planned | GSD-02     | storage, authority operations, tests          | Delete mutation commits a tombstone change, broadcasts only on commit, and preserves replay semantics.                           |
+| GSD-02 | shipped | GSD-01     | schema parser, protocol, authority validation | `delete.enabled: true` parses and `op: "delete"` validates with disabled, unknown, wrong-entity, tombstone, and replay coverage. |
+| GSD-03 | ready   | GSD-02     | storage, authority operations, tests          | Delete mutation commits a tombstone change, broadcasts only on commit, and preserves replay semantics.                           |
 | GSD-04 | planned | GSD-03     | authority validation, storage/query tests     | Active inbound references block generic delete; tombstoned referencing records do not block delete.                              |
 | GSD-05 | planned | GSD-04     | client sync, generated delete UI, app tests   | Generated collection/table/tree surfaces render confirmed delete controls only when schema policy enables them.                  |
 | GSD-06 | planned | GSD-05     | Site source schema, app/browser smoke, PRD    | Site enables safe deletes, remove-vs-delete behavior is clear, browser smoke passes, and PRD evidence is current.                |
@@ -237,7 +238,7 @@ Should not ship in parallel with:
 ## Blockers
 
 - None hard.
-- GSD-02 has no known blocker.
+- GSD-03 has no known blocker.
 - GSD-05 should wait until the delete mutation contract is stable.
 - GSD-06 should wait until reference-blocking behavior is proven in authority tests.
 
@@ -260,6 +261,7 @@ Should not ship in parallel with:
 ## Promote after ship
 
 - GSD-01: no global doc promotion; this chunk only adds characterization tests and PRD evidence.
+- GSD-02: no global doc promotion; this chunk stages parser, protocol, and validation behavior, while storage execution remains GSD-03.
 - `doc/current.md`: generic delete mutations can soft-delete records through `deletedAt`.
 - `doc/current.md`: delete mutation validation blocks active inbound references.
 - `doc/current.md`: generated delete controls render only when entity delete policy is enabled.
@@ -276,3 +278,9 @@ Should not ship in parallel with:
 - 2026-05-12: GSD-01 added authority characterization in `src/worker/authority.test.ts`: current `op: "delete"` mutation requests are rejected and do not tombstone records or append sync changes.
 - 2026-05-12: GSD-01 tightened storage tombstone characterization in `src/worker/storage.test.ts`: action tombstones keep entity, values, and createdAt while adding deletedAt.
 - 2026-05-12: GSD-01 check evidence: `devstate check` reports checks ok, service test watcher passed 3 changed test files / 212 tests, and `./tmp` status files were absent in this checkout so `.devstate/status.json` and `.devstate/logs/*` were used.
+- 2026-05-12: GSD-02 changed `src/shared/schema-mutations.ts` and `src/shared/schema-types.ts` so `delete.enabled: true` parses and survives `stringifySchema`.
+- 2026-05-12: GSD-02 changed `src/shared/protocol.ts` so generic `Mutation` includes `DeleteMutation`, and sync protocol validation accepts `ChangeRow.op: "delete"`.
+- 2026-05-12: GSD-02 changed `src/worker/authority-validation.ts` so delete requests validate mutation id, policy, `recordId`, missing values, unknown records, entity mismatch, tombstones, and replay before storage execution.
+- 2026-05-12: GSD-02 changed `src/worker/authority-operations.ts` to reject validated delete execution with an explicit storage-boundary error until GSD-03 adds the tombstone writer.
+- 2026-05-12: GSD-02 tests updated in `src/shared/schema.test.ts`, `src/shared/protocol.test.ts`, and `src/worker/authority.test.ts`.
+- 2026-05-12: GSD-02 check evidence: `devstate check` reports checks ok, web service ready, and service test watcher passing; `./tmp` status files are absent in this checkout so `.devstate/status.md` and `.devstate/logs/*` were used.

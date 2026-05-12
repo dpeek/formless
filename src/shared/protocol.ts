@@ -27,7 +27,14 @@ export type PatchMutation = {
   values: Partial<RecordValues>;
 };
 
-export type Mutation = CreateMutation | PatchMutation;
+export type DeleteMutation = {
+  mutationId: string;
+  entity: EntityName;
+  op: "delete";
+  recordId: string;
+};
+
+export type Mutation = CreateMutation | PatchMutation | DeleteMutation;
 
 export type CreateSelectedJoinRecordActionInput = {
   fromRecordId: string;
@@ -63,7 +70,7 @@ export type ActionRequest = {
 export type ChangeRow = {
   seq: number;
   mutationId: string;
-  op: "create" | "patch" | "action";
+  op: "create" | "patch" | "delete" | "action";
   entity: EntityName;
   recordId: string;
   payload: StoredRecord;
@@ -303,7 +310,10 @@ function isChangeRow(value: unknown): value is ChangeRow {
     isRecord(value) &&
     isCursor(value.seq) &&
     typeof value.mutationId === "string" &&
-    (value.op === "create" || value.op === "patch" || value.op === "action") &&
+    (value.op === "create" ||
+      value.op === "patch" ||
+      value.op === "delete" ||
+      value.op === "action") &&
     typeof value.entity === "string" &&
     typeof value.recordId === "string" &&
     isStoredRecord(value.payload) &&

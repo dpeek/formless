@@ -87,7 +87,7 @@ function parseAfterCreateHook(
 
 function parseGenericMutationPolicy(
   entityName: string,
-  mutationName: "create" | "patch",
+  mutationName: "patch" | "delete",
   value: unknown,
 ): GenericMutationPolicy {
   if (!isRecord(value)) {
@@ -104,19 +104,7 @@ function parseGenericMutationPolicy(
 }
 
 function parseDeleteMutationPolicy(entityName: string, value: unknown): DeleteMutationPolicy {
-  if (!isRecord(value)) {
-    throw new Error(`Entity "${entityName}" delete mutation policy must be an object.`);
-  }
-
-  assertExactPolicyKeys(entityName, "delete", value);
-
-  if (value.enabled !== false) {
-    throw new Error(
-      `Entity "${entityName}" delete.enabled must be false until delete mutations are implemented.`,
-    );
-  }
-
-  return { enabled: false };
+  return parseGenericMutationPolicy(entityName, "delete", value);
 }
 
 function assertExactPolicyKeys(
