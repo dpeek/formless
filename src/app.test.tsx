@@ -995,7 +995,6 @@ describe("generated collection home", () => {
     expect(html).toContain("Add placement");
     expect(html).not.toContain("Create Block<");
     expect(html).not.toContain('data-slot="table"');
-    expect(html).toContain("Body");
     expect(html).toContain('data-web-autosize-text-input="true"');
     expect(html).toContain("h-9 w-full text-2xl font-semibold");
     expect(html).toContain('data-web-markdown-editor="plate"');
@@ -1005,7 +1004,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Blog");
     expect(html).toContain("Resume");
     expect(html).toContain("Projects");
-    expect(html).toContain("A concise personal site for current work");
+    expect(html).not.toContain("A concise personal site for current work");
     expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain("Site owner portrait");
     expect(html).toContain("Intro video");
@@ -1122,8 +1121,8 @@ describe("generated collection home", () => {
     expect(html).toContain(
       'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
     );
-    expect(html).toContain('value="contentList"');
-    expect(html).toContain('value="contentGrid"');
+    expect(html).not.toContain('value="contentList"');
+    expect(html).not.toContain('value="contentGrid"');
   });
 
   it("renders header navigation as content block placements", () => {
@@ -1139,7 +1138,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Header");
     expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
     expect(html).toContain("Add placement");
-    expect(html).toContain('value="link"');
+    expect(html).not.toContain('value="link"');
     expect(html).toContain('value="rec_site_content_link_home" selected="">Home</option>');
     expect(html).toContain('value="rec_site_content_link_blog" selected="">Blog</option>');
     expect(html).toContain('value="rec_site_content_link_projects" selected="">Projects</option>');
@@ -2981,8 +2980,9 @@ describe("generated forms and records", () => {
 
     expect(createHtml).toContain('name="type"');
     expect(createHtml).toContain("Post");
-    expect(createHtml).toMatch(inputWithNameAndType("body", "hidden"));
-    expect(createHtml).toContain('data-web-markdown-editor="plate"');
+    expect(createHtml).not.toMatch(inputWithNameAndType("body", "hidden"));
+    expect(createHtml).not.toContain('name="templateKey"');
+    expect(createHtml).not.toContain('data-web-markdown-editor="plate"');
     expect(createHtml).not.toContain('name="featured"');
     expect(createHtml).not.toContain('name="publishedAt"');
     expect(createHtml).not.toContain('aria-label="Select date"');
@@ -3001,7 +3001,6 @@ describe("generated forms and records", () => {
       label: "Field behavior note",
       body: "## Note\n\nCreate and edit stay wired.",
       href: "https://example.com/field-behavior",
-      templateKey: "post",
     });
     expect(resolveCreateValues(imageFormData, action)).toEqual({
       type: "image",

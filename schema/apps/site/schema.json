@@ -227,34 +227,34 @@
       "variants": {
         "page": {
           "label": "Page",
-          "fields": ["label", "body", "href", "templateKey"],
+          "fields": ["label", "href"],
           "requiredFields": ["label", "href"]
         },
         "post": {
           "label": "Post",
-          "fields": ["label", "body", "href", "templateKey"],
+          "fields": ["label", "body", "href"],
           "requiredFields": ["label", "href"]
         },
         "project": {
           "label": "Project",
-          "fields": ["label", "body", "href", "templateKey"],
+          "fields": ["label", "body", "href"],
           "requiredFields": ["label", "href"]
         },
         "profile": {
           "label": "Profile",
-          "fields": ["label", "body", "templateKey"]
+          "fields": ["label", "body"]
         },
         "group": {
           "label": "Group",
-          "fields": ["label", "templateKey"]
+          "fields": ["label"]
         },
         "header": {
           "label": "Header",
-          "fields": ["label", "templateKey"]
+          "fields": ["label"]
         },
         "footer": {
           "label": "Footer",
-          "fields": ["label", "templateKey"]
+          "fields": ["label"]
         },
         "link": {
           "label": "Link",
@@ -263,42 +263,16 @@
         },
         "markdown": {
           "label": "Markdown",
-          "fields": ["label", "body", "templateKey"]
+          "fields": ["label", "body"]
         },
         "hero": {
           "label": "Hero",
-          "fields": ["label", "body", "templateKey"]
-        },
-        "contentList": {
-          "label": "Content list",
-          "fields": ["label", "templateKey"]
-        },
-        "contentGrid": {
-          "label": "Content grid",
-          "fields": ["label", "templateKey"]
+          "fields": ["label", "body"]
         },
         "image": {
           "label": "Image",
           "fields": ["label", "href", "width", "height"],
           "requiredFields": ["label", "href"]
-        },
-        "video": {
-          "label": "Video",
-          "fields": ["label", "href", "width", "height"],
-          "requiredFields": ["label", "href"]
-        },
-        "file": {
-          "label": "File",
-          "fields": ["label", "href", "width", "height"],
-          "requiredFields": ["label", "href"]
-        },
-        "cta": {
-          "label": "Call to action",
-          "fields": ["label", "body", "href", "icon", "color"]
-        },
-        "subscribe": {
-          "label": "Subscribe",
-          "fields": ["label", "body", "href", "icon", "color"]
         }
       },
       "fallback": {
@@ -506,10 +480,6 @@
         "label": {
           "editor": "text",
           "commit": "field-commit"
-        },
-        "type": {
-          "editor": "enum",
-          "commit": "immediate"
         }
       }
     },
@@ -519,20 +489,12 @@
         "label": {
           "editor": "text",
           "commit": "field-commit"
-        },
-        "type": {
-          "editor": "enum",
-          "commit": "immediate"
         }
       }
     },
     "blockRootDetail": {
       "entity": "block",
       "fields": {
-        "type": {
-          "editor": "enum",
-          "commit": "immediate"
-        },
         "label": {
           "editor": "text",
           "commit": "field-commit"
@@ -543,10 +505,6 @@
         "page": {
           "presentation": "fields",
           "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
             "href": {
               "editor": "href",
               "commit": "field-commit"
@@ -576,10 +534,6 @@
             "href": {
               "editor": "href",
               "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
             }
           }
         },
@@ -588,37 +542,6 @@
           "fields": {
             "body": {
               "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "group": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "header": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "footer": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
               "commit": "field-commit"
             }
           }
@@ -638,10 +561,6 @@
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
             }
           }
         },
@@ -650,28 +569,6 @@
           "fields": {
             "body": {
               "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "contentList": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "contentGrid": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
               "commit": "field-commit"
             }
           }
@@ -692,90 +589,14 @@
               "commit": "field-commit"
             }
           }
-        },
-        "video": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "file": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "cta": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "subscribe": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
-              "commit": "field-commit"
-            }
-          }
         }
       },
       "fallback": {
         "presentation": "fields",
         "fields": {
-          "type": {
-            "editor": "enum",
-            "commit": "immediate"
+          "label": {
+            "editor": "text",
+            "commit": "field-commit"
           }
         }
       }
@@ -832,28 +653,6 @@
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "contentList": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "contentGrid": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
             }
           }
         },
@@ -873,90 +672,14 @@
               "commit": "field-commit"
             }
           }
-        },
-        "video": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "file": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "cta": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "subscribe": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
-              "commit": "field-commit"
-            }
-          }
         }
       },
       "fallback": {
         "presentation": "fields",
         "fields": {
-          "type": {
-            "editor": "enum",
-            "commit": "immediate"
+          "label": {
+            "editor": "text",
+            "commit": "field-commit"
           }
         }
       }
@@ -1146,18 +869,6 @@
           "count": {
             "type": "count"
           }
-        },
-        {
-          "query": "blockVideos",
-          "count": {
-            "type": "count"
-          }
-        },
-        {
-          "query": "blockFiles",
-          "count": {
-            "type": "count"
-          }
         }
       ],
       "defaultQuery": "blockAll",
@@ -1331,14 +1042,8 @@
         "page": {
           "presentation": "fields",
           "fields": {
-            "body": {
-              "editor": "markdown"
-            },
             "href": {
               "editor": "href"
-            },
-            "templateKey": {
-              "editor": "slug"
             }
           }
         },
@@ -1350,9 +1055,6 @@
             },
             "href": {
               "editor": "href"
-            },
-            "templateKey": {
-              "editor": "slug"
             }
           }
         },
@@ -1364,9 +1066,6 @@
             },
             "href": {
               "editor": "href"
-            },
-            "templateKey": {
-              "editor": "slug"
             }
           }
         },
@@ -1375,33 +1074,6 @@
           "fields": {
             "body": {
               "editor": "markdown"
-            },
-            "templateKey": {
-              "editor": "slug"
-            }
-          }
-        },
-        "group": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug"
-            }
-          }
-        },
-        "header": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug"
-            }
-          }
-        },
-        "footer": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug"
             }
           }
         },
@@ -1418,9 +1090,6 @@
           "fields": {
             "body": {
               "editor": "markdown"
-            },
-            "templateKey": {
-              "editor": "slug"
             }
           }
         },
@@ -1429,25 +1098,6 @@
           "fields": {
             "body": {
               "editor": "markdown"
-            },
-            "templateKey": {
-              "editor": "slug"
-            }
-          }
-        },
-        "contentList": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug"
-            }
-          }
-        },
-        "contentGrid": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug"
             }
           }
         },
@@ -1462,68 +1112,6 @@
             },
             "height": {
               "editor": "number"
-            }
-          }
-        },
-        "video": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href"
-            },
-            "width": {
-              "editor": "number"
-            },
-            "height": {
-              "editor": "number"
-            }
-          }
-        },
-        "file": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href"
-            },
-            "width": {
-              "editor": "number"
-            },
-            "height": {
-              "editor": "number"
-            }
-          }
-        },
-        "cta": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown"
-            },
-            "href": {
-              "editor": "href"
-            },
-            "icon": {
-              "editor": "icon"
-            },
-            "color": {
-              "editor": "color"
-            }
-          }
-        },
-        "subscribe": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown"
-            },
-            "href": {
-              "editor": "href"
-            },
-            "icon": {
-              "editor": "icon"
-            },
-            "color": {
-              "editor": "color"
             }
           }
         }
@@ -1541,10 +1129,6 @@
       "type": "edit",
       "entity": "block",
       "fields": {
-        "type": {
-          "editor": "enum",
-          "commit": "immediate"
-        },
         "label": {
           "editor": "text",
           "commit": "field-commit"
@@ -1555,16 +1139,8 @@
         "page": {
           "presentation": "fields",
           "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
             "href": {
               "editor": "href",
-              "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
               "commit": "field-commit"
             }
           }
@@ -1579,10 +1155,6 @@
             "href": {
               "editor": "href",
               "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
             }
           }
         },
@@ -1596,10 +1168,6 @@
             "href": {
               "editor": "href",
               "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
             }
           }
         },
@@ -1608,37 +1176,6 @@
           "fields": {
             "body": {
               "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "group": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "header": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "footer": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
               "commit": "field-commit"
             }
           }
@@ -1658,10 +1195,6 @@
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
             }
           }
         },
@@ -1670,28 +1203,6 @@
           "fields": {
             "body": {
               "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "contentList": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "contentGrid": {
-          "presentation": "fields",
-          "fields": {
-            "templateKey": {
-              "editor": "slug",
               "commit": "field-commit"
             }
           }
@@ -1709,82 +1220,6 @@
             },
             "height": {
               "editor": "number",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "video": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "file": {
-          "presentation": "fields",
-          "fields": {
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "cta": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
-              "commit": "field-commit"
-            }
-          }
-        },
-        "subscribe": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            },
-            "href": {
-              "editor": "href",
-              "commit": "field-commit"
-            },
-            "icon": {
-              "editor": "icon",
-              "commit": "field-commit"
-            },
-            "color": {
-              "editor": "color",
               "commit": "field-commit"
             }
           }

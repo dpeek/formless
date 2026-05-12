@@ -1304,7 +1304,7 @@ describe("home view model collections", () => {
           },
           createAction: null,
           itemViewName: "blockRootDetail",
-          recordFields: ["type", "label"],
+          recordFields: ["label"],
         },
         queries: [
           {
@@ -1440,8 +1440,6 @@ describe("home view model collections", () => {
       "blockLinks",
       "blockGroups",
       "blockImages",
-      "blockVideos",
-      "blockFiles",
     ]);
     expect(
       contentModel?.result.type === "table"
@@ -1468,7 +1466,7 @@ describe("home view model collections", () => {
     expect(create?.type === "create" ? create.union?.unionName : undefined).toBe("blockByType");
     expect(createVariantFields).toMatchObject({
       link: ["href"],
-      markdown: ["body", "templateKey"],
+      markdown: ["body"],
       image: ["href", "width", "height"],
     });
   });
@@ -1548,7 +1546,7 @@ describe("home view model collections", () => {
         },
       },
       itemViewName: "blockContextItem",
-      recordFields: [{ fieldName: "label" }, { fieldName: "type" }],
+      recordFields: [{ fieldName: "label" }],
     });
     expect(compositionModel?.actions[0]).toMatchObject({
       type: "create",

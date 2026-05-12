@@ -4172,14 +4172,15 @@ describe("personal site sample schema", () => {
       entity: "block",
       discriminator: "type",
       variants: {
-        header: { label: "Header", fields: ["label", "templateKey"] },
-        footer: { label: "Footer", fields: ["label", "templateKey"] },
+        page: { label: "Page", fields: ["label", "href"] },
+        header: { label: "Header", fields: ["label"] },
+        footer: { label: "Footer", fields: ["label"] },
         link: {
           label: "Link",
           fields: ["label", "href"],
           requiredFields: ["label", "href"],
         },
-        markdown: { label: "Markdown", fields: ["label", "body", "templateKey"] },
+        markdown: { label: "Markdown", fields: ["label", "body"] },
         image: {
           label: "Image",
           fields: ["label", "href", "width", "height"],
@@ -4188,6 +4189,9 @@ describe("personal site sample schema", () => {
       },
       fallback: { label: "Block", fields: ["label", "type"] },
     });
+    expect(Object.keys(schema.unions?.blockByType?.variants ?? {})).not.toEqual(
+      expect.arrayContaining(["contentList", "contentGrid", "video", "file", "cta", "subscribe"]),
+    );
     expect(schema.relationships).toMatchObject({
       placementParent: {
         kind: "toOne",
@@ -4283,7 +4287,7 @@ describe("personal site sample schema", () => {
       fallback: {
         presentation: "fields",
         fields: {
-          type: { editor: "enum", commit: "immediate" },
+          label: { editor: "text", commit: "field-commit" },
         },
       },
     });
@@ -4304,6 +4308,19 @@ describe("personal site sample schema", () => {
       },
       union: "blockByType",
       variants: {
+        page: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "href" },
+          },
+        },
+        post: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown" },
+            href: { editor: "href" },
+          },
+        },
         link: {
           presentation: "fields",
           fields: {
@@ -4314,7 +4331,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             body: { editor: "markdown" },
-            templateKey: { editor: "slug" },
           },
         },
         image: {
@@ -4331,11 +4347,23 @@ describe("personal site sample schema", () => {
       type: "edit",
       entity: "block",
       fields: {
-        type: { editor: "enum", commit: "immediate" },
         label: { editor: "text", commit: "field-commit" },
       },
       union: "blockByType",
       variants: {
+        page: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "href", commit: "field-commit" },
+          },
+        },
+        post: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+            href: { editor: "href", commit: "field-commit" },
+          },
+        },
         link: {
           presentation: "fields",
           fields: {
@@ -4346,7 +4374,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             body: { editor: "markdown", commit: "field-commit" },
-            templateKey: { editor: "slug", commit: "field-commit" },
           },
         },
         image: {
@@ -4457,7 +4484,7 @@ describe("personal site sample schema", () => {
     });
   });
 
-  it("characterizes current site authoring simplification targets", () => {
+  it("parses simplified site block authoring views", () => {
     const schema = parseAppSchema(rawSiteSchema);
     const plannedRemovedBlockTypes = [
       "contentList",
@@ -4476,7 +4503,7 @@ describe("personal site sample schema", () => {
     expect(Object.keys(blockTypeField.values)).toEqual(
       expect.arrayContaining(plannedRemovedBlockTypes),
     );
-    expect(Object.keys(schema.unions?.blockByType?.variants ?? {})).toEqual(
+    expect(Object.keys(schema.unions?.blockByType?.variants ?? {})).not.toEqual(
       expect.arrayContaining(plannedRemovedBlockTypes),
     );
 
@@ -4503,99 +4530,90 @@ describe("personal site sample schema", () => {
       label: { editor: "text" },
     });
     expect(blockEdit.fields).toMatchObject({
-      type: { editor: "enum", commit: "immediate" },
       label: { editor: "text", commit: "field-commit" },
     });
+    expect(blockEdit.fields).not.toHaveProperty("type");
     expect(schema.itemViews.blockRootDetail).toMatchObject({
       fields: {
-        type: { editor: "enum", commit: "immediate" },
         label: { editor: "text", commit: "field-commit" },
       },
       variants: {
         page: {
           presentation: "fields",
           fields: {
+            href: { editor: "href", commit: "field-commit" },
+          },
+        },
+        post: {
+          presentation: "fields",
+          fields: {
             body: { editor: "markdown", commit: "field-commit" },
             href: { editor: "href", commit: "field-commit" },
           },
         },
-        group: {
-          presentation: "fields",
-          fields: {
-            templateKey: { editor: "slug", commit: "field-commit" },
-          },
-        },
-        header: {
-          presentation: "fields",
-          fields: {
-            templateKey: { editor: "slug", commit: "field-commit" },
-          },
-        },
-        footer: {
-          presentation: "fields",
-          fields: {
-            templateKey: { editor: "slug", commit: "field-commit" },
-          },
-        },
       },
     });
+    const blockRootPage = schema.itemViews.blockRootDetail.variants?.page;
+    if (blockRootPage?.presentation !== "fields") {
+      throw new Error("Missing Site page root-detail fields presentation.");
+    }
+    expect(schema.itemViews.blockRootDetail.fields).not.toHaveProperty("type");
+    expect(blockRootPage.fields).not.toHaveProperty("body");
+    expect(blockRootPage.fields).not.toHaveProperty("templateKey");
+    expect(schema.itemViews.blockRootDetail.variants).not.toHaveProperty("group");
+    expect(schema.itemViews.blockRootDetail.variants).not.toHaveProperty("header");
+    expect(schema.itemViews.blockRootDetail.variants).not.toHaveProperty("footer");
     expect(schema.itemViews.blockTreeNode).toMatchObject({
       variants: {
         hero: {
           presentation: "fields",
           fields: {
             body: { editor: "markdown", commit: "field-commit" },
-            templateKey: { editor: "slug", commit: "field-commit" },
-          },
-        },
-        contentList: {
-          presentation: "fields",
-          fields: {
-            templateKey: { editor: "slug", commit: "field-commit" },
-          },
-        },
-        contentGrid: {
-          presentation: "fields",
-          fields: {
-            templateKey: { editor: "slug", commit: "field-commit" },
           },
         },
       },
       fallback: {
         presentation: "fields",
         fields: {
-          type: { editor: "enum", commit: "immediate" },
+          label: { editor: "text", commit: "field-commit" },
         },
       },
     });
+    const blockTreeHero = schema.itemViews.blockTreeNode.variants?.hero;
+    if (blockTreeHero?.presentation !== "fields") {
+      throw new Error("Missing Site hero tree-node fields presentation.");
+    }
+    expect(blockTreeHero.fields).not.toHaveProperty("templateKey");
     expect(blockCreate.variants?.page).toMatchObject({
       presentation: "fields",
       fields: {
-        body: { editor: "markdown" },
-        templateKey: { editor: "slug" },
+        href: { editor: "href" },
       },
     });
+    expect(blockCreate.variants?.page?.fields).not.toHaveProperty("body");
+    expect(blockCreate.variants?.page?.fields).not.toHaveProperty("templateKey");
     expect(blockEdit.variants?.page).toMatchObject({
       presentation: "fields",
       fields: {
-        body: { editor: "markdown", commit: "field-commit" },
-        templateKey: { editor: "slug", commit: "field-commit" },
+        href: { editor: "href", commit: "field-commit" },
       },
     });
+    expect(blockEdit.variants?.page?.fields).not.toHaveProperty("body");
+    expect(blockEdit.variants?.page?.fields).not.toHaveProperty("templateKey");
     expect(blockEdit.variants?.post).toMatchObject({
       presentation: "fields",
       fields: {
         body: { editor: "markdown", commit: "field-commit" },
-        templateKey: { editor: "slug", commit: "field-commit" },
+        href: { editor: "href", commit: "field-commit" },
       },
     });
+    expect(blockEdit.variants?.post?.fields).not.toHaveProperty("templateKey");
 
     for (const blockType of plannedRemovedBlockTypes) {
-      expect(blockCreate.variants).toHaveProperty(blockType);
-      expect(blockEdit.variants).toHaveProperty(blockType);
-      expect(schema.itemViews.blockRootDetail).toMatchObject({
-        variants: { [blockType]: { presentation: "fields" } },
-      });
+      expect(blockCreate.variants).not.toHaveProperty(blockType);
+      expect(blockEdit.variants).not.toHaveProperty(blockType);
+      expect(schema.itemViews.blockRootDetail.variants).not.toHaveProperty(blockType);
+      expect(schema.itemViews.blockTreeNode.variants).not.toHaveProperty(blockType);
     }
 
     expect(siteCompositionHome.result).toMatchObject({
