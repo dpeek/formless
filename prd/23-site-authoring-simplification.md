@@ -1,7 +1,7 @@
 # PRD 23: Site authoring simplification
 
 Status: in progress
-Current chunk: SAS-07 ready
+Current chunk: SAS-08 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -227,22 +227,22 @@ Owned files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                                | Reason                                                                         | Evidence                                               |
-| ------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| SAS-D1  | Keep `block` and `blockPlacement` as the Site storage model.            | Flat records are a core runtime bet and existing Site code uses them.          | `CONTEXT.md`, prior Site PRDs                          |
-| SAS-D2  | Treat block type as create-time authoring input.                        | Type switching after creation makes editors unstable and unsafe.               | User direction 2026-05-12                              |
-| SAS-D3  | Use hidden literal defaults for fixed block type creation.              | The stored discriminator is still required, but authors need not edit it.      | Existing create defaults already resolve hidden values |
-| SAS-D4  | Hide `templateKey` before removing the storage field.                   | Existing seeds/rendering may still depend on it during migration.              | Current Site renderer and tree projection              |
-| SAS-D5  | Remove unfinished block types from first-release authoring vocabulary.  | A smaller set makes authoring clearer and avoids supporting weak abstractions. | User direction 2026-05-12                              |
-| SAS-D6  | Use `group` as the generic fallback composition block.                  | It preserves composition without speculative specialized types.                | User direction 2026-05-12                              |
-| SAS-D7  | Keep page content in child blocks only.                                 | Page roots should own route/container identity, not body content.              | User direction 2026-05-12                              |
-| SAS-D8  | Add child allowance as tree result/view-model policy.                   | Parent-child authoring rules belong to the generated tree view.                | Existing tree result branch policy                     |
-| SAS-D9  | Add/remove tree commands should write placement edges, not nested data. | The data model stays flat and public tree projection remains reusable.         | `blockPlacement` relationship model                    |
-| SAS-D10 | Remove from tree means remove the placement edge first.                 | Blocks can be reused; deleting the child would be destructive.                 | Existing reusable Header/Footer/link records           |
-| SAS-D11 | Model Header/Footer as a Site frame.                                    | Shared chrome should be edited once and rendered everywhere.                   | User question about repeated Header/Footer             |
-| SAS-D12 | Do not use visible page templates for first release.                    | A full template system would become a layout DSL too early.                    | Roadmap excludes full layout DSL                       |
-| SAS-D13 | Model posts as content routes rather than query-list blocks.            | Authors should write posts; the system should own `/blog` routing/listing.     | User question about posts and `/blog`                  |
-| SAS-D14 | Keep the public renderer site-specific.                                 | This simplification should not generalize renderer layout too early.           | Roadmap and PRD 09 direction                           |
+| ID      | Decision                                                                | Reason                                                                         | Evidence                                                                                       |
+| ------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| SAS-D1  | Keep `block` and `blockPlacement` as the Site storage model.            | Flat records are a core runtime bet and existing Site code uses them.          | `CONTEXT.md`, prior Site PRDs                                                                  |
+| SAS-D2  | Treat block type as create-time authoring input.                        | Type switching after creation makes editors unstable and unsafe.               | User direction 2026-05-12                                                                      |
+| SAS-D3  | Use hidden literal defaults for fixed block type creation.              | The stored discriminator is still required, but authors need not edit it.      | Existing create defaults already resolve hidden values                                         |
+| SAS-D4  | Hide `templateKey` before removing the storage field.                   | Existing seeds/rendering may still depend on it during migration.              | Current Site renderer and tree projection                                                      |
+| SAS-D5  | Remove unfinished block types from first-release authoring vocabulary.  | A smaller set makes authoring clearer and avoids supporting weak abstractions. | User direction 2026-05-12                                                                      |
+| SAS-D6  | Use `group` as the generic fallback composition block.                  | It preserves composition without speculative specialized types.                | User direction 2026-05-12                                                                      |
+| SAS-D7  | Keep page content in child blocks only.                                 | Page roots should own route/container identity, not body content.              | User direction 2026-05-12                                                                      |
+| SAS-D8  | Add child allowance as tree result/view-model policy.                   | Parent-child authoring rules belong to the generated tree view.                | Existing tree result branch policy                                                             |
+| SAS-D9  | Add/remove tree commands should write placement edges, not nested data. | The data model stays flat and public tree projection remains reusable.         | `blockPlacement` relationship model                                                            |
+| SAS-D10 | Remove from tree means remove the placement edge first.                 | Blocks can be reused; deleting the child would be destructive.                 | Existing reusable Header/Footer/link records                                                   |
+| SAS-D11 | Model Header/Footer as a Site frame.                                    | Shared chrome should be edited once and rendered everywhere.                   | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`, `schema/apps/site/seed-records.json` |
+| SAS-D12 | Do not use visible page templates for first release.                    | A full template system would become a layout DSL too early.                    | Roadmap excludes full layout DSL                                                               |
+| SAS-D13 | Model posts as content routes rather than query-list blocks.            | Authors should write posts; the system should own `/blog` routing/listing.     | User question about posts and `/blog`                                                          |
+| SAS-D14 | Keep the public renderer site-specific.                                 | This simplification should not generalize renderer layout too early.           | Roadmap and PRD 09 direction                                                                   |
 
 ### Deep Modules
 
@@ -279,7 +279,7 @@ Owned files:
 | SAS-04 | shipped | SAS-03     | tree policy parser/view model/generated tree UI                  | Tree child policy controls add buttons for allowed parent variants, including empty parents.                                 |
 | SAS-05 | shipped | SAS-04     | authority actions/storage integration/generated tree UI          | Tree add creates block plus placement, and tree remove tombstones placement edges without deleting child blocks.             |
 | SAS-06 | shipped | SAS-03     | Site source schema/seeds/readiness/public renderer               | Removed block types are gone from source schema, seeds, readiness checks, and renderer branches.                             |
-| SAS-07 | planned | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
+| SAS-07 | shipped | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
 | SAS-08 | planned | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
 | SAS-09 | planned | SAS-08     | browser smoke, PRD                                               | `/site`, `/pages/home`, `/pages/blog`, and a post route smoke pass; PRD status/evidence are current.                         |
 
@@ -296,23 +296,26 @@ Owned files:
 - 2026-05-12: SAS-05 generated Site tree add buttons now open fixed-type child create dialogs using hidden literal `block.type` defaults, and placement cards expose a remove action when tree composition remove is configured.
 - 2026-05-12: SAS-06 shipped source schema/seed/readiness/public renderer cleanup. Site source `block.type` enum and source queries no longer include `contentList`, `contentGrid`, `video`, `file`, `cta`, or `subscribe`; source seeds no longer create those block types; readiness no longer warns for removed query-list blocks; public renderer and tree projection no longer have query-list/video/CTA branches.
 - 2026-05-12: SAS-06 keeps Home seed content by converting Recent posts and Featured projects to `group` blocks with explicit flat `blockPlacement` children to posts/projects. Intro video and unused More posts query-list seed records were removed.
-- 2026-05-12: Next ready chunk is SAS-07 Site frame roots: Header/Footer should resolve from roots and page seeds should stop repeating Header/Footer placements.
+- 2026-05-12: SAS-07 shipped Site frame roots. Public Site tree responses now include `frame.header` and `frame.footer` resolved from live `header`/`footer` block roots; duplicate frame roots warn and choose deterministically; missing frame roots warn without blocking page rendering.
+- 2026-05-12: SAS-07 removed repeated Home Header/Footer placements from source seeds. Home page content now contains Hero, Recent posts, and Featured projects only; Header and Footer remain editable as Navigation roots and render around public pages through the Site frame.
+- 2026-05-12: Next ready chunk is SAS-08 posts and blog routing.
 
 ## Blockers
 
-- None for SAS-06.
+- None for SAS-07.
 
 ## Evidence
 
 - `devstate start`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
 - `devstate check`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
 - `.devstate/status.md`: checks ok; web service ready; test watcher passing.
-- `.devstate/logs/service-test.txt`: latest rerun passed 3 files with 216 tests.
+- `.devstate/logs/service-test.txt`: latest rerun passed 15 files with 440 tests; status file reports test watcher passing.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 190 files.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
-- `bun browser --session sas-06 ... fetch('/api/site/reset/seed')`: reset Site source seed in the browser session.
-- `bun browser --session sas-06 ... /site`: Site admin opened after reset with Home 5 placements and no browser errors.
-- `bun browser --session sas-06 ... /pages/home`: public Home rendered Header, Hero image, Recent posts group, Featured projects group, and Footer with no browser errors.
+- `bun browser --session sas-07 ... fetch('/api/site/reset/seed')`: reset Site source seed in the browser session; response status 200.
+- `bun browser --session sas-07 ... /site`: Site admin opened after reset; Pages showed Home with 3 placements, Navigation showed Header with 4 placements and Footer with 2 placements.
+- `bun browser --session sas-07 ... /pages/home`: public Home rendered Header navigation, Hero image, Recent posts group, Featured projects group, and Footer through the Site frame.
+- `bun browser --session sas-07 errors`: no page errors.
 
 ## Out of Scope
 

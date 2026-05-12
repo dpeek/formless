@@ -364,16 +364,6 @@
     "createdAt": "2026-05-05T00:00:26.000Z"
   },
   {
-    "id": "rec_site_place_home_header",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "rec_site_content_group_header",
-      "order": 1000
-    },
-    "createdAt": "2026-05-05T00:00:26.100Z"
-  },
-  {
     "id": "rec_site_place_footer_section_explore",
     "entity": "blockPlacement",
     "values": {
@@ -392,16 +382,6 @@
       "order": 2000
     },
     "createdAt": "2026-05-05T00:00:26.300Z"
-  },
-  {
-    "id": "rec_site_place_home_footer",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "rec_site_content_group_footer",
-      "order": 5000
-    },
-    "createdAt": "2026-05-05T00:00:26.400Z"
   },
   {
     "id": "rec_site_place_home_hero",

@@ -157,7 +157,13 @@ export type SitePageTreeResponse = SitePageTree;
 
 export type SitePageTree = {
   page: SiteBlockNode;
+  frame: SitePageFrame;
   meta: SiteTreeMeta;
+};
+
+export type SitePageFrame = {
+  header?: SiteBlockNode;
+  footer?: SiteBlockNode;
 };
 
 export type SiteTreeMeta = {

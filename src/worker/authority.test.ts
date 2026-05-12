@@ -111,12 +111,12 @@ describe("authority", () => {
       warnings: [],
     });
     expect(body.page.placements.map((placement) => placement.id)).toEqual([
-      "rec_site_place_home_header",
       "rec_site_place_home_hero",
       "rec_site_place_home_recent_posts",
       "rec_site_place_home_projects",
-      "rec_site_place_home_footer",
     ]);
+    expect(body.frame.header?.id).toBe("rec_site_content_group_header");
+    expect(body.frame.footer?.id).toBe("rec_site_content_group_footer");
     expect(recentPosts?.type).toBe("group");
     expect(recentPosts?.query).toBeUndefined();
     expect(recentPosts?.placements.map((placement) => placement.block.id)).toEqual([
@@ -938,7 +938,7 @@ describe("authority", () => {
     expect(placement.values).toEqual({
       parent: "rec_site_content_home",
       block: child.id,
-      order: 6000,
+      order: 5000,
     });
     expect(replay).toEqual(added);
 

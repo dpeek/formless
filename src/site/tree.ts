@@ -1,6 +1,7 @@
 import type {
   FieldValue,
   SiteBlockNode,
+  SitePageFrame,
   SitePageTreeProjection,
   SitePlacementNode,
   SiteTreeWarning,
@@ -10,6 +11,7 @@ import type { AppSchema } from "../shared/schema.ts";
 
 export type {
   SiteBlockNode,
+  SitePageFrame,
   SitePageTree,
   SitePageTreeProjection,
   SitePlacementNode,
@@ -67,11 +69,13 @@ export function buildSitePageTree(
     warnings,
     maxDepth: normalizeMaxDepth(options.maxDepth),
   };
+  const frame = buildSitePageFrame(context);
   const page = buildBlockNode(root, context, 0, new Set());
 
   return {
     tree: {
       page,
+      frame,
       meta,
     },
     meta,
@@ -133,6 +137,59 @@ function resolveRootPage(
       code: "skipped-root",
       recordId: duplicate.id,
       message: `Skipped duplicate page block "${duplicate.id}" for route "${slug}".`,
+    });
+  }
+
+  return root;
+}
+
+function buildSitePageFrame(context: SiteTreeBuildContext): SitePageFrame {
+  return {
+    ...optionalFrameRoot("header", context),
+    ...optionalFrameRoot("footer", context),
+  };
+}
+
+function optionalFrameRoot(
+  type: "header" | "footer",
+  context: SiteTreeBuildContext,
+): Partial<SitePageFrame> {
+  const root = resolveFrameRoot(context.indexes.blocks, type, context.warnings);
+
+  if (!root) {
+    return {};
+  }
+
+  return {
+    [type]: buildBlockNode(root, context, 0, new Set()),
+  };
+}
+
+function resolveFrameRoot(
+  blocks: Map<string, StoredRecord>,
+  type: "header" | "footer",
+  warnings: SiteTreeWarning[],
+): StoredRecord | undefined {
+  const candidates = [...blocks.values()]
+    .filter((record) => record.entity === "block" && stringValue(record.values.type) === type)
+    .sort(compareRecords);
+
+  const root = candidates[0];
+
+  if (!root) {
+    warnings.push({
+      code: "missing-frame-root",
+      recordId: type,
+      message: `No ${type} block found for the Site frame.`,
+    });
+    return undefined;
+  }
+
+  for (const duplicate of candidates.slice(1)) {
+    warnings.push({
+      code: "skipped-frame-root",
+      recordId: duplicate.id,
+      message: `Skipped duplicate ${type} frame block "${duplicate.id}".`,
     });
   }
 

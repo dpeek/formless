@@ -17,11 +17,14 @@ export function SitePageRenderer({
   tree: SitePageTree;
 }) {
   const page = tree.page;
+  const frame = tree.frame;
 
   return (
     <SitePageLinkModeContext.Provider value={linkMode}>
       <article className="min-h-dvh bg-white text-zinc-950">
+        {frame.header ? <HeaderGroup block={frame.header} /> : null}
         <PagePlacementFlow page={page} />
+        {frame.footer ? <FooterGroup block={frame.footer} /> : null}
       </article>
     </SitePageLinkModeContext.Provider>
   );
@@ -65,14 +68,7 @@ function SiteBlockRenderer({
 }
 
 function PageBlock({ block }: { block: SiteBlockNode }) {
-  return (
-    <article className="space-y-8">
-      {block.placements.length === 0 ? <PageIntro block={block} /> : null}
-      {block.placements.map((placement) => (
-        <SitePlacementRenderer key={placement.id} placement={placement} />
-      ))}
-    </article>
-  );
+  return <PagePlacementFlow page={block} />;
 }
 
 function PageIntro({ block }: { block: SiteBlockNode }) {
@@ -281,58 +277,19 @@ function ImageBlock({ block }: { block: SiteBlockNode }) {
 }
 
 function PagePlacementFlow({ page }: { page: SiteBlockNode }) {
-  const nodes: ReactNode[] = [];
-  let bodyRun: SitePlacementNode[] = [];
-  let renderedBody = false;
+  const bodyPlacements = page.placements.filter((placement) => !isPageChromePlacement(placement));
 
-  const flushBodyRun = () => {
-    if (bodyRun.length === 0) {
-      return;
-    }
-
-    const run = bodyRun;
-    bodyRun = [];
-    renderedBody = true;
-    nodes.push(
-      <PageMain key={`body-${nodes.length}`}>
-        {run.map((placement) => (
-          <SitePlacementRenderer key={placement.id} placement={placement} />
-        ))}
-      </PageMain>,
-    );
-  };
-
-  for (const placement of page.placements) {
-    if (isPageChromePlacement(placement)) {
-      flushBodyRun();
-
-      if (isPageFooterPlacement(placement) && !renderedBody) {
-        renderedBody = true;
-        nodes.push(
-          <PageMain key="intro">
-            <PageIntro block={page} />
-          </PageMain>,
-        );
-      }
-
-      nodes.push(<SitePlacementRenderer key={placement.id} placement={placement} />);
-      continue;
-    }
-
-    bodyRun.push(placement);
-  }
-
-  flushBodyRun();
-
-  if (!renderedBody) {
-    nodes.push(
-      <PageMain key="intro">
+  return (
+    <PageMain>
+      {bodyPlacements.length === 0 ? (
         <PageIntro block={page} />
-      </PageMain>,
-    );
-  }
-
-  return <>{nodes}</>;
+      ) : (
+        bodyPlacements.map((placement) => (
+          <SitePlacementRenderer key={placement.id} placement={placement} />
+        ))
+      )}
+    </PageMain>
+  );
 }
 
 function PageMain({ children }: { children: ReactNode }) {

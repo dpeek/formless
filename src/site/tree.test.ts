@@ -11,7 +11,7 @@ import {
 const generatedAt = "2026-05-06T00:00:00.000Z";
 
 describe("site page tree projection", () => {
-  it("projects home into a nested public tree with shell, content groups, and media blocks", () => {
+  it("projects home into a framed public tree with content groups and media blocks", () => {
     const result = buildSitePageTree(siteSourceSchema, baseTreeRecords(), "home", { generatedAt });
     const tree = requireTree(result);
 
@@ -29,13 +29,12 @@ describe("site page tree projection", () => {
     });
 
     expect(tree.page.placements.map((placement) => placement.id)).toEqual([
-      "rec_site_place_home_header",
       "rec_site_place_home_hero",
       "rec_site_place_home_recent_posts",
       "rec_site_place_home_projects",
-      "rec_site_place_home_footer",
     ]);
-    const header = childForPlacement(tree.page, "rec_site_place_home_header");
+
+    const header = requireBlock(tree.frame.header, "header");
     expect(header).toMatchObject({
       id: "rec_site_content_group_header",
       type: "header",
@@ -60,7 +59,7 @@ describe("site page tree projection", () => {
       "/resume",
     ]);
 
-    const footer = childForPlacement(tree.page, "rec_site_place_home_footer");
+    const footer = requireBlock(tree.frame.footer, "footer");
     expect(footer.label).toBe("Footer");
     expect(footer.placements.map((placement) => placement.block.label)).toEqual([
       "Explore",
@@ -196,7 +195,11 @@ describe("site page tree projection", () => {
     expect(result.meta.warnings).toEqual([
       expect.objectContaining({
         code: "max-depth",
-        recordId: "rec_site_content_group_header",
+        recordId: "rec_site_content_group_footer_main",
+      }),
+      expect.objectContaining({
+        code: "max-depth",
+        recordId: "rec_site_content_group_footer_social",
       }),
       expect.objectContaining({
         code: "max-depth",
@@ -210,9 +213,58 @@ describe("site page tree projection", () => {
         code: "max-depth",
         recordId: "rec_site_block_home_projects",
       }),
+    ]);
+  });
+
+  it("warns when Site frame roots are missing", () => {
+    const records = baseTreeRecords().filter(
+      (record) =>
+        !(
+          record.entity === "block" &&
+          (record.values.type === "header" || record.values.type === "footer")
+        ),
+    );
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+
+    expect(tree.frame).toEqual({});
+    expect(tree.meta.warnings).toEqual([
       expect.objectContaining({
-        code: "max-depth",
-        recordId: "rec_site_content_group_footer",
+        code: "missing-frame-root",
+        recordId: "header",
+      }),
+      expect.objectContaining({
+        code: "missing-frame-root",
+        recordId: "footer",
+      }),
+    ]);
+  });
+
+  it("chooses frame roots deterministically and warns about duplicates", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_content_group_header_later", {
+        type: "header",
+        label: "Later header",
+      }),
+      blockRecord("rec_site_content_group_footer_later", {
+        type: "footer",
+        label: "Later footer",
+      }),
+    ];
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+
+    expect(tree.frame.header?.id).toBe("rec_site_content_group_header");
+    expect(tree.frame.footer?.id).toBe("rec_site_content_group_footer");
+    expect(tree.meta.warnings).toEqual([
+      expect.objectContaining({
+        code: "skipped-frame-root",
+        recordId: "rec_site_content_group_header_later",
+      }),
+      expect.objectContaining({
+        code: "skipped-frame-root",
+        recordId: "rec_site_content_group_footer_later",
       }),
     ]);
   });
@@ -293,6 +345,14 @@ function childForPlacement(parent: SiteBlockNode, placementId: string): SiteBloc
   }
 
   return placement.block;
+}
+
+function requireBlock(block: SiteBlockNode | undefined, label: string): SiteBlockNode {
+  if (!block) {
+    throw new Error(`Missing ${label} block.`);
+  }
+
+  return block;
 }
 
 function flattenPlacementIds(node: SiteBlockNode): string[] {

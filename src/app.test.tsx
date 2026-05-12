@@ -1071,7 +1071,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain("A concise personal site for current work");
     expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain("Site owner portrait");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
   });
 
   it("renders the site route with root sidebar navigation", () => {
@@ -1176,10 +1176,10 @@ describe("generated collection home", () => {
     expect(html).toContain('data-slot="tabs-list"');
     expect(html).toContain('data-slot="tabs-trigger"');
     expect(html).toContain("Home");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
     expect(html).toContain("Add placement");
-    expect(html).toContain('value="rec_site_content_group_header" selected="">Header</option>');
-    expect(html).toContain('value="rec_site_content_group_footer" selected="">Footer</option>');
+    expect(html).not.toContain('value="rec_site_content_group_header" selected="">Header</option>');
+    expect(html).not.toContain('value="rec_site_content_group_footer" selected="">Footer</option>');
     expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain(
       'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
