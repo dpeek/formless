@@ -1,7 +1,7 @@
 # PRD 27: Generated authoring primitives
 
-Status: in progress
-Current chunk: GAP-05 ready
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-12
 
 ## Goal
@@ -64,6 +64,7 @@ That makes future generated authoring changes feel like UI edits, even when they
 - GAP-02 shipped `src/shared/create-defaults.ts` as the create-default primitive. Generated create UI now delegates submit shaping and context-default readiness to that module.
 - GAP-03 shipped `src/client/generated-authoring.ts` as the generated context-selection and root-navigation primitive.
 - GAP-04 removed create-default policy adapters from generated React modules and made scoped collection action context an explicit generated authoring fact.
+- GAP-05 closes PRD 27 without code changes. Global doc promotion remains a later doc-steward pass.
 
 ## Characterized Behavior
 
@@ -157,7 +158,7 @@ Acceptance:
 
 ### GAP-05: Closeout and promotion notes
 
-Status: planned
+Status: shipped
 
 Tasks:
 
@@ -197,6 +198,7 @@ Acceptance:
 - 2026-05-12: GAP-04 moved scoped action query-context fallback into `GeneratedContextSelectionFacts.actionQueryContext` in `src/client/generated-authoring.ts`; collection renderers now consume that fact.
 - 2026-05-12: Added UI-adapter coverage in `src/app.test.tsx` for Site placement create defaults from the generated Site collection and non-Site scoped rate create defaults from a generated rate collection.
 - 2026-05-12: Added primitive coverage in `src/client/generated-authoring.test.ts` for `actionQueryContext` when context is selected and when context options are empty.
+- 2026-05-12: GAP-05 shipped closeout only. All PRD 27 chunks are shipped; remaining follow-up is to promote the listed facts into global docs in a doc-steward pass.
 
 ## Evidence
 
@@ -211,6 +213,9 @@ Acceptance:
 - `.devstate/status.md`: GAP-04 checks ok; services running.
 - `.devstate/logs/service-test.txt`: GAP-04 watcher rerun passed 3 affected test files; 129 tests passed.
 - `.devstate/logs/check-vite.txt`: GAP-04 formatting completed; no warnings, lint errors, or type errors in 197 files.
+- `devstate start`: GAP-05 checks ok; web service ready at `https://27-generated-authoring-primitives.formless.local`; test watcher passing.
+- `devstate check`: GAP-05 checks ok; services running.
+- `.devstate/status.md`: GAP-05 checks ok; services running.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent in this repo; devstate evidence is under `.devstate/`.
 - `bun browser --session prd-27-gap-02 --ignore-https-errors open https://27-generated-authoring-primitives.formless.local/rates`: opened the running generated rate-card app.
 - `bun browser --session prd-27-gap-02 snapshot -i`: confirmed the rate-card table and `Create Resource` action rendered.
@@ -232,5 +237,7 @@ Acceptance:
 - GAP-04: promote `GeneratedContextSelectionFacts.actionQueryContext` in `src/client/generated-authoring.ts` as the owner for scoped collection action query-context fallback.
 - GAP-04: promote `src/app/generated/create.tsx` and `src/app/generated/actions.tsx` as generated UI adapters that call `src/shared/create-defaults.ts` directly for create-default readiness and value resolution.
 - GAP-04: promote `src/app.test.tsx` coverage for Site placement create defaults and non-Site scoped rate create defaults through generated collection/action adapters.
-- `doc/current.md`: generated authoring primitives and their file locations, once shipped.
-- `doc/roadmap.md`: only if this changes first-release scope wording.
+- GAP-05: promote PRD 27 as shipped with no storage-schema, route-shape, or public-site behavior changes.
+- `doc/current.md`: add generated authoring primitive ownership facts for `src/shared/create-defaults.ts`, `src/client/generated-authoring.ts`, `src/app/generated/create.tsx`, `src/app/generated/actions.tsx`, `src/app/generated/collection.tsx`, and `src/app.tsx`.
+- `doc/current.md`: add coverage facts for `src/shared/create-defaults.test.ts`, `src/client/generated-authoring.test.ts`, and `src/app.test.tsx`.
+- `doc/roadmap.md`: no promotion needed; PRD 27 changed implementation ownership, not first-release scope.
