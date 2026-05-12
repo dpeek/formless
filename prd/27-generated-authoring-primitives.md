@@ -1,7 +1,7 @@
 # PRD 27: Generated authoring primitives
 
 Status: in progress
-Current chunk: GAP-02 ready
+Current chunk: GAP-03 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -61,6 +61,7 @@ That makes future generated authoring changes feel like UI edits, even when they
 - Use existing schema parsers and view-model types. Add a new abstraction only where it removes repeated policy.
 - GAP-01 confirmed PRD 23 is complete. GAP-02 can preserve shipped PRD 23 behavior.
 - GAP-01 module names: `src/shared/create-defaults.ts` should own create-default parsing, validation, resolution, and submitted value shaping; `src/client/generated-authoring.ts` should own context fallback and root-navigation facts.
+- GAP-02 shipped `src/shared/create-defaults.ts` as the create-default primitive. Generated create UI now delegates submit shaping and context-default readiness to that module.
 
 ## Characterized Behavior
 
@@ -105,7 +106,7 @@ Acceptance:
 
 ### GAP-02: Extract create default primitive
 
-Status: ready
+Status: shipped
 
 Tasks:
 
@@ -184,17 +185,26 @@ Acceptance:
 - 2026-05-12: Existing create default characterization stays in `src/shared/schema.test.ts` and `src/app.test.tsx`: literal and context defaults parse, fixed-discriminator creates hide and submit literal defaults, scoped defaults submit selected context values, and unresolved context defaults throw.
 - 2026-05-12: Added `src/app.test.tsx` coverage for stale scoped context selection falling back to the first available context option.
 - 2026-05-12: No production behavior changed in GAP-01.
+- 2026-05-12: GAP-02 moved create default parsing, required-field checks, context default readiness, active-union submit field selection, and submitted value shaping into `src/shared/create-defaults.ts`.
+- 2026-05-12: Generated create rendering remains in `src/app/generated/create.tsx`; it delegates default resolution to the shared primitive and keeps only form/rendering adapters.
+- 2026-05-12: `src/shared/create-defaults.test.ts` covers context defaults, literal defaults, unsupported field errors, fixed-discriminator submit shaping, and missing context errors.
 
 ## Evidence
 
 - `devstate start`: checks ok; web service ready at `https://27-generated-authoring-primitives.formless.local`; test watcher passing.
+- `devstate check`: checks ok; services running.
 - `.devstate/status.md`: checks ok; services running.
-- `.devstate/logs/service-test.txt`: latest rerun passed `src/app.test.tsx`; 119 tests passed.
-- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 193 files.
+- `.devstate/logs/service-test.txt`: latest rerun passed 17 test files; 460 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 195 files.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent in this repo; devstate evidence is under `.devstate/`.
+- `bun browser --session prd-27-gap-02 --ignore-https-errors open https://27-generated-authoring-primitives.formless.local/rates`: opened the running generated rate-card app.
+- `bun browser --session prd-27-gap-02 snapshot -i`: confirmed the rate-card table and `Create Resource` action rendered.
+- `bun browser --session prd-27-gap-02 click @e13` plus `snapshot -i`: confirmed the generated `Create Resource` dialog rendered.
 
 ## Promote after ship
 
 - GAP-01: no global doc promotion. Characterization only; no runtime behavior changed.
+- GAP-02: promote `src/shared/create-defaults.ts` as the owner for create default parsing, validation, resolution, and submitted value shaping.
+- GAP-02: promote `src/shared/create-defaults.test.ts` as primitive coverage for context defaults, literal defaults, unsupported field errors, fixed-discriminator submit shaping, and missing context errors.
 - `doc/current.md`: generated authoring primitives and their file locations, once shipped.
 - `doc/roadmap.md`: only if this changes first-release scope wording.

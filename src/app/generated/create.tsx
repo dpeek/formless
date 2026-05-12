@@ -31,9 +31,12 @@ import {
 import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema, FieldSchema } from "../../shared/schema.ts";
+import {
+  createDefaultsAreResolved as createDefaultValuesAreResolved,
+  resolveCreateValues as resolvePrimitiveCreateValues,
+} from "../../shared/create-defaults.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import {
-  createInputValueToFieldValue,
   decodeNumberEditorInputValue,
   encodeNumberEditorInputValue,
   numberInputValueToFieldValue,
@@ -42,7 +45,6 @@ import { useSchemaKey } from "./schema-app-context.tsx";
 import {
   initialCreateDiscriminatorValue,
   selectCreateFieldsForDiscriminator,
-  selectCreateFieldsForFormData,
 } from "./union-presentation.ts";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
@@ -597,74 +599,18 @@ function resolveCreateValuesForFields(
   defaults: CreateDefaultConfig[],
   queryContext?: QueryEvaluationContext,
 ): RecordValues {
-  const values = getVisibleCreateValues(
+  return resolvePrimitiveCreateValues({
     formData,
-    selectCreateFieldsForFormData(fields, union, formData, defaults),
-  );
-
-  for (const defaultConfig of defaults) {
-    if (Object.hasOwn(values, defaultConfig.fieldName)) {
-      continue;
-    }
-
-    if (defaultConfig.value.kind === "context") {
-      values[defaultConfig.fieldName] = resolveContextDefaultValue(
-        defaultConfig.fieldName,
-        defaultConfig.value.name,
-        queryContext,
-      );
-    } else {
-      values[defaultConfig.fieldName] = defaultConfig.value.value;
-    }
-  }
-
-  return values;
-}
-
-function getVisibleCreateValues(formData: FormData, fields: CreateFieldConfig[]): RecordValues {
-  const values: RecordValues = {};
-
-  for (const { field, fieldName } of fields) {
-    const value = formData.get(fieldName);
-    values[fieldName] = createInputValueToFieldValue(
-      field,
-      typeof value === "string" ? value : undefined,
-      formData.has(fieldName),
-    );
-  }
-
-  return values;
+    fields,
+    union,
+    defaults,
+    queryContext,
+  });
 }
 
 export function createDefaultsAreResolved(
   action: CreateHomeActionConfig,
   queryContext?: QueryEvaluationContext,
 ) {
-  try {
-    for (const defaultConfig of action.defaults) {
-      if (defaultConfig.value.kind === "context") {
-        resolveContextDefaultValue(defaultConfig.fieldName, defaultConfig.value.name, queryContext);
-      }
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function resolveContextDefaultValue(
-  fieldName: string,
-  contextName: string,
-  queryContext?: QueryEvaluationContext,
-): string {
-  const value = queryContext?.values?.[contextName];
-
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(
-      `Create default for "${fieldName}" requires selected context "${contextName}".`,
-    );
-  }
-
-  return value;
+  return createDefaultValuesAreResolved(action.defaults, queryContext);
 }
