@@ -1,7 +1,7 @@
 # PRD 28: Browser replica projection module
 
-Status: planned
-Current chunk: BRP-01 ready
+Status: in progress
+Current chunk: BRP-02 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -60,12 +60,50 @@ That coupling makes derived browser data harder to test without React store setu
 - Store hooks become adapters over projection selectors.
 - The selector interface is a public internal test surface.
 - Performance should be no worse than today; identity reuse tests stand in for broad performance claims.
+- BRP-01 exported `createEntityRecordIdsMatchingQuerySelector` and `createRecordReadinessWarningsSelector` from `src/client/store.ts` for characterization and later extraction tests.
+
+## BRP-01 Characterization
+
+Projection hook surface in `src/client/store.ts`:
+
+- State passthrough hooks: `useHydrated`, `useActiveSchemaKey`, `useSchema`, `useCursor`, `useLastSyncedAt`.
+- Record passthrough hooks: `useEntityRecordIds`, `useRecord`, `useRecordsById`, `useRecordCreatedAt`, `useRecordField`.
+- Derived projection hooks: `useReferenceOptions`, `useEntityRecordIdsMatchingQuery`, `useEntityRecordOptionsMatchingQuery`, `useEntityRecordCountMatchingQuery`, `useAggregateValueMatchingQuery`, `useEntityRecordCountReferencingField`, `useRecordReadinessWarnings`.
+
+Projection selector surface in `src/client/store.ts`:
+
+- `createEntityRecordIdsMatchingQuerySelector`: returns active entity ids for `all` queries and filtered ids through `matchesQuery`.
+- `createEntityRecordOptionsMatchingQuerySelector`: returns matching ids and labels for query-filtered reference pickers.
+- `createEntityRecordCountMatchingQuerySelector`: counts active entity records matching a query.
+- `createAggregateValueMatchingQuerySelector`: evaluates aggregate read-model values over local query-matching records.
+- `createEntityRecordCountReferencingFieldSelector`: counts active entity records whose field equals a referenced record id.
+- `createReferenceOptionsSelector`: returns active entity ids and display labels for reference editors.
+- `createRecordReadinessWarningsSelector`: returns generated readiness warnings for one local record.
+
+Current identity and fallback behavior:
+
+- `recordIdsByEntity` excludes tombstoned records before projection selectors run.
+- Query-id selectors return the stored entity id array for `all` queries.
+- Filtered query-id selectors reuse the same result array when ids are unchanged after unrelated record patches.
+- Filtered query and option selectors include `today` and sorted context values in the cache key.
+- Empty query-id results reuse the shared empty id array.
+- Reference options use `displayField` only when the field value is a non-blank string; otherwise the label falls back to record id.
+- Reference option arrays reuse prior arrays when ids and labels are unchanged.
+- Aggregate selectors cache by entity id array, `recordsById` identity, and context key, then delegate values to `evaluateAggregate`.
+- Readiness warning selectors reuse warning arrays when warning code and message output is unchanged.
+
+PRD 26 dependency check:
+
+- PRD 26 preview routes use public tree reads and push-sync invalidation, not browser store projection selectors.
+- PRD 26 publish builds restore data from source schema and source seed records, not browser store projection selectors.
+- Generated Site editor screens still consume the store projection hooks listed above.
+- No PRD 26 preview or publish blocker was found in BRP-01.
 
 ## Chunks
 
 ### BRP-01: Characterize current projections
 
-Status: ready
+Status: shipped
 
 Tasks:
 
@@ -82,7 +120,7 @@ Acceptance:
 
 ### BRP-02: Extract query, option, count, and reference projections
 
-Status: planned
+Status: ready
 
 Tasks:
 
@@ -149,13 +187,24 @@ Acceptance:
 - Hook adapter tests only where adapter wiring is not already covered.
 - Regression coverage for identity reuse where current selectors preserve stable results.
 - `devstate check` is green.
+- BRP-01 added `src/client/store.test.ts` coverage for query-id selection, context-sensitive query ids, reference option label fallback, reference counts, and readiness warning selector reuse.
+- BRP-01 confirmed existing `src/client/store.test.ts` coverage for query options, query counts, aggregate values, context changes, tombstoned records, and selector notifications.
 
 ## Blockers
 
 - None hard.
 - Prefer shipping after PRD 26 unless preview or publish work exposes projection bugs.
+- BRP-01 blocker check: none found.
 
 ## Promote after ship
 
 - `doc/current.md`: browser replica projection module and store responsibility split, once shipped.
 - `doc/roadmap.md`: only if this changes first-release scope wording.
+
+## Status Log
+
+- 2026-05-12: BRP-01 shipped. Projection hooks and selector factories are mapped above.
+- 2026-05-12: BRP-01 evidence: `.devstate/status.md` reports checks ok, web service ready at `https://28-browser-replica-projection-module.formless.local`, and watcher tests passing.
+- 2026-05-12: BRP-01 test evidence: `.devstate/logs/service-test.txt` reports `src/client/store.test.ts` passed with 28 tests.
+- 2026-05-12: BRP-01 check evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 209 files.
+- 2026-05-12: BRP-01 browser smoke skipped because this chunk only exported selector factories and added characterization tests; rendered app behavior did not change.

@@ -389,7 +389,7 @@ function emit() {
   }
 }
 
-function createEntityRecordIdsMatchingQuerySelector(
+export function createEntityRecordIdsMatchingQuerySelector(
   entityName: string,
   query: QueryExpression,
   context?: QueryEvaluationContext,
@@ -592,7 +592,7 @@ export function createReferenceOptionsSelector(entityName: string, displayField?
   };
 }
 
-function createRecordReadinessWarningsSelector(recordId: string) {
+export function createRecordReadinessWarningsSelector(recordId: string) {
   let previousRecord: StoredRecord | undefined;
   let previousRecordsById: Record<string, StoredRecord> | undefined;
   let previousResult = EMPTY_READINESS_WARNINGS;

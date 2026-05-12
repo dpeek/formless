@@ -5,8 +5,11 @@ import {
   applyRecordMerge,
   applySchemaSave,
   createAggregateValueMatchingQuerySelector,
+  createEntityRecordCountReferencingFieldSelector,
   createEntityRecordCountMatchingQuerySelector,
+  createEntityRecordIdsMatchingQuerySelector,
   createEntityRecordOptionsMatchingQuerySelector,
+  createRecordReadinessWarningsSelector,
   createReferenceOptionsSelector,
   getClientStoreSnapshot,
   resetClientStore,
@@ -282,6 +285,55 @@ describe("client store selectors", () => {
     }
   });
 
+  it("returns stable query-matching IDs by entity and leaves deleted records out", () => {
+    const selector = createEntityRecordIdsMatchingQuerySelector("task", activeQuery);
+
+    applyBootstrapResponse(
+      bootstrap([
+        record("record-1", "First", false),
+        record("record-2", "Second", true),
+        { ...record("record-3", "Deleted", false), deletedAt: "2026-04-28T00:02:00.000Z" },
+        record("note-1", "Note", false, "note"),
+      ]),
+    );
+    const first = selector(getClientStoreSnapshot());
+    const repeated = selector(getClientStoreSnapshot());
+
+    applyRecordMerge([record("note-1", "Updated note", false, "note")], 2);
+    const afterUnrelatedPatch = selector(getClientStoreSnapshot());
+
+    applyRecordMerge([record("record-1", "First", true)], 3);
+    const afterMatchingPatch = selector(getClientStoreSnapshot());
+    const repeatedEmpty = selector(getClientStoreSnapshot());
+
+    expect(first).toEqual(["record-1"]);
+    expect(repeated).toBe(first);
+    expect(afterUnrelatedPatch).toBe(first);
+    expect(afterMatchingPatch).toEqual([]);
+    expect(repeatedEmpty).toBe(afterMatchingPatch);
+  });
+
+  it("selects matching IDs through the current context value", () => {
+    const context = { today: "2026-05-01", values: { card: "card-1" } };
+    const selector = createEntityRecordIdsMatchingQuerySelector(
+      "rate",
+      cardScopedRateQuery,
+      context,
+    );
+
+    applyBootstrapResponse(
+      bootstrap([rateRecord("rate-1", "card-1"), rateRecord("rate-2", "card-2")]),
+    );
+    const first = selector(getClientStoreSnapshot());
+
+    context.values.card = "card-2";
+    const second = selector(getClientStoreSnapshot());
+
+    expect(first).toEqual(["rate-1"]);
+    expect(second).toEqual(["rate-2"]);
+    expect(second).not.toBe(first);
+  });
+
   it("returns stable reference options from active target records", () => {
     const selector = createReferenceOptionsSelector("resource", "title");
     const activeResource = record("resource-1", "Designer", false, "resource");
@@ -305,6 +357,22 @@ describe("client store selectors", () => {
     expect(afterUnrelatedPatch).toBe(first);
     expect(afterLabelPatch).toEqual([{ id: "resource-1", label: "Engineer" }]);
     expect(afterLabelPatch).not.toBe(first);
+  });
+
+  it("falls back to record IDs for missing or blank reference option labels", () => {
+    const selector = createReferenceOptionsSelector("resource", "title");
+
+    applyBootstrapResponse(
+      bootstrap([
+        record("resource-1", "   ", false, "resource"),
+        genericRecord("resource-2", "resource", { name: "Engineer" }),
+      ]),
+    );
+
+    expect(selector(getClientStoreSnapshot())).toEqual([
+      { id: "resource-1", label: "resource-1" },
+      { id: "resource-2", label: "resource-2" },
+    ]);
   });
 
   it("filters options through context query values", () => {
@@ -390,6 +458,43 @@ describe("client store selectors", () => {
     expect(selector(getClientStoreSnapshot())).toBe(2);
 
     context.values.card = "card-2";
+
+    expect(selector(getClientStoreSnapshot())).toBe(1);
+  });
+
+  it("counts active records referencing a field value", () => {
+    const selector = createEntityRecordCountReferencingFieldSelector(
+      "blockPlacement",
+      "block",
+      "block-1",
+    );
+
+    applyBootstrapResponse(
+      bootstrap([
+        placementRecord("placement-1", "block-1"),
+        placementRecord("placement-2", "block-2"),
+        {
+          ...placementRecord("placement-3", "block-1"),
+          deletedAt: "2026-04-28T00:02:00.000Z",
+        },
+      ]),
+    );
+
+    expect(selector(getClientStoreSnapshot())).toBe(1);
+
+    applyRecordMerge([placementRecord("placement-2", "block-1")], 2);
+
+    expect(selector(getClientStoreSnapshot())).toBe(2);
+
+    applyRecordMerge(
+      [
+        {
+          ...placementRecord("placement-1", "block-1"),
+          deletedAt: "2026-04-28T00:03:00.000Z",
+        },
+      ],
+      3,
+    );
 
     expect(selector(getClientStoreSnapshot())).toBe(1);
   });
@@ -518,6 +623,28 @@ describe("client store selectors", () => {
     expect(cardSelector(getClientStoreSnapshot())).toEqual([{ id: "card-1", label: "Default" }]);
     expect(rateSelector(getClientStoreSnapshot())).toEqual([{ id: "rate-1", label: "rate-1" }]);
   });
+
+  it("reuses readiness warning arrays and updates when references resolve", () => {
+    const selector = createRecordReadinessWarningsSelector("placement-1");
+
+    applyBootstrapResponse(bootstrap([placementRecord("placement-1", "block-1")]));
+    const first = selector(getClientStoreSnapshot());
+    const repeated = selector(getClientStoreSnapshot());
+
+    applyRecordMerge([genericRecord("block-1", "block", { type: "link", label: "Home" })], 2);
+    const afterResolvedReference = selector(getClientStoreSnapshot());
+    const repeatedEmpty = selector(getClientStoreSnapshot());
+
+    expect(first).toEqual([
+      {
+        code: "placement-block-child",
+        message: "Placement should point to a live child block.",
+      },
+    ]);
+    expect(repeated).toBe(first);
+    expect(afterResolvedReference).toEqual([]);
+    expect(repeatedEmpty).toBe(afterResolvedReference);
+  });
 });
 
 const activeQuery = {
@@ -582,6 +709,19 @@ function rateValueRecord(id: string, card: string, cost: number, price: number):
     id,
     entity: "rate",
     values: { card, cost, price },
+    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function placementRecord(id: string, block: string): StoredRecord {
+  return genericRecord(id, "blockPlacement", { parent: "parent-1", block, order: 0 });
+}
+
+function genericRecord(id: string, entity: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity,
+    values,
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
   };
 }
