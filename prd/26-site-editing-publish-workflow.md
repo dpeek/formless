@@ -1,7 +1,7 @@
 # PRD 26: Site editing preview and publish workflow
 
-Status: in progress
-Current chunk: SWF-07 planned
+Status: complete
+Current chunk: none
 Last updated: 2026-05-12
 
 Start after PRD 25 authority operation module.
@@ -368,7 +368,7 @@ Likely changed files:
 | SWF-04 | shipped | SWF-03     | source snapshot builder, tests             | Source schema plus source seed records produce a restore-ready Site snapshot envelope with validation.                |
 | SWF-05 | shipped | SWF-04     | authority guard, worker tests              | Production developer write endpoints require authorization while public tree reads remain public.                     |
 | SWF-06 | shipped | SWF-05     | publish script, package script, tests      | Publish command can dry-run, deploy code, back up live Site snapshot, restore source Site data, and smoke routes.     |
-| SWF-07 | planned | SWF-06     | browser smoke, PRD                         | Separate editor/preview smoke passes; publish dry-run evidence is recorded; PRD status and promote notes are current. |
+| SWF-07 | shipped | SWF-06     | browser smoke, PRD                         | Separate editor/preview smoke passes; publish dry-run evidence is recorded; PRD status and promote notes are current. |
 
 ## Parallel Shipping
 
@@ -444,6 +444,14 @@ Should not ship in parallel with:
 - 2026-05-12: SWF-06 evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 205 files; `.devstate/logs/service-test.txt` reports `src/site/publish.test.ts` passing with 4 tests.
 - 2026-05-12: SWF-06 evidence: requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were not present; available devstate evidence lives in `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - 2026-05-12: SWF-06 browser smoke skipped because this chunk added a CLI publish workflow and tests only; no rendered app behavior changed.
+- 2026-05-12: SWF-07 shipped browser smoke and PRD closeout.
+- 2026-05-12: SWF-07 dry-run evidence: `bun run site:publish` reported `DRY RUN`, validated 47 Site seed records, used no target, and did not mutate code or live data.
+- 2026-05-12: SWF-07 editor smoke: `bun browser --session swf07-editor --ignore-https-errors` opened `https://26-site-editing-publish-workflow.formless.local/site` and rendered the generated Site editor with Pages, Navigation, placement controls, schema navigation, and synced status.
+- 2026-05-12: SWF-07 preview smoke: `bun browser --session swf07-preview --ignore-https-errors` opened `https://26-site-editing-publish-workflow.formless.local/pages/home` and rendered the public Home page with seeded header navigation, hero copy, recent posts, featured projects, and footer.
+- 2026-05-12: SWF-07 browser errors: `bun browser --session swf07-editor errors` and `bun browser --session swf07-preview errors` returned no page errors.
+- 2026-05-12: SWF-07 evidence: `devstate check` passed; `.devstate/status.md` reports checks ok, web service ready, and watcher tests passing.
+- 2026-05-12: SWF-07 evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 205 files; `.devstate/logs/service-test.txt` reports 41 test files passing with 635 tests.
+- 2026-05-12: SWF-07 evidence: requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were not present; available devstate evidence lives in `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 
 ## PRD status notes
 
@@ -453,7 +461,8 @@ Should not ship in parallel with:
 - SWF-04 shipped 2026-05-12.
 - SWF-05 shipped 2026-05-12.
 - SWF-06 shipped 2026-05-12.
-- Current chunk: SWF-07 planned.
+- SWF-07 shipped 2026-05-12.
+- Current chunk: none.
 - Current blocker: none.
 - Decisions: script contracts above are locked for SWF-06; SWF-03 implementation follows its locked contract; SWF-04 source snapshots use `sourceCursor: 0` because source seed files do not store change rows; SWF-05 admin protection is enabled by `FORMLESS_ADMIN_TOKEN` and uses bearer auth for Authority writes; SWF-06 publish is dry-run by default and requires `--apply`; SWF-06 data publish requires `--target <url>` or `FORMLESS_SITE_PUBLISH_TARGET`.
-- Promote notes stay pending until live preview, seed promotion, guarded publish, and publish workflow ship.
+- Promote notes are ready for a later docs steward pass; normal PRD agents do not edit `doc/current.md` or `doc/roadmap.md`.
