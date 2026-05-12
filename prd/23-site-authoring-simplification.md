@@ -1,7 +1,7 @@
 # PRD 23: Site authoring simplification
 
-Status: planned
-Current chunk: SAS-01 ready
+Status: in progress
+Current chunk: SAS-02 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -273,8 +273,8 @@ Owned files:
 
 | ID     | Status  | Depends on | Main files                                                       | Acceptance                                                                                                                   |
 | ------ | ------- | ---------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| SAS-01 | ready   | none       | PRD, schema tests                                                | Characterize current Site authoring behavior and lock planned simplification scope.                                          |
-| SAS-02 | planned | SAS-01     | schema parser, create defaults, view models, generated create UI | Literal defaults parse/resolve, and fixed-type create forms hide `type` while submitting it.                                 |
+| SAS-01 | shipped | none       | PRD, schema tests                                                | Characterize current Site authoring behavior and lock planned simplification scope.                                          |
+| SAS-02 | ready   | SAS-01     | schema parser, create defaults, view models, generated create UI | Literal defaults parse/resolve, and fixed-type create forms hide `type` while submitting it.                                 |
 | SAS-03 | planned | SAS-02     | Site source schema, generated block views, tests                 | Site block authoring hides `type`, hides `templateKey`, hides page `body`, and removes deprecated block variants from views. |
 | SAS-04 | planned | SAS-03     | tree policy parser/view model/generated tree UI                  | Tree child policy controls add buttons for allowed parent variants, including empty parents.                                 |
 | SAS-05 | planned | SAS-04     | authority actions/storage integration/generated tree UI          | Tree add creates block plus placement, and tree remove tombstones placement edges without deleting child blocks.             |
@@ -282,6 +282,23 @@ Owned files:
 | SAS-07 | planned | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
 | SAS-08 | planned | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
 | SAS-09 | planned | SAS-08     | browser smoke, PRD                                               | `/site`, `/pages/home`, `/pages/blog`, and a post route smoke pass; PRD status/evidence are current.                         |
+
+## Status Notes
+
+- 2026-05-12: SAS-01 shipped as characterization only. `src/shared/schema.test.ts` now locks the current Site authoring simplification targets: mutable `block.type` in create/edit/root/tree fallback surfaces, visible `templateKey` in block authoring variants, visible page `body`, deprecated block variants still present, Header/Footer leaf branch policy still active, and tree add still creates placement records only.
+- 2026-05-12: No new implementation decisions in SAS-01. Existing decisions SAS-D2 through SAS-D10 are now backed by source-schema characterization coverage for the planned behavior changes.
+- 2026-05-12: Next ready chunk is SAS-02 literal create defaults and fixed-type create forms.
+
+## Blockers
+
+- None for SAS-01.
+
+## Evidence
+
+- `devstate start`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
+- `.devstate/logs/service-test.txt`: watcher reran `src/shared/schema.test.ts`; 96 tests passed.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 190 files.
+- Requested `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent in this repo; devstate evidence exists under `.devstate/status.md` and `.devstate/logs/`.
 
 ## Out of Scope
 
@@ -303,6 +320,7 @@ Owned files:
 
 ## Promote After Ship
 
+- SAS-01: no global doc promotion. Characterization only; no runtime behavior changed.
 - `doc/current.md`: Site block type is fixed after creation in generated authoring views.
 - `doc/current.md`: Site authoring hides `templateKey` and page `body` editors.
 - `doc/current.md`: Site source block types exclude `contentList`, `contentGrid`, `video`, `file`, `cta`, and `subscribe`.

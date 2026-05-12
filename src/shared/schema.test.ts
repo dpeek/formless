@@ -4315,6 +4315,177 @@ describe("personal site sample schema", () => {
       },
     });
   });
+
+  it("characterizes current site authoring simplification targets", () => {
+    const schema = parseAppSchema(rawSiteSchema);
+    const plannedRemovedBlockTypes = [
+      "contentList",
+      "contentGrid",
+      "video",
+      "file",
+      "cta",
+      "subscribe",
+    ];
+
+    const blockTypeField = schema.entities.block?.fields.type;
+    if (blockTypeField?.type !== "enum") {
+      throw new Error("Missing Site block type enum.");
+    }
+
+    expect(Object.keys(blockTypeField.values)).toEqual(
+      expect.arrayContaining(plannedRemovedBlockTypes),
+    );
+    expect(Object.keys(schema.unions?.blockByType?.variants ?? {})).toEqual(
+      expect.arrayContaining(plannedRemovedBlockTypes),
+    );
+
+    const blockCreate = schema.views.blockCreate;
+    const blockEdit = schema.views.blockEdit;
+    const blockPlacementCreate = schema.views.blockPlacementCreate;
+    const siteCompositionHome = schema.views.siteCompositionHome;
+
+    if (blockCreate?.type !== "create") {
+      throw new Error("Missing Site block create view.");
+    }
+    if (blockEdit?.type !== "edit") {
+      throw new Error("Missing Site block edit view.");
+    }
+    if (blockPlacementCreate?.type !== "create") {
+      throw new Error("Missing Site placement create view.");
+    }
+    if (siteCompositionHome?.type !== "collection") {
+      throw new Error("Missing Site composition collection view.");
+    }
+
+    expect(blockCreate.fields).toMatchObject({
+      type: { editor: "enum" },
+      label: { editor: "text" },
+    });
+    expect(blockEdit.fields).toMatchObject({
+      type: { editor: "enum", commit: "immediate" },
+      label: { editor: "text", commit: "field-commit" },
+    });
+    expect(schema.itemViews.blockRootDetail).toMatchObject({
+      fields: {
+        type: { editor: "enum", commit: "immediate" },
+        label: { editor: "text", commit: "field-commit" },
+      },
+      variants: {
+        page: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+            href: { editor: "href", commit: "field-commit" },
+          },
+        },
+        group: {
+          presentation: "fields",
+          fields: {
+            templateKey: { editor: "slug", commit: "field-commit" },
+          },
+        },
+        header: {
+          presentation: "fields",
+          fields: {
+            templateKey: { editor: "slug", commit: "field-commit" },
+          },
+        },
+        footer: {
+          presentation: "fields",
+          fields: {
+            templateKey: { editor: "slug", commit: "field-commit" },
+          },
+        },
+      },
+    });
+    expect(schema.itemViews.blockTreeNode).toMatchObject({
+      variants: {
+        hero: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+            templateKey: { editor: "slug", commit: "field-commit" },
+          },
+        },
+        contentList: {
+          presentation: "fields",
+          fields: {
+            templateKey: { editor: "slug", commit: "field-commit" },
+          },
+        },
+        contentGrid: {
+          presentation: "fields",
+          fields: {
+            templateKey: { editor: "slug", commit: "field-commit" },
+          },
+        },
+      },
+      fallback: {
+        presentation: "fields",
+        fields: {
+          type: { editor: "enum", commit: "immediate" },
+        },
+      },
+    });
+    expect(blockCreate.variants?.page).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+        templateKey: { editor: "slug" },
+      },
+    });
+    expect(blockEdit.variants?.page).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        templateKey: { editor: "slug", commit: "field-commit" },
+      },
+    });
+    expect(blockEdit.variants?.post).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        templateKey: { editor: "slug", commit: "field-commit" },
+      },
+    });
+
+    for (const blockType of plannedRemovedBlockTypes) {
+      expect(blockCreate.variants).toHaveProperty(blockType);
+      expect(blockEdit.variants).toHaveProperty(blockType);
+      expect(schema.itemViews.blockRootDetail).toMatchObject({
+        variants: { [blockType]: { presentation: "fields" } },
+      });
+    }
+
+    expect(siteCompositionHome.result).toMatchObject({
+      type: "tree",
+      relationship: "blockPlacements",
+      childField: "block",
+      childItemView: "blockTreeNode",
+      branches: {
+        variants: {
+          header: "leaf",
+          footer: "leaf",
+        },
+      },
+    });
+    expect(siteCompositionHome.actions).toEqual([
+      { type: "create", createView: "blockPlacementCreate", label: "Add placement" },
+    ]);
+    expect(blockPlacementCreate).toMatchObject({
+      type: "create",
+      entity: "blockPlacement",
+      fields: {
+        block: { editor: "reference" },
+        label: { editor: "text" },
+      },
+      defaults: {
+        parent: { kind: "context", name: "block" },
+      },
+    });
+    expect(blockPlacementCreate.fields).not.toHaveProperty("parent");
+    expect(blockPlacementCreate.fields).not.toHaveProperty("type");
+  });
 });
 
 describe("schema entity constraints", () => {
