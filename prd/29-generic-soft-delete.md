@@ -1,7 +1,7 @@
 # PRD 29: Generic soft delete
 
-Status: in progress
-Current chunk: GSD-06 ready
+Status: complete
+Current chunk: GSD-06 shipped
 Last updated: 2026-05-12
 
 Start before PRD 26 if Site authoring cleanup needs block/post/page deletion.
@@ -187,6 +187,7 @@ Possible changed files:
 | GSD-D12 | Delete mutation storage writes use the same write outcome path.       | Replay and push-notification semantics should match create and patch mutations.            | `src/worker/storage.ts`, `src/worker/authority-operations.ts`, `src/worker/authority.test.ts`              |
 | GSD-D13 | Delete validation blocks active inbound reference fields.             | Storage stays schema-agnostic while authority prevents orphan-producing generic deletes.   | `src/worker/authority-validation.ts`, `src/worker/authority.test.ts`                                       |
 | GSD-D14 | Generated delete UI uses one confirmation adapter.                    | Collection, table, and tree delete controls need the same submit/status behavior.          | `src/app/generated/record-delete.tsx`, `src/app/generated/collection.tsx`, `src/app/generated/table.tsx`   |
+| GSD-D15 | Site source enables delete for `block`, not `blockPlacement`.         | Blocks need author cleanup; placements already have a clearer remove command.              | `schema/apps/site/schema.json`, `src/app.test.tsx`, `src/worker/schema-apps.test.ts`                       |
 
 ### Deep Modules
 
@@ -215,7 +216,7 @@ Possible changed files:
 | GSD-03 | shipped | GSD-02     | storage, authority operations, tests          | Delete mutation commits a tombstone change, broadcasts only on commit, and preserves replay semantics.                           |
 | GSD-04 | shipped | GSD-03     | authority validation, storage/query tests     | Active inbound references block generic delete; tombstoned referencing records do not block delete.                              |
 | GSD-05 | shipped | GSD-04     | client sync, generated delete UI, app tests   | Generated collection/table/tree surfaces render confirmed delete controls only when schema policy enables them.                  |
-| GSD-06 | ready   | GSD-05     | Site source schema, app/browser smoke, PRD    | Site enables safe deletes, remove-vs-delete behavior is clear, browser smoke passes, and PRD evidence is current.                |
+| GSD-06 | shipped | GSD-05     | Site source schema, app/browser smoke, PRD    | Site enables safe deletes, remove-vs-delete behavior is clear, browser smoke passes, and PRD evidence is current.                |
 
 ## Parallel Shipping
 
@@ -240,8 +241,7 @@ Should not ship in parallel with:
 
 ## Blockers
 
-- None hard.
-- GSD-06 has no known blocker.
+- None.
 
 ## Out of Scope
 
@@ -304,3 +304,8 @@ Should not ship in parallel with:
 - 2026-05-12: GSD-05 check evidence: `devstate check` reports checks ok, web service ready, and service test watcher passing; `.devstate/status.json` records `services.test.lastResult: "pass"`. `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent, so `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/*` were used.
 - 2026-05-12: GSD-05 browser smoke used `bun browser --session gsd05-final --ignore-https-errors` against `https://29-generic-soft-delete.formless.local/site`; generated app count was 1, source-policy delete controls were absent, and browser errors output was empty.
 - 2026-05-12: GSD-05 rebase onto local `main` brought in `ea59bb3 Update seed`; stale Site seed expectations were updated in `src/app.test.tsx`, `src/site/tree.test.ts`, `src/worker/authority.test.ts`, and `src/worker/schema-apps.test.ts` so managed checks stayed green on the rebased branch.
+- 2026-05-12: GSD-06 changed `schema/apps/site/schema.json` so Site `block` enables generic delete while `blockPlacement` keeps generic delete disabled and continues using placement remove.
+- 2026-05-12: GSD-06 updated `src/app.test.tsx` for source Site list/detail delete controls and tree remove-vs-delete controls, and updated `src/worker/schema-apps.test.ts` to lock the source policy.
+- 2026-05-12: GSD-06 `devstate check` reports checks ok, web service ready, and service test watcher passing; `.devstate/status.json` records `checks.vite.state: "pass"` and `services.test.lastResult: "pass"`.
+- 2026-05-12: GSD-06 `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent in this checkout, so `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/*` were used as check evidence.
+- 2026-05-12: GSD-06 browser smoke used `bun browser --session gsd06` against `https://29-generic-soft-delete.formless.local/site`; it reset Site schema and seed, verified `block.delete.enabled` true and `blockPlacement.delete.enabled` false, deleted an unreferenced block, got a `400` delete rejection while a placement referenced a block through `blockPlacement.block`, removed that placement, deleted the now-unreferenced block, reset seed, rendered `/pages/home`, and returned no page errors.

@@ -1133,15 +1133,15 @@ describe("generated collection home", () => {
     expect(nestedHtml).toContain('aria-label="Remove child placement"');
   });
 
-  it("renders list/detail delete controls only when context entity policy enables them", () => {
-    const disabledCollection = requiredSiteCollectionModel("siteCompositionHome");
-    const enabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", true);
-    const enabledCollection = requiredCollectionModel(enabledSchema, "siteCompositionHome");
+  it("renders source Site list/detail delete controls only when context entity policy enables them", () => {
+    const disabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", false);
+    const disabledCollection = requiredCollectionModel(disabledSchema, "siteCompositionHome");
+    const enabledCollection = requiredSiteCollectionModel("siteCompositionHome");
 
     applyBootstrapResponse(
       bootstrap(
         [siteBlockRecord("page-1", { type: "page", label: "Disposable page" })],
-        siteSourceSchema,
+        disabledSchema,
       ),
       "site",
     );
@@ -1154,7 +1154,7 @@ describe("generated collection home", () => {
     applyBootstrapResponse(
       bootstrap(
         [siteBlockRecord("page-1", { type: "page", label: "Disposable page" })],
-        enabledSchema,
+        siteSourceSchema,
       ),
       "site",
     );
@@ -1170,9 +1170,9 @@ describe("generated collection home", () => {
   });
 
   it("renders tree child delete controls separately from placement remove", () => {
-    const disabledCollection = requiredSiteCollectionModel("siteCompositionHome");
-    const enabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", true);
-    const enabledCollection = requiredCollectionModel(enabledSchema, "siteCompositionHome");
+    const disabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", false);
+    const disabledCollection = requiredCollectionModel(disabledSchema, "siteCompositionHome");
+    const enabledCollection = requiredSiteCollectionModel("siteCompositionHome");
     const records = [
       siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
       siteBlockRecord("block-1", { type: "group", label: "Disposable group" }),
@@ -1187,7 +1187,7 @@ describe("generated collection home", () => {
       throw new Error("Site composition home should render a context tree.");
     }
 
-    applyBootstrapResponse(bootstrap(records, siteSourceSchema), "site");
+    applyBootstrapResponse(bootstrap(records, disabledSchema), "site");
     const disabledHtml = renderToStaticMarkup(
       <RecordTree
         context={disabledCollection.context}
@@ -1199,7 +1199,7 @@ describe("generated collection home", () => {
     );
 
     resetClientStore();
-    applyBootstrapResponse(bootstrap(records, enabledSchema), "site");
+    applyBootstrapResponse(bootstrap(records, siteSourceSchema), "site");
     const enabledHtml = renderToStaticMarkup(
       <RecordTree
         context={enabledCollection.context}
