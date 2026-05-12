@@ -50,6 +50,7 @@ type SyncWebSocket = {
 };
 
 type StartPushSyncOptions = {
+  onSynced?: () => void;
   reconnectInitialDelayMs?: number;
   reconnectMaxDelayMs?: number;
   socketFactory?: (url: string) => SyncWebSocket;
@@ -255,6 +256,7 @@ export async function resetSeedData(schemaKey: SchemaKey, fetcher: typeof fetch 
 }
 
 export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOptions = {}) {
+  const onSynced = options.onSynced;
   const reconnectInitialDelayMs =
     options.reconnectInitialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS;
   const reconnectMaxDelayMs = options.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS;
@@ -304,12 +306,18 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
         return;
       }
 
-      void handleSyncSocketMessage(schemaKey, event).catch((error: unknown) => {
-        setSyncStatus({
-          state: "error",
-          message: error instanceof Error ? error.message : "Push sync failed.",
+      void handleSyncSocketMessage(schemaKey, event)
+        .then((didApplySync) => {
+          if (didApplySync && !stopped && socket === nextSocket) {
+            onSynced?.();
+          }
+        })
+        .catch((error: unknown) => {
+          setSyncStatus({
+            state: "error",
+            message: error instanceof Error ? error.message : "Push sync failed.",
+          });
         });
-      });
     };
 
     nextSocket.onerror = () => {
@@ -423,11 +431,12 @@ async function handleSyncSocketMessage(schemaKey: SchemaKey, event: MessageEvent
 
   if (message.type === "error") {
     setSyncStatus({ state: "error", message: message.message });
-    return;
+    return false;
   }
 
   await applySyncResponse(schemaKey, message.payload);
   setSyncStatus({ state: "idle", message: "Pushed sync received." });
+  return true;
 }
 
 function parseSyncSocketServerMessage(data: unknown): SyncSocketServerMessage | undefined {

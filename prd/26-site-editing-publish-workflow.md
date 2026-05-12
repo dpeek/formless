@@ -1,7 +1,7 @@
 # PRD 26: Site editing preview and publish workflow
 
 Status: in progress
-Current chunk: SWF-02 planned
+Current chunk: SWF-03 planned
 Last updated: 2026-05-12
 
 Start after PRD 25 authority operation module.
@@ -188,6 +188,7 @@ Likely changed files:
 | SWF-D8  | Add production auth before relying on live restore.                  | Current developer endpoints are too powerful for an unauthenticated public Worker flow. | User workflow requirement 2026-05-12, `prd/25-authority-operation-module.md` |
 | SWF-D9  | Use `devstate` as check evidence.                                    | Repo instructions say `devstate` owns dev, test, and check output.                      | `AGENTS.md`                                                                  |
 | SWF-D10 | Keep this workflow Site-specific first.                              | General app marketplace/import/export is out of first-release scope.                    | `doc/roadmap.md`                                                             |
+| SWF-D11 | Start live preview sync only for preview-mode public routes.         | Published Site visitors do not need edit invalidation.                                  | `src/app/routes/site-page.tsx`                                               |
 
 ### Deep Modules
 
@@ -211,6 +212,19 @@ Likely changed files:
 - No source seed promotion command exists yet.
 - `bun run deploy` runs `vp build && wrangler deploy`.
 - Deploy does not reset or replace live Durable Object data.
+
+### SWF-02 Live Preview Sync
+
+- `/pages/*` preview route starts Site push sync through `startPushSync("site")`.
+- Preview route refetches the active `/api/site/tree/:slug` after pushed Site sync applies.
+- Preview route also refetches after same-profile Site record or schema events.
+- Preview refetches keep public tree fetches read-only.
+- Preview refetch aborts stale in-flight tree requests.
+- Preview cleanup stops push sync, local event listening, and active tree fetches.
+- Published Site route mode does not start preview sync.
+- Sync client supports an `onSynced` callback after pushed sync messages apply.
+- Tests cover pushed-sync refetch, same-profile refetch, cleanup, and sync callback.
+- Browser smoke opened `/pages/home` and rendered the seeded public page without console errors.
 
 ### Script Contracts
 
@@ -276,7 +290,7 @@ Likely changed files:
 | ID     | Status  | Depends on | Main files                                 | Acceptance                                                                                                            |
 | ------ | ------- | ---------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | SWF-01 | shipped | PRD 25     | tests, PRD                                 | Current manual snapshot, preview, seed, and deploy workflow is characterized; script contracts are locked.            |
-| SWF-02 | planned | SWF-01     | public route, sync client, app tests       | `/pages/*` local preview refetches active tree after pushed Site writes and cleans up on route changes/unmount.       |
+| SWF-02 | shipped | SWF-01     | public route, sync client, app tests       | `/pages/*` local preview refetches active tree after pushed Site writes and cleans up on route changes/unmount.       |
 | SWF-03 | planned | SWF-01     | seed adapter script, package script, tests | `bun run site:pull-seed` writes deterministic `schema/apps/site/seed-records.json` from local Site authority state.   |
 | SWF-04 | planned | SWF-03     | source snapshot builder, tests             | Source schema plus source seed records produce a restore-ready Site snapshot envelope with validation.                |
 | SWF-05 | planned | SWF-04     | authority guard, worker tests              | Production developer write endpoints require authorization while public tree reads remain public.                     |
@@ -317,7 +331,8 @@ Should not ship in parallel with:
 
 ## Promote after ship
 
-- `doc/current.md`: note public Site preview can live-update from Site push sync if shipped.
+- `doc/current.md`: note public Site preview can live-update from Site push sync.
+- `doc/current.md`: note public preview sync is preview-mode only; published Site routes stay quiet.
 - `doc/current.md`: note `schema/apps/site/seed-records.json` can be promoted from local Site authority with a Bun script if shipped.
 - `doc/current.md`: note live Site publish backs up and restores Site authority data through guarded snapshot APIs if shipped.
 - `doc/roadmap.md`: add only if this workflow becomes first-release release scope.

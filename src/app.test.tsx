@@ -12,7 +12,11 @@ import { HomeScreen } from "./app/generated/screen.tsx";
 import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table.tsx";
 import { EditViewFields } from "./app/generated/table-actions.tsx";
 import { RecordTree } from "./app/generated/tree.tsx";
-import { SitePageRouteView } from "./app/routes/site-page.tsx";
+import {
+  SitePageRouteView,
+  startSitePageRouteSession,
+  type SitePageRouteState,
+} from "./app/routes/site-page.tsx";
 import { SitePageRenderer } from "./app/site-renderer/renderer.tsx";
 import {
   applyBootstrapResponse,
@@ -95,6 +99,22 @@ function sitePageTree(slug = "home", records = siteSeedRecords): SitePageTree {
   }
 
   return projection.tree;
+}
+
+function siteTreeFetcher(fetchPaths: string[], tree: SitePageTree): typeof fetch {
+  return async (input) => {
+    fetchPaths.push(requestUrl(input));
+
+    return Response.json(tree);
+  };
+}
+
+function requestUrl(input: Parameters<typeof fetch>[0]) {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  return input instanceof URL ? input.href : input.url;
 }
 
 beforeEach(() => {
@@ -458,6 +478,113 @@ describe("App smoke routes", () => {
 });
 
 describe("public site renderer", () => {
+  it("refetches the active preview tree after pushed Site sync", async () => {
+    const fetchPaths: string[] = [];
+    const states: SitePageRouteState[] = [];
+    const tree = sitePageTree("home");
+    let notifySynced: (() => void) | undefined;
+    let stoppedPreviewSync = false;
+
+    const stop = startSitePageRouteSession({
+      fetcher: siteTreeFetcher(fetchPaths, tree),
+      linkMode: "preview",
+      listenForPreviewChanges: () => () => {},
+      onState: (state) => states.push(state),
+      slug: "home",
+      startPreviewSync: (onSynced) => {
+        notifySynced = onSynced;
+        return () => {
+          stoppedPreviewSync = true;
+        };
+      },
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "ready"));
+      expect(fetchPaths).toEqual(["/api/site/tree/home"]);
+
+      notifySynced?.();
+
+      await waitFor(() => states.filter((state) => state.status === "ready").length === 2);
+      expect(fetchPaths).toEqual(["/api/site/tree/home", "/api/site/tree/home"]);
+      expect(states.filter((state) => state.status === "ready")).toHaveLength(2);
+    } finally {
+      stop();
+    }
+
+    expect(stoppedPreviewSync).toBe(true);
+  });
+
+  it("refetches the active preview tree after same-profile Site changes", async () => {
+    const fetchPaths: string[] = [];
+    const states: SitePageRouteState[] = [];
+    let notifyChanged: (() => void) | undefined;
+    let stoppedPreviewChanges = false;
+
+    const stop = startSitePageRouteSession({
+      fetcher: siteTreeFetcher(fetchPaths, sitePageTree("home")),
+      linkMode: "preview",
+      listenForPreviewChanges: (onChanged) => {
+        notifyChanged = onChanged;
+        return () => {
+          stoppedPreviewChanges = true;
+        };
+      },
+      onState: (state) => states.push(state),
+      slug: "home",
+      startPreviewSync: () => () => {},
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "ready"));
+
+      notifyChanged?.();
+
+      await waitFor(() => fetchPaths.length === 2);
+      expect(fetchPaths).toEqual(["/api/site/tree/home", "/api/site/tree/home"]);
+    } finally {
+      stop();
+    }
+
+    expect(stoppedPreviewChanges).toBe(true);
+  });
+
+  it("aborts in-flight preview tree fetches and subscriptions on cleanup", () => {
+    let signal: AbortSignal | undefined;
+    let stoppedPreviewSync = false;
+    let stoppedPreviewChanges = false;
+
+    const fetcher: typeof fetch = (_input, init) => {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    };
+
+    const stop = startSitePageRouteSession({
+      fetcher,
+      linkMode: "preview",
+      listenForPreviewChanges: () => {
+        return () => {
+          stoppedPreviewChanges = true;
+        };
+      },
+      onState: () => {},
+      slug: "home",
+      startPreviewSync: () => {
+        return () => {
+          stoppedPreviewSync = true;
+        };
+      },
+    });
+
+    expect(signal?.aborted).toBe(false);
+
+    stop();
+
+    expect(signal?.aborted).toBe(true);
+    expect(stoppedPreviewSync).toBe(true);
+    expect(stoppedPreviewChanges).toBe(true);
+  });
+
   it("renders the Home page tree with header navigation and hero content", () => {
     const html = renderSitePage("home");
 
@@ -4654,6 +4781,20 @@ function withMutationPolicy(
       delete: { enabled: false },
     },
   };
+}
+
+async function waitFor(predicate: () => boolean) {
+  const deadline = Date.now() + 1000;
+
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+
+  throw new Error("Timed out waiting for condition.");
 }
 
 function bootstrap(records: StoredRecord[], schema = appSchema): BootstrapResponse {

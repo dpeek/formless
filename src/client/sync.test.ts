@@ -290,6 +290,47 @@ describe("client sync", () => {
     }
   });
 
+  it("notifies callers after pushed sync messages are applied", async () => {
+    const sockets = fakeSocketFactory();
+    let syncedCount = 0;
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    const stop = startPushSync("tasks", {
+      onSynced: () => {
+        syncedCount += 1;
+      },
+      socketFactory: sockets.create,
+    });
+
+    try {
+      sockets.instances[0]?.open();
+
+      sockets.instances[0]?.receive({
+        type: "sync",
+        payload: {
+          changes: [change(2, "record-2", "Second")],
+          cursor: 2,
+        },
+      });
+
+      await waitFor(() => syncedCount === 1);
+
+      expect(getClientStoreSnapshot().cursor).toBe(2);
+      expect(getClientStoreSnapshot().recordsById["record-2"]).toEqual(
+        record("record-2", "Second"),
+      );
+    } finally {
+      stop();
+    }
+  });
+
   it("sends sync-requested over an open push sync socket", async () => {
     const sockets = fakeSocketFactory();
 

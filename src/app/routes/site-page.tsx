@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { SitePageRenderer } from "../site-renderer/renderer.tsx";
 import { sitePagePathForSlug, type SitePageLinkMode } from "../site-renderer/links.ts";
+import { listenForClientEvents } from "../../client/broadcast.ts";
+import { startPushSync } from "../../client/sync.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../../shared/protocol.ts";
 
 export type SitePageRouteState =
@@ -22,6 +24,15 @@ export type SitePageRouteState =
       slug: string;
     };
 
+type SitePageRouteSessionOptions = {
+  fetcher?: typeof fetch;
+  linkMode: SitePageLinkMode;
+  listenForPreviewChanges?: (onChanged: () => void) => () => void;
+  onState: (state: SitePageRouteState) => void;
+  slug: string;
+  startPreviewSync?: (onSynced: () => void) => () => void;
+};
+
 export function SitePageRoute({
   linkMode = "preview",
   slug,
@@ -36,39 +47,93 @@ export function SitePageRoute({
   });
 
   useEffect(() => {
+    return startSitePageRouteSession({
+      linkMode,
+      onState: setState,
+      slug: normalizedSlug,
+    });
+  }, [linkMode, normalizedSlug]);
+
+  return <SitePageRouteView linkMode={linkMode} state={state} />;
+}
+
+export function startSitePageRouteSession({
+  fetcher,
+  linkMode,
+  listenForPreviewChanges = listenForSitePreviewChanges,
+  onState,
+  slug,
+  startPreviewSync = startSitePreviewSync,
+}: SitePageRouteSessionOptions) {
+  const normalizedSlug = normalizeSitePageSlug(slug);
+  let stopped = false;
+  let activeController: AbortController | undefined;
+  let stopPreviewChanges = () => {};
+  let stopPreviewSync = () => {};
+
+  function loadTree(showLoading: boolean) {
+    activeController?.abort();
+
     const controller = new AbortController();
+    activeController = controller;
 
-    setState({ status: "loading", slug: normalizedSlug });
+    if (showLoading) {
+      onState({ status: "loading", slug: normalizedSlug });
+    }
 
-    void fetchSitePageTree(normalizedSlug, { signal: controller.signal })
+    void fetchSitePageTree(normalizedSlug, { fetcher, signal: controller.signal })
       .then((tree) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "ready", tree });
+        if (!stopped && activeController === controller && !controller.signal.aborted) {
+          onState({ status: "ready", tree });
         }
       })
       .catch((error: unknown) => {
-        if (controller.signal.aborted) {
+        if (stopped || activeController !== controller || controller.signal.aborted) {
           return;
         }
 
         if (error instanceof SitePageNotFoundError) {
-          setState({ status: "not-found", slug: normalizedSlug });
+          onState({ status: "not-found", slug: normalizedSlug });
           return;
         }
 
-        setState({
+        onState({
           status: "error",
           message: error instanceof Error ? error.message : "Site page failed to load.",
           slug: normalizedSlug,
         });
       });
+  }
 
-    return () => {
-      controller.abort();
-    };
-  }, [normalizedSlug]);
+  function refetchActiveTree() {
+    loadTree(false);
+  }
 
-  return <SitePageRouteView linkMode={linkMode} state={state} />;
+  loadTree(true);
+
+  if (linkMode === "preview") {
+    stopPreviewSync = startPreviewSync(refetchActiveTree);
+    stopPreviewChanges = listenForPreviewChanges(refetchActiveTree);
+  }
+
+  return () => {
+    stopped = true;
+    activeController?.abort();
+    stopPreviewChanges();
+    stopPreviewSync();
+  };
+}
+
+function startSitePreviewSync(onSynced: () => void) {
+  return startPushSync("site", { onSynced });
+}
+
+function listenForSitePreviewChanges(onChanged: () => void) {
+  return listenForClientEvents("site", (event) => {
+    if (event.type === "records-updated" || event.type === "schema-updated") {
+      onChanged();
+    }
+  });
 }
 
 export function SitePageRouteView({
