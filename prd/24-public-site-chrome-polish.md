@@ -1,7 +1,7 @@
 # PRD 24: Public site chrome polish
 
-Status: in progress
-Current chunk: PSC-03 ready
+Status: complete
+Current chunk: PSC-03 shipped
 Last updated: 2026-05-12
 
 ## Goal
@@ -209,7 +209,7 @@ These modules should stay small and renderer-local unless another public Site re
 | ------ | ------- | ---------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | PSC-01 | done    | none       | renderer, app tests | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu. |
 | PSC-02 | done    | PSC-01     | renderer, app tests | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
-| PSC-03 | ready   | PSC-02     | browser smoke, PRD  | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
+| PSC-03 | shipped | PSC-02     | browser smoke, PRD  | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
 
 ## Out of Scope
 
@@ -231,11 +231,11 @@ These modules should stay small and renderer-local unless another public Site re
 
 - `doc/current.md`: note public Site header uses seeded nav only, has a scoped dark-mode toggle, and mobile collapses to first nav item plus menu.
 - `doc/current.md`: note public Site footer uses inherited background with subtle top border.
-- `doc/roadmap.md`: update only if the first-release target needs explicit public chrome polish language.
+- `doc/roadmap.md`: no required change unless the first-release target needs explicit public chrome polish language.
 
 ## Blockers
 
-- None.
+- None for PSC-03.
 
 ## Evidence
 
@@ -248,3 +248,9 @@ These modules should stay small and renderer-local unless another public Site re
 - 2026-05-12: PSC-02 tests updated in `src/app.test.tsx`; `devstate` watcher passed 118 tests and `.devstate/logs/check-vite.txt` reported no formatting, lint, or type errors.
 - 2026-05-12: PSC-02 browser smoke opened `https://24-public-site-chrome-polish.formless.local/pages/home`; footer eval returned transparent background, solid top border, Explore label, GitHub link, and no `bg-*` footer class; `bun browser --session psc-02 errors` returned no page errors.
 - 2026-05-12: PSC-02 check files requested under `tmp/` were absent; this branch's devstate evidence is in root `devstate.json` and `.devstate/`.
+- 2026-05-12: PSC-03 shipped browser smoke and PRD closeout. Desktop `/pages/home` rendered seeded Header navigation, scoped public theme toggle, public home content, and inherited-background Footer with solid 1px top border.
+- 2026-05-12: PSC-03 mobile smoke at 375px rendered Home as the primary header item, `Header menu` as the accessible overflow control, and Blog/Projects/Resume only in the overflow menu.
+- 2026-05-12: PSC-03 dark toggle smoke changed the public renderer root from dark to light, updated the toggle label to `Switch to dark mode`, and persisted `formless:public-site:theme = light` across reload.
+- 2026-05-12: PSC-03 `bun browser --session psc-03 errors` returned no page errors.
+- 2026-05-12: PSC-03 `devstate` evidence: `.devstate/status.md` reported checks ok, web ready, and test watcher passing at `https://24-public-site-chrome-polish.formless.local`; `.devstate/logs/service-test.txt` passed 118 tests; `.devstate/logs/check-vite.txt` reported no formatting, lint, or type errors in 191 files.
+- 2026-05-12: PSC-03 `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
