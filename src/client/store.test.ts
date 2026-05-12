@@ -5,17 +5,19 @@ import {
   applyRecordMerge,
   applySchemaSave,
   createAggregateValueMatchingQuerySelector,
-  createEntityRecordCountReferencingFieldSelector,
-  createEntityRecordCountMatchingQuerySelector,
-  createEntityRecordIdsMatchingQuerySelector,
-  createEntityRecordOptionsMatchingQuerySelector,
   createRecordReadinessWarningsSelector,
-  createReferenceOptionsSelector,
   getClientStoreSnapshot,
   resetClientStore,
   selectClientStoreSchemaKey,
   subscribeToClientStoreSelector,
 } from "./store.ts";
+import {
+  createEntityRecordCountReferencingFieldSelector,
+  createEntityRecordCountMatchingQuerySelector,
+  createEntityRecordIdsMatchingQuerySelector,
+  createEntityRecordOptionsMatchingQuerySelector,
+  createReferenceOptionsSelector,
+} from "./projections.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import {
