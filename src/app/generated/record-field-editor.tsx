@@ -1,13 +1,28 @@
 import { useEffect, useState } from "react";
+import { Button } from "@formless/ui/button";
 import { Checkbox } from "@formless/ui/checkbox";
 import { ColorInput } from "@formless/ui/color";
 import { DateInput } from "@formless/ui/date";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@formless/ui/dialog";
 import { Field, FieldError } from "@formless/ui/field";
 import { Input } from "@formless/ui/input";
 import { Label } from "@formless/ui/label";
 import { MarkdownEditor } from "@formless/ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import { FormattedNumberInput } from "@formless/ui/number-input";
+import {
+  SourceEditor,
+  SourcePreviewFieldEditor,
+  sourcePreviewPanelClassName,
+} from "@formless/ui/source-preview";
+import { SvgIcon } from "@formless/ui/svg-icon";
 import { Textarea } from "@formless/ui/textarea";
 import { AutosizeTextInput } from "@formless/ui/text-input";
 import { ValueUnitInput } from "@formless/ui/value-unit-input";
@@ -56,6 +71,10 @@ export function RecordFieldEditor({
   const [draft, setDraft] = useState(() =>
     fieldValueToEditorInputValue(field, recordValue, numberFormat),
   );
+  const [iconDialogOpen, setIconDialogOpen] = useState(false);
+  const [iconDialogDraft, setIconDialogDraft] = useState(() =>
+    fieldValueToEditorInputValue(field, recordValue, numberFormat),
+  );
   const [unitDraft, setUnitDraft] = useState(() =>
     valueUnitConfig ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue) : "",
   );
@@ -63,7 +82,13 @@ export function RecordFieldEditor({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
+    const nextDraft = fieldValueToEditorInputValue(field, recordValue, numberFormat);
+
+    setDraft(nextDraft);
+
+    if (!iconDialogOpen) {
+      setIconDialogDraft(nextDraft);
+    }
   }, [field, numberFormat, recordValue]);
 
   useEffect(() => {
@@ -72,9 +97,9 @@ export function RecordFieldEditor({
     );
   }, [unitRecordValue, valueUnitConfig]);
 
-  async function commitPatch(values: Partial<RecordValues>) {
+  async function commitPatch(values: Partial<RecordValues>): Promise<boolean> {
     if (!canPatch || isPending) {
-      return;
+      return false;
     }
 
     const patchValues: Partial<RecordValues> = {};
@@ -92,7 +117,7 @@ export function RecordFieldEditor({
     const patchFieldNames = Object.keys(patchValues);
 
     if (patchFieldNames.length === 0) {
-      return;
+      return true;
     }
 
     setIsPending(true);
@@ -102,6 +127,7 @@ export function RecordFieldEditor({
       await submitPatchMutation(schemaKey, entityName, recordId, patchValues);
       setError(null);
       setSyncStatus({ state: "idle", message: "Updated and synced." });
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Update failed.";
 
@@ -114,6 +140,7 @@ export function RecordFieldEditor({
         state: "error",
         message,
       });
+      return false;
     } finally {
       setIsPending(false);
     }
@@ -131,8 +158,8 @@ export function RecordFieldEditor({
     return undefined;
   }
 
-  async function commit(value: FieldValue) {
-    await commitPatch({ [fieldName]: value });
+  async function commit(value: FieldValue): Promise<boolean> {
+    return commitPatch({ [fieldName]: value });
   }
 
   if (adapter.kind === "boolean") {
@@ -237,6 +264,9 @@ export function RecordFieldEditor({
   }
 
   const control = adapter.control;
+  const isIconEditor =
+    adapter.kind === "text" &&
+    (adapter.editor === "icon" || adapter.field.format === "icon" || control.kind === "icon");
   const isMarkdownEditor = adapter.kind === "text" && adapter.editor === "markdown";
   const isRichMarkdownEditor = isMarkdownEditor && density !== "compact";
   const isMultilineTextEditor = control.kind === "textarea" && !isRichMarkdownEditor;
@@ -309,7 +339,40 @@ export function RecordFieldEditor({
     >
       <Field>
         <Label className={labelClass}>{label}</Label>
-        {isRichMarkdownEditor ? (
+        {isIconEditor ? (
+          <IconFieldEditor
+            canPatch={canPatch}
+            density={density}
+            draft={iconDialogDraft}
+            error={error}
+            isPending={isPending}
+            label={label}
+            onCancel={() => {
+              setIconDialogDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
+              setIconDialogOpen(false);
+            }}
+            onDraftChange={setIconDialogDraft}
+            onOpenChange={(open) => {
+              if (open) {
+                setIconDialogDraft(draft);
+              } else {
+                setIconDialogDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
+              }
+
+              setIconDialogOpen(open);
+            }}
+            onSave={async () => {
+              const saved = await commit(inputValueToFieldValue(field, iconDialogDraft));
+
+              if (saved) {
+                setDraft(iconDialogDraft);
+                setIconDialogOpen(false);
+              }
+            }}
+            open={iconDialogOpen}
+            previewSource={draft}
+          />
+        ) : isRichMarkdownEditor ? (
           <MarkdownEditor
             aria-invalid={error !== null}
             aria-label={label}
@@ -519,6 +582,131 @@ export function RecordFieldEditor({
   );
 }
 
+function IconFieldEditor({
+  canPatch,
+  density,
+  draft,
+  error,
+  isPending,
+  label,
+  onCancel,
+  onDraftChange,
+  onOpenChange,
+  onSave,
+  open,
+  previewSource,
+}: {
+  canPatch: boolean;
+  density: "default" | "compact";
+  draft: string;
+  error: string | null;
+  isPending: boolean;
+  label: string;
+  onCancel: () => void;
+  onDraftChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSave: () => Promise<void>;
+  open: boolean;
+  previewSource: string;
+}) {
+  return (
+    <>
+      <div
+        className={
+          density === "compact"
+            ? "flex h-6 w-full min-w-0 items-center gap-2"
+            : "flex min-h-8 w-full min-w-0 items-center gap-2"
+        }
+        data-web-field-kind="icon"
+      >
+        <span className="flex min-w-0 flex-1 items-center" data-web-icon-field-preview="compact">
+          <SvgIcon
+            ariaLabel={`${label} preview`}
+            className={density === "compact" ? "size-4" : "size-5"}
+            source={previewSource}
+          />
+        </span>
+        <Button
+          aria-label={`Edit ${label}`}
+          data-web-icon-field-edit="trigger"
+          disabled={!canPatch || isPending}
+          onClick={() => onOpenChange(true)}
+          size={density === "compact" ? "icon-xs" : "icon-sm"}
+          title={`Edit ${label}`}
+          type="button"
+          variant="outline"
+        >
+          <EditGlyphIcon />
+        </Button>
+      </div>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) {
+            onOpenChange(true);
+          } else {
+            onCancel();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit {label}</DialogTitle>
+          </DialogHeader>
+          <SourcePreviewFieldEditor
+            defaultMode="source"
+            kind="icon"
+            preview={<IconSourcePreview label={label} source={draft} />}
+            source={
+              <SourceEditor
+                aria-invalid={error !== null ? true : undefined}
+                aria-label={`${label} SVG source`}
+                onChange={onDraftChange}
+                placeholder={'<svg viewBox="0 0 24 24">...</svg>'}
+                readOnly={!canPatch || isPending}
+                sourceKind="svg"
+                value={draft}
+              />
+            }
+          />
+          {error ? <FieldError>{error}</FieldError> : null}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
+            <Button disabled={!canPatch || isPending} onClick={() => void onSave()} type="button">
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function EditGlyphIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        d="m5 19 4.2-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L5 19Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path d="m13.5 6.5 4 4" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function IconSourcePreview({ label, source }: { label: string; source: string }) {
+  return (
+    <div
+      className={`${sourcePreviewPanelClassName} flex items-center justify-center`}
+      data-web-svg-preview="icon"
+    >
+      <SvgIcon ariaLabel={`${label} preview`} className="size-12" source={source} />
+    </div>
+  );
+}
+
 function valueUnitPatch(
   fieldName: string,
   draft: string,
@@ -589,7 +777,7 @@ function RecordReferenceEditor({
   isPending: boolean;
   label: string;
   labelClass: string;
-  onCommit: (value: FieldValue) => Promise<void>;
+  onCommit: (value: FieldValue) => Promise<boolean>;
   onDraftChange: (value: string) => void;
 }) {
   const options = useReferenceOptions(field.to, field.displayField);

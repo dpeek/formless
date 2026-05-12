@@ -17,6 +17,12 @@ import { Label } from "@formless/ui/label";
 import { MarkdownEditor } from "@formless/ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
 import { FormattedNumberInput } from "@formless/ui/number-input";
+import {
+  SourceEditor,
+  SourcePreviewFieldEditor,
+  sourcePreviewPanelClassName,
+} from "@formless/ui/source-preview";
+import { SvgIcon } from "@formless/ui/svg-icon";
 import { Textarea } from "@formless/ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
@@ -335,6 +341,25 @@ function CreateFieldInput({
     );
   }
 
+  if (
+    adapter.kind === "text" &&
+    (adapter.editor === "icon" ||
+      adapter.field.format === "icon" ||
+      adapter.control.kind === "icon")
+  ) {
+    return (
+      <Field>
+        <Label>{label}</Label>
+        <CreateIconField
+          defaultValue={adapter.createDefaultValue}
+          fieldName={fieldName}
+          label={label}
+          required={adapter.required}
+        />
+      </Field>
+    );
+  }
+
   if (adapter.kind === "number") {
     return (
       <Field>
@@ -407,6 +432,67 @@ function CreateFieldInput({
         type={adapter.control.kind === "input" ? adapter.control.inputType : "text"}
       />
     </Field>
+  );
+}
+
+function CreateIconField({
+  defaultValue,
+  fieldName,
+  label,
+  required,
+}: {
+  defaultValue: string | undefined;
+  fieldName: string;
+  label: string;
+  required: boolean;
+}) {
+  const resetValue = defaultValue ?? "";
+  const [value, setValue] = useState(resetValue);
+  const fieldRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const form = fieldRef.current?.closest("form");
+
+    if (!form) {
+      return;
+    }
+
+    const handleReset = () => setValue(resetValue);
+    form.addEventListener("reset", handleReset);
+
+    return () => form.removeEventListener("reset", handleReset);
+  }, [resetValue]);
+
+  return (
+    <div ref={fieldRef}>
+      <SourcePreviewFieldEditor
+        defaultMode="source"
+        kind="icon"
+        preview={<CreateIconPreview label={label} source={value} />}
+        source={
+          <SourceEditor
+            aria-label={label}
+            name={fieldName}
+            onChange={setValue}
+            placeholder={'<svg viewBox="0 0 24 24">...</svg>'}
+            required={required}
+            sourceKind="svg"
+            value={value}
+          />
+        }
+      />
+    </div>
+  );
+}
+
+function CreateIconPreview({ label, source }: { label: string; source: string }) {
+  return (
+    <div
+      className={`${sourcePreviewPanelClassName} flex items-center justify-center`}
+      data-web-svg-preview="icon"
+    >
+      <SvgIcon ariaLabel={`${label} preview`} className="size-12" source={source} />
+    </div>
   );
 }
 

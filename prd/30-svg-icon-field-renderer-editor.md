@@ -1,7 +1,7 @@
 # PRD 30: SVG icon field renderer and editor
 
 Status: in progress
-Current chunk: SIF-03 ready
+Current chunk: SIF-04 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -246,8 +246,8 @@ Likely changed files:
 | ------ | ------- | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | SIF-01 | done    | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
 | SIF-02 | done    | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
-| SIF-03 | ready   | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
-| SIF-04 | planned | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
+| SIF-03 | done    | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
+| SIF-04 | ready   | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
 | SIF-05 | planned | SIF-04     | browser smoke, PRD                               | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes updated. |
 
 ## Out of Scope
@@ -271,6 +271,7 @@ Likely changed files:
 - Current `devstate` service-test watcher is failing before this PRD starts because Site seed expectations and live seed data differ. This PRD should not take ownership of that failure unless the same tests are still failing after the assigned implementation changes touch Site seed records.
 - 2026-05-12 SIF-01: `devstate start` and post-change watcher still report the pre-existing `src/app.test.tsx` generated route failures. SIF-01 did not touch route behavior.
 - 2026-05-12 SIF-02: no new chunk blocker. Current devstate layout did not create `tmp/devstate.json`, `tmp/test.txt`, or `tmp/check.txt`; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- 2026-05-12 SIF-03: `bun browser` generated `/site` smoke could not verify generated icon editing because this agent shell has `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite`, so the dev URL serves published-site routes and `/site` renders "No site page exists for site." Clear or override that env before SIF-05 browser smoke.
 
 ## Promote after ship
 
@@ -280,6 +281,7 @@ Likely changed files:
 - `doc/roadmap.md`: no change unless icon support becomes explicit first-release scope wording.
 - SIF-01: no global-doc promotion yet; behavior is characterized but unchanged.
 - SIF-02: promote shared `lib/ui/src/svg-icon.tsx` renderer after generated UI and public Site consumers land.
+- SIF-03: promote generated icon display/create/edit behavior after public Site consumer lands.
 
 ## Evidence
 
@@ -302,3 +304,11 @@ Likely changed files:
 - SIF-02: exported the renderer through `@formless/ui` and `@formless/ui/svg-icon`.
 - SIF-02: `devstate check` before the final rebase on 2026-05-12 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`.
 - SIF-02: final post-rebase `devstate check` on 2026-05-12 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`.
+- SIF-03: `FieldEditorControl` now has `kind: "icon"` for `editor: "icon"` while stored values remain text strings.
+- SIF-03: generated create forms render icon fields with `SourcePreviewFieldEditor` and `SourceEditor` textarea source editing; create submission still reads one flat string field.
+- SIF-03: generated inline patch surfaces render compact `SvgIcon` previews and an edit dialog with SVG source textarea editing; save still patches only the icon field.
+- SIF-03: generated read-only/table display renders text-backed icon values through `SvgIcon` and no longer displays raw SVG text.
+- SIF-03: route-render tests now pass an explicit dev runtime profile so app-route assertions do not depend on the agent shell's published-site env.
+- SIF-03: `devstate check` on 2026-05-12 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`.
+- SIF-03: required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- SIF-03: `bun browser --session sif03 --ignore-https-errors` opened `/site`, but generated-app markers were absent because `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite` made the page render published-site output.

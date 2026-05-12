@@ -149,7 +149,7 @@ describe("field type behavior", () => {
   it("centralizes generated editor control metadata without React", () => {
     expect(fieldEditorControl(fields.title, "text")).toEqual({ kind: "input", inputType: "text" });
     expect(fieldEditorControl(fields.title, "markdown")).toEqual({ kind: "textarea" });
-    expect(fieldEditorControl(fields.icon, "icon")).toEqual({ kind: "input", inputType: "text" });
+    expect(fieldEditorControl(fields.icon, "icon")).toEqual({ kind: "icon" });
     expect(fieldEditorControl(fields.done, "boolean")).toEqual({ kind: "checkbox" });
     expect(fieldEditorControl(fields.dueDate, "date")).toEqual({
       kind: "input",

@@ -8,6 +8,7 @@ export type FieldDisplayOptions = { format?: TableColumnFormat };
 export type FieldEditorControl =
   | { kind: "checkbox" }
   | { kind: "formattedNumber" }
+  | { kind: "icon" }
   | { kind: "input"; inputType: "date" | "number" | "text" }
   | { kind: "reference" }
   | { kind: "select" }
@@ -291,6 +292,10 @@ function textEditorControl(
   _field: Extract<FieldSchema, { type: "text" }>,
   editor: FieldEditor,
 ): FieldEditorControl {
+  if (editor === "icon") {
+    return { kind: "icon" };
+  }
+
   if (editor === "textarea" || editor === "markdown") {
     return { kind: "textarea" };
   }

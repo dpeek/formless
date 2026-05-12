@@ -18,7 +18,7 @@ describe("generated field UI adapters", () => {
       href: { kind: "input", inputType: "text" },
       slug: { kind: "input", inputType: "text" },
       color: { kind: "input", inputType: "text" },
-      icon: { kind: "input", inputType: "text" },
+      icon: { kind: "icon" },
     });
     expect(selectGeneratedFieldEditorAdapter(fields.title, "text")).toMatchObject({
       kind: "text",
@@ -35,7 +35,7 @@ describe("generated field UI adapters", () => {
     expect(selectGeneratedFieldEditorAdapter(fields.icon, "icon")).toMatchObject({
       kind: "text",
       editor: "icon",
-      control: { kind: "input", inputType: "text" },
+      control: { kind: "icon" },
       createDefaultValue: undefined,
       required: false,
     });

@@ -10,17 +10,23 @@ export const sourcePreviewTextareaClassName = `${sourcePreviewSurfaceClassName} 
 export type SourcePreviewMode = "source" | "preview";
 
 export function SourceEditor({
+  "aria-label": ariaLabel,
   "aria-invalid": ariaInvalid,
+  name,
   onChange,
   placeholder,
   readOnly = false,
+  required,
   sourceKind,
   value,
 }: {
+  "aria-label"?: string;
   "aria-invalid"?: AriaAttributes["aria-invalid"];
+  name?: string;
   onChange?: (nextValue: string) => void;
   placeholder?: string;
   readOnly?: boolean;
+  required?: boolean;
   sourceKind: string;
   value: string;
 }) {
@@ -31,13 +37,16 @@ export function SourceEditor({
 
   return (
     <textarea
+      aria-label={ariaLabel}
       aria-invalid={ariaInvalid}
       className={sourcePreviewTextareaClassName}
       data-web-field-kind="textarea"
       {...sourceData}
+      name={name}
       onChange={onChange ? (event) => onChange(event.currentTarget.value) : undefined}
       placeholder={placeholder}
       readOnly={isReadOnly}
+      required={required}
       spellCheck={false}
       value={value}
     />

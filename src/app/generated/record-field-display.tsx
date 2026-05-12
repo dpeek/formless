@@ -1,5 +1,6 @@
 import { isHexColor, toPickerHexColor } from "@formless/ui/color-utils";
 import { MarkdownRenderer } from "@formless/ui/markdown";
+import { SvgIcon } from "@formless/ui/svg-icon";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
 import type {
   FieldTableColumnConfig,
@@ -34,6 +35,10 @@ export function RecordFieldDisplay({
     return <RecordColorDisplay column={column} recordValue={recordValue} />;
   }
 
+  if (isIconDisplayColumn(column)) {
+    return <RecordIconDisplay column={column} recordValue={recordValue} />;
+  }
+
   if (isMarkdownDisplayColumn(column)) {
     return <RecordMarkdownDisplay column={column} recordValue={recordValue} />;
   }
@@ -41,6 +46,23 @@ export function RecordFieldDisplay({
   return (
     <>
       <span>{formatFieldDisplayValue(column, recordValue)}</span>
+      {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+    </>
+  );
+}
+
+function RecordIconDisplay({
+  column,
+  recordValue,
+}: {
+  column: DisplayTableColumnConfig;
+  recordValue: FieldValue | undefined;
+}) {
+  const source = typeof recordValue === "string" ? recordValue : "";
+
+  return (
+    <>
+      <SvgIcon ariaLabel={column.label} className="size-4" source={source} />
       {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
     </>
   );
@@ -115,6 +137,12 @@ function ColorDisplaySwatch({ color, label }: { color: string; label: string }) 
 function isColorDisplayColumn(column: DisplayTableColumnConfig) {
   return (
     column.field.type === "text" && (column.editor === "color" || column.field.format === "color")
+  );
+}
+
+function isIconDisplayColumn(column: DisplayTableColumnConfig) {
+  return (
+    column.field.type === "text" && (column.editor === "icon" || column.field.format === "icon")
   );
 }
 

@@ -36,6 +36,7 @@ import {
 } from "./app/routes/home.tsx";
 import { buildSitePageTree } from "./site/tree.ts";
 import {
+  createDevRuntimeProfile,
   createAppRuntimeProfile,
   createPublishedSiteRuntimeProfile,
   type RuntimeProfile,
@@ -81,7 +82,7 @@ import { testSiteSeedRecords } from "./test/site-records.ts";
 function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
-      <App runtimeProfile={runtimeProfile} />
+      <App runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()} />
     </Router>,
   );
 }
@@ -3095,7 +3096,7 @@ describe("generated forms and records", () => {
     expect(html).toContain("Lead");
   });
 
-  it("characterizes generated create controls for current editor hints", () => {
+  it("renders generated create controls for current editor hints", () => {
     const entity = fieldEditorCharacterizationEntity();
     const action = fieldEditorCharacterizationCreateAction(entity);
 
@@ -3114,8 +3115,9 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
     expect(html).toMatch(inputWithNameAndType("href", "text"));
     expect(html).toMatch(inputWithNameAndType("slug", "text"));
-    expect(html).toMatch(inputWithNameAndType("icon", "text"));
-    expect(html).not.toContain("data-web-svg-source");
+    expect(html).toMatch(textareaWithName("icon"));
+    expect(html).toContain('data-web-field-kind="icon"');
+    expect(html).toContain("data-web-svg-source");
     expect(html).toMatch(inputWithNameAndType("publishedAt", "date"));
     expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "2026-05-06"));
     expect(html).toMatch(inputWithNameAndType("count", "hidden"));
@@ -3144,7 +3146,7 @@ describe("generated forms and records", () => {
     });
   });
 
-  it("characterizes inline patch controls for current editor hints", () => {
+  it("renders inline patch controls for current editor hints", () => {
     const entity = fieldEditorCharacterizationEntity();
 
     applyBootstrapResponse(
@@ -3171,9 +3173,10 @@ describe("generated forms and records", () => {
     expect(html).toContain('value="#336699"');
     expect(html).toMatch(inputWithAriaLabelAndType("Link", "text"));
     expect(html).toMatch(inputWithAriaLabelAndType("Slug", "text"));
-    expect(html).toMatch(inputWithAriaLabelAndType("Icon", "text"));
-    expect(html).toContain('value="sparkles"');
-    expect(html).not.toContain("data-web-svg-source");
+    expect(html).toContain('data-web-field-kind="icon"');
+    expect(html).toContain('data-web-svg-icon="empty"');
+    expect(html).toContain('aria-label="Edit Icon"');
+    expect(html).not.toContain('value="sparkles"');
     expect(html).toMatch(inputWithAriaLabelAndType("Published at", "date"));
     expect(html).toContain('value="2026-05-06"');
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
@@ -3183,7 +3186,7 @@ describe("generated forms and records", () => {
     expect(html).toContain("Designer");
   });
 
-  it("characterizes generated read-only icon display as escaped raw text", () => {
+  it("renders generated read-only icon display as SVG icon markup", () => {
     const entity = fieldEditorCharacterizationEntity();
     const columns: TableColumnConfig[] = [
       {
@@ -3218,8 +3221,9 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain("&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;/svg&gt;");
-    expect(html).not.toContain('<svg viewBox="0 0 24 24">');
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain('viewBox="0 0 24 24"');
+    expect(html).not.toContain("&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;/svg&gt;");
     expect(html).not.toContain("data-web-svg-source");
   });
 
