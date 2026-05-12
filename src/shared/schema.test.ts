@@ -1007,6 +1007,64 @@ describe("schema create view defaults", () => {
     });
   });
 
+  it("accepts literal defaults for omitted scalar fields and preserves them through stringify", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: {
+            ...taskEntityWithEstimateNumber(),
+            fields: {
+              ...taskEntityWithEstimateNumber().fields,
+              kind: {
+                type: "enum",
+                required: true,
+                values: {
+                  role: { label: "Role" },
+                  stream: { label: "Stream" },
+                },
+              },
+            },
+          },
+        },
+        views: {
+          ...defaultViews(),
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              dueDate: { editor: "date" },
+            },
+            defaults: {
+              title: { kind: "literal", value: "Untitled" },
+              done: { kind: "literal", value: true },
+              estimate: { kind: "literal", value: 3 },
+              kind: { kind: "literal", value: "stream" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.views.taskCreate).toMatchObject({
+      type: "create",
+      fields: {
+        dueDate: { editor: "date" },
+      },
+      defaults: {
+        title: { kind: "literal", value: "Untitled" },
+        done: { kind: "literal", value: true },
+        estimate: { kind: "literal", value: 3 },
+        kind: { kind: "literal", value: "stream" },
+      },
+    });
+    expect(JSON.parse(stringifySchema(schema)).views.taskCreate.defaults).toEqual({
+      title: { kind: "literal", value: "Untitled" },
+      done: { kind: "literal", value: true },
+      estimate: { kind: "literal", value: 3 },
+      kind: { kind: "literal", value: "stream" },
+    });
+  });
+
   it("rejects unknown, duplicated, and empty create defaults", () => {
     expect(() =>
       parseAppSchema(
@@ -1073,8 +1131,91 @@ describe("schema create view defaults", () => {
     ).toThrow('default "card" has unsupported key "extra"');
 
     expect(() =>
-      parseAppSchema(schemaWithRateCreateDefault({ kind: "literal", name: "card" })),
-    ).toThrow('default "card" has unsupported kind "literal"');
+      parseAppSchema(schemaWithRateCreateDefault({ kind: "literal", value: "card" })),
+    ).toThrow('default "card" requires a scalar field');
+  });
+
+  it("rejects malformed literal create defaults", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          views: {
+            ...defaultViews(),
+            taskCreate: {
+              ...defaultViews().taskCreate,
+              defaults: {
+                done: { kind: "literal" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default "done" must include "value"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          views: {
+            ...defaultViews(),
+            taskCreate: {
+              ...defaultViews().taskCreate,
+              fields: {
+                title: { editor: "text" },
+              },
+              defaults: {
+                dueDate: { kind: "literal", value: "May 12, 2026" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default "dueDate" literal value must be a YYYY-MM-DD date');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithEstimateNumber({ integer: true }),
+          },
+          views: {
+            ...defaultViews(),
+            taskCreate: {
+              type: "create",
+              entity: "task",
+              fields: {
+                title: { editor: "text" },
+              },
+              defaults: {
+                estimate: { kind: "literal", value: 1.5 },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default "estimate" literal value must be an integer');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          views: {
+            ...defaultViews(),
+            taskCreate: {
+              type: "create",
+              entity: "task",
+              fields: {
+                title: { editor: "text" },
+              },
+              defaults: {
+                kind: { kind: "literal", value: "missing" },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('default "kind" literal value must be a known enum value');
   });
 
   it("rejects context defaults on non-reference fields", () => {

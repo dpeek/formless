@@ -1698,6 +1698,26 @@ describe("generated forms and records", () => {
     expect(streamHtml).not.toContain('name="title"');
   });
 
+  it("renders fixed-discriminator create fields from literal defaults", () => {
+    const action = requiredCreateAction(
+      generatedDiscriminatedTaskSchema({ fixedCreateKind: "stream" }),
+      "taskHome",
+    );
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+    const formData = new FormData();
+    formData.set("done", "on");
+
+    expect(html).not.toContain('name="kind"');
+    expect(html).toContain('name="done"');
+    expect(html).not.toContain('name="title"');
+    expect(resolveCreateValues(formData, action)).toEqual({
+      done: true,
+      kind: "stream",
+    });
+  });
+
   it("renders record fields for the active union discriminator", () => {
     const schema = generatedDiscriminatedTaskSchema();
     const model = requiredCollectionModel(schema, "taskHome");
@@ -3242,10 +3262,24 @@ function requiredEditView(schema: AppSchema, viewName: string): EditViewConfig {
 function generatedDiscriminatedTaskSchema(
   options: {
     defaultKind?: "role" | "stream";
+    fixedCreateKind?: "role" | "stream";
     streamItemPresentation?: "fields" | "contextLink";
     treeBranchVariants?: Partial<Record<"role" | "stream", "leaf">>;
   } = {},
 ): AppSchema {
+  const createFields =
+    options.fixedCreateKind === undefined
+      ? {
+          kind: { editor: "enum" },
+        }
+      : options.fixedCreateKind === "stream"
+        ? {
+            done: { editor: "boolean" },
+          }
+        : {
+            title: { editor: "text" },
+          };
+
   return parseAppSchema({
     version: 1,
     entities: {
@@ -3419,9 +3453,14 @@ function generatedDiscriminatedTaskSchema(
       taskCreate: {
         type: "create",
         entity: "task",
-        fields: {
-          kind: { editor: "enum" },
-        },
+        fields: createFields,
+        ...(options.fixedCreateKind === undefined
+          ? {}
+          : {
+              defaults: {
+                kind: { kind: "literal", value: options.fixedCreateKind },
+              },
+            }),
         union: "taskByKind",
         variants: {
           role: {

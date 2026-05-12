@@ -146,6 +146,46 @@ describe("home view model collections", () => {
     );
   });
 
+  it("exposes literal create defaults for fixed discriminator create actions", () => {
+    const model = requiredCollectionModel(
+      discriminatedTaskSchema({ fixedCreateKind: "stream" }),
+      "taskHome",
+    );
+    const createAction = model.actions.find((action) => action.type === "create");
+
+    expect(createAction?.type === "create" ? createAction.fields : []).toMatchObject([
+      {
+        fieldName: "title",
+        editor: "text",
+      },
+    ]);
+    expect(createAction?.type === "create" ? createAction.defaults : []).toMatchObject([
+      {
+        fieldName: "kind",
+        value: { kind: "literal", value: "stream" },
+      },
+    ]);
+    expect(createAction?.type === "create" ? createAction.union : undefined).toMatchObject({
+      discriminatorFieldName: "kind",
+      variants: [
+        {
+          variantValue: "role",
+          presentation: {
+            type: "fields",
+            fields: [{ fieldName: "title" }],
+          },
+        },
+        {
+          variantValue: "stream",
+          presentation: {
+            type: "fields",
+            fields: [{ fieldName: "done" }],
+          },
+        },
+      ],
+    });
+  });
+
   it("resolves collection actions and clear-completed target query", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 
@@ -1929,7 +1969,19 @@ function findFieldTableColumn(columns: TableColumnConfig[], fieldName: string) {
   );
 }
 
-function discriminatedTaskSchema(): AppSchema {
+function discriminatedTaskSchema(
+  options: { fixedCreateKind?: "role" | "stream" | "custom" } = {},
+): AppSchema {
+  const createFields =
+    options.fixedCreateKind === undefined
+      ? {
+          title: { editor: "text" },
+          kind: { editor: "enum" },
+        }
+      : {
+          title: { editor: "text" },
+        };
+
   return parseAppSchema({
     version: 1,
     entities: {
@@ -2050,10 +2102,14 @@ function discriminatedTaskSchema(): AppSchema {
       taskCreate: {
         type: "create",
         entity: "task",
-        fields: {
-          title: { editor: "text" },
-          kind: { editor: "enum" },
-        },
+        fields: createFields,
+        ...(options.fixedCreateKind === undefined
+          ? {}
+          : {
+              defaults: {
+                kind: { kind: "literal", value: options.fixedCreateKind },
+              },
+            }),
         union: "taskByKind",
         variants: {
           role: {

@@ -1,4 +1,5 @@
 import type {
+  CreateDefaultConfig,
   CreateFieldConfig,
   CreateUnionPresentationConfig,
   RecordVariantContextLinkPresentationConfig,
@@ -56,6 +57,7 @@ export function selectCreateFieldsForFormData(
   baseFields: CreateFieldConfig[],
   union: CreateUnionPresentationConfig | undefined,
   formData: FormData,
+  defaults: CreateDefaultConfig[] = [],
 ): CreateFieldConfig[] {
   if (union === undefined) {
     return baseFields;
@@ -63,16 +65,25 @@ export function selectCreateFieldsForFormData(
 
   const formValue = formData.get(union.discriminatorFieldName);
   const discriminatorValue =
-    typeof formValue === "string" ? formValue : initialCreateDiscriminatorValue(union);
+    typeof formValue === "string" ? formValue : initialCreateDiscriminatorValue(union, defaults);
 
   return selectCreateFieldsForDiscriminator(baseFields, union, discriminatorValue);
 }
 
 export function initialCreateDiscriminatorValue(
   union: CreateUnionPresentationConfig | undefined,
+  defaults: CreateDefaultConfig[] = [],
 ): string | undefined {
   if (union === undefined) {
     return undefined;
+  }
+
+  const defaultConfig = defaults.find(
+    (candidate) => candidate.fieldName === union.discriminatorFieldName,
+  );
+
+  if (defaultConfig?.value.kind === "literal" && typeof defaultConfig.value.value === "string") {
+    return defaultConfig.value.value;
   }
 
   return (

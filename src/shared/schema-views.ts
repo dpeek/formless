@@ -1,6 +1,7 @@
 import { findAddressableField, getEntityFieldCatalog } from "./fields.ts";
 import { fieldHasCreateDefault } from "./field-types.ts";
 import { collectQueryContextNames, parseQueryExpression, type QueryExpression } from "./query.ts";
+import { isDateString } from "./date.ts";
 import {
   assertExactKeys,
   isRecord,
@@ -310,6 +311,10 @@ function validateCreateActionContextDefaults(
     return;
   }
 
+  const contextDefaults = Object.entries(createView.defaults ?? {}).filter(
+    (entry): entry is [string, Extract<CreateDefaultValueSchema, { kind: "context" }>] =>
+      entry[1].kind === "context",
+  );
   const context = `Collection view "${collectionViewName}" create action view "${createViewName}"`;
 
   if (!collectionContext) {
@@ -327,7 +332,7 @@ function validateCreateActionContextDefaults(
     throw new Error(`${context} must use relationship target entity "${relationship.to.entity}".`);
   }
 
-  for (const [fieldName, defaultValue] of Object.entries(createView.defaults ?? {})) {
+  for (const [fieldName, defaultValue] of contextDefaults) {
     if (defaultValue.name !== collectionContext.name) {
       throw new Error(
         `${context} requires context "${defaultValue.name}" but the collection context is "${collectionContext.name}".`,
@@ -350,7 +355,9 @@ function validateCreateActionContextDefaults(
 }
 
 function createViewRequiresContextDefaults(createView: CreateViewSchema) {
-  return Object.keys(createView.defaults ?? {}).length > 0;
+  return Object.values(createView.defaults ?? {}).some((defaultValue) => {
+    return defaultValue.kind === "context";
+  });
 }
 
 function parseView(
@@ -2113,21 +2120,125 @@ function parseCreateViewDefault(
     throw new Error(`${context} must be an object.`);
   }
 
-  assertExactKeys(context, value, ["kind", "name"]);
+  if (value.kind === "context") {
+    assertExactKeys(context, value, ["kind", "name"]);
 
-  if (value.kind !== "context") {
+    if (typeof value.name !== "string" || value.name.trim() === "") {
+      throw new Error(`${context} name must be a non-empty string.`);
+    }
+
+    if (field.type !== "reference") {
+      throw new Error(`${context} requires a reference field.`);
+    }
+
+    return { kind: "context", name: value.name };
+  }
+
+  if (value.kind === "literal") {
+    assertExactKeys(context, value, ["kind", "value"]);
+
+    if (field.type === "reference") {
+      throw new Error(`${context} requires a scalar field.`);
+    }
+
+    const literalValue = parseCreateLiteralDefaultValue(context, field, value.value);
+
+    return { kind: "literal", value: literalValue };
+  }
+
+  if (!("kind" in value)) {
+    throw new Error(`${context} must include "kind".`);
+  }
+
+  if (typeof value.kind === "string") {
     throw new Error(`${context} has unsupported kind "${String(value.kind)}".`);
   }
 
-  if (typeof value.name !== "string" || value.name.trim() === "") {
-    throw new Error(`${context} name must be a non-empty string.`);
+  throw new Error(`${context} kind must be a string.`);
+}
+
+function parseCreateLiteralDefaultValue(
+  context: string,
+  field: Exclude<FieldSchema, { type: "reference" }>,
+  value: unknown,
+) {
+  if (field.type === "text") {
+    if (typeof value !== "string") {
+      throw new Error(`${context} literal value must be a string.`);
+    }
+
+    if (field.required && value.trim() === "") {
+      throw new Error(`${context} literal value cannot be empty.`);
+    }
+
+    return value;
   }
 
-  if (field.type !== "reference") {
-    throw new Error(`${context} requires a reference field.`);
+  if (field.type === "date") {
+    if (typeof value !== "string") {
+      throw new Error(`${context} literal value must be a YYYY-MM-DD date.`);
+    }
+
+    if (value === "") {
+      if (field.required) {
+        throw new Error(`${context} literal value cannot be empty.`);
+      }
+
+      return value;
+    }
+
+    if (!isDateString(value)) {
+      throw new Error(`${context} literal value must be a YYYY-MM-DD date.`);
+    }
+
+    return value;
   }
 
-  return { kind: "context", name: value.name };
+  if (field.type === "boolean") {
+    if (typeof value !== "boolean") {
+      throw new Error(`${context} literal value must be a boolean.`);
+    }
+
+    return value;
+  }
+
+  if (field.type === "number") {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`${context} literal value must be a finite number.`);
+    }
+
+    if (field.min !== undefined && value < field.min) {
+      throw new Error(`${context} literal value must be greater than or equal to ${field.min}.`);
+    }
+
+    if (field.max !== undefined && value > field.max) {
+      throw new Error(`${context} literal value must be less than or equal to ${field.max}.`);
+    }
+
+    if (field.integer && !Number.isInteger(value)) {
+      throw new Error(`${context} literal value must be an integer.`);
+    }
+
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`${context} literal value must be a known enum value.`);
+  }
+
+  if (value === "") {
+    if (field.required) {
+      throw new Error(`${context} literal value cannot be empty.`);
+    }
+
+    return value;
+  }
+
+  if (!Object.hasOwn(field.values, value)) {
+    throw new Error(`${context} literal value must be a known enum value.`);
+  }
+
+  return value;
 }
 
 function parseViewFieldEditor(

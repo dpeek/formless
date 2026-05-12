@@ -229,10 +229,15 @@ export type TableViewSchema = {
   columns: TableColumnSchema[];
 };
 
-export type CreateDefaultValueSchema = {
-  kind: "context";
-  name: string;
-};
+export type CreateDefaultValueSchema =
+  | {
+      kind: "context";
+      name: string;
+    }
+  | {
+      kind: "literal";
+      value: string | boolean | number;
+    };
 
 export type CollectionQuerySchema = {
   label: string;

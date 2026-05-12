@@ -23,6 +23,7 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitCreateMutation } from "../../client/sync.ts";
 import {
   fieldLabel,
+  type CreateDefaultConfig,
   type CreateFieldConfig,
   type CreateUnionPresentationConfig,
   type HomeActionConfig,
@@ -48,11 +49,13 @@ export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" 
 
 export function GeneratedCreateForm({
   createFields,
+  defaults = [],
   entity,
   entityName,
   union,
 }: {
   createFields: CreateFieldConfig[];
+  defaults?: CreateDefaultConfig[];
   entity: EntitySchema;
   entityName: string;
   union?: CreateUnionPresentationConfig;
@@ -60,7 +63,7 @@ export function GeneratedCreateForm({
   const schemaKey = useSchemaKey();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [discriminatorValue, setDiscriminatorValue] = useState(() =>
-    initialCreateDiscriminatorValue(union),
+    initialCreateDiscriminatorValue(union, defaults),
   );
   const canCreate = entity.mutations.create.enabled;
   const visibleCreateFields = selectCreateFieldsForDiscriminator(
@@ -70,8 +73,8 @@ export function GeneratedCreateForm({
   );
 
   useEffect(() => {
-    setDiscriminatorValue(initialCreateDiscriminatorValue(union));
-  }, [union]);
+    setDiscriminatorValue(initialCreateDiscriminatorValue(union, defaults));
+  }, [defaults, union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,10 +85,7 @@ export function GeneratedCreateForm({
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = getVisibleCreateValues(
-      formData,
-      selectCreateFieldsForFormData(createFields, union, formData),
-    );
+    const values = resolveCreateValuesForFields(formData, createFields, union, defaults);
 
     setIsSubmitting(true);
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
@@ -93,7 +93,7 @@ export function GeneratedCreateForm({
     try {
       await submitCreateMutation(schemaKey, entityName, values);
       form.reset();
-      setDiscriminatorValue(initialCreateDiscriminatorValue(union));
+      setDiscriminatorValue(initialCreateDiscriminatorValue(union, defaults));
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -180,7 +180,7 @@ export function GeneratedCreateDialogForm({
   const schemaKey = useSchemaKey();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [discriminatorValue, setDiscriminatorValue] = useState(() =>
-    initialCreateDiscriminatorValue(action.union),
+    initialCreateDiscriminatorValue(action.union, action.defaults),
   );
   const canSubmit = action.enabled && createDefaultsAreResolved(action, queryContext);
   const visibleFields = selectCreateFieldsForDiscriminator(
@@ -190,8 +190,8 @@ export function GeneratedCreateDialogForm({
   );
 
   useEffect(() => {
-    setDiscriminatorValue(initialCreateDiscriminatorValue(action.union));
-  }, [action.union]);
+    setDiscriminatorValue(initialCreateDiscriminatorValue(action.union, action.defaults));
+  }, [action.defaults, action.union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -213,7 +213,7 @@ export function GeneratedCreateDialogForm({
     try {
       const response = await submitCreateMutation(schemaKey, action.entityName, values);
       form.reset();
-      setDiscriminatorValue(initialCreateDiscriminatorValue(action.union));
+      setDiscriminatorValue(initialCreateDiscriminatorValue(action.union, action.defaults));
       onSuccess?.(response.record.id);
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
@@ -573,12 +573,28 @@ export function resolveCreateValues(
   action: CreateHomeActionConfig,
   queryContext?: QueryEvaluationContext,
 ): RecordValues {
+  return resolveCreateValuesForFields(
+    formData,
+    action.fields,
+    action.union,
+    action.defaults,
+    queryContext,
+  );
+}
+
+function resolveCreateValuesForFields(
+  formData: FormData,
+  fields: CreateFieldConfig[],
+  union: CreateUnionPresentationConfig | undefined,
+  defaults: CreateDefaultConfig[],
+  queryContext?: QueryEvaluationContext,
+): RecordValues {
   const values = getVisibleCreateValues(
     formData,
-    selectCreateFieldsForFormData(action.fields, action.union, formData),
+    selectCreateFieldsForFormData(fields, union, formData, defaults),
   );
 
-  for (const defaultConfig of action.defaults) {
+  for (const defaultConfig of defaults) {
     if (Object.hasOwn(values, defaultConfig.fieldName)) {
       continue;
     }
@@ -589,6 +605,8 @@ export function resolveCreateValues(
         defaultConfig.value.name,
         queryContext,
       );
+    } else {
+      values[defaultConfig.fieldName] = defaultConfig.value.value;
     }
   }
 
