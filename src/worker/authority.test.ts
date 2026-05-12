@@ -1585,10 +1585,13 @@ describe("authority", () => {
     }
   });
 
-  it("broadcasts committed patch mutations and actions", async () => {
+  it("broadcasts committed patch mutations, delete mutations, and actions", async () => {
     const created = await postMutation("mutation-broadcast-patch-source", {
       title: "Broadcast patch",
       done: false,
+    });
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskAndProjectDeleteEnabled(),
     });
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const socket = await openSyncSocket();
@@ -1610,6 +1613,22 @@ describe("authority", () => {
         payload: {
           changes: patched.changes,
           cursor: patched.cursor,
+        },
+      });
+
+      const deleteMessage = readSyncSocketMessage(socket);
+      const deleted = await postJson<MutationResponse>("/api/mutations", {
+        mutationId: "mutation-broadcast-delete",
+        entity: "task",
+        op: "delete",
+        recordId: created.record.id,
+      });
+
+      await expect(deleteMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: deleted.changes,
+          cursor: deleted.cursor,
         },
       });
 
@@ -2332,30 +2351,46 @@ describe("authority", () => {
     expect(sync.changes).toEqual([]);
   });
 
-  it("validates enabled generic delete mutation requests before storage execution", async () => {
+  it("commits enabled generic delete mutations as tombstone changes", async () => {
     const created = await postMutation("mutation-1", { title: "First", done: false });
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithMutations(deleteEnabledMutations()),
     });
 
-    await expectError(
-      "/api/mutations",
-      {
-        mutationId: "mutation-delete-ready",
-        entity: "task",
-        op: "delete",
-        recordId: created.record.id,
-      },
-      "Delete mutation execution is not implemented yet.",
-    );
-
+    const deleted = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-delete-ready",
+      entity: "task",
+      op: "delete",
+      recordId: created.record.id,
+    });
     const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
-    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 1}`);
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${created.cursor}`);
 
-    expect(bootstrap.records.find((record) => record.id === created.record.id)).not.toHaveProperty(
-      "deletedAt",
+    expect(deleted).toMatchObject({
+      record: {
+        ...created.record,
+        deletedAt: expect.any(String),
+      },
+      changes: [
+        {
+          mutationId: "mutation-delete-ready",
+          op: "delete",
+          entity: "task",
+          recordId: created.record.id,
+          payload: {
+            ...created.record,
+            deletedAt: expect.any(String),
+          },
+          createdAt: expect.any(String),
+        },
+      ],
+      cursor: created.cursor + 1,
+      mutationId: "mutation-delete-ready",
+    });
+    expect(bootstrap.records.find((record) => record.id === created.record.id)).toEqual(
+      deleted.record,
     );
-    expect(sync.changes).toEqual([]);
+    expect(sync.changes).toEqual(deleted.changes);
   });
 
   it("rejects invalid generic delete mutations after policy enables delete", async () => {
@@ -2414,22 +2449,31 @@ describe("authority", () => {
   });
 
   it("replays delete mutation IDs without duplicating changes", async () => {
-    const created = await postMutation("mutation-replay-delete", {
+    const created = await postMutation("mutation-delete-replay-source", {
       title: "First",
       done: false,
     });
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations(deleteEnabledMutations()),
+    });
 
+    const first = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-replay-delete",
+      entity: "task",
+      op: "delete",
+      recordId: created.record.id,
+    });
     const replay = await postJson<MutationResponse>("/api/mutations", {
       mutationId: "mutation-replay-delete",
       entity: "task",
       op: "delete",
       recordId: "missing",
     });
-    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length}`);
 
-    expect(replay).toEqual(created);
-    expect(sync.changes).toHaveLength(1);
-    expect(sync.changes[0]?.mutationId).toBe("mutation-replay-delete");
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${created.cursor}`);
+
+    expect(replay).toEqual(first);
+    expect(sync.changes).toEqual(first.changes);
   });
 
   it("rejects invalid patch mutations", async () => {

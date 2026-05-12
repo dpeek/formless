@@ -5,6 +5,7 @@ import type {
   BootstrapResponse,
   ChangeRow,
   CreateMutation,
+  DeleteMutation,
   PatchMutation,
   MutationResponse,
   RecordValues,
@@ -25,7 +26,7 @@ type RecordRow = {
 type ChangeSqlRow = {
   seq: number;
   mutation_id: string;
-  op: "create" | "patch" | "action";
+  op: "create" | "patch" | "delete" | "action";
   entity: string;
   record_id: string;
   payload_json: string;
@@ -611,6 +612,82 @@ export function patchStoredRecordOutcome(
 
     if (!change) {
       throw new Error(`Could not read patch change for record "${record.id}".`);
+    }
+
+    return committedWrite({
+      record,
+      changes: [change],
+      cursor: getCurrentCursor(storage),
+      mutationId: mutation.mutationId,
+    });
+  });
+}
+
+export function deleteStoredRecord(
+  storage: DurableObjectStorage,
+  mutation: DeleteMutation,
+): MutationResponse {
+  return writeOutcomeResponse(deleteStoredRecordOutcome(storage, mutation));
+}
+
+export function deleteStoredRecordOutcome(
+  storage: DurableObjectStorage,
+  mutation: DeleteMutation,
+): WriteOutcome<MutationResponse> {
+  return storage.transactionSync(() => {
+    const existingResponse = getMutationResponseById(storage, mutation.mutationId);
+
+    if (existingResponse) {
+      return replayedWrite(existingResponse);
+    }
+
+    const existingRecord = getStoredRecord(storage, mutation.recordId);
+
+    if (!existingRecord) {
+      throw new Error(`Record "${mutation.recordId}" does not exist.`);
+    }
+
+    if (existingRecord.entity !== mutation.entity) {
+      throw new Error("Delete entity must match the stored record entity.");
+    }
+
+    if (existingRecord.deletedAt) {
+      throw new Error(`Record "${mutation.recordId}" is already tombstoned.`);
+    }
+
+    const deletedAt = nowIsoString();
+    const record: StoredRecord = {
+      ...existingRecord,
+      deletedAt,
+    };
+
+    storage.sql.exec(
+      `
+        UPDATE records
+        SET deleted_at = ?
+        WHERE id = ?
+      `,
+      deletedAt,
+      record.id,
+    );
+
+    storage.sql.exec(
+      `
+        INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      mutation.mutationId,
+      mutation.op,
+      mutation.entity,
+      record.id,
+      JSON.stringify(record),
+      deletedAt,
+    );
+
+    const change = findLatestChangeForRecord(storage, mutation.mutationId, record.id);
+
+    if (!change) {
+      throw new Error(`Could not read delete change for record "${record.id}".`);
     }
 
     return committedWrite({

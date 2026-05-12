@@ -270,6 +270,52 @@ describe("storage", () => {
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
   });
 
+  it("soft-deletes records through mutation writes without removing record rows", async () => {
+    const created = await createRecord("mutation-1", "First");
+
+    const deleted = await postJson<MutationResponse>("/delete", {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "delete",
+      recordId: created.record.id,
+    });
+    const records = await getJson<StoredRecord[]>("/records");
+    const changes = await getJson<unknown[]>("/changes?after=1");
+
+    expect(deleted.cursor).toBe(2);
+    expect(deleted.record).toEqual({
+      ...created.record,
+      deletedAt: expect.any(String),
+    });
+    expect(records).toEqual([deleted.record]);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      mutationId: "mutation-2",
+      op: "delete",
+      entity: "task",
+      recordId: created.record.id,
+      payload: deleted.record,
+      createdAt: deleted.record.deletedAt,
+    });
+  });
+
+  it("replays delete mutationIds without inserting duplicate changes", async () => {
+    const created = await createRecord("mutation-1", "First");
+    const body = {
+      mutationId: "mutation-2",
+      entity: "task",
+      op: "delete",
+      recordId: created.record.id,
+    };
+
+    const first = await postJson<MutationResponse>("/delete", body);
+    const replay = await postJson<MutationResponse>("/delete", body);
+
+    expect(replay).toEqual(first);
+    expect(await getJson<StoredRecord[]>("/records")).toEqual([first.record]);
+    expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
+  });
+
   it("tombstones requested records for action replay", async () => {
     const completed = await createRecord("mutation-1", "Done", true);
     const active = await createRecord("mutation-2", "Open");
@@ -611,6 +657,7 @@ async function writeStorageHarness() {
       import { parseAppSchema } from "${process.cwd()}/src/shared/schema.ts";
       import {
         createStoredRecord,
+        deleteStoredRecord,
         ensureStorageTables,
         exportStorageSnapshot,
         getActiveSchema,
@@ -690,6 +737,10 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/patch") {
             return Response.json(patchStoredRecord(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/delete") {
+            return Response.json(deleteStoredRecord(this.ctx.storage, await request.json()));
           }
 
           if (request.method === "POST" && url.pathname === "/tombstone-records") {

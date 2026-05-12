@@ -17,6 +17,7 @@ import { BadRequestError } from "./errors.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {
   createStoredRecordOutcome,
+  deleteStoredRecordOutcome,
   exportStorageSnapshot,
   getBootstrapRecords,
   getChangesAfter,
@@ -297,7 +298,11 @@ export function executeAuthorityOperation(
       }
 
       if (mutation.op === "delete") {
-        throw new BadRequestError("Delete mutation execution is not implemented yet.");
+        const response = input.writes.apply(() =>
+          deleteStoredRecordOutcome(input.storage, mutation),
+        );
+
+        return { body: response };
       }
 
       const response = input.writes.apply(() =>
