@@ -55,6 +55,12 @@ describe("Site editing and publish workflow baseline", () => {
     expect(deployScript).not.toContain("site:publish");
     expect(readWranglerConfigText()).toContain('"run_worker_first": ["/api/*"]');
   });
+
+  it("exposes the Site source seed promotion command", () => {
+    const packageJson = readPackageJson();
+
+    expect(packageJson.scripts?.["site:pull-seed"]).toBe("bun run scripts/site-pull-seed.ts");
+  });
 });
 
 function readPackageJson(): PackageJson {

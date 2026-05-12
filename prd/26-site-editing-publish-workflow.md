@@ -1,7 +1,7 @@
 # PRD 26: Site editing preview and publish workflow
 
 Status: in progress
-Current chunk: SWF-03 planned
+Current chunk: SWF-04 planned
 Last updated: 2026-05-12
 
 Start after PRD 25 authority operation module.
@@ -226,6 +226,24 @@ Likely changed files:
 - Tests cover pushed-sync refetch, same-profile refetch, cleanup, and sync callback.
 - Browser smoke opened `/pages/home` and rendered the seeded public page without console errors.
 
+### SWF-03 Source Seed Promotion
+
+- Package script `site:pull-seed` runs `scripts/site-pull-seed.ts`.
+- `scripts/site-pull-seed.ts` defaults to the dev URL from `.devstate/status.json`.
+- `scripts/site-pull-seed.ts` accepts `--source <url>`.
+- `scripts/site-pull-seed.ts` accepts `--check`.
+- The script fetches `GET <source>/api/site/snapshot`.
+- Seed promotion requires snapshot schema key `site`.
+- Seed promotion requires the snapshot schema to match the source Site schema.
+- Seed promotion writes active records only.
+- Seed promotion omits tombstoned records.
+- Seed promotion preserves record IDs and `createdAt`.
+- Seed promotion normalizes record values to source field order.
+- Seed promotion sorts by source entity order, then `createdAt`, then record ID.
+- Seed promotion writes deterministic two-space JSON with a trailing newline.
+- Check mode compares generated output to `schema/apps/site/seed-records.json` without writing.
+- Tests cover deterministic output, tombstone omission, wrong schema keys, schema mismatch, invalid active records, and package script exposure.
+
 ### Script Contracts
 
 #### `site:pull-seed`
@@ -291,7 +309,7 @@ Likely changed files:
 | ------ | ------- | ---------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | SWF-01 | shipped | PRD 25     | tests, PRD                                 | Current manual snapshot, preview, seed, and deploy workflow is characterized; script contracts are locked.            |
 | SWF-02 | shipped | SWF-01     | public route, sync client, app tests       | `/pages/*` local preview refetches active tree after pushed Site writes and cleans up on route changes/unmount.       |
-| SWF-03 | planned | SWF-01     | seed adapter script, package script, tests | `bun run site:pull-seed` writes deterministic `schema/apps/site/seed-records.json` from local Site authority state.   |
+| SWF-03 | shipped | SWF-01     | seed adapter script, package script, tests | `bun run site:pull-seed` writes deterministic `schema/apps/site/seed-records.json` from local Site authority state.   |
 | SWF-04 | planned | SWF-03     | source snapshot builder, tests             | Source schema plus source seed records produce a restore-ready Site snapshot envelope with validation.                |
 | SWF-05 | planned | SWF-04     | authority guard, worker tests              | Production developer write endpoints require authorization while public tree reads remain public.                     |
 | SWF-06 | planned | SWF-05     | publish script, package script, tests      | Publish command can dry-run, deploy code, back up live Site snapshot, restore source Site data, and smoke routes.     |
@@ -333,7 +351,7 @@ Should not ship in parallel with:
 
 - `doc/current.md`: note public Site preview can live-update from Site push sync.
 - `doc/current.md`: note public preview sync is preview-mode only; published Site routes stay quiet.
-- `doc/current.md`: note `schema/apps/site/seed-records.json` can be promoted from local Site authority with a Bun script if shipped.
+- `doc/current.md`: note `schema/apps/site/seed-records.json` can be promoted from local Site authority with `bun run site:pull-seed`.
 - `doc/current.md`: note live Site publish backs up and restores Site authority data through guarded snapshot APIs if shipped.
 - `doc/roadmap.md`: add only if this workflow becomes first-release release scope.
 - `AGENTS.md`: add command summary only if the workflow becomes standard agent procedure.
@@ -348,11 +366,18 @@ Should not ship in parallel with:
 - 2026-05-12: SWF-01 evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 195 files; `.devstate/logs/service-test.txt` reports the changed workflow tests passing.
 - 2026-05-12: SWF-01 evidence: requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were not present; available devstate evidence lives in `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - 2026-05-12: Browser smoke skipped because SWF-01 changed tests and PRD contracts only; no rendered app behavior changed.
+- 2026-05-12: SWF-03 shipped. Added `src/site/seed-promotion.ts`, `scripts/site-pull-seed.ts`, `src/site/seed-promotion.test.ts`, package script `site:pull-seed`, and package-script contract coverage.
+- 2026-05-12: SWF-03 evidence: `bun run site:pull-seed --check` passed against `https://26-site-editing-publish-workflow.formless.local` and reported the source seed current with 47 records.
+- 2026-05-12: SWF-03 evidence: `devstate check` passed; `.devstate/status.md` reports checks ok, web service ready, and watcher tests passing.
+- 2026-05-12: SWF-03 evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 198 files; `.devstate/logs/service-test.txt` reports the seed-promotion tests passing.
+- 2026-05-12: SWF-03 browser smoke skipped because this chunk added a CLI seed promotion path and tests only; no rendered app behavior changed.
 
 ## PRD status notes
 
 - SWF-01 shipped 2026-05-12.
-- Current chunk: SWF-02 planned.
+- SWF-02 shipped 2026-05-12.
+- SWF-03 shipped 2026-05-12.
+- Current chunk: SWF-04 planned.
 - Current blocker: none.
-- Decisions: script contracts above are locked for SWF-03 and SWF-06.
+- Decisions: script contracts above are locked for SWF-06; SWF-03 implementation follows its locked contract.
 - Promote notes stay pending until live preview, seed promotion, guarded publish, and publish workflow ship.
