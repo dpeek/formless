@@ -1,7 +1,7 @@
 # PRD 29: Generic soft delete
 
-Status: planned
-Current chunk: GSD-01 ready
+Status: in progress
+Current chunk: GSD-02 ready
 Last updated: 2026-05-12
 
 Start before PRD 26 if Site authoring cleanup needs block/post/page deletion.
@@ -171,17 +171,18 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID     | Decision                                                              | Reason                                                                                     | Evidence                                                                                                   |
-| ------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| GSD-D1 | Generic delete means soft delete.                                     | Storage, sync, snapshots, and queries already use `deletedAt` tombstones.                  | `src/shared/protocol.ts`, `src/worker/storage.ts`, `src/shared/query.ts`                                   |
-| GSD-D2 | Do not hard-delete rows from `records` or `changes`.                  | Browser replicas and sync cursors need a durable delete fact.                              | `src/client/sync.ts`, `src/worker/storage.ts`                                                              |
-| GSD-D3 | Add `op: "delete"` to the generic mutation path.                      | The schema already models `mutations.delete`; the missing piece is mutation execution.     | `src/shared/schema-mutations.ts`, `src/worker/authority-validation.ts`                                     |
-| GSD-D4 | Use restrictive reference checks for the first generic delete policy. | Cascades are too broad for first release and accidental orphaning would damage trees.      | `schema/apps/site/schema.json`, `src/site/tree.ts`, `prd/23-site-authoring-simplification.md`              |
-| GSD-D5 | Keep tree remove separate from record delete.                         | A placement edge is not the child block; blocks can be reused.                             | `blockPlacement.removeTreePlacement`, `prd/23-site-authoring-simplification.md`                            |
-| GSD-D6 | Generated delete controls are schema-policy driven.                   | Existing generated create and patch controls already respect entity mutation policy.       | `src/app/generated/create.tsx`, `src/app/generated/record-field-editor.tsx`, `src/app/generated/table.tsx` |
-| GSD-D7 | Delete confirmation is mandatory in generated UI.                     | Delete is destructive from the author perspective even though storage keeps tombstone.     | Existing reset confirmation in `src/app/dev-actions.tsx`                                                   |
-| GSD-D8 | Enable Site delete narrowly after generic behavior is proven.         | The immediate user problem is Site editor cleanup, but runtime behavior should be generic. | User direction 2026-05-12                                                                                  |
-| GSD-D9 | Treat hard delete as storage compaction, not authoring behavior.      | Physical removal would complicate sync, replay, snapshots, and references.                 | Existing change-log storage model                                                                          |
+| ID      | Decision                                                              | Reason                                                                                     | Evidence                                                                                                   |
+| ------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| GSD-D1  | Generic delete means soft delete.                                     | Storage, sync, snapshots, and queries already use `deletedAt` tombstones.                  | `src/shared/protocol.ts`, `src/worker/storage.ts`, `src/shared/query.ts`                                   |
+| GSD-D2  | Do not hard-delete rows from `records` or `changes`.                  | Browser replicas and sync cursors need a durable delete fact.                              | `src/client/sync.ts`, `src/worker/storage.ts`                                                              |
+| GSD-D3  | Add `op: "delete"` to the generic mutation path.                      | The schema already models `mutations.delete`; the missing piece is mutation execution.     | `src/shared/schema-mutations.ts`, `src/worker/authority-validation.ts`                                     |
+| GSD-D4  | Use restrictive reference checks for the first generic delete policy. | Cascades are too broad for first release and accidental orphaning would damage trees.      | `schema/apps/site/schema.json`, `src/site/tree.ts`, `prd/23-site-authoring-simplification.md`              |
+| GSD-D5  | Keep tree remove separate from record delete.                         | A placement edge is not the child block; blocks can be reused.                             | `blockPlacement.removeTreePlacement`, `prd/23-site-authoring-simplification.md`                            |
+| GSD-D6  | Generated delete controls are schema-policy driven.                   | Existing generated create and patch controls already respect entity mutation policy.       | `src/app/generated/create.tsx`, `src/app/generated/record-field-editor.tsx`, `src/app/generated/table.tsx` |
+| GSD-D7  | Delete confirmation is mandatory in generated UI.                     | Delete is destructive from the author perspective even though storage keeps tombstone.     | Existing reset confirmation in `src/app/dev-actions.tsx`                                                   |
+| GSD-D8  | Enable Site delete narrowly after generic behavior is proven.         | The immediate user problem is Site editor cleanup, but runtime behavior should be generic. | User direction 2026-05-12                                                                                  |
+| GSD-D9  | Treat hard delete as storage compaction, not authoring behavior.      | Physical removal would complicate sync, replay, snapshots, and references.                 | Existing change-log storage model                                                                          |
+| GSD-D10 | Characterize the current delete gap before enabling the path.         | GSD-02 can change parser and validation behavior against explicit current-behavior tests.  | `src/shared/schema.test.ts`, `src/worker/authority.test.ts`, `src/worker/storage.test.ts`                  |
 
 ### Deep Modules
 
@@ -205,8 +206,8 @@ Possible changed files:
 
 | ID     | Status  | Depends on | Main files                                    | Acceptance                                                                                                                       |
 | ------ | ------- | ---------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| GSD-01 | ready   | none       | tests, PRD                                    | Current tombstone, mutation-policy, and tree-remove behavior is characterized; delete mutation contract is locked.               |
-| GSD-02 | planned | GSD-01     | schema parser, protocol, authority validation | `delete.enabled: true` parses and `op: "delete"` validates with disabled, unknown, wrong-entity, tombstone, and replay coverage. |
+| GSD-01 | shipped | none       | tests, PRD                                    | Current tombstone, mutation-policy, and tree-remove behavior is characterized; delete mutation contract is locked.               |
+| GSD-02 | ready   | GSD-01     | schema parser, protocol, authority validation | `delete.enabled: true` parses and `op: "delete"` validates with disabled, unknown, wrong-entity, tombstone, and replay coverage. |
 | GSD-03 | planned | GSD-02     | storage, authority operations, tests          | Delete mutation commits a tombstone change, broadcasts only on commit, and preserves replay semantics.                           |
 | GSD-04 | planned | GSD-03     | authority validation, storage/query tests     | Active inbound references block generic delete; tombstoned referencing records do not block delete.                              |
 | GSD-05 | planned | GSD-04     | client sync, generated delete UI, app tests   | Generated collection/table/tree surfaces render confirmed delete controls only when schema policy enables them.                  |
@@ -236,6 +237,7 @@ Should not ship in parallel with:
 ## Blockers
 
 - None hard.
+- GSD-02 has no known blocker.
 - GSD-05 should wait until the delete mutation contract is stable.
 - GSD-06 should wait until reference-blocking behavior is proven in authority tests.
 
@@ -257,6 +259,7 @@ Should not ship in parallel with:
 
 ## Promote after ship
 
+- GSD-01: no global doc promotion; this chunk only adds characterization tests and PRD evidence.
 - `doc/current.md`: generic delete mutations can soft-delete records through `deletedAt`.
 - `doc/current.md`: delete mutation validation blocks active inbound references.
 - `doc/current.md`: generated delete controls render only when entity delete policy is enabled.
@@ -269,3 +272,7 @@ Should not ship in parallel with:
 - 2026-05-12: PRD created from user direction that soft delete already exists as tombstone behavior, but generic delete mutations and tree-editor delete controls do not.
 - 2026-05-12: `devstate start` reported checks ok and services running at `https://formless.local`; command returned exit code 1 despite ready status.
 - 2026-05-12: `.devstate/status.md` reports checks ok, web service ready, and test watcher passing.
+- 2026-05-12: GSD-01 added parser characterization in `src/shared/schema.test.ts`: `delete.enabled: false` survives stringify, and `delete.enabled: true` remains rejected until implementation.
+- 2026-05-12: GSD-01 added authority characterization in `src/worker/authority.test.ts`: current `op: "delete"` mutation requests are rejected and do not tombstone records or append sync changes.
+- 2026-05-12: GSD-01 tightened storage tombstone characterization in `src/worker/storage.test.ts`: action tombstones keep entity, values, and createdAt while adding deletedAt.
+- 2026-05-12: GSD-01 check evidence: `devstate check` reports checks ok, service test watcher passed 3 changed test files / 212 tests, and `./tmp` status files were absent in this checkout so `.devstate/status.json` and `.devstate/logs/*` were used.

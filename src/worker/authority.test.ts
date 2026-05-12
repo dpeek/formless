@@ -2308,6 +2308,30 @@ describe("authority", () => {
     });
   });
 
+  it("rejects generic delete mutation requests without writing tombstones yet", async () => {
+    const created = await postMutation("mutation-1", { title: "First", done: false });
+
+    await expectError(
+      "/api/mutations",
+      {
+        mutationId: "mutation-delete-currently-unsupported",
+        entity: "task",
+        op: "delete",
+        recordId: created.record.id,
+      },
+      'Only "create" and "patch" mutations are supported.',
+    );
+
+    const bootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${taskSeedRecords.length + 1}`);
+
+    expect(bootstrap.records).toContainEqual(created.record);
+    expect(bootstrap.records.find((record) => record.id === created.record.id)).not.toHaveProperty(
+      "deletedAt",
+    );
+    expect(sync.changes).toEqual([]);
+  });
+
   it("rejects invalid patch mutations", async () => {
     const created = await postMutation("mutation-1", { title: "First", done: false });
     const schemaWithProject = {

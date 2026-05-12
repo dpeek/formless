@@ -287,6 +287,9 @@ describe("storage", () => {
       recordId: completed.record.id,
       payload: {
         id: completed.record.id,
+        entity: "task",
+        values: completed.record.values,
+        createdAt: completed.record.createdAt,
         deletedAt: expect.any(String),
       },
     });
