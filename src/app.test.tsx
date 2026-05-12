@@ -461,8 +461,9 @@ describe("public site renderer", () => {
   it("renders the Home page tree with header navigation and hero content", () => {
     const html = renderSitePage("home");
 
+    expect(html).toContain("data-site-header");
+    expect(html).toContain('data-site-header-nav="desktop"');
     expect(html).toContain('href="/pages/home"');
-    expect(html).toContain("Formless");
     expect(html).toContain("Home");
     expect(html).toContain('href="/pages/blog"');
     expect(html).toContain("Blog");
@@ -470,10 +471,63 @@ describe("public site renderer", () => {
     expect(html).toContain("Projects");
     expect(html).toContain('href="/pages/resume"');
     expect(html).toContain("Resume");
+    expect(html).toContain("data-site-theme-toggle");
+    expect(html).toContain('aria-label="Switch to dark mode"');
+    expect(html).toContain('data-site-theme="light"');
+    expect(html).not.toMatch(/href="\/pages\/home"[^>]*>Formless<\/a>/);
+    expect(html).not.toContain("border-b border-zinc-200 bg-white");
     expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain(
       "I design and build schema-backed software for teams that need their tools to keep up with the work.",
     );
+  });
+
+  it("renders mobile header overflow without duplicating the first seeded nav item", () => {
+    const html = renderSitePage("home");
+    const primaryStart = html.indexOf("data-site-header-mobile-primary");
+    const menuStart = html.indexOf("data-site-header-mobile-menu");
+    const menuEnd = html.indexOf("</details>", menuStart);
+
+    expect(primaryStart).toBeGreaterThan(-1);
+    expect(menuStart).toBeGreaterThan(-1);
+    expect(menuEnd).toBeGreaterThan(menuStart);
+
+    const primaryHtml = html.slice(primaryStart, menuStart);
+    const menuHtml = html.slice(menuStart, menuEnd);
+
+    expect(primaryHtml).toContain(">Home</a>");
+    expect(menuHtml).toContain('aria-label="Header menu"');
+    expect(menuHtml).not.toContain(">Home</a>");
+    expect(menuHtml).toContain(">Blog</a>");
+    expect(menuHtml).toContain(">Projects</a>");
+    expect(menuHtml).toContain(">Resume</a>");
+  });
+
+  it("does not render a mobile header menu when only one seeded nav item exists", () => {
+    const tree = sitePageTree("home");
+    const header = tree.frame.header;
+
+    if (!header) {
+      throw new Error("Missing site header.");
+    }
+
+    const html = renderToStaticMarkup(
+      <SitePageRenderer
+        tree={{
+          ...tree,
+          frame: {
+            ...tree.frame,
+            header: {
+              ...header,
+              placements: header.placements.slice(0, 1),
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain("data-site-header-mobile-primary");
+    expect(html).not.toContain("data-site-header-mobile-menu");
   });
 
   it("renders published Site links at top-level paths", () => {
@@ -516,7 +570,7 @@ describe("public site renderer", () => {
   it("renders post detail routes through the Site frame", () => {
     const html = renderSitePage("blog/shipping-schema-backed-authoring");
 
-    expect(html).toContain("Formless");
+    expect(html).toContain("Home");
     expect(html).toContain("Shipping schema-backed authoring");
     expect(html).toContain(
       "The first useful content app should keep records flat and move composition into relationships and views.",

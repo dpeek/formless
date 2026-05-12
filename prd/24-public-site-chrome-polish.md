@@ -1,7 +1,7 @@
 # PRD 24: Public site chrome polish
 
-Status: planned
-Current chunk: PSC-01 ready
+Status: in progress
+Current chunk: PSC-02 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -166,17 +166,18 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID     | Decision                                                 | Reason                                                                               | Evidence                                      |
-| ------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------- |
-| PSC-D1 | Keep this as public renderer work.                       | The request changes public chrome, not stored records or generated admin surfaces.   | `src/app/site-renderer/renderer.tsx`          |
-| PSC-D2 | Use seeded header placements as the only nav source.     | Header links are content data; injected Home duplicates seed data.                   | `schema/apps/site/seed-records.json`          |
-| PSC-D3 | Keep Header and Footer as block renderers.               | Current public tree already projects them as nested blocks.                          | `src/site/tree.ts`, `src/app.test.tsx`        |
-| PSC-D4 | Add a small public Site theme controller if needed.      | Dark mode should stay scoped to public pages and avoid schema/state writes.          | `lib/ui/src/global.css` supports `.dark`.     |
-| PSC-D5 | Make responsive nav a renderer concern for now.          | The first-release Site renderer is site-specific; no layout DSL is needed.           | `doc/roadmap.md`                              |
-| PSC-D6 | Prefer semantic test hooks over brittle class snapshots. | Chrome behavior is the contract; exact utility classes can change.                   | Existing public renderer tests in `app.test`. |
-| PSC-D7 | Keep footer content data-driven.                         | Footer groups and links already live in seed records.                                | `schema/apps/site/seed-records.json`          |
-| PSC-D8 | Defer SSR but keep chrome SSR-compatible.                | Client rendering is acceptable now, but public Site markup should not close off SSR. | User direction 2026-05-12                     |
-| PSC-D9 | Treat Kent C. Dodds' site as a style reference only.     | It clarifies tone and information architecture without copying a brand.              | `https://kentcdodds.com/`                     |
+| ID      | Decision                                                 | Reason                                                                               | Evidence                                      |
+| ------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------- |
+| PSC-D1  | Keep this as public renderer work.                       | The request changes public chrome, not stored records or generated admin surfaces.   | `src/app/site-renderer/renderer.tsx`          |
+| PSC-D2  | Use seeded header placements as the only nav source.     | Header links are content data; injected Home duplicates seed data.                   | `schema/apps/site/seed-records.json`          |
+| PSC-D3  | Keep Header and Footer as block renderers.               | Current public tree already projects them as nested blocks.                          | `src/site/tree.ts`, `src/app.test.tsx`        |
+| PSC-D4  | Add a small public Site theme controller if needed.      | Dark mode should stay scoped to public pages and avoid schema/state writes.          | `lib/ui/src/global.css` supports `.dark`.     |
+| PSC-D5  | Make responsive nav a renderer concern for now.          | The first-release Site renderer is site-specific; no layout DSL is needed.           | `doc/roadmap.md`                              |
+| PSC-D6  | Prefer semantic test hooks over brittle class snapshots. | Chrome behavior is the contract; exact utility classes can change.                   | Existing public renderer tests in `app.test`. |
+| PSC-D7  | Keep footer content data-driven.                         | Footer groups and links already live in seed records.                                | `schema/apps/site/seed-records.json`          |
+| PSC-D8  | Defer SSR but keep chrome SSR-compatible.                | Client rendering is acceptable now, but public Site markup should not close off SSR. | User direction 2026-05-12                     |
+| PSC-D9  | Treat Kent C. Dodds' site as a style reference only.     | It clarifies tone and information architecture without copying a brand.              | `https://kentcdodds.com/`                     |
+| PSC-D10 | Scope theme state to the public renderer root.           | Public dark mode must not affect generated admin routes or stored Site records.      | `src/app/site-renderer/renderer.tsx`          |
 
 ### Deep Modules
 
@@ -205,8 +206,8 @@ These modules should stay small and renderer-local unless another public Site re
 
 | ID     | Status  | Depends on | Main files          | Acceptance                                                                                                               |
 | ------ | ------- | ---------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| PSC-01 | ready   | none       | renderer, app tests | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu. |
-| PSC-02 | planned | PSC-01     | renderer, app tests | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
+| PSC-01 | done    | none       | renderer, app tests | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu. |
+| PSC-02 | ready   | PSC-01     | renderer, app tests | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
 | PSC-03 | planned | PSC-02     | browser smoke, PRD  | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
 
 ## Out of Scope
@@ -231,7 +232,14 @@ These modules should stay small and renderer-local unless another public Site re
 - `doc/current.md`: note public Site footer uses inherited background with subtle top border.
 - `doc/roadmap.md`: update only if the first-release target needs explicit public chrome polish language.
 
+## Blockers
+
+- None.
+
 ## Evidence
 
 - 2026-05-12: PRD created from user direction to polish public Site header/footer before editing workflow work.
 - 2026-05-12: Added Kent C. Dodds style reference and SSR compatibility guidance; SSR remains deferred.
+- 2026-05-12: PSC-01 shipped renderer-local seeded header nav, scoped public dark toggle, and mobile first-link plus overflow menu in `src/app/site-renderer/renderer.tsx`.
+- 2026-05-12: PSC-01 tests updated in `src/app.test.tsx`; `devstate` watcher passed 118 tests.
+- 2026-05-12: PSC-01 browser smoke opened `/pages/home`, toggled theme to `light`, and verified mobile menu shows Home directly with Blog/Projects/Resume in overflow.
