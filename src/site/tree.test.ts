@@ -11,7 +11,7 @@ import {
 const generatedAt = "2026-05-06T00:00:00.000Z";
 
 describe("site page tree projection", () => {
-  it("projects home into a nested public tree with shell, content, queries, and media blocks", () => {
+  it("projects home into a nested public tree with shell, content groups, and media blocks", () => {
     const result = buildSitePageTree(siteSourceSchema, baseTreeRecords(), "home", { generatedAt });
     const tree = requireTree(result);
 
@@ -92,7 +92,6 @@ describe("site page tree projection", () => {
 
     const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
     const heroImage = childForPlacement(hero, "rec_site_place_home_hero_image");
-    const heroVideo = childForPlacement(hero, "rec_site_place_home_hero_video");
     expect(heroImage).toMatchObject({
       id: "rec_site_media_avatar",
       type: "image",
@@ -101,27 +100,19 @@ describe("site page tree projection", () => {
       width: 1200,
       height: 1200,
     });
-    expect(heroVideo).toMatchObject({
-      id: "rec_site_media_intro_video",
-      type: "video",
-      label: "Intro video",
-      href: "https://example.com/intro.mp4",
-      width: 1920,
-      height: 1080,
-    });
 
     const recentPosts = childForPlacement(tree.page, "rec_site_place_home_recent_posts");
-    expect(recentPosts.query).toMatchObject({
-      key: "blockPosts",
-      items: [
-        { label: "Shipping schema-backed authoring" },
-        { label: "Draft notes on generated editorial tools" },
-      ],
-    });
+    expect(recentPosts.type).toBe("group");
+    expect(recentPosts.query).toBeUndefined();
+    expect(recentPosts.placements.map((placement) => placement.block.label)).toEqual([
+      "Shipping schema-backed authoring",
+      "Draft notes on generated editorial tools",
+    ]);
 
     const projectList = childForPlacement(tree.page, "rec_site_place_home_projects");
-    expect(projectList.query?.key).toBe("blockProjects");
-    expect(projectList.query?.items.map((item) => item.label)).toEqual([
+    expect(projectList.type).toBe("group");
+    expect(projectList.query).toBeUndefined();
+    expect(projectList.placements.map((placement) => placement.block.label)).toEqual([
       "Estii",
       "OpenSurf",
       "Formless",
@@ -224,34 +215,6 @@ describe("site page tree projection", () => {
         recordId: "rec_site_content_group_footer",
       }),
     ]);
-  });
-
-  it("warns and returns empty query items for bad query keys", () => {
-    const records = baseTreeRecords().map((record) =>
-      record.id === "rec_site_block_home_recent_posts"
-        ? {
-            ...record,
-            values: {
-              ...record.values,
-              templateKey: "missingQuery",
-            },
-          }
-        : record,
-    );
-    const result = buildSitePageTree(siteSourceSchema, records, "home", { generatedAt });
-    const tree = requireTree(result);
-    const recentPosts = childForPlacement(tree.page, "rec_site_place_home_recent_posts");
-
-    expect(result.meta.warnings).toEqual([
-      expect.objectContaining({
-        code: "bad-query-key",
-        recordId: "rec_site_block_home_recent_posts",
-      }),
-    ]);
-    expect(recentPosts.query).toEqual({
-      key: "missingQuery",
-      items: [],
-    });
   });
 
   it("returns null when no page href matches the route", () => {

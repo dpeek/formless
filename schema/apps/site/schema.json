@@ -39,26 +39,8 @@
             "hero": {
               "label": "Hero"
             },
-            "contentList": {
-              "label": "Content list"
-            },
-            "contentGrid": {
-              "label": "Content grid"
-            },
             "image": {
               "label": "Image"
-            },
-            "video": {
-              "label": "Video"
-            },
-            "file": {
-              "label": "File"
-            },
-            "cta": {
-              "label": "Call to action"
-            },
-            "subscribe": {
-              "label": "Subscribe"
             },
             "custom": {
               "label": "Custom"
@@ -442,32 +424,6 @@
         },
         "op": "eq",
         "value": "image"
-      }
-    },
-    "blockVideos": {
-      "label": "Videos",
-      "entity": "block",
-      "expression": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "type"
-        },
-        "op": "eq",
-        "value": "video"
-      }
-    },
-    "blockFiles": {
-      "label": "Files",
-      "entity": "block",
-      "expression": {
-        "kind": "where",
-        "ref": {
-          "kind": "value",
-          "name": "type"
-        },
-        "op": "eq",
-        "value": "file"
       }
     },
     "placementsForSelectedBlock": {

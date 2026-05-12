@@ -117,7 +117,9 @@ describe("authority", () => {
       "rec_site_place_home_projects",
       "rec_site_place_home_footer",
     ]);
-    expect(recentPosts?.query?.items.map((item) => item.id)).toEqual([
+    expect(recentPosts?.type).toBe("group");
+    expect(recentPosts?.query).toBeUndefined();
+    expect(recentPosts?.placements.map((placement) => placement.block.id)).toEqual([
       "rec_site_content_post_shipped_schema",
       "rec_site_content_post_draft_notes",
     ]);

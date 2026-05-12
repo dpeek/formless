@@ -29,22 +29,25 @@ describe("worker schema app definitions", () => {
     expect(new Set(estii.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["card", "resource", "rate"]),
     );
-    expect(site.seedRecords).toHaveLength(47);
+    expect(site.seedRecords).toHaveLength(49);
     expect(new Set(site.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["block", "blockPlacement"]),
     );
-    expect(site.seedRecords.filter((record) => record.entity === "block")).toHaveLength(28);
+    expect(site.seedRecords.filter((record) => record.entity === "block")).toHaveLength(26);
     expect(site.seedRecords.filter((record) => record.entity === "blockPlacement")).toHaveLength(
-      19,
+      23,
     );
     expect(
       site.seedRecords
-        .filter(
-          (record) =>
-            record.entity === "block" && ["image", "video"].includes(String(record.values.type)),
-        )
+        .filter((record) => record.entity === "block" && record.values.type === "image")
         .map((record) => record.values.type),
-    ).toEqual(["image", "video"]);
+    ).toEqual(["image"]);
+    const siteBlockTypes = site.seedRecords
+      .filter((record) => record.entity === "block")
+      .map((record) => record.values.type);
+    for (const removedType of ["contentList", "contentGrid", "video", "file", "cta", "subscribe"]) {
+      expect(siteBlockTypes).not.toContain(removedType);
+    }
   });
 
   it("keeps site source seed records on the first-release block fields", () => {

@@ -1,4 +1,3 @@
-import { matchesQuery } from "../shared/query.ts";
 import type {
   FieldValue,
   SiteBlockNode,
@@ -7,7 +6,7 @@ import type {
   SiteTreeWarning,
   StoredRecord,
 } from "../shared/protocol.ts";
-import type { AppSchema, CollectionQuerySchema } from "../shared/schema.ts";
+import type { AppSchema } from "../shared/schema.ts";
 
 export type {
   SiteBlockNode,
@@ -36,7 +35,6 @@ type SiteTreeBuildContext = {
 };
 
 const DEFAULT_MAX_DEPTH = 16;
-const QUERY_BLOCK_TYPES = new Set(["contentList", "contentGrid"]);
 
 export function buildSitePageTree(
   schema: AppSchema,
@@ -157,11 +155,6 @@ function buildBlockNode(
   const nextAncestors = new Set(ancestors);
   nextAncestors.add(record.id);
   node.placements = buildPlacementNodes(record.id, context, depth, nextAncestors);
-  const query = buildQueryProjection(record, context, depth, nextAncestors);
-
-  if (query) {
-    node.query = query;
-  }
 
   return node;
 }
@@ -207,71 +200,6 @@ function buildPlacementNodes(
   return nodes;
 }
 
-function buildQueryProjection(
-  record: StoredRecord,
-  context: SiteTreeBuildContext,
-  depth: number,
-  ancestors: Set<string>,
-): SiteBlockNode["query"] | undefined {
-  if (!QUERY_BLOCK_TYPES.has(stringValue(record.values.type) ?? "")) {
-    return undefined;
-  }
-
-  const queryKey = stringValue(record.values.templateKey) ?? "";
-  const query = context.schema.queries[queryKey];
-
-  if (!isBlockQuery(query)) {
-    context.warnings.push({
-      code: "bad-query-key",
-      recordId: record.id,
-      message: `Block "${record.id}" references missing or non-block query "${queryKey}".`,
-    });
-
-    return { key: queryKey, items: [] };
-  }
-
-  const queryRecords = matchQueryBlocks(query, context, record.id);
-  const items: SiteBlockNode[] = [];
-
-  for (const item of queryRecords) {
-    if (ancestors.has(item.id)) {
-      context.warnings.push({
-        code: "cycle",
-        recordId: item.id,
-        message: `Skipped cyclic query item "${item.id}" for block "${record.id}".`,
-      });
-      continue;
-    }
-
-    items.push(buildBlockNode(item, context, depth + 1, ancestors));
-  }
-
-  return { key: queryKey, items };
-}
-
-function matchQueryBlocks(
-  query: CollectionQuerySchema,
-  context: SiteTreeBuildContext,
-  sourceRecordId: string,
-): StoredRecord[] {
-  try {
-    return [...context.indexes.blocks.values()]
-      .filter(isLiveBlock)
-      .filter((record) => matchesQuery(record, query.expression))
-      .sort(compareRecords);
-  } catch (error) {
-    context.warnings.push({
-      code: "bad-query-key",
-      recordId: sourceRecordId,
-      message: `Block "${sourceRecordId}" query "${query.label}" could not be evaluated: ${
-        error instanceof Error ? error.message : "Unknown query error."
-      }`,
-    });
-
-    return [];
-  }
-}
-
 function projectBlock(record: StoredRecord): SiteBlockNode {
   return {
     id: record.id,
@@ -309,9 +237,8 @@ function warnMissingChild(placement: StoredRecord, warnings: SiteTreeWarning[]) 
 
 function warnIfDepthStopsTraversal(record: StoredRecord, context: SiteTreeBuildContext) {
   const hasPlacements = (context.indexes.placementsByParent.get(record.id) ?? []).length > 0;
-  const hasQuery = QUERY_BLOCK_TYPES.has(stringValue(record.values.type) ?? "");
 
-  if (!hasPlacements && !hasQuery) {
+  if (!hasPlacements) {
     return;
   }
 
@@ -320,14 +247,6 @@ function warnIfDepthStopsTraversal(record: StoredRecord, context: SiteTreeBuildC
     recordId: record.id,
     message: `Stopped tree traversal at block "${record.id}" because max depth ${context.maxDepth} was reached.`,
   });
-}
-
-function isBlockQuery(query: CollectionQuerySchema | undefined): query is CollectionQuerySchema {
-  return query?.entity === "block";
-}
-
-function isLiveBlock(record: StoredRecord): boolean {
-  return record.entity === "block" && !record.deletedAt;
 }
 
 function comparePlacements(a: StoredRecord, b: StoredRecord): number {

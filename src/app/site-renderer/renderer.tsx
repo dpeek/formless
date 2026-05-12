@@ -53,16 +53,8 @@ function SiteBlockRenderer({
       return <MarkdownBlock block={block} />;
     case "link":
       return <LinkBlock block={block} placement={placement} />;
-    case "contentList":
-      return <ContentQueryBlock block={block} layout="list" />;
-    case "contentGrid":
-      return <ContentQueryBlock block={block} layout="grid" />;
     case "image":
       return <ImageBlock block={block} />;
-    case "video":
-      return <VideoBlock block={block} />;
-    case "cta":
-      return <CtaBlock block={block} />;
     case "post":
     case "project":
     case "profile":
@@ -229,29 +221,6 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
   );
 }
 
-function ContentQueryBlock({ block, layout }: { block: SiteBlockNode; layout: "grid" | "list" }) {
-  const items = block.query?.items ?? [];
-  const listClassName = layout === "grid" ? "grid gap-4 md:grid-cols-3" : "grid max-w-3xl gap-3";
-
-  return (
-    <section className="space-y-4" data-block-type={block.type}>
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold">{block.label}</h2>
-      </div>
-      {items.length === 0 ? (
-        <p className="text-sm text-zinc-500">No items.</p>
-      ) : (
-        <div className={listClassName}>
-          {items.map((item) => (
-            <ContentSummary key={item.id} block={item} />
-          ))}
-        </div>
-      )}
-      {renderUnclaimedPlacements(block)}
-    </section>
-  );
-}
-
 function ContentSummary({ block }: { block: SiteBlockNode }) {
   const linkMode = useSitePageLinkMode();
   const href = blockHref(block, linkMode);
@@ -308,54 +277,6 @@ function ImageBlock({ block }: { block: SiteBlockNode }) {
       )}
       <figcaption className="px-4 py-3 text-sm text-zinc-600">{block.label}</figcaption>
     </figure>
-  );
-}
-
-function VideoBlock({ block }: { block: SiteBlockNode }) {
-  const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "16 / 9";
-
-  return (
-    <figure className="overflow-hidden rounded-md border border-zinc-200 bg-zinc-950 text-white">
-      {block.href ? (
-        <video
-          aria-label={block.label}
-          className="w-full bg-zinc-950"
-          controls
-          style={{ aspectRatio }}
-        >
-          <source src={block.href} />
-        </video>
-      ) : (
-        <div
-          aria-label={block.label}
-          className="flex min-h-48 items-center justify-center p-6 text-center text-sm text-zinc-300"
-          style={{ aspectRatio }}
-        >
-          <span>{block.label}</span>
-        </div>
-      )}
-      <figcaption className="px-4 py-3 text-sm text-zinc-300">{block.label}</figcaption>
-    </figure>
-  );
-}
-
-function CtaBlock({ block }: { block: SiteBlockNode }) {
-  const linkMode = useSitePageLinkMode();
-  const href = blockHref(block, linkMode);
-
-  return (
-    <section className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-zinc-200 bg-teal-50 p-5">
-      <div className="space-y-1">
-        <h2 className="text-xl font-semibold">{block.label}</h2>
-        {block.body ? <PlainText text={block.body} className="text-sm text-zinc-600" /> : null}
-      </div>
-      {href ? (
-        <a className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white" href={href}>
-          {block.label}
-        </a>
-      ) : null}
-      {renderUnclaimedPlacements(block)}
-    </section>
   );
 }
 
@@ -438,9 +359,7 @@ function renderUnclaimedPlacements(
 }
 
 function mediaPlacements(block: SiteBlockNode): SitePlacementNode[] {
-  return block.placements.filter(
-    (placement) => placement.block.type === "image" || placement.block.type === "video",
-  );
+  return block.placements.filter((placement) => placement.block.type === "image");
 }
 
 function placementIdSet(placements: SitePlacementNode[]): Set<string> {

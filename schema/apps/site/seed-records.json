@@ -12,18 +12,6 @@
     "createdAt": "2026-05-05T00:00:01.000Z"
   },
   {
-    "id": "rec_site_media_intro_video",
-    "entity": "block",
-    "values": {
-      "type": "video",
-      "label": "Intro video",
-      "href": "https://example.com/intro.mp4",
-      "width": 1920,
-      "height": 1080
-    },
-    "createdAt": "2026-05-05T00:00:02.000Z"
-  },
-  {
     "id": "rec_site_content_profile_intro",
     "entity": "block",
     "values": {
@@ -270,9 +258,8 @@
     "id": "rec_site_block_home_recent_posts",
     "entity": "block",
     "values": {
-      "type": "contentList",
-      "label": "Recent posts",
-      "templateKey": "blockPosts"
+      "type": "group",
+      "label": "Recent posts"
     },
     "createdAt": "2026-05-05T00:00:18.200Z"
   },
@@ -280,9 +267,8 @@
     "id": "rec_site_block_home_projects",
     "entity": "block",
     "values": {
-      "type": "contentGrid",
-      "label": "Featured projects",
-      "templateKey": "blockProjects"
+      "type": "group",
+      "label": "Featured projects"
     },
     "createdAt": "2026-05-05T00:00:18.300Z"
   },
@@ -296,16 +282,6 @@
       "templateKey": "post-body"
     },
     "createdAt": "2026-05-05T00:00:18.400Z"
-  },
-  {
-    "id": "rec_site_block_post_related_posts",
-    "entity": "block",
-    "values": {
-      "type": "contentList",
-      "label": "More posts",
-      "templateKey": "blockPosts"
-    },
-    "createdAt": "2026-05-05T00:00:18.500Z"
   },
   {
     "id": "rec_site_place_header_home",
@@ -449,16 +425,6 @@
     "createdAt": "2026-05-05T00:00:27.100Z"
   },
   {
-    "id": "rec_site_place_home_hero_video",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_block_home_hero",
-      "block": "rec_site_media_intro_video",
-      "order": 2000
-    },
-    "createdAt": "2026-05-05T00:00:27.200Z"
-  },
-  {
     "id": "rec_site_place_home_recent_posts",
     "entity": "blockPlacement",
     "values": {
@@ -477,6 +443,56 @@
       "order": 4000
     },
     "createdAt": "2026-05-05T00:00:29.000Z"
+  },
+  {
+    "id": "rec_site_place_recent_posts_shipped_schema",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_recent_posts",
+      "block": "rec_site_content_post_shipped_schema",
+      "order": 1000
+    },
+    "createdAt": "2026-05-05T00:00:29.100Z"
+  },
+  {
+    "id": "rec_site_place_recent_posts_draft_notes",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_recent_posts",
+      "block": "rec_site_content_post_draft_notes",
+      "order": 2000
+    },
+    "createdAt": "2026-05-05T00:00:29.200Z"
+  },
+  {
+    "id": "rec_site_place_featured_project_estii",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_projects",
+      "block": "rec_site_content_project_estii",
+      "order": 1000
+    },
+    "createdAt": "2026-05-05T00:00:29.300Z"
+  },
+  {
+    "id": "rec_site_place_featured_project_opensurf",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_projects",
+      "block": "rec_site_content_project_opensurf",
+      "order": 2000
+    },
+    "createdAt": "2026-05-05T00:00:29.400Z"
+  },
+  {
+    "id": "rec_site_place_featured_project_formless",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_projects",
+      "block": "rec_site_content_project_formless",
+      "order": 3000
+    },
+    "createdAt": "2026-05-05T00:00:29.500Z"
   },
   {
     "id": "rec_site_place_post_body",

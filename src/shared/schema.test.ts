@@ -4149,13 +4149,7 @@ describe("personal site sample schema", () => {
         link: { label: "Link" },
         markdown: { label: "Markdown" },
         hero: { label: "Hero" },
-        contentList: { label: "Content list" },
-        contentGrid: { label: "Content grid" },
         image: { label: "Image" },
-        video: { label: "Video" },
-        file: { label: "File" },
-        cta: { label: "Call to action" },
-        subscribe: { label: "Subscribe" },
         custom: { label: "Custom" },
       },
     });
@@ -4241,9 +4235,9 @@ describe("personal site sample schema", () => {
       },
       fallback: { label: "Block", fields: ["label", "type"] },
     });
-    expect(Object.keys(schema.unions?.blockByType?.variants ?? {})).not.toEqual(
-      expect.arrayContaining(["contentList", "contentGrid", "video", "file", "cta", "subscribe"]),
-    );
+    for (const removedType of ["contentList", "contentGrid", "video", "file", "cta", "subscribe"]) {
+      expect(schema.unions?.blockByType?.variants ?? {}).not.toHaveProperty(removedType);
+    }
     expect(schema.relationships).toMatchObject({
       placementParent: {
         kind: "toOne",
@@ -4280,8 +4274,6 @@ describe("personal site sample schema", () => {
       "blockLinks",
       "blockGroups",
       "blockImages",
-      "blockVideos",
-      "blockFiles",
       "placementsForSelectedBlock",
     ]);
     expect(schema.queries.blockPosts?.expression).toMatchObject({
@@ -4556,12 +4548,10 @@ describe("personal site sample schema", () => {
       throw new Error("Missing Site block type enum.");
     }
 
-    expect(Object.keys(blockTypeField.values)).toEqual(
-      expect.arrayContaining(plannedRemovedBlockTypes),
-    );
-    expect(Object.keys(schema.unions?.blockByType?.variants ?? {})).not.toEqual(
-      expect.arrayContaining(plannedRemovedBlockTypes),
-    );
+    for (const blockType of plannedRemovedBlockTypes) {
+      expect(blockTypeField.values).not.toHaveProperty(blockType);
+      expect(schema.unions?.blockByType?.variants ?? {}).not.toHaveProperty(blockType);
+    }
 
     const blockCreate = schema.views.blockCreate;
     const blockEdit = schema.views.blockEdit;

@@ -49,13 +49,6 @@ function getBlockWarnings(record: StoredRecord): RecordReadinessWarning[] {
     });
   }
 
-  if (["contentList", "contentGrid"].includes(type) && !hasTextValue(record, "templateKey")) {
-    warnings.push({
-      code: `block-${type}-query`,
-      message: `${blockTypeLabel(type)} block should include a query key.`,
-    });
-  }
-
   return warnings;
 }
 
@@ -113,13 +106,5 @@ function stringValue(record: StoredRecord, fieldName: string) {
 }
 
 function blockTypeLabel(type: string) {
-  if (type === "contentList") {
-    return "Content list";
-  }
-
-  if (type === "contentGrid") {
-    return "Content grid";
-  }
-
   return type.charAt(0).toUpperCase() + type.slice(1);
 }

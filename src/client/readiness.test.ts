@@ -74,22 +74,6 @@ describe("record readiness warnings", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("warns when query-backed blocks have no query key", () => {
-    const warnings = getRecordReadinessWarnings(
-      record("block-1", "block", {
-        type: "contentList",
-        label: "Recent posts",
-      }),
-    );
-
-    expect(warnings).toEqual([
-      {
-        code: "block-contentList-query",
-        message: "Content list block should include a query key.",
-      },
-    ]);
-  });
-
   it("warns for every placement with a missing child block", () => {
     const warnings = getRecordReadinessWarnings(
       record("placement-1", "blockPlacement", {

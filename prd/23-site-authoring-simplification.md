@@ -1,7 +1,7 @@
 # PRD 23: Site authoring simplification
 
 Status: in progress
-Current chunk: SAS-06 ready
+Current chunk: SAS-07 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -278,7 +278,7 @@ Owned files:
 | SAS-03 | shipped | SAS-02     | Site source schema, generated block views, tests                 | Site block authoring hides `type`, hides `templateKey`, hides page `body`, and removes deprecated block variants from views. |
 | SAS-04 | shipped | SAS-03     | tree policy parser/view model/generated tree UI                  | Tree child policy controls add buttons for allowed parent variants, including empty parents.                                 |
 | SAS-05 | shipped | SAS-04     | authority actions/storage integration/generated tree UI          | Tree add creates block plus placement, and tree remove tombstones placement edges without deleting child blocks.             |
-| SAS-06 | planned | SAS-03     | Site source schema/seeds/readiness/public renderer               | Removed block types are gone from source schema, seeds, readiness checks, and renderer branches.                             |
+| SAS-06 | shipped | SAS-03     | Site source schema/seeds/readiness/public renderer               | Removed block types are gone from source schema, seeds, readiness checks, and renderer branches.                             |
 | SAS-07 | planned | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
 | SAS-08 | planned | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
 | SAS-09 | planned | SAS-08     | browser smoke, PRD                                               | `/site`, `/pages/home`, `/pages/blog`, and a post route smoke pass; PRD status/evidence are current.                         |
@@ -294,22 +294,25 @@ Owned files:
 - 2026-05-12: SAS-04 Site policy allows page and group parents to add page-content blocks, Header roots to add links, and Footer roots to add groups or links. Header/Footer placements still keep leaf behavior when they appear as child context links.
 - 2026-05-12: SAS-05 shipped tree composition actions. `blockPlacement.addTreeChild` creates a child `block` plus `blockPlacement` edge in one authority action; `blockPlacement.removeTreePlacement` tombstones only the placement edge.
 - 2026-05-12: SAS-05 generated Site tree add buttons now open fixed-type child create dialogs using hidden literal `block.type` defaults, and placement cards expose a remove action when tree composition remove is configured.
-- 2026-05-12: Next ready chunk is SAS-06 source schema/seed/readiness/public renderer cleanup for removed block types.
+- 2026-05-12: SAS-06 shipped source schema/seed/readiness/public renderer cleanup. Site source `block.type` enum and source queries no longer include `contentList`, `contentGrid`, `video`, `file`, `cta`, or `subscribe`; source seeds no longer create those block types; readiness no longer warns for removed query-list blocks; public renderer and tree projection no longer have query-list/video/CTA branches.
+- 2026-05-12: SAS-06 keeps Home seed content by converting Recent posts and Featured projects to `group` blocks with explicit flat `blockPlacement` children to posts/projects. Intro video and unused More posts query-list seed records were removed.
+- 2026-05-12: Next ready chunk is SAS-07 Site frame roots: Header/Footer should resolve from roots and page seeds should stop repeating Header/Footer placements.
 
 ## Blockers
 
-- None for SAS-05.
+- None for SAS-06.
 
 ## Evidence
 
 - `devstate start`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
 - `devstate check`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
-- `.devstate/logs/service-test.txt`: 15 files passed with 439 tests.
+- `.devstate/status.md`: checks ok; web service ready; test watcher passing.
+- `.devstate/logs/service-test.txt`: latest rerun passed 3 files with 216 tests.
 - `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 190 files.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
-- `curl -sk -X POST https://23-site-authoring-simplification.formless.local/api/site/reset/schema`: returned Site schema with `blockPlacement.addTreeChild`, `blockPlacement.removeTreePlacement`, and tree composition action config.
-- `bun browser --session sas05-site --ignore-https-errors open https://23-site-authoring-simplification.formless.local/site`: Site admin opened.
-- `bun browser --session sas05-site errors`: no browser errors reported.
+- `bun browser --session sas-06 ... fetch('/api/site/reset/seed')`: reset Site source seed in the browser session.
+- `bun browser --session sas-06 ... /site`: Site admin opened after reset with Home 5 placements and no browser errors.
+- `bun browser --session sas-06 ... /pages/home`: public Home rendered Header, Hero image, Recent posts group, Featured projects group, and Footer with no browser errors.
 
 ## Out of Scope
 
@@ -336,10 +339,12 @@ Owned files:
 - `doc/current.md`: Generated create forms submit hidden literal defaults and use literal discriminator defaults for fixed union variants.
 - `doc/current.md`: Site generated authoring views hide mutable `block.type` after creation.
 - `doc/current.md`: Site generated authoring views hide `templateKey` and page `body` editors.
-- `doc/current.md`: Site `blockByType` and generated authoring variants exclude `contentList`, `contentGrid`, `video`, `file`, `cta`, and `subscribe`; stored enum values, seeds, readiness, and public renderer cleanup remain later.
+- `doc/current.md`: Site `blockByType` and generated authoring variants exclude `contentList`, `contentGrid`, `video`, `file`, `cta`, and `subscribe`.
 - `doc/current.md`: SAS-04: generated tree results can declare allowed child variants and render add controls for empty allowed parents.
 - `doc/current.md`: Site tree add creates a child block plus placement edge.
 - `doc/current.md`: Site tree remove removes placement edges without deleting child blocks.
+- `doc/current.md`: Site source `block.type` enum, source seeds, readiness checks, public renderer, and public tree projection exclude `contentList`, `contentGrid`, `video`, `file`, `cta`, and `subscribe`.
+- `doc/current.md`: Home seed Recent posts and Featured projects are `group` blocks with flat `blockPlacement` children to post/project records.
 - `doc/current.md`: Header/Footer render through a Site frame instead of repeated per-page placements.
 - `doc/current.md`: Site posts route under `/blog`, and `/blog` renders a generated post index.
 - `doc/roadmap.md`: Site authoring simplification is first-release scope if shipped before release.

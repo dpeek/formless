@@ -490,7 +490,7 @@ describe("public site renderer", () => {
     expect(html).not.toContain('href="/pages/blog"');
   });
 
-  it("renders all content list and grid query results", () => {
+  it("renders seeded post and project summaries from groups", () => {
     const html = renderSitePage("home");
 
     expect(html).toContain("Recent posts");
@@ -502,15 +502,12 @@ describe("public site renderer", () => {
     expect(html).toContain("Formless makes app schema describe enough behavior");
   });
 
-  it("renders media blocks from href and label metadata", () => {
+  it("renders image media blocks from href and label metadata", () => {
     const html = renderSitePage("home");
 
     expect(html).toContain("Site owner portrait");
     expect(html).toContain('alt="Site owner portrait"');
     expect(html).toContain('src="data:image/svg+xml');
-    expect(html).toContain("Intro video");
-    expect(html).toContain('aria-label="Intro video"');
-    expect(html).toContain('src="https://example.com/intro.mp4"');
     expect(html).not.toContain("data-asset-key");
   });
 
@@ -1074,7 +1071,6 @@ describe("generated collection home", () => {
     expect(html).not.toContain("A concise personal site for current work");
     expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain("Site owner portrait");
-    expect(html).toContain("Intro video");
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>5</);
   });
 
@@ -1188,8 +1184,9 @@ describe("generated collection home", () => {
     expect(html).toContain(
       'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
     );
-    expect(html).not.toContain('value="contentList"');
-    expect(html).not.toContain('value="contentGrid"');
+    for (const removedType of ["contentList", "contentGrid", "video", "file", "cta", "subscribe"]) {
+      expect(html).not.toContain(`value="${removedType}"`);
+    }
   });
 
   it("renders header navigation as content block placements", () => {
