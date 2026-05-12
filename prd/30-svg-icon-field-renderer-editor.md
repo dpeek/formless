@@ -1,8 +1,8 @@
 # PRD 30: SVG icon field renderer and editor
 
-Status: in progress
-Current chunk: SIF-05 ready
-Last updated: 2026-05-12
+Status: complete
+Current chunk: SIF-05 shipped
+Last updated: 2026-05-13
 
 ## Goal
 
@@ -242,13 +242,13 @@ Likely changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files                                       | Acceptance                                                                                 |
-| ------ | ------ | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| SIF-01 | done   | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
-| SIF-02 | done   | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
-| SIF-03 | done   | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
-| SIF-04 | done   | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
-| SIF-05 | ready  | SIF-04     | browser smoke, PRD                               | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes updated. |
+| ID     | Status  | Depends on | Main files                                       | Acceptance                                                                                 |
+| ------ | ------- | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| SIF-01 | done    | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
+| SIF-02 | done    | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
+| SIF-03 | done    | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
+| SIF-04 | done    | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
+| SIF-05 | shipped | SIF-04     | browser smoke, PRD                               | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes updated. |
 
 ## Out of Scope
 
@@ -273,6 +273,7 @@ Likely changed files:
 - 2026-05-12 SIF-02: no new chunk blocker. Current devstate layout did not create `tmp/devstate.json`, `tmp/test.txt`, or `tmp/check.txt`; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - 2026-05-12 SIF-03: `bun browser` generated `/site` smoke could not verify generated icon editing because this agent shell has `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite`, so the dev URL serves published-site routes and `/site` renders "No site page exists for site." Clear or override that env before SIF-05 browser smoke.
 - 2026-05-12 SIF-04: no new chunk blocker. Required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent again; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- 2026-05-13 SIF-05: previous `/site` smoke blocker resolved by restarting devstate with `VITE_FORMLESS_RUNTIME_PROFILE` unset. No new blocker.
 
 ## Promote after ship
 
@@ -286,6 +287,7 @@ Likely changed files:
 - SIF-04: promote public Site link blocks render text-backed SVG icons before labels when `block.icon` has source.
 - SIF-04: promote Site footer social seed records now store inline SVG source for GitHub, LinkedIn, Bluesky, and X.
 - SIF-04: promote Site link authoring variants expose the icon field in create, edit, root detail, and tree node surfaces.
+- SIF-05: PRD complete; promote generated icon field behavior, shared renderer, Site footer social SVG seeds, and public link icon rendering in the next doc/steward pass.
 
 ## Evidence
 
@@ -324,3 +326,12 @@ Likely changed files:
 - SIF-04: required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - SIF-04: `bun browser --session sif04 --ignore-https-errors` reset Site schema and seed, opened the published home page, and evaluated footer icon state as `{ footer: true, iconCount: 4, github: true, linkedIn: true }`.
 - SIF-04: `bun browser --session sif04 errors` returned no page errors.
+- SIF-05: `devstate start` first confirmed checks ok, web ready, and test watcher passing; the running app served published-site routes because the shell had `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite`.
+- SIF-05: restarted devstate with `VITE_FORMLESS_RUNTIME_PROFILE` unset; `devstate start` then reported checks ok, web ready/running, and test service pass.
+- SIF-05: `bun browser --session sif05` reset Site schema and seed through `/api/site/reset/schema` and `/api/site/reset/seed`; both returned `200`.
+- SIF-05: `/site` smoke rendered the generated Site editor, Footer root, GitHub/LinkedIn/Bluesky/X link fields, 7 icon edit buttons, 4 seeded compact SVG icons, and 3 empty icon outlines for links without SVG.
+- SIF-05: `/site` icon dialog smoke opened GitHub `Edit Icon`, showed the `Icon SVG source` textarea containing SVG source, and preview mode rendered one SVG icon preview.
+- SIF-05: `/pages/home` smoke rendered the public footer with GitHub, LinkedIn, Bluesky, and X labels, 4 SVG icons, no empty footer icons, and external links still using `target="_blank"` and `rel="noreferrer"`.
+- SIF-05: `bun browser --session sif05 errors` returned no page errors.
+- SIF-05: `devstate check` on 2026-05-13 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`; watcher log showed 45 test files and 671 tests passed.
+- SIF-05: required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; final evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
