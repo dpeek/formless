@@ -1443,6 +1443,52 @@ describe("authority", () => {
     });
   });
 
+  it("does not broadcast read-only HTTP operations to sync WebSocket clients", async () => {
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const taskSocket = await openSyncSocket("/api/sync/ws", "tasks");
+
+    try {
+      await primeSyncSocket(taskSocket, taskSeedRecords.length, schemaResponse.updatedAt);
+
+      const capture = captureSyncSocketMessages(taskSocket);
+      try {
+        await getJson<BootstrapResponse>("/api/bootstrap");
+        await getJson<SchemaResponse>("/api/schema");
+        await getJson<StoreSnapshot>("/api/snapshot");
+        await getJson<SyncResponse>(
+          `/api/sync?after=${taskSeedRecords.length}&schemaUpdatedAt=${encodeURIComponent(
+            schemaResponse.updatedAt,
+          )}`,
+        );
+
+        await expectNoCapturedMessages(capture);
+      } finally {
+        capture.stop();
+      }
+    } finally {
+      taskSocket.close();
+    }
+
+    useSchemaApp("site");
+    const siteBootstrap = await getJson<BootstrapResponse>("/api/bootstrap");
+    const siteSocket = await openSyncSocket("/api/sync/ws", "site");
+
+    try {
+      await primeSyncSocket(siteSocket, siteBootstrap.cursor, siteBootstrap.schemaUpdatedAt);
+
+      const capture = captureSyncSocketMessages(siteSocket);
+      try {
+        await getJson<SitePageTreeResponse>("/api/tree/home");
+
+        await expectNoCapturedMessages(capture);
+      } finally {
+        capture.stop();
+      }
+    } finally {
+      siteSocket.close();
+    }
+  });
+
   it("broadcasts committed task creates to same-schema sync WebSockets only", async () => {
     const taskSocketA = await openSyncSocket("/api/sync/ws", "tasks");
     const taskSocketB = await openSyncSocket("/api/sync/ws", "tasks");

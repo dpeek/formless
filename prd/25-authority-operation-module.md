@@ -1,7 +1,7 @@
 # PRD 25: Authority operation module
 
-Status: planned
-Current chunk: AOM-01 ready
+Status: active
+Current chunk: AOM-02 ready
 Last updated: 2026-05-12
 
 Start after PRD 24 public Site chrome polish.
@@ -157,11 +157,34 @@ Possible changed files:
 | AOM-D6 | Do not add the production admin guard here.                 | The guard is a policy consumer of operation metadata in PRD 26.        | User direction 2026-05-12                        |
 | AOM-D7 | Keep API and storage behavior unchanged.                    | This is a locality refactor, not product behavior.                     | `doc/current.md`, `src/worker/authority.test.ts` |
 | AOM-D8 | Test through route behavior and operation interface seams.  | The interface is the test surface; private helper order is not stable. | `src/test/authority-write.ts`                    |
+| AOM-D9 | Lock operation metadata as route-selected facts.            | PRD 26 needs read/write classification before protected write work.    | Operation Metadata Contract below                |
 
 ### Deep Modules
 
 - **Authority operation module:** accepts parsed route/app facts and request facts, executes the matching read/write operation, and returns typed response bodies plus write outcome metadata where needed.
 - **Authority write notifier:** existing committed-write seam that sends sync to hibernatable sockets after committed writes.
+
+### Operation Metadata Contract
+
+AOM-02 should expose these route-selected facts before storage writes run:
+
+| Kind            | Method and path           | Mode  | Request facts owned by adapter |
+| --------------- | ------------------------- | ----- | ------------------------------ |
+| `bootstrap`     | `GET /bootstrap`          | read  | none                           |
+| `readSchema`    | `GET /schema`             | read  | none                           |
+| `exportSnapshot`| `GET /snapshot`           | read  | none                           |
+| `siteTree`      | `GET /tree/:slug`         | read  | slug from path                 |
+| `sync`          | `GET /sync`               | read  | `after`, `schemaUpdatedAt`     |
+| `writeSchema`   | `POST /schema`            | write | parsed JSON body               |
+| `restoreSnapshot` | `POST /snapshot/restore` | write | parsed JSON body               |
+| `mutation`      | `POST /mutations`         | write | parsed JSON body               |
+| `action`        | `POST /actions`           | write | parsed JSON body               |
+| `resetSchema`   | `POST /reset/schema`      | write | parsed JSON body               |
+| `resetSeed`     | `POST /reset/seed`        | write | parsed JSON body               |
+
+Metadata must include `kind`, route path, and `mode`.
+Write metadata must be available before write storage reads or mutations.
+`GET /sync/ws` stays adapter-owned because Cloudflare owns WebSocket upgrade and lifecycle hooks.
 
 ## Testing Decisions
 
@@ -180,8 +203,8 @@ Possible changed files:
 
 | ID     | Status  | Depends on | Main files                    | Acceptance                                                                                                       |
 | ------ | ------- | ---------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| AOM-01 | ready   | none       | tests, PRD                    | Current Authority route/write behavior is characterized and operation metadata requirements are locked.          |
-| AOM-02 | planned | AOM-01     | authority operation module    | Authority route branches delegate operation selection/execution with unchanged responses and write semantics.    |
+| AOM-01 | shipped | none       | tests, PRD                    | Current Authority route/write behavior is characterized and operation metadata requirements are locked.          |
+| AOM-02 | ready   | AOM-01     | authority operation module    | Authority route branches delegate operation selection/execution with unchanged responses and write semantics.    |
 | AOM-03 | planned | AOM-02     | authority tests, test helpers | Route tests and operation tests prove committed, replayed, failed, read-only, and Site tree behavior.            |
 | AOM-04 | planned | AOM-03     | PRD                           | `devstate check` passes; browser smoke is skipped unless rendered app behavior changed; PRD evidence is current. |
 
@@ -230,3 +253,5 @@ Avoid parallel edits with:
 ## Evidence
 
 - 2026-05-12: PRD created from architecture review sequencing. User direction: PRD 23 is in flight, add Authority operation module as PRD 25, and renumber the Site publish workflow to PRD 26.
+- 2026-05-12: AOM-01 shipped. Added read-only HTTP broadcast characterization in `src/worker/authority.test.ts`; locked operation metadata contract above for AOM-02 and PRD 26.
+- 2026-05-12: Devstate evidence after AOM-01: `.devstate/logs/service-test.txt` shows `src/worker/authority.test.ts` 93 passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass.
