@@ -254,7 +254,7 @@
         },
         "link": {
           "label": "Link",
-          "fields": ["label", "href"],
+          "fields": ["label", "href", "icon"],
           "requiredFields": ["label", "href"]
         },
         "markdown": {
@@ -522,6 +522,10 @@
             "href": {
               "editor": "href",
               "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
+              "commit": "field-commit"
             }
           }
         },
@@ -604,6 +608,10 @@
           "fields": {
             "href": {
               "editor": "href",
+              "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
               "commit": "field-commit"
             }
           }
@@ -1068,6 +1076,9 @@
           "fields": {
             "href": {
               "editor": "href"
+            },
+            "icon": {
+              "editor": "icon"
             }
           }
         },
@@ -1171,6 +1182,10 @@
           "fields": {
             "href": {
               "editor": "href",
+              "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
               "commit": "field-commit"
             }
           }

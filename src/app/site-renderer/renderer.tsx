@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { SvgIcon } from "@formless/ui/svg-icon";
 import { isExternalSiteHref, profileAwareSiteHref, type SitePageLinkMode } from "./links.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
 
@@ -370,12 +371,19 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
 
   return (
     <a
-      className="max-w-full whitespace-nowrap text-sm font-medium text-current underline decoration-transparent underline-offset-4 transition hover:decoration-current"
+      className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap text-sm font-medium text-current underline decoration-transparent underline-offset-4 transition hover:decoration-current"
       href={href}
       rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
       target={isExternalSiteHref(href) ? "_blank" : undefined}
     >
-      {displayLabel(block, placement)}
+      {block.icon ? (
+        <>
+          <SvgIcon className="size-4" source={block.icon} />
+          <span className="min-w-0 truncate">{displayLabel(block, placement)}</span>
+        </>
+      ) : (
+        displayLabel(block, placement)
+      )}
     </a>
   );
 }

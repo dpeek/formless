@@ -83,8 +83,8 @@ describe("site page tree projection", () => {
     ]);
     expect(social.placements.map((placement) => placement.block.type)).toEqual(["link", "link"]);
     expect(social.placements.map((placement) => placement.block.icon)).toEqual([
-      "github",
-      "linkedin",
+      expect.stringContaining("<svg"),
+      expect.stringContaining("<svg"),
     ]);
 
     const mainBlocks = [

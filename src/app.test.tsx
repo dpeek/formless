@@ -111,6 +111,18 @@ function siteTreeFetcher(fetchPaths: string[], tree: SitePageTree): typeof fetch
   };
 }
 
+function footerLinkHtml(footerHtml: string, href: string): string {
+  const hrefIndex = footerHtml.indexOf(`href="${href}"`);
+  const linkStart = footerHtml.lastIndexOf("<a", hrefIndex);
+  const linkEnd = footerHtml.indexOf("</a>", hrefIndex);
+
+  if (hrefIndex === -1 || linkStart === -1 || linkEnd === -1) {
+    throw new Error(`Missing footer link for "${href}".`);
+  }
+
+  return footerHtml.slice(linkStart, linkEnd + "</a>".length);
+}
+
 function requestUrl(input: Parameters<typeof fetch>[0]) {
   if (typeof input === "string") {
     return input;
@@ -754,15 +766,7 @@ describe("public site renderer", () => {
               body: "Internal footer body should stay private.",
             },
           }
-        : record.id === "rec_site_content_link_github"
-          ? {
-              ...record,
-              values: {
-                ...record.values,
-                icon: '<svg data-characterized-site-icon="github"></svg>',
-              },
-            }
-          : record,
+        : record,
     );
     records.push(
       {
@@ -793,6 +797,8 @@ describe("public site renderer", () => {
     expect(footerEnd).toBeGreaterThan(footerStart);
 
     const footerHtml = html.slice(footerStart, footerEnd);
+    const githubLinkHtml = footerLinkHtml(footerHtml, "https://github.com/dpeek");
+    const linkedInLinkHtml = footerLinkHtml(footerHtml, "https://linkedin.com/in/dpeekdotcom");
 
     expect(footerHtml).toContain("data-site-footer");
     expect(footerHtml).toContain("border-t border-zinc-200");
@@ -809,10 +815,16 @@ describe("public site renderer", () => {
     expect(html).toContain("Social");
     expect(footerHtml).toContain("Copyright 2026 David Peek. All rights reserved.");
     expect(html).toContain('href="https://github.com/dpeek"');
-    expect(html).toContain("GitHub");
-    expect(footerHtml).not.toContain("data-characterized-site-icon");
+    expect(githubLinkHtml).toContain('data-web-svg-icon="svg"');
+    expect(githubLinkHtml).toContain('target="_blank"');
+    expect(githubLinkHtml).toContain('rel="noreferrer"');
+    expect(githubLinkHtml).toContain("GitHub");
     expect(html).toContain('href="https://linkedin.com/in/dpeekdotcom"');
-    expect(html).toContain("LinkedIn");
+    expect(linkedInLinkHtml).toContain('data-web-svg-icon="svg"');
+    expect(linkedInLinkHtml).toContain('target="_blank"');
+    expect(linkedInLinkHtml).toContain('rel="noreferrer"');
+    expect(linkedInLinkHtml).toContain("LinkedIn");
+    expect(footerHtml).not.toContain("&lt;svg");
   });
 
   it("renders a 404 state for missing public site pages", () => {
@@ -1072,10 +1084,10 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Link"');
     expect(html).toContain('value="/docs"');
     expect(html).not.toContain("Placement label");
-    expect(html).not.toContain('aria-label="Icon"');
+    expect(html).toContain('data-web-field-kind="icon"');
+    expect(html).toContain('data-web-svg-icon="empty"');
+    expect(html).toContain('aria-label="Edit Icon"');
     expect(html).not.toContain('aria-label="Choose Color"');
-    expect(html).not.toContain("text-2xl font-semibold");
-    expect(html).not.toContain("text-xs font-medium text-slate-600");
   });
 
   it("renders Site tree add controls from allowed child policy", () => {
@@ -3575,6 +3587,7 @@ describe("generated forms and records", () => {
       type: "link",
       label: "Field behavior link",
       href: "https://example.com/field-behavior",
+      icon: "note",
     });
     expect(editHtml).toContain("Shipping schema-backed authoring");
     expect(editHtml).toContain('aria-label="Body"');

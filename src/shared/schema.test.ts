@@ -4252,7 +4252,7 @@ describe("personal site sample schema", () => {
         footer: { label: "Footer", fields: ["label"] },
         link: {
           label: "Link",
-          fields: ["label", "href"],
+          fields: ["label", "href", "icon"],
           requiredFields: ["label", "href"],
         },
         markdown: { label: "Markdown", fields: ["label", "body"] },
@@ -4348,6 +4348,7 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "href", commit: "field-commit" },
+            icon: { editor: "icon", commit: "field-commit" },
           },
         },
         markdown: {
@@ -4398,6 +4399,7 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "href" },
+            icon: { editor: "icon" },
           },
         },
         markdown: {
@@ -4441,6 +4443,7 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "href", commit: "field-commit" },
+            icon: { editor: "icon", commit: "field-commit" },
           },
         },
         markdown: {

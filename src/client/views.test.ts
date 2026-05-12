@@ -1512,7 +1512,7 @@ describe("home view model collections", () => {
     ]);
     expect(create?.type === "create" ? create.union?.unionName : undefined).toBe("blockByType");
     expect(createVariantFields).toMatchObject({
-      link: ["href"],
+      link: ["href", "icon"],
       markdown: ["body"],
       image: ["href", "width", "height"],
     });
@@ -1558,6 +1558,7 @@ describe("home view model collections", () => {
     expect(createVariantEditors).toMatchObject({
       link: {
         href: "href",
+        icon: "icon",
       },
       markdown: {
         body: "markdown",

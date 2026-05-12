@@ -1,7 +1,7 @@
 # PRD 30: SVG icon field renderer and editor
 
 Status: in progress
-Current chunk: SIF-04 ready
+Current chunk: SIF-05 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -242,13 +242,13 @@ Likely changed files:
 
 ## Chunks
 
-| ID     | Status  | Depends on | Main files                                       | Acceptance                                                                                 |
-| ------ | ------- | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| SIF-01 | done    | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
-| SIF-02 | done    | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
-| SIF-03 | done    | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
-| SIF-04 | ready   | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
-| SIF-05 | planned | SIF-04     | browser smoke, PRD                               | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes updated. |
+| ID     | Status | Depends on | Main files                                       | Acceptance                                                                                 |
+| ------ | ------ | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| SIF-01 | done   | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
+| SIF-02 | done   | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
+| SIF-03 | done   | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
+| SIF-04 | done   | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
+| SIF-05 | ready  | SIF-04     | browser smoke, PRD                               | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes updated. |
 
 ## Out of Scope
 
@@ -272,6 +272,7 @@ Likely changed files:
 - 2026-05-12 SIF-01: `devstate start` and post-change watcher still report the pre-existing `src/app.test.tsx` generated route failures. SIF-01 did not touch route behavior.
 - 2026-05-12 SIF-02: no new chunk blocker. Current devstate layout did not create `tmp/devstate.json`, `tmp/test.txt`, or `tmp/check.txt`; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - 2026-05-12 SIF-03: `bun browser` generated `/site` smoke could not verify generated icon editing because this agent shell has `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite`, so the dev URL serves published-site routes and `/site` renders "No site page exists for site." Clear or override that env before SIF-05 browser smoke.
+- 2026-05-12 SIF-04: no new chunk blocker. Required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent again; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 
 ## Promote after ship
 
@@ -282,6 +283,9 @@ Likely changed files:
 - SIF-01: no global-doc promotion yet; behavior is characterized but unchanged.
 - SIF-02: promote shared `lib/ui/src/svg-icon.tsx` renderer after generated UI and public Site consumers land.
 - SIF-03: promote generated icon display/create/edit behavior after public Site consumer lands.
+- SIF-04: promote public Site link blocks render text-backed SVG icons before labels when `block.icon` has source.
+- SIF-04: promote Site footer social seed records now store inline SVG source for GitHub, LinkedIn, Bluesky, and X.
+- SIF-04: promote Site link authoring variants expose the icon field in create, edit, root detail, and tree node surfaces.
 
 ## Evidence
 
@@ -312,3 +316,11 @@ Likely changed files:
 - SIF-03: `devstate check` on 2026-05-12 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`.
 - SIF-03: required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - SIF-03: `bun browser --session sif03 --ignore-https-errors` opened `/site`, but generated-app markers were absent because `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite` made the page render published-site output.
+- SIF-04: Site link union/create/edit/root-detail/tree-node variants now include the `icon` field with `editor: "icon"` where link authoring needs social icon source editing.
+- SIF-04: Site source seed social links now store SVG source strings for GitHub, LinkedIn, Bluesky, and X instead of icon names or empty icon data.
+- SIF-04: Public Site `LinkBlock` now renders `SvgIcon` before the label when `block.icon` is present while preserving external `target` and `rel` behavior.
+- SIF-04: Site tree and public renderer tests assert projected social icons are SVG source and footer GitHub/LinkedIn links render SVG icons plus text labels.
+- SIF-04: `devstate check` on 2026-05-12 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`; watcher log showed `src/app.test.tsx` 127 tests passed after fixes.
+- SIF-04: required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- SIF-04: `bun browser --session sif04 --ignore-https-errors` reset Site schema and seed, opened the published home page, and evaluated footer icon state as `{ footer: true, iconCount: 4, github: true, linkedIn: true }`.
+- SIF-04: `bun browser --session sif04 errors` returned no page errors.
