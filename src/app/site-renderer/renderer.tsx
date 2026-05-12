@@ -16,18 +16,29 @@ export function SitePageRenderer({
   linkMode?: SitePageLinkMode;
   tree: SitePageTree;
 }) {
-  const page = tree.page;
   const frame = tree.frame;
 
   return (
     <SitePageLinkModeContext.Provider value={linkMode}>
       <article className="min-h-dvh bg-white text-zinc-950">
         {frame.header ? <HeaderGroup block={frame.header} /> : null}
-        <PagePlacementFlow page={page} />
+        <SiteRoutePage tree={tree} />
         {frame.footer ? <FooterGroup block={frame.footer} /> : null}
       </article>
     </SitePageLinkModeContext.Provider>
   );
+}
+
+function SiteRoutePage({ tree }: { tree: SitePageTree }) {
+  switch (tree.route?.kind) {
+    case "post-index":
+      return <PostIndexPage page={tree.page} />;
+    case "post":
+      return <ContentDetailPage block={tree.page} />;
+    case "page":
+    default:
+      return <PagePlacementFlow page={tree.page} />;
+  }
 }
 
 function SitePlacementRenderer({ placement }: { placement: SitePlacementNode }) {
@@ -77,6 +88,41 @@ function PageIntro({ block }: { block: SiteBlockNode }) {
       <h1 className="text-4xl font-semibold tracking-normal text-zinc-950">{block.label}</h1>
       {block.body ? <PlainText text={block.body} className="text-base text-zinc-600" /> : null}
     </header>
+  );
+}
+
+function PostIndexPage({ page }: { page: SiteBlockNode }) {
+  return (
+    <PageMain>
+      <PageIntro block={page} />
+      {page.placements.length > 0 ? (
+        <section className="grid gap-4 md:grid-cols-2" aria-label={page.label}>
+          {page.placements.map((placement) => (
+            <SitePlacementRenderer key={placement.id} placement={placement} />
+          ))}
+        </section>
+      ) : (
+        <p className="text-sm text-zinc-600">No posts published yet.</p>
+      )}
+    </PageMain>
+  );
+}
+
+function ContentDetailPage({ block }: { block: SiteBlockNode }) {
+  const hasBodyPlacements = block.placements.length > 0;
+
+  return (
+    <PageMain>
+      <header className="max-w-3xl space-y-4">
+        <h1 className="text-4xl font-semibold tracking-normal text-zinc-950">{block.label}</h1>
+        {!hasBodyPlacements && block.body ? (
+          <PlainText text={block.body} className="text-base leading-7 text-zinc-700" />
+        ) : null}
+      </header>
+      {block.placements.map((placement) => (
+        <SitePlacementRenderer key={placement.id} placement={placement} />
+      ))}
+    </PageMain>
   );
 }
 

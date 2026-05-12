@@ -144,6 +144,30 @@ describe("authority", () => {
     });
   });
 
+  it("returns generated blog and post route trees for the site app", async () => {
+    useSchemaApp("site");
+
+    const blog = await getJson<SitePageTreeResponse>("/api/tree/blog");
+    const post = await getJson<SitePageTreeResponse>(
+      "/api/tree/blog%2Fshipping-schema-backed-authoring",
+    );
+
+    expect(blog.route).toEqual({
+      kind: "post-index",
+      slug: "blog",
+      postCount: 2,
+    });
+    expect(blog.page.placements.map((placement) => placement.block.type)).toEqual(["post", "post"]);
+    expect(post.route).toEqual({
+      kind: "post",
+      slug: "blog/shipping-schema-backed-authoring",
+    });
+    expect(post.page).toMatchObject({
+      id: "rec_site_content_post_shipped_schema",
+      type: "post",
+    });
+  });
+
   it("returns 404 for a missing site page href", async () => {
     useSchemaApp("site");
 

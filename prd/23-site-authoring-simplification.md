@@ -1,7 +1,7 @@
 # PRD 23: Site authoring simplification
 
 Status: in progress
-Current chunk: SAS-08 ready
+Current chunk: SAS-09 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -243,6 +243,7 @@ Owned files:
 | SAS-D12 | Do not use visible page templates for first release.                    | A full template system would become a layout DSL too early.                    | Roadmap excludes full layout DSL                                                               |
 | SAS-D13 | Model posts as content routes rather than query-list blocks.            | Authors should write posts; the system should own `/blog` routing/listing.     | User question about posts and `/blog`                                                          |
 | SAS-D14 | Keep the public renderer site-specific.                                 | This simplification should not generalize renderer layout too early.           | Roadmap and PRD 09 direction                                                                   |
+| SAS-D15 | Resolve Blog index and post detail routes in the Site route resolver.   | Routing stays out of renderer branches and no query-list block is required.    | `src/site/route-resolver.ts`, `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`         |
 
 ### Deep Modules
 
@@ -280,7 +281,7 @@ Owned files:
 | SAS-05 | shipped | SAS-04     | authority actions/storage integration/generated tree UI          | Tree add creates block plus placement, and tree remove tombstones placement edges without deleting child blocks.             |
 | SAS-06 | shipped | SAS-03     | Site source schema/seeds/readiness/public renderer               | Removed block types are gone from source schema, seeds, readiness checks, and renderer branches.                             |
 | SAS-07 | shipped | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
-| SAS-08 | planned | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
+| SAS-08 | shipped | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
 | SAS-09 | planned | SAS-08     | browser smoke, PRD                                               | `/site`, `/pages/home`, `/pages/blog`, and a post route smoke pass; PRD status/evidence are current.                         |
 
 ## Status Notes
@@ -298,20 +299,25 @@ Owned files:
 - 2026-05-12: SAS-06 keeps Home seed content by converting Recent posts and Featured projects to `group` blocks with explicit flat `blockPlacement` children to posts/projects. Intro video and unused More posts query-list seed records were removed.
 - 2026-05-12: SAS-07 shipped Site frame roots. Public Site tree responses now include `frame.header` and `frame.footer` resolved from live `header`/`footer` block roots; duplicate frame roots warn and choose deterministically; missing frame roots warn without blocking page rendering.
 - 2026-05-12: SAS-07 removed repeated Home Header/Footer placements from source seeds. Home page content now contains Hero, Recent posts, and Featured projects only; Header and Footer remain editable as Navigation roots and render around public pages through the Site frame.
-- 2026-05-12: Next ready chunk is SAS-08 posts and blog routing.
+- 2026-05-12: SAS-08 shipped posts and blog routing. Public Site route resolution now emits route facts for page, generated post index, and post detail routes; `/blog` renders a generated post index from live post blocks without query-list blocks; `/blog/:slug` renders post detail pages through the Site frame.
+- 2026-05-12: SAS-08 keeps post index ordering deterministic by created time descending, omits tombstoned posts, and keeps post route matching on existing `block.href` values for this slice.
+- 2026-05-12: Next ready chunk is SAS-09 browser smoke and PRD closeout.
 
 ## Blockers
 
-- None for SAS-07.
+- None for SAS-08.
 
 ## Evidence
 
 - `devstate start`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
 - `devstate check`: checks ok; services running at `https://23-site-authoring-simplification.formless.local`.
 - `.devstate/status.md`: checks ok; web service ready; test watcher passing.
-- `.devstate/logs/service-test.txt`: latest rerun passed 15 files with 440 tests; status file reports test watcher passing.
-- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 190 files.
+- `.devstate/logs/service-test.txt`: latest rerun passed `src/app.test.tsx` with 116 tests; status file reports test watcher passing.
+- `.devstate/logs/check-vite.txt`: formatting completed; no warnings, lint errors, or type errors in 191 files.
 - `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt`: absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
+- `bun browser --session sas-08 ... /pages/blog`: rendered Header, Blog index copy, generated post summaries, and Footer.
+- `bun browser --session sas-08 ... /pages/blog/shipping-schema-backed-authoring`: rendered Header, post detail content, nested profile content, and Footer.
+- `bun browser --session sas-08 errors`: no page errors.
 - `bun browser --session sas-07 ... fetch('/api/site/reset/seed')`: reset Site source seed in the browser session; response status 200.
 - `bun browser --session sas-07 ... /site`: Site admin opened after reset; Pages showed Home with 3 placements, Navigation showed Header with 4 placements and Footer with 2 placements.
 - `bun browser --session sas-07 ... /pages/home`: public Home rendered Header navigation, Hero image, Recent posts group, Featured projects group, and Footer through the Site frame.
@@ -350,6 +356,7 @@ Owned files:
 - `doc/current.md`: Home seed Recent posts and Featured projects are `group` blocks with flat `blockPlacement` children to post/project records.
 - `doc/current.md`: Header/Footer render through a Site frame instead of repeated per-page placements.
 - `doc/current.md`: Site posts route under `/blog`, and `/blog` renders a generated post index.
+- `doc/current.md`: Public Site tree responses include route facts for page, post index, and post detail routes.
 - `doc/roadmap.md`: Site authoring simplification is first-release scope if shipped before release.
 
 ## Further Notes

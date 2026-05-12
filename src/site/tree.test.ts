@@ -20,6 +20,10 @@ describe("site page tree projection", () => {
       generatedAt,
       warnings: [],
     });
+    expect(tree.route).toEqual({
+      kind: "page",
+      slug: "home",
+    });
     expect(tree.page).toMatchObject({
       id: "rec_site_content_home",
       type: "page",
@@ -266,6 +270,78 @@ describe("site page tree projection", () => {
         code: "skipped-frame-root",
         recordId: "rec_site_content_group_footer_later",
       }),
+    ]);
+  });
+
+  it("resolves /blog as a generated post index", () => {
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, baseTreeRecords(), "blog", { generatedAt }),
+    );
+
+    expect(tree.route).toEqual({
+      kind: "post-index",
+      slug: "blog",
+      postCount: 2,
+    });
+    expect(tree.page).toMatchObject({
+      id: "rec_site_content_blog",
+      type: "page",
+      label: "Blog",
+      href: "/blog",
+    });
+    expect(tree.page.placements.map((placement) => placement.id)).toEqual([
+      "generated_site_post_index_rec_site_content_post_draft_notes",
+      "generated_site_post_index_rec_site_content_post_shipped_schema",
+    ]);
+    expect(tree.page.placements.map((placement) => placement.block.id)).toEqual([
+      "rec_site_content_post_draft_notes",
+      "rec_site_content_post_shipped_schema",
+    ]);
+  });
+
+  it("resolves post detail routes under /blog", () => {
+    const tree = requireTree(
+      buildSitePageTree(
+        siteSourceSchema,
+        baseTreeRecords(),
+        "blog/shipping-schema-backed-authoring",
+        {
+          generatedAt,
+        },
+      ),
+    );
+
+    expect(tree.route).toEqual({
+      kind: "post",
+      slug: "blog/shipping-schema-backed-authoring",
+    });
+    expect(tree.page).toMatchObject({
+      id: "rec_site_content_post_shipped_schema",
+      type: "post",
+      label: "Shipping schema-backed authoring",
+      href: "/blog/shipping-schema-backed-authoring",
+    });
+    expect(tree.page.placements.map((placement) => placement.id)).toEqual([
+      "rec_site_place_post_body",
+      "rec_site_place_post_profile",
+    ]);
+  });
+
+  it("omits tombstoned posts from the generated blog index", () => {
+    const records = baseTreeRecords().map((record) =>
+      record.id === "rec_site_content_post_draft_notes"
+        ? { ...record, deletedAt: "2026-05-06T00:00:00.000Z" }
+        : record,
+    );
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "blog", { generatedAt }));
+
+    expect(tree.route).toEqual({
+      kind: "post-index",
+      slug: "blog",
+      postCount: 1,
+    });
+    expect(tree.page.placements.map((placement) => placement.block.id)).toEqual([
+      "rec_site_content_post_shipped_schema",
     ]);
   });
 

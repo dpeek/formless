@@ -159,12 +159,28 @@ export type SitePageTree = {
   page: SiteBlockNode;
   frame: SitePageFrame;
   meta: SiteTreeMeta;
+  route?: SiteTreeRoute;
 };
 
 export type SitePageFrame = {
   header?: SiteBlockNode;
   footer?: SiteBlockNode;
 };
+
+export type SiteTreeRoute =
+  | {
+      kind: "page";
+      slug: string;
+    }
+  | {
+      kind: "post-index";
+      slug: string;
+      postCount: number;
+    }
+  | {
+      kind: "post";
+      slug: string;
+    };
 
 export type SiteTreeMeta = {
   slug: string;

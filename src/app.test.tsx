@@ -502,6 +502,31 @@ describe("public site renderer", () => {
     expect(html).toContain("Formless makes app schema describe enough behavior");
   });
 
+  it("renders /blog as a generated post index", () => {
+    const html = renderSitePage("blog");
+
+    expect(html).toContain("Blog");
+    expect(html).toContain("Notes on product engineering");
+    expect(html).toContain("Draft notes on generated editorial tools");
+    expect(html).toContain("Shipping schema-backed authoring");
+    expect(html).toContain('href="/pages/blog/generated-editorial-tools"');
+    expect(html).toContain('href="/pages/blog/shipping-schema-backed-authoring"');
+  });
+
+  it("renders post detail routes through the Site frame", () => {
+    const html = renderSitePage("blog/shipping-schema-backed-authoring");
+
+    expect(html).toContain("Formless");
+    expect(html).toContain("Shipping schema-backed authoring");
+    expect(html).toContain(
+      "The first useful content app should keep records flat and move composition into relationships and views.",
+    );
+    expect(html).toContain(
+      "I design and build schema-backed software for teams that need their tools to keep up with the work.",
+    );
+    expect(html).toContain("Footer");
+  });
+
   it("renders image media blocks from href and label metadata", () => {
     const html = renderSitePage("home");
 

@@ -8,6 +8,11 @@ import type {
   StoredRecord,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import {
+  resolveSiteRoute,
+  routeInfoForResolution,
+  type SiteRouteResolution,
+} from "./route-resolver.ts";
 
 export type {
   SiteBlockNode,
@@ -51,13 +56,13 @@ export function buildSitePageTree(
     warnings,
   };
   const indexes = indexSiteRecords(records);
-  const root = resolveRootPage(indexes.blocks, slug, warnings);
+  const route = resolveSiteRoute(indexes.blocks.values(), slug, warnings);
 
-  if (!root) {
+  if (!route) {
     warnings.push({
       code: "missing-root",
       recordId: slug,
-      message: `No page block found for route "${slug}".`,
+      message: `No Site route found for "${slug}".`,
     });
 
     return { tree: null, meta };
@@ -70,13 +75,14 @@ export function buildSitePageTree(
     maxDepth: normalizeMaxDepth(options.maxDepth),
   };
   const frame = buildSitePageFrame(context);
-  const page = buildBlockNode(root, context, 0, new Set());
+  const page = buildRoutePageNode(route, context);
 
   return {
     tree: {
       page,
       frame,
       meta,
+      route: routeInfoForResolution(route),
     },
     meta,
   };
@@ -114,33 +120,6 @@ function indexSiteRecords(records: StoredRecord[]): SiteTreeIndexes {
   }
 
   return { blocks, placementsByParent };
-}
-
-function resolveRootPage(
-  blocks: Map<string, StoredRecord>,
-  slug: string,
-  warnings: SiteTreeWarning[],
-): StoredRecord | undefined {
-  const candidates = [...blocks.values()]
-    .filter(
-      (record) =>
-        record.entity === "block" &&
-        stringValue(record.values.type) === "page" &&
-        hrefMatchesRoute(stringValue(record.values.href), slug),
-    )
-    .sort(compareRecords);
-
-  const root = candidates[0];
-
-  for (const duplicate of candidates.slice(1)) {
-    warnings.push({
-      code: "skipped-root",
-      recordId: duplicate.id,
-      message: `Skipped duplicate page block "${duplicate.id}" for route "${slug}".`,
-    });
-  }
-
-  return root;
 }
 
 function buildSitePageFrame(context: SiteTreeBuildContext): SitePageFrame {
@@ -194,6 +173,45 @@ function resolveFrameRoot(
   }
 
   return root;
+}
+
+function buildRoutePageNode(
+  route: SiteRouteResolution,
+  context: SiteTreeBuildContext,
+): SiteBlockNode {
+  switch (route.kind) {
+    case "page":
+      return buildBlockNode(route.page, context, 0, new Set());
+    case "post":
+      return buildBlockNode(route.post, context, 0, new Set());
+    case "post-index":
+      return buildPostIndexPageNode(route, context);
+  }
+}
+
+function buildPostIndexPageNode(
+  route: Extract<SiteRouteResolution, { kind: "post-index" }>,
+  context: SiteTreeBuildContext,
+): SiteBlockNode {
+  const page = route.page ? projectBlock(route.page) : fallbackPostIndexPage();
+
+  page.placements = route.posts.map((post, index) => ({
+    id: `generated_site_post_index_${post.id}`,
+    order: (index + 1) * 1000,
+    block: buildBlockNode(post, context, 0, new Set()),
+  }));
+
+  return page;
+}
+
+function fallbackPostIndexPage(): SiteBlockNode {
+  return {
+    id: "generated_site_post_index",
+    type: "page",
+    label: "Blog",
+    href: "/blog",
+    placements: [],
+  };
 }
 
 function buildBlockNode(
@@ -376,30 +394,4 @@ function normalizeMaxDepth(maxDepth: number | undefined): number {
   }
 
   return Math.max(0, Math.floor(maxDepth));
-}
-
-function hrefMatchesRoute(href: string | undefined, slug: string): boolean {
-  if (!href) {
-    return false;
-  }
-
-  const hrefPath = normalizeHrefPath(href);
-  const routePath = normalizeRoutePath(slug);
-  const previewPath = `/pages/${routePath}`;
-  const publishedPath = routePath === "home" ? "/" : `/${routePath}`;
-
-  return hrefPath === previewPath || hrefPath === publishedPath;
-}
-
-function normalizeHrefPath(href: string): string {
-  const path = href.split(/[?#]/, 1)[0] ?? "";
-  const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
-
-  return withLeadingSlash.length > 1 ? withLeadingSlash.replace(/\/+$/, "") : withLeadingSlash;
-}
-
-function normalizeRoutePath(slug: string): string {
-  const trimmed = slug.trim().replace(/^\/+/, "").replace(/\/+$/, "");
-
-  return trimmed === "" ? "home" : trimmed;
 }
