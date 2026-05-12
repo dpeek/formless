@@ -32,6 +32,13 @@ describe("generated field UI adapters", () => {
       kind: "text",
       control: { kind: "textarea" },
     });
+    expect(selectGeneratedFieldEditorAdapter(fields.icon, "icon")).toMatchObject({
+      kind: "text",
+      editor: "icon",
+      control: { kind: "input", inputType: "text" },
+      createDefaultValue: undefined,
+      required: false,
+    });
     expect(selectGeneratedFieldEditorAdapter(fields.dueDate, "date")).toMatchObject({
       kind: "date",
       control: { kind: "input", inputType: "date" },
@@ -72,6 +79,7 @@ describe("generated field UI adapters", () => {
 
 const fields = {
   title: { type: "text", required: true },
+  icon: { type: "text", required: false, format: "icon" },
   done: { type: "boolean", required: true, default: true },
   dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false, default: 2, min: 0, max: 10, integer: true },

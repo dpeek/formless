@@ -1,7 +1,7 @@
 # PRD 30: SVG icon field renderer and editor
 
-Status: planned
-Current chunk: SIF-01 ready
+Status: in progress
+Current chunk: SIF-02 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -243,8 +243,8 @@ Likely changed files:
 
 | ID     | Status  | Depends on | Main files                                       | Acceptance                                                                                 |
 | ------ | ------- | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| SIF-01 | ready   | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
-| SIF-02 | planned | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
+| SIF-01 | done    | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
+| SIF-02 | ready   | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
 | SIF-03 | planned | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
 | SIF-04 | planned | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
 | SIF-05 | planned | SIF-04     | browser smoke, PRD                               | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes updated. |
@@ -268,6 +268,7 @@ Likely changed files:
 ## Blockers
 
 - Current `devstate` service-test watcher is failing before this PRD starts because Site seed expectations and live seed data differ. This PRD should not take ownership of that failure unless the same tests are still failing after the assigned implementation changes touch Site seed records.
+- 2026-05-12 SIF-01: `devstate start` and post-change watcher still report the pre-existing `src/app.test.tsx` generated route failures. SIF-01 did not touch route behavior.
 
 ## Promote after ship
 
@@ -275,6 +276,7 @@ Likely changed files:
 - `doc/current.md`: public Site link blocks can render text-backed SVG icons, used by footer social links.
 - `doc/current.md`: shared SVG icon renderer lives in `lib/ui` and is reused by generated UI and public Site rendering.
 - `doc/roadmap.md`: no change unless icon support becomes explicit first-release scope wording.
+- SIF-01: no global-doc promotion yet; behavior is characterized but unchanged.
 
 ## Evidence
 
@@ -287,3 +289,7 @@ Likely changed files:
 - Current behavior: public tree projection already carries `block.icon`.
 - Current behavior: `lib/ui` already has textarea-backed source editing primitives suitable for SVG source.
 - `devstate start` on 2026-05-12 reported checks ok and web ready, but service-test failed on pre-existing Site seed expectation differences.
+- SIF-01: added tests that characterize `format: "icon"` as text-backed at `src/shared/field-types.test.ts`.
+- SIF-01: added generated adapter and format tests showing `editor: "icon"` currently selects a text input and preserves flat string values.
+- SIF-01: added generated create, inline patch, and read-only display tests showing icon source currently renders/edits as raw text.
+- SIF-01: added Site tree and public renderer assertions showing `block.icon` projects through the tree while public link rendering currently ignores it.

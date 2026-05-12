@@ -753,7 +753,15 @@ describe("public site renderer", () => {
               body: "Internal footer body should stay private.",
             },
           }
-        : record,
+        : record.id === "rec_site_content_link_github"
+          ? {
+              ...record,
+              values: {
+                ...record.values,
+                icon: '<svg data-characterized-site-icon="github"></svg>',
+              },
+            }
+          : record,
     );
     records.push(
       {
@@ -801,6 +809,7 @@ describe("public site renderer", () => {
     expect(footerHtml).toContain("Copyright 2026 David Peek. All rights reserved.");
     expect(html).toContain('href="https://github.com/dpeek"');
     expect(html).toContain("GitHub");
+    expect(footerHtml).not.toContain("data-characterized-site-icon");
     expect(html).toContain('href="https://linkedin.com/in/dpeekdotcom"');
     expect(html).toContain("LinkedIn");
   });
@@ -3106,6 +3115,7 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithNameAndType("href", "text"));
     expect(html).toMatch(inputWithNameAndType("slug", "text"));
     expect(html).toMatch(inputWithNameAndType("icon", "text"));
+    expect(html).not.toContain("data-web-svg-source");
     expect(html).toMatch(inputWithNameAndType("publishedAt", "date"));
     expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "2026-05-06"));
     expect(html).toMatch(inputWithNameAndType("count", "hidden"));
@@ -3114,6 +3124,24 @@ describe("generated forms and records", () => {
     expect(html).toContain("Draft");
     expect(html).toContain("Published");
     expect(html).toContain("Designer");
+
+    const formData = new FormData();
+    formData.set("title", "Icon create");
+    formData.set("summary", "Summary");
+    formData.set("body", "# Body");
+    formData.set("color", "#336699");
+    formData.set("href", "https://example.com");
+    formData.set("slug", "icon-create");
+    formData.set("icon", '<svg viewBox="0 0 24 24"></svg>');
+    formData.set("publishedAt", "2026-05-06");
+    formData.set("count", "1.2k");
+    formData.set("status", "published");
+    formData.set("resource", "resource-1");
+
+    expect(resolveCreateValues(formData, action)).toMatchObject({
+      icon: '<svg viewBox="0 0 24 24"></svg>',
+      title: "Icon create",
+    });
   });
 
   it("characterizes inline patch controls for current editor hints", () => {
@@ -3144,6 +3172,8 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithAriaLabelAndType("Link", "text"));
     expect(html).toMatch(inputWithAriaLabelAndType("Slug", "text"));
     expect(html).toMatch(inputWithAriaLabelAndType("Icon", "text"));
+    expect(html).toContain('value="sparkles"');
+    expect(html).not.toContain("data-web-svg-source");
     expect(html).toMatch(inputWithAriaLabelAndType("Published at", "date"));
     expect(html).toContain('value="2026-05-06"');
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
@@ -3151,6 +3181,46 @@ describe("generated forms and records", () => {
     expect(html).toContain('value="1200"');
     expect(html).toContain("Published");
     expect(html).toContain("Designer");
+  });
+
+  it("characterizes generated read-only icon display as escaped raw text", () => {
+    const entity = fieldEditorCharacterizationEntity();
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:icon",
+        fieldName: "icon",
+        field: entity.fields.icon,
+        editor: "icon",
+        commit: "field-commit",
+        label: "Icon",
+        display: "readOnly",
+        format: "plain",
+        width: "sm",
+      },
+    ];
+    const baseRecord = fieldEditorCharacterizationRecord();
+    const record = {
+      ...baseRecord,
+      values: {
+        ...baseRecord.values,
+        icon: '<svg viewBox="0 0 24 24"></svg>',
+      },
+    };
+
+    applyBootstrapResponse(bootstrap([record]));
+    const html = renderToStaticMarkup(
+      <RecordTable
+        columns={columns}
+        entity={entity}
+        entityName="editorCase"
+        query={{ kind: "all" }}
+      />,
+    );
+
+    expect(html).toContain("&lt;svg viewBox=&quot;0 0 24 24&quot;&gt;&lt;/svg&gt;");
+    expect(html).not.toContain('<svg viewBox="0 0 24 24">');
+    expect(html).not.toContain("data-web-svg-source");
   });
 
   it("renders compact text table editors as autosizing editable text", () => {

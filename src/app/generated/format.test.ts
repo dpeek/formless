@@ -28,6 +28,15 @@ describe("generated field format helpers", () => {
     expect(formatFieldDisplayValue(fieldColumn(fields.title), undefined)).toBe("");
     expect(formatFieldDisplayValue(fieldColumn(fields.title), "")).toBe("");
     expect(formatFieldDisplayValue(fieldColumn(fields.title), "Alpha")).toBe("Alpha");
+    expect(formatFieldDisplayValue(fieldColumn(fields.icon, "plain", "icon"), "github")).toBe(
+      "github",
+    );
+    expect(
+      formatFieldDisplayValue(
+        fieldColumn(fields.icon, "plain", "icon"),
+        '<svg viewBox="0 0 24 24"></svg>',
+      ),
+    ).toBe('<svg viewBox="0 0 24 24"></svg>');
     expect(formatFieldDisplayValue(fieldColumn(fields.done), true)).toBe("Yes");
     expect(formatFieldDisplayValue(fieldColumn(fields.done), false)).toBe("No");
     expect(formatFieldDisplayValue(fieldColumn(fields.estimate), 1.5)).toBe("1.5");
@@ -57,10 +66,16 @@ describe("generated field format helpers", () => {
 
   it("converts current inline editor values for patch mutations", () => {
     expect(fieldValueToInputValue(fields.title, "Alpha")).toBe("Alpha");
+    expect(fieldValueToInputValue(fields.icon, '<svg viewBox="0 0 24 24"></svg>')).toBe(
+      '<svg viewBox="0 0 24 24"></svg>',
+    );
     expect(fieldValueToInputValue(fields.estimate, 1.5)).toBe("1.5");
     expect(fieldValueToInputValue(fields.done, true)).toBe("");
     expect(fieldValueToInputValue(fields.title, undefined)).toBe("");
     expect(inputValueToFieldValue(fields.title, "Alpha")).toBe("Alpha");
+    expect(inputValueToFieldValue(fields.icon, '<svg viewBox="0 0 24 24"></svg>')).toBe(
+      '<svg viewBox="0 0 24 24"></svg>',
+    );
     expect(inputValueToFieldValue(fields.dueDate, "2026-05-06")).toBe("2026-05-06");
     expect(inputValueToFieldValue(fields.estimate, "")).toBe("");
     expect(inputValueToFieldValue(fields.estimate, "1.5")).toBe(1.5);
@@ -76,6 +91,7 @@ describe("generated field format helpers", () => {
     expect(createInputValueToFieldValue(fields.done, undefined, false)).toBe(false);
     expect(createInputValueToFieldValue(fields.done, "on", true)).toBe(true);
     expect(createInputValueToFieldValue(fields.title, "Alpha", true)).toBe("Alpha");
+    expect(createInputValueToFieldValue(fields.icon, "<svg></svg>", true)).toBe("<svg></svg>");
     expect(createInputValueToFieldValue(fields.title, undefined, false)).toBe("");
     expect(createInputValueToFieldValue(fields.estimate, "", true)).toBe("");
     expect(createInputValueToFieldValue(fields.estimate, "1.5", true)).toBe(1.5);
@@ -121,6 +137,7 @@ describe("generated field format helpers", () => {
 
 const fields = {
   title: { type: "text", required: true },
+  icon: { type: "text", required: false, format: "icon" },
   done: { type: "boolean", required: true, default: false },
   dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false, min: 0, max: 10, integer: true },
@@ -138,6 +155,7 @@ const fields = {
 function fieldColumn(
   field: FieldSchema,
   format: TableColumnFormat = "plain",
+  editor: FieldEditor = defaultEditorFor(field),
 ): FieldTableColumnConfig {
   return {
     type: "field",
@@ -145,7 +163,7 @@ function fieldColumn(
     label: "Value",
     fieldName: "value",
     field,
-    editor: defaultEditorFor(field),
+    editor,
     commit: defaultCommitFor(field),
     display: "readOnly",
     format,

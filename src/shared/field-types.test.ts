@@ -47,6 +47,12 @@ describe("field type behavior", () => {
         defaultEditor: "text",
         defaultCommit: "field-commit",
       },
+      icon: {
+        filterOps: ["eq"],
+        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
+        defaultEditor: "text",
+        defaultCommit: "field-commit",
+      },
       done: {
         filterOps: ["eq"],
         editors: ["boolean"],
@@ -93,6 +99,9 @@ describe("field type behavior", () => {
 
   it("formats display primitives without React", () => {
     expect(formatFieldDisplayPrimitive(fields.title, "Task")).toBe("Task");
+    expect(formatFieldDisplayPrimitive(fields.icon, '<svg viewBox="0 0 24 24"></svg>')).toBe(
+      '<svg viewBox="0 0 24 24"></svg>',
+    );
     expect(formatFieldDisplayPrimitive(fields.done, true)).toBe("Yes");
     expect(formatFieldDisplayPrimitive(fields.done, false)).toBe("No");
     expect(formatFieldDisplayPrimitive(fields.estimate, 1.5)).toBe("1.5");
@@ -108,10 +117,16 @@ describe("field type behavior", () => {
 
   it("centralizes scalar input conversion without React", () => {
     expect(fieldValueToInputValue(fields.title, "Task")).toBe("Task");
+    expect(fieldValueToInputValue(fields.icon, '<svg viewBox="0 0 24 24"></svg>')).toBe(
+      '<svg viewBox="0 0 24 24"></svg>',
+    );
     expect(fieldValueToInputValue(fields.estimate, 1.5)).toBe("1.5");
     expect(fieldValueToInputValue(fields.done, true)).toBe("");
     expect(fieldValueToInputValue(fields.title, undefined)).toBe("");
     expect(inputValueToFieldValue(fields.title, "Task")).toBe("Task");
+    expect(inputValueToFieldValue(fields.icon, '<svg viewBox="0 0 24 24"></svg>')).toBe(
+      '<svg viewBox="0 0 24 24"></svg>',
+    );
     expect(inputValueToFieldValue(fields.dueDate, "2026-05-06")).toBe("2026-05-06");
     expect(createInputValueToFieldValue(fields.dueDate, "May 06, 2026", true)).toBe("May 06, 2026");
     expect(inputValueToFieldValue(fields.estimate, "")).toBe("");
@@ -134,6 +149,7 @@ describe("field type behavior", () => {
   it("centralizes generated editor control metadata without React", () => {
     expect(fieldEditorControl(fields.title, "text")).toEqual({ kind: "input", inputType: "text" });
     expect(fieldEditorControl(fields.title, "markdown")).toEqual({ kind: "textarea" });
+    expect(fieldEditorControl(fields.icon, "icon")).toEqual({ kind: "input", inputType: "text" });
     expect(fieldEditorControl(fields.done, "boolean")).toEqual({ kind: "checkbox" });
     expect(fieldEditorControl(fields.dueDate, "date")).toEqual({
       kind: "input",
@@ -195,6 +211,10 @@ describe("field type behavior", () => {
       kind: "set",
       value: "## Heading\n\nBody",
     });
+    expect(validateAuthorityFieldValue("icon", fields.icon, "<svg></svg>", true)).toEqual({
+      kind: "set",
+      value: "<svg></svg>",
+    });
 
     expect(() => validateAuthorityFieldValue("estimate", fields.estimate, Infinity, true)).toThrow(
       'Field "estimate" must be a finite number.',
@@ -229,6 +249,7 @@ describe("field type behavior", () => {
 const fields = {
   title: { type: "text", required: true },
   body: { type: "text", required: false, format: "markdown" },
+  icon: { type: "text", required: false, format: "icon" },
   done: { type: "boolean", required: true, default: false },
   dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false, default: 0, min: 0, integer: true },

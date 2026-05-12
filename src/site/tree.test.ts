@@ -82,6 +82,10 @@ describe("site page tree projection", () => {
       "LinkedIn",
     ]);
     expect(social.placements.map((placement) => placement.block.type)).toEqual(["link", "link"]);
+    expect(social.placements.map((placement) => placement.block.icon)).toEqual([
+      "github",
+      "linkedin",
+    ]);
 
     const mainBlocks = [
       childForPlacement(tree.page, "rec_site_place_home_hero"),
