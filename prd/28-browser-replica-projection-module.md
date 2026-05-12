@@ -1,7 +1,7 @@
 # PRD 28: Browser replica projection module
 
 Status: in progress
-Current chunk: BRP-03 ready
+Current chunk: BRP-04 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -63,6 +63,8 @@ That coupling makes derived browser data harder to test without React store setu
 - BRP-01 exported `createEntityRecordIdsMatchingQuerySelector` and `createRecordReadinessWarningsSelector` from `src/client/store.ts` for characterization and later extraction tests.
 - BRP-02 makes `src/client/projections.ts` the module boundary for query ids, query options, query counts, reference options, and reference counts.
 - BRP-02 keeps aggregate and readiness selectors in `src/client/store.ts`; BRP-03 owns their extraction.
+- BRP-03 makes `src/client/projections.ts` the module boundary for aggregate values and record readiness warnings.
+- BRP-03 keeps `src/client/store.ts` hooks as projection adapters for aggregate and readiness consumers.
 
 ## BRP-01 Characterization
 
@@ -139,7 +141,7 @@ Acceptance:
 
 ### BRP-03: Extract aggregate and readiness projections
 
-Status: ready
+Status: shipped
 
 Tasks:
 
@@ -155,7 +157,7 @@ Acceptance:
 
 ### BRP-04: Store cleanup and adapter pass
 
-Status: planned
+Status: ready
 
 Tasks:
 
@@ -192,6 +194,7 @@ Acceptance:
 - BRP-01 added `src/client/store.test.ts` coverage for query-id selection, context-sensitive query ids, reference option label fallback, reference counts, and readiness warning selector reuse.
 - BRP-01 confirmed existing `src/client/store.test.ts` coverage for query options, query counts, aggregate values, context changes, tombstoned records, and selector notifications.
 - BRP-02 added `src/client/projections.test.ts` coverage for entity filters, context filters, missing-entity empty results, tombstoned snapshot records, reference counts, and stable array reuse.
+- BRP-03 added `src/client/projections.test.ts` coverage for aggregate query context, computed aggregate values, invalid runtime aggregate values, and readiness warning array reuse.
 
 ## Blockers
 
@@ -203,6 +206,7 @@ Acceptance:
 ## Promote after ship
 
 - `doc/current.md`: browser replica projection module `src/client/projections.ts` owns query ids, query options, query counts, reference options, and reference counts.
+- `doc/current.md`: browser replica projection module `src/client/projections.ts` owns aggregate values and record readiness warnings.
 - `doc/current.md`: store hooks in `src/client/store.ts` adapt to projection selectors while store mutation, hydration, and reconciliation stay in the store.
 - `doc/roadmap.md`: only if this changes first-release scope wording.
 
@@ -218,3 +222,8 @@ Acceptance:
 - 2026-05-12: BRP-02 check evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 211 files.
 - 2026-05-12: BRP-02 loop evidence: `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; `.devstate/status.md` reports checks ok and services running.
 - 2026-05-12: BRP-02 browser smoke: `bun browser --session brp-02 --ignore-https-errors batch --bail` opened `/tasks`, `/rates` (current redirect to `/estii`), and `/site`; `bun browser --session brp-02 errors` returned no page errors.
+- 2026-05-12: BRP-03 shipped. Moved aggregate and readiness selector factories from `src/client/store.ts` to `src/client/projections.ts`; store hooks remain adapters.
+- 2026-05-12: BRP-03 test evidence: `devstate check` reports `.devstate/status.md` checks ok, web ready, and watcher tests passing.
+- 2026-05-12: BRP-03 check evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 211 files.
+- 2026-05-12: BRP-03 loop evidence: `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; `.devstate/status.md` reports checks ok and services running.
+- 2026-05-12: BRP-03 browser smoke: `bun browser --session brp-03 --ignore-https-errors batch --bail` opened `/tasks`, `/rates` (current redirect to `/estii`), and `/site`; `bun browser --session brp-03 errors` returned no page errors.

@@ -2,10 +2,12 @@ import { useMemo, useSyncExternalStore } from "react";
 import { listenForClientEvents } from "./broadcast.ts";
 import { readLocalSnapshot, type LocalSnapshot } from "./db.ts";
 import {
+  createAggregateValueMatchingQuerySelector,
   createEntityRecordCountMatchingQuerySelector,
   createEntityRecordCountReferencingFieldSelector,
   createEntityRecordIdsMatchingQuerySelector,
   createEntityRecordOptionsMatchingQuerySelector,
+  createRecordReadinessWarningsSelector,
   createReferenceOptionsSelector,
   EMPTY_RECORD_IDS,
   queryEvaluationContextCacheKey,
@@ -13,15 +15,9 @@ import {
 } from "./projections.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import type { BootstrapResponse, ChangeRow, FieldValue, StoredRecord } from "../shared/protocol.ts";
-import {
-  matchesQuery,
-  type QueryEvaluationContext,
-  type QueryExpression,
-} from "../shared/query.ts";
-import { getRecordReadinessWarnings, type RecordReadinessWarning } from "./readiness.ts";
+import type { QueryEvaluationContext, QueryExpression } from "../shared/query.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { AggregateSchema, AppSchema, ComputedValueSchema } from "../shared/schema.ts";
-import { evaluateAggregate } from "../shared/read-model.ts";
 
 export type NormalizedClientState = {
   activeSchemaKey: SchemaKey | null;
@@ -37,9 +33,7 @@ export type NormalizedClientState = {
 export type { ReferenceOption };
 
 type StoreListener = () => void;
-type QuerySelectorSnapshot = Pick<NormalizedClientState, "recordsById" | "recordIdsByEntity">;
 
-const EMPTY_READINESS_WARNINGS: RecordReadinessWarning[] = [];
 const listeners = new Set<StoreListener>();
 
 let state: NormalizedClientState = emptyClientState(null);
@@ -393,87 +387,6 @@ function emit() {
   }
 }
 
-export function createAggregateValueMatchingQuerySelector(
-  entityName: string,
-  query: QueryExpression,
-  aggregate: AggregateSchema,
-  computedValues: Record<string, ComputedValueSchema>,
-  context?: QueryEvaluationContext,
-) {
-  let previousRecordIds: string[] | undefined;
-  let previousRecordsById: Record<string, StoredRecord> | undefined;
-  let previousContextKey: string | undefined;
-  let previousResult: number | undefined;
-
-  return (snapshot: QuerySelectorSnapshot) => {
-    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
-    const contextKey = queryEvaluationContextCacheKey(context);
-
-    if (
-      recordIds === previousRecordIds &&
-      snapshot.recordsById === previousRecordsById &&
-      contextKey === previousContextKey
-    ) {
-      return previousResult;
-    }
-
-    const records = recordIds.flatMap((recordId) => {
-      const record = snapshot.recordsById[recordId];
-
-      if (!record || (query.kind !== "all" && !matchesQuery(record, query, context))) {
-        return [];
-      }
-
-      return [record];
-    });
-    const result = evaluateAggregate(aggregate, records, computedValues);
-
-    previousRecordIds = recordIds;
-    previousRecordsById = snapshot.recordsById;
-    previousContextKey = contextKey;
-    previousResult = result;
-
-    return result;
-  };
-}
-
-export function createRecordReadinessWarningsSelector(recordId: string) {
-  let previousRecord: StoredRecord | undefined;
-  let previousRecordsById: Record<string, StoredRecord> | undefined;
-  let previousResult = EMPTY_READINESS_WARNINGS;
-
-  return (snapshot: QuerySelectorSnapshot) => {
-    const record = snapshot.recordsById[recordId];
-
-    if (!record) {
-      return EMPTY_READINESS_WARNINGS;
-    }
-
-    if (record === previousRecord && snapshot.recordsById === previousRecordsById) {
-      return previousResult;
-    }
-
-    const warnings = getRecordReadinessWarnings(record, snapshot.recordsById);
-
-    previousRecord = record;
-    previousRecordsById = snapshot.recordsById;
-    previousResult = reuseReadinessWarnings(previousResult, warnings);
-
-    return previousResult;
-  };
-}
-
-function reuseReadinessWarnings(
-  existing: RecordReadinessWarning[],
-  next: RecordReadinessWarning[],
-) {
-  if (readinessWarningsEqual(existing, next)) {
-    return existing;
-  }
-
-  return next.length === 0 ? EMPTY_READINESS_WARNINGS : next;
-}
-
 function recordsById(records: StoredRecord[]) {
   return Object.fromEntries(records.map((record) => [record.id, record]));
 }
@@ -574,25 +487,6 @@ function arraysEqual<T>(left: T[] | undefined, right: T[]) {
     left !== undefined &&
     left.length === right.length &&
     left.every((value, index) => value === right[index])
-  );
-}
-
-function readinessWarningsEqual(
-  left: RecordReadinessWarning[] | undefined,
-  right: RecordReadinessWarning[],
-) {
-  return (
-    left !== undefined &&
-    left.length === right.length &&
-    left.every((warning, index) => {
-      const rightWarning = right[index];
-
-      return (
-        rightWarning !== undefined &&
-        warning.code === rightWarning.code &&
-        warning.message === rightWarning.message
-      );
-    })
   );
 }
 

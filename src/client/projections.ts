@@ -1,9 +1,12 @@
 import type { StoredRecord } from "../shared/protocol.ts";
+import { evaluateAggregate } from "../shared/read-model.ts";
 import {
   matchesQuery,
   type QueryEvaluationContext,
   type QueryExpression,
 } from "../shared/query.ts";
+import type { AggregateSchema, ComputedValueSchema } from "../shared/schema.ts";
+import { getRecordReadinessWarnings, type RecordReadinessWarning } from "./readiness.ts";
 
 export type BrowserReplicaProjectionSnapshot = {
   recordsById: Record<string, StoredRecord>;
@@ -17,6 +20,7 @@ export type ReferenceOption = {
 
 export const EMPTY_RECORD_IDS: string[] = [];
 
+const EMPTY_READINESS_WARNINGS: RecordReadinessWarning[] = [];
 const EMPTY_REFERENCE_OPTIONS: ReferenceOption[] = [];
 
 export function createEntityRecordIdsMatchingQuerySelector(
@@ -128,6 +132,50 @@ export function createEntityRecordCountMatchingQuerySelector(
   };
 }
 
+export function createAggregateValueMatchingQuerySelector(
+  entityName: string,
+  query: QueryExpression,
+  aggregate: AggregateSchema,
+  computedValues: Record<string, ComputedValueSchema>,
+  context?: QueryEvaluationContext,
+) {
+  let previousRecordIds: string[] | undefined;
+  let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousContextKey: string | undefined;
+  let previousResult: number | undefined;
+
+  return (snapshot: BrowserReplicaProjectionSnapshot) => {
+    const recordIds = snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+    const contextKey = queryEvaluationContextCacheKey(context);
+
+    if (
+      recordIds === previousRecordIds &&
+      snapshot.recordsById === previousRecordsById &&
+      contextKey === previousContextKey
+    ) {
+      return previousResult;
+    }
+
+    const records = recordIds.flatMap((recordId) => {
+      const record = snapshot.recordsById[recordId];
+
+      if (!record || (query.kind !== "all" && !matchesQuery(record, query, context))) {
+        return [];
+      }
+
+      return [record];
+    });
+    const result = evaluateAggregate(aggregate, records, computedValues);
+
+    previousRecordIds = recordIds;
+    previousRecordsById = snapshot.recordsById;
+    previousContextKey = contextKey;
+    previousResult = result;
+
+    return result;
+  };
+}
+
 export function createEntityRecordCountReferencingFieldSelector(
   entityName: string,
   fieldName: string,
@@ -146,6 +194,32 @@ export function createEntityRecordCountReferencingFieldSelector(
     }
 
     return count;
+  };
+}
+
+export function createRecordReadinessWarningsSelector(recordId: string) {
+  let previousRecord: StoredRecord | undefined;
+  let previousRecordsById: Record<string, StoredRecord> | undefined;
+  let previousResult = EMPTY_READINESS_WARNINGS;
+
+  return (snapshot: BrowserReplicaProjectionSnapshot) => {
+    const record = snapshot.recordsById[recordId];
+
+    if (!record) {
+      return EMPTY_READINESS_WARNINGS;
+    }
+
+    if (record === previousRecord && snapshot.recordsById === previousRecordsById) {
+      return previousResult;
+    }
+
+    const warnings = getRecordReadinessWarnings(record, snapshot.recordsById);
+
+    previousRecord = record;
+    previousRecordsById = snapshot.recordsById;
+    previousResult = reuseReadinessWarnings(previousResult, warnings);
+
+    return previousResult;
   };
 }
 
@@ -209,6 +283,17 @@ function reuseStringArray(existing: string[], next: string[]) {
   return next.length === 0 ? EMPTY_RECORD_IDS : next;
 }
 
+function reuseReadinessWarnings(
+  existing: RecordReadinessWarning[],
+  next: RecordReadinessWarning[],
+) {
+  if (readinessWarningsEqual(existing, next)) {
+    return existing;
+  }
+
+  return next.length === 0 ? EMPTY_READINESS_WARNINGS : next;
+}
+
 function reuseReferenceOptions(existing: ReferenceOption[], next: ReferenceOption[]) {
   if (referenceOptionsEqual(existing, next)) {
     return existing;
@@ -222,6 +307,25 @@ function arraysEqual<T>(left: T[] | undefined, right: T[]) {
     left !== undefined &&
     left.length === right.length &&
     left.every((value, index) => value === right[index])
+  );
+}
+
+function readinessWarningsEqual(
+  left: RecordReadinessWarning[] | undefined,
+  right: RecordReadinessWarning[],
+) {
+  return (
+    left !== undefined &&
+    left.length === right.length &&
+    left.every((warning, index) => {
+      const rightWarning = right[index];
+
+      return (
+        rightWarning !== undefined &&
+        warning.code === rightWarning.code &&
+        warning.message === rightWarning.message
+      );
+    })
   );
 }
 

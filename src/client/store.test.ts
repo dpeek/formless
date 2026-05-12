@@ -4,18 +4,18 @@ import {
   applyChanges,
   applyRecordMerge,
   applySchemaSave,
-  createAggregateValueMatchingQuerySelector,
-  createRecordReadinessWarningsSelector,
   getClientStoreSnapshot,
   resetClientStore,
   selectClientStoreSchemaKey,
   subscribeToClientStoreSelector,
 } from "./store.ts";
 import {
+  createAggregateValueMatchingQuerySelector,
   createEntityRecordCountReferencingFieldSelector,
   createEntityRecordCountMatchingQuerySelector,
   createEntityRecordIdsMatchingQuerySelector,
   createEntityRecordOptionsMatchingQuerySelector,
+  createRecordReadinessWarningsSelector,
   createReferenceOptionsSelector,
 } from "./projections.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";

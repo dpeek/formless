@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  createAggregateValueMatchingQuerySelector,
   createEntityRecordCountMatchingQuerySelector,
   createEntityRecordCountReferencingFieldSelector,
   createEntityRecordIdsMatchingQuerySelector,
   createEntityRecordOptionsMatchingQuerySelector,
+  createRecordReadinessWarningsSelector,
   createReferenceOptionsSelector,
   EMPTY_RECORD_IDS,
   type BrowserReplicaProjectionSnapshot,
@@ -99,6 +101,88 @@ describe("browser replica projections", () => {
 
     expect(activeCount(snapshot)).toBe(1);
     expect(blockReferenceCount(snapshot)).toBe(1);
+  });
+
+  it("evaluates aggregate values from matching local query records", () => {
+    const selector = createAggregateValueMatchingQuerySelector(
+      "rate",
+      cardScopedRateQuery,
+      {
+        query: "ratesForSelectedCard",
+        function: "sum",
+        value: { kind: "field", field: "cost" },
+      },
+      {},
+      { today: "2026-05-01", values: { card: "card-1" } },
+    );
+    const snapshot = projectionSnapshot([
+      record("rate-1", "rate", { card: "card-1", cost: 325, price: 475 }),
+      record("rate-2", "rate", { card: "card-1", cost: 450, price: 600 }),
+      record("rate-3", "rate", { card: "card-2", cost: 750, price: 900 }),
+    ]);
+
+    expect(selector(snapshot)).toBe(775);
+  });
+
+  it("evaluates aggregate computed values and skips invalid runtime values", () => {
+    const selector = createAggregateValueMatchingQuerySelector(
+      "rate",
+      { kind: "all" },
+      {
+        query: "rateAll",
+        function: "average",
+        value: { kind: "computed", computedValue: "rateMargin" },
+      },
+      {
+        rateMargin: {
+          entity: "rate",
+          type: "number",
+          expression: {
+            kind: "binary",
+            op: "divide",
+            left: {
+              kind: "binary",
+              op: "subtract",
+              left: { kind: "field", field: "price" },
+              right: { kind: "field", field: "cost" },
+            },
+            right: { kind: "field", field: "price" },
+          },
+        },
+      },
+    );
+    const snapshot = projectionSnapshot([
+      record("rate-1", "rate", { card: "card-1", cost: 300, price: 600 }),
+      record("rate-2", "rate", { card: "card-1", cost: 100, price: 0 }),
+    ]);
+
+    expect(selector(snapshot)).toBe(0.5);
+  });
+
+  it("reuses readiness warning arrays and updates when references resolve", () => {
+    const selector = createRecordReadinessWarningsSelector("placement-1");
+    const snapshot = projectionSnapshot([
+      record("placement-1", "blockPlacement", { parent: "parent-1", block: "block-1", order: 0 }),
+    ]);
+
+    const first = selector(snapshot);
+    const repeated = selector(snapshot);
+    const resolvedSnapshot = projectionSnapshot([
+      record("placement-1", "blockPlacement", { parent: "parent-1", block: "block-1", order: 0 }),
+      record("block-1", "block", { type: "link", label: "Home" }),
+    ]);
+    const afterResolvedReference = selector(resolvedSnapshot);
+    const repeatedEmpty = selector(resolvedSnapshot);
+
+    expect(first).toEqual([
+      {
+        code: "placement-block-child",
+        message: "Placement should point to a live child block.",
+      },
+    ]);
+    expect(repeated).toBe(first);
+    expect(afterResolvedReference).toEqual([]);
+    expect(repeatedEmpty).toBe(afterResolvedReference);
   });
 });
 
