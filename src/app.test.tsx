@@ -604,10 +604,10 @@ describe("public site renderer", () => {
     expect(html).toContain('data-site-theme="light"');
     expect(html).not.toMatch(/href="\/pages\/home"[^>]*>Formless<\/a>/);
     expect(html).not.toContain("border-b border-zinc-200 bg-white");
-    expect(html).toContain("Great software feels like magic");
-    expect(html).toContain("Let&#x27;s build some magic together.");
-    expect(html).toContain("Greetings, Robot!");
     expect(html).toContain("Schema-backed software for content-heavy products");
+    expect(html).toContain(
+      "I design and build schema-backed software for teams that need their tools to keep up with the work.",
+    );
   });
 
   it("renders mobile header overflow without duplicating the first seeded nav item", () => {
@@ -667,18 +667,21 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/blog"');
     expect(html).toContain('href="/projects"');
     expect(html).toContain('href="/resume"');
+    expect(html).toContain('href="/projects/estii"');
     expect(html).not.toContain('href="/pages/home"');
     expect(html).not.toContain('href="/pages/blog"');
   });
 
-  it("renders seeded home author sections", () => {
+  it("renders seeded post and project summaries from groups", () => {
     const html = renderSitePage("home");
 
-    expect(html).toContain("Great software feels like magic");
-    expect(html).toContain("Let&#x27;s build some magic together.");
-    expect(html).toContain("Greetings, Robot!");
-    expect(html).toContain("full-stack developer");
-    expect(html).toContain("Building software that lets small teams do ambitious things");
+    expect(html).toContain("Recent posts");
+    expect(html).toContain("Shipping schema-backed authoring");
+    expect(html).toContain("Draft notes on generated editorial tools");
+    expect(html).toContain("Featured projects");
+    expect(html).toContain("Estii");
+    expect(html).toContain("OpenSurf");
+    expect(html).toContain("Formless makes app schema describe enough behavior");
   });
 
   it("renders /blog as a generated post index", () => {
@@ -1434,9 +1437,10 @@ describe("generated collection home", () => {
     expect(html).toContain("Blog");
     expect(html).toContain("Resume");
     expect(html).toContain("Projects");
-    expect(html).toContain("Great software feels like magic");
-    expect(html).toContain("Greetings, Robot!");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>2</);
+    expect(html).not.toContain("A concise personal site for current work");
+    expect(html).toContain("Schema-backed software for content-heavy products");
+    expect(html).toContain("Site owner portrait");
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
   });
 
   it("renders the site route with root sidebar navigation", () => {
@@ -1541,14 +1545,13 @@ describe("generated collection home", () => {
     expect(html).toContain('data-slot="tabs-list"');
     expect(html).toContain('data-slot="tabs-trigger"');
     expect(html).toContain("Home");
-    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>2</);
+    expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
     expect(html).toContain("Add placement");
     expect(html).not.toContain('value="rec_site_content_group_header" selected="">Header</option>');
     expect(html).not.toContain('value="rec_site_content_group_footer" selected="">Footer</option>');
-    expect(html).toContain("Great software feels like magic");
-    expect(html).toContain("Greetings, Robot!");
+    expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain(
-      'value="record_bad74e4c-0a35-4514-a3fc-280d66a4d226" selected="">Great software feels like magic</option>',
+      'value="rec_site_block_home_recent_posts" selected="">Recent posts</option>',
     );
     for (const removedType of ["contentList", "contentGrid", "video", "file", "cta", "subscribe"]) {
       expect(html).not.toContain(`value="${removedType}"`);
