@@ -64,6 +64,7 @@
     "./sonner": "./src/sonner.tsx",
     "./source-preview": "./src/source-preview.tsx",
     "./spinner": "./src/spinner.tsx",
+    "./svg-icon": "./src/svg-icon.tsx",
     "./switch": "./src/switch.tsx",
     "./tabs": "./src/tabs.tsx",
     "./table": "./src/table.tsx",

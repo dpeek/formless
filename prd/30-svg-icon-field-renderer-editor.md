@@ -1,7 +1,7 @@
 # PRD 30: SVG icon field renderer and editor
 
 Status: in progress
-Current chunk: SIF-02 ready
+Current chunk: SIF-03 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -202,19 +202,20 @@ Likely changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                        | Reason                                                                                | Evidence                                             |
-| ------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| SIF-D1  | Keep icons as string-backed text fields.                        | Flat records are a core runtime bet and existing schemas already define icon as text. | `doc/overview.md`, `schema/apps/site/schema.json`    |
-| SIF-D2  | Treat `format: "icon"` and `editor: "icon"` as SVG source.      | The user wants the field to contain SVG, not an icon catalog key.                     | User direction 2026-05-12                            |
-| SIF-D3  | Add a shared SVG icon renderer in `lib/ui`.                     | Generated UI and public Site rendering need the same rendering and fallback rules.    | `lib/ui/src/source-preview.tsx`                      |
-| SIF-D4  | Render an empty outline for missing, invalid, or unsafe SVG.    | Editors and public pages should stay stable without hiding that no icon is available. | User direction 2026-05-12                            |
-| SIF-D5  | Sanitize or reject SVG at render time, not authority time.      | Stored strings should remain editable; public rendering must still be safe.           | Existing text field authority behavior               |
-| SIF-D6  | Keep React components out of shared field behavior.             | Field behavior must remain runtime-safe and non-React.                                | PRD 07 field behavior decision                       |
-| SIF-D7  | Add a dedicated generated icon control kind.                    | Generated renderers need a stable branch without treating icon like generic text.     | `src/shared/field-types.ts`                          |
-| SIF-D8  | Use a dialog for icon source editing.                           | SVG source is too large for compact table/tree fields but still needs direct editing. | User direction 2026-05-12                            |
-| SIF-D9  | Reuse the source-preview textarea primitive.                    | The UI package already owns non-markdown textarea-backed source editing.              | `lib/ui/doc/browser-primitives.md`                   |
-| SIF-D10 | Public Site link icons are content data, not hard-coded chrome. | Footer social links already live as link blocks in the Site tree.                     | `src/app/site-renderer/renderer.tsx`, Site seed data |
-| SIF-D11 | Do not add an icon catalog in this PRD.                         | The first use case needs pasted SVG; catalog semantics can come later.                | User direction 2026-05-12                            |
+| ID      | Decision                                                        | Reason                                                                                | Evidence                                                  |
+| ------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| SIF-D1  | Keep icons as string-backed text fields.                        | Flat records are a core runtime bet and existing schemas already define icon as text. | `doc/overview.md`, `schema/apps/site/schema.json`         |
+| SIF-D2  | Treat `format: "icon"` and `editor: "icon"` as SVG source.      | The user wants the field to contain SVG, not an icon catalog key.                     | User direction 2026-05-12                                 |
+| SIF-D3  | Add a shared SVG icon renderer in `lib/ui`.                     | Generated UI and public Site rendering need the same rendering and fallback rules.    | `lib/ui/src/source-preview.tsx`                           |
+| SIF-D4  | Render an empty outline for missing, invalid, or unsafe SVG.    | Editors and public pages should stay stable without hiding that no icon is available. | User direction 2026-05-12                                 |
+| SIF-D5  | Sanitize or reject SVG at render time, not authority time.      | Stored strings should remain editable; public rendering must still be safe.           | Existing text field authority behavior                    |
+| SIF-D6  | Keep React components out of shared field behavior.             | Field behavior must remain runtime-safe and non-React.                                | PRD 07 field behavior decision                            |
+| SIF-D7  | Add a dedicated generated icon control kind.                    | Generated renderers need a stable branch without treating icon like generic text.     | `src/shared/field-types.ts`                               |
+| SIF-D8  | Use a dialog for icon source editing.                           | SVG source is too large for compact table/tree fields but still needs direct editing. | User direction 2026-05-12                                 |
+| SIF-D9  | Reuse the source-preview textarea primitive.                    | The UI package already owns non-markdown textarea-backed source editing.              | `lib/ui/doc/browser-primitives.md`                        |
+| SIF-D10 | Public Site link icons are content data, not hard-coded chrome. | Footer social links already live as link blocks in the Site tree.                     | `src/app/site-renderer/renderer.tsx`, Site seed data      |
+| SIF-D11 | Do not add an icon catalog in this PRD.                         | The first use case needs pasted SVG; catalog semantics can come later.                | User direction 2026-05-12                                 |
+| SIF-D12 | Use a strict SVG tag and attribute allowlist in the renderer.   | Unsafe or unsupported SVG should fall back without broad HTML/SVG execution surface.  | `lib/ui/src/svg-icon.tsx`, `lib/ui/src/svg-icon.test.tsx` |
 
 ### Deep Modules
 
@@ -244,8 +245,8 @@ Likely changed files:
 | ID     | Status  | Depends on | Main files                                       | Acceptance                                                                                 |
 | ------ | ------- | ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | SIF-01 | done    | none       | tests, PRD                                       | Current plain-text icon behavior and target contracts are characterized.                   |
-| SIF-02 | ready   | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
-| SIF-03 | planned | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
+| SIF-02 | done    | SIF-01     | `lib/ui`, tests                                  | Shared SVG icon renderer renders safe SVG and empty-outline fallback with sanitizer tests. |
+| SIF-03 | ready   | SIF-02     | field behavior, generated adapters, generated UI | Generated display, create, and inline patch surfaces use icon renderer/editor.             |
 | SIF-04 | planned | SIF-03     | Site schema, seed, public renderer, tests        | Site social links store SVG source and public footer renders icons plus labels.            |
 | SIF-05 | planned | SIF-04     | browser smoke, PRD                               | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes updated. |
 
@@ -269,6 +270,7 @@ Likely changed files:
 
 - Current `devstate` service-test watcher is failing before this PRD starts because Site seed expectations and live seed data differ. This PRD should not take ownership of that failure unless the same tests are still failing after the assigned implementation changes touch Site seed records.
 - 2026-05-12 SIF-01: `devstate start` and post-change watcher still report the pre-existing `src/app.test.tsx` generated route failures. SIF-01 did not touch route behavior.
+- 2026-05-12 SIF-02: no new chunk blocker. Current devstate layout did not create `tmp/devstate.json`, `tmp/test.txt`, or `tmp/check.txt`; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 
 ## Promote after ship
 
@@ -277,6 +279,7 @@ Likely changed files:
 - `doc/current.md`: shared SVG icon renderer lives in `lib/ui` and is reused by generated UI and public Site rendering.
 - `doc/roadmap.md`: no change unless icon support becomes explicit first-release scope wording.
 - SIF-01: no global-doc promotion yet; behavior is characterized but unchanged.
+- SIF-02: promote shared `lib/ui/src/svg-icon.tsx` renderer after generated UI and public Site consumers land.
 
 ## Evidence
 
@@ -293,3 +296,9 @@ Likely changed files:
 - SIF-01: added generated adapter and format tests showing `editor: "icon"` currently selects a text input and preserves flat string values.
 - SIF-01: added generated create, inline patch, and read-only display tests showing icon source currently renders/edits as raw text.
 - SIF-01: added Site tree and public renderer assertions showing `block.icon` projects through the tree while public link rendering currently ignores it.
+- SIF-02: added `SvgIcon`, `EmptySvgIcon`, and `parseSvgIconSource` in `lib/ui/src/svg-icon.tsx`.
+- SIF-02: SVG renderer preserves safe basic icon tags and attributes, strips event/style attributes, and falls back for malformed source, unsupported tags, `javascript:` URLs, and external asset references.
+- SIF-02: added sanitizer coverage in `lib/ui/src/svg-icon.test.tsx` for valid SVG, missing and malformed source, event handler stripping, script rejection, `foreignObject` rejection, `javascript:` URL rejection, and external reference rejection.
+- SIF-02: exported the renderer through `@formless/ui` and `@formless/ui/svg-icon`.
+- SIF-02: `devstate check` before the final rebase on 2026-05-12 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`.
+- SIF-02: final post-rebase `devstate check` on 2026-05-12 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`.

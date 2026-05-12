@@ -53,6 +53,7 @@ export * from "./slider.js";
 export * from "./sonner.js";
 export * from "./source-preview.js";
 export * from "./spinner.js";
+export * from "./svg-icon.js";
 export * from "./switch.js";
 export * from "./table.js";
 export * from "./tabs.js";
