@@ -1,7 +1,7 @@
 # PRD 26: Site editing preview and publish workflow
 
-Status: planned
-Current chunk: SWF-01 planned
+Status: in progress
+Current chunk: SWF-02 planned
 Last updated: 2026-05-12
 
 Start after PRD 25 authority operation module.
@@ -197,6 +197,61 @@ Likely changed files:
 - **Authority admin guard:** uses PRD 25 operation metadata to centralize production authorization checks for developer write endpoints.
 - **Site publish client:** orchestrates check, build/deploy, backup, restore, and smoke with explicit dry-run behavior.
 
+### SWF-01 Baseline
+
+- Public preview route `src/app/routes/site-page.tsx` fetches `/api/site/tree/:slug` on route load.
+- Public preview route aborts stale tree fetches when the route slug changes or unmounts.
+- Public preview route does not start Site push sync yet.
+- Public tree fetches stay read-only and do not broadcast sync messages.
+- Manual snapshot export uses `GET /api/site/snapshot`.
+- Manual snapshot restore uses `POST /api/site/snapshot/restore`.
+- Source seed reset uses `schema/apps/site/seed-records.json`.
+- Source seed file stores active flat `StoredRecord` rows only.
+- Source seed file does not store change rows, action replay rows, tombstones, or read-model output.
+- No source seed promotion command exists yet.
+- `bun run deploy` runs `vp build && wrangler deploy`.
+- Deploy does not reset or replace live Durable Object data.
+
+### Script Contracts
+
+#### `site:pull-seed`
+
+- Package script: `bun run site:pull-seed`.
+- Entrypoint: `scripts/site-pull-seed.ts`.
+- Default source: local dev URL from devstate status.
+- Source override: `--source <url>`.
+- Check mode: `--check`.
+- Output path: `schema/apps/site/seed-records.json`.
+- Snapshot source: `GET <source>/api/site/snapshot`.
+- Required snapshot key: `site`.
+- Validation: parse snapshot envelope, parse source Site schema, validate records against source Site schema.
+- Default output records: active `block` and `blockPlacement` records only.
+- Omit from output: tombstones, change rows, action replay rows, read-model output, snapshot envelope metadata.
+- Preserve: record IDs and `createdAt`.
+- Sort order: source schema entity order, then `createdAt`, then record ID.
+- JSON format: two-space indentation, trailing newline.
+- Check exit: `0` when output matches; non-zero when stale or invalid.
+- Write exit: `0` after writing current output; non-zero on fetch, parse, validation, or filesystem failure.
+
+#### `site:publish`
+
+- Package script: `bun run site:publish`.
+- Entrypoint: `scripts/site-publish.ts`.
+- Default behavior: dry run.
+- Mutating mode: `--apply` required.
+- Target override: `--target <url>`.
+- Mode flags: default apply mode deploys code and publishes data; `--code-only` deploys without data; `--data-only` publishes data without deploy.
+- Check behavior: run `devstate check` before mutating unless `--skip-check` is explicitly provided.
+- Build/deploy: use existing Bun build/deploy path and Wrangler.
+- Restore input: build a Site store snapshot from source Site schema plus `schema/apps/site/seed-records.json`.
+- Backup: fetch live `GET <target>/api/site/snapshot` before data restore.
+- Backup path: `tmp/site-publish-backups/` unless `--backup-dir <path>` is provided.
+- Restore path: `POST <target>/api/site/snapshot/restore`.
+- Validation: validate source snapshot before restore and validate live response after restore.
+- Auth: when the production guard ships, send the admin token from `FORMLESS_ADMIN_TOKEN`.
+- Smoke: after data restore, fetch live public routes including `/pages/home` or the published root profile equivalent.
+- Failure rule: if backup succeeds and restore fails, keep the backup artifact and print its path.
+
 ## Testing Decisions
 
 - Preview sync tests should assert route behavior: a pushed Site write triggers a tree refetch for the active slug.
@@ -220,7 +275,7 @@ Likely changed files:
 
 | ID     | Status  | Depends on | Main files                                 | Acceptance                                                                                                            |
 | ------ | ------- | ---------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| SWF-01 | planned | PRD 25     | tests, PRD                                 | Current manual snapshot, preview, seed, and deploy workflow is characterized; script contracts are locked.            |
+| SWF-01 | shipped | PRD 25     | tests, PRD                                 | Current manual snapshot, preview, seed, and deploy workflow is characterized; script contracts are locked.            |
 | SWF-02 | planned | SWF-01     | public route, sync client, app tests       | `/pages/*` local preview refetches active tree after pushed Site writes and cleans up on route changes/unmount.       |
 | SWF-03 | planned | SWF-01     | seed adapter script, package script, tests | `bun run site:pull-seed` writes deterministic `schema/apps/site/seed-records.json` from local Site authority state.   |
 | SWF-04 | planned | SWF-03     | source snapshot builder, tests             | Source schema plus source seed records produce a restore-ready Site snapshot envelope with validation.                |
@@ -256,6 +311,10 @@ Should not ship in parallel with:
 - Do not make WebSocket a write path.
 - Do not reset live Durable Object data implicitly during ordinary deploy.
 
+## Blockers
+
+- None.
+
 ## Promote after ship
 
 - `doc/current.md`: note public Site preview can live-update from Site push sync if shipped.
@@ -268,3 +327,17 @@ Should not ship in parallel with:
 
 - 2026-05-12: PRD created from user direction to refine the personal Site editing workflow after public Site chrome polish.
 - 2026-05-12: Renumbered from PRD 25 to PRD 26 after adding PRD 25 for the Authority operation module. Start condition now depends on PRD 25.
+- 2026-05-12: PRD 25 is shipped; SWF-01 dependency satisfied.
+- 2026-05-12: SWF-01 shipped. Added characterization coverage for current Site preview tree fetch behavior, manual Site snapshot versus source seed reset behavior, source seed artifact shape, and deploy-as-code-only behavior.
+- 2026-05-12: SWF-01 evidence: `devstate check` passed; `.devstate/status.md` reports checks ok, web service ready at `https://26-site-editing-publish-workflow.formless.local`, and watcher tests passing.
+- 2026-05-12: SWF-01 evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 195 files; `.devstate/logs/service-test.txt` reports the changed workflow tests passing.
+- 2026-05-12: SWF-01 evidence: requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were not present; available devstate evidence lives in `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- 2026-05-12: Browser smoke skipped because SWF-01 changed tests and PRD contracts only; no rendered app behavior changed.
+
+## PRD status notes
+
+- SWF-01 shipped 2026-05-12.
+- Current chunk: SWF-02 planned.
+- Current blocker: none.
+- Decisions: script contracts above are locked for SWF-03 and SWF-06.
+- Promote notes stay pending until live preview, seed promotion, guarded publish, and publish workflow ship.

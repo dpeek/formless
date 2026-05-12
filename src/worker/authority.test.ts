@@ -532,6 +532,28 @@ describe("authority", () => {
     expect(rateSnapshot.records.some((record) => record.id === created.record.id)).toBe(false);
   });
 
+  it("keeps manual Site snapshots separate from source seed reset", async () => {
+    useSchemaApp("site");
+    const created = await postMutationForEntity("mutation-site-manual-snapshot", "block", {
+      type: "page",
+      label: "Temporary preview page",
+      href: "/temporary-preview-page",
+    });
+
+    const snapshot = await getJson<StoreSnapshot>("/api/snapshot");
+
+    expect(snapshot.schemaKey).toBe("site");
+    expect(snapshot.schema).toEqual(siteSourceSchema);
+    expect(snapshot.records).toEqual([...siteSeedRecords, created.record]);
+    expect(siteSeedRecords.some((record) => record.id === created.record.id)).toBe(false);
+
+    const reset = await postJson<BootstrapResponse>("/api/reset/seed", {});
+
+    expect(reset.records).toEqual(siteSeedRecords);
+    expect(reset.cursor).toBe(siteSeedRecords.length);
+    expect(reset.records.some((record) => record.id === created.record.id)).toBe(false);
+  });
+
   it("restores snapshots and broadcasts committed restore writes", async () => {
     const before = await getJson<BootstrapResponse>("/api/bootstrap");
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
