@@ -15,13 +15,16 @@ import {
 } from "./storage.ts";
 import { BadRequestError } from "./errors.ts";
 import type { Env } from "./index.ts";
+import { authorizeAuthorityOperation } from "./authority-admin-guard.ts";
 import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { executeAuthorityOperation, selectAuthorityOperation } from "./authority-operations.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
+  private readonly bindings: Env;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ensureStorageTables(this.ctx.storage);
+    this.bindings = env;
   }
 
   async fetch(request: Request) {
@@ -31,11 +34,6 @@ export class FormlessAuthority extends DurableObject<Env> {
     if (!route) {
       return jsonResponse({ error: "Not found." }, 404);
     }
-
-    const source = storageSourceFromApp(route.app);
-    const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
-      this.ctx.getWebSockets(),
-    );
 
     try {
       if (route.path === "/sync/ws") {
@@ -49,7 +47,22 @@ export class FormlessAuthority extends DurableObject<Env> {
       });
 
       if (operation) {
+        const authorization = authorizeAuthorityOperation(request, operation, this.bindings);
+
+        if (!authorization.authorized) {
+          return jsonResponse(
+            { error: authorization.error },
+            authorization.status,
+            authorization.headers,
+          );
+        }
+
         const body = operation.metadata.mode === "write" ? await readJson(request) : undefined;
+        ensureStorageTables(this.ctx.storage);
+        const source = storageSourceFromApp(route.app);
+        const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
+          this.ctx.getWebSockets(),
+        );
         const result = executeAuthorityOperation({
           app: route.app,
           body,
@@ -73,6 +86,8 @@ export class FormlessAuthority extends DurableObject<Env> {
   }
 
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
+    ensureStorageTables(this.ctx.storage);
+
     const parsedMessage = parseSyncSocketMessage(message);
 
     if (!parsedMessage) {

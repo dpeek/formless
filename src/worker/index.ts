@@ -4,6 +4,7 @@ import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
 export { FormlessAuthority } from "./authority.ts";
 
 export type Env = {
+  FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace<FormlessAuthority>;
 };
 

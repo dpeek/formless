@@ -13,9 +13,14 @@ type DurableObjectBindings = Record<
   }
 >;
 
+type WorkerHarnessOptions = {
+  bindings?: Record<string, string>;
+};
+
 export async function createWorkerHarness(
   entryPoint: string,
   durableObjects: DurableObjectBindings,
+  options: WorkerHarnessOptions = {},
 ) {
   const tempDir = await mkdtemp(resolve(".worker-test-"));
   const scriptPath = join(tempDir, "worker.mjs");
@@ -30,6 +35,7 @@ export async function createWorkerHarness(
   });
 
   const mf = new Miniflare({
+    bindings: options.bindings,
     durableObjects,
     durableObjectsPersist: false,
     modules: true,
