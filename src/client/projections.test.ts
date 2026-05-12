@@ -25,6 +25,16 @@ describe("browser replica projections", () => {
     expect(selector(snapshot)).toEqual(["task-1"]);
   });
 
+  it("returns the stored entity ID array for all queries", () => {
+    const selector = createEntityRecordIdsMatchingQuerySelector("task", { kind: "all" });
+    const snapshot = projectionSnapshot([
+      record("task-1", "task", { done: false }),
+      record("task-2", "task", { done: true }),
+    ]);
+
+    expect(selector(snapshot)).toBe(snapshot.recordIdsByEntity.task);
+  });
+
   it("reuses filtered ID arrays when projection inputs do not change", () => {
     const selector = createEntityRecordIdsMatchingQuerySelector("task", activeQuery);
     const snapshot = projectionSnapshot([record("task-1", "task", { done: false })]);
@@ -81,6 +91,47 @@ describe("browser replica projections", () => {
     expect(secondOptions).toBe(firstOptions);
   });
 
+  it("reuses reference options when labels are unchanged and updates changed labels", () => {
+    const selector = createReferenceOptionsSelector("resource", "title");
+    const snapshot = projectionSnapshot([
+      record("resource-1", "resource", { title: "Designer" }),
+      { ...record("resource-2", "resource", { title: "Archived" }), deletedAt },
+      record("task-1", "task", { title: "Task" }),
+    ]);
+    const first = selector(snapshot);
+    const unrelatedPatch = {
+      recordsById: {
+        ...snapshot.recordsById,
+        "task-1": record("task-1", "task", { title: "Updated task" }),
+      },
+      recordIdsByEntity: snapshot.recordIdsByEntity,
+    };
+    const afterUnrelatedPatch = selector(unrelatedPatch);
+    const labelPatch = projectionSnapshot([
+      record("resource-1", "resource", { title: "Engineer" }),
+      record("task-1", "task", { title: "Updated task" }),
+    ]);
+    const afterLabelPatch = selector(labelPatch);
+
+    expect(first).toEqual([{ id: "resource-1", label: "Designer" }]);
+    expect(afterUnrelatedPatch).toBe(first);
+    expect(afterLabelPatch).toEqual([{ id: "resource-1", label: "Engineer" }]);
+    expect(afterLabelPatch).not.toBe(first);
+  });
+
+  it("falls back to record IDs for missing or blank reference option labels", () => {
+    const selector = createReferenceOptionsSelector("resource", "title");
+    const snapshot = projectionSnapshot([
+      record("resource-1", "resource", { title: "   " }),
+      record("resource-2", "resource", { name: "Engineer" }),
+    ]);
+
+    expect(selector(snapshot)).toEqual([
+      { id: "resource-1", label: "resource-1" },
+      { id: "resource-2", label: "resource-2" },
+    ]);
+  });
+
   it("counts entity filters and active references from the replica snapshot", () => {
     const activeCount = createEntityRecordCountMatchingQuerySelector("task", activeQuery);
     const blockReferenceCount = createEntityRecordCountReferencingFieldSelector(
@@ -101,6 +152,29 @@ describe("browser replica projections", () => {
 
     expect(activeCount(snapshot)).toBe(1);
     expect(blockReferenceCount(snapshot)).toBe(1);
+  });
+
+  it("keeps tombstoned context and child records out of scoped options", () => {
+    const cardSelector = createEntityRecordOptionsMatchingQuerySelector(
+      "card",
+      { kind: "all" },
+      "name",
+    );
+    const rateSelector = createEntityRecordOptionsMatchingQuerySelector(
+      "rate",
+      cardScopedRateQuery,
+      "name",
+      { today: "2026-05-01", values: { card: "card-1" } },
+    );
+    const snapshot = projectionSnapshot([
+      record("card-1", "card", { name: "Default" }),
+      { ...record("card-2", "card", { name: "Archived" }), deletedAt },
+      record("rate-1", "rate", { card: "card-1" }),
+      { ...record("rate-2", "rate", { card: "card-1" }), deletedAt },
+    ]);
+
+    expect(cardSelector(snapshot)).toEqual([{ id: "card-1", label: "Default" }]);
+    expect(rateSelector(snapshot)).toEqual([{ id: "rate-1", label: "rate-1" }]);
   });
 
   it("evaluates aggregate values from matching local query records", () => {
@@ -199,6 +273,8 @@ const cardScopedRateQuery = {
   op: "eq",
   value: { kind: "context", name: "card" },
 } as const;
+
+const deletedAt = "2026-04-28T00:04:00.000Z";
 
 function projectionSnapshot(records: StoredRecord[]): BrowserReplicaProjectionSnapshot {
   return {

@@ -1,7 +1,7 @@
 # PRD 28: Browser replica projection module
 
 Status: in progress
-Current chunk: BRP-04 ready
+Current chunk: BRP-05 ready
 Last updated: 2026-05-12
 
 ## Goal
@@ -65,6 +65,8 @@ That coupling makes derived browser data harder to test without React store setu
 - BRP-02 keeps aggregate and readiness selectors in `src/client/store.ts`; BRP-03 owns their extraction.
 - BRP-03 makes `src/client/projections.ts` the module boundary for aggregate values and record readiness warnings.
 - BRP-03 keeps `src/client/store.ts` hooks as projection adapters for aggregate and readiness consumers.
+- BRP-04 keeps selector behavior tests in `src/client/projections.test.ts`; `src/client/store.test.ts` now covers state, reconciliation, and subscription behavior only.
+- BRP-04 keeps `useEntityRecordIds` as a store-state passthrough hook with a store-local stable empty result.
 
 ## BRP-01 Characterization
 
@@ -157,7 +159,7 @@ Acceptance:
 
 ### BRP-04: Store cleanup and adapter pass
 
-Status: ready
+Status: shipped
 
 Tasks:
 
@@ -202,12 +204,14 @@ Acceptance:
 - Prefer shipping after PRD 26 unless preview or publish work exposes projection bugs.
 - BRP-01 blocker check: none found.
 - BRP-02 blocker check: none found.
+- BRP-04 blocker check: none found.
 
 ## Promote after ship
 
 - `doc/current.md`: browser replica projection module `src/client/projections.ts` owns query ids, query options, query counts, reference options, and reference counts.
 - `doc/current.md`: browser replica projection module `src/client/projections.ts` owns aggregate values and record readiness warnings.
 - `doc/current.md`: store hooks in `src/client/store.ts` adapt to projection selectors while store mutation, hydration, and reconciliation stay in the store.
+- `doc/current.md`: projection behavior tests live in `src/client/projections.test.ts`; store tests focus on browser replica state, reconciliation, and subscription behavior.
 - `doc/roadmap.md`: only if this changes first-release scope wording.
 
 ## Status Log
@@ -227,3 +231,8 @@ Acceptance:
 - 2026-05-12: BRP-03 check evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 211 files.
 - 2026-05-12: BRP-03 loop evidence: `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; `.devstate/status.md` reports checks ok and services running.
 - 2026-05-12: BRP-03 browser smoke: `bun browser --session brp-03 --ignore-https-errors batch --bail` opened `/tasks`, `/rates` (current redirect to `/estii`), and `/site`; `bun browser --session brp-03 errors` returned no page errors.
+- 2026-05-12: BRP-04 shipped. Removed direct projection selector imports from `src/client/store.test.ts`; added missing selector identity, fallback, and tombstone coverage to `src/client/projections.test.ts`; kept `src/client/store.ts` projection usage to hook adapters.
+- 2026-05-12: BRP-04 test evidence: `.devstate/logs/service-test.txt` reports `src/client/projections.test.ts` reran and passed 12 tests; `.devstate/status.md` reports watcher tests passing.
+- 2026-05-12: BRP-04 check evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 212 files.
+- 2026-05-12: BRP-04 loop evidence: `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; `.devstate/status.md` reports checks ok and services running.
+- 2026-05-12: BRP-04 browser smoke skipped because this chunk only cleaned store/projection test boundaries and preserved rendered app behavior.

@@ -9,7 +9,6 @@ import {
   createEntityRecordOptionsMatchingQuerySelector,
   createRecordReadinessWarningsSelector,
   createReferenceOptionsSelector,
-  EMPTY_RECORD_IDS,
   queryEvaluationContextCacheKey,
   type ReferenceOption,
 } from "./projections.ts";
@@ -37,6 +36,7 @@ type StoreListener = () => void;
 const listeners = new Set<StoreListener>();
 
 let state: NormalizedClientState = emptyClientState(null);
+const EMPTY_ENTITY_RECORD_IDS: string[] = [];
 
 export function getClientStoreSnapshot(): NormalizedClientState {
   return state;
@@ -187,7 +187,7 @@ export function useSchema() {
 
 export function useEntityRecordIds(entityName: string) {
   return useClientStoreSelector((snapshot) => {
-    return snapshot.recordIdsByEntity[entityName] ?? EMPTY_RECORD_IDS;
+    return snapshot.recordIdsByEntity[entityName] ?? EMPTY_ENTITY_RECORD_IDS;
   });
 }
 
