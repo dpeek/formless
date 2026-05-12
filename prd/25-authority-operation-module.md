@@ -1,7 +1,7 @@
 # PRD 25: Authority operation module
 
-Status: active
-Current chunk: AOM-04 ready
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-12
 
 Start after PRD 24 public Site chrome polish.
@@ -207,7 +207,7 @@ Write metadata must be available before write storage reads or mutations.
 | AOM-01 | shipped | none       | tests, PRD                    | Current Authority route/write behavior is characterized and operation metadata requirements are locked.          |
 | AOM-02 | shipped | AOM-01     | authority operation module    | Authority route branches delegate operation selection/execution with unchanged responses and write semantics.    |
 | AOM-03 | shipped | AOM-02     | authority tests, test helpers | Route tests and operation tests prove committed, replayed, failed, read-only, and Site tree behavior.            |
-| AOM-04 | ready   | AOM-03     | PRD                           | `devstate check` passes; browser smoke is skipped unless rendered app behavior changed; PRD evidence is current. |
+| AOM-04 | shipped | AOM-03     | PRD                           | `devstate check` passes; browser smoke is skipped unless rendered app behavior changed; PRD evidence is current. |
 
 ## Parallel Shipping
 
@@ -264,3 +264,16 @@ Avoid parallel edits with:
 - 2026-05-12: AOM-02 evidence: `devstate check` passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass; `.devstate/logs/service-test.txt` shows `src/worker/authority.test.ts` 93 passed. Browser smoke skipped because no rendered app behavior changed.
 - 2026-05-12: AOM-03 shipped. Added `src/worker/authority-operations.test.ts` coverage for `selectAuthorityOperation` read/write metadata, sync request facts, invalid sync cursor rejection, and adapter-owned WebSocket/unknown route non-selection. Existing `src/worker/authority.test.ts` route coverage proves committed, replayed, failed-validation, read-only, and Site tree behavior.
 - 2026-05-12: AOM-03 evidence: `devstate check` passed; `.devstate/logs/check-vite.txt` shows formatting, lint, and type checks pass across 193 files; `.devstate/logs/service-test.txt` shows `src/worker/authority-operations.test.ts` 5 passed. Browser smoke skipped because no rendered app behavior changed.
+- 2026-05-12: AOM-04 shipped. PRD status, blockers, decisions, evidence, and promote notes are current.
+- 2026-05-12: AOM-04 evidence: `devstate check` passed; `.devstate/status.md` reports checks ok, web service ready at `https://25-authority-operation-module.formless.local`, and watcher tests passing.
+- 2026-05-12: AOM-04 evidence: requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were not present; available devstate evidence lives in `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- 2026-05-12: AOM-04 evidence: no rendered app behavior changed; browser smoke skipped.
+
+## PRD status notes
+
+- AOM-04 shipped 2026-05-12.
+- Current chunk: complete.
+- Current blocker: none.
+- Decisions: no new decisions for AOM-04.
+- Promote notes are ready in `Promote after ship`.
+- PRD complete; no next ready chunk.
