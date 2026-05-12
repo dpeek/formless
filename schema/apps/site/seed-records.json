@@ -228,7 +228,7 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "label": "Explore",
+      "label": "Sitemap",
       "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:17.000Z"
@@ -238,7 +238,7 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "label": "Social",
+      "label": "David Peek",
       "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:18.000Z"
@@ -248,7 +248,7 @@
     "entity": "block",
     "values": {
       "type": "hero",
-      "label": "Schema-backed software for content-heavy products",
+      "label": "Developer of fine software products",
       "body": "I design and build schema-backed software for teams that need their tools to keep up with the work.",
       "templateKey": "home-hero"
     },
@@ -282,6 +282,95 @@
       "templateKey": "post-body"
     },
     "createdAt": "2026-05-05T00:00:18.400Z"
+  },
+  {
+    "id": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "Bluesky",
+      "href": "https://bsky.app/profile/dpeek.com"
+    },
+    "createdAt": "2026-05-12T04:27:33.010Z"
+  },
+  {
+    "id": "record_0749e061-1ba8-4923-841e-143fc825427c",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "X",
+      "href": "https://x.com/dpeekdotcom"
+    },
+    "createdAt": "2026-05-12T04:28:23.801Z"
+  },
+  {
+    "id": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "Home",
+      "href": "/"
+    },
+    "createdAt": "2026-05-12T04:30:55.995Z"
+  },
+  {
+    "id": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
+    "entity": "block",
+    "values": {
+      "type": "group",
+      "label": "All rights reserved © David Peek 2026"
+    },
+    "createdAt": "2026-05-12T04:31:48.064Z"
+  },
+  {
+    "id": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
+    "entity": "block",
+    "values": {
+      "type": "hero",
+      "label": "Great software feels like magic",
+      "body": "Let's build some magic together."
+    },
+    "createdAt": "2026-05-12T04:56:24.201Z"
+  },
+  {
+    "id": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
+    "entity": "block",
+    "values": {
+      "type": "hero",
+      "label": "Assorted shower thoughts",
+      "body": "Sometimes a blog post is as far as you should take your next startup idea."
+    },
+    "createdAt": "2026-05-12T05:02:46.686Z"
+  },
+  {
+    "id": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
+    "entity": "block",
+    "values": {
+      "type": "markdown",
+      "label": "David Peek",
+      "body": "> Lead / Staff Software Engineer based in Sydney, Australia\n> AI-native systems, automation, distributed architecture\n\n## Summary\n\nStaff-level engineer with 15+ years experience designing and shipping complex systems across frontend platforms, distributed infrastructure, and AI-native automation.\n\nCombines deep technical execution with product and commercial understanding, with a track record of building high-leverage systems in small teams, from multi-platform video SDKs used by major broadcasters to an offline-first commercial estimation platform and a next-generation browser automation runtime.\n\n## Experience\n\n### Co-founder - [OpenSurf](https://opensurf.ai/)\n\n_2025 - Present_\n\nBuilding an AI-native browser automation platform focused on reliable, local-first agent execution.\n\n* Designed and implemented a typed actor runtime for coordinating browser sessions, agents, and UI across Playwright and Chrome extension environments, using synchronized TinyBase stores and RPC-style communication.\n* Built a semantic graph and fingerprinting system to replace brittle DOM selectors with resilient, structure-aware targeting across UI changes.\n* Developed a deterministic validation platform for browser automation, enabling repeatable testing, regression detection, and safe evolution of agent behaviour.\n* Architected a local-first execution model to avoid limitations of cloud browsers (latency, blocking, auth fragility).\n* Built tooling for artefact capture, replay, and scoring of automation workflows (DOM snapshots, screenshots, semantic state).\n\nImpact:\n\n* Established the core technical foundation for reliable web automation beyond script-based approaches.\n* Enabled measurable benchmarking and validation of agent performance.\n\n### Co-founder & CTO - [Estii](https://estii.com/)\n\n_2021 - Present_\n\nBuilt and operated a commercial estimation platform for services businesses, replacing spreadsheet-based workflows with a structured, real-time system.\n\n* Architected an offline-first, real-time collaborative system using Next.js, Replicache, and Cloudflare Durable Objects.\n* Designed a typed document graph model and shared calculation engine linking scope, pricing, scheduling, and forecasting.\n* Built a financially correct feedback loop between estimation and scheduling, handling complex pricing models (multi-currency, tiered pricing, margins, recurring services).\n* Implemented a heuristic scheduling engine exploring and ranking valid project plans under business constraints.\n* Designed an asynchronous forecasting pipeline to aggregate distributed deal data under serverless memory constraints.\n* Built full platform infrastructure: sync, schema validation (Zod), migrations, backups, exports, E2E automation, and CI/CD.\n\nTechnical scope:\n\n* Custom replication model with cross-entity sync (between deal and workspace).\n* Memoized calculation engine with selective invalidation.\n* Distributed data model using Durable Objects (sharded by workspace/deal).\n* Comprehensive unit, integration and E2E test suite\n* Automated product documentation pipeline (screenshots + videos update on CI)\n\nCommercial outcomes:\n\n* 30 active users across 3 paying customers ($30K ARR).\n* Supported multi-million EUR deal pipelines (10M+ handled by a single customer).\n* Zero major incidents or data loss over 4+ years of operation.\n\nKey insight: Delivered a high-complexity, financially critical system with a two-person team by investing heavily in system primitives and automation.\n\n### Director of Solution Engineering - [Deltatre](https://deltatre.com/)\n\n_2017 - 2021_\n\nLed solution design and commercial estimation for large-scale video platform integrations.\n\n* Owned end-to-end RFP response process for $1-5M+ deals across OTT video platforms.\n* Translated ambiguous client requirements into scoped architecture, delivery plans, and pricing models.\n* Built structured estimation workflows that later evolved into Estii.\n* Coordinated stakeholders across design, frontend, backend, video delivery, and infrastructure teams.\n* Influenced product roadmap through analysis of pipeline demand.\n\nScope:\n\n* Video ingest, encoding, DRM (Widevine, FairPlay), streaming (HLS).\n* Authentication, payments, analytics, ad integration.\n* Multi-platform frontend delivery.\n\nImpact:\n\n* Developed data-driven estimation workflow that increased accuracy and improved delivery margins.\n* Key role in winning DAZN and WWE, growing revenue to $40M leading to a $130M aquisition.\n\n### Lead Frontend Engineer / Architect - [Deltatre](https://deltatre.com/)\n\n_2009 - 2017_\n\nLed development of a cross-platform application SDK powering OTT apps across web, mobile, and connected devices.\n\n* Built a multi-platform SDK enabling shared code across 20+ device platforms (Web, iOS, Android, Samsung, PlayStation, LG, etc.).\n* Designed a runtime abstraction layer spanning HTML, Flash, and native (OpenGL/SDL) environments.\n* Developed a UI framework, component system, and application architecture.\n* Led a team building tooling for cross-device testing and deployment.\n\nImpact:\n\n* SDK used in applications for BBC, ITV, DAZN, WWE Network, Channel 5, YouView, and others.\n* Enabled reuse of application logic across a fragmented device ecosystem.\n\n## Technical Skills\n\n* Languages: TypeScript, JavaScript\n* Architecture: Distributed systems, offline-first sync, actor models\n* AI/Automation: LLM-driven workflows, agent systems, browser automation\n* Frontend: React, Next.js, Tailwind\n* Infrastructure: Cloudflare, AWS, Vercel\n* Data: Replicache, TinyBase, Zod, Drizzle\n* Testing: Playwright, E2E automation, deterministic validation systems"
+    },
+    "createdAt": "2026-05-12T05:04:06.684Z"
+  },
+  {
+    "id": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
+    "entity": "block",
+    "values": {
+      "type": "hero",
+      "label": "Some things I have built",
+      "body": "Products, libraries and experiments"
+    },
+    "createdAt": "2026-05-12T05:16:25.529Z"
+  },
+  {
+    "id": "record_692a7ebd-fe3a-4724-9821-9d94255aa29f",
+    "entity": "block",
+    "values": {
+      "type": "markdown",
+      "label": "Greetings, Robot!",
+      "body": "I'm David Peek, a full-stack developer, entrepreneur and technology optimist. I'm co-founder and CTO of [estii.com](https://estii.com) - an estimation and pricing platform for service providers and [opensurf.ai](https://opensurf.ai) - a framework for building reliable web agents.\n\nBuilding software that lets small teams do ambitious things is my happy place. Generally, that means plugging together tools from the amazing JavaScript ecosystem with automation, duct-tape and love."
+    },
+    "createdAt": "2026-05-12T05:24:03.945Z"
   },
   {
     "id": "rec_site_place_header_home",
@@ -379,19 +468,9 @@
     "values": {
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_social",
-      "order": 2000
+      "order": 500
     },
     "createdAt": "2026-05-05T00:00:26.300Z"
-  },
-  {
-    "id": "rec_site_place_home_hero",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "rec_site_block_home_hero",
-      "order": 2000
-    },
-    "createdAt": "2026-05-05T00:00:27.000Z"
   },
   {
     "id": "rec_site_place_home_hero_image",
@@ -403,26 +482,6 @@
       "label": "Portrait"
     },
     "createdAt": "2026-05-05T00:00:27.100Z"
-  },
-  {
-    "id": "rec_site_place_home_recent_posts",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "rec_site_block_home_recent_posts",
-      "order": 3000
-    },
-    "createdAt": "2026-05-05T00:00:28.000Z"
-  },
-  {
-    "id": "rec_site_place_home_projects",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "rec_site_block_home_projects",
-      "order": 4000
-    },
-    "createdAt": "2026-05-05T00:00:29.000Z"
   },
   {
     "id": "rec_site_place_recent_posts_shipped_schema",
@@ -494,5 +553,95 @@
       "label": "Profile"
     },
     "createdAt": "2026-05-05T00:00:31.000Z"
+  },
+  {
+    "id": "record_a83332ce-88e9-4be3-a01d-23fa251738f8",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_social",
+      "block": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
+      "order": 3000
+    },
+    "createdAt": "2026-05-12T04:27:33.010Z"
+  },
+  {
+    "id": "record_df809264-df03-4773-9eec-4a79e36ccf4b",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_social",
+      "block": "record_0749e061-1ba8-4923-841e-143fc825427c",
+      "order": 4000
+    },
+    "createdAt": "2026-05-12T04:28:23.801Z"
+  },
+  {
+    "id": "record_62cf35f7-0f2f-4179-83c0-e35632ce26d3",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_main",
+      "block": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
+      "order": 500
+    },
+    "createdAt": "2026-05-12T04:30:55.995Z"
+  },
+  {
+    "id": "record_adafde98-6f1b-42b2-a5b4-b54d12d5cb83",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer",
+      "block": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
+      "order": 2000
+    },
+    "createdAt": "2026-05-12T04:31:48.064Z"
+  },
+  {
+    "id": "record_4f205edd-6b96-41da-8f9f-3defac28da1a",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "block": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T04:56:24.201Z"
+  },
+  {
+    "id": "record_bbb296c2-25ec-41e8-8da1-9523297d7f2d",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_blog",
+      "block": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T05:02:46.686Z"
+  },
+  {
+    "id": "record_2182aea7-7023-497e-b9d6-ed3b1ab7ee10",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_resume",
+      "block": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T05:04:06.684Z"
+  },
+  {
+    "id": "record_24fbbfd1-6aec-47d4-8909-99e4bcd52895",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_projects",
+      "block": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T05:16:25.529Z"
+  },
+  {
+    "id": "record_eaf87639-8e8b-4849-8f02-442dba2ef8e3",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "block": "record_692a7ebd-fe3a-4724-9821-9d94255aa29f",
+      "order": 2000
+    },
+    "createdAt": "2026-05-12T05:24:03.945Z"
   }
 ]
