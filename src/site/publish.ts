@@ -1,0 +1,393 @@
+import path from "node:path";
+
+import {
+  STORE_SNAPSHOT_KIND,
+  STORE_SNAPSHOT_VERSION,
+  parseStoreSnapshot,
+  type BootstrapResponse,
+  type StoreSnapshot,
+  type StoredRecord,
+} from "../shared/protocol.ts";
+import type { AppSchema } from "../shared/schema.ts";
+import { buildSiteSourceSnapshot } from "./source-snapshot.ts";
+
+export type SitePublishOptions = {
+  apply: boolean;
+  backupDir: string;
+  code: boolean;
+  data: boolean;
+  skipCheck: boolean;
+  target: string | null;
+};
+
+export type SitePublishResult = {
+  backupPath: string | null;
+  mode: "apply" | "dry-run";
+  sourceRecordCount: number;
+  target: string | null;
+};
+
+export type SitePublishRunCommandOptions = {
+  cwd: string;
+};
+
+export type SitePublishHttpResponse = {
+  ok: boolean;
+  status: number;
+  text: () => Promise<string>;
+};
+
+export type SitePublishDependencies = {
+  fetch: (url: string, init?: RequestInit) => Promise<SitePublishHttpResponse>;
+  log: (message: string) => void;
+  mkdir: (directoryPath: string, options: { recursive: true }) => Promise<void>;
+  now: () => string;
+  runCommand: (
+    command: string,
+    args: string[],
+    options: SitePublishRunCommandOptions,
+  ) => Promise<void>;
+  writeFile: (filePath: string, contents: string) => Promise<void>;
+};
+
+export type SitePublishInput = {
+  adminToken?: string;
+  cwd: string;
+  dependencies: SitePublishDependencies;
+  options: SitePublishOptions;
+  sourceSchema: AppSchema;
+  sourceSeedRecords: StoredRecord[];
+};
+
+type SitePublishModeFlags = {
+  codeOnly: boolean;
+  dataOnly: boolean;
+};
+
+const defaultBackupDir = "tmp/site-publish-backups";
+const defaultSmokePaths = ["/pages/home"];
+
+export function parseSitePublishArgs(
+  args: string[],
+  env: Record<string, string | undefined> = {},
+): SitePublishOptions | "help" {
+  const modeFlags: SitePublishModeFlags = {
+    codeOnly: false,
+    dataOnly: false,
+  };
+  const options: Omit<SitePublishOptions, "code" | "data"> = {
+    apply: false,
+    backupDir: defaultBackupDir,
+    skipCheck: false,
+    target: env.FORMLESS_SITE_PUBLISH_TARGET
+      ? normalizePublishUrl(env.FORMLESS_SITE_PUBLISH_TARGET)
+      : null,
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "-h" || arg === "--help") {
+      return "help";
+    }
+
+    if (arg === "--apply") {
+      options.apply = true;
+      continue;
+    }
+
+    if (arg === "--skip-check") {
+      options.skipCheck = true;
+      continue;
+    }
+
+    if (arg === "--code-only") {
+      modeFlags.codeOnly = true;
+      continue;
+    }
+
+    if (arg === "--data-only") {
+      modeFlags.dataOnly = true;
+      continue;
+    }
+
+    if (arg === "--target") {
+      options.target = normalizePublishUrl(readOptionValue(args, index, "--target"));
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--backup-dir") {
+      options.backupDir = readOptionValue(args, index, "--backup-dir");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option: ${arg}`);
+  }
+
+  if (modeFlags.codeOnly && modeFlags.dataOnly) {
+    throw new Error("--code-only and --data-only cannot be used together.");
+  }
+
+  return {
+    ...options,
+    code: !modeFlags.dataOnly,
+    data: !modeFlags.codeOnly,
+  };
+}
+
+export async function runSitePublish(input: SitePublishInput): Promise<SitePublishResult> {
+  const plannedAt = input.dependencies.now();
+  const sourceSnapshot = buildSiteSourceSnapshot(input.sourceSchema, input.sourceSeedRecords, {
+    exportedAt: plannedAt,
+  });
+
+  if (input.options.apply && input.options.data && !input.options.target) {
+    throw new Error(
+      "Site publish target is required for --apply data publish. Pass --target <url> or set FORMLESS_SITE_PUBLISH_TARGET.",
+    );
+  }
+
+  logPublishPlan(input, sourceSnapshot);
+
+  if (!input.options.apply) {
+    return {
+      backupPath: null,
+      mode: "dry-run",
+      sourceRecordCount: sourceSnapshot.records.length,
+      target: input.options.target,
+    };
+  }
+
+  if (!input.options.skipCheck) {
+    input.dependencies.log("Check: devstate check");
+    await input.dependencies.runCommand("devstate", ["check"], { cwd: input.cwd });
+  }
+
+  if (input.options.code) {
+    input.dependencies.log("Code deploy: bun run deploy");
+    await input.dependencies.runCommand("bun", ["run", "deploy"], { cwd: input.cwd });
+  }
+
+  const backupPath = input.options.data
+    ? await publishSiteData(input, sourceSnapshot, plannedAt)
+    : null;
+
+  input.dependencies.log("Site publish complete.");
+
+  return {
+    backupPath,
+    mode: "apply",
+    sourceRecordCount: sourceSnapshot.records.length,
+    target: input.options.target,
+  };
+}
+
+export function sitePublishUsage(): string {
+  return [
+    "Usage: bun run site:publish [--apply] [--target <url>] [--code-only | --data-only] [--skip-check] [--backup-dir <path>]",
+    "",
+    "Defaults to a dry run. Mutating publish requires --apply.",
+    "Data publish backs up GET /api/site/snapshot, restores source Site seed data, and smokes /pages/home.",
+  ].join("\n");
+}
+
+function logPublishPlan(input: SitePublishInput, sourceSnapshot: StoreSnapshot) {
+  const mode = input.options.apply ? "APPLY" : "DRY RUN";
+  const codeStep = input.options.code ? "enabled" : "skipped";
+  const dataStep = input.options.data ? "enabled" : "skipped";
+  const checkStep = input.options.skipCheck ? "skipped" : "devstate check";
+  const target = input.options.target ?? "(not set)";
+
+  input.dependencies.log(`${mode}: Site publish workflow.`);
+  input.dependencies.log(`Source: ${sourceSnapshot.records.length} Site seed records validated.`);
+  input.dependencies.log(`Target: ${target}`);
+  input.dependencies.log(`Steps: check=${checkStep}; code=${codeStep}; data=${dataStep}.`);
+
+  if (!input.options.apply) {
+    input.dependencies.log("Dry run only. Re-run with --apply to mutate code or live data.");
+    return;
+  }
+
+  if (input.options.data) {
+    input.dependencies.log(`Backup directory: ${input.options.backupDir}`);
+  }
+}
+
+async function publishSiteData(
+  input: SitePublishInput,
+  sourceSnapshot: StoreSnapshot,
+  plannedAt: string,
+): Promise<string> {
+  const target = input.options.target;
+
+  if (!target) {
+    throw new Error("Site publish target is required for data publish.");
+  }
+
+  input.dependencies.log("Data backup: GET /api/site/snapshot");
+  const backup = parseStoreSnapshot(
+    await fetchJson(input, sitePublishUrl(target, "/api/site/snapshot"), {
+      headers: authHeaders(input.adminToken, { accept: "application/json" }),
+    }),
+    "site",
+  );
+  const backupPath = sitePublishBackupPath(input.cwd, input.options.backupDir, plannedAt);
+  await input.dependencies.mkdir(path.dirname(backupPath), { recursive: true });
+  await input.dependencies.writeFile(backupPath, formatJson(backup));
+  input.dependencies.log(`Data backup written: ${backupPath}`);
+
+  try {
+    input.dependencies.log("Data restore: POST /api/site/snapshot/restore");
+    const restoreResponse = validateRestoreResponse(
+      await fetchJson(input, sitePublishUrl(target, "/api/site/snapshot/restore"), {
+        body: JSON.stringify(sourceSnapshot),
+        headers: authHeaders(input.adminToken, {
+          accept: "application/json",
+          "content-type": "application/json",
+        }),
+        method: "POST",
+      }),
+      sourceSnapshot,
+    );
+    input.dependencies.log(
+      `Data restore complete: cursor ${restoreResponse.cursor}, ${restoreResponse.records.length} records.`,
+    );
+
+    for (const smokePath of defaultSmokePaths) {
+      input.dependencies.log(`Smoke: GET ${smokePath}`);
+      await fetchOk(input, sitePublishUrl(target, smokePath), {
+        headers: { accept: "text/html,application/json" },
+      });
+    }
+  } catch (error) {
+    throw new Error(`${errorMessage(error)} Backup kept at ${backupPath}.`);
+  }
+
+  return backupPath;
+}
+
+function validateRestoreResponse(value: unknown, sourceSnapshot: StoreSnapshot): BootstrapResponse {
+  if (!isRecord(value)) {
+    throw new Error("Site restore response must be an object.");
+  }
+
+  const parsed = parseStoreSnapshot(
+    {
+      kind: STORE_SNAPSHOT_KIND,
+      version: STORE_SNAPSHOT_VERSION,
+      schemaKey: "site",
+      exportedAt: sourceSnapshot.exportedAt,
+      schemaUpdatedAt: value.schemaUpdatedAt,
+      sourceCursor: value.cursor,
+      schema: value.schema,
+      records: value.records,
+    },
+    "site",
+  );
+  const response: BootstrapResponse = {
+    cursor: parsed.sourceCursor,
+    records: parsed.records,
+    schema: parsed.schema,
+    schemaUpdatedAt: parsed.schemaUpdatedAt,
+  };
+  const responseRecordsById = new Map(response.records.map((record) => [record.id, record]));
+
+  for (const sourceRecord of sourceSnapshot.records) {
+    const responseRecord = responseRecordsById.get(sourceRecord.id);
+
+    if (JSON.stringify(responseRecord) !== JSON.stringify(sourceRecord)) {
+      throw new Error(
+        `Site restore response did not include restored record "${sourceRecord.id}".`,
+      );
+    }
+  }
+
+  return response;
+}
+
+function sitePublishBackupPath(cwd: string, backupDir: string, timestamp: string): string {
+  const safeTimestamp = timestamp.replace(/[:.]/g, "-");
+
+  return path.resolve(cwd, backupDir, `site-${safeTimestamp}.snapshot.json`);
+}
+
+async function fetchJson(
+  input: SitePublishInput,
+  url: string,
+  init?: RequestInit,
+): Promise<unknown> {
+  const response = await input.dependencies.fetch(url, init);
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Failed ${init?.method ?? "GET"} ${url}: HTTP ${response.status} ${text}`);
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(`Failed ${init?.method ?? "GET"} ${url}: response was not JSON.`);
+  }
+}
+
+async function fetchOk(input: SitePublishInput, url: string, init?: RequestInit): Promise<void> {
+  const response = await input.dependencies.fetch(url, init);
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Failed ${init?.method ?? "GET"} ${url}: HTTP ${response.status} ${text}`);
+  }
+}
+
+function sitePublishUrl(target: string, pathname: string): string {
+  return new URL(pathname, `${target}/`).toString();
+}
+
+function authHeaders(
+  adminToken: string | undefined,
+  headers: Record<string, string>,
+): Record<string, string> {
+  if (!adminToken) {
+    return headers;
+  }
+
+  return {
+    ...headers,
+    authorization: `Bearer ${adminToken}`,
+  };
+}
+
+function normalizePublishUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.search = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    throw new Error(`Publish target URL is invalid: ${value}`);
+  }
+}
+
+function readOptionValue(args: string[], index: number, option: string): string {
+  const value = args[index + 1];
+
+  if (typeof value !== "string" || value.length === 0 || value.startsWith("-")) {
+    throw new Error(`Missing value for ${option}.`);
+  }
+
+  return value;
+}
+
+function formatJson(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

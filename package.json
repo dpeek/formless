@@ -15,6 +15,7 @@
     "build": "vp build",
     "preview": "vp preview",
     "site:pull-seed": "bun run scripts/site-pull-seed.ts",
+    "site:publish": "bun run scripts/site-publish.ts",
     "deploy": "vp build && wrangler deploy"
   },
   "dependencies": {

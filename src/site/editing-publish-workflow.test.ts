@@ -61,6 +61,13 @@ describe("Site editing and publish workflow baseline", () => {
 
     expect(packageJson.scripts?.["site:pull-seed"]).toBe("bun run scripts/site-pull-seed.ts");
   });
+
+  it("exposes the Site publish command without changing ordinary deploy", () => {
+    const packageJson = readPackageJson();
+
+    expect(packageJson.scripts?.["site:publish"]).toBe("bun run scripts/site-publish.ts");
+    expect(packageJson.scripts?.deploy).toBe("vp build && wrangler deploy");
+  });
 });
 
 function readPackageJson(): PackageJson {

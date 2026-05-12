@@ -1,7 +1,7 @@
 # PRD 26: Site editing preview and publish workflow
 
 Status: in progress
-Current chunk: SWF-06 planned
+Current chunk: SWF-07 planned
 Last updated: 2026-05-12
 
 Start after PRD 25 authority operation module.
@@ -191,6 +191,8 @@ Likely changed files:
 | SWF-D11 | Start live preview sync only for preview-mode public routes.         | Published Site visitors do not need edit invalidation.                                  | `src/app/routes/site-page.tsx`                                               |
 | SWF-D12 | Enable admin write protection when `FORMLESS_ADMIN_TOKEN` is set.    | Local dev keeps no-token writes; deployed Workers can become public-only by config.     | `src/worker/authority-admin-guard.ts`                                        |
 | SWF-D13 | Check write authorization before JSON body parsing and execution.    | Unauthorized live writes must fail before storage reads or mutations.                   | `src/worker/authority.ts`, `src/worker/authority-admin-guard.test.ts`        |
+| SWF-D14 | Keep Site publish dry-run by default and require `--apply`.          | Live code deploy and data restore must be explicit.                                     | `src/site/publish.ts`, `scripts/site-publish.ts`                             |
+| SWF-D15 | Require an explicit data-publish target via flag or env.             | The live Worker URL is deployment-specific and should be visible before mutation.       | `src/site/publish.ts`                                                        |
 
 ### Deep Modules
 
@@ -274,6 +276,29 @@ Likely changed files:
 - Public Site tree reads remain unauthenticated.
 - Worker tests cover missing auth, invalid auth, valid auth, no mutation on unauthorized reset, and public Site tree access.
 
+### SWF-06 Site Publish Command
+
+- Package script `site:publish` runs `scripts/site-publish.ts`.
+- Publish orchestration lives in `src/site/publish.ts`.
+- Default `bun run site:publish` is a dry run.
+- Dry run validates the source Site schema plus `schema/apps/site/seed-records.json`.
+- Dry run does not run commands, fetch live URLs, write backups, or restore data.
+- Mutating publish requires `--apply`.
+- Data publish requires `--target <url>` or `FORMLESS_SITE_PUBLISH_TARGET`.
+- Default apply mode runs `devstate check`, then `bun run deploy`, then live data publish.
+- `--code-only` deploys code without data publish.
+- `--data-only` publishes data without deploy.
+- `--skip-check` skips the pre-mutation `devstate check`.
+- Data publish fetches `GET /api/site/snapshot` before restore.
+- Data publish writes backups under `tmp/site-publish-backups/` unless `--backup-dir` is passed.
+- Data publish builds restore input from the source Site schema plus source seed records.
+- Data publish posts restore input to `POST /api/site/snapshot/restore`.
+- Data publish sends `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when the token is configured.
+- Data publish validates the restore response contains the source seed records.
+- Data publish smokes `/pages/home` after restore.
+- Restore and smoke failures after backup report the backup artifact path.
+- Tests cover argument parsing, dry-run no-op behavior, default apply command/request order, auth header forwarding, backup writing, restore payload shape, and backup-path error reporting.
+
 ### Script Contracts
 
 #### `site:pull-seed`
@@ -342,7 +367,7 @@ Likely changed files:
 | SWF-03 | shipped | SWF-01     | seed adapter script, package script, tests | `bun run site:pull-seed` writes deterministic `schema/apps/site/seed-records.json` from local Site authority state.   |
 | SWF-04 | shipped | SWF-03     | source snapshot builder, tests             | Source schema plus source seed records produce a restore-ready Site snapshot envelope with validation.                |
 | SWF-05 | shipped | SWF-04     | authority guard, worker tests              | Production developer write endpoints require authorization while public tree reads remain public.                     |
-| SWF-06 | planned | SWF-05     | publish script, package script, tests      | Publish command can dry-run, deploy code, back up live Site snapshot, restore source Site data, and smoke routes.     |
+| SWF-06 | shipped | SWF-05     | publish script, package script, tests      | Publish command can dry-run, deploy code, back up live Site snapshot, restore source Site data, and smoke routes.     |
 | SWF-07 | planned | SWF-06     | browser smoke, PRD                         | Separate editor/preview smoke passes; publish dry-run evidence is recorded; PRD status and promote notes are current. |
 
 ## Parallel Shipping
@@ -384,7 +409,7 @@ Should not ship in parallel with:
 - `doc/current.md`: note `schema/apps/site/seed-records.json` can be promoted from local Site authority with `bun run site:pull-seed`.
 - `doc/current.md`: note `src/site/source-snapshot.ts` can build a restore-ready Site snapshot from the source Site schema and seed records.
 - `doc/current.md`: note Authority write endpoints require `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when `FORMLESS_ADMIN_TOKEN` is configured.
-- `doc/current.md`: note live Site publish backs up and restores Site authority data through guarded snapshot APIs if shipped.
+- `doc/current.md`: note `bun run site:publish` dry-runs by default and `--apply` backs up and restores Site authority data through guarded snapshot APIs.
 - `doc/roadmap.md`: add only if this workflow becomes first-release release scope.
 - `AGENTS.md`: add command summary only if the workflow becomes standard agent procedure.
 
@@ -413,6 +438,12 @@ Should not ship in parallel with:
 - 2026-05-12: SWF-05 evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 202 files; `.devstate/logs/service-test.txt` reports 3 test files passing with 115 tests, including `src/worker/authority-admin-guard.test.ts`.
 - 2026-05-12: SWF-05 evidence: requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were not present; available devstate evidence lives in `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - 2026-05-12: SWF-05 browser smoke skipped because this chunk changed worker API authorization and tests only; no rendered app behavior changed.
+- 2026-05-12: SWF-06 shipped. Added `src/site/publish.ts`, `scripts/site-publish.ts`, `src/site/publish.test.ts`, package script `site:publish`, and package-script contract coverage in `src/site/editing-publish-workflow.test.ts`.
+- 2026-05-12: SWF-06 dry-run evidence: `bun run site:publish` reported `DRY RUN`, validated 47 Site seed records, used no target, and did not mutate code or live data.
+- 2026-05-12: SWF-06 evidence: `devstate check` passed; `.devstate/status.md` reports checks ok, web service ready, and watcher tests passing.
+- 2026-05-12: SWF-06 evidence: `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors across 205 files; `.devstate/logs/service-test.txt` reports `src/site/publish.test.ts` passing with 4 tests.
+- 2026-05-12: SWF-06 evidence: requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were not present; available devstate evidence lives in `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- 2026-05-12: SWF-06 browser smoke skipped because this chunk added a CLI publish workflow and tests only; no rendered app behavior changed.
 
 ## PRD status notes
 
@@ -421,7 +452,8 @@ Should not ship in parallel with:
 - SWF-03 shipped 2026-05-12.
 - SWF-04 shipped 2026-05-12.
 - SWF-05 shipped 2026-05-12.
-- Current chunk: SWF-06 planned.
+- SWF-06 shipped 2026-05-12.
+- Current chunk: SWF-07 planned.
 - Current blocker: none.
-- Decisions: script contracts above are locked for SWF-06; SWF-03 implementation follows its locked contract; SWF-04 source snapshots use `sourceCursor: 0` because source seed files do not store change rows; SWF-05 admin protection is enabled by `FORMLESS_ADMIN_TOKEN` and uses bearer auth for Authority writes.
+- Decisions: script contracts above are locked for SWF-06; SWF-03 implementation follows its locked contract; SWF-04 source snapshots use `sourceCursor: 0` because source seed files do not store change rows; SWF-05 admin protection is enabled by `FORMLESS_ADMIN_TOKEN` and uses bearer auth for Authority writes; SWF-06 publish is dry-run by default and requires `--apply`; SWF-06 data publish requires `--target <url>` or `FORMLESS_SITE_PUBLISH_TARGET`.
 - Promote notes stay pending until live preview, seed promotion, guarded publish, and publish workflow ship.
