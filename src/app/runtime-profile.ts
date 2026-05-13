@@ -51,6 +51,12 @@ export type RuntimeProfileResolverInput = {
   hostname?: string | undefined;
 };
 
+export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
+
+type RuntimeProfileHintDocument = {
+  querySelector(selector: string): { getAttribute(name: string): string | null } | null;
+};
+
 export function resolveRuntimeProfile(
   input: RuntimeProfileResolverInput = browserRuntimeProfileConfig(),
 ): RuntimeProfile {
@@ -183,10 +189,22 @@ export function runtimeScreenPathFromRoute(
 
 function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {
   return {
-    profile: stringConfigValue(import.meta.env.VITE_FORMLESS_RUNTIME_PROFILE),
+    profile:
+      stringConfigValue(import.meta.env.VITE_FORMLESS_RUNTIME_PROFILE) ??
+      readRuntimeProfileDocumentHint(),
     schemaKey: stringConfigValue(import.meta.env.VITE_FORMLESS_SCHEMA_KEY),
     hostname: typeof window === "undefined" ? undefined : window.location.hostname,
   };
+}
+
+export function readRuntimeProfileDocumentHint(
+  doc: RuntimeProfileHintDocument | undefined = browserDocument(),
+): string | undefined {
+  const profile = doc
+    ?.querySelector(`meta[name="${FORMLESS_RUNTIME_PROFILE_META_NAME}"]`)
+    ?.getAttribute("content");
+
+  return stringConfigValue(profile);
 }
 
 function parseRuntimeProfileKind(value: string | undefined): RuntimeProfileKind | undefined {
@@ -224,4 +242,8 @@ function parseSchemaKey(value: string | undefined): SchemaKey | undefined {
 
 function stringConfigValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function browserDocument(): RuntimeProfileHintDocument | undefined {
+  return typeof document === "undefined" ? undefined : document;
 }

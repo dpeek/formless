@@ -3,6 +3,8 @@ import {
   createAppRuntimeProfile,
   createDevRuntimeProfile,
   createPublishedSiteRuntimeProfile,
+  FORMLESS_RUNTIME_PROFILE_META_NAME,
+  readRuntimeProfileDocumentHint,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
   runtimeScreenRoute,
@@ -79,5 +81,23 @@ describe("runtime profile resolver", () => {
       "publishedSite",
     );
     expect(resolveRuntimeProfile({ profile: "missing", schemaKey: "missing" }).kind).toBe("dev");
+  });
+
+  it("uses an SSR document profile hint before falling back to the host", () => {
+    const doc = {
+      querySelector: (selector: string) =>
+        selector === `meta[name="${FORMLESS_RUNTIME_PROFILE_META_NAME}"]`
+          ? {
+              getAttribute: (name: string) => (name === "content" ? "publishedSite" : null),
+            }
+          : null,
+    };
+
+    const profile = resolveRuntimeProfile({
+      hostname: "34-public-site-ssr.formless.local",
+      profile: readRuntimeProfileDocumentHint(doc),
+    });
+
+    expect(profile.kind).toBe("publishedSite");
   });
 });

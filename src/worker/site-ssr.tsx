@@ -3,6 +3,7 @@ import { renderToReadableStream } from "react-dom/server.edge";
 
 import { renderInitialSitePageTreeScript } from "../app/site-renderer/initial-tree.ts";
 import { SitePageRenderer } from "../app/site-renderer/renderer.tsx";
+import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { Env } from "./index.ts";
@@ -136,6 +137,7 @@ function renderDocument(appHtml: string, options: { initialTree?: SitePageTree }
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />
     <title>formless</title>
   </head>
   <body>

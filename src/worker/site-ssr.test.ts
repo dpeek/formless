@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "../app/site-renderer/initial-tree.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { Env } from "./index.ts";
@@ -57,6 +58,9 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
     expect(html).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />`,
+    );
+    expect(html).toContain(
       `<script id="${INITIAL_SITE_PAGE_TREE_SCRIPT_ID}" type="application/json">`,
     );
     expect(payload.kind).toBe("formless.sitePageTree");
@@ -69,11 +73,11 @@ describe("published Site Worker SSR", () => {
   });
 
   it("returns server-rendered HTML for nested published Site slugs", async () => {
-    const response = await getDocument("/blog/shipping-schema-backed-authoring");
+    const response = await getDocument("/blog/agents-are-enablers");
     const html = await response.text();
 
     expect(response.status).toBe(200);
-    expect(html).toContain("Shipping schema-backed authoring");
+    expect(html).toContain("Agents are enablers");
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
     expect(html).toContain('href="/blog"');
