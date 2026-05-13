@@ -76,7 +76,7 @@
     "values": {
       "type": "project",
       "label": "Estii",
-      "body": "Estii helps teams turn operational assumptions into clear, reusable pricing structures.",
+      "body": "Estii helps teams turn **operational assumptions** into clear, reusable [pricing structures](https://estii.com).",
       "href": "/projects/estii",
       "templateKey": "project"
     },
@@ -533,6 +533,36 @@
       "order": 3000
     },
     "createdAt": "2026-05-05T00:00:29.500Z"
+  },
+  {
+    "id": "rec_site_place_projects_estii",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_projects",
+      "block": "rec_site_content_project_estii",
+      "order": 2000
+    },
+    "createdAt": "2026-05-05T00:00:29.600Z"
+  },
+  {
+    "id": "rec_site_place_projects_opensurf",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_projects",
+      "block": "rec_site_content_project_opensurf",
+      "order": 3000
+    },
+    "createdAt": "2026-05-05T00:00:29.700Z"
+  },
+  {
+    "id": "rec_site_place_projects_formless",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_projects",
+      "block": "rec_site_content_project_formless",
+      "order": 4000
+    },
+    "createdAt": "2026-05-05T00:00:29.800Z"
   },
   {
     "id": "rec_site_place_post_body",

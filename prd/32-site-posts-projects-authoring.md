@@ -1,7 +1,7 @@
 # PRD 32: Site posts and projects authoring
 
 Status: ready
-Current chunk: PPA-04 ready
+Current chunk: PPA-05 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -293,7 +293,7 @@ Likely changed files:
 | PPA-01 | shipped | none       | tests, PRD                              | Current Site editor gaps for hidden Posts/Projects and missing project tree add policy are characterized.                 |
 | PPA-02 | shipped | PPA-01     | Site source schema, schema/view tests   | `/site` exposes Posts and Projects groups with fixed-type root create actions and focused root edit fields.               |
 | PPA-03 | shipped | PPA-02     | Site source schema, tree/view tests     | Post roots can add markdown body blocks; Projects page contexts can add project blocks and placements.                    |
-| PPA-04 | ready   | PPA-03     | Site seeds, renderer, tree/public tests | Source seed proves `/projects` can render placed project summaries with label, href, and formatted markdown body content. |
+| PPA-04 | shipped | PPA-03     | Site seeds, renderer, tree/public tests | Source seed proves `/projects` can render placed project summaries with label, href, and formatted markdown body content. |
 | PPA-05 | ready   | PPA-04     | browser smoke, PRD                      | `/site`, `/pages/blog`, and `/pages/projects` smoke pass; PRD evidence, blockers, and promotion notes update.             |
 
 ## Out of Scope
@@ -334,6 +334,9 @@ Likely changed files:
 - 2026-05-13: PPA-02 kept tree child policy unchanged; post markdown children and project placement creation remain PPA-03.
 - 2026-05-13: PPA-03 shipped. Site tree branch policy now lets post roots add markdown child blocks and lets page/group contexts, including the Projects page, add project blocks through the existing tree child action.
 - 2026-05-13: PPA-03 marks project tree nodes as leaf authoring nodes and gives project tree nodes focused markdown body and href fields for generated add/edit flows.
+- 2026-05-13: PPA-04 shipped. Source Site seed now places Estii, OpenSurf, and Formless project blocks under the `/projects` page while keeping the same flat `block` plus `blockPlacement` model.
+- 2026-05-13: PPA-04 renders project summary `body` through the shared markdown renderer so project summaries can include markdown links and emphasis without leaking raw syntax.
+- 2026-05-13: PPA-04 leaves public routing unchanged; `/projects` remains a normal page route and no project detail route generation was added.
 
 ## Evidence
 
@@ -361,6 +364,15 @@ Likely changed files:
 - PPA-03 devstate: `.devstate/status.md` reports checks ok and services running; `.devstate/logs/service-test.txt` reports 20 affected files and 487 tests passed; `.devstate/logs/check-vite.txt` reports formatting pass and no lint or type errors across 217 files.
 - PPA-03 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent; current evidence is under `.devstate/`.
 - PPA-03 browser smoke: `bun browser --session ppa-03` reset Site schema and seed data, opened `/site`, confirmed the Home and Projects page roots expose `group hero markdown image link project` tree add variants, confirmed a post root exposes `markdown`, and `bun browser --session ppa-03 errors` returned no page errors.
+- PPA-04 source seed: `schema/apps/site/seed-records.json` adds project placements under `rec_site_content_projects` for Estii, OpenSurf, and Formless.
+- PPA-04 source seed: `rec_site_content_project_estii.values.body` includes markdown emphasis and a markdown link, proving project summaries can carry markdown-capable body content.
+- PPA-04 renderer: `src/app/site-renderer/renderer.tsx` renders `project` summary bodies with `MarkdownRenderer`; post and profile summary bodies keep plain-text rendering.
+- PPA-04 tests: `src/site/tree.test.ts` covers `/projects` projecting placed project blocks with label, href, and markdown body data.
+- PPA-04 tests: `src/app.test.tsx` covers `/projects` rendering project summary links and formatted markdown body HTML without raw markdown syntax.
+- PPA-04 tests: `src/worker/schema-apps.test.ts` updates source Site seed record counts to 66 records and 31 placements.
+- PPA-04 devstate: `.devstate/status.md` reports checks ok and services running; `.devstate/logs/service-test.txt` reports latest watcher rerun passed after the seed count update; `.devstate/logs/check-vite.txt` reports formatting pass and no lint or type errors across 217 files.
+- PPA-04 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent; current evidence is under `.devstate/`.
+- PPA-04 browser smoke: `bun browser --session ppa-04` reset Site seed data through `/api/site/reset/seed`, opened `/pages/projects`, confirmed Estii/OpenSurf/Formless rendered, confirmed Estii body emitted `<strong>` and `href="https://estii.com/"`, and `bun browser --session ppa-04 errors` returned no page errors.
 
 ## Promote after ship
 
@@ -371,6 +383,7 @@ Likely changed files:
 - `doc/current.md`: add that `/blog` is generated from post blocks and `/blog/:slug` resolves post hrefs.
 - `doc/current.md`: add that Projects are authored as `block.type = project` roots with `label`, `href`, and markdown-capable `body`.
 - `doc/current.md`: add that `/projects` is manually curated with project block placements.
+- `doc/current.md`: add that public `/projects` renders placed project summaries and project summary body markdown through the shared markdown renderer.
 - `doc/current.md`: add that generated Site tree add policy lets post roots add markdown children and page/group roots add project children.
 - `doc/current.md`: add that project tree nodes are leaf authoring nodes in the generated Site tree.
 - `doc/roadmap.md`: update first-release Site editor surface from Pages/Header/Footer-era wording to Pages, Posts, Projects, and Navigation if this becomes release scope.

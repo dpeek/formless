@@ -332,6 +332,41 @@ describe("site page tree projection", () => {
     ]);
   });
 
+  it("projects manually placed project summaries on /projects", () => {
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, baseTreeRecords(), "projects", { generatedAt }),
+    );
+
+    expect(tree.route).toEqual({
+      kind: "page",
+      slug: "projects",
+    });
+    expect(tree.page).toMatchObject({
+      id: "rec_site_content_projects",
+      type: "page",
+      label: "Projects",
+      href: "/projects",
+    });
+    expect(tree.page.placements.map((placement) => placement.id)).toEqual([
+      "rec_site_place_projects_estii",
+      "rec_site_place_projects_opensurf",
+      "rec_site_place_projects_formless",
+    ]);
+    expect(tree.page.placements.map((placement) => placement.block.type)).toEqual([
+      "project",
+      "project",
+      "project",
+    ]);
+    expect(tree.page.placements.map((placement) => placement.block.href)).toEqual([
+      "/projects/estii",
+      "/projects/opensurf",
+      "/projects/formless",
+    ]);
+    expect(tree.page.placements[0]?.block.body).toBe(
+      "Estii helps teams turn **operational assumptions** into clear, reusable [pricing structures](https://estii.com).",
+    );
+  });
+
   it("omits tombstoned posts from the generated blog index", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_content_post_draft_notes"

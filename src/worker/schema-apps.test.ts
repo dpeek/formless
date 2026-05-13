@@ -31,13 +31,13 @@ describe("worker schema app definitions", () => {
     expect(new Set(estii.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["card", "resource", "rate"]),
     );
-    expect(site.seedRecords).toHaveLength(63);
+    expect(site.seedRecords).toHaveLength(66);
     expect(new Set(site.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["block", "blockPlacement"]),
     );
     expect(site.seedRecords.filter((record) => record.entity === "block")).toHaveLength(35);
     expect(site.seedRecords.filter((record) => record.entity === "blockPlacement")).toHaveLength(
-      28,
+      31,
     );
     expect(
       site.seedRecords

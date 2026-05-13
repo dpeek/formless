@@ -454,12 +454,28 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
     >
       <div className="space-y-2">
         {title}
-        {block.body ? (
-          <PlainText text={block.body} className="text-sm text-zinc-600 dark:text-zinc-300" />
-        ) : null}
+        <ContentSummaryBody block={block} />
       </div>
     </article>
   );
+}
+
+function ContentSummaryBody({ block }: { block: SiteBlockNode }) {
+  if (!block.body) {
+    return null;
+  }
+
+  if (block.type === "project") {
+    return (
+      <MarkdownRenderer
+        className="text-sm text-zinc-600 dark:text-zinc-300"
+        content={block.body}
+        minHeadingLevel={4}
+      />
+    );
+  }
+
+  return <PlainText text={block.body} className="text-sm text-zinc-600 dark:text-zinc-300" />;
 }
 
 function ImageBlock({ block }: { block: SiteBlockNode }) {

@@ -714,6 +714,24 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/pages/blog/shipping-schema-backed-authoring"');
   });
 
+  it("renders /projects as manually placed project summaries with markdown bodies", () => {
+    const html = renderSitePage("projects");
+
+    expect(html).toContain("Estii");
+    expect(html).toContain("OpenSurf");
+    expect(html).toContain("Formless");
+    expect(html).toContain('href="/pages/projects/estii"');
+    expect(html).toContain('href="/pages/projects/opensurf"');
+    expect(html).toContain('href="/pages/projects/formless"');
+    expect(html).toContain('data-web-markdown-renderer="server"');
+    expect(html).toContain("operational assumptions");
+    expect(html).toContain("<strong");
+    expect(html).toContain('href="https://estii.com/"');
+    expect(html).toContain(">pricing structures<");
+    expect(html).not.toContain("**operational assumptions**");
+    expect(html).not.toContain("[pricing structures](https://estii.com)");
+  });
+
   it("renders post detail routes through the Site frame", () => {
     const html = renderSitePage("blog/shipping-schema-backed-authoring");
 
