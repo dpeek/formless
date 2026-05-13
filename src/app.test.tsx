@@ -1035,7 +1035,11 @@ describe("generated collection home", () => {
 
     expect(html).toContain('class="mx-auto w-full max-w-[112rem]"');
     expect(html).toContain('aria-label="Pages roots"');
+    expect(html).toContain('aria-label="Posts roots"');
+    expect(html).toContain('aria-label="Projects roots"');
     expect(html).toContain('aria-label="Navigation roots"');
+    expect(html).toContain('aria-label="Create Post"');
+    expect(html).toContain('aria-label="Create Project"');
     expect(html).not.toContain(
       "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]",
     );
@@ -1470,12 +1474,16 @@ describe("generated collection home", () => {
     expect(html).toContain("<h1");
     expect(html).toContain(">Site</h1>");
     expect(html).toContain('aria-label="Pages roots"');
+    expect(html).toContain('aria-label="Posts roots"');
+    expect(html).toContain('aria-label="Projects roots"');
     expect(html).toContain('aria-label="Navigation roots"');
     expect(html).not.toContain('aria-label="Site screens"');
     expect(html).not.toContain('href="/site/navigation"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
     expect(html).toContain("Navigation");
+    expect(html).toContain("Posts");
+    expect(html).toContain("Projects");
     expect(html).toContain("Header");
     expect(html).toContain("Footer");
     expect(html).toContain('aria-label="Site roots list detail"');
@@ -1507,13 +1515,19 @@ describe("generated collection home", () => {
     expect(html).toContain("<h1");
     expect(html).toContain(">Site</h1>");
     expect(html).toContain('aria-label="Pages roots"');
+    expect(html).toContain('aria-label="Posts roots"');
+    expect(html).toContain('aria-label="Projects roots"');
     expect(html).toContain('aria-label="Navigation roots"');
     expect(html).not.toContain('aria-label="Site screens"');
     expect(html).not.toContain('href="/site/navigation"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
     expect(html).toContain("Pages");
+    expect(html).toContain("Posts");
+    expect(html).toContain("Projects");
     expect(html).toContain("Navigation");
+    expect(html).toContain('aria-label="Create Post"');
+    expect(html).toContain('aria-label="Create Project"');
     expect(html).toContain('aria-label="Site roots list detail"');
     expect(html).toContain("Home");
     expect(html).toContain('aria-label="Placement tree"');
@@ -2259,6 +2273,46 @@ describe("generated forms and records", () => {
     expect(resolveCreateValues(formData, action)).toEqual({
       done: true,
       kind: "stream",
+    });
+  });
+
+  it("renders source site post and project root creates with fixed block types", () => {
+    const postAction = requiredRootNavigationCreateAction("Posts");
+    const projectAction = requiredRootNavigationCreateAction("Projects");
+    const postHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={postAction} renderDialogCancel={false} />,
+    );
+    const projectHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={projectAction} renderDialogCancel={false} />,
+    );
+    const postFormData = new FormData();
+    postFormData.set("label", "A focused post");
+    postFormData.set("href", "/blog/focused-post");
+    postFormData.set("body", "A short **summary**.");
+    const projectFormData = new FormData();
+    projectFormData.set("label", "Focused Project");
+    projectFormData.set("href", "/projects/focused-project");
+    projectFormData.set("body", "A short **summary**.");
+
+    expect(postHtml).not.toContain('name="type"');
+    expect(postHtml).toContain('name="label"');
+    expect(postHtml).toContain('name="href"');
+    expect(postHtml).toContain('name="body"');
+    expect(projectHtml).not.toContain('name="type"');
+    expect(projectHtml).toContain('name="label"');
+    expect(projectHtml).toContain('name="href"');
+    expect(projectHtml).toContain('name="body"');
+    expect(resolveCreateValues(postFormData, postAction)).toEqual({
+      label: "A focused post",
+      href: "/blog/focused-post",
+      body: "A short **summary**.",
+      type: "post",
+    });
+    expect(resolveCreateValues(projectFormData, projectAction)).toEqual({
+      label: "Focused Project",
+      href: "/projects/focused-project",
+      body: "A short **summary**.",
+      type: "project",
     });
   });
 
@@ -3915,6 +3969,20 @@ function requiredCreateAction(
   }
 
   return action;
+}
+
+function requiredRootNavigationCreateAction(
+  groupLabel: string,
+): Extract<HomeActionConfig, { type: "create" }> {
+  const group = requiredSiteCollectionModel("siteCompositionHome").context?.navigation?.groups.find(
+    (candidate) => candidate.label === groupLabel,
+  );
+
+  if (!group?.createAction) {
+    throw new Error(`Missing root navigation create action for ${groupLabel}.`);
+  }
+
+  return group.createAction;
 }
 
 function requiredEditView(schema: AppSchema, viewName: string): EditViewConfig {

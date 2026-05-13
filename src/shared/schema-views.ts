@@ -273,34 +273,67 @@ function assertCollectionViews(
       );
     }
 
-    if (view.context?.createView === undefined) {
+    const context = view.context;
+    if (context === undefined) {
       continue;
     }
 
-    const createView = views[view.context.createView];
-    if (!createView) {
-      throw new Error(
-        `Collection view "${viewName}" context createView references unknown view "${view.context.createView}".`,
+    if (context.createView !== undefined) {
+      validateContextCreateView(
+        views,
+        viewName,
+        context.entity,
+        context.createView,
+        "context createView",
       );
     }
 
-    if (createView.type !== "create") {
-      throw new Error(
-        `Collection view "${viewName}" context createView must reference a create view.`,
-      );
-    }
+    for (const group of context.navigation?.groups ?? []) {
+      if (group.createView === undefined) {
+        continue;
+      }
 
-    if (createView.entity !== view.context.entity) {
-      throw new Error(
-        `Collection view "${viewName}" context createView "${view.context.createView}" must use entity "${view.context.entity}".`,
+      validateContextCreateView(
+        views,
+        viewName,
+        context.entity,
+        group.createView,
+        `context navigation group "${group.label}" createView`,
       );
     }
+  }
+}
 
-    if (createViewRequiresContextDefaults(createView)) {
-      throw new Error(
-        `Collection view "${viewName}" context createView "${view.context.createView}" must not require context defaults.`,
-      );
-    }
+function validateContextCreateView(
+  views: Record<string, ViewSchema>,
+  collectionViewName: string,
+  contextEntityName: string,
+  createViewName: string,
+  description: string,
+) {
+  const createView = views[createViewName];
+  if (!createView) {
+    throw new Error(
+      `Collection view "${collectionViewName}" ${description} references unknown view "${createViewName}".`,
+    );
+  }
+
+  if (createView.type !== "create") {
+    throw new Error(
+      `Collection view "${collectionViewName}" ${description} must reference a create view.`,
+    );
+  }
+
+  if (createView.entity !== contextEntityName) {
+    throw new Error(
+      `Collection view "${collectionViewName}" ${description} "${createViewName}" must use entity "${contextEntityName}".`,
+    );
+  }
+
+  if (createViewRequiresContextDefaults(createView)) {
+    throw new Error(
+      `Collection view "${collectionViewName}" ${description} "${createViewName}" must not require context defaults.`,
+    );
   }
 }
 
@@ -825,10 +858,11 @@ function parseCollectionContextNavigationGroup(
     throw new Error(`${groupContext} must be an object.`);
   }
 
-  assertExactKeys(groupContext, value, ["label", "query"]);
+  assertExactKeys(groupContext, value, ["label", "query"], ["createView"]);
 
   const label = parseRequiredNonEmptyString(`${groupContext} label`, value.label);
   const queryName = parseRequiredNonEmptyString(`${groupContext} query`, value.query);
+  const createView = parseOptionalNonEmptyString(`${groupContext} createView`, value.createView);
   const query = queries[queryName];
 
   if (!query) {
@@ -847,6 +881,7 @@ function parseCollectionContextNavigationGroup(
   return {
     label,
     query: queryName,
+    ...(createView === undefined ? {} : { createView }),
   };
 }
 

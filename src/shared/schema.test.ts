@@ -3387,6 +3387,26 @@ describe("schema collection views", () => {
     expect(() =>
       parseAppSchema(
         scopedRateSchema({
+          views: scopedRateViews({
+            context: {
+              name: "card",
+              entity: "card",
+              query: "cardAll",
+              labelField: "name",
+              createView: "cardCreate",
+              navigation: {
+                placement: "sidebar",
+                groups: [{ label: "Cards", query: "cardAll", createView: "rateCreate" }],
+              },
+            },
+          }),
+        }),
+      ),
+    ).toThrow('context navigation group "Cards" createView "rateCreate" must use entity "card"');
+
+    expect(() =>
+      parseAppSchema(
+        scopedRateSchema({
           entities: {
             ...scopedRateEntities(),
             card: {
@@ -4326,6 +4346,16 @@ describe("personal site sample schema", () => {
         { ref: { kind: "value", name: "type" }, op: "eq", value: "footer" },
       ],
     });
+    expect(schema.queries.blockSiteRoots?.expression).toMatchObject({
+      kind: "or",
+      expressions: [
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "page" },
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "post" },
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "project" },
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "header" },
+        { ref: { kind: "value", name: "type" }, op: "eq", value: "footer" },
+      ],
+    });
     expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
     expect(schema.itemViews.blockTreeNode).toMatchObject({
       entity: "block",
@@ -4501,6 +4531,8 @@ describe("personal site sample schema", () => {
           placement: "sidebar",
           groups: [
             { label: "Pages", query: "blockPages" },
+            { label: "Posts", query: "blockPosts", createView: "blockPostCreate" },
+            { label: "Projects", query: "blockProjects", createView: "blockProjectCreate" },
             { label: "Navigation", query: "blockNavigationRoots" },
           ],
         },
@@ -4522,6 +4554,30 @@ describe("personal site sample schema", () => {
         maxDepth: 8,
       },
       actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
+    });
+    expect(schema.views.blockPostCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        body: { editor: "markdown" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "post" },
+      },
+    });
+    expect(schema.views.blockProjectCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        body: { editor: "markdown" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "project" },
+      },
     });
     expect(schema.views.pageCompositionHome).toMatchObject({
       type: "collection",
@@ -4564,7 +4620,7 @@ describe("personal site sample schema", () => {
     });
   });
 
-  it("characterizes current source authoring gaps for posts and projects", () => {
+  it("parses site post and project root authoring", () => {
     const schema = parseAppSchema(rawSiteSchema);
     const siteCompositionHome = schema.views.siteCompositionHome;
 
@@ -4584,10 +4640,42 @@ describe("personal site sample schema", () => {
     expect(schema.queries.blockProjects?.label).toBe("Projects");
     expect(navigationGroups.map((group) => [group.label, group.query])).toEqual([
       ["Pages", "blockPages"],
+      ["Posts", "blockPosts"],
+      ["Projects", "blockProjects"],
       ["Navigation", "blockNavigationRoots"],
     ]);
-    expect(navigationQueries).not.toContain("blockPosts");
-    expect(navigationQueries).not.toContain("blockProjects");
+    expect(navigationQueries).toContain("blockPosts");
+    expect(navigationQueries).toContain("blockProjects");
+    expect(navigationGroups.map((group) => [group.label, group.createView ?? null])).toEqual([
+      ["Pages", null],
+      ["Posts", "blockPostCreate"],
+      ["Projects", "blockProjectCreate"],
+      ["Navigation", null],
+    ]);
+    expect(schema.views.blockPostCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        body: { editor: "markdown" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "post" },
+      },
+    });
+    expect(schema.views.blockProjectCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        body: { editor: "markdown" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "project" },
+      },
+    });
     expect(Object.keys(branchVariants)).toEqual(["page", "group", "header", "footer"]);
     expect(pageChildren).toEqual(["group", "hero", "markdown", "image", "link"]);
     expect(groupChildren).toEqual(["group", "hero", "markdown", "image", "link"]);
@@ -4766,6 +4854,30 @@ describe("personal site sample schema", () => {
       },
       defaults: {
         parent: { kind: "context", name: "block" },
+      },
+    });
+    expect(schema.views.blockPostCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        body: { editor: "markdown" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "post" },
+      },
+    });
+    expect(schema.views.blockProjectCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        body: { editor: "markdown" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "project" },
       },
     });
     expect(blockPlacementCreate.fields).not.toHaveProperty("parent");

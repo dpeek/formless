@@ -113,21 +113,40 @@ describe("generated authoring root navigation", () => {
     expect(facts?.screen.screenName).toBe("siteEditor");
     expect(facts?.section.id).toBe("site");
     expect(facts?.context.name).toBe("block");
-    expect(facts?.groups.map((group) => group.label)).toEqual(["Pages", "Navigation"]);
+    expect(facts?.groups.map((group) => group.label)).toEqual([
+      "Pages",
+      "Posts",
+      "Projects",
+      "Navigation",
+    ]);
   });
 
-  it("characterizes the current Site root navigation gap for posts and projects", () => {
+  it("exposes Site posts and projects as root navigation groups with fixed creates", () => {
     const facts = selectGeneratedRootNavigationFacts(requiredSiteScreen());
-    const groupQueries = facts?.groups.map((group) => group.queryName) ?? [];
 
     expect(siteSourceSchema.queries.blockPosts?.label).toBe("Posts");
     expect(siteSourceSchema.queries.blockProjects?.label).toBe("Projects");
-    expect(facts?.groups.map((group) => [group.label, group.queryName])).toEqual([
-      ["Pages", "blockPages"],
-      ["Navigation", "blockNavigationRoots"],
+    expect(
+      facts?.groups.map((group) => [
+        group.label,
+        group.queryName,
+        group.createAction?.label ?? null,
+        group.createAction?.defaults.map((defaultValue) => [
+          defaultValue.fieldName,
+          defaultValue.value,
+        ]) ?? [],
+      ]),
+    ).toEqual([
+      ["Pages", "blockPages", null, []],
+      ["Posts", "blockPosts", "Create Post", [["type", { kind: "literal", value: "post" }]]],
+      [
+        "Projects",
+        "blockProjects",
+        "Create Project",
+        [["type", { kind: "literal", value: "project" }]],
+      ],
+      ["Navigation", "blockNavigationRoots", null, []],
     ]);
-    expect(groupQueries).not.toContain("blockPosts");
-    expect(groupQueries).not.toContain("blockProjects");
   });
 
   it("leaves screens without context navigation on normal screen links", () => {

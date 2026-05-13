@@ -1,7 +1,7 @@
 # PRD 32: Site posts and projects authoring
 
 Status: ready
-Current chunk: PPA-02 ready
+Current chunk: PPA-03 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -257,6 +257,7 @@ Likely changed files:
 | PPA-D9  | Reuse existing public content summary rendering.                     | The renderer already treats `post`, `project`, and `profile` blocks as summaries.           | `src/app/site-renderer/renderer.tsx`                                                      |
 | PPA-D10 | Render project summary body as markdown.                             | The authoring model says project body is markdown, so public output should not leak syntax. | Shared markdown renderer already serves public markdown blocks                            |
 | PPA-D11 | Prefer schema-only implementation except markdown summary rendering. | Context create actions, literal defaults, and tree add already exist as primitives.         | `src/client/generated-authoring.ts`, `src/shared/create-defaults.ts`, generated tree code |
+| PPA-D12 | Let root navigation groups declare optional create views.            | Posts and Projects need group-specific fixed-type root creation without changing storage.   | `src/shared/schema-views.ts`, `src/client/views.ts`, `src/app.tsx`                        |
 
 ### Deep Modules
 
@@ -289,7 +290,7 @@ Likely changed files:
 | ID     | Status  | Depends on | Main files                              | Acceptance                                                                                                                |
 | ------ | ------- | ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | PPA-01 | shipped | none       | tests, PRD                              | Current Site editor gaps for hidden Posts/Projects and missing project tree add policy are characterized.                 |
-| PPA-02 | ready   | PPA-01     | Site source schema, schema/view tests   | `/site` exposes Posts and Projects groups with fixed-type root create actions and focused root edit fields.               |
+| PPA-02 | shipped | PPA-01     | Site source schema, schema/view tests   | `/site` exposes Posts and Projects groups with fixed-type root create actions and focused root edit fields.               |
 | PPA-03 | ready   | PPA-02     | Site source schema, tree/view tests     | Post roots can add markdown body blocks; Projects page contexts can add project blocks and placements.                    |
 | PPA-04 | ready   | PPA-03     | Site seeds, renderer, tree/public tests | Source seed proves `/projects` can render placed project summaries with label, href, and formatted markdown body content. |
 | PPA-05 | ready   | PPA-04     | browser smoke, PRD                      | `/site`, `/pages/blog`, and `/pages/projects` smoke pass; PRD evidence, blockers, and promotion notes update.             |
@@ -327,6 +328,9 @@ Likely changed files:
 - 2026-05-13: PPA-01 added tests proving `blockPosts` and `blockProjects` queries exist while generated Site root navigation exposes only Pages and Navigation.
 - 2026-05-13: PPA-01 added tests proving current Site tree add policy allows page/group children `group`, `hero`, `markdown`, `image`, and `link`, but not `project`, and has no `post` branch policy yet.
 - 2026-05-13: No implementation decisions or blockers changed in PPA-01.
+- 2026-05-13: PPA-02 shipped. Site root navigation now exposes Pages, Posts, Projects, and Navigation; Posts and Projects carry fixed-type create actions backed by literal `block.type` defaults.
+- 2026-05-13: PPA-02 added optional create views to context navigation groups so root sidebar groups can own focused creation without adding entities or changing stored records.
+- 2026-05-13: PPA-02 kept tree child policy unchanged; post markdown children and project placement creation remain PPA-03.
 
 ## Evidence
 
@@ -341,11 +345,20 @@ Likely changed files:
 - PPA-01 tests: `src/shared/schema.test.ts` characterizes the source schema gap for Posts/Projects root navigation and project child policy.
 - PPA-01 devstate: `.devstate/status.md` reports checks ok and services running; `.devstate/logs/service-test.txt` reports latest watcher rerun passed; `.devstate/logs/check-vite.txt` reports formatting, lint, and typecheck pass.
 - PPA-01 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence for this repo is under `.devstate/`.
+- PPA-02 source schema: `schema/apps/site/schema.json` adds Posts and Projects root navigation groups, includes posts/projects in `blockSiteRoots`, and adds `blockPostCreate`/`blockProjectCreate` with hidden literal `block.type` defaults.
+- PPA-02 parser/view model: `src/shared/schema-views.ts`, `src/shared/schema-types.ts`, `src/client/views.ts`, and `src/app.tsx` support optional context navigation group create views and render group create buttons in the generated root sidebar.
+- PPA-02 tests: `src/shared/schema.test.ts`, `src/client/views.test.ts`, `src/client/generated-authoring.test.ts`, and `src/app.test.tsx` cover root groups, fixed post/project create facts, focused create fields, and hidden submitted type defaults.
+- PPA-02 devstate: `devstate check` reports checks ok and services running; `.devstate/logs/service-test.txt` reported a full 45-file, 676-test pass after restart and a final affected 23-file, 498-test pass after rebase; `.devstate/logs/check-vite.txt` reports formatting pass and no lint or type errors across 217 files.
+- PPA-02 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent; current evidence is under `.devstate/`.
+- PPA-02 browser smoke: restarted devstate with `VITE_FORMLESS_RUNTIME_PROFILE` unset because the shell exported `publishedSite`; `bun browser --session ppa-02` then confirmed `/site` renders Pages, Posts, Projects, Navigation, `Create Post`, and `Create Project`.
+- PPA-02 browser smoke: `bun browser --session ppa-02` opened the `Create Post` and `Create Project` dialogs and confirmed focused label/link/body forms.
+- PPA-02 browser smoke: `bun browser --session ppa-02` opened `/pages/blog` and `/pages/projects`; both public routes rendered.
 
 ## Promote after ship
 
 - PPA-01 adds no global-doc promotion beyond existing planned bullets because it is characterization only.
 - `doc/current.md`: add that the Site editor primary sidebar exposes Pages, Posts, Projects, and Navigation.
+- `doc/current.md`: add that generated root navigation groups can declare focused create views for root records.
 - `doc/current.md`: add that Posts are authored as `block.type = post` roots with `label`, `href`, summary `body`, and child markdown placements for long-form content.
 - `doc/current.md`: add that `/blog` is generated from post blocks and `/blog/:slug` resolves post hrefs.
 - `doc/current.md`: add that Projects are authored as `block.type = project` roots with `label`, `href`, and markdown-capable `body`.

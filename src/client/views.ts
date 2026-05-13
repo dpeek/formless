@@ -339,6 +339,7 @@ export type HomeContextNavigationGroupConfig = {
   label: string;
   queryName: string;
   query: QueryExpression;
+  createAction?: Extract<HomeActionConfig, { type: "create" }>;
 };
 
 export type HomeContextNavigationConfig = {
@@ -758,11 +759,21 @@ function selectContext(
               if (!query) {
                 throw new Error(`Missing context navigation query "${group.query}".`);
               }
+              const createAction =
+                group.createView === undefined
+                  ? undefined
+                  : selectCreateAction(
+                      schema,
+                      viewEntries,
+                      group.createView,
+                      createRootNavigationLabel(group.label),
+                    );
 
               return {
                 label: group.label,
                 queryName: group.query,
                 query: query.expression,
+                ...(createAction === undefined ? {} : { createAction }),
               };
             }),
           },
@@ -777,6 +788,10 @@ function selectContext(
           ...(recordUnion === undefined ? {} : { recordUnion }),
         }),
   };
+}
+
+function createRootNavigationLabel(groupLabel: string) {
+  return `Create ${groupLabel.endsWith("s") ? groupLabel.slice(0, -1) : groupLabel}`;
 }
 
 function selectToManyRelationship(schema: AppSchema, relationshipName: string) {

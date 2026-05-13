@@ -5,12 +5,14 @@ import {
   type ElementType,
   type ReactNode,
   useMemo,
+  useState,
 } from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
@@ -22,6 +24,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@formless/ui/sidebar";
+import { GeneratedCreateDialog } from "./app/generated/create.tsx";
 import {
   SnapshotExportControl,
   SnapshotRestoreControl,
@@ -445,32 +448,53 @@ function AppRootRecordNavigationGroup({
     activeRecordId,
     options,
   });
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
-  if (groupFacts.isEmpty) {
+  if (groupFacts.isEmpty && !group.createAction) {
     return null;
   }
 
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+      {group.createAction ? (
+        <SidebarGroupAction
+          aria-label={group.createAction.label}
+          disabled={!group.createAction.enabled}
+          onClick={() => setCreateDialogOpen(true)}
+          type="button"
+        >
+          +
+        </SidebarGroupAction>
+      ) : null}
       <SidebarGroupContent>
-        <SidebarMenu aria-label={`${group.label} roots`}>
-          {groupFacts.items.map(({ isActive, option }) => (
-            <SidebarMenuItem key={option.id}>
-              <SidebarMenuButton
-                isActive={isActive}
-                onClick={() => onSelectRecord(option.id)}
-                type="button"
-              >
-                <span>{option.label}</span>
-              </SidebarMenuButton>
-              {context.relatedCollection ? (
-                <AppRootRecordCountBadge context={context} option={option} />
-              ) : null}
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+        {groupFacts.isEmpty ? null : (
+          <SidebarMenu aria-label={`${group.label} roots`}>
+            {groupFacts.items.map(({ isActive, option }) => (
+              <SidebarMenuItem key={option.id}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  onClick={() => onSelectRecord(option.id)}
+                  type="button"
+                >
+                  <span>{option.label}</span>
+                </SidebarMenuButton>
+                {context.relatedCollection ? (
+                  <AppRootRecordCountBadge context={context} option={option} />
+                ) : null}
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        )}
       </SidebarGroupContent>
+      {group.createAction && createDialogOpen ? (
+        <GeneratedCreateDialog
+          action={group.createAction}
+          onOpenChange={(open) => setCreateDialogOpen(open)}
+          onSuccess={onSelectRecord}
+          open={true}
+        />
+      ) : null}
     </SidebarGroup>
   );
 }

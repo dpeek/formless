@@ -1338,7 +1338,46 @@ describe("home view model collections", () => {
     expect(models.map((model) => model.context?.presentation)).toEqual(["listDetail"]);
     expect(
       models.map((model) => model.context?.navigation?.groups.map((group) => group.label)),
-    ).toEqual([["Pages", "Navigation"]]);
+    ).toEqual([["Pages", "Posts", "Projects", "Navigation"]]);
+    expect(
+      models.map((model) =>
+        model.context?.navigation?.groups.map((group) => ({
+          label: group.label,
+          queryName: group.queryName,
+          createAction:
+            group.createAction === undefined ? null : summarizeHomeAction(group.createAction),
+        })),
+      ),
+    ).toEqual([
+      [
+        { label: "Pages", queryName: "blockPages", createAction: null },
+        {
+          label: "Posts",
+          queryName: "blockPosts",
+          createAction: {
+            type: "create",
+            label: "Create Post",
+            entityName: "block",
+            fields: ["label", "href", "body"],
+            defaults: ["type"],
+            enabled: true,
+          },
+        },
+        {
+          label: "Projects",
+          queryName: "blockProjects",
+          createAction: {
+            type: "create",
+            label: "Create Project",
+            entityName: "block",
+            fields: ["label", "href", "body"],
+            defaults: ["type"],
+            enabled: true,
+          },
+        },
+        { label: "Navigation", queryName: "blockNavigationRoots", createAction: null },
+      ],
+    ]);
     expect(models.map((model) => model.result.type)).toEqual(["tree"]);
     expect(requiredCollectionModel(siteSourceSchema, "blockHome").navigation.primary).toBe(false);
     expect(

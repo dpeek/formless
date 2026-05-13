@@ -407,6 +407,7 @@ export type CollectionContextPresentation = "tabs" | "listDetail";
 export type CollectionContextNavigationGroupSchema = {
   label: string;
   query: string;
+  createView?: string;
 };
 
 export type CollectionContextNavigationSchema = {

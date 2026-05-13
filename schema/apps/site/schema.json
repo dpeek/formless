@@ -347,6 +347,24 @@
               "name": "type"
             },
             "op": "eq",
+            "value": "post"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "type"
+            },
+            "op": "eq",
+            "value": "project"
+          },
+          {
+            "kind": "where",
+            "ref": {
+              "kind": "value",
+              "name": "type"
+            },
+            "op": "eq",
             "value": "header"
           },
           {
@@ -884,6 +902,16 @@
               "query": "blockPages"
             },
             {
+              "label": "Posts",
+              "query": "blockPosts",
+              "createView": "blockPostCreate"
+            },
+            {
+              "label": "Projects",
+              "query": "blockProjects",
+              "createView": "blockProjectCreate"
+            },
+            {
               "label": "Navigation",
               "query": "blockNavigationRoots"
             }
@@ -1119,6 +1147,48 @@
           "label": {
             "editor": "text"
           }
+        }
+      }
+    },
+    "blockPostCreate": {
+      "type": "create",
+      "entity": "block",
+      "fields": {
+        "label": {
+          "editor": "text"
+        },
+        "href": {
+          "editor": "href"
+        },
+        "body": {
+          "editor": "markdown"
+        }
+      },
+      "defaults": {
+        "type": {
+          "kind": "literal",
+          "value": "post"
+        }
+      }
+    },
+    "blockProjectCreate": {
+      "type": "create",
+      "entity": "block",
+      "fields": {
+        "label": {
+          "editor": "text"
+        },
+        "href": {
+          "editor": "href"
+        },
+        "body": {
+          "editor": "markdown"
+        }
+      },
+      "defaults": {
+        "type": {
+          "kind": "literal",
+          "value": "project"
         }
       }
     },
