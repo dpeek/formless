@@ -21,6 +21,7 @@ import {
   taskSeedRecords,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
+import { testSiteSeedRecords } from "../test/site-records.ts";
 import {
   createAuthorityWriteHelpers,
   type AuthorityWriteHelpers,
@@ -132,6 +133,7 @@ describe("authority", () => {
 
   it("returns generated blog and post route trees for the site app", async () => {
     useSchemaApp("site");
+    await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());
 
     const blog = await getJson<SitePageTreeResponse>("/api/tree/blog");
     const post = await getJson<SitePageTreeResponse>(
@@ -429,6 +431,39 @@ describe("authority", () => {
     expect(reset.schema.screens).toEqual(appSchema.screens);
     expect(reset.records).toEqual([...taskSeedRecords, created.record]);
     expect(reset.cursor).toBe(beforeReset.cursor);
+  });
+
+  it("resets source schema after a source field removal and prunes stored values", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithTaskNotesField(),
+    });
+    const created = await postMutation("mutation-task-with-retired-field", {
+      title: "Has retired field",
+      notes: "Remove this when the source schema resets.",
+    });
+
+    const reset = await postJson<BootstrapResponse>("/api/reset/schema", {});
+    const resetRecord = reset.records.find((record) => record.id === created.record.id);
+    const sync = await getJson<SyncResponse>(`/api/sync?after=${created.cursor}`);
+
+    expect(reset.schema).toEqual(appSchema);
+    expect(reset.schema.entities.task.fields).not.toHaveProperty("notes");
+    expect(resetRecord?.values).toEqual({
+      title: "Has retired field",
+      done: false,
+      priority: "normal",
+    });
+    expect(reset.cursor).toBe(created.cursor + 1);
+    expect(sync.changes).toEqual([
+      expect.objectContaining({
+        op: "patch",
+        entity: "task",
+        recordId: created.record.id,
+        payload: expect.objectContaining({
+          values: resetRecord?.values,
+        }),
+      }),
+    ]);
   });
 
   it("rejects source schema resets when existing records violate source constraints", async () => {
@@ -3354,6 +3389,16 @@ function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
   };
 }
 
+function siteStoreSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
+  return storeSnapshot({
+    schemaKey: "site",
+    sourceCursor: testSiteSeedRecords.length,
+    schema: siteSourceSchema,
+    records: testSiteSeedRecords,
+    ...overrides,
+  });
+}
+
 function taskSnapshotRecord(id: string, title: string): StoredRecord {
   return {
     id,
@@ -3411,6 +3456,22 @@ function schemaWithTaskLabel(label: string) {
       },
     },
   } satisfies AppSchema;
+}
+
+function schemaWithTaskNotesField(): AppSchema {
+  return {
+    ...appSchema,
+    entities: {
+      ...appSchema.entities,
+      task: {
+        ...appSchema.entities.task,
+        fields: {
+          ...appSchema.entities.task.fields,
+          notes: { type: "text", required: false, label: "Notes" },
+        },
+      },
+    },
+  };
 }
 
 function schemaWithMutations(mutations: unknown) {

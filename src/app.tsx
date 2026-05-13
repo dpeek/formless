@@ -25,6 +25,7 @@ import {
   SidebarTrigger,
 } from "@formless/ui/sidebar";
 import { GeneratedCreateDialog } from "./app/generated/create.tsx";
+import { SchemaAppProvider } from "./app/generated/schema-app-context.tsx";
 import {
   SnapshotExportControl,
   SnapshotRestoreControl,
@@ -268,7 +269,7 @@ function GeneratedAppFrame({
     screenModels,
   });
 
-  return (
+  const frame = (
     <HomeRouteSelectionProvider>
       <SidebarProvider data-frame="generated-app">
         <Sidebar collapsible="offcanvas">
@@ -298,6 +299,8 @@ function GeneratedAppFrame({
       </SidebarProvider>
     </HomeRouteSelectionProvider>
   );
+
+  return routeApp ? <SchemaAppProvider schemaKey={routeApp.key}>{frame}</SchemaAppProvider> : frame;
 }
 
 function generatedAppHeaderTitle({

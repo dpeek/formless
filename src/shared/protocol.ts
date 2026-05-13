@@ -203,7 +203,6 @@ export type SiteBlockNode = {
   href?: string;
   icon?: string;
   color?: string;
-  templateKey?: string;
   width?: number;
   height?: number;
   placements: SitePlacementNode[];

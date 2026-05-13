@@ -640,7 +640,7 @@ function ContextRecordEditor({
             density={isHeading || isRichMarkdownRecordField(fieldConfig) ? "default" : density}
             entityName={context.entityName}
             fieldConfig={fieldConfig}
-            key={fieldConfig.fieldName}
+            key={recordFieldEditorKey(context.entityName, recordId, fieldConfig.fieldName)}
             presentation={isHeading ? "heading" : "default"}
             recordId={recordId}
             showLabel={!isHeading}
@@ -675,6 +675,10 @@ function isHeadingRecordField(fieldConfig: RecordFieldConfig) {
 
 function isRichMarkdownRecordField(fieldConfig: RecordFieldConfig) {
   return fieldConfig.field.type === "text" && fieldConfig.editor === "markdown";
+}
+
+function recordFieldEditorKey(entityName: string, recordId: string, fieldName: string) {
+  return `${entityName}:${recordId}:${fieldName}`;
 }
 
 function HomeQueryTabTrigger({
@@ -1106,7 +1110,7 @@ function RecordRow({
               canPatch={canPatch}
               entityName={entityName}
               fieldConfig={fieldConfig}
-              key={fieldConfig.fieldName}
+              key={recordFieldEditorKey(entityName, recordId, fieldConfig.fieldName)}
               recordId={recordId}
             />
           ))}

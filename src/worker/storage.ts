@@ -12,7 +12,12 @@ import type {
   StoredRecord,
   StoreSnapshot,
 } from "../shared/protocol.ts";
-import { parseAppSchema, stringifySchema, type AppSchema } from "../shared/schema.ts";
+import {
+  parseAppSchema,
+  stringifySchema,
+  type AppSchema,
+  type EntitySchema,
+} from "../shared/schema.ts";
 import { nowIsoString } from "../shared/clock.ts";
 
 type RecordRow = {
@@ -240,8 +245,10 @@ export function resetStorageSchemaToSourceOutcome(
 
     const records = getBootstrapRecords(storage);
     validate(current.schema, source.schema, records);
+    const updatedAt = nowIsoString();
+    pruneStoredRecordValuesToSchema(storage, source.schema, updatedAt);
 
-    return writeActiveSchemaOutcome(storage, source.schema);
+    return committedWrite(writeActiveSchemaAt(storage, source.schema, updatedAt));
   });
 }
 
@@ -362,6 +369,70 @@ function writeSourceData(storage: DurableObjectStorage, source: StorageSource): 
   }
 
   return storedSchema;
+}
+
+function pruneStoredRecordValuesToSchema(
+  storage: DurableObjectStorage,
+  schema: AppSchema,
+  changedAt: string,
+) {
+  const rows = storage.sql
+    .exec<RecordRow>(
+      "SELECT id, entity, values_json, created_at, deleted_at FROM records ORDER BY created_at ASC",
+    )
+    .toArray();
+
+  for (const row of rows) {
+    const record = recordFromRow(row);
+    const entity = schema.entities[record.entity];
+
+    if (!entity) {
+      continue;
+    }
+
+    const values = pruneRecordValuesToEntity(record.values, entity);
+
+    if (recordValuesEqual(record.values, values)) {
+      continue;
+    }
+
+    const prunedRecord = { ...record, values };
+
+    storage.sql.exec(
+      `
+        UPDATE records
+        SET values_json = ?
+        WHERE id = ?
+      `,
+      JSON.stringify(values),
+      record.id,
+    );
+
+    storage.sql.exec(
+      `
+        INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      `schema-reset:${changedAt}:${record.id}`,
+      "patch",
+      record.entity,
+      record.id,
+      JSON.stringify(prunedRecord),
+      changedAt,
+    );
+  }
+}
+
+function pruneRecordValuesToEntity(values: RecordValues, entity: EntitySchema): RecordValues {
+  const pruned: RecordValues = {};
+
+  for (const [fieldName, fieldValue] of Object.entries(values)) {
+    if (Object.hasOwn(entity.fields, fieldName)) {
+      pruned[fieldName] = fieldValue;
+    }
+  }
+
+  return pruned;
 }
 
 function insertSeedRecord(

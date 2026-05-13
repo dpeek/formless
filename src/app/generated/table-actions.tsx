@@ -323,7 +323,10 @@ export function EditViewFields({
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {fields.map((fieldConfig) => (
-        <div className={editFieldClass(fieldConfig)} key={fieldConfig.fieldName}>
+        <div
+          className={editFieldClass(fieldConfig)}
+          key={recordFieldEditorKey(editView.entityName, targetRecordId, fieldConfig.fieldName)}
+        >
           <RecordFieldEditor
             canPatch={editView.entity.mutations.patch.enabled}
             entityName={editView.entityName}
@@ -343,4 +346,8 @@ function editFieldClass(fieldConfig: EditViewConfig["fields"][number]) {
   }
 
   return "";
+}
+
+function recordFieldEditorKey(entityName: string, recordId: string, fieldName: string) {
+  return `${entityName}:${recordId}:${fieldName}`;
 }

@@ -30,6 +30,12 @@
             "footer": {
               "label": "Footer"
             },
+            "footerSection": {
+              "label": "Footer section"
+            },
+            "footerSocial": {
+              "label": "Footer social"
+            },
             "link": {
               "label": "Link"
             },
@@ -63,12 +69,6 @@
           "required": false,
           "label": "Link",
           "format": "href"
-        },
-        "templateKey": {
-          "type": "text",
-          "required": false,
-          "label": "Template key",
-          "format": "slug"
         },
         "icon": {
           "type": "text",
@@ -250,6 +250,14 @@
         },
         "footer": {
           "label": "Footer",
+          "fields": ["label"]
+        },
+        "footerSection": {
+          "label": "Footer section",
+          "fields": ["label"]
+        },
+        "footerSocial": {
+          "label": "Footer social",
           "fields": ["label"]
         },
         "link": {
@@ -737,13 +745,6 @@
         },
         {
           "type": "field",
-          "field": "templateKey",
-          "editor": "slug",
-          "commit": "field-commit",
-          "width": "md"
-        },
-        {
-          "type": "field",
           "field": "icon",
           "editor": "icon",
           "commit": "field-commit",
@@ -963,7 +964,13 @@
             },
             "footer": {
               "action": "leaf",
-              "children": ["group", "link"]
+              "children": ["footerSection", "footerSocial", "link"]
+            },
+            "footerSection": {
+              "children": ["link"]
+            },
+            "footerSocial": {
+              "children": ["link"]
             }
           }
         },

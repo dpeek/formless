@@ -30,8 +30,8 @@ describe("site page tree projection", () => {
       type: "page",
       label: "Home",
       href: "/",
-      templateKey: "home",
     });
+    expect(tree.page).not.toHaveProperty("templateKey");
 
     expect(tree.page.placements.map((placement) => placement.id)).toEqual([
       "rec_site_place_home_hero",
@@ -69,6 +69,10 @@ describe("site page tree projection", () => {
     expect(footer.placements.map((placement) => placement.block.label)).toEqual([
       "Explore",
       "Social",
+    ]);
+    expect(footer.placements.map((placement) => placement.block.type)).toEqual([
+      "footerSection",
+      "footerSocial",
     ]);
     const explore = childForPlacement(footer, "rec_site_place_footer_section_explore");
     const social = childForPlacement(footer, "rec_site_place_footer_section_social");

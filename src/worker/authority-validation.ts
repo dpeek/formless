@@ -184,7 +184,9 @@ export function validateSourceSchemaReset(
   sourceSchema: AppSchema,
   records: StoredRecord[],
 ) {
-  validateCompatibleSchemaChange(currentSchema, sourceSchema, records);
+  validateCompatibleSchemaChange(currentSchema, sourceSchema, records, {
+    allowFieldRemoval: true,
+  });
   assertExistingRecordsSatisfyUniqueConstraints(sourceSchema, records);
 }
 
@@ -277,6 +279,7 @@ export function validateCompatibleSchemaChange(
   currentSchema: AppSchema,
   nextSchema: AppSchema,
   records: StoredRecord[],
+  options: { allowFieldRemoval?: boolean } = {},
 ) {
   const recordsById = new Map(records.map((record) => [record.id, record]));
 
@@ -292,6 +295,10 @@ export function validateCompatibleSchemaChange(
       const nextField = nextEntity.fields[fieldName];
 
       if (!nextField) {
+        if (options.allowFieldRemoval) {
+          continue;
+        }
+
         throw new BadRequestError(`Cannot remove or rename field "${entityName}.${fieldName}".`);
       }
 

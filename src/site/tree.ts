@@ -284,7 +284,6 @@ function projectBlock(record: StoredRecord): SiteBlockNode {
     ...optionalStringField("href", record.values.href),
     ...optionalStringField("icon", record.values.icon),
     ...optionalStringField("color", record.values.color),
-    ...optionalStringField("templateKey", record.values.templateKey),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
     placements: [],

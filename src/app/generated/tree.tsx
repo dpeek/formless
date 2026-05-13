@@ -750,7 +750,11 @@ function PlacementRecordFields({
           density="compact"
           entityName={result.relationship.to.entity}
           fieldConfig={fieldConfig}
-          key={fieldConfig.fieldName}
+          key={recordFieldEditorKey(
+            result.relationship.to.entity,
+            placement.id,
+            fieldConfig.fieldName,
+          )}
           recordId={placement.id}
         />
       ))}
@@ -808,7 +812,11 @@ function ChildRecordEditor({
             }
             entityName={result.childEntityName}
             fieldConfig={fieldConfig}
-            key={fieldConfig.fieldName}
+            key={recordFieldEditorKey(
+              result.childEntityName,
+              childRecord.id,
+              fieldConfig.fieldName,
+            )}
             presentation={isHeading ? "heading" : "default"}
             recordId={childRecord.id}
             showLabel={!renderAsInlineStack && !isHeading}
@@ -1064,6 +1072,10 @@ function isInlineLinkFieldStack(recordFields: RecordFieldConfig[]) {
 
 function isRichMarkdownRecordField(fieldConfig: RecordFieldConfig) {
   return fieldConfig.field.type === "text" && fieldConfig.editor === "markdown";
+}
+
+function recordFieldEditorKey(entityName: string, recordId: string, fieldName: string) {
+  return `${entityName}:${recordId}:${fieldName}`;
 }
 
 function stringValue(value: FieldValue | undefined): string | undefined {

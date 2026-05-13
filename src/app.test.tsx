@@ -9,7 +9,7 @@ import {
   resolveCreateValues,
 } from "./app/generated/create.tsx";
 import { RecordFieldEditor } from "./app/generated/record-field-editor.tsx";
-import { SchemaAppProvider } from "./app/generated/schema-app-context.tsx";
+import { SchemaAppProvider, useSchemaKey } from "./app/generated/schema-app-context.tsx";
 import { HomeScreen } from "./app/generated/screen.tsx";
 import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table.tsx";
 import { EditViewFields } from "./app/generated/table-actions.tsx";
@@ -63,6 +63,7 @@ import {
 } from "./client/views.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { SitePageTree } from "./shared/protocol.ts";
+import type { SchemaKey } from "./shared/schema-apps.ts";
 import { parseAppSchema, type AppSchema, type EntitySchema } from "./shared/schema.ts";
 import type { NumericExpression } from "./shared/read-model.ts";
 import {
@@ -92,6 +93,21 @@ function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
         runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()}
       />
     </Router>,
+  );
+}
+
+function SchemaKeyProbeHomeRoute({
+  schemaKey: routeSchemaKey,
+}: {
+  schemaKey: SchemaKey;
+  screenPath: string;
+}) {
+  const contextSchemaKey = useSchemaKey();
+
+  return (
+    <main data-route-schema-key={routeSchemaKey} data-schema-key={contextSchemaKey}>
+      Schema key {contextSchemaKey}
+    </main>
   );
 }
 
@@ -321,6 +337,24 @@ describe("App smoke routes", () => {
     expect(html).toContain("Sync issue");
     expect(html).toContain("Push sync unavailable.");
     expect(html).toContain("text-red-200");
+  });
+
+  it("provides the route schema key through the generated app frame", () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/site">
+        <App
+          routeComponents={{
+            HomeRoute: SchemaKeyProbeHomeRoute,
+            SchemaRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={createDevRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-schema-key="site"');
+    expect(html).not.toContain('data-schema-key="tasks"');
   });
 
   it('renders the "/tasks/schema" route', () => {
@@ -1608,7 +1642,6 @@ describe("generated collection home", () => {
           type: "page",
           label: "Unannounced page",
           href: "/unannounced",
-          templateKey: "standard",
         }),
       ],
       2,
@@ -3662,7 +3695,6 @@ describe("generated forms and records", () => {
     formData.set("label", "Field behavior note");
     formData.set("body", "## Note\n\nCreate and edit stay wired.");
     formData.set("href", "https://example.com/field-behavior");
-    formData.set("templateKey", "post");
     const imageFormData = new FormData();
     imageFormData.set("type", "image");
     imageFormData.set("label", "Cover image");

@@ -3989,7 +3989,6 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
-        "field",
         "orderingHandle",
         "field",
         "field",
@@ -4202,6 +4201,8 @@ describe("personal site sample schema", () => {
         group: { label: "Group" },
         header: { label: "Header" },
         footer: { label: "Footer" },
+        footerSection: { label: "Footer section" },
+        footerSocial: { label: "Footer social" },
         link: { label: "Link" },
         markdown: { label: "Markdown" },
         hero: { label: "Hero" },
@@ -4229,12 +4230,12 @@ describe("personal site sample schema", () => {
       "label",
       "body",
       "href",
-      "templateKey",
       "icon",
       "color",
       "width",
       "height",
     ]);
+    expect(schema.entities.block?.fields).not.toHaveProperty("templateKey");
     expect(schema.entities.block?.fields).not.toHaveProperty("featured");
     expect(schema.entities.block?.fields).not.toHaveProperty("order");
     expect(schema.entities.blockPlacement?.label).toBe("Placement");
@@ -4277,6 +4278,8 @@ describe("personal site sample schema", () => {
         page: { label: "Page", fields: ["label", "href"] },
         header: { label: "Header", fields: ["label"] },
         footer: { label: "Footer", fields: ["label"] },
+        footerSection: { label: "Footer section", fields: ["label"] },
+        footerSocial: { label: "Footer social", fields: ["label"] },
         link: {
           label: "Link",
           fields: ["label", "href", "icon"],
@@ -4690,11 +4693,19 @@ describe("personal site sample schema", () => {
       "project",
       "header",
       "footer",
+      "footerSection",
+      "footerSocial",
     ]);
     expect(pageChildren).toEqual(["group", "hero", "markdown", "image", "link", "project"]);
     expect(groupChildren).toEqual(["group", "hero", "markdown", "image", "link", "project"]);
     expect(branchVariants.post).toEqual({ children: ["markdown"] });
     expect(branchVariants.project).toBe("leaf");
+    expect(branchVariants.footer).toEqual({
+      action: "leaf",
+      children: ["footerSection", "footerSocial", "link"],
+    });
+    expect(branchVariants.footerSection).toEqual({ children: ["link"] });
+    expect(branchVariants.footerSocial).toEqual({ children: ["link"] });
   });
 
   it("parses simplified site block authoring views", () => {
@@ -4882,7 +4893,13 @@ describe("personal site sample schema", () => {
           },
           footer: {
             action: "leaf",
-            children: ["group", "link"],
+            children: ["footerSection", "footerSocial", "link"],
+          },
+          footerSection: {
+            children: ["link"],
+          },
+          footerSocial: {
+            children: ["link"],
           },
         },
       },

@@ -600,6 +600,7 @@ function RecordTableCell({
         density="compact"
         entityName={entityName}
         fieldConfig={column}
+        key={recordFieldEditorKey(entityName, recordId, column.fieldName)}
         recordId={recordId}
       />
       {column.suffix ? (
@@ -758,6 +759,7 @@ function ResolvedReferenceFieldTableCell({
         density="compact"
         entityName={column.referencedEntityName}
         fieldConfig={column}
+        key={recordFieldEditorKey(column.referencedEntityName, referenceRecordId, column.fieldName)}
         recordId={referenceRecordId}
       />
       {column.suffix ? (
@@ -847,7 +849,11 @@ export function ReferencedRecordEditorFields({
           canPatch={referenceItem.entity.mutations.patch.enabled}
           entityName={referenceItem.entityName}
           fieldConfig={fieldConfig}
-          key={fieldConfig.fieldName}
+          key={recordFieldEditorKey(
+            referenceItem.entityName,
+            referenceRecordId,
+            fieldConfig.fieldName,
+          )}
           recordId={referenceRecordId}
           showLabel={true}
         />
@@ -860,6 +866,10 @@ function labelFieldsForTableColumns(columns: TableColumnConfig[]): RecordLabelFi
   return columns.flatMap((column) =>
     column.type === "field" ? [{ fieldName: column.fieldName, field: column.field }] : [],
   );
+}
+
+function recordFieldEditorKey(entityName: string, recordId: string, fieldName: string) {
+  return `${entityName}:${recordId}:${fieldName}`;
 }
 
 function tableHeadClass(column: TableColumnConfig) {

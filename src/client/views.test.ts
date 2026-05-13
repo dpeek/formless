@@ -893,7 +893,9 @@ describe("home view model collections", () => {
       group: ["group", "hero", "markdown", "image", "link", "project"],
       post: ["markdown"],
       header: ["link"],
-      footer: ["group", "link"],
+      footer: ["footerSection", "footerSocial", "link"],
+      footerSection: ["link"],
+      footerSocial: ["link"],
     });
     expect(treeResult.branches?.variants.leafVariantValues).toContain("project");
     expect(treeResult.childRecordUnion?.variants).toEqual(
@@ -1573,7 +1575,6 @@ describe("home view model collections", () => {
       "field:label",
       "field:body",
       "field:href",
-      "field:templateKey",
       "field:icon",
       "field:color",
       "field:width",
@@ -1581,7 +1582,7 @@ describe("home view model collections", () => {
     ]);
     expect(
       contentModel?.result.type === "table" ? tableColumnEditors(contentModel.result.columns) : [],
-    ).toEqual(["enum", "text", "markdown", "href", "slug", "icon", "color", "number", "number"]);
+    ).toEqual(["enum", "text", "markdown", "href", "icon", "color", "number", "number"]);
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "type",
       "label",

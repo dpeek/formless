@@ -79,6 +79,10 @@ function SiteBlockRenderer({
       return <HeaderGroup block={block} />;
     case "footer":
       return <FooterGroup block={block} />;
+    case "footerSection":
+      return <FooterSection block={block} />;
+    case "footerSocial":
+      return <FooterSocialSection block={block} />;
     case "group":
       return <GroupBlock block={block} placement={placement} />;
     case "hero":
@@ -156,22 +160,6 @@ function ContentDetailPage({ block }: { block: SiteBlockNode }) {
 }
 
 function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: SitePlacementNode }) {
-  if (block.templateKey === "header") {
-    return <HeaderGroup block={block} />;
-  }
-
-  if (block.templateKey === "footer-group") {
-    return <FooterSection block={block} />;
-  }
-
-  if (block.templateKey === "footer-social") {
-    return <FooterSocialSection block={block} />;
-  }
-
-  if (block.templateKey === "footer") {
-    return <FooterGroup block={block} />;
-  }
-
   return (
     <section className="space-y-4" data-block-type={block.type}>
       <h2 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">
@@ -192,10 +180,10 @@ function HeaderGroup({ block }: { block: SiteBlockNode }) {
 
   return (
     <header className="text-zinc-900 dark:text-zinc-100" data-site-header>
-      <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-6 py-4 sm:items-center">
+      <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-6 py-8 sm:items-center">
         <nav aria-label={block.label} className="min-w-0">
           <div
-            className="hidden flex-wrap items-center gap-4 sm:flex"
+            className="hidden flex-wrap items-center gap-4 sm:flex text-lg"
             data-site-header-nav="desktop"
           >
             <SitePlacementList placements={block.placements} />
@@ -253,7 +241,7 @@ function FooterGroup({ block }: { block: SiteBlockNode }) {
     <footer className="border-t border-dashed" data-site-footer>
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-18">
         {sections.length > 0 ? (
-          <div className="flex max-w-lg flex-wrap justify-between gap-x-14 gap-y-8">
+          <div className="flex max-w-lg flex-wrap justify-between gap-x-14 gap-y-8 text-sm">
             {sections.map((placement) => (
               <SitePlacementRenderer key={placement.id} placement={placement} />
             ))}
@@ -304,7 +292,7 @@ function partitionFooterPlacements(placements: SitePlacementNode[]): {
 }
 
 function isFooterSectionPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.type === "group" && placement.block.placements.length > 0;
+  return placement.block.type === "footerSection" || placement.block.type === "footerSocial";
 }
 
 function FooterSection({ block }: { block: SiteBlockNode }) {
@@ -412,7 +400,7 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
 
   return (
     <a
-      className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap text-sm font-medium text-current underline decoration-transparent underline-offset-4 transition hover:decoration-current"
+      className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap font-medium text-current underline decoration-transparent underline-offset-4 transition hover:decoration-current"
       href={href}
       rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
       target={isExternalSiteHref(href) ? "_blank" : undefined}
@@ -574,11 +562,11 @@ function isPageChromePlacement(placement: SitePlacementNode): boolean {
 }
 
 function isPageHeaderPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.type === "header" || placement.block.templateKey === "header";
+  return placement.block.type === "header";
 }
 
 function isPageFooterPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.type === "footer" || placement.block.templateKey === "footer";
+  return placement.block.type === "footer";
 }
 
 function PlainText({ className, text }: { className?: string; text: string }) {

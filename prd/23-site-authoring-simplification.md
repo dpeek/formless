@@ -1,8 +1,8 @@
 # PRD 23: Site authoring simplification
 
 Status: complete
-Current chunk: SAS-09 shipped
-Last updated: 2026-05-12
+Current chunk: SAS-10 shipped
+Last updated: 2026-05-13
 
 ## Goal
 
@@ -227,23 +227,24 @@ Owned files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                                | Reason                                                                         | Evidence                                                                                       |
-| ------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| SAS-D1  | Keep `block` and `blockPlacement` as the Site storage model.            | Flat records are a core runtime bet and existing Site code uses them.          | `CONTEXT.md`, prior Site PRDs                                                                  |
-| SAS-D2  | Treat block type as create-time authoring input.                        | Type switching after creation makes editors unstable and unsafe.               | User direction 2026-05-12                                                                      |
-| SAS-D3  | Use hidden literal defaults for fixed block type creation.              | The stored discriminator is still required, but authors need not edit it.      | Existing create defaults already resolve hidden values                                         |
-| SAS-D4  | Hide `templateKey` before removing the storage field.                   | Existing seeds/rendering may still depend on it during migration.              | Current Site renderer and tree projection                                                      |
-| SAS-D5  | Remove unfinished block types from first-release authoring vocabulary.  | A smaller set makes authoring clearer and avoids supporting weak abstractions. | User direction 2026-05-12                                                                      |
-| SAS-D6  | Use `group` as the generic fallback composition block.                  | It preserves composition without speculative specialized types.                | User direction 2026-05-12                                                                      |
-| SAS-D7  | Keep page content in child blocks only.                                 | Page roots should own route/container identity, not body content.              | User direction 2026-05-12                                                                      |
-| SAS-D8  | Add child allowance as tree result/view-model policy.                   | Parent-child authoring rules belong to the generated tree view.                | Existing tree result branch policy                                                             |
-| SAS-D9  | Add/remove tree commands should write placement edges, not nested data. | The data model stays flat and public tree projection remains reusable.         | `blockPlacement` relationship model                                                            |
-| SAS-D10 | Remove from tree means remove the placement edge first.                 | Blocks can be reused; deleting the child would be destructive.                 | Existing reusable Header/Footer/link records                                                   |
-| SAS-D11 | Model Header/Footer as a Site frame.                                    | Shared chrome should be edited once and rendered everywhere.                   | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`, `schema/apps/site/seed-records.json` |
-| SAS-D12 | Do not use visible page templates for first release.                    | A full template system would become a layout DSL too early.                    | Roadmap excludes full layout DSL                                                               |
-| SAS-D13 | Model posts as content routes rather than query-list blocks.            | Authors should write posts; the system should own `/blog` routing/listing.     | User question about posts and `/blog`                                                          |
-| SAS-D14 | Keep the public renderer site-specific.                                 | This simplification should not generalize renderer layout too early.           | Roadmap and PRD 09 direction                                                                   |
-| SAS-D15 | Resolve Blog index and post detail routes in the Site route resolver.   | Routing stays out of renderer branches and no query-list block is required.    | `src/site/route-resolver.ts`, `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`         |
+| ID      | Decision                                                                | Reason                                                                         | Evidence                                                                                        |
+| ------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| SAS-D1  | Keep `block` and `blockPlacement` as the Site storage model.            | Flat records are a core runtime bet and existing Site code uses them.          | `CONTEXT.md`, prior Site PRDs                                                                   |
+| SAS-D2  | Treat block type as create-time authoring input.                        | Type switching after creation makes editors unstable and unsafe.               | User direction 2026-05-12                                                                       |
+| SAS-D3  | Use hidden literal defaults for fixed block type creation.              | The stored discriminator is still required, but authors need not edit it.      | Existing create defaults already resolve hidden values                                          |
+| SAS-D4  | Hide `templateKey` before removing the storage field.                   | Existing seeds/rendering may still depend on it during migration.              | Current Site renderer and tree projection                                                       |
+| SAS-D5  | Remove unfinished block types from first-release authoring vocabulary.  | A smaller set makes authoring clearer and avoids supporting weak abstractions. | User direction 2026-05-12                                                                       |
+| SAS-D6  | Use `group` as the generic fallback composition block.                  | It preserves composition without speculative specialized types.                | User direction 2026-05-12                                                                       |
+| SAS-D7  | Keep page content in child blocks only.                                 | Page roots should own route/container identity, not body content.              | User direction 2026-05-12                                                                       |
+| SAS-D8  | Add child allowance as tree result/view-model policy.                   | Parent-child authoring rules belong to the generated tree view.                | Existing tree result branch policy                                                              |
+| SAS-D9  | Add/remove tree commands should write placement edges, not nested data. | The data model stays flat and public tree projection remains reusable.         | `blockPlacement` relationship model                                                             |
+| SAS-D10 | Remove from tree means remove the placement edge first.                 | Blocks can be reused; deleting the child would be destructive.                 | Existing reusable Header/Footer/link records                                                    |
+| SAS-D11 | Model Header/Footer as a Site frame.                                    | Shared chrome should be edited once and rendered everywhere.                   | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`, `schema/apps/site/seed-records.json`  |
+| SAS-D12 | Do not use visible page templates for first release.                    | A full template system would become a layout DSL too early.                    | Roadmap excludes full layout DSL                                                                |
+| SAS-D13 | Model posts as content routes rather than query-list blocks.            | Authors should write posts; the system should own `/blog` routing/listing.     | User question about posts and `/blog`                                                           |
+| SAS-D14 | Keep the public renderer site-specific.                                 | This simplification should not generalize renderer layout too early.           | Roadmap and PRD 09 direction                                                                    |
+| SAS-D15 | Resolve Blog index and post detail routes in the Site route resolver.   | Routing stays out of renderer branches and no query-list block is required.    | `src/site/route-resolver.ts`, `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`          |
+| SAS-D16 | Remove stored `templateKey` and use `block.type` for footer variants.   | A second free-text discriminator can disagree with `block.type`.               | User direction 2026-05-13; `schema/apps/site/schema.json`, `src/app/site-renderer/renderer.tsx` |
 
 ### Deep Modules
 
@@ -283,6 +284,7 @@ Owned files:
 | SAS-07 | shipped | SAS-06     | Site tree projection/protocol/renderer/tests                     | Header/Footer resolve as Site frame roots and page seeds no longer repeat Header/Footer placements.                          |
 | SAS-08 | shipped | SAS-07     | Site route resolver/tree projection/renderer/tests               | Posts route at `/blog/:slug`, and `/blog` renders a generated post index without query-list blocks.                          |
 | SAS-09 | shipped | SAS-08     | browser smoke, PRD                                               | `/site`, `/pages/home`, `/pages/blog`, and a post route smoke pass; PRD status/evidence are current.                         |
+| SAS-10 | shipped | SAS-09     | Site schema/seeds/tree/protocol/renderer/storage reset/tests     | Site source schema and public tree no longer carry `templateKey`; footer presentation uses `footerSection`/`footerSocial`.   |
 
 ## Status Notes
 
@@ -302,6 +304,9 @@ Owned files:
 - 2026-05-12: SAS-08 shipped posts and blog routing. Public Site route resolution now emits route facts for page, generated post index, and post detail routes; `/blog` renders a generated post index from live post blocks without query-list blocks; `/blog/:slug` renders post detail pages through the Site frame.
 - 2026-05-12: SAS-08 keeps post index ordering deterministic by created time descending, omits tombstoned posts, and keeps post route matching on existing `block.href` values for this slice.
 - 2026-05-12: SAS-09 shipped browser smoke and PRD closeout. `/site`, `/pages/home`, `/pages/blog`, and `/pages/blog/shipping-schema-backed-authoring` render expected Site editor, public home, generated blog index, and post detail content with no browser page errors.
+- 2026-05-13: SAS-10 shipped `templateKey` removal. Site source schema, source seeds, test seeds, public tree protocol/projection, and renderer no longer store or project `templateKey`; footer section/social presentation is modeled by `block.type = footerSection` and `block.type = footerSocial`.
+- 2026-05-13: SAS-10 added source schema reset migration support for retired fields. `/api/:schemaKey/reset/schema` can now remove fields from source schema and emits patch changes for records whose retired field values are pruned; normal `/api/:schemaKey/schema` updates still reject field removal.
+- 2026-05-13: SAS-10 supersedes PRD 24 PSC-D13's temporary use of `templateKey = footer-social`.
 
 ## Blockers
 
@@ -323,6 +328,10 @@ Owned files:
 - `bun browser --session sas-09 ... /pages/blog`: generated blog index rendered Blog, seeded post summaries, and Footer.
 - `bun browser --session sas-09 ... /pages/blog/shipping-schema-backed-authoring`: post detail route rendered Header navigation, post title/body, nested Intro content, and Footer.
 - `bun browser --session sas-09 errors`: no page errors.
+- 2026-05-13 SAS-10 `devstate check`: checks ok; web service ready at `https://formless.local`; test watcher passing.
+- 2026-05-13 SAS-10 browser smoke reset Site schema and seed with `bun browser --session template-key-removal`; both reset endpoints returned 200.
+- 2026-05-13 SAS-10 browser smoke opened `https://formless.local/pages/home`; footer rendered two nav sections, social links were icon-only 32px links, page text did not include `templateKey`, and browser errors were empty.
+- 2026-05-13 SAS-10 browser bootstrap eval returned `hasTemplateKeyField: false`, `templateKeyRecords: 0`, and footer section records typed `footerSection` and `footerSocial`.
 - `bun browser --session sas-08 ... /pages/blog`: rendered Header, Blog index copy, generated post summaries, and Footer.
 - `bun browser --session sas-08 ... /pages/blog/shipping-schema-backed-authoring`: rendered Header, post detail content, nested profile content, and Footer.
 - `bun browser --session sas-08 errors`: no page errors.
@@ -365,12 +374,15 @@ Owned files:
 - `doc/current.md`: Header/Footer render through a Site frame instead of repeated per-page placements.
 - `doc/current.md`: Site posts route under `/blog`, and `/blog` renders a generated post index.
 - `doc/current.md`: Public Site tree responses include route facts for page, post index, and post detail routes.
+- `doc/current.md`: Site block schema no longer has `templateKey`; public rendering uses `block.type`.
+- `doc/current.md`: Footer section and social presentation use `block.type = footerSection` and `block.type = footerSocial`.
+- `doc/current.md`: Source schema reset can remove retired fields and prune retired stored values while normal schema updates still reject field removal.
 - `doc/roadmap.md`: Site authoring simplification is first-release scope if shipped before release.
 
 ## Further Notes
 
 - The strongest design line is separating storage shape from authoring intent. `block.type` remains a real stored discriminator; the editor simply stops treating it as mutable content.
-- `templateKey` should be considered an internal migration smell. Hiding it is the first step; later chunks should remove renderer dependence where practical.
+- `templateKey` was removed in SAS-10. Future presentation variants should use typed schema vocabulary or a real layout/policy primitive, not a second record discriminator.
 - Site frame roots are a better fit than page templates for Header/Footer because the repeated thing is global chrome, not copied page content.
 - If richer page templates become necessary later, they should assign route/layout behavior without cloning block trees across pages.
 - Post route generation needs a clear stability rule. The recommended first rule is: derive the route from the title on create, keep it stable after creation, and resolve collisions deterministically.
