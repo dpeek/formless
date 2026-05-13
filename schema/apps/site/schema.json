@@ -268,7 +268,7 @@
         "image": {
           "label": "Image",
           "fields": ["label", "href", "width", "height"],
-          "requiredFields": ["label", "href"]
+          "requiredFields": ["label"]
         }
       },
       "fallback": {
@@ -569,7 +569,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "href",
+              "editor": "image",
               "commit": "field-commit"
             },
             "width": {
@@ -669,7 +669,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "href",
+              "editor": "image",
               "commit": "field-commit"
             },
             "width": {
@@ -1147,7 +1147,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "href"
+              "editor": "image"
             },
             "width": {
               "editor": "number"
@@ -1299,7 +1299,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "href",
+              "editor": "image",
               "commit": "field-commit"
             },
             "width": {

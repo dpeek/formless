@@ -4286,7 +4286,7 @@ describe("personal site sample schema", () => {
         image: {
           label: "Image",
           fields: ["label", "href", "width", "height"],
-          requiredFields: ["label", "href"],
+          requiredFields: ["label"],
         },
       },
       fallback: { label: "Block", fields: ["label", "type"] },
@@ -4448,7 +4448,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "href" },
+            href: { editor: "image" },
             width: { editor: "number" },
             height: { editor: "number" },
           },
@@ -4492,7 +4492,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "href", commit: "field-commit" },
+            href: { editor: "image", commit: "field-commit" },
             width: { editor: "number", commit: "field-commit" },
             height: { editor: "number", commit: "field-commit" },
           },
@@ -4762,6 +4762,14 @@ describe("personal site sample schema", () => {
             href: { editor: "href", commit: "field-commit" },
           },
         },
+        image: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "image", commit: "field-commit" },
+            width: { editor: "number", commit: "field-commit" },
+            height: { editor: "number", commit: "field-commit" },
+          },
+        },
       },
     });
     const blockRootPage = schema.itemViews.blockRootDetail.variants?.page;
@@ -4780,6 +4788,14 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             body: { editor: "markdown", commit: "field-commit" },
+          },
+        },
+        image: {
+          presentation: "fields",
+          fields: {
+            href: { editor: "image", commit: "field-commit" },
+            width: { editor: "number", commit: "field-commit" },
+            height: { editor: "number", commit: "field-commit" },
           },
         },
       },
@@ -4803,6 +4819,14 @@ describe("personal site sample schema", () => {
     });
     expect(blockCreate.variants?.page?.fields).not.toHaveProperty("body");
     expect(blockCreate.variants?.page?.fields).not.toHaveProperty("templateKey");
+    expect(blockCreate.variants?.image).toMatchObject({
+      presentation: "fields",
+      fields: {
+        href: { editor: "image" },
+        width: { editor: "number" },
+        height: { editor: "number" },
+      },
+    });
     expect(blockEdit.variants?.page).toMatchObject({
       presentation: "fields",
       fields: {
@@ -4819,6 +4843,14 @@ describe("personal site sample schema", () => {
       },
     });
     expect(blockEdit.variants?.post?.fields).not.toHaveProperty("templateKey");
+    expect(blockEdit.variants?.image).toMatchObject({
+      presentation: "fields",
+      fields: {
+        href: { editor: "image", commit: "field-commit" },
+        width: { editor: "number", commit: "field-commit" },
+        height: { editor: "number", commit: "field-commit" },
+      },
+    });
 
     for (const blockType of plannedRemovedBlockTypes) {
       expect(blockCreate.variants).not.toHaveProperty(blockType);

@@ -782,7 +782,7 @@ describe("public site renderer", () => {
     expect(html).not.toContain("**OpenSurf**");
   });
 
-  it("renders image media blocks from href and label metadata", () => {
+  it("renders image media blocks from uploaded and external href metadata", () => {
     const tree = sitePageTree("home");
     const html = renderToStaticMarkup(
       <SitePageRenderer
@@ -798,9 +798,20 @@ describe("public site renderer", () => {
                   id: "rec_site_media_avatar",
                   type: "image",
                   label: "Site owner portrait",
-                  href: "data:image/svg+xml,%3Csvg%20/%3E",
+                  href: "/api/site/media/site/images/cover.webp",
                   width: 1200,
                   height: 1200,
+                  placements: [],
+                },
+              },
+              {
+                id: "test-external-image-placement",
+                order: 2,
+                block: {
+                  id: "rec_site_media_external",
+                  type: "image",
+                  label: "External reference",
+                  href: "https://example.com/manual.png",
                   placements: [],
                 },
               },
@@ -812,7 +823,9 @@ describe("public site renderer", () => {
 
     expect(html).toContain("Site owner portrait");
     expect(html).toContain('alt="Site owner portrait"');
-    expect(html).toContain('src="data:image/svg+xml');
+    expect(html).toContain('src="/api/site/media/site/images/cover.webp"');
+    expect(html).toContain('alt="External reference"');
+    expect(html).toContain('src="https://example.com/manual.png"');
     expect(html).not.toContain("data-asset-key");
   });
 
@@ -3656,6 +3669,9 @@ describe("generated forms and records", () => {
     imageFormData.set("href", "https://example.com/cover.png");
     imageFormData.set("width", "1200");
     imageFormData.set("height", "630");
+    const imageWithoutHrefFormData = new FormData();
+    imageWithoutHrefFormData.set("type", "image");
+    imageWithoutHrefFormData.set("label", "Unuploaded image");
     const linkFormData = new FormData();
     linkFormData.set("type", "link");
     linkFormData.set("label", "Field behavior link");
@@ -3706,6 +3722,11 @@ describe("generated forms and records", () => {
       href: "https://example.com/cover.png",
       width: 1200,
       height: 630,
+    });
+    expect(resolveCreateValues(imageWithoutHrefFormData, action)).toMatchObject({
+      type: "image",
+      label: "Unuploaded image",
+      href: "",
     });
     expect(resolveCreateValues(linkFormData, action)).toEqual({
       type: "link",

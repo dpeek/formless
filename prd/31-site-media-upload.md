@@ -1,7 +1,7 @@
 # PRD 31: Site media upload
 
 Status: in progress
-Current chunk: SMU-04 ready
+Current chunk: SMU-05 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -255,13 +255,13 @@ Possible changed files:
 
 ## Chunks
 
-| ID     | Status  | Depends on | Main files                         | Acceptance                                                                                      |
-| ------ | ------- | ---------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| SMU-01 | done    | none       | docs, PRD                          | Release roadmap includes Site image upload; PRD defines scope, contracts, chunks, and tests.    |
-| SMU-02 | done    | SMU-01     | Worker media routes, config, tests | R2 upload and serving routes work in Miniflare and respect upload auth/public read rules.       |
-| SMU-03 | done    | SMU-02     | client upload, generated editor    | Site image field can upload, preview, and patch flat block fields through existing mutations.   |
-| SMU-04 | ready   | SMU-03     | Site schema, renderer tests        | Image blocks can be created before upload; public Site renders uploaded media URLs unchanged.   |
-| SMU-05 | planned | SMU-04     | browser smoke, PRD                 | `/site` authoring and `/pages/home` public preview pass; PRD evidence and promotion notes land. |
+| ID     | Status | Depends on | Main files                         | Acceptance                                                                                      |
+| ------ | ------ | ---------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SMU-01 | done   | none       | docs, PRD                          | Release roadmap includes Site image upload; PRD defines scope, contracts, chunks, and tests.    |
+| SMU-02 | done   | SMU-01     | Worker media routes, config, tests | R2 upload and serving routes work in Miniflare and respect upload auth/public read rules.       |
+| SMU-03 | done   | SMU-02     | client upload, generated editor    | Site image field can upload, preview, and patch flat block fields through existing mutations.   |
+| SMU-04 | done   | SMU-03     | Site schema, renderer tests        | Image blocks can be created before upload; public Site renders uploaded media URLs unchanged.   |
+| SMU-05 | ready  | SMU-04     | browser smoke, PRD                 | `/site` authoring and `/pages/home` public preview pass; PRD evidence and promotion notes land. |
 
 ### SMU-01: Roadmap and PRD
 
@@ -380,6 +380,7 @@ Acceptance:
 - 2026-05-13: SMU-01 shipped. Roadmap already names Site image upload as first-release scope and keeps general media library, video upload, file upload, transforms, and cleanup out of first release. Next ready chunk is SMU-02.
 - 2026-05-13: SMU-02 shipped. Worker now routes Site media before Authority dispatch, uploads one raster image to `FORMLESS_MEDIA`, serves same-origin media URLs from R2, guards uploads with the admin bearer token policy, and leaves public reads open. Next ready chunk is SMU-03.
 - 2026-05-13: SMU-03 shipped. Text-backed fields now support `editor: "image"` metadata, the client can upload one Site image through `/api/site/media/images`, generated inline editors preview current image URLs, expose upload and manual URL fallback, and patch `href` plus numeric `width`/`height` when the active schema exposes those sibling fields. Next ready chunk is SMU-04.
+- 2026-05-13: SMU-04 shipped. Site image variants now require only `label`, use `editor: "image"` in Site image authoring views, and tests prove uploaded-style media URLs continue through the unchanged `href` tree and public renderer path. Next ready chunk is SMU-05.
 
 ## Evidence
 
@@ -397,10 +398,16 @@ Acceptance:
 - SMU-03 generated editor: `src/app/generated/record-field-editor.tsx` renders image preview, empty state, upload input, manual URL fallback, and uses existing `submitPatchMutation`; `src/app.test.tsx` covers generated Site image editor markup.
 - 2026-05-13 final `devstate check`: checks ok; watch tests pass with 31 test files and 583 tests; services running at `https://31-site-media-upload.formless.local`.
 - 2026-05-13 `bun browser`: loaded the running app at `http://127.0.0.1:4521/`; public Site rendered and browser errors were empty. The current dev server profile exposed the published Site route, so generated `/site` authoring smoke remains for SMU-05 after schema integration.
+- SMU-04 schema: `schema/apps/site/schema.json` changes image variant required fields to `["label"]` and selects `editor: "image"` for image `href` fields in Site create, edit, root-detail, and tree-node authoring metadata.
+- SMU-04 parser coverage: `src/shared/schema.test.ts` asserts the image variant requiredness and Site image authoring metadata.
+- SMU-04 create coverage: `src/app.test.tsx` asserts generated Site image create values can resolve without an uploaded `href`.
+- SMU-04 public coverage: `src/site/tree.test.ts` asserts uploaded-style media URLs project through the existing block node shape, and `src/app.test.tsx` asserts uploaded-style and external image `href` values render as `<img src>`.
+- SMU-04 browser smoke: `bun browser --session smu-04` reset Site schema and seed with `200` responses. Current dev server profile renders published-site routes, so `/site` returned `No site page exists for site` and `/pages/home` returned `No site page exists for pages/home`; `/` rendered the published home page and `bun browser --session smu-04 errors` returned no page errors.
+- 2026-05-13 SMU-04 final `devstate check`: checks ok; `vp check --fix` found no warnings, lint errors, or type errors in 221 files; watcher tests pass; services running at `https://31-site-media-upload.formless.local`.
 
 ## Promote after ship
 
 - `doc/current.md`: add `FORMLESS_MEDIA` R2 binding, `src/worker/media.ts`, `/api/site/media/images`, `/api/site/media/*`, upload auth, public read, and Miniflare R2 test facts after SMU-02 ships.
 - `doc/current.md`: add `editor: "image"` text-backed field metadata, `src/client/media.ts`, generated image preview/upload/manual URL fallback, and existing mutation patch of `href`/`width`/`height` after SMU-03 ships.
-- `doc/current.md`: add Site image create and public rendering facts after SMU-04 ships.
+- `doc/current.md`: add Site image `href` optional create behavior, `editor: "image"` Site authoring metadata, and public rendering through unchanged `href` tree facts after SMU-04 ships.
 - `doc/roadmap.md`: keep Site image upload in first-release scope and keep general media library/video/file/transforms/cleanup out of scope.

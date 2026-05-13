@@ -127,6 +127,33 @@ describe("site page tree projection", () => {
     ]);
   });
 
+  it("projects uploaded-style image hrefs through the existing block shape", () => {
+    const records = baseTreeRecords().map((record) =>
+      record.id === "rec_site_media_avatar"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              href: "/api/site/media/site/images/avatar.webp",
+            },
+          }
+        : record,
+    );
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
+    const heroImage = childForPlacement(hero, "rec_site_place_home_hero_image");
+
+    expect(heroImage).toEqual({
+      id: "rec_site_media_avatar",
+      type: "image",
+      label: "Site owner portrait",
+      href: "/api/site/media/site/images/avatar.webp",
+      width: 1200,
+      height: 1200,
+      placements: [],
+    });
+  });
+
   it("renders every live placement", () => {
     const records = [
       ...baseTreeRecords(),
