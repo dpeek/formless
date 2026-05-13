@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import "@formless/ui/global.css";
 import "./style.css";
@@ -10,8 +10,14 @@ if (!app) {
   throw new Error("App root not found.");
 }
 
-createRoot(app).render(
+const appTree = (
   <StrictMode>
     <App />
-  </StrictMode>,
+  </StrictMode>
 );
+
+if (app.hasChildNodes()) {
+  hydrateRoot(app, appTree);
+} else {
+  createRoot(app).render(appTree);
+}

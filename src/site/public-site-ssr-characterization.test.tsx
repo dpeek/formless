@@ -26,12 +26,13 @@ describe("public Site SSR characterization", () => {
     expect(html).not.toContain("data-site-header");
   });
 
-  it("characterizes the browser entry as client rendering, not hydration", () => {
+  it("characterizes the browser entry as hydrating SSR markup when present", () => {
     const entry = readRepoFile("../main.tsx");
 
-    expect(entry).toContain('import { createRoot } from "react-dom/client";');
+    expect(entry).toContain('import { createRoot, hydrateRoot } from "react-dom/client";');
+    expect(entry).toContain("if (app.hasChildNodes())");
+    expect(entry).toContain("hydrateRoot(app, appTree);");
     expect(entry).toContain("createRoot(app).render(");
-    expect(entry).not.toContain("hydrateRoot");
   });
 
   it("characterizes Cloudflare routing as SPA fallback with Worker-first API only", () => {

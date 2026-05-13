@@ -786,6 +786,35 @@ describe("public site renderer", () => {
     expect(html).not.toContain('href="/pages/blog"');
   });
 
+  it("renders the same published app shell markup from SSR and hydrated route state", () => {
+    const tree = sitePageTree("home");
+    const ReadySitePageRoute = ({
+      linkMode = "preview",
+    }: {
+      linkMode?: "preview" | "published";
+      slug: string;
+    }) => <SitePageRouteView linkMode={linkMode} state={{ status: "ready", tree }} />;
+    const ssrHtml = renderToStaticMarkup(
+      <main className="min-h-dvh">
+        <SitePageRenderer linkMode="published" tree={tree} />
+      </main>,
+    );
+    const hydratedAppHtml = renderToStaticMarkup(
+      <Router ssrPath="/">
+        <App
+          routeComponents={{
+            HomeRoute,
+            SchemaRoute,
+            SitePageRoute: ReadySitePageRoute,
+          }}
+          runtimeProfile={createPublishedSiteRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(hydratedAppHtml).toBe(ssrHtml);
+  });
+
   it("renders seeded post and project summaries from groups", () => {
     const html = renderSitePage("home");
 

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { renderToReadableStream } from "react-dom/server.edge";
 
+import { renderInitialSitePageTreeScript } from "../app/site-renderer/initial-tree.ts";
 import { SitePageRenderer } from "../app/site-renderer/renderer.tsx";
 import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
-import type { SitePageTreeResponse } from "../shared/protocol.ts";
+import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { Env } from "./index.ts";
 
 const SITE_SCHEMA_KEY = "site";
@@ -33,9 +34,13 @@ async function renderPublishedSiteDocument(request: Request, env: Env): Promise<
   }
 
   const tree = (await treeResponse.json()) as SitePageTreeResponse;
-  const appHtml = await renderReactToString(<SitePageRenderer linkMode="published" tree={tree} />);
+  const appHtml = await renderReactToString(
+    <PublishedSiteDocumentShell>
+      <SitePageRenderer linkMode="published" tree={tree} />
+    </PublishedSiteDocumentShell>,
+  );
 
-  return htmlResponse(renderDocument(appHtml));
+  return htmlResponse(renderDocument(appHtml, { initialTree: tree }));
 }
 
 async function fetchSitePageTree(request: Request, env: Env, slug: string): Promise<Response> {
@@ -54,15 +59,17 @@ async function fetchSitePageTree(request: Request, env: Env, slug: string): Prom
 async function renderNotFoundDocument(slug: string): Promise<string> {
   return renderDocument(
     await renderReactToString(
-      <section className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold">Page not found</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          No site page exists for <code>{slug}</code>.
-        </p>
-        <a className="mt-4 inline-flex text-sm font-medium underline" href="/">
-          Home
-        </a>
-      </section>,
+      <PublishedSiteDocumentShell>
+        <section className="mx-auto max-w-3xl px-6 py-10">
+          <h1 className="text-2xl font-semibold">Page not found</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            No site page exists for <code>{slug}</code>.
+          </p>
+          <a className="mt-4 inline-flex text-sm font-medium underline" href="/">
+            Home
+          </a>
+        </section>
+      </PublishedSiteDocumentShell>,
     ),
   );
 }
@@ -70,12 +77,18 @@ async function renderNotFoundDocument(slug: string): Promise<string> {
 async function renderErrorDocument(slug: string): Promise<string> {
   return renderDocument(
     await renderReactToString(
-      <section className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold">Site page failed to load</h1>
-        <p className="mt-2 text-sm text-slate-600">{slug}: Site page failed to render.</p>
-      </section>,
+      <PublishedSiteDocumentShell>
+        <section className="mx-auto max-w-3xl px-6 py-10">
+          <h1 className="text-2xl font-semibold">Site page failed to load</h1>
+          <p className="mt-2 text-sm text-slate-600">{slug}: Site page failed to render.</p>
+        </section>
+      </PublishedSiteDocumentShell>,
     ),
   );
+}
+
+function PublishedSiteDocumentShell({ children }: { children: ReactNode }) {
+  return <main className="min-h-dvh">{children}</main>;
 }
 
 async function renderReactToString(node: ReactNode): Promise<string> {
@@ -86,7 +99,11 @@ async function renderReactToString(node: ReactNode): Promise<string> {
   return new Response(stream).text();
 }
 
-function renderDocument(appHtml: string): string {
+function renderDocument(appHtml: string, options: { initialTree?: SitePageTree } = {}): string {
+  const initialTreeScript = options.initialTree
+    ? `\n    ${renderInitialSitePageTreeScript(options.initialTree)}`
+    : "";
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -96,7 +113,7 @@ function renderDocument(appHtml: string): string {
     <title>formless</title>
   </head>
   <body>
-    <div id="app">${appHtml}</div>
+    <div id="app">${appHtml}</div>${initialTreeScript}
     <script type="module" src="${CLIENT_MODULE_PATH}"></script>
   </body>
 </html>`;

@@ -38,7 +38,10 @@ import {
   withHomeRouteSelectedSectionContextRecordId,
 } from "./app/routes/home-selection.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
-import { normalizeSitePageSlug } from "./app/routes/site-page-slug.ts";
+import {
+  SitePageRoute as DefaultSitePageRoute,
+  normalizeSitePageSlug,
+} from "./app/routes/site-page.tsx";
 import { SyncStatusControl } from "./app/routes/status-line.tsx";
 import {
   findRuntimeWorldMountByRoute,
@@ -84,9 +87,7 @@ const defaultRouteComponents: AppRouteComponents = {
   SchemaRoute: lazy(() =>
     import("./app/routes/schema.tsx").then((module) => ({ default: module.SchemaRoute })),
   ),
-  SitePageRoute: lazy(() =>
-    import("./app/routes/site-page.tsx").then((module) => ({ default: module.SitePageRoute })),
-  ),
+  SitePageRoute: DefaultSitePageRoute,
 };
 
 export function App({

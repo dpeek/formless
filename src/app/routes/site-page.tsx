@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SitePageRenderer } from "../site-renderer/renderer.tsx";
 import { sitePagePathForSlug, type SitePageLinkMode } from "../site-renderer/links.ts";
+import { readInitialSitePageTree } from "../site-renderer/initial-tree.ts";
 import { listenForClientEvents } from "../../client/broadcast.ts";
 import { startPushSync } from "../../client/sync.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../../shared/protocol.ts";
@@ -29,6 +30,7 @@ export type SitePageRouteState =
 
 type SitePageRouteSessionOptions = {
   fetcher?: typeof fetch;
+  initialTree?: SitePageTree;
   linkMode: SitePageLinkMode;
   listenForPreviewChanges?: (onChanged: () => void) => () => void;
   onState: (state: SitePageRouteState) => void;
@@ -44,13 +46,17 @@ export function SitePageRoute({
   slug: string;
 }) {
   const normalizedSlug = normalizeSitePageSlug(slug);
-  const [state, setState] = useState<SitePageRouteState>({
-    status: "loading",
-    slug: normalizedSlug,
-  });
+  const initialTree = useMemo(
+    () => (linkMode === "published" ? readInitialSitePageTree(normalizedSlug) : undefined),
+    [linkMode, normalizedSlug],
+  );
+  const [state, setState] = useState<SitePageRouteState>(() =>
+    sitePageRouteInitialState({ initialTree, linkMode, slug: normalizedSlug }),
+  );
 
   useEffect(() => {
     return startSitePageRouteSession({
+      initialTree,
       linkMode,
       onState: setState,
       slug: normalizedSlug,
@@ -62,6 +68,7 @@ export function SitePageRoute({
 
 export function startSitePageRouteSession({
   fetcher,
+  initialTree,
   linkMode,
   listenForPreviewChanges = listenForSitePreviewChanges,
   onState,
@@ -112,11 +119,14 @@ export function startSitePageRouteSession({
     loadTree(false);
   }
 
-  loadTree(true);
-
   if (linkMode === "preview") {
+    loadTree(true);
     stopPreviewSync = startPreviewSync(refetchActiveTree);
     stopPreviewChanges = listenForPreviewChanges(refetchActiveTree);
+  } else if (initialTreeMatchesSlug(initialTree, normalizedSlug)) {
+    onState({ status: "ready", tree: initialTree });
+  } else {
+    loadTree(true);
   }
 
   return () => {
@@ -125,6 +135,29 @@ export function startSitePageRouteSession({
     stopPreviewChanges();
     stopPreviewSync();
   };
+}
+
+function sitePageRouteInitialState({
+  initialTree,
+  linkMode,
+  slug,
+}: {
+  initialTree: SitePageTree | undefined;
+  linkMode: SitePageLinkMode;
+  slug: string;
+}): SitePageRouteState {
+  if (linkMode === "published" && initialTreeMatchesSlug(initialTree, slug)) {
+    return { status: "ready", tree: initialTree };
+  }
+
+  return { status: "loading", slug };
+}
+
+function initialTreeMatchesSlug(
+  tree: SitePageTree | undefined,
+  slug: string,
+): tree is SitePageTree {
+  return Boolean(tree && normalizeSitePageSlug(tree.meta.slug) === normalizeSitePageSlug(slug));
 }
 
 function startSitePreviewSync(onSynced: () => void) {

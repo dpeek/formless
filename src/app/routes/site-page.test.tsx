@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { fetchSitePageTree, normalizeSitePageSlug } from "./site-page.tsx";
+import {
+  fetchSitePageTree,
+  normalizeSitePageSlug,
+  startSitePageRouteSession,
+  type SitePageRouteState,
+} from "./site-page.tsx";
+import {
+  INITIAL_SITE_PAGE_TREE_SCRIPT_ID,
+  readInitialSitePageTree,
+  renderInitialSitePageTreeScript,
+} from "../site-renderer/initial-tree.ts";
 import type { SitePageTreeResponse } from "../../shared/protocol.ts";
 
 describe("public Site page route data loading", () => {
@@ -70,7 +80,84 @@ describe("public Site page route data loading", () => {
       "blog/shipping-schema-backed-authoring",
     );
   });
+
+  it("reads matching embedded initial tree data", () => {
+    const tree = sitePageTree("blog/shipping-schema-backed-authoring");
+    const scriptText = initialTreeScriptText(tree);
+
+    expect(
+      readInitialSitePageTree("blog/shipping-schema-backed-authoring", fakeDocument(scriptText)),
+    ).toEqual(tree);
+    expect(readInitialSitePageTree("blog/other", fakeDocument(scriptText))).toBeUndefined();
+  });
+
+  it("escapes embedded initial tree data so content cannot close the script", () => {
+    const homeTree = sitePageTree("home");
+    const tree = {
+      ...homeTree,
+      page: {
+        ...homeTree.page,
+        label: 'Hostile </script><script type="module">alert(1)</script> & text',
+      },
+    };
+    const scriptText = initialTreeScriptText(tree);
+
+    expect(scriptText).not.toContain("</script");
+    expect(scriptText).not.toContain("<script");
+    expect(scriptText).toContain("\\u003C/script\\u003E\\u003Cscript");
+    expect(scriptText).toContain("\\u0026 text");
+    expect(readInitialSitePageTree("home", fakeDocument(scriptText))).toEqual(tree);
+  });
+
+  it("starts published Site sessions from embedded tree data without a duplicate fetch", () => {
+    const tree = sitePageTree("home");
+    const states: SitePageRouteState[] = [];
+    let fetched = false;
+    let startedPreviewSync = false;
+    let listenedForPreviewChanges = false;
+
+    const stop = startSitePageRouteSession({
+      fetcher: async () => {
+        fetched = true;
+        return Response.json(tree);
+      },
+      initialTree: tree,
+      linkMode: "published",
+      listenForPreviewChanges: () => {
+        listenedForPreviewChanges = true;
+        return () => {};
+      },
+      onState: (state) => states.push(state),
+      slug: "home",
+      startPreviewSync: () => {
+        startedPreviewSync = true;
+        return () => {};
+      },
+    });
+
+    stop();
+
+    expect(states).toEqual([{ status: "ready", tree }]);
+    expect(fetched).toBe(false);
+    expect(startedPreviewSync).toBe(false);
+    expect(listenedForPreviewChanges).toBe(false);
+  });
 });
+
+function initialTreeScriptText(tree: SitePageTreeResponse): string {
+  const script = renderInitialSitePageTreeScript(tree);
+  const start = script.indexOf(">") + 1;
+  const end = script.lastIndexOf("</script>");
+
+  return script.slice(start, end);
+}
+
+function fakeDocument(textContent: string) {
+  return {
+    getElementById: (id: string) =>
+      id === INITIAL_SITE_PAGE_TREE_SCRIPT_ID ? { textContent } : null,
+  };
+}
 
 function sitePageTree(slug: string): SitePageTreeResponse {
   return {
