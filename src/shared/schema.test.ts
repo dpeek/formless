@@ -5008,8 +5008,16 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         linkTargetMode: { editor: "enum", commit: "immediate" },
-        linkTargetBlock: { editor: "reference", commit: "immediate" },
-        href: { editor: "href", commit: "field-commit" },
+        linkTargetBlock: {
+          editor: "reference",
+          commit: "immediate",
+          visibleWhen: { field: "linkTargetMode", values: ["internal"] },
+        },
+        href: {
+          editor: "href",
+          commit: "field-commit",
+          visibleWhen: { field: "linkTargetMode", values: ["", "external"] },
+        },
         icon: { editor: "icon", commit: "field-commit" },
       },
     });
@@ -5017,8 +5025,16 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         linkTargetMode: { editor: "enum", commit: "immediate" },
-        linkTargetBlock: { editor: "reference", commit: "immediate" },
-        href: { editor: "href", commit: "field-commit" },
+        linkTargetBlock: {
+          editor: "reference",
+          commit: "immediate",
+          visibleWhen: { field: "linkTargetMode", values: ["internal"] },
+        },
+        href: {
+          editor: "href",
+          commit: "field-commit",
+          visibleWhen: { field: "linkTargetMode", values: ["", "external"] },
+        },
         icon: { editor: "icon", commit: "field-commit" },
       },
     });
@@ -5028,8 +5044,14 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             linkTargetMode: { editor: "enum" },
-            linkTargetBlock: { editor: "reference" },
-            href: { editor: "href" },
+            linkTargetBlock: {
+              editor: "reference",
+              visibleWhen: { field: "linkTargetMode", values: ["internal"] },
+            },
+            href: {
+              editor: "href",
+              visibleWhen: { field: "linkTargetMode", values: ["", "external"] },
+            },
             icon: { editor: "icon" },
           },
         },
@@ -5041,8 +5063,16 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             linkTargetMode: { editor: "enum", commit: "immediate" },
-            linkTargetBlock: { editor: "reference", commit: "immediate" },
-            href: { editor: "href", commit: "field-commit" },
+            linkTargetBlock: {
+              editor: "reference",
+              commit: "immediate",
+              visibleWhen: { field: "linkTargetMode", values: ["internal"] },
+            },
+            href: {
+              editor: "href",
+              commit: "field-commit",
+              visibleWhen: { field: "linkTargetMode", values: ["", "external"] },
+            },
             icon: { editor: "icon", commit: "field-commit" },
           },
         },

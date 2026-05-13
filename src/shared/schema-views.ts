@@ -42,7 +42,8 @@ import type {
   EditViewSchema,
   EntitySchema,
   EntityUnionSchema,
-  FieldEditor,
+  FieldVisibilityConditionSchema,
+  FieldVisibilityValue,
   FieldSchema,
   ItemViewVariantPresentationSchema,
   ItemViewSchema,
@@ -2188,7 +2189,7 @@ function parseListViewField(
     throw new Error(`View field "${viewName}.${fieldName}" must be an object.`);
   }
 
-  const allowedKeys = new Set(["editor", "commit"]);
+  const allowedKeys = new Set(["editor", "commit", "visibleWhen"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`View field "${viewName}.${fieldName}" has unsupported key "${key}".`);
@@ -2203,10 +2204,12 @@ function parseListViewField(
   const context = `View field "${viewName}.${fieldName}"`;
   const editor = parseFieldEditor(context, value.editor, field);
   const commit = parseFieldCommitPolicy(context, value.commit, field);
+  const visibleWhen = parseFieldVisibilityCondition(context, value.visibleWhen, entity);
 
   return {
     editor,
     commit,
+    ...(visibleWhen === undefined ? {} : { visibleWhen }),
   };
 }
 
@@ -2239,7 +2242,7 @@ function parseCreateViewField(
     throw new Error(`View field "${viewName}.${fieldName}" must be an object.`);
   }
 
-  const allowedKeys = new Set(["editor"]);
+  const allowedKeys = new Set(["editor", "visibleWhen"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`View field "${viewName}.${fieldName}" has unsupported key "${key}".`);
@@ -2251,20 +2254,80 @@ function parseCreateViewField(
     throw new Error(`View "${viewName}" references unknown field "${entityName}.${fieldName}".`);
   }
 
-  const editor = parseViewFieldEditor(viewName, fieldName, value.editor, field);
+  const context = `View field "${viewName}.${fieldName}"`;
+  const editor = parseFieldEditor(context, value.editor, field);
+  const visibleWhen = parseFieldVisibilityCondition(context, value.visibleWhen, entity);
 
   return {
     editor,
+    ...(visibleWhen === undefined ? {} : { visibleWhen }),
   };
 }
 
-function parseViewFieldEditor(
-  viewName: string,
-  fieldName: string,
+function parseFieldVisibilityCondition(
+  context: string,
+  value: unknown,
+  entity: EntitySchema,
+): FieldVisibilityConditionSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} visibleWhen must be an object.`);
+  }
+
+  assertExactKeys(`${context} visibleWhen`, value, ["field", "values"]);
+
+  const fieldName = parseRequiredNonEmptyString(`${context} visibleWhen field`, value.field);
+  const field = entity.fields[fieldName];
+
+  if (!field) {
+    throw new Error(`${context} visibleWhen references unknown field "${fieldName}".`);
+  }
+
+  if (!Array.isArray(value.values) || value.values.length === 0) {
+    throw new Error(`${context} visibleWhen values must be a non-empty array.`);
+  }
+
+  return {
+    field: fieldName,
+    values: value.values.map((candidate, index) =>
+      parseFieldVisibilityValue(`${context} visibleWhen values[${index}]`, candidate, field),
+    ),
+  };
+}
+
+function parseFieldVisibilityValue(
+  context: string,
   value: unknown,
   field: FieldSchema,
-): FieldEditor {
-  return parseFieldEditor(`View field "${viewName}.${fieldName}"`, value, field);
+): FieldVisibilityValue {
+  if (field.type === "boolean") {
+    if (typeof value !== "boolean") {
+      throw new Error(`${context} must be a boolean.`);
+    }
+
+    return value;
+  }
+
+  if (field.type === "number") {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`${context} must be a finite number.`);
+    }
+
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(`${context} must be a string.`);
+  }
+
+  if (field.type === "enum" && value !== "" && !Object.hasOwn(field.values, value)) {
+    throw new Error(`${context} must be a known enum value.`);
+  }
+
+  return value;
 }
 
 function assertViewHasFields(viewName: string, fields: Record<string, unknown>) {

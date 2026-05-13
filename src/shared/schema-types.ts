@@ -85,13 +85,22 @@ export type FieldEditor =
   | "enum"
   | "reference";
 
+export type FieldVisibilityValue = string | boolean | number;
+
+export type FieldVisibilityConditionSchema = {
+  field: string;
+  values: FieldVisibilityValue[];
+};
+
 export type ViewFieldSchema = {
   editor: FieldEditor;
   commit: FieldCommitPolicy;
+  visibleWhen?: FieldVisibilityConditionSchema;
 };
 
 export type CreateViewFieldSchema = {
   editor: FieldEditor;
+  visibleWhen?: FieldVisibilityConditionSchema;
 };
 
 export type TableColumnAlign = "start" | "center" | "end";

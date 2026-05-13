@@ -1206,7 +1206,7 @@ describe("generated collection home", () => {
     expect(html).toContain("data-formless-sortable-tree-placement=");
   });
 
-  it("renders Site link tree nodes as compact label and href editors", () => {
+  it("renders Site link tree nodes with mode-specific target editors", () => {
     const collection = requiredSiteCollectionModel("siteCompositionHome");
 
     if (!collection.context || collection.result.type !== "tree") {
@@ -1215,12 +1215,22 @@ describe("generated collection home", () => {
 
     bootstrapSiteEditor([
       siteBlockRecord("page-1", { type: "page", label: "Tree root" }),
+      siteBlockRecord("page-2", { type: "page", label: "Docs page", href: "/docs" }),
       siteBlockRecord("link-1", {
         type: "link",
-        label: "Docs",
-        href: "/docs",
+        label: "Docs internal",
+        linkTargetMode: "internal",
+        linkTargetBlock: "page-2",
+        href: "/stale-docs",
         icon: "book",
         color: "#336699",
+      }),
+      siteBlockRecord("link-2", {
+        type: "link",
+        label: "Docs external",
+        linkTargetMode: "external",
+        href: "https://example.com/docs",
+        icon: "book",
       }),
       {
         id: "placement-1",
@@ -1232,6 +1242,17 @@ describe("generated collection home", () => {
           order: 1000,
         },
         createdAt: "2026-05-05T00:00:40.000Z",
+      },
+      {
+        id: "placement-2",
+        entity: "blockPlacement",
+        values: {
+          parent: "page-1",
+          block: "link-2",
+          label: "External placement label",
+          order: 2000,
+        },
+        createdAt: "2026-05-05T00:00:41.000Z",
       },
     ]);
     const html = renderToStaticMarkup(
@@ -1245,10 +1266,18 @@ describe("generated collection home", () => {
     );
 
     expect(html).toContain('aria-label="Label"');
-    expect(html).toContain('value="Docs"');
+    expect(html).toContain('value="Docs internal"');
+    expect(html).toContain('value="Docs external"');
+    expect(html).toContain('aria-label="Link target"');
+    expect(html).toContain('value="internal" selected="">Internal</option>');
+    expect(html).toContain('value="external" selected="">External</option>');
+    expect(html).toContain('aria-label="Target block"');
+    expect(html).toContain('value="page-2" selected="">Docs page</option>');
     expect(html).toContain('aria-label="Link"');
-    expect(html).toContain('value="/docs"');
+    expect(html).toContain('value="https://example.com/docs"');
+    expect(html).not.toContain('value="/stale-docs"');
     expect(html).not.toContain("Placement label");
+    expect(html).not.toContain("External placement label");
     expect(html).toContain('data-web-field-kind="icon"');
     expect(html).toContain('data-web-svg-icon="empty"');
     expect(html).toContain('aria-label="Edit Icon"');
@@ -2453,6 +2482,63 @@ describe("generated forms and records", () => {
       href: "/projects/focused-project",
       body: "A short **summary**.",
       type: "project",
+    });
+  });
+
+  it("renders source site link creates with mode-specific destination fields", () => {
+    const baseAction = requiredCreateAction(siteSourceSchema, "blockHome");
+    const typeField = siteSourceSchema.entities.block.fields.type;
+
+    if (typeField.type !== "enum") {
+      throw new Error("Site block type must be an enum field.");
+    }
+
+    const action = {
+      ...baseAction,
+      fields: baseAction.fields.filter((field) => field.fieldName !== "type"),
+      defaults: [
+        ...baseAction.defaults,
+        {
+          fieldName: "type",
+          field: typeField,
+          value: { kind: "literal" as const, value: "link" },
+        },
+      ],
+    };
+    const internalFormData = new FormData();
+    internalFormData.set("label", "Internal docs");
+    internalFormData.set("linkTargetMode", "internal");
+    internalFormData.set("linkTargetBlock", "rec_site_content_blog");
+    internalFormData.set("href", "/stale-docs");
+    internalFormData.set("icon", "book");
+    const externalFormData = new FormData();
+    externalFormData.set("label", "External docs");
+    externalFormData.set("linkTargetMode", "external");
+    externalFormData.set("linkTargetBlock", "rec_site_content_blog");
+    externalFormData.set("href", "https://example.com/docs");
+    externalFormData.set("icon", "book");
+
+    bootstrapSiteEditor();
+    const html = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+
+    expect(html).toContain('name="linkTargetMode"');
+    expect(html).toContain('name="href"');
+    expect(html).not.toContain('name="linkTargetBlock"');
+    expect(resolveCreateValues(internalFormData, action)).toEqual({
+      label: "Internal docs",
+      linkTargetMode: "internal",
+      linkTargetBlock: "rec_site_content_blog",
+      icon: "book",
+      type: "link",
+    });
+    expect(resolveCreateValues(externalFormData, action)).toEqual({
+      label: "External docs",
+      linkTargetMode: "external",
+      href: "https://example.com/docs",
+      icon: "book",
+      type: "link",
     });
   });
 
@@ -3824,7 +3910,6 @@ describe("generated forms and records", () => {
       type: "link",
       label: "Field behavior link",
       linkTargetMode: "external",
-      linkTargetBlock: "",
       href: "https://example.com/field-behavior",
       icon: "note",
     });

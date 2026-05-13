@@ -148,6 +148,7 @@ function selectRecordVariantPresentation(
       field: entity.fields[fieldName] as FieldSchema,
       editor: viewField.editor,
       commit: viewField.commit,
+      ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
     })),
   };
 }
@@ -194,6 +195,7 @@ function selectCreateVariantPresentation(
       fieldName,
       field: entity.fields[fieldName] as FieldSchema,
       editor: viewField.editor,
+      ...(viewField.visibleWhen === undefined ? {} : { visibleWhen: viewField.visibleWhen }),
     })),
   };
 }

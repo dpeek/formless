@@ -1,5 +1,10 @@
 import { isDateString } from "./date.ts";
-import { createInputValueToFieldValue, fieldHasCreateDefault } from "./field-types.ts";
+import {
+  createInputValueToFieldValue,
+  fieldCreateDefaultValue,
+  fieldHasCreateDefault,
+  fieldValueToInputValue,
+} from "./field-types.ts";
 import type { RecordValues } from "./protocol.ts";
 import type { QueryEvaluationContext } from "./query.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
@@ -8,12 +13,15 @@ import type {
   CreateViewFieldSchema,
   CreateViewSchema,
   EntitySchema,
+  FieldVisibilityConditionSchema,
+  FieldVisibilityValue,
   FieldSchema,
 } from "./schema-types.ts";
 
 export type CreateDefaultFieldConfig = {
   fieldName: string;
   field: FieldSchema;
+  visibleWhen?: FieldVisibilityConditionSchema;
 };
 
 export type CreateDefaultConfig = CreateDefaultFieldConfig & {
@@ -108,7 +116,7 @@ export function resolveCreateValues<TField extends CreateDefaultFieldConfig>({
 }): RecordValues {
   const values = getVisibleCreateValues(
     formData,
-    selectCreateFieldsForFormData(fields, union, formData, defaults),
+    selectCreateFieldsForFormData(fields, union, formData, defaults, queryContext),
   );
 
   return applyCreateDefaultValues(values, defaults, queryContext);
@@ -176,16 +184,44 @@ export function selectCreateFieldsForFormData<TField extends CreateDefaultFieldC
   union: CreateDefaultUnionConfig<TField> | undefined,
   formData: FormData,
   defaults: CreateDefaultConfig[] = [],
+  queryContext?: QueryEvaluationContext,
 ): TField[] {
   if (union === undefined) {
-    return baseFields;
+    return selectCreateFieldsForVisibility(baseFields, (fieldName) =>
+      fieldInputValueForCreateVisibility(fieldName, baseFields, formData, defaults, queryContext),
+    );
   }
 
   const formValue = formData.get(union.discriminatorFieldName);
   const discriminatorValue =
     typeof formValue === "string" ? formValue : initialCreateDiscriminatorValue(union, defaults);
 
-  return selectCreateFieldsForDiscriminator(baseFields, union, discriminatorValue);
+  const fields = selectCreateFieldsForDiscriminator(baseFields, union, discriminatorValue);
+
+  return selectCreateFieldsForVisibility(fields, (fieldName) =>
+    fieldInputValueForCreateVisibility(fieldName, fields, formData, defaults, queryContext),
+  );
+}
+
+export function selectCreateFieldsForInputValues<TField extends CreateDefaultFieldConfig>(
+  fields: TField[],
+  inputValues: Record<string, FieldVisibilityValue | undefined>,
+): TField[] {
+  return selectCreateFieldsForVisibility(fields, (fieldName) => {
+    const inputValue = inputValues[fieldName];
+
+    if (inputValue !== undefined) {
+      return inputValue;
+    }
+
+    const fieldConfig = fields.find((candidate) => candidate.fieldName === fieldName);
+
+    if (fieldConfig && fieldHasCreateDefault(fieldConfig.field)) {
+      return fieldValueToInputValue(fieldConfig.field, fieldCreateDefaultValue(fieldConfig.field));
+    }
+
+    return "";
+  });
 }
 
 export function initialCreateDiscriminatorValue(
@@ -390,6 +426,53 @@ function getVisibleCreateValues<TField extends CreateDefaultFieldConfig>(
   }
 
   return values;
+}
+
+function selectCreateFieldsForVisibility<TField extends CreateDefaultFieldConfig>(
+  fields: TField[],
+  valueForField: (fieldName: string) => FieldVisibilityValue | undefined,
+): TField[] {
+  return fields.filter((field) => {
+    const condition = field.visibleWhen;
+
+    if (condition === undefined) {
+      return true;
+    }
+
+    return condition.values.includes(valueForField(condition.field) ?? "");
+  });
+}
+
+function fieldInputValueForCreateVisibility<TField extends CreateDefaultFieldConfig>(
+  fieldName: string,
+  fields: TField[],
+  formData: FormData,
+  defaults: CreateDefaultConfig[],
+  queryContext?: QueryEvaluationContext,
+): FieldVisibilityValue {
+  const formValue = formData.get(fieldName);
+
+  if (typeof formValue === "string") {
+    return formValue;
+  }
+
+  const defaultConfig = defaults.find((candidate) => candidate.fieldName === fieldName);
+
+  if (defaultConfig?.value.kind === "literal") {
+    return defaultConfig.value.value;
+  }
+
+  if (defaultConfig?.value.kind === "context") {
+    return queryContext?.values?.[defaultConfig.value.name] ?? "";
+  }
+
+  const fieldConfig = fields.find((candidate) => candidate.fieldName === fieldName);
+
+  if (fieldConfig && fieldHasCreateDefault(fieldConfig.field)) {
+    return fieldValueToInputValue(fieldConfig.field, fieldCreateDefaultValue(fieldConfig.field));
+  }
+
+  return "";
 }
 
 function selectActiveCreateUnionPresentation<TField extends CreateDefaultFieldConfig>(

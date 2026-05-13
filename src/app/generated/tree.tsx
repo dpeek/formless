@@ -970,6 +970,7 @@ function recordFieldsToCreateFields(fields: RecordFieldConfig[]): CreateFieldCon
     fieldName: field.fieldName,
     field: field.field,
     editor: field.editor,
+    ...(field.visibleWhen === undefined ? {} : { visibleWhen: field.visibleWhen }),
   }));
 }
 

@@ -42,7 +42,9 @@ import {
   initialCreateDiscriminatorValue,
   resolveCreateValues as resolveCreateDefaultValues,
   selectCreateFieldsForDiscriminator,
+  selectCreateFieldsForInputValues,
 } from "../../shared/create-defaults.ts";
+import type { FieldVisibilityValue } from "../../shared/schema.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import {
   decodeNumberEditorInputValue,
@@ -71,15 +73,16 @@ export function GeneratedCreateForm({
   const [discriminatorValue, setDiscriminatorValue] = useState(() =>
     initialCreateDiscriminatorValue(union, defaults),
   );
+  const [inputValues, setInputValues] = useState<Record<string, FieldVisibilityValue>>({});
   const canCreate = entity.mutations.create.enabled;
-  const visibleCreateFields = selectCreateFieldsForDiscriminator(
-    createFields,
-    union,
-    discriminatorValue,
+  const visibleCreateFields = selectCreateFieldsForInputValues(
+    selectCreateFieldsForDiscriminator(createFields, union, discriminatorValue),
+    inputValues,
   );
 
   useEffect(() => {
     setDiscriminatorValue(initialCreateDiscriminatorValue(union, defaults));
+    setInputValues({});
   }, [defaults, union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
@@ -105,6 +108,7 @@ export function GeneratedCreateForm({
       await submitCreateMutation(schemaKey, entityName, values);
       form.reset();
       setDiscriminatorValue(initialCreateDiscriminatorValue(union, defaults));
+      setInputValues({});
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -130,8 +134,13 @@ export function GeneratedCreateForm({
             fieldConfig={fieldConfig}
             key={fieldConfig.fieldName}
             onValueChange={(value) => {
+              setInputValues((current) => ({
+                ...current,
+                [fieldConfig.fieldName]: value,
+              }));
+
               if (fieldConfig.fieldName === union?.discriminatorFieldName) {
-                setDiscriminatorValue(value);
+                setDiscriminatorValue(String(value));
               }
             }}
           />
@@ -195,15 +204,16 @@ export function GeneratedCreateDialogForm({
   const [discriminatorValue, setDiscriminatorValue] = useState(() =>
     initialCreateDiscriminatorValue(action.union, action.defaults),
   );
+  const [inputValues, setInputValues] = useState<Record<string, FieldVisibilityValue>>({});
   const canSubmit = action.enabled && createDefaultsAreResolved(action.defaults, queryContext);
-  const visibleFields = selectCreateFieldsForDiscriminator(
-    action.fields,
-    action.union,
-    discriminatorValue,
+  const visibleFields = selectCreateFieldsForInputValues(
+    selectCreateFieldsForDiscriminator(action.fields, action.union, discriminatorValue),
+    inputValues,
   );
 
   useEffect(() => {
     setDiscriminatorValue(initialCreateDiscriminatorValue(action.union, action.defaults));
+    setInputValues({});
   }, [action.defaults, action.union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
@@ -233,6 +243,7 @@ export function GeneratedCreateDialogForm({
           : await submitValues(values);
       form.reset();
       setDiscriminatorValue(initialCreateDiscriminatorValue(action.union, action.defaults));
+      setInputValues({});
       onSuccess?.(response.recordId);
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
@@ -257,8 +268,13 @@ export function GeneratedCreateDialogForm({
             fieldConfig={fieldConfig}
             key={fieldConfig.fieldName}
             onValueChange={(value) => {
+              setInputValues((current) => ({
+                ...current,
+                [fieldConfig.fieldName]: value,
+              }));
+
               if (fieldConfig.fieldName === action.union?.discriminatorFieldName) {
-                setDiscriminatorValue(value);
+                setDiscriminatorValue(String(value));
               }
             }}
           />
@@ -286,7 +302,7 @@ function CreateFieldInput({
   onValueChange,
 }: {
   fieldConfig: CreateFieldConfig;
-  onValueChange?: (value: string) => void;
+  onValueChange?: (value: FieldVisibilityValue) => void;
 }) {
   const { field, fieldName, editor } = fieldConfig;
   const adapter = selectGeneratedFieldEditorAdapter(field, editor);
@@ -295,7 +311,11 @@ function CreateFieldInput({
   if (adapter.kind === "boolean") {
     return (
       <Field orientation="horizontal">
-        <Checkbox defaultChecked={adapter.createDefaultChecked} name={fieldName} />
+        <Checkbox
+          defaultChecked={adapter.createDefaultChecked}
+          name={fieldName}
+          onCheckedChange={(checked) => onValueChange?.(checked)}
+        />
         <Label>{label}</Label>
       </Field>
     );
@@ -404,6 +424,7 @@ function CreateFieldInput({
         field={adapter.field}
         fieldName={fieldName}
         label={label}
+        onValueChange={onValueChange}
         required={adapter.required}
       />
     );
@@ -416,6 +437,7 @@ function CreateFieldInput({
         <Textarea
           defaultValue={adapter.createDefaultValue}
           name={fieldName}
+          onChange={(event) => onValueChange?.(event.currentTarget.value)}
           required={adapter.required}
         />
       </Field>
@@ -428,6 +450,7 @@ function CreateFieldInput({
       <Input
         defaultValue={adapter.createDefaultValue}
         name={fieldName}
+        onChange={(event) => onValueChange?.(event.currentTarget.value)}
         required={adapter.required}
         type={adapter.control.kind === "input" ? adapter.control.inputType : "text"}
       />
@@ -637,12 +660,14 @@ function ReferenceCreateField({
   field,
   fieldName,
   label,
+  onValueChange,
   required,
 }: {
   defaultValue: string | undefined;
   field: Extract<FieldSchema, { type: "reference" }>;
   fieldName: string;
   label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
   required: boolean;
 }) {
   const options = useReferenceOptions(field.to, field.displayField);
@@ -654,6 +679,7 @@ function ReferenceCreateField({
         className="w-full"
         defaultValue={defaultValue}
         name={fieldName}
+        onChange={(event) => onValueChange?.(event.currentTarget.value)}
         required={required}
       >
         {required ? null : <NativeSelectOption value="" />}

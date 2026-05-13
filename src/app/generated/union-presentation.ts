@@ -4,6 +4,7 @@ import type {
   RecordUnionPresentationConfig,
 } from "../../client/views.ts";
 import type { FieldValue, StoredRecord } from "../../shared/protocol.ts";
+import type { FieldVisibilityValue } from "../../shared/schema.ts";
 
 type ActiveRecordUnionPresentation =
   | RecordUnionPresentationConfig["variants"][number]
@@ -17,10 +18,13 @@ export function selectRecordFieldsForActiveUnion(
   const presentation = selectActiveRecordUnionPresentation(union, record);
 
   if (presentation?.presentation.type !== "fields") {
-    return baseFields;
+    return selectRecordFieldsForVisibility(baseFields, record);
   }
 
-  return appendNewFields(baseFields, presentation.presentation.fields);
+  return selectRecordFieldsForVisibility(
+    appendNewFields(baseFields, presentation.presentation.fields),
+    record,
+  );
 }
 
 export function selectRecordContextLinkForActiveUnion(
@@ -55,6 +59,29 @@ function appendNewFields<TField extends { fieldName: string }>(
   const newFields = variantFields.filter((field) => !fieldNames.has(field.fieldName));
 
   return newFields.length === 0 ? baseFields : [...baseFields, ...newFields];
+}
+
+function selectRecordFieldsForVisibility(
+  fields: RecordFieldConfig[],
+  record: StoredRecord | undefined,
+): RecordFieldConfig[] {
+  return fields.filter((fieldConfig) => {
+    const condition = fieldConfig.visibleWhen;
+
+    if (condition === undefined) {
+      return true;
+    }
+
+    return condition.values.includes(recordVisibilityValue(record?.values[condition.field]) ?? "");
+  });
+}
+
+function recordVisibilityValue(value: FieldValue | undefined): FieldVisibilityValue | undefined {
+  if (typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
+    return value;
+  }
+
+  return undefined;
 }
 
 function stringValue(value: FieldValue | undefined): string | undefined {

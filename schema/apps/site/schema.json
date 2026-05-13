@@ -571,11 +571,19 @@
             },
             "linkTargetBlock": {
               "editor": "reference",
-              "commit": "immediate"
+              "commit": "immediate",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["internal"]
+              }
             },
             "href": {
               "editor": "href",
-              "commit": "field-commit"
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["", "external"]
+              }
             },
             "icon": {
               "editor": "icon",
@@ -679,11 +687,19 @@
             },
             "linkTargetBlock": {
               "editor": "reference",
-              "commit": "immediate"
+              "commit": "immediate",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["internal"]
+              }
             },
             "href": {
               "editor": "href",
-              "commit": "field-commit"
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["", "external"]
+              }
             },
             "icon": {
               "editor": "icon",
@@ -1166,10 +1182,18 @@
               "editor": "enum"
             },
             "linkTargetBlock": {
-              "editor": "reference"
+              "editor": "reference",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["internal"]
+              }
             },
             "href": {
-              "editor": "href"
+              "editor": "href",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["", "external"]
+              }
             },
             "icon": {
               "editor": "icon"
@@ -1322,11 +1346,19 @@
             },
             "linkTargetBlock": {
               "editor": "reference",
-              "commit": "immediate"
+              "commit": "immediate",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["internal"]
+              }
             },
             "href": {
               "editor": "href",
-              "commit": "field-commit"
+              "commit": "field-commit",
+              "visibleWhen": {
+                "field": "linkTargetMode",
+                "values": ["", "external"]
+              }
             },
             "icon": {
               "editor": "icon",

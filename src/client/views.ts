@@ -16,6 +16,7 @@ import type {
   EntityUnionVariantSchema,
   FieldCommitPolicy,
   FieldEditor,
+  FieldVisibilityConditionSchema,
   FieldSchema,
   ItemViewSchema,
   ScreenNavigationSchema,
@@ -52,6 +53,7 @@ export type RecordFieldConfig = {
   commit: FieldCommitPolicy;
   label?: string;
   format?: TableColumnFormat;
+  visibleWhen?: FieldVisibilityConditionSchema;
   valueUnit?: ValueUnitFieldConfig;
 };
 
@@ -168,6 +170,7 @@ export type CreateFieldConfig = {
   fieldName: string;
   field: FieldSchema;
   editor: FieldEditor;
+  visibleWhen?: FieldVisibilityConditionSchema;
 };
 
 export type CreateDefaultConfig = {
