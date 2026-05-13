@@ -1,7 +1,7 @@
 # PRD 33: Site link targets
 
-Status: ready
-Current chunk: SLT-06 ready
+Status: complete
+Current chunk: none
 Last updated: 2026-05-13
 
 ## Goal
@@ -305,7 +305,7 @@ Possible changed files:
 | SLT-03 | shipped | SLT-02     | Site schema, seed, schema tests | Site source schema and seeds distinguish internal and external links while preserving legacy rendering.          |
 | SLT-04 | shipped | SLT-03     | tree projection, renderer tests | Public tree resolves internal target blocks and validates external URLs with warnings and unchanged tree shape.  |
 | SLT-05 | shipped | SLT-04     | generated UI, app tests         | Site authoring exposes clear internal target and external URL editing paths for link blocks.                     |
-| SLT-06 | ready   | SLT-05     | browser smoke, PRD              | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes update.                        |
+| SLT-06 | shipped | SLT-05     | browser smoke, PRD              | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes update.                        |
 
 ## Parallel Shipping
 
@@ -363,6 +363,7 @@ Should not ship in parallel with:
 - 2026-05-13: SLT-03 shipped. Site source schema now adds flat `block.linkTargetMode` and `block.linkTargetBlock` fields and exposes them in link create/edit/item presentations. Source seed internal nav links now set `linkTargetMode = internal` and `linkTargetBlock` while retaining legacy `href` values; social links set `linkTargetMode = external`. Resolver is still not wired into tree projection. Next ready chunk is SLT-04.
 - 2026-05-13: SLT-04 shipped. Public tree projection now resolves `type = link` hrefs through `resolveSiteLinkHref`, so explicit internal links project the target block route href, explicit external links must be valid absolute `http`/`https` URLs, broken explicit links emit Site tree warnings with no rendered href, and legacy link hrefs still pass through. Renderer tests cover preview/published output from projected internal hrefs and omitted anchors for invalid external links. Next ready chunk is SLT-05.
 - 2026-05-13: SLT-05 shipped. Generated view fields now support `visibleWhen` conditions. Site link create, edit, root-detail, and tree-node presentations show `linkTargetBlock` only for internal links and `href` only for external or legacy blank-mode links. Create value resolution ignores hidden link target fields. Next ready chunk is SLT-06.
+- 2026-05-13: SLT-06 shipped. Browser smoke reset Site source schema and seed, verified `/site` generated authoring, Header internal link target fields, `/pages/home` public preview links, empty Site tree warnings, and empty browser page errors. PRD complete; promote notes are ready for a doc/steward pass.
 
 ## Evidence
 
@@ -406,6 +407,13 @@ Should not ship in parallel with:
 - 2026-05-13 SLT-05 `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` read attempt: files absent; current generated evidence is in `.devstate/status.md`.
 - 2026-05-13 SLT-05 `devstate check`: checks ok; watch tests pass; services running at `https://33-site-link-targets.formless.local`.
 - 2026-05-13 SLT-05 browser smoke: `bun browser --session slt-05` reset Site seed with a 200 response; `/site` Header authoring showed internal link `Link target` and `Target block` controls with no URL field for header nav links; `/pages/home` rendered public Home; browser link inspection showed preview `/pages/*` internal hrefs and external social links with `target="_blank"` and `rel="noreferrer"`; `bun browser --session slt-05 errors` returned no page errors.
+- 2026-05-13 SLT-06 reset: `bun browser --session slt-06` reset Site source schema and seed through `/api/site/reset/schema` and `/api/site/reset/seed`; both returned `200`.
+- 2026-05-13 SLT-06 `/site` smoke: generated Site authoring rendered Pages, Posts, Projects, Navigation, and synced status; selecting Header showed internal `Link target` and `Target block` controls and no URL field for seeded internal nav links.
+- 2026-05-13 SLT-06 `/pages/home` smoke: public Home rendered; internal nav links resolved to preview `/pages/home`, `/pages/blog`, `/pages/projects`, and `/pages/resume`; social links rendered absolute URLs with `target="_blank"` and `rel="noreferrer"`.
+- 2026-05-13 SLT-06 tree smoke: `/api/site/tree/home` returned `meta.warnings = []` and projected frame link hrefs `/`, `/blog`, `/projects`, `/resume`, plus valid external social URLs.
+- 2026-05-13 SLT-06 browser errors: `bun browser --session slt-06 errors` returned no page errors.
+- 2026-05-13 SLT-06 `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` read attempt: files absent; current generated evidence is in `.devstate/status.md`.
+- 2026-05-13 SLT-06 final `devstate check`: checks ok; watch tests pass; services running at `https://33-site-link-targets.formless.local`.
 
 ## Promote after ship
 
