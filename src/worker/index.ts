@@ -1,6 +1,7 @@
 import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
 import { handleSiteMediaRequest } from "./media.ts";
+import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 
 export { FormlessAuthority } from "./authority.ts";
 
@@ -21,14 +22,20 @@ export default {
     const url = new URL(request.url);
     const app = parseApiSchemaApp(url.pathname);
 
-    if (!app) {
-      return new Response(null, { status: 404 });
+    if (app) {
+      const authorityId = env.FORMLESS_AUTHORITY.idFromName(app.key);
+      const authority = env.FORMLESS_AUTHORITY.get(authorityId);
+
+      return authority.fetch(request);
     }
 
-    const authorityId = env.FORMLESS_AUTHORITY.idFromName(app.key);
-    const authority = env.FORMLESS_AUTHORITY.get(authorityId);
+    const siteDocumentResponse = await handlePublishedSiteDocumentRequest(request, env);
 
-    return authority.fetch(request);
+    if (siteDocumentResponse) {
+      return siteDocumentResponse;
+    }
+
+    return new Response(null, { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
 

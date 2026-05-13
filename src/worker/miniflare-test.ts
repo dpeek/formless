@@ -15,6 +15,7 @@ type DurableObjectBindings = Record<
 
 type WorkerHarnessOptions = {
   bindings?: Record<string, string>;
+  compatibilityDate?: string;
   r2Buckets?: string[];
 };
 
@@ -37,6 +38,7 @@ export async function createWorkerHarness(
 
   const mf = new Miniflare({
     bindings: options.bindings,
+    compatibilityDate: options.compatibilityDate,
     durableObjects,
     durableObjectsPersist: false,
     modules: true,

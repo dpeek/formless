@@ -1,7 +1,7 @@
 # PRD 34: Public Site SSR
 
 Status: ready
-Current chunk: PSSR-02 ready
+Current chunk: PSSR-03 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -215,20 +215,23 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID       | Decision                                                          | Reason                                                                                           | Evidence                                                                |
-| -------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| PSSR-D1  | Create a new PRD for SSR.                                         | SSR changes Worker routing, response shape, hydration, and cache behavior.                       | `prd/24-public-site-chrome-polish.md` deferred SSR to a future PRD.     |
-| PSSR-D2  | SSR published Site pages first.                                   | Public Site already has a server-readable tree and renderer boundary.                            | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`                |
-| PSSR-D3  | Keep generated admin routes client-rendered.                      | Admin routes depend on IndexedDB, browser replica bootstrap, generated state, and push sync.     | `src/app/routes/home.tsx`, `src/client/db.ts`, `src/client/sync.ts`     |
-| PSSR-D4  | Reuse `SitePageTree` as the SSR data contract.                    | The public route already fetches this shape and the renderer already consumes it.                | `src/app/routes/site-page.tsx`, `src/shared/protocol.ts`                |
-| PSSR-D5  | Hydrate instead of replacing server markup.                       | Replacing the markup would lose the first-paint benefit and risk visible layout churn.           | `src/main.tsx` currently uses `createRoot`.                             |
-| PSSR-D6  | Embed initial tree data in the document.                          | The browser should not refetch the same tree before first paint.                                 | Current public route fetches `/api/site/tree/:slug` after mount.        |
-| PSSR-D7  | Keep schema-keyed API routes unchanged.                           | API route stability protects storage, sync, writes, and existing clients.                        | `doc/current.md`, `src/worker/index.ts`                                 |
-| PSSR-D8  | Keep preview live behavior out of the first SSR slice.            | Preview uses push-sync invalidation and should remain optimized for editing feedback.            | `prd/26-site-editing-publish-workflow.md`                               |
-| PSSR-D9  | Put document routing in a small Worker SSR adapter.               | API dispatch, asset handling, slug resolution, and HTML rendering should stay separately tested. | `src/worker/index.ts`, `src/worker/authority-operations.ts`             |
-| PSSR-D10 | Define cache policy before shipping SSR.                          | SSR can improve paint while hurting freshness or TTFB if cache behavior is undefined.            | User direction 2026-05-13                                               |
-| PSSR-D11 | Treat Cloudflare Worker compatibility as a requirement.           | The deploy target is Workers with Durable Objects, not a Node SSR server.                        | `wrangler.jsonc`, `src/worker/authority.ts`                             |
-| PSSR-D12 | Leave route metadata and SEO enrichment for later unless trivial. | The first value is first paint; richer metadata can build on the SSR document later.             | Current public tree has route/page facts but no full metadata contract. |
+| ID       | Decision                                                                                                 | Reason                                                                                                                      | Evidence                                                                |
+| -------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| PSSR-D1  | Create a new PRD for SSR.                                                                                | SSR changes Worker routing, response shape, hydration, and cache behavior.                                                  | `prd/24-public-site-chrome-polish.md` deferred SSR to a future PRD.     |
+| PSSR-D2  | SSR published Site pages first.                                                                          | Public Site already has a server-readable tree and renderer boundary.                                                       | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx`                |
+| PSSR-D3  | Keep generated admin routes client-rendered.                                                             | Admin routes depend on IndexedDB, browser replica bootstrap, generated state, and push sync.                                | `src/app/routes/home.tsx`, `src/client/db.ts`, `src/client/sync.ts`     |
+| PSSR-D4  | Reuse `SitePageTree` as the SSR data contract.                                                           | The public route already fetches this shape and the renderer already consumes it.                                           | `src/app/routes/site-page.tsx`, `src/shared/protocol.ts`                |
+| PSSR-D5  | Hydrate instead of replacing server markup.                                                              | Replacing the markup would lose the first-paint benefit and risk visible layout churn.                                      | `src/main.tsx` currently uses `createRoot`.                             |
+| PSSR-D6  | Embed initial tree data in the document.                                                                 | The browser should not refetch the same tree before first paint.                                                            | Current public route fetches `/api/site/tree/:slug` after mount.        |
+| PSSR-D7  | Keep schema-keyed API routes unchanged.                                                                  | API route stability protects storage, sync, writes, and existing clients.                                                   | `doc/current.md`, `src/worker/index.ts`                                 |
+| PSSR-D8  | Keep preview live behavior out of the first SSR slice.                                                   | Preview uses push-sync invalidation and should remain optimized for editing feedback.                                       | `prd/26-site-editing-publish-workflow.md`                               |
+| PSSR-D9  | Put document routing in a small Worker SSR adapter.                                                      | API dispatch, asset handling, slug resolution, and HTML rendering should stay separately tested.                            | `src/worker/index.ts`, `src/worker/authority-operations.ts`             |
+| PSSR-D10 | Define cache policy before shipping SSR.                                                                 | SSR can improve paint while hurting freshness or TTFB if cache behavior is undefined.                                       | User direction 2026-05-13                                               |
+| PSSR-D11 | Treat Cloudflare Worker compatibility as a requirement.                                                  | The deploy target is Workers with Durable Objects, not a Node SSR server.                                                   | `wrangler.jsonc`, `src/worker/authority.ts`                             |
+| PSSR-D12 | Leave route metadata and SEO enrichment for later unless trivial.                                        | The first value is first paint; richer metadata can build on the SSR document later.                                        | Current public tree has route/page facts but no full metadata contract. |
+| PSSR-D13 | Load SSR page data through the existing Site authority tree route.                                       | This keeps SSR on the same `SitePageTree` projection as preview and avoids duplicating storage reads outside the authority. | `src/worker/site-ssr.tsx`, `src/worker/site-ssr.test.ts`                |
+| PSSR-D14 | Render Worker SSR with `react-dom/server.edge` stream rendering.                                         | React string rendering falls back to a browser legacy renderer; the edge stream API matches the Cloudflare runtime.         | `src/worker/site-ssr.tsx`, `src/worker/site-ssr.test.ts`                |
+| PSSR-D15 | Keep `/api/*`, `/pages/*`, asset-like paths, and non-HTML requests outside the PSSR-02 document adapter. | API dispatch, preview routes, and static asset routing must stay isolated until the explicit Worker routing chunk.          | `src/worker/site-ssr.tsx`                                               |
 
 ### Deep Modules
 
@@ -263,7 +266,7 @@ These modules should expose small interfaces and keep authority storage details 
 | ID      | Status  | Depends on | Main files                      | Acceptance                                                                                                    |
 | ------- | ------- | ---------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | PSSR-01 | shipped | none       | tests, PRD                      | Characterize current SPA first-paint path and lock current published Site routing/loading behavior.           |
-| PSSR-02 | ready   | PSSR-01    | worker SSR adapter, tests       | Worker can return server-rendered HTML for published `/` and nested Site slugs using the public tree.         |
+| PSSR-02 | shipped | PSSR-01    | worker SSR adapter, tests       | Worker can return server-rendered HTML for published `/` and nested Site slugs using the public tree.         |
 | PSSR-03 | ready   | PSSR-02    | browser entry, route, tests     | Browser hydrates SSR markup from embedded `SitePageTree` without an immediate duplicate tree fetch.           |
 | PSSR-04 | ready   | PSSR-03    | Worker routing, wrangler, tests | Cloudflare routing sends published documents to Worker while API routes and assets keep existing behavior.    |
 | PSSR-05 | ready   | PSSR-04    | cache policy, tests             | Successful, not-found, and error SSR responses have explicit cache headers and documented freshness tradeoff. |
@@ -288,6 +291,7 @@ These modules should expose small interfaces and keep authority storage details 
 
 - PSSR-01: no global doc promotion; characterization-only baseline for later SSR chunks.
 - `doc/current.md`: note published Site pages render through Worker SSR.
+- PSSR-02: promote Worker SSR document adapter facts after hydration/routing chunks decide final route exposure.
 - `doc/current.md`: note public Site hydration uses embedded initial `SitePageTree`.
 - `doc/current.md`: note published SSR cache policy and status behavior.
 - `doc/current.md`: note generated admin routes remain client-rendered.
@@ -296,6 +300,7 @@ These modules should expose small interfaces and keep authority storage details 
 ## Blockers
 
 - Need implementation-time confirmation of the Cloudflare asset binding or manifest shape produced by the current Vite/Cloudflare build.
+- PSSR-02 did not close the asset manifest blocker; the first document shell still references the current dev client module path and PSSR-04 must confirm production asset routing.
 - Need cache policy choice before PSSR-05 ships: short TTL only, explicit purge, or no-store for the first release.
 
 ## Evidence
@@ -308,3 +313,7 @@ These modules should expose small interfaces and keep authority storage details 
 - 2026-05-13: PRD created as `prd/34-public-site-ssr.md`.
 - 2026-05-13: PSSR-01 shipped. Added `src/site/public-site-ssr-characterization.test.tsx` to lock the current empty SPA document shell, `createRoot` browser mount, Cloudflare SPA fallback with Worker-first `/api/*` only, published Site loading shell for `/` and nested slugs, and the current single `/api/site/tree/:slug` read before public content renders.
 - 2026-05-13: PSSR-01 check evidence: `devstate start` and final `devstate check` reported checks ok, web service ready at `https://34-public-site-ssr.formless.local`, and test watcher passing. `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent in this checkout, so `.devstate/status.md`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` were used. Watcher reran `src/site/public-site-ssr-characterization.test.tsx` with 5 tests passing. `check-vite` reported no formatting, lint, or type errors in 222 files.
+- 2026-05-13: PSSR-02 shipped. Added `src/worker/site-ssr.tsx` and Worker dispatch integration so HTML document requests can fetch `/api/site/tree/:slug` through the Site authority, render `SitePageRenderer` in published link mode, and return a full HTML document for `/`, nested slugs, not-found, and error states.
+- 2026-05-13: PSSR-02 tests added in `src/worker/site-ssr.test.ts`: published `/` returns server-rendered Home HTML with header/footer and no loading text; `/blog/shipping-schema-backed-authoring` returns nested published HTML with published links; a page created through `/api/site/mutations` is visible through SSR, proving the adapter reads the current authority tree.
+- 2026-05-13: PSSR-02 check evidence: `devstate start` and `.devstate/status.md` reported checks ok, web service ready at `https://34-public-site-ssr.formless.local`, and test watcher passing. `.devstate/logs/service-test.txt` reported 49 files and 696 tests passing after restart, then reran affected Worker tests with 5 files and 131 tests passing. `.devstate/logs/check-vite.txt` reported no formatting, lint, or type errors in 224 files.
+- 2026-05-13: PSSR-02 browser smoke: `bun browser --session pssr02 --ignore-https-errors open https://34-public-site-ssr.formless.local/` under the published Site profile showed David Peek, Code is magic, and Greetings, Robot content with no page errors. The smoke confirmed the explicit `streams_enable_constructors` Wrangler flag was wrong for the repo's 2026 compatibility date; the final implementation keeps Wrangler unchanged and passes that compatibility date only to the Miniflare SSR test harness.
