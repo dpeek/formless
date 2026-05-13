@@ -7,6 +7,10 @@ import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { Env } from "./index.ts";
 import { shouldHandlePublishedSiteDocument } from "./routing.ts";
+import {
+  publishedSiteDocumentCacheControl,
+  type PublishedSiteDocumentCacheKind,
+} from "./site-cache.ts";
 
 const SITE_SCHEMA_KEY = "site";
 const CLIENT_MODULE_PATH = "/src/main.tsx";
@@ -24,24 +28,38 @@ export async function handlePublishedSiteDocumentRequest(
 
 async function renderPublishedSiteDocument(request: Request, env: Env): Promise<Response> {
   const slug = publishedSiteSlugFromUrl(new URL(request.url));
-  const treeResponse = await fetchSitePageTree(request, env, slug);
 
-  if (treeResponse.status === 404) {
-    return htmlResponse(await renderNotFoundDocument(slug), 404);
+  try {
+    const treeResponse = await fetchSitePageTree(request, env, slug);
+
+    if (treeResponse.status === 404) {
+      return htmlResponse(await renderNotFoundDocument(slug), {
+        cacheKind: "not-found",
+        status: 404,
+      });
+    }
+
+    if (!treeResponse.ok) {
+      return htmlResponse(await renderErrorDocument(slug), {
+        cacheKind: "error",
+        status: 500,
+      });
+    }
+
+    const tree = (await treeResponse.json()) as SitePageTreeResponse;
+    const appHtml = await renderReactToString(
+      <PublishedSiteDocumentShell>
+        <SitePageRenderer linkMode="published" tree={tree} />
+      </PublishedSiteDocumentShell>,
+    );
+
+    return htmlResponse(renderDocument(appHtml, { initialTree: tree }));
+  } catch {
+    return htmlResponse(await renderErrorDocument(slug), {
+      cacheKind: "error",
+      status: 500,
+    });
   }
-
-  if (!treeResponse.ok) {
-    return htmlResponse(await renderErrorDocument(slug), 500);
-  }
-
-  const tree = (await treeResponse.json()) as SitePageTreeResponse;
-  const appHtml = await renderReactToString(
-    <PublishedSiteDocumentShell>
-      <SitePageRenderer linkMode="published" tree={tree} />
-    </PublishedSiteDocumentShell>,
-  );
-
-  return htmlResponse(renderDocument(appHtml, { initialTree: tree }));
 }
 
 async function fetchSitePageTree(request: Request, env: Env, slug: string): Promise<Response> {
@@ -120,12 +138,17 @@ function renderDocument(appHtml: string, options: { initialTree?: SitePageTree }
 </html>`;
 }
 
-function htmlResponse(html: string, status = 200): Response {
+function htmlResponse(
+  html: string,
+  options: { cacheKind?: PublishedSiteDocumentCacheKind; status?: number } = {},
+): Response {
   return new Response(html, {
     headers: {
+      "Cache-Control": publishedSiteDocumentCacheControl(options.cacheKind ?? "success"),
       "Content-Type": "text/html; charset=utf-8",
+      Vary: "Accept",
     },
-    status,
+    status: options.status ?? 200,
   });
 }
 

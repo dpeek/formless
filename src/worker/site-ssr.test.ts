@@ -2,7 +2,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 
 import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "../app/site-renderer/initial-tree.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
+import type { Env } from "./index.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
+import {
+  PUBLISHED_SITE_ERROR_CACHE_CONTROL,
+  PUBLISHED_SITE_HTML_CACHE_CONTROL,
+  PUBLISHED_SITE_NOT_FOUND_CACHE_CONTROL,
+} from "./site-cache.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -38,7 +45,9 @@ describe("published Site Worker SSR", () => {
     const payload = initialTreePayload(html);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLISHED_SITE_HTML_CACHE_CONTROL);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("Vary")).toBe("Accept");
     expect(html).toContain("<!doctype html>");
     expect(html).toContain('<div id="app"><main class="min-h-dvh"><article');
     expect(html).toContain('data-site-theme="light"');
@@ -68,6 +77,45 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('href="/blog"');
     expect(html).not.toContain('href="/pages/blog"');
     expect(html).not.toContain("Loading site page...");
+  });
+
+  it("returns an explicitly cached not-found document for missing published Site slugs", async () => {
+    const response = await getDocument("/missing-page");
+    const html = await response.text();
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLISHED_SITE_NOT_FOUND_CACHE_CONTROL);
+    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("Vary")).toBe("Accept");
+    expect(html).toContain("Page not found");
+    expect(html).toContain("No site page exists for");
+    expect(html).toContain("<code>missing-page</code>");
+    expect(html).not.toContain(INITIAL_SITE_PAGE_TREE_SCRIPT_ID);
+  });
+
+  it("returns a no-store error document when the public tree read fails", async () => {
+    const response = await handlePublishedSiteDocumentRequest(
+      new Request("https://example.com/broken-page", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(Response.json({ error: "Upstream failed." }, { status: 503 })),
+    );
+
+    if (!response) {
+      throw new Error("Expected a published Site document response.");
+    }
+
+    const html = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLISHED_SITE_ERROR_CACHE_CONTROL);
+    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("Vary")).toBe("Accept");
+    expect(html).toContain("Site page failed to load");
+    expect(html).toContain("broken-page");
+    expect(html).toContain("Site page failed to render.");
+    expect(html).not.toContain("Upstream failed.");
+    expect(html).not.toContain(INITIAL_SITE_PAGE_TREE_SCRIPT_ID);
   });
 
   it("uses the current public tree from the Site authority", async () => {
@@ -204,4 +252,15 @@ function initialTreeScriptText(html: string): string {
   expect(end).toBeGreaterThan(contentStart);
 
   return html.slice(contentStart, end);
+}
+
+function envWithTreeResponse(response: Response): Env {
+  return {
+    FORMLESS_AUTHORITY: {
+      get: () => ({
+        fetch: async () => response,
+      }),
+      idFromName: () => "site-id",
+    },
+  } as unknown as Env;
 }

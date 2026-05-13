@@ -72,7 +72,7 @@ export class FormlessAuthority extends DurableObject<Env> {
           writes,
         });
 
-        return jsonResponse(result.body, result.status);
+        return jsonResponse(result.body, result.status, result.headers);
       }
 
       return jsonResponse({ error: "Not found." }, 404);
@@ -292,7 +292,10 @@ async function readJson(request: Request): Promise<unknown> {
 
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}) {
   const responseHeaders = new Headers(headers);
-  responseHeaders.set("Cache-Control", "no-store");
+
+  if (!responseHeaders.has("Cache-Control")) {
+    responseHeaders.set("Cache-Control", "no-store");
+  }
 
   return Response.json(body, {
     status,

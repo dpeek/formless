@@ -15,6 +15,7 @@ import {
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
 import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
+import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
 import {
   createStoredRecordOutcome,
   deleteStoredRecordOutcome,
@@ -99,6 +100,7 @@ export type AuthorityWriteNotifier = {
 
 export type AuthorityOperationResult = {
   body: unknown;
+  headers?: HeadersInit;
   status?: number;
 };
 
@@ -219,13 +221,17 @@ export function executeAuthorityOperation(
       if (!projection.tree) {
         return {
           body: { error: "Site page not found." },
+          headers: { "Cache-Control": PUBLIC_SITE_TREE_CACHE_CONTROL },
           status: 404,
         };
       }
 
       const response: SitePageTreeResponse = projection.tree;
 
-      return { body: response };
+      return {
+        body: response,
+        headers: { "Cache-Control": PUBLIC_SITE_TREE_CACHE_CONTROL },
+      };
     }
 
     case "sync": {

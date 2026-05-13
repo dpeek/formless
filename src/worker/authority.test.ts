@@ -27,6 +27,7 @@ import {
   type AuthorityWriteHelpers,
 } from "../test/authority-write.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -93,8 +94,11 @@ describe("authority", () => {
   it("returns a public page tree for a published site page", async () => {
     useSchemaApp("site");
 
-    const body = await getJson<SitePageTreeResponse>("/api/tree/home");
+    const response = await harness.fetch(apiPath("/api/tree/home"));
+    const body = (await response.json()) as SitePageTreeResponse;
 
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLIC_SITE_TREE_CACHE_CONTROL);
     expect(body.page).toMatchObject({
       id: "rec_site_content_home",
       type: "page",
@@ -162,6 +166,7 @@ describe("authority", () => {
     const response = await harness.fetch(apiPath("/api/tree/missing-page"));
 
     expect(response.status).toBe(404);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLIC_SITE_TREE_CACHE_CONTROL);
     expect((await response.json()) as { error: string }).toEqual({
       error: "Site page not found.",
     });
