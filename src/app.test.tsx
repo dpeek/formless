@@ -3707,6 +3707,7 @@ describe("generated forms and records", () => {
     const linkFormData = new FormData();
     linkFormData.set("type", "link");
     linkFormData.set("label", "Field behavior link");
+    linkFormData.set("linkTargetMode", "external");
     linkFormData.set("href", "https://example.com/field-behavior");
     linkFormData.set("icon", "note");
     linkFormData.set("color", "#336699");
@@ -3763,6 +3764,8 @@ describe("generated forms and records", () => {
     expect(resolveCreateValues(linkFormData, action)).toEqual({
       type: "link",
       label: "Field behavior link",
+      linkTargetMode: "external",
+      linkTargetBlock: "",
       href: "https://example.com/field-behavior",
       icon: "note",
     });

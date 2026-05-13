@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/estii/schema.json";
+import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
 import { sourceLikeSchemas, sourceLikeSiteSchema } from "../test/schema-builders.ts";
 import { parseAppSchema, stringifySchema } from "./schema.ts";
@@ -4230,6 +4231,8 @@ describe("personal site sample schema", () => {
       "label",
       "body",
       "href",
+      "linkTargetMode",
+      "linkTargetBlock",
       "icon",
       "color",
       "width",
@@ -4282,8 +4285,8 @@ describe("personal site sample schema", () => {
         footerSocial: { label: "Footer social", fields: ["label"] },
         link: {
           label: "Link",
-          fields: ["label", "href", "icon"],
-          requiredFields: ["label", "href"],
+          fields: ["label", "linkTargetMode", "linkTargetBlock", "href", "icon"],
+          requiredFields: ["label", "linkTargetMode"],
         },
         markdown: { label: "Markdown", fields: ["label", "body"] },
         image: {
@@ -4387,6 +4390,8 @@ describe("personal site sample schema", () => {
         link: {
           presentation: "fields",
           fields: {
+            linkTargetMode: { editor: "enum", commit: "immediate" },
+            linkTargetBlock: { editor: "reference", commit: "immediate" },
             href: { editor: "href", commit: "field-commit" },
             icon: { editor: "icon", commit: "field-commit" },
           },
@@ -4438,6 +4443,8 @@ describe("personal site sample schema", () => {
         link: {
           presentation: "fields",
           fields: {
+            linkTargetMode: { editor: "enum" },
+            linkTargetBlock: { editor: "reference" },
             href: { editor: "href" },
             icon: { editor: "icon" },
           },
@@ -4482,6 +4489,8 @@ describe("personal site sample schema", () => {
         link: {
           presentation: "fields",
           fields: {
+            linkTargetMode: { editor: "enum", commit: "immediate" },
+            linkTargetBlock: { editor: "reference", commit: "immediate" },
             href: { editor: "href", commit: "field-commit" },
             icon: { editor: "icon", commit: "field-commit" },
           },
@@ -4955,6 +4964,122 @@ describe("personal site sample schema", () => {
     });
     expect(blockPlacementCreate.fields).not.toHaveProperty("parent");
     expect(blockPlacementCreate.fields).not.toHaveProperty("type");
+  });
+
+  it("parses site link target authoring fields and explicit seed target modes", () => {
+    const schema = parseAppSchema(rawSiteSchema);
+    const seedRecords = new Map(
+      (rawSiteSeedRecords as Array<{ id: string; values: Record<string, unknown> }>).map(
+        (record) => [record.id, record],
+      ),
+    );
+    const valuesFor = (id: string) => {
+      const record = seedRecords.get(id);
+
+      if (!record) {
+        throw new Error(`Missing Site seed record "${id}".`);
+      }
+
+      return record.values;
+    };
+
+    expect(schema.entities.block?.fields.linkTargetMode).toEqual({
+      type: "enum",
+      required: false,
+      label: "Link target",
+      values: {
+        internal: { label: "Internal" },
+        external: { label: "External" },
+      },
+    });
+    expect(schema.entities.block?.fields.linkTargetBlock).toEqual({
+      type: "reference",
+      required: false,
+      label: "Target block",
+      to: "block",
+      displayField: "label",
+    });
+    expect(schema.unions?.blockByType?.variants.link).toEqual({
+      label: "Link",
+      fields: ["label", "linkTargetMode", "linkTargetBlock", "href", "icon"],
+      requiredFields: ["label", "linkTargetMode"],
+    });
+    expect(schema.itemViews.blockRootDetail.variants?.link).toMatchObject({
+      presentation: "fields",
+      fields: {
+        linkTargetMode: { editor: "enum", commit: "immediate" },
+        linkTargetBlock: { editor: "reference", commit: "immediate" },
+        href: { editor: "href", commit: "field-commit" },
+        icon: { editor: "icon", commit: "field-commit" },
+      },
+    });
+    expect(schema.itemViews.blockTreeNode.variants?.link).toMatchObject({
+      presentation: "fields",
+      fields: {
+        linkTargetMode: { editor: "enum", commit: "immediate" },
+        linkTargetBlock: { editor: "reference", commit: "immediate" },
+        href: { editor: "href", commit: "field-commit" },
+        icon: { editor: "icon", commit: "field-commit" },
+      },
+    });
+    expect(schema.views.blockCreate).toMatchObject({
+      variants: {
+        link: {
+          presentation: "fields",
+          fields: {
+            linkTargetMode: { editor: "enum" },
+            linkTargetBlock: { editor: "reference" },
+            href: { editor: "href" },
+            icon: { editor: "icon" },
+          },
+        },
+      },
+    });
+    expect(schema.views.blockEdit).toMatchObject({
+      variants: {
+        link: {
+          presentation: "fields",
+          fields: {
+            linkTargetMode: { editor: "enum", commit: "immediate" },
+            linkTargetBlock: { editor: "reference", commit: "immediate" },
+            href: { editor: "href", commit: "field-commit" },
+            icon: { editor: "icon", commit: "field-commit" },
+          },
+        },
+      },
+    });
+
+    for (const [id, targetBlock, href] of [
+      ["rec_site_content_link_home", "rec_site_content_home", "/"],
+      ["rec_site_content_link_blog", "rec_site_content_blog", "/blog"],
+      ["rec_site_content_link_projects", "rec_site_content_projects", "/projects"],
+      ["rec_site_content_link_resume", "rec_site_content_resume", "/resume"],
+      ["record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1", "rec_site_content_home", "/"],
+      ["record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde", "rec_site_content_blog", "/blog"],
+    ]) {
+      expect(valuesFor(id)).toMatchObject({
+        type: "link",
+        linkTargetMode: "internal",
+        linkTargetBlock: targetBlock,
+        href,
+      });
+    }
+
+    for (const [id, href] of [
+      ["rec_site_content_link_github", "https://github.com/dpeek"],
+      ["rec_site_content_link_linkedin", "https://linkedin.com/in/dpeekdotcom"],
+      ["record_1c4c18d8-e1f1-4cd6-b298-012542519487", "https://bsky.app/profile/dpeek.com"],
+      ["record_0749e061-1ba8-4923-841e-143fc825427c", "https://x.com/dpeekdotcom"],
+    ]) {
+      const values = valuesFor(id);
+
+      expect(values).toMatchObject({
+        type: "link",
+        linkTargetMode: "external",
+        href,
+      });
+      expect(values).not.toHaveProperty("linkTargetBlock");
+    }
   });
 });
 

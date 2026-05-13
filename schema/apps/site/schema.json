@@ -70,6 +70,26 @@
           "label": "Link",
           "format": "href"
         },
+        "linkTargetMode": {
+          "type": "enum",
+          "required": false,
+          "label": "Link target",
+          "values": {
+            "internal": {
+              "label": "Internal"
+            },
+            "external": {
+              "label": "External"
+            }
+          }
+        },
+        "linkTargetBlock": {
+          "type": "reference",
+          "required": false,
+          "label": "Target block",
+          "to": "block",
+          "displayField": "label"
+        },
         "icon": {
           "type": "text",
           "required": false,
@@ -262,8 +282,8 @@
         },
         "link": {
           "label": "Link",
-          "fields": ["label", "href", "icon"],
-          "requiredFields": ["label", "href"]
+          "fields": ["label", "linkTargetMode", "linkTargetBlock", "href", "icon"],
+          "requiredFields": ["label", "linkTargetMode"]
         },
         "markdown": {
           "label": "Markdown",
@@ -545,6 +565,14 @@
         "link": {
           "presentation": "fields",
           "fields": {
+            "linkTargetMode": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "linkTargetBlock": {
+              "editor": "reference",
+              "commit": "immediate"
+            },
             "href": {
               "editor": "href",
               "commit": "field-commit"
@@ -645,6 +673,14 @@
         "link": {
           "presentation": "fields",
           "fields": {
+            "linkTargetMode": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "linkTargetBlock": {
+              "editor": "reference",
+              "commit": "immediate"
+            },
             "href": {
               "editor": "href",
               "commit": "field-commit"
@@ -1126,6 +1162,12 @@
         "link": {
           "presentation": "fields",
           "fields": {
+            "linkTargetMode": {
+              "editor": "enum"
+            },
+            "linkTargetBlock": {
+              "editor": "reference"
+            },
             "href": {
               "editor": "href"
             },
@@ -1274,6 +1316,14 @@
         "link": {
           "presentation": "fields",
           "fields": {
+            "linkTargetMode": {
+              "editor": "enum",
+              "commit": "immediate"
+            },
+            "linkTargetBlock": {
+              "editor": "reference",
+              "commit": "immediate"
+            },
             "href": {
               "editor": "href",
               "commit": "field-commit"

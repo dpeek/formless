@@ -1,7 +1,7 @@
 # PRD 33: Site link targets
 
 Status: ready
-Current chunk: SLT-03 ready
+Current chunk: SLT-04 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -265,6 +265,7 @@ Possible changed files:
 | SLT-D11 | Coordinate schema-file edits with PRD 31 and PRD 32.                | Media upload and posts/projects authoring also touch Site schema and seed files.           | `prd/31-site-media-upload.md`, `prd/32-site-posts-projects-authoring.md` |
 | SLT-D12 | Treat hard conditional authority validation as later unless needed. | Generic conditional validation is broader than Site link target resolution.                | Current field validation validates scalar/reference shape                |
 | SLT-D13 | Use `linkTargetMode` and `linkTargetBlock` for explicit link data.  | The fields are flat on `block` and keep external destinations in existing `href`.          | `src/site/link-targets.ts`, `src/site/link-targets.test.ts`              |
+| SLT-D14 | Keep migrated internal seed link `href` values for now.             | Target projection is not wired until SLT-04, so legacy `href` values preserve rendering.   | `schema/apps/site/seed-records.json`, `src/site/tree.test.ts`            |
 
 ### Deep Modules
 
@@ -300,7 +301,7 @@ Possible changed files:
 | ------ | ------- | ---------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | SLT-01 | shipped | none       | PRD                             | PRD defines internal/external link target model, resolution rules, compatibility, tests, and coordination notes. |
 | SLT-02 | shipped | SLT-01     | tests, tree/link resolver       | Current string-link behavior is characterized and new target resolver tests are added before implementation.     |
-| SLT-03 | ready   | SLT-02     | Site schema, seed, schema tests | Site source schema and seeds distinguish internal and external links while preserving legacy rendering.          |
+| SLT-03 | shipped | SLT-02     | Site schema, seed, schema tests | Site source schema and seeds distinguish internal and external links while preserving legacy rendering.          |
 | SLT-04 | ready   | SLT-03     | tree projection, renderer tests | Public tree resolves internal target blocks and validates external URLs with warnings and unchanged tree shape.  |
 | SLT-05 | ready   | SLT-04     | generated UI, app tests         | Site authoring exposes clear internal target and external URL editing paths for link blocks.                     |
 | SLT-06 | ready   | SLT-05     | browser smoke, PRD              | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes update.                        |
@@ -358,6 +359,7 @@ Should not ship in parallel with:
 - 2026-05-13: PRD created from design discussion about distinguishing internal and external Site links. Product direction: internal links should reference target page/post/project blocks; external links should use absolute URLs; internal targets should not be modeled as child placements.
 - 2026-05-13: SLT-01 shipped. PRD locks the flat link target model, internal/external resolution rules, compatibility requirements, test plan, and coordination notes. No app behavior changed. Next ready chunk is SLT-02.
 - 2026-05-13: SLT-02 shipped. Added `src/site/link-targets.ts` and focused tests for legacy string href fallback, internal page/post/project target resolution, target href changes, broken target warnings, and explicit external URL validation. Added `src/site/tree.test.ts` coverage proving current public tree legacy link href passthrough stays unchanged. Resolver is not wired into Site schema or tree projection yet. No app behavior changed. Next ready chunk is SLT-03.
+- 2026-05-13: SLT-03 shipped. Site source schema now adds flat `block.linkTargetMode` and `block.linkTargetBlock` fields and exposes them in link create/edit/item presentations. Source seed internal nav links now set `linkTargetMode = internal` and `linkTargetBlock` while retaining legacy `href` values; social links set `linkTargetMode = external`. Resolver is still not wired into tree projection. Next ready chunk is SLT-04.
 
 ## Evidence
 
@@ -380,6 +382,15 @@ Should not ship in parallel with:
 - 2026-05-13 SLT-02 `devstate start`: checks ok; watch tests pass; services running at `https://33-site-link-targets.formless.local`.
 - 2026-05-13 SLT-02 final `devstate check`: checks ok; watch tests pass; services running at `https://33-site-link-targets.formless.local`.
 - SLT-02 browser smoke skipped: no app behavior changed.
+- SLT-03 schema fields: `schema/apps/site/schema.json` defines `block.linkTargetMode` as optional enum values `internal` and `external`, and `block.linkTargetBlock` as an optional reference to `block`.
+- SLT-03 schema presentations: Site link variants expose `linkTargetMode`, `linkTargetBlock`, `href`, and `icon` in create, edit, root-detail, and tree-node presentations.
+- SLT-03 seed migration: `schema/apps/site/seed-records.json` marks seeded Home, Blog, Projects, Resume, extra Home, and extra Blog links as internal references while keeping their legacy `href` values.
+- SLT-03 seed migration: seeded GitHub, LinkedIn, Bluesky, and X links use `linkTargetMode = external` and keep absolute `href` values.
+- SLT-03 test updates: `src/shared/schema.test.ts` covers link target field schema, link authoring presentations, and explicit source seed target modes; `src/app.test.tsx` and `src/client/views.test.ts` cover the updated generated create model.
+- 2026-05-13 SLT-03 initial browser smoke found this shell exported `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite`, so `/site` served published-site output; devstate was restarted with `VITE_FORMLESS_RUNTIME_PROFILE` unset before final smoke.
+- 2026-05-13 SLT-03 `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` read attempt: `./tmp` files absent; current generated evidence is in `.devstate/status.md`.
+- 2026-05-13 SLT-03 final `env -u VITE_FORMLESS_RUNTIME_PROFILE devstate check`: checks ok; watch tests pass; services running at `https://33-site-link-targets.formless.local`.
+- 2026-05-13 SLT-03 browser smoke: reset Site source schema and seed returned 200; `/site` rendered the generated Site editor with Pages, Posts, Projects, Navigation, and synced status; `/pages/home` rendered public Home with header links, body content, and footer; `bun browser --session slt-03 errors` returned no page errors.
 
 ## Promote after ship
 
@@ -389,4 +400,5 @@ Should not ship in parallel with:
 - `doc/current.md`: add that public tree projection resolves link targets into renderer-facing hrefs.
 - `doc/current.md`: add any new Site tree warning codes for broken link targets.
 - `doc/current.md`: add that explicit Site link fields are `linkTargetMode` and `linkTargetBlock`.
+- `doc/current.md`: add that migrated source seed internal links keep legacy `href` values until public tree projection resolves targets.
 - `doc/roadmap.md`: add internal/external Site link targets to first-release Site scope if this becomes release scope.

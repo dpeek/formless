@@ -1589,7 +1589,7 @@ describe("home view model collections", () => {
     ]);
     expect(create?.type === "create" ? create.union?.unionName : undefined).toBe("blockByType");
     expect(createVariantFields).toMatchObject({
-      link: ["href", "icon"],
+      link: ["linkTargetMode", "linkTargetBlock", "href", "icon"],
       markdown: ["body"],
       image: ["href", "width", "height"],
     });
