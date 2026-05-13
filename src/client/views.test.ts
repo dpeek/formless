@@ -875,7 +875,7 @@ describe("home view model collections", () => {
     });
   });
 
-  it("characterizes the current Site tree add policy gap for post and project authoring", () => {
+  it("resolves Site tree add policy for post and project authoring", () => {
     const treeResult = requiredCollectionModel(siteSourceSchema, "siteCompositionHome").result;
 
     if (treeResult.type !== "tree") {
@@ -889,14 +889,27 @@ describe("home view model collections", () => {
     );
 
     expect(allowedChildVariants).toEqual({
-      page: ["group", "hero", "markdown", "image", "link"],
-      group: ["group", "hero", "markdown", "image", "link"],
+      page: ["group", "hero", "markdown", "image", "link", "project"],
+      group: ["group", "hero", "markdown", "image", "link", "project"],
+      post: ["markdown"],
       header: ["link"],
       footer: ["group", "link"],
     });
-    expect(allowedChildVariants).not.toHaveProperty("post");
-    expect(allowedChildVariants.page).not.toContain("project");
-    expect(allowedChildVariants.group).not.toContain("project");
+    expect(treeResult.branches?.variants.leafVariantValues).toContain("project");
+    expect(treeResult.childRecordUnion?.variants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          variantValue: "project",
+          presentation: {
+            type: "fields",
+            fields: expect.arrayContaining([
+              expect.objectContaining({ fieldName: "body", editor: "markdown" }),
+              expect.objectContaining({ fieldName: "href", editor: "href" }),
+            ]),
+          },
+        }),
+      ]),
+    );
   });
 
   it("resolves Site tree composition action facts", () => {

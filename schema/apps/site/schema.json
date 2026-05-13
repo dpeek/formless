@@ -621,6 +621,19 @@
             "record": "self"
           }
         },
+        "project": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "href": {
+              "editor": "href",
+              "commit": "field-commit"
+            }
+          }
+        },
         "link": {
           "presentation": "fields",
           "fields": {
@@ -935,11 +948,15 @@
         "branches": {
           "variants": {
             "page": {
-              "children": ["group", "hero", "markdown", "image", "link"]
+              "children": ["group", "hero", "markdown", "image", "link", "project"]
             },
             "group": {
-              "children": ["group", "hero", "markdown", "image", "link"]
+              "children": ["group", "hero", "markdown", "image", "link", "project"]
             },
+            "post": {
+              "children": ["markdown"]
+            },
+            "project": "leaf",
             "header": {
               "action": "leaf",
               "children": ["link"]

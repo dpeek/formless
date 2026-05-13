@@ -1,7 +1,7 @@
 # PRD 32: Site posts and projects authoring
 
 Status: ready
-Current chunk: PPA-03 ready
+Current chunk: PPA-04 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -258,6 +258,7 @@ Likely changed files:
 | PPA-D10 | Render project summary body as markdown.                             | The authoring model says project body is markdown, so public output should not leak syntax. | Shared markdown renderer already serves public markdown blocks                            |
 | PPA-D11 | Prefer schema-only implementation except markdown summary rendering. | Context create actions, literal defaults, and tree add already exist as primitives.         | `src/client/generated-authoring.ts`, `src/shared/create-defaults.ts`, generated tree code |
 | PPA-D12 | Let root navigation groups declare optional create views.            | Posts and Projects need group-specific fixed-type root creation without changing storage.   | `src/shared/schema-views.ts`, `src/client/views.ts`, `src/app.tsx`                        |
+| PPA-D13 | Treat project tree nodes as leaf authoring nodes.                    | Project entries are reusable summaries; this PRD does not add project child composition.    | `schema/apps/site/schema.json`, `src/client/views.test.ts`                                |
 
 ### Deep Modules
 
@@ -291,7 +292,7 @@ Likely changed files:
 | ------ | ------- | ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | PPA-01 | shipped | none       | tests, PRD                              | Current Site editor gaps for hidden Posts/Projects and missing project tree add policy are characterized.                 |
 | PPA-02 | shipped | PPA-01     | Site source schema, schema/view tests   | `/site` exposes Posts and Projects groups with fixed-type root create actions and focused root edit fields.               |
-| PPA-03 | ready   | PPA-02     | Site source schema, tree/view tests     | Post roots can add markdown body blocks; Projects page contexts can add project blocks and placements.                    |
+| PPA-03 | shipped | PPA-02     | Site source schema, tree/view tests     | Post roots can add markdown body blocks; Projects page contexts can add project blocks and placements.                    |
 | PPA-04 | ready   | PPA-03     | Site seeds, renderer, tree/public tests | Source seed proves `/projects` can render placed project summaries with label, href, and formatted markdown body content. |
 | PPA-05 | ready   | PPA-04     | browser smoke, PRD                      | `/site`, `/pages/blog`, and `/pages/projects` smoke pass; PRD evidence, blockers, and promotion notes update.             |
 
@@ -331,6 +332,8 @@ Likely changed files:
 - 2026-05-13: PPA-02 shipped. Site root navigation now exposes Pages, Posts, Projects, and Navigation; Posts and Projects carry fixed-type create actions backed by literal `block.type` defaults.
 - 2026-05-13: PPA-02 added optional create views to context navigation groups so root sidebar groups can own focused creation without adding entities or changing stored records.
 - 2026-05-13: PPA-02 kept tree child policy unchanged; post markdown children and project placement creation remain PPA-03.
+- 2026-05-13: PPA-03 shipped. Site tree branch policy now lets post roots add markdown child blocks and lets page/group contexts, including the Projects page, add project blocks through the existing tree child action.
+- 2026-05-13: PPA-03 marks project tree nodes as leaf authoring nodes and gives project tree nodes focused markdown body and href fields for generated add/edit flows.
 
 ## Evidence
 
@@ -353,6 +356,11 @@ Likely changed files:
 - PPA-02 browser smoke: restarted devstate with `VITE_FORMLESS_RUNTIME_PROFILE` unset because the shell exported `publishedSite`; `bun browser --session ppa-02` then confirmed `/site` renders Pages, Posts, Projects, Navigation, `Create Post`, and `Create Project`.
 - PPA-02 browser smoke: `bun browser --session ppa-02` opened the `Create Post` and `Create Project` dialogs and confirmed focused label/link/body forms.
 - PPA-02 browser smoke: `bun browser --session ppa-02` opened `/pages/blog` and `/pages/projects`; both public routes rendered.
+- PPA-03 source schema: `schema/apps/site/schema.json` adds `project` as an allowed page/group tree child, adds post branch children `markdown`, marks project branches as `leaf`, and exposes project tree-node `body` and `href` fields.
+- PPA-03 tests: `src/shared/schema.test.ts`, `src/client/views.test.ts`, and `src/app.test.tsx` cover source tree policy parsing, generated view facts, project tree-node fields, page/group Project add variants, and post Markdown add variants.
+- PPA-03 devstate: `.devstate/status.md` reports checks ok and services running; `.devstate/logs/service-test.txt` reports 20 affected files and 487 tests passed; `.devstate/logs/check-vite.txt` reports formatting pass and no lint or type errors across 217 files.
+- PPA-03 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent; current evidence is under `.devstate/`.
+- PPA-03 browser smoke: `bun browser --session ppa-03` reset Site schema and seed data, opened `/site`, confirmed the Home and Projects page roots expose `group hero markdown image link project` tree add variants, confirmed a post root exposes `markdown`, and `bun browser --session ppa-03 errors` returned no page errors.
 
 ## Promote after ship
 
@@ -363,4 +371,6 @@ Likely changed files:
 - `doc/current.md`: add that `/blog` is generated from post blocks and `/blog/:slug` resolves post hrefs.
 - `doc/current.md`: add that Projects are authored as `block.type = project` roots with `label`, `href`, and markdown-capable `body`.
 - `doc/current.md`: add that `/projects` is manually curated with project block placements.
+- `doc/current.md`: add that generated Site tree add policy lets post roots add markdown children and page/group roots add project children.
+- `doc/current.md`: add that project tree nodes are leaf authoring nodes in the generated Site tree.
 - `doc/roadmap.md`: update first-release Site editor surface from Pages/Header/Footer-era wording to Pages, Posts, Projects, and Navigation if this becomes release scope.

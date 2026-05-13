@@ -1150,10 +1150,25 @@ describe("generated collection home", () => {
     expect(emptyRootHtml).toContain("No records yet.");
     expect(emptyRootHtml).toContain('data-formless-tree-add-parent="page-1"');
     expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variants="group hero markdown image link"',
+      'data-formless-tree-add-variants="group hero markdown image link project"',
     );
     expect(emptyRootHtml).toContain('aria-label="Add child"');
     expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');
+
+    resetClientStore();
+    bootstrapSiteEditor([siteBlockRecord("post-1", { type: "post", label: "Blank post" })]);
+    const postRootHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "post-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(postRootHtml).toContain('data-formless-tree-add-parent="post-1"');
+    expect(postRootHtml).toContain('data-formless-tree-add-variants="markdown"');
 
     resetClientStore();
     bootstrapSiteEditor([

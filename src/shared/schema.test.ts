@@ -4676,12 +4676,18 @@ describe("personal site sample schema", () => {
         type: { kind: "literal", value: "project" },
       },
     });
-    expect(Object.keys(branchVariants)).toEqual(["page", "group", "header", "footer"]);
-    expect(pageChildren).toEqual(["group", "hero", "markdown", "image", "link"]);
-    expect(groupChildren).toEqual(["group", "hero", "markdown", "image", "link"]);
-    expect(branchVariants.post).toBeUndefined();
-    expect(pageChildren).not.toContain("project");
-    expect(groupChildren).not.toContain("project");
+    expect(Object.keys(branchVariants)).toEqual([
+      "page",
+      "group",
+      "post",
+      "project",
+      "header",
+      "footer",
+    ]);
+    expect(pageChildren).toEqual(["group", "hero", "markdown", "image", "link", "project"]);
+    expect(groupChildren).toEqual(["group", "hero", "markdown", "image", "link", "project"]);
+    expect(branchVariants.post).toEqual({ children: ["markdown"] });
+    expect(branchVariants.project).toBe("leaf");
   });
 
   it("parses simplified site block authoring views", () => {
@@ -4822,11 +4828,15 @@ describe("personal site sample schema", () => {
       branches: {
         variants: {
           page: {
-            children: ["group", "hero", "markdown", "image", "link"],
+            children: ["group", "hero", "markdown", "image", "link", "project"],
           },
           group: {
-            children: ["group", "hero", "markdown", "image", "link"],
+            children: ["group", "hero", "markdown", "image", "link", "project"],
           },
+          post: {
+            children: ["markdown"],
+          },
+          project: "leaf",
           header: {
             action: "leaf",
             children: ["link"],
@@ -4840,6 +4850,13 @@ describe("personal site sample schema", () => {
       composition: {
         createAction: "addTreeChild",
         removeAction: "removeTreePlacement",
+      },
+    });
+    expect(schema.itemViews.blockTreeNode.variants?.project).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        href: { editor: "href", commit: "field-commit" },
       },
     });
     expect(siteCompositionHome.actions).toEqual([
