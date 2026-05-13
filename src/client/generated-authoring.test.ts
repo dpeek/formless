@@ -116,6 +116,20 @@ describe("generated authoring root navigation", () => {
     expect(facts?.groups.map((group) => group.label)).toEqual(["Pages", "Navigation"]);
   });
 
+  it("characterizes the current Site root navigation gap for posts and projects", () => {
+    const facts = selectGeneratedRootNavigationFacts(requiredSiteScreen());
+    const groupQueries = facts?.groups.map((group) => group.queryName) ?? [];
+
+    expect(siteSourceSchema.queries.blockPosts?.label).toBe("Posts");
+    expect(siteSourceSchema.queries.blockProjects?.label).toBe("Projects");
+    expect(facts?.groups.map((group) => [group.label, group.queryName])).toEqual([
+      ["Pages", "blockPages"],
+      ["Navigation", "blockNavigationRoots"],
+    ]);
+    expect(groupQueries).not.toContain("blockPosts");
+    expect(groupQueries).not.toContain("blockProjects");
+  });
+
   it("leaves screens without context navigation on normal screen links", () => {
     const screen = selectPrimaryScreenModels(rateCardSchema)[0];
 

@@ -875,6 +875,30 @@ describe("home view model collections", () => {
     });
   });
 
+  it("characterizes the current Site tree add policy gap for post and project authoring", () => {
+    const treeResult = requiredCollectionModel(siteSourceSchema, "siteCompositionHome").result;
+
+    if (treeResult.type !== "tree") {
+      throw new Error("Missing Site tree model.");
+    }
+
+    const allowedChildVariants = Object.fromEntries(
+      Object.entries(treeResult.branches?.variants.allowedChildVariantsByParentVariant ?? {}).map(
+        ([parentVariant, children]) => [parentVariant, children.map((child) => child.variantValue)],
+      ),
+    );
+
+    expect(allowedChildVariants).toEqual({
+      page: ["group", "hero", "markdown", "image", "link"],
+      group: ["group", "hero", "markdown", "image", "link"],
+      header: ["link"],
+      footer: ["group", "link"],
+    });
+    expect(allowedChildVariants).not.toHaveProperty("post");
+    expect(allowedChildVariants.page).not.toContain("project");
+    expect(allowedChildVariants.group).not.toContain("project");
+  });
+
   it("resolves Site tree composition action facts", () => {
     const treeResult = requiredCollectionModel(siteSourceSchema, "siteCompositionHome").result;
 

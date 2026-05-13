@@ -1,7 +1,7 @@
 # PRD 32: Site posts and projects authoring
 
 Status: ready
-Current chunk: PPA-01 ready
+Current chunk: PPA-02 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -286,13 +286,13 @@ Likely changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files                              | Acceptance                                                                                                                |
-| ------ | ------ | ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| PPA-01 | ready  | none       | tests, PRD                              | Current Site editor gaps for hidden Posts/Projects and missing project tree add policy are characterized.                 |
-| PPA-02 | ready  | PPA-01     | Site source schema, schema/view tests   | `/site` exposes Posts and Projects groups with fixed-type root create actions and focused root edit fields.               |
-| PPA-03 | ready  | PPA-02     | Site source schema, tree/view tests     | Post roots can add markdown body blocks; Projects page contexts can add project blocks and placements.                    |
-| PPA-04 | ready  | PPA-03     | Site seeds, renderer, tree/public tests | Source seed proves `/projects` can render placed project summaries with label, href, and formatted markdown body content. |
-| PPA-05 | ready  | PPA-04     | browser smoke, PRD                      | `/site`, `/pages/blog`, and `/pages/projects` smoke pass; PRD evidence, blockers, and promotion notes update.             |
+| ID     | Status  | Depends on | Main files                              | Acceptance                                                                                                                |
+| ------ | ------- | ---------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| PPA-01 | shipped | none       | tests, PRD                              | Current Site editor gaps for hidden Posts/Projects and missing project tree add policy are characterized.                 |
+| PPA-02 | ready   | PPA-01     | Site source schema, schema/view tests   | `/site` exposes Posts and Projects groups with fixed-type root create actions and focused root edit fields.               |
+| PPA-03 | ready   | PPA-02     | Site source schema, tree/view tests     | Post roots can add markdown body blocks; Projects page contexts can add project blocks and placements.                    |
+| PPA-04 | ready   | PPA-03     | Site seeds, renderer, tree/public tests | Source seed proves `/projects` can render placed project summaries with label, href, and formatted markdown body content. |
+| PPA-05 | ready   | PPA-04     | browser smoke, PRD                      | `/site`, `/pages/blog`, and `/pages/projects` smoke pass; PRD evidence, blockers, and promotion notes update.             |
 
 ## Out of Scope
 
@@ -323,6 +323,10 @@ Likely changed files:
 ## Status Notes
 
 - 2026-05-13: PRD created from authoring discussion. Product direction: Posts should be authored separately from the Blog page, `/blog` should list them automatically, `/blog/:slug` should resolve from post hrefs, and Projects should be addable as `label`/`href`/markdown `body` blocks placed on the existing `/projects` page.
+- 2026-05-13: PPA-01 shipped as characterization only. No app behavior changed.
+- 2026-05-13: PPA-01 added tests proving `blockPosts` and `blockProjects` queries exist while generated Site root navigation exposes only Pages and Navigation.
+- 2026-05-13: PPA-01 added tests proving current Site tree add policy allows page/group children `group`, `hero`, `markdown`, `image`, and `link`, but not `project`, and has no `post` branch policy yet.
+- 2026-05-13: No implementation decisions or blockers changed in PPA-01.
 
 ## Evidence
 
@@ -332,9 +336,15 @@ Likely changed files:
 - Code inspection: `src/site/route-resolver.ts` supports post index and post detail routes under `/blog`.
 - Code inspection: `src/app/site-renderer/renderer.tsx` renders `post`, `project`, and `profile` blocks through `ContentSummary`.
 - Code inspection: current `ContentSummary` uses plain text for body output; project markdown summary rendering remains part of this PRD.
+- PPA-01 tests: `src/client/generated-authoring.test.ts` characterizes the generated root navigation gap for Posts and Projects.
+- PPA-01 tests: `src/client/views.test.ts` characterizes current generated Site tree add policy facts for page/group/header/footer parents and the missing post/project affordances.
+- PPA-01 tests: `src/shared/schema.test.ts` characterizes the source schema gap for Posts/Projects root navigation and project child policy.
+- PPA-01 devstate: `.devstate/status.md` reports checks ok and services running; `.devstate/logs/service-test.txt` reports latest watcher rerun passed; `.devstate/logs/check-vite.txt` reports formatting, lint, and typecheck pass.
+- PPA-01 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence for this repo is under `.devstate/`.
 
 ## Promote after ship
 
+- PPA-01 adds no global-doc promotion beyond existing planned bullets because it is characterization only.
 - `doc/current.md`: add that the Site editor primary sidebar exposes Pages, Posts, Projects, and Navigation.
 - `doc/current.md`: add that Posts are authored as `block.type = post` roots with `label`, `href`, summary `body`, and child markdown placements for long-form content.
 - `doc/current.md`: add that `/blog` is generated from post blocks and `/blog/:slug` resolves post hrefs.

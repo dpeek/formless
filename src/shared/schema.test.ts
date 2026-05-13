@@ -4564,6 +4564,38 @@ describe("personal site sample schema", () => {
     });
   });
 
+  it("characterizes current source authoring gaps for posts and projects", () => {
+    const schema = parseAppSchema(rawSiteSchema);
+    const siteCompositionHome = schema.views.siteCompositionHome;
+
+    if (siteCompositionHome?.type !== "collection" || siteCompositionHome.result.type !== "tree") {
+      throw new Error("Missing Site composition tree view.");
+    }
+
+    const navigationGroups = siteCompositionHome.context?.navigation?.groups ?? [];
+    const navigationQueries = navigationGroups.map((group) => group.query);
+    const branchVariants = siteCompositionHome.result.branches?.variants ?? {};
+    const pagePolicy = branchVariants.page;
+    const groupPolicy = branchVariants.group;
+    const pageChildren = pagePolicy !== "leaf" ? (pagePolicy?.children ?? []) : [];
+    const groupChildren = groupPolicy !== "leaf" ? (groupPolicy?.children ?? []) : [];
+
+    expect(schema.queries.blockPosts?.label).toBe("Posts");
+    expect(schema.queries.blockProjects?.label).toBe("Projects");
+    expect(navigationGroups.map((group) => [group.label, group.query])).toEqual([
+      ["Pages", "blockPages"],
+      ["Navigation", "blockNavigationRoots"],
+    ]);
+    expect(navigationQueries).not.toContain("blockPosts");
+    expect(navigationQueries).not.toContain("blockProjects");
+    expect(Object.keys(branchVariants)).toEqual(["page", "group", "header", "footer"]);
+    expect(pageChildren).toEqual(["group", "hero", "markdown", "image", "link"]);
+    expect(groupChildren).toEqual(["group", "hero", "markdown", "image", "link"]);
+    expect(branchVariants.post).toBeUndefined();
+    expect(pageChildren).not.toContain("project");
+    expect(groupChildren).not.toContain("project");
+  });
+
   it("parses simplified site block authoring views", () => {
     const schema = parseAppSchema(rawSiteSchema);
     const plannedRemovedBlockTypes = [
