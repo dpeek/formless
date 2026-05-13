@@ -195,6 +195,134 @@ describe("site page tree projection", () => {
     expect(tree.meta.warnings).toEqual([]);
   });
 
+  it("resolves explicit internal links through target block hrefs in the public tree", () => {
+    const records = baseTreeRecords().map((record) => {
+      if (record.id === "rec_site_content_blog") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            href: "/writing",
+          },
+        };
+      }
+
+      if (record.id === "rec_site_content_link_blog") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            linkTargetMode: "internal",
+            linkTargetBlock: "rec_site_content_blog",
+            href: "/stale-blog",
+          },
+        };
+      }
+
+      return record;
+    });
+
+    records.push(
+      blockRecord("rec_site_content_link_shipping", {
+        type: "link",
+        label: "Shipping",
+        linkTargetMode: "internal",
+        linkTargetBlock: "rec_site_content_post_shipped_schema",
+        href: "/stale-post",
+      }),
+      placementRecord(
+        "rec_site_place_home_shipping_link",
+        "rec_site_content_home",
+        "rec_site_content_link_shipping",
+        { order: 50 },
+      ),
+    );
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const header = requireBlock(tree.frame.header, "header");
+    const blog = childForPlacement(header, "rec_site_place_header_blog");
+    const shipping = childForPlacement(tree.page, "rec_site_place_home_shipping_link");
+
+    expect(blog.href).toBe("/writing");
+    expect(shipping.href).toBe("/blog/shipping-schema-backed-authoring");
+    expect(blog).not.toHaveProperty("linkTargetMode");
+    expect(blog).not.toHaveProperty("linkTargetBlock");
+    expect(tree.meta.warnings).toEqual([]);
+  });
+
+  it("warns and omits hrefs for broken explicit internal link targets", () => {
+    const records = baseTreeRecords().map((record) => {
+      if (record.id !== "rec_site_content_link_blog") {
+        return record;
+      }
+
+      return {
+        ...record,
+        values: {
+          ...record.values,
+          linkTargetMode: "internal",
+          linkTargetBlock: "rec_site_missing_blog",
+          href: "/legacy-blog",
+        },
+      };
+    });
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const header = requireBlock(tree.frame.header, "header");
+    const blog = childForPlacement(header, "rec_site_place_header_blog");
+
+    expect(blog.href).toBeUndefined();
+    expect(tree.meta.warnings).toEqual([
+      expect.objectContaining({
+        code: "missing-link-target",
+        recordId: "rec_site_content_link_blog",
+      }),
+    ]);
+  });
+
+  it("validates explicit external link hrefs in the public tree", () => {
+    const records = baseTreeRecords().map((record) => {
+      if (record.id === "rec_site_content_link_github") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            linkTargetMode: "external",
+            href: "/not-external",
+          },
+        };
+      }
+
+      if (record.id === "rec_site_content_link_linkedin") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            linkTargetMode: "external",
+            href: "https://example.com/profile?tab=links#top",
+          },
+        };
+      }
+
+      return record;
+    });
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const footer = requireBlock(tree.frame.footer, "footer");
+    const social = childForPlacement(footer, "rec_site_place_footer_section_social");
+    const github = childForPlacement(social, "rec_site_place_footer_github");
+    const linkedIn = childForPlacement(social, "rec_site_place_footer_linkedin");
+
+    expect(github.href).toBeUndefined();
+    expect(linkedIn.href).toBe("https://example.com/profile?tab=links#top");
+    expect(tree.meta.warnings).toEqual([
+      expect.objectContaining({
+        code: "invalid-external-link",
+        recordId: "rec_site_content_link_github",
+      }),
+    ]);
+  });
+
   it("renders every live placement", () => {
     const records = [
       ...baseTreeRecords(),

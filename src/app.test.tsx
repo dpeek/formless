@@ -665,6 +665,65 @@ describe("public site renderer", () => {
     );
   });
 
+  it("renders explicit internal link targets through preview and published link modes", () => {
+    const records = testSiteSeedRecords.map((record) => {
+      if (record.id === "rec_site_content_blog") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            href: "/writing",
+          },
+        };
+      }
+
+      if (record.id === "rec_site_content_link_blog") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            linkTargetMode: "internal",
+            linkTargetBlock: "rec_site_content_blog",
+            href: "/stale-blog",
+          },
+        };
+      }
+
+      return record;
+    });
+
+    const previewHtml = renderSitePage("home", records);
+    const publishedHtml = renderToStaticMarkup(
+      <SitePageRenderer linkMode="published" tree={sitePageTree("home", records)} />,
+    );
+
+    expect(previewHtml).toContain('href="/pages/writing"');
+    expect(previewHtml).not.toContain('href="/pages/stale-blog"');
+    expect(publishedHtml).toContain('href="/writing"');
+    expect(publishedHtml).not.toContain('href="/stale-blog"');
+  });
+
+  it("does not render anchors for invalid explicit external links", () => {
+    const records = testSiteSeedRecords.map((record) => {
+      if (record.id !== "rec_site_content_link_github") {
+        return record;
+      }
+
+      return {
+        ...record,
+        values: {
+          ...record.values,
+          linkTargetMode: "external",
+          href: "/not-external",
+        },
+      };
+    });
+    const html = renderSitePage("home", records);
+
+    expect(html).not.toContain('href="/pages/not-external"');
+    expect(html).not.toContain('aria-label="GitHub"');
+  });
+
   it("renders mobile header overflow without duplicating the first seeded nav item", () => {
     const html = renderSitePage("home");
     const primaryStart = html.indexOf("data-site-header-mobile-primary");

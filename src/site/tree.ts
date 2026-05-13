@@ -13,6 +13,7 @@ import {
   routeInfoForResolution,
   type SiteRouteResolution,
 } from "./route-resolver.ts";
+import { resolveSiteLinkHref } from "./link-targets.ts";
 
 export type {
   SiteBlockNode,
@@ -193,7 +194,7 @@ function buildPostIndexPageNode(
   route: Extract<SiteRouteResolution, { kind: "post-index" }>,
   context: SiteTreeBuildContext,
 ): SiteBlockNode {
-  const page = route.page ? projectBlock(route.page) : fallbackPostIndexPage();
+  const page = route.page ? projectBlock(route.page, context) : fallbackPostIndexPage();
 
   page.placements = route.posts.map((post, index) => ({
     id: `generated_site_post_index_${post.id}`,
@@ -220,7 +221,7 @@ function buildBlockNode(
   depth: number,
   ancestors: Set<string>,
 ): SiteBlockNode {
-  const node = projectBlock(record);
+  const node = projectBlock(record, context);
 
   if (depth >= context.maxDepth) {
     warnIfDepthStopsTraversal(record, context);
@@ -275,19 +276,36 @@ function buildPlacementNodes(
   return nodes;
 }
 
-function projectBlock(record: StoredRecord): SiteBlockNode {
+function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): SiteBlockNode {
+  const type = stringValue(record.values.type) ?? "";
+
   return {
     id: record.id,
-    type: stringValue(record.values.type) ?? "",
+    type,
     label: stringValue(record.values.label) ?? "",
     ...optionalStringField("body", record.values.body),
-    ...optionalStringField("href", record.values.href),
+    ...optionalStringField("href", projectedBlockHref(record, type, context)),
     ...optionalStringField("icon", record.values.icon),
     ...optionalStringField("color", record.values.color),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
     placements: [],
   };
+}
+
+function projectedBlockHref(
+  record: StoredRecord,
+  type: string,
+  context: SiteTreeBuildContext,
+): string | FieldValue | undefined {
+  if (type !== "link") {
+    return record.values.href;
+  }
+
+  const resolution = resolveSiteLinkHref(record, context.indexes.blocks);
+  context.warnings.push(...resolution.warnings);
+
+  return resolution.href;
 }
 
 function projectPlacement(placement: StoredRecord, childBlock: SiteBlockNode): SitePlacementNode {
