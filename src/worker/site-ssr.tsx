@@ -14,6 +14,13 @@ import {
 
 const SITE_SCHEMA_KEY = "site";
 const CLIENT_MODULE_PATH = "/src/main.tsx";
+const VITE_REACT_REFRESH_PREAMBLE = `<script type="module">
+import RefreshRuntime from "/@react-refresh";
+RefreshRuntime.injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;
+window.__vite_plugin_react_preamble_installed__ = true;
+</script>`;
 
 export async function handlePublishedSiteDocumentRequest(
   request: Request,
@@ -133,6 +140,7 @@ function renderDocument(appHtml: string, options: { initialTree?: SitePageTree }
   </head>
   <body>
     <div id="app">${appHtml}</div>${initialTreeScript}
+    ${VITE_REACT_REFRESH_PREAMBLE}
     <script type="module" src="${CLIENT_MODULE_PATH}"></script>
   </body>
 </html>`;

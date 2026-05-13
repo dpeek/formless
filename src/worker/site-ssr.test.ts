@@ -62,6 +62,8 @@ describe("published Site Worker SSR", () => {
     expect(payload.kind).toBe("formless.sitePageTree");
     expect(payload.version).toBe(1);
     expect(payload.tree.meta.slug).toBe("home");
+    expect(html).toContain('import RefreshRuntime from "/@react-refresh";');
+    expect(html).toContain("window.__vite_plugin_react_preamble_installed__ = true;");
     expect(html).toContain('<script type="module" src="/src/main.tsx"></script>');
     expect(html).not.toContain("Loading site page...");
   });

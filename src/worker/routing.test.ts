@@ -24,6 +24,8 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/schema"),
       documentRequest("http://app.example.com/"),
       documentRequest("http://example.com/assets/index.js"),
+      new Request("http://example.com/@vite/client", { headers: { Accept: "*/*" } }),
+      new Request("http://example.com/@react-refresh", { headers: { Accept: "*/*" } }),
       documentRequest("http://example.com/favicon.svg"),
       new Request("http://example.com/blog/post", { headers: { Accept: "application/json" } }),
     ];
@@ -40,6 +42,16 @@ describe("Worker document routing", () => {
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/assets/index.js"))).toBe(
       true,
     );
+    expect(
+      shouldDeferToStaticAssets(
+        new Request("http://example.com/@vite/client", { headers: { Accept: "*/*" } }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(
+        new Request("http://example.com/@react-refresh", { headers: { Accept: "*/*" } }),
+      ),
+    ).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/api/site/schema"))).toBe(
       false,
     );

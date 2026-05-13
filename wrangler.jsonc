@@ -21,6 +21,8 @@
       "!/schema",
       "!/assets/*",
       "!/src/*",
+      "!/@vite/*",
+      "!/@react-refresh",
       "!/favicon.svg",
     ],
   },

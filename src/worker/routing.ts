@@ -7,6 +7,7 @@ const clientRoutePrefixes = [
   ...schemaApps.map((app) => app.route),
   ...legacyClientRoutePrefixes,
 ] as const;
+const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 
 export function shouldHandlePublishedSiteDocument(request: Request): boolean {
   if (request.method !== "GET") {
@@ -58,7 +59,10 @@ export function isClientShellRoute(pathname: string): boolean {
 export function looksLikeStaticAssetPath(pathname: string): boolean {
   const lastSegment = pathname.split("/").at(-1) ?? "";
 
-  return /\.[a-zA-Z0-9]+$/.test(lastSegment);
+  return (
+    staticAssetPathPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) ||
+    /\.[a-zA-Z0-9]+$/.test(lastSegment)
+  );
 }
 
 function isAppProfileHost(hostname: string): boolean {

@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { App } from "./app.tsx";
@@ -794,12 +794,12 @@ describe("public site renderer", () => {
       linkMode?: "preview" | "published";
       slug: string;
     }) => <SitePageRouteView linkMode={linkMode} state={{ status: "ready", tree }} />;
-    const ssrHtml = renderToStaticMarkup(
+    const ssrHtml = renderToString(
       <main className="min-h-dvh">
         <SitePageRenderer linkMode="published" tree={tree} />
       </main>,
     );
-    const hydratedAppHtml = renderToStaticMarkup(
+    const hydratedAppHtml = renderToString(
       <Router ssrPath="/">
         <App
           routeComponents={{
