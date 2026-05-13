@@ -1,7 +1,7 @@
 # PRD 34: Public Site SSR
 
 Status: ready
-Current chunk: PSSR-01 ready
+Current chunk: PSSR-02 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -260,14 +260,14 @@ These modules should expose small interfaces and keep authority storage details 
 
 ## Chunks
 
-| ID      | Status | Depends on | Main files                      | Acceptance                                                                                                    |
-| ------- | ------ | ---------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| PSSR-01 | ready  | none       | tests, PRD                      | Characterize current SPA first-paint path and lock current published Site routing/loading behavior.           |
-| PSSR-02 | ready  | PSSR-01    | worker SSR adapter, tests       | Worker can return server-rendered HTML for published `/` and nested Site slugs using the public tree.         |
-| PSSR-03 | ready  | PSSR-02    | browser entry, route, tests     | Browser hydrates SSR markup from embedded `SitePageTree` without an immediate duplicate tree fetch.           |
-| PSSR-04 | ready  | PSSR-03    | Worker routing, wrangler, tests | Cloudflare routing sends published documents to Worker while API routes and assets keep existing behavior.    |
-| PSSR-05 | ready  | PSSR-04    | cache policy, tests             | Successful, not-found, and error SSR responses have explicit cache headers and documented freshness tradeoff. |
-| PSSR-06 | ready  | PSSR-05    | browser smoke, PRD              | Published Site smoke confirms content, hydration, links, theme toggle, no page errors, and PRD evidence.      |
+| ID      | Status  | Depends on | Main files                      | Acceptance                                                                                                    |
+| ------- | ------- | ---------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| PSSR-01 | shipped | none       | tests, PRD                      | Characterize current SPA first-paint path and lock current published Site routing/loading behavior.           |
+| PSSR-02 | ready   | PSSR-01    | worker SSR adapter, tests       | Worker can return server-rendered HTML for published `/` and nested Site slugs using the public tree.         |
+| PSSR-03 | ready   | PSSR-02    | browser entry, route, tests     | Browser hydrates SSR markup from embedded `SitePageTree` without an immediate duplicate tree fetch.           |
+| PSSR-04 | ready   | PSSR-03    | Worker routing, wrangler, tests | Cloudflare routing sends published documents to Worker while API routes and assets keep existing behavior.    |
+| PSSR-05 | ready   | PSSR-04    | cache policy, tests             | Successful, not-found, and error SSR responses have explicit cache headers and documented freshness tradeoff. |
+| PSSR-06 | ready   | PSSR-05    | browser smoke, PRD              | Published Site smoke confirms content, hydration, links, theme toggle, no page errors, and PRD evidence.      |
 
 ## Out of Scope
 
@@ -286,6 +286,7 @@ These modules should expose small interfaces and keep authority storage details 
 
 ## Promote after ship
 
+- PSSR-01: no global doc promotion; characterization-only baseline for later SSR chunks.
 - `doc/current.md`: note published Site pages render through Worker SSR.
 - `doc/current.md`: note public Site hydration uses embedded initial `SitePageTree`.
 - `doc/current.md`: note published SSR cache policy and status behavior.
@@ -305,3 +306,5 @@ These modules should expose small interfaces and keep authority storage details 
 - 2026-05-13: User asked whether this should be a new PRD or rolled into an existing one.
 - 2026-05-13: Decision: make this a new PRD because SSR owns Worker route-level rendering, hydration, cache behavior, and response shape.
 - 2026-05-13: PRD created as `prd/34-public-site-ssr.md`.
+- 2026-05-13: PSSR-01 shipped. Added `src/site/public-site-ssr-characterization.test.tsx` to lock the current empty SPA document shell, `createRoot` browser mount, Cloudflare SPA fallback with Worker-first `/api/*` only, published Site loading shell for `/` and nested slugs, and the current single `/api/site/tree/:slug` read before public content renders.
+- 2026-05-13: PSSR-01 check evidence: `devstate start` and final `devstate check` reported checks ok, web service ready at `https://34-public-site-ssr.formless.local`, and test watcher passing. `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent in this checkout, so `.devstate/status.md`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` were used. Watcher reran `src/site/public-site-ssr-characterization.test.tsx` with 5 tests passing. `check-vite` reported no formatting, lint, or type errors in 222 files.
