@@ -114,6 +114,34 @@ describe("published Site Worker SSR", () => {
     expect(scriptText).toContain("\\u0026 text");
     expect(initialTreePayload(html).tree.page.label).toBe(hostileLabel);
   });
+
+  it("keeps API requests dispatched as API responses instead of Site documents", async () => {
+    const response = await harness.fetch("/api/site/tree/home", {
+      headers: {
+        Accept: "text/html",
+      },
+    });
+    const body = (await response.json()) as { meta: { slug: string } };
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+    expect(body.meta.slug).toBe("home");
+  });
+
+  it("leaves preview, generated admin, and asset-like routes outside the SSR document path", async () => {
+    const responses = await Promise.all([
+      getDocument("/pages/home"),
+      getDocument("/site"),
+      getDocument("/tasks"),
+      getDocument("/assets/index.js"),
+      getDocument("/favicon.svg"),
+    ]);
+    const bodies = await Promise.all(responses.map((response) => response.text()));
+
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404]);
+    expect(bodies.join("\n")).not.toContain("data-site-header");
+    expect(bodies.join("\n")).not.toContain("Loading site page...");
+  });
 });
 
 async function resetSchemaApp(schemaKey: SchemaKey) {

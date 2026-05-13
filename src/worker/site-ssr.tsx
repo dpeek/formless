@@ -6,6 +6,7 @@ import { SitePageRenderer } from "../app/site-renderer/renderer.tsx";
 import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { Env } from "./index.ts";
+import { shouldHandlePublishedSiteDocument } from "./routing.ts";
 
 const SITE_SCHEMA_KEY = "site";
 const CLIENT_MODULE_PATH = "/src/main.tsx";
@@ -14,7 +15,7 @@ export async function handlePublishedSiteDocumentRequest(
   request: Request,
   env: Env,
 ): Promise<Response | undefined> {
-  if (!isPublishedSiteDocumentRequest(request)) {
+  if (!shouldHandlePublishedSiteDocument(request)) {
     return undefined;
   }
 
@@ -130,38 +131,4 @@ function htmlResponse(html: string, status = 200): Response {
 
 function publishedSiteSlugFromUrl(url: URL): string {
   return normalizeSitePageSlug(url.pathname);
-}
-
-function isPublishedSiteDocumentRequest(request: Request): boolean {
-  if (request.method !== "GET") {
-    return false;
-  }
-
-  const url = new URL(request.url);
-
-  if (url.pathname === "/pages" || url.pathname.startsWith("/pages/")) {
-    return false;
-  }
-
-  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-    return false;
-  }
-
-  if (looksLikeStaticAssetPath(url.pathname)) {
-    return false;
-  }
-
-  return acceptsHtml(request.headers.get("Accept"));
-}
-
-function acceptsHtml(acceptHeader: string | null): boolean {
-  return (
-    acceptHeader === null || acceptHeader.includes("text/html") || acceptHeader.includes("*/*")
-  );
-}
-
-function looksLikeStaticAssetPath(pathname: string): boolean {
-  const lastSegment = pathname.split("/").at(-1) ?? "";
-
-  return /\.[a-zA-Z0-9]+$/.test(lastSegment);
 }

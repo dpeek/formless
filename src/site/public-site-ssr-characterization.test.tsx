@@ -35,13 +35,21 @@ describe("public Site SSR characterization", () => {
     expect(entry).toContain("createRoot(app).render(");
   });
 
-  it("characterizes Cloudflare routing as SPA fallback with Worker-first API only", () => {
+  it("characterizes Cloudflare routing as Worker-first for API and published documents", () => {
     const wrangler = readRepoFile("../../wrangler.jsonc");
 
     expect(wrangler).toContain('"not_found_handling": "single-page-application"');
-    expect(wrangler).toContain('"run_worker_first": ["/api/*"]');
-    expect(wrangler).not.toContain('"/pages/*"');
-    expect(wrangler).not.toContain('"/*"');
+    expect(wrangler).toContain('"binding": "ASSETS"');
+    expect(wrangler).toContain('"run_worker_first": [');
+    expect(wrangler).toContain('"/*"');
+    expect(wrangler).not.toContain('"/api/*"');
+    expect(wrangler).toContain('"!/pages"');
+    expect(wrangler).toContain('"!/pages/*"');
+    expect(wrangler).toContain('"!/site"');
+    expect(wrangler).toContain('"!/site/*"');
+    expect(wrangler).toContain('"!/assets/*"');
+    expect(wrangler).toContain('"!/src/*"');
+    expect(wrangler).toContain('"!/favicon.svg"');
   });
 
   it("renders published Site document routes as loading shells before tree data arrives", () => {

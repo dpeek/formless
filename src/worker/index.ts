@@ -1,11 +1,13 @@
 import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
 import { handleSiteMediaRequest } from "./media.ts";
+import { shouldDeferToStaticAssets } from "./routing.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 
 export { FormlessAuthority } from "./authority.ts";
 
 export type Env = {
+  ASSETS?: Fetcher;
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace<FormlessAuthority>;
   FORMLESS_MEDIA: R2Bucket;
@@ -33,6 +35,10 @@ export default {
 
     if (siteDocumentResponse) {
       return siteDocumentResponse;
+    }
+
+    if (env.ASSETS && shouldDeferToStaticAssets(request)) {
+      return env.ASSETS.fetch(request);
     }
 
     return new Response(null, { status: 404 });

@@ -53,7 +53,8 @@ describe("Site editing and publish workflow baseline", () => {
     expect(deployScript).not.toContain("snapshot");
     expect(deployScript).not.toContain("reset");
     expect(deployScript).not.toContain("site:publish");
-    expect(readWranglerConfigText()).toContain('"run_worker_first": ["/api/*"]');
+    expect(readWranglerConfigText()).toContain('"run_worker_first": [');
+    expect(readWranglerConfigText()).toContain('"/*"');
   });
 
   it("exposes the Site source seed promotion command", () => {
