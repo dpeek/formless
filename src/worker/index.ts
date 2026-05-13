@@ -1,15 +1,23 @@
 import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
+import { handleSiteMediaRequest } from "./media.ts";
 
 export { FormlessAuthority } from "./authority.ts";
 
 export type Env = {
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace<FormlessAuthority>;
+  FORMLESS_MEDIA: R2Bucket;
 };
 
 export default {
-  fetch(request, env) {
+  async fetch(request, env) {
+    const mediaResponse = await handleSiteMediaRequest(request, env);
+
+    if (mediaResponse) {
+      return mediaResponse;
+    }
+
     const url = new URL(request.url);
     const app = parseApiSchemaApp(url.pathname);
 

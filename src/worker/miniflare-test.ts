@@ -15,6 +15,7 @@ type DurableObjectBindings = Record<
 
 type WorkerHarnessOptions = {
   bindings?: Record<string, string>;
+  r2Buckets?: string[];
 };
 
 export async function createWorkerHarness(
@@ -40,6 +41,8 @@ export async function createWorkerHarness(
     durableObjectsPersist: false,
     modules: true,
     modulesRoot: process.cwd(),
+    r2Buckets: options.r2Buckets,
+    r2Persist: false,
     scriptPath,
   });
 

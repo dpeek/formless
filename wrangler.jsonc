@@ -15,6 +15,12 @@
       },
     ],
   },
+  "r2_buckets": [
+    {
+      "binding": "FORMLESS_MEDIA",
+      "bucket_name": "formless-site-media",
+    },
+  ],
   "migrations": [
     {
       "tag": "v1",

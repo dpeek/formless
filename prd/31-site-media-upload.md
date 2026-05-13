@@ -1,7 +1,7 @@
 # PRD 31: Site media upload
 
 Status: in progress
-Current chunk: SMU-02 ready
+Current chunk: SMU-03 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -227,6 +227,7 @@ Possible changed files:
 | SMU-D10 | Use immutable object keys and tolerate first-slice orphans.  | Cleanup needs a registry or reference scan; neither is needed to prove authoring upload.   | First-slice scope                                        |
 | SMU-D11 | Detect dimensions in the browser, not the Worker.            | The Worker can stay a byte validator/store; browser image APIs can populate layout hints.  | Existing `width` and `height` fields                     |
 | SMU-D12 | Keep manual URL support.                                     | Existing authored external image URLs and seeds should keep rendering.                     | Public renderer accepts any `href` string                |
+| SMU-D13 | Parse the single upload multipart field in `media.ts`.       | The Worker route owns file validation and byte preservation before R2 writes.              | `src/worker/media.ts`, `src/worker/media.test.ts`        |
 
 ### Deep Modules
 
@@ -257,8 +258,8 @@ Possible changed files:
 | ID     | Status  | Depends on | Main files                         | Acceptance                                                                                      |
 | ------ | ------- | ---------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
 | SMU-01 | done    | none       | docs, PRD                          | Release roadmap includes Site image upload; PRD defines scope, contracts, chunks, and tests.    |
-| SMU-02 | ready   | SMU-01     | Worker media routes, config, tests | R2 upload and serving routes work in Miniflare and respect upload auth/public read rules.       |
-| SMU-03 | planned | SMU-02     | client upload, generated editor    | Site image field can upload, preview, and patch flat block fields through existing mutations.   |
+| SMU-02 | done    | SMU-01     | Worker media routes, config, tests | R2 upload and serving routes work in Miniflare and respect upload auth/public read rules.       |
+| SMU-03 | ready   | SMU-02     | client upload, generated editor    | Site image field can upload, preview, and patch flat block fields through existing mutations.   |
 | SMU-04 | planned | SMU-03     | Site schema, renderer tests        | Image blocks can be created before upload; public Site renders uploaded media URLs unchanged.   |
 | SMU-05 | planned | SMU-04     | browser smoke, PRD                 | `/site` authoring and `/pages/home` public preview pass; PRD evidence and promotion notes land. |
 
@@ -377,6 +378,7 @@ Acceptance:
 - 2026-05-13: PRD created from user direction to include an initial media slice in first release, focused on Site image authoring.
 - 2026-05-13: First-slice direction: upload raster image to R2, serve through same-origin Worker media route, patch existing image block fields, and keep public tree protocol unchanged.
 - 2026-05-13: SMU-01 shipped. Roadmap already names Site image upload as first-release scope and keeps general media library, video upload, file upload, transforms, and cleanup out of first release. Next ready chunk is SMU-02.
+- 2026-05-13: SMU-02 shipped. Worker now routes Site media before Authority dispatch, uploads one raster image to `FORMLESS_MEDIA`, serves same-origin media URLs from R2, guards uploads with the admin bearer token policy, and leaves public reads open. Next ready chunk is SMU-03.
 
 ## Evidence
 
@@ -384,10 +386,14 @@ Acceptance:
 - SMU-01 acceptance: `doc/roadmap.md` includes Site image upload under Site App and Generated UI, and keeps general media library, video upload, file upload, image transforms, and media garbage collection out of first release.
 - Loop status files requested at `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were not present; current generated evidence is in `.devstate/status.md` and `.devstate/status.json`.
 - `devstate check`: checks ok; watch tests pass; services running at `https://31-site-media-upload.formless.local`.
+- SMU-02 acceptance: `src/worker/media.test.ts` covers successful upload and serve, unsupported MIME rejection, oversized rejection, missing/repeated file rejection, upload auth, unauthenticated public reads, and missing-object `404`.
+- SMU-02 implementation: `src/worker/media.ts` owns `/api/site/media/images`, `/api/site/media/*`, MIME/size validation, immutable Site image keys, R2 writes, and R2 response headers.
+- SMU-02 config: `wrangler.jsonc` binds `FORMLESS_MEDIA`; `src/worker/miniflare-test.ts` supports Miniflare R2 buckets.
+- 2026-05-13 `devstate check`: checks ok; watch tests pass; services running at `https://31-site-media-upload.formless.local`.
 
 ## Promote after ship
 
-- `doc/current.md`: add R2 binding and Site media route facts after SMU-02 ships.
+- `doc/current.md`: add `FORMLESS_MEDIA` R2 binding, `src/worker/media.ts`, `/api/site/media/images`, `/api/site/media/*`, upload auth, public read, and Miniflare R2 test facts after SMU-02 ships.
 - `doc/current.md`: add generated image upload editor facts after SMU-03 ships.
 - `doc/current.md`: add Site image create and public rendering facts after SMU-04 ships.
 - `doc/roadmap.md`: keep Site image upload in first-release scope and keep general media library/video/file/transforms/cleanup out of scope.

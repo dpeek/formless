@@ -18,9 +18,20 @@ export function authorizeAuthorityOperation(
   operation: AuthorityOperation,
   env: AuthorityAdminGuardEnv,
 ): AuthorityAdminGuardResult {
+  if (operation.metadata.mode === "read") {
+    return { authorized: true };
+  }
+
+  return authorizeAdminWrite(request, env);
+}
+
+export function authorizeAdminWrite(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+): AuthorityAdminGuardResult {
   const adminToken = normalizedAdminToken(env.FORMLESS_ADMIN_TOKEN);
 
-  if (!adminToken || operation.metadata.mode === "read") {
+  if (!adminToken) {
     return { authorized: true };
   }
 
