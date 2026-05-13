@@ -1,7 +1,7 @@
 # PRD 31: Site media upload
 
-Status: planned
-Current chunk: SMU-01 ready
+Status: in progress
+Current chunk: SMU-02 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -256,8 +256,8 @@ Possible changed files:
 
 | ID     | Status  | Depends on | Main files                         | Acceptance                                                                                      |
 | ------ | ------- | ---------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| SMU-01 | ready   | none       | docs, PRD                          | Release roadmap includes Site image upload; PRD defines scope, contracts, chunks, and tests.    |
-| SMU-02 | planned | SMU-01     | Worker media routes, config, tests | R2 upload and serving routes work in Miniflare and respect upload auth/public read rules.       |
+| SMU-01 | done    | none       | docs, PRD                          | Release roadmap includes Site image upload; PRD defines scope, contracts, chunks, and tests.    |
+| SMU-02 | ready   | SMU-01     | Worker media routes, config, tests | R2 upload and serving routes work in Miniflare and respect upload auth/public read rules.       |
 | SMU-03 | planned | SMU-02     | client upload, generated editor    | Site image field can upload, preview, and patch flat block fields through existing mutations.   |
 | SMU-04 | planned | SMU-03     | Site schema, renderer tests        | Image blocks can be created before upload; public Site renders uploaded media URLs unchanged.   |
 | SMU-05 | planned | SMU-04     | browser smoke, PRD                 | `/site` authoring and `/pages/home` public preview pass; PRD evidence and promotion notes land. |
@@ -376,11 +376,14 @@ Acceptance:
 
 - 2026-05-13: PRD created from user direction to include an initial media slice in first release, focused on Site image authoring.
 - 2026-05-13: First-slice direction: upload raster image to R2, serve through same-origin Worker media route, patch existing image block fields, and keep public tree protocol unchanged.
+- 2026-05-13: SMU-01 shipped. Roadmap already names Site image upload as first-release scope and keeps general media library, video upload, file upload, transforms, and cleanup out of first release. Next ready chunk is SMU-02.
 
 ## Evidence
 
-- `devstate start`: checks ok; services running at `https://formless.local`.
-- `devstate check`: pending for implementation chunks.
+- `devstate start`: checks ok; watch tests pass; services running at `https://31-site-media-upload.formless.local`.
+- SMU-01 acceptance: `doc/roadmap.md` includes Site image upload under Site App and Generated UI, and keeps general media library, video upload, file upload, image transforms, and media garbage collection out of first release.
+- Loop status files requested at `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were not present; current generated evidence is in `.devstate/status.md` and `.devstate/status.json`.
+- `devstate check`: checks ok; watch tests pass; services running at `https://31-site-media-upload.formless.local`.
 
 ## Promote after ship
 
