@@ -158,6 +158,43 @@ describe("site page tree projection", () => {
     });
   });
 
+  it("keeps legacy link href strings unchanged in the public tree", () => {
+    const records = baseTreeRecords().map((record) => {
+      if (record.id === "rec_site_content_link_blog") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            href: "/pages/blog?draft=1#intro",
+          },
+        };
+      }
+
+      if (record.id === "rec_site_content_link_github") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            href: "https://example.com/profile?tab=links#top",
+          },
+        };
+      }
+
+      return record;
+    });
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const header = requireBlock(tree.frame.header, "header");
+    const blog = childForPlacement(header, "rec_site_place_header_blog");
+    const footer = requireBlock(tree.frame.footer, "footer");
+    const social = childForPlacement(footer, "rec_site_place_footer_section_social");
+    const github = childForPlacement(social, "rec_site_place_footer_github");
+
+    expect(blog.href).toBe("/pages/blog?draft=1#intro");
+    expect(github.href).toBe("https://example.com/profile?tab=links#top");
+    expect(tree.meta.warnings).toEqual([]);
+  });
+
   it("renders every live placement", () => {
     const records = [
       ...baseTreeRecords(),
