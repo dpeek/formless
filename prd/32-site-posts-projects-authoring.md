@@ -1,7 +1,7 @@
 # PRD 32: Site posts and projects authoring
 
-Status: ready
-Current chunk: PPA-05 ready
+Status: complete
+Current chunk: PPA-05 shipped
 Last updated: 2026-05-13
 
 ## Goal
@@ -294,7 +294,7 @@ Likely changed files:
 | PPA-02 | shipped | PPA-01     | Site source schema, schema/view tests   | `/site` exposes Posts and Projects groups with fixed-type root create actions and focused root edit fields.               |
 | PPA-03 | shipped | PPA-02     | Site source schema, tree/view tests     | Post roots can add markdown body blocks; Projects page contexts can add project blocks and placements.                    |
 | PPA-04 | shipped | PPA-03     | Site seeds, renderer, tree/public tests | Source seed proves `/projects` can render placed project summaries with label, href, and formatted markdown body content. |
-| PPA-05 | ready   | PPA-04     | browser smoke, PRD                      | `/site`, `/pages/blog`, and `/pages/projects` smoke pass; PRD evidence, blockers, and promotion notes update.             |
+| PPA-05 | shipped | PPA-04     | browser smoke, PRD                      | `/site`, `/pages/blog`, and `/pages/projects` smoke pass; PRD evidence, blockers, and promotion notes update.             |
 
 ## Out of Scope
 
@@ -337,6 +337,8 @@ Likely changed files:
 - 2026-05-13: PPA-04 shipped. Source Site seed now places Estii, OpenSurf, and Formless project blocks under the `/projects` page while keeping the same flat `block` plus `blockPlacement` model.
 - 2026-05-13: PPA-04 renders project summary `body` through the shared markdown renderer so project summaries can include markdown links and emphasis without leaking raw syntax.
 - 2026-05-13: PPA-04 leaves public routing unchanged; `/projects` remains a normal page route and no project detail route generation was added.
+- 2026-05-13: PPA-05 shipped browser smoke and PRD closeout. `/site`, `/pages/blog`, and `/pages/projects` render from reset source Site schema and seed data with no browser page errors.
+- 2026-05-13: PRD 32 is complete; remaining work is doc/steward promotion of the listed shipped facts into global docs.
 
 ## Evidence
 
@@ -373,6 +375,14 @@ Likely changed files:
 - PPA-04 devstate: `.devstate/status.md` reports checks ok and services running; `.devstate/logs/service-test.txt` reports latest watcher rerun passed after the seed count update; `.devstate/logs/check-vite.txt` reports formatting pass and no lint or type errors across 217 files.
 - PPA-04 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent; current evidence is under `.devstate/`.
 - PPA-04 browser smoke: `bun browser --session ppa-04` reset Site seed data through `/api/site/reset/seed`, opened `/pages/projects`, confirmed Estii/OpenSurf/Formless rendered, confirmed Estii body emitted `<strong>` and `href="https://estii.com/"`, and `bun browser --session ppa-04 errors` returned no page errors.
+- PPA-05 devstate: `env -u VITE_FORMLESS_RUNTIME_PROFILE devstate start` reports checks ok, web ready at `https://32-site-posts-projects-authoring.formless.local`, and watcher tests passing.
+- PPA-05 browser reset: `bun browser --session ppa-05` reset Site schema and seed through `/api/site/reset/schema` and `/api/site/reset/seed`; both returned `200`.
+- PPA-05 browser smoke: `/site` rendered Pages, Posts, Projects, Navigation, post records, project records, placement tree controls, synced status, and schema navigation.
+- PPA-05 browser smoke: `/pages/blog` rendered the public Blog index with both seeded post summaries.
+- PPA-05 browser smoke: `/pages/projects` rendered the public Projects page with Estii, OpenSurf, and Formless summaries.
+- PPA-05 browser errors: `bun browser --session ppa-05 errors` returned no page errors.
+- PPA-05 final check: `devstate check` reports checks ok, web ready, and watcher tests passing.
+- PPA-05 devstate compatibility: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` are absent; current evidence is under `.devstate/`.
 
 ## Promote after ship
 
@@ -387,3 +397,4 @@ Likely changed files:
 - `doc/current.md`: add that generated Site tree add policy lets post roots add markdown children and page/group roots add project children.
 - `doc/current.md`: add that project tree nodes are leaf authoring nodes in the generated Site tree.
 - `doc/roadmap.md`: update first-release Site editor surface from Pages/Header/Footer-era wording to Pages, Posts, Projects, and Navigation if this becomes release scope.
+- PPA-05 adds no new global-doc facts beyond the promotion bullets above.
