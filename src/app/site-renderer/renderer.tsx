@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { MarkdownRenderer } from "@formless/ui/markdown-renderer";
 import { SvgIcon } from "@formless/ui/svg-icon";
 import { isExternalSiteHref, profileAwareSiteHref, type SitePageLinkMode } from "./links.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
@@ -34,8 +35,8 @@ export function SitePageRenderer({
         <article
           className={
             theme.theme === "dark"
-              ? "dark min-h-dvh bg-zinc-950 text-zinc-100"
-              : "min-h-dvh bg-white text-zinc-950"
+              ? "dark flex min-h-dvh flex-col bg-zinc-950 text-zinc-100"
+              : "flex min-h-dvh flex-col bg-white text-zinc-950"
           }
           data-site-theme={theme.theme}
         >
@@ -163,6 +164,10 @@ function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: Si
     return <FooterSection block={block} />;
   }
 
+  if (block.templateKey === "footer-social") {
+    return <FooterSocialSection block={block} />;
+  }
+
   if (block.templateKey === "footer") {
     return <FooterGroup block={block} />;
   }
@@ -245,20 +250,17 @@ function FooterGroup({ block }: { block: SiteBlockNode }) {
   const { notes, sections } = partitionFooterPlacements(block.placements);
 
   return (
-    <footer
-      className="border-t border-zinc-200 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300"
-      data-site-footer
-    >
-      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
+    <footer className="border-t border-dashed" data-site-footer>
+      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-18">
         {sections.length > 0 ? (
-          <div className="grid gap-6 sm:grid-cols-2">
+          <div className="flex max-w-lg flex-wrap justify-between gap-x-14 gap-y-8">
             {sections.map((placement) => (
               <SitePlacementRenderer key={placement.id} placement={placement} />
             ))}
           </div>
         ) : null}
         {notes.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             {notes.map((placement) => (
               <FooterNote key={placement.id} placement={placement} />
             ))}
@@ -276,7 +278,7 @@ function FooterNote({ placement }: { placement: SitePlacementNode }) {
     const text = block.body ?? displayLabel(block, placement);
 
     return text ? (
-      <PlainText text={text} className="text-sm text-zinc-500 dark:text-zinc-400" />
+      <PlainText text={text} className="text-sm text-zinc-700 dark:text-zinc-700" />
     ) : null;
   }
 
@@ -307,14 +309,52 @@ function isFooterSectionPlacement(placement: SitePlacementNode): boolean {
 
 function FooterSection({ block }: { block: SiteBlockNode }) {
   return (
-    <section className="space-y-3">
-      <h3 className="text-sm font-semibold uppercase tracking-normal text-zinc-500 dark:text-zinc-400">
-        {block.label}
-      </h3>
+    <section className="w-full max-w-48 space-y-3 sm:w-48">
       <nav aria-label={block.label} className="flex flex-col items-start gap-2">
         <SitePlacementList placements={block.placements} />
       </nav>
     </section>
+  );
+}
+
+function FooterSocialSection({ block }: { block: SiteBlockNode }) {
+  return (
+    <section className="w-full max-w-48 space-y-3 sm:w-48">
+      <nav aria-label={block.label} className="flex flex-wrap items-center gap-2">
+        {block.placements.map((placement) => (
+          <FooterSocialLink key={placement.id} placement={placement} />
+        ))}
+      </nav>
+    </section>
+  );
+}
+
+function FooterSocialLink({ placement }: { placement: SitePlacementNode }) {
+  const linkMode = useSitePageLinkMode();
+  const block = placement.block;
+  const href = blockHref(block, linkMode);
+
+  if (!href) {
+    return null;
+  }
+
+  const label = displayLabel(block, placement);
+
+  return (
+    <a
+      aria-label={label}
+      className="inline-flex size-8 items-center justify-center text-current transition hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
+      href={href}
+      rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
+      target={isExternalSiteHref(href) ? "_blank" : undefined}
+      title={label}
+    >
+      {block.icon ? (
+        <SvgIcon className="size-6" source={block.icon} />
+      ) : (
+        <span className="text-sm font-medium">{label}</span>
+      )}
+    </a>
   );
 }
 
@@ -351,9 +391,10 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
         <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
       ) : null}
       {block.body ? (
-        <PlainText
-          text={block.body}
+        <MarkdownRenderer
           className="text-base leading-7 text-zinc-700 dark:text-zinc-300"
+          content={block.body}
+          minHeadingLevel={2}
         />
       ) : null}
       {renderUnclaimedPlacements(block)}
@@ -468,7 +509,11 @@ function PagePlacementFlow({ page }: { page: SiteBlockNode }) {
 }
 
 function PageMain({ children }: { children: ReactNode }) {
-  return <main className="mx-auto flex max-w-5xl flex-col gap-12 px-6 py-10">{children}</main>;
+  return (
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-6 py-10">
+      {children}
+    </main>
+  );
 }
 
 function SitePlacementList({ placements }: { placements: SitePlacementNode[] }) {

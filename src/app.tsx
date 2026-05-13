@@ -1,4 +1,11 @@
-import { type CSSProperties, type ReactNode, useMemo } from "react";
+import {
+  lazy,
+  Suspense,
+  type CSSProperties,
+  type ElementType,
+  type ReactNode,
+  useMemo,
+} from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import {
   Sidebar,
@@ -21,15 +28,13 @@ import {
   SourceResetControl,
 } from "./app/dev-actions.tsx";
 import {
-  HomeRoute,
   HomeRouteSelectionProvider,
   selectHomeRouteSectionContextRecordId,
   useHomeRouteSelectionStore,
   withHomeRouteSelectedSectionContextRecordId,
-} from "./app/routes/home.tsx";
+} from "./app/routes/home-selection.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
-import { SchemaRoute } from "./app/routes/schema.tsx";
-import { normalizeSitePageSlug, SitePageRoute } from "./app/routes/site-page.tsx";
+import { normalizeSitePageSlug } from "./app/routes/site-page-slug.ts";
 import { SyncStatusControl } from "./app/routes/status-line.tsx";
 import {
   findRuntimeWorldMountByRoute,
@@ -55,11 +60,35 @@ import {
   type GeneratedRootNavigationFacts,
 } from "./client/generated-authoring.ts";
 import { todayDateString } from "./shared/date.ts";
+import type { SchemaKey } from "./shared/schema-apps.ts";
 import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.ts";
 
+type HomeRouteProps = { schemaKey: SchemaKey; screenPath: string };
+type SchemaRouteProps = { schemaKey: SchemaKey };
+type SitePageRouteProps = { linkMode?: "preview" | "published"; slug: string };
+
+export type AppRouteComponents = {
+  HomeRoute: ElementType<HomeRouteProps>;
+  SchemaRoute: ElementType<SchemaRouteProps>;
+  SitePageRoute: ElementType<SitePageRouteProps>;
+};
+
+const defaultRouteComponents: AppRouteComponents = {
+  HomeRoute: lazy(() =>
+    import("./app/routes/home.tsx").then((module) => ({ default: module.HomeRoute })),
+  ),
+  SchemaRoute: lazy(() =>
+    import("./app/routes/schema.tsx").then((module) => ({ default: module.SchemaRoute })),
+  ),
+  SitePageRoute: lazy(() =>
+    import("./app/routes/site-page.tsx").then((module) => ({ default: module.SitePageRoute })),
+  ),
+};
+
 export function App({
+  routeComponents = defaultRouteComponents,
   runtimeProfile: runtimeProfileProp,
-}: { runtimeProfile?: RuntimeProfile } = {}) {
+}: { routeComponents?: AppRouteComponents; runtimeProfile?: RuntimeProfile } = {}) {
   const [location] = useLocation();
   const runtimeProfile = useMemo(
     () => runtimeProfileProp ?? resolveRuntimeProfile(),
@@ -87,7 +116,7 @@ export function App({
   if (isPublicSiteRoute || runtimeProfile.shell === "publishedSite") {
     return (
       <main className="min-h-dvh">
-        <AppRoutes runtimeProfile={runtimeProfile} />
+        <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
       </main>
     );
   }
@@ -100,7 +129,7 @@ export function App({
       screenModels={routeAppScreenModels}
       showSyncStatus={runtimeProfile.shell === "app"}
     >
-      <AppRoutes runtimeProfile={runtimeProfile} />
+      <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
     </GeneratedAppFrame>
   );
 
@@ -108,7 +137,7 @@ export function App({
     <WorkbenchFrame routeWorld={routeWorld} runtimeProfile={runtimeProfile}>
       {isWorkbenchToolRoute ? (
         <main className="bg-background p-6" data-frame="workbench-tool">
-          <AppRoutes runtimeProfile={runtimeProfile} />
+          <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
         </main>
       ) : (
         generatedAppFrame
@@ -472,69 +501,82 @@ function AppRootRecordCountBadge({
   );
 }
 
-function AppRoutes({ runtimeProfile }: { runtimeProfile: RuntimeProfile }) {
+function AppRoutes({
+  routeComponents,
+  runtimeProfile,
+}: {
+  routeComponents: AppRouteComponents;
+  runtimeProfile: RuntimeProfile;
+}) {
+  const { HomeRoute, SchemaRoute, SitePageRoute } = routeComponents;
   const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
 
   return (
-    <Switch>
-      {runtimeProfile.defaultRedirect ? (
-        <Route path="/">
-          <Redirect replace to={runtimeProfile.defaultRedirect} />
-        </Route>
-      ) : null}
-      {runtimeProfile.publicSitePreview ? (
-        <Route path={runtimeProfile.publicSitePreview.rootRoute}>
-          <Redirect replace to={runtimeProfile.publicSitePreview.homeRoute} />
-        </Route>
-      ) : null}
-      {runtimeProfile.publicSitePreview ? (
-        <Route path={runtimeProfile.publicSitePreview.routePattern}>
-          {(params) => (
-            <SitePageRoute linkMode="preview" slug={normalizeSitePageSlug(params["*"])} />
-          )}
-        </Route>
-      ) : null}
-      {runtimeProfile.publishedSite ? (
-        <Route path={runtimeProfile.publishedSite.rootRoute}>
-          <SitePageRoute linkMode="published" slug={runtimeProfile.publishedSite.homeSlug} />
-        </Route>
-      ) : null}
-      {runtimeProfile.publishedSite ? (
-        <Route path={runtimeProfile.publishedSite.routePattern}>
-          {(params) => (
-            <SitePageRoute linkMode="published" slug={normalizeSitePageSlug(params["*"])} />
-          )}
-        </Route>
-      ) : null}
-      {runtimeProfile.legacyRedirects.map((redirect) => (
-        <Route key={redirect.from} path={redirect.from}>
-          <Redirect replace to={redirect.to} />
-        </Route>
-      ))}
-      {generatedWorlds.map((world) =>
-        world.schemaRoute ? (
-          <Route key={world.schemaRoute} path={world.schemaRoute}>
-            <SchemaRoute schemaKey={world.app.key} />
+    <Suspense fallback={<RouteLoading />}>
+      <Switch>
+        {runtimeProfile.defaultRedirect ? (
+          <Route path="/">
+            <Redirect replace to={runtimeProfile.defaultRedirect} />
           </Route>
-        ) : null,
-      )}
-      {generatedWorlds.map((world) => (
-        <Route key={world.route} path={world.route}>
-          <HomeRoute schemaKey={world.app.key} screenPath="/" />
+        ) : null}
+        {runtimeProfile.publicSitePreview ? (
+          <Route path={runtimeProfile.publicSitePreview.rootRoute}>
+            <Redirect replace to={runtimeProfile.publicSitePreview.homeRoute} />
+          </Route>
+        ) : null}
+        {runtimeProfile.publicSitePreview ? (
+          <Route path={runtimeProfile.publicSitePreview.routePattern}>
+            {(params) => (
+              <SitePageRoute linkMode="preview" slug={normalizeSitePageSlug(params["*"])} />
+            )}
+          </Route>
+        ) : null}
+        {runtimeProfile.publishedSite ? (
+          <Route path={runtimeProfile.publishedSite.rootRoute}>
+            <SitePageRoute linkMode="published" slug={runtimeProfile.publishedSite.homeSlug} />
+          </Route>
+        ) : null}
+        {runtimeProfile.publishedSite ? (
+          <Route path={runtimeProfile.publishedSite.routePattern}>
+            {(params) => (
+              <SitePageRoute linkMode="published" slug={normalizeSitePageSlug(params["*"])} />
+            )}
+          </Route>
+        ) : null}
+        {runtimeProfile.legacyRedirects.map((redirect) => (
+          <Route key={redirect.from} path={redirect.from}>
+            <Redirect replace to={redirect.to} />
+          </Route>
+        ))}
+        {generatedWorlds.map((world) =>
+          world.schemaRoute ? (
+            <Route key={world.schemaRoute} path={world.schemaRoute}>
+              <SchemaRoute schemaKey={world.app.key} />
+            </Route>
+          ) : null,
+        )}
+        {generatedWorlds.map((world) => (
+          <Route key={world.route} path={world.route}>
+            <HomeRoute schemaKey={world.app.key} screenPath="/" />
+          </Route>
+        ))}
+        {generatedWorlds.map((world) => (
+          <Route key={`${world.route}/*`} path={runtimeScreenWildcardRoute(world)}>
+            {(params) => (
+              <HomeRoute schemaKey={world.app.key} screenPath={runtimeWildcardScreenPath(params)} />
+            )}
+          </Route>
+        ))}
+        <Route>
+          <NotFoundRoute />
         </Route>
-      ))}
-      {generatedWorlds.map((world) => (
-        <Route key={`${world.route}/*`} path={runtimeScreenWildcardRoute(world)}>
-          {(params) => (
-            <HomeRoute schemaKey={world.app.key} screenPath={runtimeWildcardScreenPath(params)} />
-          )}
-        </Route>
-      ))}
-      <Route>
-        <NotFoundRoute />
-      </Route>
-    </Switch>
+      </Switch>
+    </Suspense>
   );
+}
+
+function RouteLoading() {
+  return <p className="text-sm text-muted-foreground">Loading...</p>;
 }
 
 function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {

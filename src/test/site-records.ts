@@ -133,7 +133,7 @@ export const testSiteSeedRecords: StoredRecord[] = [
   block("rec_site_content_group_footer_social", "2026-05-05T00:00:18.000Z", {
     type: "group",
     label: "Social",
-    templateKey: "footer-group",
+    templateKey: "footer-social",
   }),
   block("rec_site_block_home_hero", "2026-05-05T00:00:18.100Z", {
     type: "hero",

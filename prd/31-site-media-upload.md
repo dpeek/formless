@@ -1,0 +1,390 @@
+# PRD 31: Site media upload
+
+Status: planned
+Current chunk: SMU-01 ready
+Last updated: 2026-05-13
+
+## Goal
+
+Add the first Site media upload slice.
+
+The first version should:
+
+- upload one raster image from the Site authoring UI;
+- store the original image object in Cloudflare R2;
+- serve the image through a same-origin Worker route;
+- patch the existing flat image block fields;
+- render the uploaded image in the editor and public Site;
+- keep public Site tree and block composition shapes unchanged.
+
+This PRD owns Site image upload for authoring.
+It does not own a general media library, video upload, file upload, image transforms, cropping, or asset cleanup.
+
+## Problem Statement
+
+The Site app already models image media as `block` records with `type = image`.
+Image blocks already have flat `href`, `width`, and `height` fields.
+The public Site renderer already renders image blocks from `href`.
+
+The missing authoring slice is upload.
+Authors can paste a URL into an image block, but they cannot choose an image file, put it in durable object storage, and see the resulting media in the editor and public page.
+
+The first release needs enough media support to author a personal Site without manually hosting images elsewhere.
+
+## Solution
+
+Keep image records flat.
+Use the existing image block as the content record.
+Add a Site-specific image upload path that stores the file in R2 and returns a same-origin media URL.
+The generated Site image editor patches that URL into `block.href` and, when available, patches `width` and `height`.
+
+Public rendering keeps using the Site tree projection.
+The tree still projects `href`, `width`, and `height` from block records.
+The public renderer still renders an image block from those fields.
+
+## Source Map
+
+Existing anchors:
+
+- Current runtime docs: `doc/current.md`.
+- Release target docs: `doc/roadmap.md`.
+- Site source schema: `schema/apps/site/schema.json`.
+- Site seed records: `schema/apps/site/seed-records.json`.
+- Site tree projection: `src/site/tree.ts`.
+- Public Site renderer: `src/app/site-renderer/renderer.tsx`.
+- Public Site route: `src/app/routes/site-page.tsx`.
+- Worker entrypoint: `src/worker/index.ts`.
+- Authority admin guard: `src/worker/authority-admin-guard.ts`.
+- Client sync and mutation path: `src/client/sync.ts`.
+- Field behavior module: `src/shared/field-types.ts`.
+- Field schema types: `src/shared/schema-types.ts`.
+- Generated field UI adapter: `src/app/generated/field-ui-adapters.ts`.
+- Generated inline field editor: `src/app/generated/record-field-editor.tsx`.
+- Generated create renderer: `src/app/generated/create.tsx`.
+- Worker config: `wrangler.jsonc`.
+- Worker tests: `src/worker/authority.test.ts`, `src/worker/authority-admin-guard.test.ts`.
+- Public renderer tests: `src/app.test.tsx`, `src/site/tree.test.ts`.
+
+Owned files:
+
+- `prd/31-site-media-upload.md`.
+
+Likely changed files:
+
+- `doc/roadmap.md`.
+- `wrangler.jsonc`.
+- `src/worker/index.ts`.
+- `src/worker/media.ts`.
+- `src/worker/miniflare-test.ts`.
+- `src/shared/schema-types.ts`.
+- `src/shared/field-types.ts`.
+- `src/shared/field-types.test.ts`.
+- `src/app/generated/field-ui-adapters.ts`.
+- `src/app/generated/field-ui-adapters.test.ts`.
+- `src/app/generated/record-field-editor.tsx`.
+- `src/app/generated/create.tsx`.
+- `src/client/media.ts`.
+- `schema/apps/site/schema.json`.
+- `src/shared/schema.test.ts`.
+- `src/worker/schema-apps.test.ts`.
+- `src/site/tree.test.ts`.
+- `src/app.test.tsx`.
+
+Possible changed files:
+
+- `lib/ui/src/image-upload.tsx`.
+- `lib/ui/src/index.ts`.
+- `lib/ui/package.json`.
+
+## User Stories
+
+1. As a Site author, I want to upload an image file from an image block editor, so that I do not need to host images manually.
+2. As a Site author, I want uploaded images to persist outside browser storage, so that they survive browser resets and publish flows.
+3. As a Site author, I want uploaded images to appear in the editor after upload, so that I can verify the selected image immediately.
+4. As a Site author, I want uploaded images to appear on the public Site preview, so that public rendering matches authoring.
+5. As a Site author, I want image blocks to be creatable before a file is uploaded, so that adding an image node is not blocked by a required URL.
+6. As a Site author, I want replacing an image to leave the block label and placement intact, so that image changes do not restructure the page.
+7. As a Site author, I want failed uploads to show a useful error and keep the current image, so that a bad upload does not corrupt content.
+8. As a Site author, I want oversized files rejected before they become content, so that accidental large uploads do not make pages heavy.
+9. As a Site author, I want non-image files rejected, so that an image block always serves image media.
+10. As a Site visitor, I want uploaded images to load from the public Site route, so that pages do not depend on local development URLs.
+11. As a Site visitor, I want image dimensions preserved when available, so that image layout stays stable during loading.
+12. As a schema author, I want media to stay in `block` records, so that Site composition remains flat.
+13. As a schema author, I want the upload editor to remain an editor hint over a text field, so that no new stored scalar type is required.
+14. As a runtime developer, I want R2 writes isolated behind a small media module, so that upload validation and object serving are testable.
+15. As a runtime developer, I want public media reads outside Durable Object storage, so that serving files does not involve the authority.
+16. As a runtime developer, I want media upload writes to use the existing admin guard policy, so that deployed Workers can protect authoring endpoints.
+17. As a runtime developer, I want media object keys to be immutable and unique, so that browser and edge caches can be long-lived.
+18. As a runtime developer, I want the block patch to stay a normal mutation, so that browser replicas and public preview sync keep working.
+19. As a runtime developer, I want orphaned uploaded objects to be acceptable in the first slice, so that upload can ship without a media registry.
+20. As a runtime developer, I want tests to prove public image rendering did not need a new tree protocol, so that future media work does not fork the public path.
+
+## Requirements
+
+### Stored Records
+
+- Site records stay flat as `block` and `blockPlacement`.
+- Image media stays on `block` records.
+- The first slice stores the served image URL in `block.href`.
+- The first slice may patch `block.width` and `block.height` when the browser can determine image dimensions.
+- The first slice does not add `mediaAsset`.
+- The first slice does not add `assetKey`.
+- The first slice does not add nested object fields.
+- The first slice does not add array-valued fields.
+- Image blocks can be created without `href`.
+- Existing public image rendering handles missing `href` through the current placeholder path.
+
+### Upload API
+
+- Add `POST /api/site/media/images`.
+- The request body is `multipart/form-data`.
+- The file field name is `file`.
+- The route accepts one file per request.
+- The route accepts raster images only.
+- Accepted MIME types: `image/jpeg`, `image/png`, `image/webp`, `image/gif`.
+- SVG upload is out of scope for this slice.
+- The route rejects missing files.
+- The route rejects unsupported media types.
+- The route rejects files above the first-slice size limit.
+- The first-slice size limit is 5 MB.
+- Upload writes the original file bytes to R2.
+- Upload writes immutable object keys.
+- Upload object keys use a Site image prefix.
+- Upload sets R2 HTTP metadata for content type and cache control.
+- Upload returns JSON with at least `href`, `key`, `contentType`, and `size`.
+- Upload does not create or patch a Site record by itself.
+- Upload uses the same optional bearer-token policy as other authoring writes when `FORMLESS_ADMIN_TOKEN` is configured.
+- Local development remains no-token when `FORMLESS_ADMIN_TOKEN` is absent.
+
+### Media Serving API
+
+- Add `GET /api/site/media/*`.
+- The route reads from R2 by key.
+- Missing objects return `404`.
+- Successful reads stream the R2 object body.
+- Successful reads set `Content-Type` from R2 metadata when available.
+- Successful reads set `ETag` when available.
+- Successful reads set long-lived cache headers for immutable object keys.
+- Public media reads do not require admin authorization.
+- Public media reads do not touch the Authority Durable Object.
+- Public media reads are same-origin with public Site pages.
+
+### Generated Authoring UI
+
+- Add a generated image upload editor for text-backed image URL fields.
+- The editor is selected by `editor: "image"` or equivalent image-editor metadata.
+- The editor renders the current image preview when `href` exists.
+- The editor renders an empty image state when `href` is missing.
+- The editor exposes a file input or button that accepts image files.
+- The editor uploads the selected file before patching the record.
+- After upload, the editor patches `href` through the existing generic patch mutation.
+- When dimensions are known, the editor patches `href`, `width`, and `height` together.
+- A failed upload does not patch the record.
+- A failed patch leaves the uploaded object orphaned in this first slice.
+- The editor reuses existing generated field error and sync status patterns.
+- The editor works in Site tree/detail edit surfaces.
+- Existing href text editing can remain available as a fallback if the implementation keeps it compact.
+
+### Generated Create
+
+- Image block create does not require `href`.
+- Create-time file upload is not required in the first slice.
+- Authors can create an image block and upload into it after the record exists.
+- Create forms still submit flat scalar values.
+- Required `label` behavior remains unchanged.
+
+### Public Site
+
+- Public Site tree response shape does not change.
+- Public image rendering keeps using `block.href`.
+- Public pages load uploaded images through same-origin media URLs.
+- Existing manually-authored external image URLs still render.
+- Missing image URLs still render the existing placeholder state.
+- Preview sync continues to work through normal record mutations.
+- Published Site profile can serve uploaded media through the same Worker media route.
+
+### Configuration
+
+- Add an R2 bucket binding for Site media.
+- Name the Worker binding `FORMLESS_MEDIA`.
+- Keep bucket naming deployment-specific in Wrangler config.
+- Tests can use Miniflare R2 buckets.
+- The Worker Env type includes the R2 binding.
+
+## Implementation Decisions
+
+| ID      | Decision                                                     | Reason                                                                                     | Evidence                                                 |
+| ------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| SMU-D1  | Keep image content in `block` records.                       | Site media is already represented as block variants and flat records are a core bet.       | `doc/current.md`, `schema/apps/site/schema.json`         |
+| SMU-D2  | Store the served media URL in `block.href`.                  | The public tree and renderer already project and render `href` for image blocks.           | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx` |
+| SMU-D3  | Do not add a media asset entity in the first slice.          | Upload can ship without changing storage shape or public tree protocol.                    | User direction 2026-05-13                                |
+| SMU-D4  | Serve private R2 objects through a same-origin Worker route. | Public pages can use stable URLs without exposing a public bucket domain or CORS policy.   | `wrangler.jsonc`, Worker routes                          |
+| SMU-D5  | Keep media reads outside the Authority Durable Object.       | File serving does not need record invariants, sync cursor, or Durable Object storage.      | `src/worker/index.ts`, `src/worker/authority.ts`         |
+| SMU-D6  | Protect uploads with the existing admin guard policy.        | Upload creates durable content and belongs with authoring writes.                          | `src/worker/authority-admin-guard.ts`                    |
+| SMU-D7  | Keep record patching separate from upload.                   | Normal mutations already drive sync, local replica merge, and public preview invalidation. | `src/client/sync.ts`, `src/app/routes/site-page.tsx`     |
+| SMU-D8  | Relax image variant `href` requiredness.                     | Authors need to create an image block before there is an uploaded URL.                     | Current Site image placeholder behavior                  |
+| SMU-D9  | Accept raster images only.                                   | SVG upload has a different safety profile and icon SVGs are already covered separately.    | `prd/30-svg-icon-field-renderer-editor.md`               |
+| SMU-D10 | Use immutable object keys and tolerate first-slice orphans.  | Cleanup needs a registry or reference scan; neither is needed to prove authoring upload.   | First-slice scope                                        |
+| SMU-D11 | Detect dimensions in the browser, not the Worker.            | The Worker can stay a byte validator/store; browser image APIs can populate layout hints.  | Existing `width` and `height` fields                     |
+| SMU-D12 | Keep manual URL support.                                     | Existing authored external image URLs and seeds should keep rendering.                     | Public renderer accepts any `href` string                |
+
+### Deep Modules
+
+- **Worker media module:** owns route matching, upload parsing, MIME and size validation, R2 key generation, R2 writes, object reads, and response headers.
+- **Client media upload helper:** owns multipart upload, response parsing, file-type error messages, and optional image dimension extraction.
+- **Generated image field editor:** adapts one flat text field to preview, upload, mutation patch, pending state, and error state.
+- **Site image schema adapter:** keeps Site image block creation and variant field rules aligned with the flat block model.
+
+## Testing Decisions
+
+- Test media Worker behavior at the HTTP boundary.
+- Worker tests should cover successful upload, unsupported MIME rejection, oversized file rejection, missing file rejection, public object read, and missing object `404`.
+- Worker tests should verify upload authorization when `FORMLESS_ADMIN_TOKEN` is configured.
+- Worker tests should verify public media reads stay unauthenticated.
+- Client upload helper tests should cover response parsing and dimension extraction behavior where practical.
+- Field behavior tests should assert the image editor is valid for text fields and invalid for non-text fields.
+- Generated adapter tests should assert image editor metadata selects the image upload control.
+- Generated UI tests should assert image upload patches `href` and optional dimensions through the generic mutation path.
+- Schema parser tests should assert Site image variants no longer require `href`.
+- Site tree tests should assert uploaded-style media URLs project through unchanged.
+- Public renderer tests should assert uploaded-style media URLs render in `<img src>`.
+- Browser smoke should cover `/site` image upload UI and `/pages/home` public image rendering when behavior changes.
+- Use `devstate check` as final check evidence.
+- Do not run raw `bun test`, `bun check`, `vp test`, or `vp check` manually during normal agent work.
+
+## Chunks
+
+| ID     | Status  | Depends on | Main files                         | Acceptance                                                                                      |
+| ------ | ------- | ---------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SMU-01 | ready   | none       | docs, PRD                          | Release roadmap includes Site image upload; PRD defines scope, contracts, chunks, and tests.    |
+| SMU-02 | planned | SMU-01     | Worker media routes, config, tests | R2 upload and serving routes work in Miniflare and respect upload auth/public read rules.       |
+| SMU-03 | planned | SMU-02     | client upload, generated editor    | Site image field can upload, preview, and patch flat block fields through existing mutations.   |
+| SMU-04 | planned | SMU-03     | Site schema, renderer tests        | Image blocks can be created before upload; public Site renders uploaded media URLs unchanged.   |
+| SMU-05 | planned | SMU-04     | browser smoke, PRD                 | `/site` authoring and `/pages/home` public preview pass; PRD evidence and promotion notes land. |
+
+### SMU-01: Roadmap and PRD
+
+Tasks:
+
+- Move Site image upload into first-release roadmap scope.
+- Remove generic media upload from the out-of-scope list.
+- Add this PRD with first-slice contracts and chunk boundaries.
+
+Acceptance:
+
+- `doc/roadmap.md` names Site image upload as first-release scope.
+- `doc/roadmap.md` keeps general media library, video upload, file upload, transforms, and cleanup out of first release.
+- This PRD is ready for implementation.
+
+### SMU-02: Worker R2 upload and serve routes
+
+Tasks:
+
+- Add the R2 binding to Worker Env and Wrangler config.
+- Add a focused media route module.
+- Route Site media requests before normal Authority dispatch.
+- Implement `POST /api/site/media/images`.
+- Implement `GET /api/site/media/*`.
+- Add Miniflare R2 bucket support to the worker harness.
+- Add worker tests for upload, serve, validation, and auth.
+
+Acceptance:
+
+- A valid raster image upload returns a same-origin `href`.
+- The returned `href` serves the uploaded bytes.
+- Invalid uploads fail before R2 write.
+- Uploads are guarded when `FORMLESS_ADMIN_TOKEN` is configured.
+- Public media reads stay open.
+
+### SMU-03: Generated image upload editor
+
+Tasks:
+
+- Add image editor metadata to field schema and field behavior.
+- Add a client upload helper for image files.
+- Add preview, file input, pending, and error UI for generated image fields.
+- Patch `href`, `width`, and `height` after upload when dimensions are available.
+- Keep manual URL behavior available or provide a clear fallback path.
+- Add generated UI and field behavior tests.
+
+Acceptance:
+
+- Image block editors show the current image preview.
+- Uploading a valid file patches the image block through the existing mutation endpoint.
+- Failed uploads do not patch the record.
+- Other text editors keep existing behavior.
+
+### SMU-04: Site schema and public rendering integration
+
+Tasks:
+
+- Update Site image variant authoring metadata to use the image upload editor.
+- Relax image variant required fields so `href` is not required at create time.
+- Keep image label required.
+- Add tests proving Site tree and renderer behavior use the existing `href` path.
+- Preserve existing seeded image behavior.
+
+Acceptance:
+
+- Authors can create an image block before upload.
+- Public tree protocol shape is unchanged.
+- Uploaded-style media URLs render as public Site images.
+- Existing external image URLs still render.
+
+### SMU-05: Smoke, evidence, and promotion notes
+
+Tasks:
+
+- Run `devstate check`.
+- Smoke `/site` image authoring with `bun browser ...`.
+- Smoke `/pages/home` public image rendering with `bun browser ...`.
+- Update this PRD with status notes, evidence, blockers, and promotion notes.
+
+Acceptance:
+
+- `devstate check` is green.
+- Browser smoke confirms editor upload UI and public image rendering.
+- Promotion notes point to code, schema, and tests.
+
+## Out of Scope
+
+- General media library.
+- Media picker.
+- Media list/grid management.
+- Media search.
+- Video upload.
+- File upload.
+- SVG upload.
+- Image resizing.
+- Image cropping.
+- Responsive image variants.
+- Alt-text-specific field semantics beyond existing `label`.
+- R2 object deletion.
+- R2 garbage collection.
+- Replacing source seed media with bundled binary assets.
+- Direct browser-to-R2 multipart upload.
+- Upload progress beyond basic pending state.
+- Production editor login or token management UI.
+- Changing public Site tree protocol.
+
+## Blockers
+
+- R2 bucket name and deployment binding need to be chosen before live deploy.
+- Deployed authoring with `FORMLESS_ADMIN_TOKEN` still needs an operator-controlled way to provide the bearer token; no product auth UI exists.
+
+## Status Notes
+
+- 2026-05-13: PRD created from user direction to include an initial media slice in first release, focused on Site image authoring.
+- 2026-05-13: First-slice direction: upload raster image to R2, serve through same-origin Worker media route, patch existing image block fields, and keep public tree protocol unchanged.
+
+## Evidence
+
+- `devstate start`: checks ok; services running at `https://formless.local`.
+- `devstate check`: pending for implementation chunks.
+
+## Promote after ship
+
+- `doc/current.md`: add R2 binding and Site media route facts after SMU-02 ships.
+- `doc/current.md`: add generated image upload editor facts after SMU-03 ships.
+- `doc/current.md`: add Site image create and public rendering facts after SMU-04 ships.
+- `doc/roadmap.md`: keep Site image upload in first-release scope and keep general media library/video/file/transforms/cleanup out of scope.

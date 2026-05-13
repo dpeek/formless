@@ -15,7 +15,6 @@ import { cn } from "@formless/ui/utils";
 import { Loader2, PipetteIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HexAlphaColorPicker, HexColorPicker } from "react-colorful";
-import { z } from "zod";
 
 import {
   hexToRgb,
@@ -29,13 +28,23 @@ import {
   toPickerHexColor,
 } from "./color-utils";
 
-export const colorSchema = z
-  .string()
-  .regex(
-    /^#[0-9A-Fa-f]{3,4}$|^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/,
-    "Color must be a valid hex color (e.g., #F00, #FF0000, or #FF0000FF)",
-  )
-  .transform((val) => val.toUpperCase());
+const colorPattern = /^#[0-9A-Fa-f]{3,4}$|^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/;
+
+function isValidColor(value: string): boolean {
+  return colorPattern.test(value);
+}
+
+export function parseColor(value: string): string {
+  if (!isValidColor(value)) {
+    throw new Error("Color must be a valid hex color (e.g., #F00, #FF0000, or #FF0000FF)");
+  }
+
+  return value.toUpperCase();
+}
+
+export const colorSchema = {
+  parse: parseColor,
+};
 
 interface ColorPickerProps {
   value: string;
@@ -153,13 +162,10 @@ export function ColorInput({
       setHexInputValue(formattedValue);
       onChange(formattedValue);
       updateColorValues(formattedValue);
-      try {
-        colorSchema.parse(formattedValue);
+      if (isValidColor(formattedValue)) {
         setHexInputError(null);
-      } catch (validationError) {
-        if (validationError instanceof z.ZodError) {
-          setHexInputError("Enter a valid color");
-        }
+      } else {
+        setHexInputError("Enter a valid color");
       }
     }
   };

@@ -1,8 +1,8 @@
 # PRD 24: Public site chrome polish
 
 Status: complete
-Current chunk: PSC-04 shipped
-Last updated: 2026-05-12
+Current chunk: PSC-06 shipped
+Last updated: 2026-05-13
 
 ## Goal
 
@@ -56,7 +56,7 @@ The author wants the public Site chrome to be data-driven and quieter:
 - no extra home item beyond seed data;
 - dark-mode toggle end-aligned;
 - mobile header shows the first nav item plus a menu;
-- footer has only a subtle top border and no background.
+- footer has a subtle solid background, no borders, compact columns, icon-only social links, and bottom anchoring on short pages.
 
 ## Source Map
 
@@ -133,16 +133,19 @@ Possible changed files:
 
 ### Footer Behavior
 
-- Footer renders a subtle top border.
-- Footer does not render a dedicated background color.
-- Footer inherits page background.
+- Footer renders no outer or inner divider borders.
+- Footer renders a subtle solid background.
 - Footer uses readable text colors in light and dark mode.
 - Footer keeps nested footer section behavior.
 - Footer keeps external footer link behavior.
 - Footer keeps footer section labels.
+- Footer section labels are not forced uppercase.
+- Footer section columns stay compact and align to the footer content start edge.
+- Footer social sections can render icon-only horizontal links.
 - Footer does not render the Footer root label or body as public copy.
 - Footer copyright text renders as footer child content, not Footer root body.
 - Footer must not become a card or panel.
+- Footer anchors to the bottom of the viewport when page content is short.
 
 ### Renderer Behavior
 
@@ -151,6 +154,7 @@ Possible changed files:
 - Published Site profile keeps top-level links.
 - Missing page and error states stay readable.
 - Existing supported block renderers keep working.
+- Public markdown blocks render markdown syntax through the shared read-only markdown renderer.
 - Unknown block types stay hidden.
 - Public renderer remains site-specific for first release.
 
@@ -168,20 +172,23 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                 | Reason                                                                               | Evidence                                      |
-| ------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------- |
-| PSC-D1  | Keep this as public renderer work.                       | The request changes public chrome, not stored records or generated admin surfaces.   | `src/app/site-renderer/renderer.tsx`          |
-| PSC-D2  | Use seeded header placements as the only nav source.     | Header links are content data; injected Home duplicates seed data.                   | `schema/apps/site/seed-records.json`          |
-| PSC-D3  | Keep Header and Footer as block renderers.               | Current public tree already projects them as nested blocks.                          | `src/site/tree.ts`, `src/app.test.tsx`        |
-| PSC-D4  | Add a small public Site theme controller if needed.      | Dark mode should stay scoped to public pages and avoid schema/state writes.          | `lib/ui/src/global.css` supports `.dark`.     |
-| PSC-D5  | Make responsive nav a renderer concern for now.          | The first-release Site renderer is site-specific; no layout DSL is needed.           | `doc/roadmap.md`                              |
-| PSC-D6  | Prefer semantic test hooks over brittle class snapshots. | Chrome behavior is the contract; exact utility classes can change.                   | Existing public renderer tests in `app.test`. |
-| PSC-D7  | Keep footer content data-driven.                         | Footer groups and links already live in seed records.                                | `schema/apps/site/seed-records.json`          |
-| PSC-D8  | Defer SSR but keep chrome SSR-compatible.                | Client rendering is acceptable now, but public Site markup should not close off SSR. | User direction 2026-05-12                     |
-| PSC-D9  | Treat Kent C. Dodds' site as a style reference only.     | It clarifies tone and information architecture without copying a brand.              | `https://kentcdodds.com/`                     |
-| PSC-D10 | Scope theme state to the public renderer root.           | Public dark mode must not affect generated admin routes or stored Site records.      | `src/app/site-renderer/renderer.tsx`          |
-| PSC-D11 | Let footer chrome inherit the public page background.    | The footer should be quiet chrome with light/dark text, not a separate dark panel.   | `src/app/site-renderer/renderer.tsx`          |
-| PSC-D12 | Treat Footer root fields as editor/frame metadata.       | Copyright is footer content, while the Footer root identifies the global frame root. | `src/app/site-renderer/renderer.tsx`          |
+| ID      | Decision                                                     | Reason                                                                                                | Evidence                                                                       |
+| ------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| PSC-D1  | Keep this as public renderer work.                           | The request changes public chrome, not stored records or generated admin surfaces.                    | `src/app/site-renderer/renderer.tsx`                                           |
+| PSC-D2  | Use seeded header placements as the only nav source.         | Header links are content data; injected Home duplicates seed data.                                    | `schema/apps/site/seed-records.json`                                           |
+| PSC-D3  | Keep Header and Footer as block renderers.                   | Current public tree already projects them as nested blocks.                                           | `src/site/tree.ts`, `src/app.test.tsx`                                         |
+| PSC-D4  | Add a small public Site theme controller if needed.          | Dark mode should stay scoped to public pages and avoid schema/state writes.                           | `lib/ui/src/global.css` supports `.dark`.                                      |
+| PSC-D5  | Make responsive nav a renderer concern for now.              | The first-release Site renderer is site-specific; no layout DSL is needed.                            | `doc/roadmap.md`                                                               |
+| PSC-D6  | Prefer semantic test hooks over brittle class snapshots.     | Chrome behavior is the contract; exact utility classes can change.                                    | Existing public renderer tests in `app.test`.                                  |
+| PSC-D7  | Keep footer content data-driven.                             | Footer groups and links already live in seed records.                                                 | `schema/apps/site/seed-records.json`                                           |
+| PSC-D8  | Defer SSR but keep chrome SSR-compatible.                    | Client rendering is acceptable now, but public Site markup should not close off SSR.                  | User direction 2026-05-12                                                      |
+| PSC-D9  | Treat Kent C. Dodds' site as a style reference only.         | It clarifies tone and information architecture without copying a brand.                               | `https://kentcdodds.com/`                                                      |
+| PSC-D10 | Scope theme state to the public renderer root.               | Public dark mode must not affect generated admin routes or stored Site records.                       | `src/app/site-renderer/renderer.tsx`                                           |
+| PSC-D11 | Give footer chrome a subtle solid background.                | The footer needs separation without borders or a heavy panel treatment.                               | `src/app/site-renderer/renderer.tsx`                                           |
+| PSC-D12 | Treat Footer root fields as editor/frame metadata.           | Copyright is footer content, while the Footer root identifies the global frame root.                  | `src/app/site-renderer/renderer.tsx`                                           |
+| PSC-D13 | Use `templateKey` for the footer social icon layout.         | Social is still a group of link blocks; only the presentation variant changes.                        | `schema/apps/site/seed-records.json`                                           |
+| PSC-D14 | Use a flex public page shell for footer bottom anchoring.    | Main content can grow to fill short viewports without making the footer fixed.                        | `src/app/site-renderer/renderer.tsx`                                           |
+| PSC-D15 | Use the shared markdown renderer for public markdown blocks. | Public content should parse the same markdown links and marks as generated read-only markdown fields. | `src/app/site-renderer/renderer.tsx`, `lib/ui/src/markdown-plate-renderer.tsx` |
 
 ### Deep Modules
 
@@ -201,6 +208,7 @@ These modules should stay small and renderer-local unless another public Site re
 - Renderer tests should assert the dark toggle renders in public Site header.
 - Renderer tests should assert footer keeps sections and external links while dropping the heavy background.
 - Renderer tests should keep server-rendered markup deterministic when browser APIs are unavailable.
+- Renderer tests should assert public markdown block bodies parse links and marks instead of rendering literal markdown syntax.
 - Existing unknown-block and media-rendering tests should keep passing.
 - Browser smoke should open `/pages/home` after implementation.
 - Browser smoke should check desktop and mobile viewport behavior.
@@ -208,12 +216,14 @@ These modules should stay small and renderer-local unless another public Site re
 
 ## Chunks
 
-| ID     | Status  | Depends on | Main files                | Acceptance                                                                                                               |
-| ------ | ------- | ---------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| PSC-01 | done    | none       | renderer, app tests       | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu. |
-| PSC-02 | done    | PSC-01     | renderer, app tests       | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.      |
-| PSC-03 | shipped | PSC-02     | browser smoke, PRD        | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                |
-| PSC-04 | shipped | PSC-02     | renderer, seed, app tests | Footer root label/body do not render publicly; loose footer child content can render the copyright note.                 |
+| ID     | Status  | Depends on | Main files                | Acceptance                                                                                                                 |
+| ------ | ------- | ---------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| PSC-01 | done    | none       | renderer, app tests       | Header renders seeded nav only, removes injected home/brand link, adds end-aligned dark toggle, and handles mobile menu.   |
+| PSC-02 | done    | PSC-01     | renderer, app tests       | Footer uses subtle top border, no dedicated background, and readable light/dark text while keeping nested sections.        |
+| PSC-03 | shipped | PSC-02     | browser smoke, PRD        | `/pages/home` desktop/mobile smoke passes; dark toggle smoke passes; PRD status and evidence are updated.                  |
+| PSC-04 | shipped | PSC-02     | renderer, seed, app tests | Footer root label/body do not render publicly; loose footer child content can render the copyright note.                   |
+| PSC-05 | shipped | PSC-04     | renderer, seed, app tests | Footer has no borders, subtle solid background, compact normal-case columns, icon-only social links, and bottom anchoring. |
+| PSC-06 | shipped | PSC-05     | renderer, app tests       | Public markdown block bodies render through the shared markdown renderer and convert markdown links and marks to HTML.     |
 
 ## Out of Scope
 
@@ -234,13 +244,15 @@ These modules should stay small and renderer-local unless another public Site re
 ## Promote after ship
 
 - `doc/current.md`: note public Site header uses seeded nav only, has a scoped dark-mode toggle, and mobile collapses to first nav item plus menu.
-- `doc/current.md`: note public Site footer uses inherited background with subtle top border.
+- `doc/current.md`: note public Site footer uses subtle solid background, no borders, compact normal-case columns, and bottom anchoring.
+- `doc/current.md`: note footer social groups can use `templateKey = footer-social` for icon-only horizontal links.
+- `doc/current.md`: note public markdown blocks use the shared read-only markdown renderer.
 - `doc/current.md`: note public Site footer root label/body are editor metadata; copyright belongs in footer child content.
 - `doc/roadmap.md`: no required change unless the first-release target needs explicit public chrome polish language.
 
 ## Blockers
 
-- None for PSC-03.
+- None for PSC-06.
 
 ## Evidence
 
@@ -261,3 +273,10 @@ These modules should stay small and renderer-local unless another public Site re
 - 2026-05-12: PSC-03 `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/status.md` and `.devstate/logs/`.
 - 2026-05-12: PSC-04 shipped footer root metadata cleanup. Public footer no longer renders the Footer root label or body, removed the old unplaced copyright body seed block, and renders loose footer children as muted footer notes.
 - 2026-05-12: PSC-04 checks: `devstate check` reported checks ok, web ready, and test watcher passing. Browser smoke reset Site schema/seed, opened `https://formless.local/pages/home`, and footer eval returned `hasRootLabel: false`, `hasOldHardcodedCopy: false`, `hasCopyright: true`, and no page errors.
+- 2026-05-13: PSC-05 shipped footer polish follow-up. `src/app/site-renderer/renderer.tsx` now removes footer divider borders, uses `bg-zinc-50`/`dark:bg-zinc-900`, constrains footer section columns, keeps headings normal-case, uses a flex public page shell, and renders `footer-social` groups as 32px icon-only horizontal links.
+- 2026-05-13: PSC-05 seed update changed the source footer social group to `templateKey = footer-social` in `schema/apps/site/seed-records.json`; test seed mirrors it in `src/test/site-records.ts`.
+- 2026-05-13: PSC-05 checks: `devstate start` after service reload reported checks ok, web ready, and test watcher passing.
+- 2026-05-13: PSC-05 browser smoke reset Site schema and seed, opened `https://formless.local/pages/home`, and footer eval returned `templateKey: "footer-social"`, `borderTopWidth: "0px"`, solid footer background, heading `textTransform: "none"`, social link labels with empty visible text, and 32px link/svg boxes; browser errors were empty.
+- 2026-05-13: PSC-06 reproduced public markdown rendering bug on the home page. Browser eval returned literal markdown text, no `estii.com` anchor, and `markdownRendererCount: 0`.
+- 2026-05-13: PSC-06 added a failing public renderer test for a home markdown block with `[estii.com](https://estii.com)` and `**OpenSurf**`; `devstate check` reported the expected watcher failure before the fix.
+- 2026-05-13: PSC-06 shipped `MarkdownBlock` through `MarkdownRenderer` in `src/app/site-renderer/renderer.tsx`; the regression test now passes and browser smoke on `https://formless.local/` returned `hasLiteral: false`, one `https://estii.com/` anchor, `markdownRendererCount: 1`, and no browser errors.

@@ -22,8 +22,7 @@
     "@dnd-kit/react": "^0.4.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "wouter": "^3.9.0",
-    "zod": "^4.4.1"
+    "wouter": "^3.9.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.33.2",

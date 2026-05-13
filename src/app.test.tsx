@@ -13,6 +13,7 @@ import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table
 import { EditViewFields } from "./app/generated/table-actions.tsx";
 import { RecordTree } from "./app/generated/tree.tsx";
 import {
+  SitePageRoute,
   SitePageRouteView,
   startSitePageRouteSession,
   type SitePageRouteState,
@@ -26,6 +27,7 @@ import {
 } from "./client/store.ts";
 import { resetSyncStatus, setSyncStatus } from "./client/sync-status.ts";
 import {
+  HomeRoute,
   createHomeRouteSelectionState,
   homeRouteSectionSelectionKey,
   selectHomeRouteSectionContextRecordId,
@@ -34,6 +36,7 @@ import {
   withHomeRouteSelectedSectionContextRecordId,
   withHomeRouteSelectedSectionQueryName,
 } from "./app/routes/home.tsx";
+import { SchemaRoute } from "./app/routes/schema.tsx";
 import { buildSitePageTree } from "./site/tree.ts";
 import {
   createDevRuntimeProfile,
@@ -82,7 +85,10 @@ import { testSiteSeedRecords } from "./test/site-records.ts";
 function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
-      <App runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()} />
+      <App
+        routeComponents={{ HomeRoute, SchemaRoute, SitePageRoute }}
+        runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()}
+      />
     </Router>,
   );
 }
@@ -722,6 +728,40 @@ describe("public site renderer", () => {
     expect(html).toContain("GitHub");
   });
 
+  it("renders public markdown block bodies with the shared markdown renderer", () => {
+    const records: StoredRecord[] = [
+      ...testSiteSeedRecords,
+      {
+        id: "rec_site_content_home_markdown",
+        entity: "block",
+        values: {
+          type: "markdown",
+          label: "Intro markdown",
+          body: "I co-founded [estii.com](https://estii.com) and **OpenSurf**.",
+        },
+        createdAt: "2026-05-05T00:00:32.000Z",
+      },
+      {
+        id: "rec_site_place_home_markdown",
+        entity: "blockPlacement",
+        values: {
+          parent: "rec_site_content_home",
+          block: "rec_site_content_home_markdown",
+          order: 1500,
+        },
+        createdAt: "2026-05-05T00:00:33.000Z",
+      },
+    ];
+    const html = renderSitePage("home", records);
+
+    expect(html).toContain('data-web-markdown-renderer="server"');
+    expect(html).toContain('href="https://estii.com/"');
+    expect(html).toContain(">estii.com<");
+    expect(html).toContain("<strong");
+    expect(html).not.toContain("[estii.com](https://estii.com)");
+    expect(html).not.toContain("**OpenSurf**");
+  });
+
   it("renders image media blocks from href and label metadata", () => {
     const tree = sitePageTree("home");
     const html = renderToStaticMarkup(
@@ -800,30 +840,25 @@ describe("public site renderer", () => {
     const githubLinkHtml = footerLinkHtml(footerHtml, "https://github.com/dpeek");
     const linkedInLinkHtml = footerLinkHtml(footerHtml, "https://linkedin.com/in/dpeekdotcom");
 
-    expect(footerHtml).toContain("data-site-footer");
-    expect(footerHtml).toContain("border-t border-zinc-200");
-    expect(footerHtml).toContain("dark:border-zinc-800");
-    expect(footerHtml).toContain("text-zinc-700");
-    expect(footerHtml).toContain("dark:text-zinc-300");
-    expect(footerHtml).not.toMatch(/\bbg-/);
-    expect(footerHtml).not.toContain("text-white");
-    expect(footerHtml).not.toContain("text-amber-200");
-    expect(footerHtml).not.toContain(">Footer<");
-    expect(footerHtml).not.toContain("Internal footer body should stay private.");
-    expect(footerHtml).not.toContain("Schema-backed software for content-heavy products");
+    expect(html).toContain("flex min-h-dvh flex-col");
+    expect(html).toContain("mx-auto flex w-full max-w-5xl flex-1 flex-col");
     expect(html).toContain("Explore");
     expect(html).toContain("Social");
     expect(footerHtml).toContain("Copyright 2026 David Peek. All rights reserved.");
     expect(html).toContain('href="https://github.com/dpeek"');
+    expect(githubLinkHtml).toContain('aria-label="GitHub"');
     expect(githubLinkHtml).toContain('data-web-svg-icon="svg"');
+    expect(githubLinkHtml).toContain("size-8");
     expect(githubLinkHtml).toContain('target="_blank"');
     expect(githubLinkHtml).toContain('rel="noreferrer"');
-    expect(githubLinkHtml).toContain("GitHub");
+    expect(githubLinkHtml).not.toContain(">GitHub<");
     expect(html).toContain('href="https://linkedin.com/in/dpeekdotcom"');
+    expect(linkedInLinkHtml).toContain('aria-label="LinkedIn"');
     expect(linkedInLinkHtml).toContain('data-web-svg-icon="svg"');
+    expect(linkedInLinkHtml).toContain("size-8");
     expect(linkedInLinkHtml).toContain('target="_blank"');
     expect(linkedInLinkHtml).toContain('rel="noreferrer"');
-    expect(linkedInLinkHtml).toContain("LinkedIn");
+    expect(linkedInLinkHtml).not.toContain(">LinkedIn<");
     expect(footerHtml).not.toContain("&lt;svg");
   });
 

@@ -4,6 +4,9 @@ import { sitePagePathForSlug, type SitePageLinkMode } from "../site-renderer/lin
 import { listenForClientEvents } from "../../client/broadcast.ts";
 import { startPushSync } from "../../client/sync.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../../shared/protocol.ts";
+import { normalizeSitePageSlug } from "./site-page-slug.ts";
+
+export { normalizeSitePageSlug } from "./site-page-slug.ts";
 
 export type SitePageRouteState =
   | {
@@ -178,20 +181,6 @@ export async function fetchSitePageTree(
   }
 
   return body as SitePageTreeResponse;
-}
-
-export function normalizeSitePageSlug(slug: string | undefined): string {
-  const trimmed = (slug ?? "").replace(/^\/+/, "").trim();
-
-  if (trimmed === "") {
-    return "home";
-  }
-
-  try {
-    return decodeURIComponent(trimmed);
-  } catch {
-    return trimmed;
-  }
 }
 
 class SitePageNotFoundError extends Error {

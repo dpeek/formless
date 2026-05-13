@@ -1,10 +1,10 @@
 # Roadmap
 
-Last updated: 2026-05-07
+Last updated: 2026-05-13
 
 Release target: first usable Formless release.
 
-Current workstream: Site editor list/detail.
+Current workstream: Site media upload.
 
 ## Runtime
 
@@ -16,6 +16,7 @@ Current workstream: Site editor list/detail.
 - One schema key maps to one browser local DB.
 - API paths stay schema-keyed.
 - Current API paths: `/api/:schemaKey/bootstrap`, `/api/:schemaKey/schema`, `/api/:schemaKey/tree/:slug`, `/api/:schemaKey/sync`, `/api/:schemaKey/sync/ws`, `/api/:schemaKey/mutations`, `/api/:schemaKey/actions`, `/api/:schemaKey/reset/schema`, `/api/:schemaKey/reset/seed`.
+- Site media API paths include `/api/site/media/images` and `/api/site/media/*`.
 - Reset schema and reset seed data stay separate.
 - Fresh route bootstrap loads source schema and source seed records.
 - Push sync stays at `/api/:schemaKey/sync/ws`.
@@ -89,6 +90,11 @@ Current workstream: Site editor list/detail.
 - Public pages fetch `/api/site/tree/:slug`.
 - Site records stay flat: blocks and block placements.
 - Media stays in block records.
+- First media upload support is Site image upload only.
+- Uploaded images are stored in R2.
+- Image blocks store the served media URL in `block.href`.
+- Image blocks can exist before an image URL is set.
+- Public image rendering uses the same Site tree and renderer path as authored image URLs.
 - `blockPlacement.parent` and `blockPlacement.block` stay the composition edge.
 - Header and footer stay nested blocks/groups in source seeds.
 - Public tree output excludes drafts, archived blocks, invisible placements, and tombstones.
@@ -111,6 +117,7 @@ Current workstream: Site editor list/detail.
 - Generated table renderer owns field, reference-field, value/unit, computed, invoke-action, and ordering-handle columns.
 - Generated table renderer owns table-local row actions, edit dialogs, ordering controls, and drag handles.
 - Generated field editors use shared UI primitives for richer scalar editing.
+- Generated Site image field editing can upload image files and patch flat block fields.
 - Generated edit dialogs can use per-field patching before draft save flows exist.
 - Table row reordering uses generic patch writes; atomic batch mutations are later.
 
@@ -142,4 +149,8 @@ Current workstream: Site editor list/detail.
 - Dashboards.
 - Charts.
 - Plugin view registry.
-- Media upload.
+- General media library.
+- Video upload.
+- File upload.
+- Image transforms.
+- Media garbage collection.

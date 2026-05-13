@@ -217,7 +217,7 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "label": "Sitemap",
+      "label": "Pages",
       "templateKey": "footer-group"
     },
     "createdAt": "2026-05-05T00:00:17.000Z"
@@ -227,8 +227,8 @@
     "entity": "block",
     "values": {
       "type": "group",
-      "label": "David Peek",
-      "templateKey": "footer-group"
+      "label": "Social",
+      "templateKey": "footer-social"
     },
     "createdAt": "2026-05-05T00:00:18.000Z"
   },
@@ -318,8 +318,8 @@
     "entity": "block",
     "values": {
       "type": "hero",
-      "label": "Great software feels like magic",
-      "body": "Let's build some magic together."
+      "label": "Code is magic",
+      "body": "I help humans and robots build elegant software together."
     },
     "createdAt": "2026-05-12T04:56:24.201Z"
   },
@@ -358,10 +358,20 @@
     "entity": "block",
     "values": {
       "type": "markdown",
-      "label": "Greetings, Robot!",
-      "body": "I'm David Peek, a full-stack developer, entrepreneur and technology optimist. I'm co-founder and CTO of [estii.com](https://estii.com) - an estimation and pricing platform for service providers and [opensurf.ai](https://opensurf.ai) - a framework for building reliable web agents.\n\nBuilding software that lets small teams do ambitious things is my happy place. Generally, that means plugging together tools from the amazing JavaScript ecosystem with automation, duct-tape and love."
+      "label": "Greetings, Robot",
+      "body": "My name is David Peek and I'm a developer and entrepreneur living in Sydney, Australia.\n\nI co-founded [estii.com](https://estii.com) (estimation and pricing) and [opensurf.ai](https://opensurf.ai) (reliable web agents).\n\nI help small, high-agency teams move fast with modern agentic tooling.\n\nNothing makes me happier than shipping great software with talented people."
     },
     "createdAt": "2026-05-12T05:24:03.945Z"
+  },
+  {
+    "id": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "Blog",
+      "href": "/blog"
+    },
+    "createdAt": "2026-05-12T15:14:16.373Z"
   },
   {
     "id": "rec_site_place_header_home",
@@ -459,7 +469,7 @@
     "values": {
       "parent": "rec_site_content_group_footer",
       "block": "rec_site_content_group_footer_social",
-      "order": 500
+      "order": 1500
     },
     "createdAt": "2026-05-05T00:00:26.300Z"
   },
@@ -634,5 +644,15 @@
       "order": 2000
     },
     "createdAt": "2026-05-12T05:24:03.945Z"
+  },
+  {
+    "id": "record_aababd9c-df39-475b-8010-ac6a990cd893",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_main",
+      "block": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
+      "order": 750
+    },
+    "createdAt": "2026-05-12T15:14:16.373Z"
   }
 ]
