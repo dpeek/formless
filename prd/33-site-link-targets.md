@@ -1,7 +1,7 @@
 # PRD 33: Site link targets
 
 Status: ready
-Current chunk: SLT-01 ready
+Current chunk: SLT-02 ready
 Last updated: 2026-05-13
 
 ## Goal
@@ -295,14 +295,14 @@ Possible changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files                      | Acceptance                                                                                                       |
-| ------ | ------ | ---------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| SLT-01 | ready  | none       | PRD                             | PRD defines internal/external link target model, resolution rules, compatibility, tests, and coordination notes. |
-| SLT-02 | ready  | SLT-01     | tests, tree/link resolver       | Current string-link behavior is characterized and new target resolver tests are added before implementation.     |
-| SLT-03 | ready  | SLT-02     | Site schema, seed, schema tests | Site source schema and seeds distinguish internal and external links while preserving legacy rendering.          |
-| SLT-04 | ready  | SLT-03     | tree projection, renderer tests | Public tree resolves internal target blocks and validates external URLs with warnings and unchanged tree shape.  |
-| SLT-05 | ready  | SLT-04     | generated UI, app tests         | Site authoring exposes clear internal target and external URL editing paths for link blocks.                     |
-| SLT-06 | ready  | SLT-05     | browser smoke, PRD              | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes update.                        |
+| ID     | Status  | Depends on | Main files                      | Acceptance                                                                                                       |
+| ------ | ------- | ---------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| SLT-01 | shipped | none       | PRD                             | PRD defines internal/external link target model, resolution rules, compatibility, tests, and coordination notes. |
+| SLT-02 | ready   | SLT-01     | tests, tree/link resolver       | Current string-link behavior is characterized and new target resolver tests are added before implementation.     |
+| SLT-03 | ready   | SLT-02     | Site schema, seed, schema tests | Site source schema and seeds distinguish internal and external links while preserving legacy rendering.          |
+| SLT-04 | ready   | SLT-03     | tree projection, renderer tests | Public tree resolves internal target blocks and validates external URLs with warnings and unchanged tree shape.  |
+| SLT-05 | ready   | SLT-04     | generated UI, app tests         | Site authoring exposes clear internal target and external URL editing paths for link blocks.                     |
+| SLT-06 | ready   | SLT-05     | browser smoke, PRD              | `/site` and `/pages/home` smoke pass; PRD evidence, blockers, and promotion notes update.                        |
 
 ## Parallel Shipping
 
@@ -355,10 +355,15 @@ Should not ship in parallel with:
 ## Status Notes
 
 - 2026-05-13: PRD created from design discussion about distinguishing internal and external Site links. Product direction: internal links should reference target page/post/project blocks; external links should use absolute URLs; internal targets should not be modeled as child placements.
+- 2026-05-13: SLT-01 shipped. PRD locks the flat link target model, internal/external resolution rules, compatibility requirements, test plan, and coordination notes. No app behavior changed. Next ready chunk is SLT-02.
 
 ## Evidence
 
-- `devstate start`: checks ok; services running at `https://formless.local`.
+- `devstate start`: checks ok; watch tests pass; services running at `https://33-site-link-targets.formless.local`.
+- 2026-05-13 loop status read: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; current generated evidence is in `.devstate/status.md`.
+- 2026-05-13 final `devstate check`: checks ok; watch tests pass; services running at `https://33-site-link-targets.formless.local`.
+- SLT-01 acceptance: PRD defines internal links as flat `block` reference fields, external links as absolute `href` values, legacy string-link fallback, Site tree warning behavior, renderer compatibility, generated authoring expectations, test coverage, and PRD 31/32/30 coordination notes.
+- SLT-01 browser smoke skipped: no app behavior changed.
 - Source schema inspection: Site `block` currently has one `href` text field with `format = href`.
 - Source schema inspection: Site links currently use `block.type = link`, `label`, `href`, and optional `icon`.
 - Code inspection: public route resolver resolves page and post routes from target block `href` values.
