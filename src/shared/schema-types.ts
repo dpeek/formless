@@ -78,6 +78,7 @@ export type FieldEditor =
   | "slug"
   | "color"
   | "icon"
+  | "image"
   | "boolean"
   | "date"
   | "number"

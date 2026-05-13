@@ -46,6 +46,7 @@ describe("schema text fields", () => {
             fields: {
               title: { editor: "text", commit: "field-commit" },
               body: { editor: "markdown", commit: "field-commit" },
+              imageUrl: { editor: "image", commit: "field-commit" },
             },
           },
         },
@@ -57,6 +58,7 @@ describe("schema text fields", () => {
             fields: {
               title: { editor: "text" },
               body: { editor: "markdown" },
+              imageUrl: { editor: "image" },
             },
           },
         },
@@ -73,10 +75,15 @@ describe("schema text fields", () => {
       editor: "markdown",
       commit: "field-commit",
     });
+    expect(schema.itemViews.taskListItem?.fields.imageUrl).toEqual({
+      editor: "image",
+      commit: "field-commit",
+    });
     expect(schema.views.taskCreate).toMatchObject({
       type: "create",
       fields: {
         body: { editor: "markdown" },
+        imageUrl: { editor: "image" },
       },
     });
   });
@@ -5793,6 +5800,13 @@ function taskEntityWithMarkdownBody(overrides: Record<string, Record<string, unk
         label: "Body",
         format: "markdown",
         ...overrides.body,
+      },
+      imageUrl: {
+        type: "text",
+        required: false,
+        label: "Image URL",
+        format: "href",
+        ...overrides.imageUrl,
       },
     },
   };

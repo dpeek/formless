@@ -9,6 +9,7 @@ export type FieldEditorControl =
   | { kind: "checkbox" }
   | { kind: "formattedNumber" }
   | { kind: "icon" }
+  | { kind: "imageUpload" }
   | { kind: "input"; inputType: "date" | "number" | "text" }
   | { kind: "reference" }
   | { kind: "select" }
@@ -51,7 +52,7 @@ export const fieldTypeBehaviors = {
   text: {
     type: "text",
     filterOps: ["eq"],
-    editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
+    editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon", "image"],
     defaultEditor: "text",
     defaultCommit: "field-commit",
     validatesExistingStoredValues: false,
@@ -172,6 +173,7 @@ export const fieldEditors = [
   "slug",
   "color",
   "icon",
+  "image",
   "boolean",
   "date",
   "number",
@@ -294,6 +296,10 @@ function textEditorControl(
 ): FieldEditorControl {
   if (editor === "icon") {
     return { kind: "icon" };
+  }
+
+  if (editor === "image") {
+    return { kind: "imageUpload" };
   }
 
   if (editor === "textarea" || editor === "markdown") {

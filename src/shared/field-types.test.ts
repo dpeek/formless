@@ -37,19 +37,19 @@ describe("field type behavior", () => {
     ).toEqual({
       title: {
         filterOps: ["eq"],
-        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
+        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon", "image"],
         defaultEditor: "text",
         defaultCommit: "field-commit",
       },
       body: {
         filterOps: ["eq"],
-        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
+        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon", "image"],
         defaultEditor: "text",
         defaultCommit: "field-commit",
       },
       icon: {
         filterOps: ["eq"],
-        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon"],
+        editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon", "image"],
         defaultEditor: "text",
         defaultCommit: "field-commit",
       },
@@ -150,6 +150,7 @@ describe("field type behavior", () => {
     expect(fieldEditorControl(fields.title, "text")).toEqual({ kind: "input", inputType: "text" });
     expect(fieldEditorControl(fields.title, "markdown")).toEqual({ kind: "textarea" });
     expect(fieldEditorControl(fields.icon, "icon")).toEqual({ kind: "icon" });
+    expect(fieldEditorControl(fields.title, "image")).toEqual({ kind: "imageUpload" });
     expect(fieldEditorControl(fields.done, "boolean")).toEqual({ kind: "checkbox" });
     expect(fieldEditorControl(fields.dueDate, "date")).toEqual({
       kind: "input",

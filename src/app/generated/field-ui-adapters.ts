@@ -12,7 +12,7 @@ import type { FieldEditor, FieldSchema } from "../../shared/schema.ts";
 
 export type TextFieldEditor = Extract<
   FieldEditor,
-  "text" | "textarea" | "markdown" | "href" | "slug" | "color" | "icon"
+  "text" | "textarea" | "markdown" | "href" | "slug" | "color" | "icon" | "image"
 >;
 
 export type GeneratedFieldEditorAdapter =
@@ -117,6 +117,7 @@ function isTextFieldEditor(editor: FieldEditor): editor is TextFieldEditor {
     editor === "href" ||
     editor === "slug" ||
     editor === "color" ||
-    editor === "icon"
+    editor === "icon" ||
+    editor === "image"
   );
 }

@@ -26,12 +26,18 @@ import { SvgIcon } from "@formless/ui/svg-icon";
 import { Textarea } from "@formless/ui/textarea";
 import { AutosizeTextInput } from "@formless/ui/text-input";
 import { ValueUnitInput } from "@formless/ui/value-unit-input";
-import { useRecordField, useReferenceOptions } from "../../client/store.ts";
+import {
+  SITE_IMAGE_UPLOAD_ACCEPT,
+  siteImageUploadPatchValues,
+  uploadSiteImageFile,
+} from "../../client/media.ts";
+import { useRecord, useReferenceOptions, useSchema } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
+import type { AppSchema, FieldSchema } from "../../shared/schema.ts";
+import type { SchemaKey } from "../../shared/schema-apps.ts";
 import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
 import {
   decodeNumberEditorInputValue,
@@ -61,13 +67,16 @@ export function RecordFieldEditor({
   const schemaKey = useSchemaKey();
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
   const adapter = selectGeneratedFieldEditorAdapter(field, editor);
+  const schema = useSchema();
   const numberFormat = fieldConfig.format ?? "plain";
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const labelClass =
     showLabel && presentation !== "heading" ? "text-xs font-medium text-slate-600" : "sr-only";
-  const recordValue = useRecordField(recordId, fieldName);
+  const record = useRecord(recordId);
+  const recordValue = record?.values[fieldName];
   const valueUnitConfig = fieldConfig.valueUnit;
-  const unitRecordValue = useRecordField(recordId, valueUnitConfig?.unitFieldName ?? fieldName);
+  const unitRecordValue =
+    valueUnitConfig === undefined ? undefined : record?.values[valueUnitConfig.unitFieldName];
   const [draft, setDraft] = useState(() =>
     fieldValueToEditorInputValue(field, recordValue, numberFormat),
   );
@@ -97,8 +106,13 @@ export function RecordFieldEditor({
     );
   }, [unitRecordValue, valueUnitConfig]);
 
-  async function commitPatch(values: Partial<RecordValues>): Promise<boolean> {
-    if (!canPatch || isPending) {
+  async function commitPatch(
+    values: Partial<RecordValues>,
+    options: { allowWhilePending?: boolean; managePending?: boolean } = {},
+  ): Promise<boolean> {
+    const managePending = options.managePending ?? true;
+
+    if (!canPatch || (isPending && !options.allowWhilePending)) {
       return false;
     }
 
@@ -120,7 +134,10 @@ export function RecordFieldEditor({
       return true;
     }
 
-    setIsPending(true);
+    if (managePending) {
+      setIsPending(true);
+    }
+
     setSyncStatus({ state: "syncing", message: `Updating ${patchFieldNames.join(", ")}...` });
 
     try {
@@ -142,20 +159,14 @@ export function RecordFieldEditor({
       });
       return false;
     } finally {
-      setIsPending(false);
+      if (managePending) {
+        setIsPending(false);
+      }
     }
   }
 
   function currentValueForPatchField(patchFieldName: string) {
-    if (patchFieldName === fieldName) {
-      return recordValue;
-    }
-
-    if (valueUnitConfig && patchFieldName === valueUnitConfig.unitFieldName) {
-      return unitRecordValue;
-    }
-
-    return undefined;
+    return record?.values[patchFieldName];
   }
 
   async function commit(value: FieldValue): Promise<boolean> {
@@ -271,6 +282,7 @@ export function RecordFieldEditor({
   const isRichMarkdownEditor = isMarkdownEditor && density !== "compact";
   const isMultilineTextEditor = control.kind === "textarea" && !isRichMarkdownEditor;
   const isColorEditor = adapter.kind === "text" && adapter.editor === "color";
+  const isImageEditor = adapter.kind === "text" && adapter.editor === "image";
   const isDateEditor = control.kind === "input" && control.inputType === "date";
   const isNumberEditor = adapter.kind === "number";
   const isValueUnitEditor = isNumberEditor && valueUnitConfig !== undefined;
@@ -327,6 +339,48 @@ export function RecordFieldEditor({
     }
   }
 
+  async function handleImageUpload(file: File | undefined) {
+    if (!file || !canPatch || isPending) {
+      return;
+    }
+
+    if (schemaKey !== "site") {
+      const message = "Image upload is only available for Site records.";
+
+      setError(message);
+      setSyncStatus({ state: "error", message });
+      return;
+    }
+
+    setIsPending(true);
+    setError(null);
+    setSyncStatus({ state: "syncing", message: "Uploading image..." });
+
+    try {
+      const upload = await uploadSiteImageFile(file);
+      const dimensionFields = selectImageDimensionFields(schema, entityName);
+      const saved = await commitPatch(
+        siteImageUploadPatchValues({
+          hrefFieldName: fieldName,
+          upload,
+          ...dimensionFields,
+        }),
+        { allowWhilePending: true, managePending: false },
+      );
+
+      if (saved) {
+        setDraft(upload.href);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Image upload failed.";
+
+      setError(message);
+      setSyncStatus({ state: "error", message });
+    } finally {
+      setIsPending(false);
+    }
+  }
+
   return (
     <div
       className={
@@ -371,6 +425,25 @@ export function RecordFieldEditor({
             }}
             open={iconDialogOpen}
             previewSource={draft}
+          />
+        ) : isImageEditor ? (
+          <ImageFieldEditor
+            canPatch={canPatch}
+            density={density}
+            draft={draft}
+            error={error}
+            isPending={isPending}
+            label={label}
+            onDraftChange={setDraft}
+            onFileSelect={(file) => void handleImageUpload(file)}
+            onUrlCommit={(value) => {
+              void commit(inputValueToFieldValue(field, value));
+            }}
+            onUrlRevert={() => {
+              setDraft(fieldValueToInputValue(field, recordValue));
+            }}
+            required={adapter.required}
+            uploadEnabled={isSiteImageUploadAvailable(schemaKey)}
           />
         ) : isRichMarkdownEditor ? (
           <MarkdownEditor
@@ -705,6 +778,127 @@ function IconSourcePreview({ label, source }: { label: string; source: string })
       <SvgIcon ariaLabel={`${label} preview`} className="size-12" source={source} />
     </div>
   );
+}
+
+function ImageFieldEditor({
+  canPatch,
+  density,
+  draft,
+  error,
+  isPending,
+  label,
+  onDraftChange,
+  onFileSelect,
+  onUrlCommit,
+  onUrlRevert,
+  required,
+  uploadEnabled,
+}: {
+  canPatch: boolean;
+  density: "default" | "compact";
+  draft: string;
+  error: string | null;
+  isPending: boolean;
+  label: string;
+  onDraftChange: (value: string) => void;
+  onFileSelect: (file: File | undefined) => void;
+  onUrlCommit: (value: string) => void;
+  onUrlRevert: () => void;
+  required: boolean;
+  uploadEnabled: boolean;
+}) {
+  function handleUrlKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onUrlCommit(event.currentTarget.value);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onUrlRevert();
+    }
+  }
+
+  return (
+    <div
+      className={density === "compact" ? "w-full min-w-0 space-y-2" : "w-full min-w-0 space-y-3"}
+      data-web-field-kind="image"
+    >
+      <div
+        className={
+          density === "compact"
+            ? "flex h-16 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50"
+            : "flex aspect-[4/3] max-h-72 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50"
+        }
+        data-web-image-field-preview={draft === "" ? "empty" : "image"}
+      >
+        {draft === "" ? (
+          <span className="text-xs text-slate-500">No image</span>
+        ) : (
+          <img
+            alt={`${label} preview`}
+            className="h-full w-full object-contain"
+            loading="lazy"
+            src={draft}
+          />
+        )}
+      </div>
+      <div className={density === "compact" ? "space-y-1" : "grid gap-2 sm:grid-cols-[1fr_1.5fr]"}>
+        <Input
+          accept={SITE_IMAGE_UPLOAD_ACCEPT}
+          aria-label={`Upload ${label}`}
+          className={
+            density === "compact"
+              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+              : "w-full rounded border border-slate-300 px-3 py-2"
+          }
+          disabled={!canPatch || isPending || !uploadEnabled}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+
+            event.currentTarget.value = "";
+            onFileSelect(file);
+          }}
+          type="file"
+        />
+        <Input
+          aria-invalid={error !== null ? true : undefined}
+          aria-label={`${label} URL`}
+          className={
+            density === "compact"
+              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+              : "w-full rounded border border-slate-300 px-3 py-2"
+          }
+          disabled={!canPatch || isPending}
+          onBlur={(event) => onUrlCommit(event.currentTarget.value)}
+          onChange={(event) => onDraftChange(event.currentTarget.value)}
+          onKeyDown={handleUrlKeyDown}
+          placeholder={label}
+          required={required}
+          type="text"
+          value={draft}
+        />
+      </div>
+    </div>
+  );
+}
+
+function selectImageDimensionFields(
+  schema: AppSchema | null,
+  entityName: string,
+): { heightFieldName?: string; widthFieldName?: string } {
+  const fields = schema?.entities[entityName]?.fields;
+
+  if (fields?.width?.type === "number" && fields.height?.type === "number") {
+    return { heightFieldName: "height", widthFieldName: "width" };
+  }
+
+  return {};
+}
+
+function isSiteImageUploadAvailable(schemaKey: SchemaKey) {
+  return schemaKey === "site";
 }
 
 function valueUnitPatch(

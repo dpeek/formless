@@ -19,6 +19,7 @@ describe("generated field UI adapters", () => {
       slug: { kind: "input", inputType: "text" },
       color: { kind: "input", inputType: "text" },
       icon: { kind: "icon" },
+      image: { kind: "imageUpload" },
     });
     expect(selectGeneratedFieldEditorAdapter(fields.title, "text")).toMatchObject({
       kind: "text",
@@ -36,6 +37,13 @@ describe("generated field UI adapters", () => {
       kind: "text",
       editor: "icon",
       control: { kind: "icon" },
+      createDefaultValue: undefined,
+      required: false,
+    });
+    expect(selectGeneratedFieldEditorAdapter(fields.image, "image")).toMatchObject({
+      kind: "text",
+      editor: "image",
+      control: { kind: "imageUpload" },
       createDefaultValue: undefined,
       required: false,
     });
@@ -80,6 +88,7 @@ describe("generated field UI adapters", () => {
 const fields = {
   title: { type: "text", required: true },
   icon: { type: "text", required: false, format: "icon" },
+  image: { type: "text", required: false, format: "href" },
   done: { type: "boolean", required: true, default: true },
   dueDate: { type: "date", required: false },
   estimate: { type: "number", required: false, default: 2, min: 0, max: 10, integer: true },
@@ -103,4 +112,13 @@ const fields = {
   resource: { type: "reference", required: true, to: "resource", displayField: "name" },
 } satisfies Record<string, FieldSchema>;
 
-const textEditors = ["text", "textarea", "markdown", "href", "slug", "color", "icon"] as const;
+const textEditors = [
+  "text",
+  "textarea",
+  "markdown",
+  "href",
+  "slug",
+  "color",
+  "icon",
+  "image",
+] as const;

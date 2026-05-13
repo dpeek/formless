@@ -8,6 +8,8 @@ import {
   GeneratedCreateForm,
   resolveCreateValues,
 } from "./app/generated/create.tsx";
+import { RecordFieldEditor } from "./app/generated/record-field-editor.tsx";
+import { SchemaAppProvider } from "./app/generated/schema-app-context.tsx";
 import { HomeScreen } from "./app/generated/screen.tsx";
 import { ReferencedRecordEditorFields, RecordTable } from "./app/generated/table.tsx";
 import { EditViewFields } from "./app/generated/table-actions.tsx";
@@ -3719,6 +3721,69 @@ describe("generated forms and records", () => {
     expect(editHtml).not.toContain('type="date"');
     expect(editHtml).not.toContain('aria-label="Order"');
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
+  });
+
+  it("renders the generated Site image upload editor with preview and URL fallback", () => {
+    const hrefField = siteSourceSchema.entities.block.fields.href;
+
+    if (!hrefField || hrefField.type !== "text") {
+      throw new Error("Missing Site block href field.");
+    }
+
+    const fieldConfig: RecordFieldConfig = {
+      fieldName: "href",
+      field: hrefField,
+      editor: "image",
+      commit: "field-commit",
+    };
+
+    bootstrapSiteEditor([
+      siteBlockRecord("block-image", {
+        type: "image",
+        label: "Cover image",
+        href: "/api/site/media/site/images/cover.webp",
+        width: 1200,
+        height: 630,
+      }),
+      siteBlockRecord("block-empty-image", {
+        type: "image",
+        label: "Empty image",
+      }),
+    ]);
+
+    const imageHtml = renderToStaticMarkup(
+      <SchemaAppProvider schemaKey="site">
+        <RecordFieldEditor
+          canPatch
+          entityName="block"
+          fieldConfig={fieldConfig}
+          recordId="block-image"
+          showLabel
+        />
+      </SchemaAppProvider>,
+    );
+    const emptyHtml = renderToStaticMarkup(
+      <SchemaAppProvider schemaKey="site">
+        <RecordFieldEditor
+          canPatch
+          entityName="block"
+          fieldConfig={fieldConfig}
+          recordId="block-empty-image"
+          showLabel
+        />
+      </SchemaAppProvider>,
+    );
+
+    expect(imageHtml).toContain('data-web-field-kind="image"');
+    expect(imageHtml).toContain('data-web-image-field-preview="image"');
+    expect(imageHtml).toContain('src="/api/site/media/site/images/cover.webp"');
+    expect(imageHtml).toContain('type="file"');
+    expect(imageHtml).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
+    expect(imageHtml).toContain('aria-label="Upload Link"');
+    expect(imageHtml).toContain('aria-label="Link URL"');
+    expect(imageHtml).toContain('value="/api/site/media/site/images/cover.webp"');
+    expect(emptyHtml).toContain('data-web-image-field-preview="empty"');
+    expect(emptyHtml).toContain("No image");
   });
 
   it("still resolves scoped create defaults for views that use them", () => {
