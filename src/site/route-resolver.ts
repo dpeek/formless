@@ -12,12 +12,6 @@ export type SiteRouteResolution =
       page: StoredRecord;
     }
   | {
-      kind: "post-index";
-      slug: string;
-      page?: StoredRecord;
-      posts: StoredRecord[];
-    }
-  | {
       kind: "post";
       slug: string;
       post: StoredRecord;
@@ -32,15 +26,6 @@ export function resolveSiteRoute(
 ): SiteRouteResolution | undefined {
   const liveBlocks = [...blocks].filter(isLiveBlock);
   const routePath = normalizeSiteRoutePath(slug);
-
-  if (routePath === BLOG_ROUTE) {
-    return {
-      kind: "post-index",
-      slug: routePath,
-      page: resolveRootPage(liveBlocks, routePath, warnings),
-      posts: resolvePostIndex(liveBlocks),
-    };
-  }
 
   if (routePath.startsWith(`${BLOG_ROUTE}/`)) {
     const post = resolveRootPost(liveBlocks, routePath, warnings);
@@ -69,12 +54,6 @@ export function resolveSiteRoute(
 
 export function routeInfoForResolution(resolution: SiteRouteResolution): SiteTreeRoute {
   switch (resolution.kind) {
-    case "post-index":
-      return {
-        kind: resolution.kind,
-        slug: resolution.slug,
-        postCount: resolution.posts.length,
-      };
     case "page":
     case "post":
       return {
@@ -127,6 +106,7 @@ function resolveRootPost(
       (record) =>
         record.entity === "block" &&
         stringValue(record.values.type) === "post" &&
+        stringValue(record.values.date) !== undefined &&
         hrefMatchesRoute(stringValue(record.values.href), slug),
     )
     .sort(compareRecords);
@@ -142,37 +122,6 @@ function resolveRootPost(
   }
 
   return root;
-}
-
-function resolvePostIndex(blocks: StoredRecord[]): StoredRecord[] {
-  return blocks
-    .filter(
-      (record) =>
-        record.entity === "block" &&
-        stringValue(record.values.type) === "post" &&
-        postRoutePath(record)?.startsWith(`${BLOG_ROUTE}/`),
-    )
-    .sort(comparePostsForIndex);
-}
-
-function postRoutePath(record: StoredRecord): string | undefined {
-  const href = stringValue(record.values.href);
-
-  if (!href) {
-    return undefined;
-  }
-
-  const path = normalizeHrefPath(href);
-
-  if (path === "/pages" || path === "/pages/") {
-    return "home";
-  }
-
-  if (path.startsWith("/pages/")) {
-    return normalizeSiteRoutePath(path.slice("/pages/".length));
-  }
-
-  return normalizeSiteRoutePath(path);
 }
 
 function hrefMatchesRoute(href: string | undefined, slug: string): boolean {
@@ -197,10 +146,6 @@ function normalizeHrefPath(href: string): string {
 
 function isLiveBlock(record: StoredRecord): boolean {
   return record.entity === "block" && !record.deletedAt;
-}
-
-function comparePostsForIndex(a: StoredRecord, b: StoredRecord): number {
-  return compareStrings(b.createdAt, a.createdAt) || compareStrings(a.id, b.id);
 }
 
 function compareRecords(a: StoredRecord, b: StoredRecord): number {

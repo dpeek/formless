@@ -43,6 +43,10 @@ type SiteTreeBuildContext = {
 };
 
 const DEFAULT_MAX_DEPTH = 16;
+const LIST_BLOCK_ITEM_TYPES = {
+  postList: "post",
+  projectList: "project",
+} as const;
 
 export function buildSitePageTree(
   schema: AppSchema,
@@ -185,34 +189,7 @@ function buildRoutePageNode(
       return buildBlockNode(route.page, context, 0, new Set());
     case "post":
       return buildBlockNode(route.post, context, 0, new Set());
-    case "post-index":
-      return buildPostIndexPageNode(route, context);
   }
-}
-
-function buildPostIndexPageNode(
-  route: Extract<SiteRouteResolution, { kind: "post-index" }>,
-  context: SiteTreeBuildContext,
-): SiteBlockNode {
-  const page = route.page ? projectBlock(route.page, context) : fallbackPostIndexPage();
-
-  page.placements = route.posts.map((post, index) => ({
-    id: `generated_site_post_index_${post.id}`,
-    order: (index + 1) * 1000,
-    block: buildBlockNode(post, context, 0, new Set()),
-  }));
-
-  return page;
-}
-
-function fallbackPostIndexPage(): SiteBlockNode {
-  return {
-    id: "generated_site_post_index",
-    type: "page",
-    label: "Blog",
-    href: "/blog",
-    placements: [],
-  };
 }
 
 function buildBlockNode(
@@ -222,6 +199,15 @@ function buildBlockNode(
   ancestors: Set<string>,
 ): SiteBlockNode {
   const node = projectBlock(record, context);
+  const listItemType = listItemTypeForBlock(node.type);
+
+  if (listItemType) {
+    node.query = {
+      key: node.type,
+      items: buildContentListItems(listItemType, context),
+    };
+    return node;
+  }
 
   if (depth >= context.maxDepth) {
     warnIfDepthStopsTraversal(record, context);
@@ -268,6 +254,10 @@ function buildPlacementNodes(
       continue;
     }
 
+    if (!isPublicRenderableBlock(childBlock)) {
+      continue;
+    }
+
     nodes.push(
       projectPlacement(placement, buildBlockNode(childBlock, context, depth + 1, ancestors)),
     );
@@ -285,6 +275,7 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
     label: stringValue(record.values.label) ?? "",
     ...optionalStringField("body", record.values.body),
     ...optionalStringField("href", projectedBlockHref(record, type, context)),
+    ...optionalStringField("date", record.values.date),
     ...optionalStringField("icon", record.values.icon),
     ...optionalStringField("color", record.values.color),
     ...optionalNumberField("width", record.values.width),
@@ -315,6 +306,32 @@ function projectPlacement(placement: StoredRecord, childBlock: SiteBlockNode): S
     ...optionalStringField("label", placement.values.label),
     block: childBlock,
   };
+}
+
+function buildContentListItems(
+  itemType: (typeof LIST_BLOCK_ITEM_TYPES)[keyof typeof LIST_BLOCK_ITEM_TYPES],
+  context: SiteTreeBuildContext,
+): SiteBlockNode[] {
+  return [...context.indexes.blocks.values()]
+    .filter(
+      (record) => stringValue(record.values.type) === itemType && isPublicRenderableBlock(record),
+    )
+    .sort(compareDatedContentRecords)
+    .map((record) => projectBlock(record, context));
+}
+
+function listItemTypeForBlock(
+  type: string,
+): (typeof LIST_BLOCK_ITEM_TYPES)[keyof typeof LIST_BLOCK_ITEM_TYPES] | undefined {
+  return LIST_BLOCK_ITEM_TYPES[type as keyof typeof LIST_BLOCK_ITEM_TYPES];
+}
+
+function isPublicRenderableBlock(record: StoredRecord): boolean {
+  const type = stringValue(record.values.type);
+
+  return type === "post" || type === "project"
+    ? stringValue(record.values.date) !== undefined
+    : true;
 }
 
 function warnMissingChild(placement: StoredRecord, warnings: SiteTreeWarning[]) {
@@ -349,6 +366,15 @@ function comparePlacements(a: StoredRecord, b: StoredRecord): number {
 
 function compareRecords(a: StoredRecord, b: StoredRecord): number {
   return compareStrings(a.createdAt, b.createdAt) || compareStrings(a.id, b.id);
+}
+
+function compareDatedContentRecords(a: StoredRecord, b: StoredRecord): number {
+  const dateCompare = compareStrings(
+    stringValue(b.values.date) ?? "",
+    stringValue(a.values.date) ?? "",
+  );
+
+  return dateCompare || compareRecords(a, b);
 }
 
 function compareStrings(a: string, b: string): number {

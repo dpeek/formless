@@ -889,8 +889,8 @@ describe("home view model collections", () => {
     );
 
     expect(allowedChildVariants).toEqual({
-      page: ["group", "hero", "markdown", "image", "link", "project"],
-      group: ["group", "hero", "markdown", "image", "link", "project"],
+      page: ["group", "hero", "markdown", "image", "link", "project", "postList", "projectList"],
+      group: ["group", "hero", "markdown", "image", "link", "project", "postList", "projectList"],
       post: ["markdown"],
       header: ["link"],
       footer: ["footerSection", "footerSocial", "link"],
@@ -898,6 +898,8 @@ describe("home view model collections", () => {
       footerSocial: ["link"],
     });
     expect(treeResult.branches?.variants.leafVariantValues).toContain("project");
+    expect(treeResult.branches?.variants.leafVariantValues).toContain("postList");
+    expect(treeResult.branches?.variants.leafVariantValues).toContain("projectList");
     expect(treeResult.childRecordUnion?.variants).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -905,6 +907,7 @@ describe("home view model collections", () => {
           presentation: {
             type: "fields",
             fields: expect.arrayContaining([
+              expect.objectContaining({ fieldName: "date", editor: "date" }),
               expect.objectContaining({ fieldName: "body", editor: "markdown" }),
               expect.objectContaining({ fieldName: "href", editor: "href" }),
             ]),
@@ -1373,7 +1376,7 @@ describe("home view model collections", () => {
             type: "create",
             label: "Create Post",
             entityName: "block",
-            fields: ["label", "href", "body"],
+            fields: ["label", "href", "date", "body"],
             defaults: ["type"],
             enabled: true,
           },
@@ -1385,7 +1388,7 @@ describe("home view model collections", () => {
             type: "create",
             label: "Create Project",
             entityName: "block",
-            fields: ["label", "href", "body"],
+            fields: ["label", "href", "date", "body"],
             defaults: ["type"],
             enabled: true,
           },
@@ -1575,6 +1578,7 @@ describe("home view model collections", () => {
       "field:label",
       "field:body",
       "field:href",
+      "field:date",
       "field:icon",
       "field:color",
       "field:width",
@@ -1582,13 +1586,15 @@ describe("home view model collections", () => {
     ]);
     expect(
       contentModel?.result.type === "table" ? tableColumnEditors(contentModel.result.columns) : [],
-    ).toEqual(["enum", "text", "markdown", "href", "icon", "color", "number", "number"]);
+    ).toEqual(["enum", "text", "markdown", "href", "date", "icon", "color", "number", "number"]);
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "type",
       "label",
     ]);
     expect(create?.type === "create" ? create.union?.unionName : undefined).toBe("blockByType");
     expect(createVariantFields).toMatchObject({
+      post: ["date", "body", "href"],
+      project: ["date", "body", "href"],
       link: ["linkTargetMode", "linkTargetBlock", "href", "icon"],
       markdown: ["body"],
       image: ["href", "width", "height"],
@@ -1628,11 +1634,18 @@ describe("home view model collections", () => {
     expect(block.fields.color).toMatchObject({ type: "text", format: "color" });
     expect(block.fields.href).toMatchObject({ type: "text", format: "href" });
     expect(block.fields.icon).toMatchObject({ type: "text", format: "icon" });
+    expect(block.fields.date).toMatchObject({ type: "date" });
     expect(createEditors).toMatchObject({
       label: "text",
       type: "enum",
     });
     expect(createVariantEditors).toMatchObject({
+      post: {
+        date: "date",
+      },
+      project: {
+        date: "date",
+      },
       link: {
         href: "href",
         icon: "icon",
@@ -1645,6 +1658,7 @@ describe("home view model collections", () => {
       label: "text",
       body: "markdown",
       href: "href",
+      date: "date",
       icon: "icon",
       color: "color",
     });

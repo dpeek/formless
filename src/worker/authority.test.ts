@@ -135,7 +135,7 @@ describe("authority", () => {
     });
   });
 
-  it("returns generated blog and post route trees for the site app", async () => {
+  it("returns regular blog and dated post route trees for the site app", async () => {
     useSchemaApp("site");
     await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());
 
@@ -145,11 +145,13 @@ describe("authority", () => {
     );
 
     expect(blog.route).toEqual({
-      kind: "post-index",
+      kind: "page",
       slug: "blog",
-      postCount: 2,
     });
-    expect(blog.page.placements.map((placement) => placement.block.type)).toEqual(["post", "post"]);
+    expect(blog.page).toMatchObject({
+      id: "rec_site_content_blog",
+      type: "page",
+    });
     expect(post.route).toEqual({
       kind: "post",
       slug: "blog/shipping-schema-backed-authoring",

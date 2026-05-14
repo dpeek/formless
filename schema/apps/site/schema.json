@@ -18,6 +18,12 @@
             "project": {
               "label": "Project"
             },
+            "postList": {
+              "label": "Post list"
+            },
+            "projectList": {
+              "label": "Project list"
+            },
             "profile": {
               "label": "Profile"
             },
@@ -69,6 +75,11 @@
           "required": false,
           "label": "Link",
           "format": "href"
+        },
+        "date": {
+          "type": "date",
+          "required": false,
+          "label": "Date"
         },
         "linkTargetMode": {
           "type": "enum",
@@ -248,13 +259,21 @@
         },
         "post": {
           "label": "Post",
-          "fields": ["label", "body", "href"],
+          "fields": ["label", "date", "body", "href"],
           "requiredFields": ["label", "href"]
         },
         "project": {
           "label": "Project",
-          "fields": ["label", "body", "href"],
+          "fields": ["label", "date", "body", "href"],
           "requiredFields": ["label", "href"]
+        },
+        "postList": {
+          "label": "Post list",
+          "fields": ["label"]
+        },
+        "projectList": {
+          "label": "Project list",
+          "fields": ["label"]
         },
         "profile": {
           "label": "Profile",
@@ -530,6 +549,10 @@
         "post": {
           "presentation": "fields",
           "fields": {
+            "date": {
+              "editor": "date",
+              "commit": "field-commit"
+            },
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
@@ -543,6 +566,10 @@
         "project": {
           "presentation": "fields",
           "fields": {
+            "date": {
+              "editor": "date",
+              "commit": "field-commit"
+            },
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
@@ -668,6 +695,10 @@
         "project": {
           "presentation": "fields",
           "fields": {
+            "date": {
+              "editor": "date",
+              "commit": "field-commit"
+            },
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
@@ -794,6 +825,13 @@
           "editor": "href",
           "commit": "field-commit",
           "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "date",
+          "editor": "date",
+          "commit": "field-commit",
+          "width": "sm"
         },
         {
           "type": "field",
@@ -1001,15 +1039,35 @@
         "branches": {
           "variants": {
             "page": {
-              "children": ["group", "hero", "markdown", "image", "link", "project"]
+              "children": [
+                "group",
+                "hero",
+                "markdown",
+                "image",
+                "link",
+                "project",
+                "postList",
+                "projectList"
+              ]
             },
             "group": {
-              "children": ["group", "hero", "markdown", "image", "link", "project"]
+              "children": [
+                "group",
+                "hero",
+                "markdown",
+                "image",
+                "link",
+                "project",
+                "postList",
+                "projectList"
+              ]
             },
             "post": {
               "children": ["markdown"]
             },
             "project": "leaf",
+            "postList": "leaf",
+            "projectList": "leaf",
             "header": {
               "action": "leaf",
               "children": ["link"]
@@ -1148,6 +1206,9 @@
         "post": {
           "presentation": "fields",
           "fields": {
+            "date": {
+              "editor": "date"
+            },
             "body": {
               "editor": "markdown"
             },
@@ -1159,6 +1220,9 @@
         "project": {
           "presentation": "fields",
           "fields": {
+            "date": {
+              "editor": "date"
+            },
             "body": {
               "editor": "markdown"
             },
@@ -1250,6 +1314,9 @@
         "href": {
           "editor": "href"
         },
+        "date": {
+          "editor": "date"
+        },
         "body": {
           "editor": "markdown"
         }
@@ -1270,6 +1337,9 @@
         },
         "href": {
           "editor": "href"
+        },
+        "date": {
+          "editor": "date"
         },
         "body": {
           "editor": "markdown"
@@ -1305,6 +1375,10 @@
         "post": {
           "presentation": "fields",
           "fields": {
+            "date": {
+              "editor": "date",
+              "commit": "field-commit"
+            },
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
@@ -1318,6 +1392,10 @@
         "project": {
           "presentation": "fields",
           "fields": {
+            "date": {
+              "editor": "date",
+              "commit": "field-commit"
+            },
             "body": {
               "editor": "markdown",
               "commit": "field-commit"

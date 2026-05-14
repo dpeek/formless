@@ -201,6 +201,7 @@ export type SiteBlockNode = {
   label: string;
   body?: string;
   href?: string;
+  date?: string;
   icon?: string;
   color?: string;
   width?: number;

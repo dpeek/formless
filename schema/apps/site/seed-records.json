@@ -50,7 +50,8 @@
       "type": "project",
       "label": "Estii",
       "body": "Estimation and pricing for service providers.",
-      "href": "https://estii.com"
+      "href": "https://estii.com",
+      "date": "2026-05-01"
     },
     "createdAt": "2026-05-05T00:00:08.000Z"
   },
@@ -61,7 +62,8 @@
       "type": "project",
       "label": "OpenSurf",
       "body": "Framework for building reliable web agents.",
-      "href": "https://opensurf.ai"
+      "href": "https://opensurf.ai",
+      "date": "2026-05-08"
     },
     "createdAt": "2026-05-05T00:00:09.000Z"
   },
@@ -72,7 +74,8 @@
       "type": "project",
       "label": "Formless",
       "body": "Schema-driven synchronised app runtime.",
-      "href": "https://github.com/dpeek/formless"
+      "href": "https://github.com/dpeek/formless",
+      "date": "2026-05-03"
     },
     "createdAt": "2026-05-05T00:00:10.000Z"
   },
@@ -83,7 +86,8 @@
       "type": "post",
       "label": "Agents are enablers",
       "body": "Like when they help you build a schema driven application runtime instead of writing your CV like you're supposed to.",
-      "href": "/blog/agents-are-enablers"
+      "href": "/blog/agents-are-enablers",
+      "date": "2026-05-13"
     },
     "createdAt": "2026-05-05T00:00:11.000Z"
   },
@@ -94,7 +98,8 @@
       "type": "post",
       "label": "Schema-driven apps",
       "body": "What if your schema gave you a local-first, synchronising date store and CRUD UI for free? Low-code for coders.",
-      "href": "/blog/schema-driven-apps"
+      "href": "/blog/schema-driven-apps",
+      "date": "2026-05-06"
     },
     "createdAt": "2026-05-05T00:00:12.000Z"
   },
@@ -330,7 +335,8 @@
       "type": "project",
       "label": "Devstate",
       "body": "Agent-first development-loop supervisor.",
-      "href": "https://github.com/dpeek/devstate"
+      "href": "https://github.com/dpeek/devstate",
+      "date": "2026-05-10"
     },
     "createdAt": "2026-05-13T05:27:49.348Z"
   },
@@ -351,7 +357,8 @@
       "type": "project",
       "label": "StreamWolf",
       "body": "Manage your streaming subscriptions.",
-      "href": "https://streamwolf.com"
+      "href": "https://streamwolf.com",
+      "date": "2026-04-15"
     },
     "createdAt": "2026-05-13T07:19:58.013Z"
   },

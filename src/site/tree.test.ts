@@ -474,15 +474,14 @@ describe("site page tree projection", () => {
     ]);
   });
 
-  it("resolves /blog as a generated post index", () => {
+  it("resolves /blog as a regular page with a projected post list", () => {
     const tree = requireTree(
-      buildSitePageTree(siteSourceSchema, baseTreeRecords(), "blog", { generatedAt }),
+      buildSitePageTree(siteSourceSchema, recordsWithBlogPostList(), "blog", { generatedAt }),
     );
 
     expect(tree.route).toEqual({
-      kind: "post-index",
+      kind: "page",
       slug: "blog",
-      postCount: 2,
     });
     expect(tree.page).toMatchObject({
       id: "rec_site_content_blog",
@@ -491,13 +490,22 @@ describe("site page tree projection", () => {
       href: "/blog",
     });
     expect(tree.page.placements.map((placement) => placement.id)).toEqual([
-      "generated_site_post_index_rec_site_content_post_draft_notes",
-      "generated_site_post_index_rec_site_content_post_shipped_schema",
+      "rec_site_place_blog_posts",
     ]);
-    expect(tree.page.placements.map((placement) => placement.block.id)).toEqual([
-      "rec_site_content_post_draft_notes",
+    const postList = childForPlacement(tree.page, "rec_site_place_blog_posts");
+    expect(postList).toMatchObject({
+      id: "rec_site_block_blog_posts",
+      type: "postList",
+      label: "Latest posts",
+      query: {
+        key: "postList",
+      },
+    });
+    expect(postList.query?.items.map((item) => item.id)).toEqual([
       "rec_site_content_post_shipped_schema",
+      "rec_site_content_post_draft_notes",
     ]);
+    expect(postList.query?.items.map((item) => item.date)).toEqual(["2026-05-13", "2026-05-06"]);
   });
 
   it("resolves post detail routes under /blog", () => {
@@ -521,6 +529,7 @@ describe("site page tree projection", () => {
       type: "post",
       label: "Shipping schema-backed authoring",
       href: "/blog/shipping-schema-backed-authoring",
+      date: "2026-05-13",
     });
     expect(tree.page.placements.map((placement) => placement.id)).toEqual([
       "rec_site_place_post_body",
@@ -563,21 +572,123 @@ describe("site page tree projection", () => {
     );
   });
 
-  it("omits tombstoned posts from the generated blog index", () => {
+  it("projects dated projects from projectList blocks in descending date order", () => {
+    const records = [
+      ...baseTreeRecords().filter(
+        (record) =>
+          ![
+            "rec_site_place_projects_estii",
+            "rec_site_place_projects_opensurf",
+            "rec_site_place_projects_formless",
+          ].includes(record.id),
+      ),
+      blockRecord("rec_site_block_project_list", {
+        type: "projectList",
+        label: "Project index",
+      }),
+      placementRecord(
+        "rec_site_place_projects_project_list",
+        "rec_site_content_projects",
+        "rec_site_block_project_list",
+        { order: 1000 },
+      ),
+    ];
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, records, "projects", { generatedAt }),
+    );
+    const projectList = childForPlacement(tree.page, "rec_site_place_projects_project_list");
+
+    expect(projectList).toMatchObject({
+      type: "projectList",
+      query: {
+        key: "projectList",
+      },
+    });
+    expect(projectList.query?.items.map((item) => item.id)).toEqual([
+      "rec_site_content_project_opensurf",
+      "rec_site_content_project_formless",
+      "rec_site_content_project_estii",
+    ]);
+    expect(projectList.query?.items.map((item) => item.date)).toEqual([
+      "2026-05-08",
+      "2026-05-03",
+      "2026-05-01",
+    ]);
+  });
+
+  it("omits tombstoned and undated posts from postList projection", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_content_post_draft_notes"
         ? { ...record, deletedAt: "2026-05-06T00:00:00.000Z" }
         : record,
     );
-    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "blog", { generatedAt }));
+    records.push(
+      blockRecord("rec_site_content_post_undated", {
+        type: "post",
+        label: "Undated post",
+        body: "Hidden until a date is set.",
+        href: "/blog/undated-post",
+      }),
+    );
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, recordsWithBlogPostList(records), "blog", {
+        generatedAt,
+      }),
+    );
+    const postList = childForPlacement(tree.page, "rec_site_place_blog_posts");
 
-    expect(tree.route).toEqual({
-      kind: "post-index",
-      slug: "blog",
-      postCount: 1,
-    });
-    expect(tree.page.placements.map((placement) => placement.block.id)).toEqual([
+    expect(postList.query?.items.map((item) => item.id)).toEqual([
       "rec_site_content_post_shipped_schema",
+    ]);
+  });
+
+  it("returns null for undated direct post detail routes", () => {
+    const records = baseTreeRecords().map((record) => {
+      if (record.id !== "rec_site_content_post_shipped_schema") {
+        return record;
+      }
+
+      return withoutRecordValue(record, "date");
+    });
+    const result = buildSitePageTree(
+      siteSourceSchema,
+      records,
+      "blog/shipping-schema-backed-authoring",
+      {
+        generatedAt,
+      },
+    );
+
+    expect(result.tree).toBeNull();
+    expect(result.meta.warnings).toEqual([
+      expect.objectContaining({
+        code: "missing-root",
+        recordId: "blog/shipping-schema-backed-authoring",
+      }),
+    ]);
+  });
+
+  it("omits undated manually placed posts and projects from public placements", () => {
+    const records = baseTreeRecords().map((record) => {
+      if (
+        record.id !== "rec_site_content_post_draft_notes" &&
+        record.id !== "rec_site_content_project_formless"
+      ) {
+        return record;
+      }
+
+      return withoutRecordValue(record, "date");
+    });
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const recentPosts = childForPlacement(tree.page, "rec_site_place_home_recent_posts");
+    const projects = childForPlacement(tree.page, "rec_site_place_home_projects");
+
+    expect(recentPosts.placements.map((placement) => placement.block.id)).toEqual([
+      "rec_site_content_post_shipped_schema",
+    ]);
+    expect(projects.placements.map((placement) => placement.block.id)).toEqual([
+      "rec_site_content_project_estii",
+      "rec_site_content_project_opensurf",
     ]);
   });
 
@@ -610,6 +721,24 @@ function baseTreeRecords(): StoredRecord[] {
   return testSiteSeedRecords;
 }
 
+function recordsWithBlogPostList(records: StoredRecord[] = baseTreeRecords()): StoredRecord[] {
+  return [
+    ...records,
+    blockRecord("rec_site_block_blog_posts", {
+      type: "postList",
+      label: "Latest posts",
+    }),
+    placementRecord(
+      "rec_site_place_blog_posts",
+      "rec_site_content_blog",
+      "rec_site_block_blog_posts",
+      {
+        order: 1000,
+      },
+    ),
+  ];
+}
+
 function blockRecord(id: string, values: StoredRecord["values"]): StoredRecord {
   return {
     id,
@@ -638,6 +767,16 @@ function placementRecord(
       label: options.label ?? id,
     },
     createdAt: "2026-05-06T00:00:00.000Z",
+  };
+}
+
+function withoutRecordValue(record: StoredRecord, field: string): StoredRecord {
+  const values = { ...record.values };
+  delete values[field];
+
+  return {
+    ...record,
+    values,
   };
 }
 

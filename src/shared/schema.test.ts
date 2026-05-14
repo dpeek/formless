@@ -3990,6 +3990,7 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
+        "field",
         "orderingHandle",
         "field",
         "field",
@@ -4198,6 +4199,8 @@ describe("personal site sample schema", () => {
         page: { label: "Page" },
         post: { label: "Post" },
         project: { label: "Project" },
+        postList: { label: "Post list" },
+        projectList: { label: "Project list" },
         profile: { label: "Profile" },
         group: { label: "Group" },
         header: { label: "Header" },
@@ -4226,11 +4229,17 @@ describe("personal site sample schema", () => {
       type: "text",
       format: "href",
     });
+    expect(schema.entities.block?.fields.date).toEqual({
+      type: "date",
+      required: false,
+      label: "Date",
+    });
     expect(Object.keys(schema.entities.block?.fields ?? {})).toEqual([
       "type",
       "label",
       "body",
       "href",
+      "date",
       "linkTargetMode",
       "linkTargetBlock",
       "icon",
@@ -4279,6 +4288,10 @@ describe("personal site sample schema", () => {
       discriminator: "type",
       variants: {
         page: { label: "Page", fields: ["label", "href"] },
+        post: { label: "Post", fields: ["label", "date", "body", "href"] },
+        project: { label: "Project", fields: ["label", "date", "body", "href"] },
+        postList: { label: "Post list", fields: ["label"] },
+        projectList: { label: "Project list", fields: ["label"] },
         header: { label: "Header", fields: ["label"] },
         footer: { label: "Footer", fields: ["label"] },
         footerSection: { label: "Footer section", fields: ["label"] },
@@ -4436,6 +4449,7 @@ describe("personal site sample schema", () => {
         post: {
           presentation: "fields",
           fields: {
+            date: { editor: "date" },
             body: { editor: "markdown" },
             href: { editor: "href" },
           },
@@ -4482,6 +4496,7 @@ describe("personal site sample schema", () => {
         post: {
           presentation: "fields",
           fields: {
+            date: { editor: "date", commit: "field-commit" },
             body: { editor: "markdown", commit: "field-commit" },
             href: { editor: "href", commit: "field-commit" },
           },
@@ -4580,6 +4595,7 @@ describe("personal site sample schema", () => {
       fields: {
         label: { editor: "text" },
         href: { editor: "href" },
+        date: { editor: "date" },
         body: { editor: "markdown" },
       },
       defaults: {
@@ -4592,6 +4608,7 @@ describe("personal site sample schema", () => {
       fields: {
         label: { editor: "text" },
         href: { editor: "href" },
+        date: { editor: "date" },
         body: { editor: "markdown" },
       },
       defaults: {
@@ -4677,6 +4694,7 @@ describe("personal site sample schema", () => {
       fields: {
         label: { editor: "text" },
         href: { editor: "href" },
+        date: { editor: "date" },
         body: { editor: "markdown" },
       },
       defaults: {
@@ -4689,6 +4707,7 @@ describe("personal site sample schema", () => {
       fields: {
         label: { editor: "text" },
         href: { editor: "href" },
+        date: { editor: "date" },
         body: { editor: "markdown" },
       },
       defaults: {
@@ -4700,15 +4719,37 @@ describe("personal site sample schema", () => {
       "group",
       "post",
       "project",
+      "postList",
+      "projectList",
       "header",
       "footer",
       "footerSection",
       "footerSocial",
     ]);
-    expect(pageChildren).toEqual(["group", "hero", "markdown", "image", "link", "project"]);
-    expect(groupChildren).toEqual(["group", "hero", "markdown", "image", "link", "project"]);
+    expect(pageChildren).toEqual([
+      "group",
+      "hero",
+      "markdown",
+      "image",
+      "link",
+      "project",
+      "postList",
+      "projectList",
+    ]);
+    expect(groupChildren).toEqual([
+      "group",
+      "hero",
+      "markdown",
+      "image",
+      "link",
+      "project",
+      "postList",
+      "projectList",
+    ]);
     expect(branchVariants.post).toEqual({ children: ["markdown"] });
     expect(branchVariants.project).toBe("leaf");
+    expect(branchVariants.postList).toBe("leaf");
+    expect(branchVariants.projectList).toBe("leaf");
     expect(branchVariants.footer).toEqual({
       action: "leaf",
       children: ["footerSection", "footerSocial", "link"],
@@ -4737,6 +4778,14 @@ describe("personal site sample schema", () => {
       expect(blockTypeField.values).not.toHaveProperty(blockType);
       expect(schema.unions?.blockByType?.variants ?? {}).not.toHaveProperty(blockType);
     }
+    expect(blockTypeField.values).toMatchObject({
+      postList: { label: "Post list" },
+      projectList: { label: "Project list" },
+    });
+    expect(schema.unions?.blockByType?.variants).toMatchObject({
+      postList: { label: "Post list", fields: ["label"] },
+      projectList: { label: "Project list", fields: ["label"] },
+    });
 
     const blockCreate = schema.views.blockCreate;
     const blockEdit = schema.views.blockEdit;
@@ -4778,6 +4827,7 @@ describe("personal site sample schema", () => {
         post: {
           presentation: "fields",
           fields: {
+            date: { editor: "date", commit: "field-commit" },
             body: { editor: "markdown", commit: "field-commit" },
             href: { editor: "href", commit: "field-commit" },
           },
@@ -4858,6 +4908,7 @@ describe("personal site sample schema", () => {
     expect(blockEdit.variants?.post).toMatchObject({
       presentation: "fields",
       fields: {
+        date: { editor: "date", commit: "field-commit" },
         body: { editor: "markdown", commit: "field-commit" },
         href: { editor: "href", commit: "field-commit" },
       },
@@ -4887,15 +4938,35 @@ describe("personal site sample schema", () => {
       branches: {
         variants: {
           page: {
-            children: ["group", "hero", "markdown", "image", "link", "project"],
+            children: [
+              "group",
+              "hero",
+              "markdown",
+              "image",
+              "link",
+              "project",
+              "postList",
+              "projectList",
+            ],
           },
           group: {
-            children: ["group", "hero", "markdown", "image", "link", "project"],
+            children: [
+              "group",
+              "hero",
+              "markdown",
+              "image",
+              "link",
+              "project",
+              "postList",
+              "projectList",
+            ],
           },
           post: {
             children: ["markdown"],
           },
           project: "leaf",
+          postList: "leaf",
+          projectList: "leaf",
           header: {
             action: "leaf",
             children: ["link"],
@@ -4920,6 +4991,7 @@ describe("personal site sample schema", () => {
     expect(schema.itemViews.blockTreeNode.variants?.project).toMatchObject({
       presentation: "fields",
       fields: {
+        date: { editor: "date", commit: "field-commit" },
         body: { editor: "markdown", commit: "field-commit" },
         href: { editor: "href", commit: "field-commit" },
       },
@@ -4944,6 +5016,7 @@ describe("personal site sample schema", () => {
       fields: {
         label: { editor: "text" },
         href: { editor: "href" },
+        date: { editor: "date" },
         body: { editor: "markdown" },
       },
       defaults: {
@@ -4956,6 +5029,7 @@ describe("personal site sample schema", () => {
       fields: {
         label: { editor: "text" },
         href: { editor: "href" },
+        date: { editor: "date" },
         body: { editor: "markdown" },
       },
       defaults: {

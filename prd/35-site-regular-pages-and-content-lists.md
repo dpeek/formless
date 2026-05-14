@@ -1,7 +1,7 @@
 # PRD 35: Site regular pages and content lists
 
 Status: ready
-Current chunk: SCL-01 ready
+Current chunk: SCL-02 ready
 Last updated: 2026-05-14
 
 ## Goal
@@ -325,6 +325,7 @@ Possible changed files:
 | SCL-D13 | Do not auto-delete orphan blocks in this PRD.                                  | Safe orphan cleanup needs reference and lifecycle rules.                                           | User decision 2026-05-14                                               |
 | SCL-D14 | Remove primary broad Add placement actions.                                    | Tree add controls are the intended composition path until create/select-at-any-level ships.        | User decision 2026-05-14                                               |
 | SCL-D15 | Let link icons override inherited target icons.                                | Explicit link presentation should win over target metadata.                                        | User decision 2026-05-14, PRD 33 link target semantics                 |
+| SCL-D16 | Project `postList` and `projectList` blocks as tree query items.               | List queries should stay testable in the tree layer before renderer markup ships.                  | `src/site/tree.ts`, `src/site/tree.test.ts`                            |
 
 ## Deep Modules
 
@@ -356,13 +357,30 @@ Possible changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on | Scope             | Summary                                                                                          |
-| ------ | ------ | ---------- | ----------------- | ------------------------------------------------------------------------------------------------ |
-| SCL-01 | ready  | none       | schema, tree      | Add `date`, `postList`, `projectList`; make `/blog` regular; keep dated post detail routing.     |
-| SCL-02 | ready  | SCL-01     | renderer, tests   | Render list blocks, suppress page root label/body, keep post detail label-only heading behavior. |
-| SCL-03 | ready  | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
-| SCL-04 | ready  | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
-| SCL-05 | ready  | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
+| ID     | Status  | Depends on | Scope             | Summary                                                                                          |
+| ------ | ------- | ---------- | ----------------- | ------------------------------------------------------------------------------------------------ |
+| SCL-01 | shipped | none       | schema, tree      | Add `date`, `postList`, `projectList`; make `/blog` regular; keep dated post detail routing.     |
+| SCL-02 | ready   | SCL-01     | renderer, tests   | Render list blocks, suppress page root label/body, keep post detail label-only heading behavior. |
+| SCL-03 | ready   | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
+| SCL-04 | ready   | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
+| SCL-05 | ready   | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
+
+## Status Notes
+
+- 2026-05-14 SCL-01 shipped.
+- Changed schema source to expose optional `block.date`, `postList`, and `projectList`.
+- Changed public route/tree projection so `/blog` resolves as a normal page route.
+- Changed post detail route resolution to require a dated live post.
+- Changed public tree projection so manually placed posts/projects and list items require `date`.
+- Projected list block items through `SiteBlockNode.query.items`, sorted by `date` descending.
+- Renderer-specific cleanup remains in SCL-02; `post-index` protocol/renderer compatibility branch is still present but no longer emitted by the route/tree layer.
+- Blockers: none.
+
+## Evidence
+
+- 2026-05-14 SCL-01 `devstate check`: checks ok, services running, tests pass.
+- 2026-05-14 SCL-01 browser smoke reset Site schema and seed, then opened `/pages/home`, `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`.
+- 2026-05-14 SCL-01 browser smoke: `bun browser --session scl-01 errors` returned no page errors.
 
 ## Out of Scope
 
@@ -382,6 +400,10 @@ Possible changed files:
 
 ## Promote after ship
 
+- SCL-01 promote: Site schema defines optional `block.date`, `postList`, and `projectList`.
+- SCL-01 promote: `/blog` resolves through the normal page route path; generated post-index route projection is no longer emitted by the tree layer.
+- SCL-01 promote: `/blog/:slug` still resolves post detail routes and now requires a dated live post.
+- SCL-01 promote: public tree list projection hides tombstoned or undated posts/projects and sorts dated items by `date` descending.
 - `doc/current.md`: note Blog and Projects are regular pages composed from blocks.
 - `doc/current.md`: note `postList` and `projectList` blocks render dated public content.
 - `doc/current.md`: note `block.date` controls public post/project list visibility and order.

@@ -827,15 +827,13 @@ describe("public site renderer", () => {
     expect(html).toContain("Formless makes app schema describe enough behavior");
   });
 
-  it("renders /blog as a generated post index", () => {
+  it("renders /blog as a regular page route", () => {
     const html = renderSitePage("blog");
 
     expect(html).toContain("Blog");
     expect(html).toContain("Notes on product engineering");
-    expect(html).toContain("Draft notes on generated editorial tools");
-    expect(html).toContain("Shipping schema-backed authoring");
-    expect(html).toContain('href="/pages/blog/generated-editorial-tools"');
-    expect(html).toContain('href="/pages/blog/shipping-schema-backed-authoring"');
+    expect(html).not.toContain('href="/pages/blog/generated-editorial-tools"');
+    expect(html).not.toContain('href="/pages/blog/shipping-schema-backed-authoring"');
   });
 
   it("renders /projects as manually placed project summaries with markdown bodies", () => {
@@ -1334,7 +1332,7 @@ describe("generated collection home", () => {
     expect(emptyRootHtml).toContain("No records yet.");
     expect(emptyRootHtml).toContain('data-formless-tree-add-parent="page-1"');
     expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variants="group hero markdown image link project"',
+      'data-formless-tree-add-variants="group hero markdown image link project postList projectList"',
     );
     expect(emptyRootHtml).toContain('aria-label="Add child"');
     expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');
@@ -2486,29 +2484,35 @@ describe("generated forms and records", () => {
     const postFormData = new FormData();
     postFormData.set("label", "A focused post");
     postFormData.set("href", "/blog/focused-post");
+    postFormData.set("date", "2026-05-14");
     postFormData.set("body", "A short **summary**.");
     const projectFormData = new FormData();
     projectFormData.set("label", "Focused Project");
     projectFormData.set("href", "/projects/focused-project");
+    projectFormData.set("date", "2026-05-13");
     projectFormData.set("body", "A short **summary**.");
 
     expect(postHtml).not.toContain('name="type"');
     expect(postHtml).toContain('name="label"');
     expect(postHtml).toContain('name="href"');
+    expect(postHtml).toContain('name="date"');
     expect(postHtml).toContain('name="body"');
     expect(projectHtml).not.toContain('name="type"');
     expect(projectHtml).toContain('name="label"');
     expect(projectHtml).toContain('name="href"');
+    expect(projectHtml).toContain('name="date"');
     expect(projectHtml).toContain('name="body"');
     expect(resolveCreateValues(postFormData, postAction)).toEqual({
       label: "A focused post",
       href: "/blog/focused-post",
+      date: "2026-05-14",
       body: "A short **summary**.",
       type: "post",
     });
     expect(resolveCreateValues(projectFormData, projectAction)).toEqual({
       label: "Focused Project",
       href: "/projects/focused-project",
+      date: "2026-05-13",
       body: "A short **summary**.",
       type: "project",
     });
@@ -3867,6 +3871,7 @@ describe("generated forms and records", () => {
     const formData = new FormData();
     formData.set("type", "post");
     formData.set("label", "Field behavior note");
+    formData.set("date", "2026-05-14");
     formData.set("body", "## Note\n\nCreate and edit stay wired.");
     formData.set("href", "https://example.com/field-behavior");
     const imageFormData = new FormData();
@@ -3920,6 +3925,7 @@ describe("generated forms and records", () => {
     expect(resolveCreateValues(formData, action)).toEqual({
       type: "post",
       label: "Field behavior note",
+      date: "2026-05-14",
       body: "## Note\n\nCreate and edit stay wired.",
       href: "https://example.com/field-behavior",
     });
@@ -3947,7 +3953,7 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain("<textarea");
     expect(editHtml).not.toContain('aria-label="Featured"');
     expect(editHtml).not.toContain('aria-label="Published at"');
-    expect(editHtml).not.toContain('type="date"');
+    expect(editHtml).toContain('type="date"');
     expect(editHtml).not.toContain('aria-label="Order"');
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
   });
