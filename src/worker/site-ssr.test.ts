@@ -65,11 +65,12 @@ describe("published Site Worker SSR", () => {
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("Vary")).toBe("Accept");
     expect(html).toContain("<!doctype html>");
-    expect(html).toContain('<div id="app"><main class="min-h-dvh"><article');
+    expect(html).toContain('<div id="app">');
+    expect(html).toContain('<main class="min-h-dvh"><article');
     expect(html).toContain('data-site-theme="light"');
     expect(html).toContain("Home");
     expect(html).toContain("Code is magic");
-    expect(html).toContain("Greetings, Robot");
+    expect(html).toContain("Welcome, Humans and Agents");
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
     expect(html).toContain(

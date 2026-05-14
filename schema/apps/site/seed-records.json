@@ -108,101 +108,6 @@
     "createdAt": "2026-05-05T00:00:12.000Z"
   },
   {
-    "id": "rec_site_media_post_agents_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Agents article primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Ccircle%20cx%3D%271180%27%20cy%3D%27320%27%20r%3D%27180%27%20fill%3D%27%23ccfbf1%27%20opacity%3D%270.35%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27470%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3EAgents%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27595%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eenablers%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:00.000Z"
-  },
-  {
-    "id": "rec_site_media_post_schema_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Schema-driven apps primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%231e3a8a%27%2F%3E%3Cpath%20d%3D%27M160%20740%20L520%20340%20L860%20580%20L1200%20260%20L1440%20740Z%27%20fill%3D%27%2393c5fd%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27270%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3ESchema-driven%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27380%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eapps%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:01.000Z"
-  },
-  {
-    "id": "rec_site_media_project_estii_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Estii project primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Crect%20x%3D%27120%27%20y%3D%27160%27%20width%3D%271360%27%20height%3D%27680%27%20rx%3D%2748%27%20fill%3D%27%23f8fafc%27%20opacity%3D%270.14%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27535%27%20font-size%3D%27128%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EEstii%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:02.000Z"
-  },
-  {
-    "id": "rec_site_media_project_opensurf_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "OpenSurf project primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f172a%27%2F%3E%3Cpath%20d%3D%27M0%20640%20C260%20510%20390%20510%20640%20640%20C890%20770%201030%20770%201600%20540%20L1600%201000%20L0%201000Z%27%20fill%3D%27%232dd4bf%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27470%27%20font-size%3D%27120%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EOpenSurf%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:03.000Z"
-  },
-  {
-    "id": "rec_site_media_project_formless_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Formless project primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%233f3f46%27%2F%3E%3Crect%20x%3D%27200%27%20y%3D%27200%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23a7f3d0%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%27640%27%20y%3D%27360%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23bfdbfe%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%271080%27%20y%3D%27520%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23fecaca%27%20opacity%3D%270.75%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27855%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EFormless%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:04.000Z"
-  },
-  {
-    "id": "rec_site_block_home_feature_agents",
-    "entity": "block",
-    "values": {
-      "type": "feature",
-      "label": "Tools that keep up with the work",
-      "body": "Schema-backed interfaces let small teams ship authoring workflows, runtime checks, and public pages from the same flat records.",
-      "alignment": "right"
-    },
-    "createdAt": "2026-05-14T02:40:05.000Z"
-  },
-  {
-    "id": "rec_site_media_home_feature_agents",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Feature block media image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%2314514a%27%2F%3E%3Crect%20x%3D%27160%27%20y%3D%27160%27%20width%3D%27540%27%20height%3D%27320%27%20rx%3D%2732%27%20fill%3D%27%23ccfbf1%27%20opacity%3D%270.86%27%2F%3E%3Crect%20x%3D%27880%27%20y%3D%27320%27%20width%3D%27560%27%20height%3D%27380%27%20rx%3D%2732%27%20fill%3D%27%23f0fdfa%27%20opacity%3D%270.72%27%2F%3E%3Cpath%20d%3D%27M700%20320%20C800%20320%20780%20540%20880%20540%27%20stroke%3D%27white%27%20stroke-width%3D%2732%27%20fill%3D%27none%27%20opacity%3D%270.8%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27855%27%20font-size%3D%2788%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EFlat%20records%2C%20rich%20views%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:06.000Z"
-  },
-  {
-    "id": "rec_site_link_home_feature_notes",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "Read notes",
-      "href": "/blog",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_blog"
-    },
-    "createdAt": "2026-05-14T02:40:07.000Z"
-  },
-  {
     "id": "rec_site_content_link_home",
     "entity": "block",
     "values": {
@@ -388,8 +293,8 @@
     "entity": "block",
     "values": {
       "type": "hero",
-      "label": "Code is magic",
-      "body": "I help humans and robots build elegant software together."
+      "label": "Code is magic ✨",
+      "body": "Helping humans and agents build amazing software together"
     },
     "createdAt": "2026-05-12T04:56:24.201Z"
   },
@@ -422,16 +327,6 @@
       "body": "Products, libraries and half-baked ideas."
     },
     "createdAt": "2026-05-12T05:16:25.529Z"
-  },
-  {
-    "id": "record_692a7ebd-fe3a-4724-9821-9d94255aa29f",
-    "entity": "block",
-    "values": {
-      "type": "markdown",
-      "label": "Greetings, Robot",
-      "body": "I'm a developer and entrepreneur working in Sydney, Australia. I founded [estii.com](https://estii.com) and [opensurf.ai](https://opensurf.ai) and work with businesses building ambitious ideas and capable teams.\n\nI love helping high-agency developers move fast with modern tooling and workflows.\n\nWhat an _amazing_ time to be a builder."
-    },
-    "createdAt": "2026-05-12T05:24:03.945Z"
   },
   {
     "id": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
@@ -496,6 +391,123 @@
       "label": "Projects"
     },
     "createdAt": "2026-05-14T01:31:01.000Z"
+  },
+  {
+    "id": "rec_site_media_post_agents_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Agents article primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Ccircle%20cx%3D%271180%27%20cy%3D%27320%27%20r%3D%27180%27%20fill%3D%27%23ccfbf1%27%20opacity%3D%270.35%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27470%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3EAgents%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27595%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eenablers%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:00.000Z"
+  },
+  {
+    "id": "rec_site_media_post_schema_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Schema-driven apps primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%231e3a8a%27%2F%3E%3Cpath%20d%3D%27M160%20740%20L520%20340%20L860%20580%20L1200%20260%20L1440%20740Z%27%20fill%3D%27%2393c5fd%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27270%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3ESchema-driven%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27380%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eapps%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:01.000Z"
+  },
+  {
+    "id": "rec_site_media_project_estii_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Estii project primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Crect%20x%3D%27120%27%20y%3D%27160%27%20width%3D%271360%27%20height%3D%27680%27%20rx%3D%2748%27%20fill%3D%27%23f8fafc%27%20opacity%3D%270.14%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27535%27%20font-size%3D%27128%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EEstii%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:02.000Z"
+  },
+  {
+    "id": "rec_site_media_project_opensurf_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "OpenSurf project primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f172a%27%2F%3E%3Cpath%20d%3D%27M0%20640%20C260%20510%20390%20510%20640%20640%20C890%20770%201030%20770%201600%20540%20L1600%201000%20L0%201000Z%27%20fill%3D%27%232dd4bf%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27470%27%20font-size%3D%27120%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EOpenSurf%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:03.000Z"
+  },
+  {
+    "id": "rec_site_media_project_formless_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Formless project primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%233f3f46%27%2F%3E%3Crect%20x%3D%27200%27%20y%3D%27200%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23a7f3d0%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%27640%27%20y%3D%27360%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23bfdbfe%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%271080%27%20y%3D%27520%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23fecaca%27%20opacity%3D%270.75%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27855%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EFormless%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:04.000Z"
+  },
+  {
+    "id": "rec_site_block_home_feature_agents",
+    "entity": "block",
+    "values": {
+      "type": "feature",
+      "label": "Welcome, Humans and Agents",
+      "body": "This is David and he's a developer based in Sydney.\n\nHe founded [estii.com](https://estii.com) and [opensurf.ai](https://opensurf.ai) and absolutely loves building ambitious teams, codebases and products.\n\nWith the right tooling and workflows, it is now possible for small, high-agency teams to ship incredibly ambitious ideas. And the scope of what is possible will only continue to grow.\n\nIt is an _amazing_ time to be a builder.\n\n### Commonly asked questions",
+      "alignment": "right"
+    },
+    "createdAt": "2026-05-14T02:40:05.000Z"
+  },
+  {
+    "id": "rec_site_media_home_feature_agents",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Feature block media image",
+      "href": "/api/site/media/site/images/5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
+      "width": 2226,
+      "height": 2226
+    },
+    "createdAt": "2026-05-14T02:40:06.000Z"
+  },
+  {
+    "id": "rec_site_link_home_feature_notes",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "Who is this guy?",
+      "href": "/blog",
+      "linkTargetMode": "internal",
+      "linkTargetBlock": "rec_site_content_blog"
+    },
+    "createdAt": "2026-05-14T02:40:07.000Z"
+  },
+  {
+    "id": "record_7b0543c5-9002-4a14-857e-7299b60fe7c9",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "What has he done?",
+      "linkTargetMode": "internal",
+      "linkTargetBlock": "rec_site_content_projects"
+    },
+    "createdAt": "2026-05-14T03:14:31.372Z"
+  },
+  {
+    "id": "record_ea60349a-1061-4394-aa76-be70d02a42fa",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "Should we hire him?",
+      "linkTargetMode": "internal",
+      "linkTargetBlock": "rec_site_content_resume"
+    },
+    "createdAt": "2026-05-14T03:15:47.149Z"
   },
   {
     "id": "rec_site_place_header_primary",
@@ -618,6 +630,116 @@
     "createdAt": "2026-05-05T00:00:26.300Z"
   },
   {
+    "id": "rec_site_place_post_body",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_post_shipped_schema",
+      "block": "rec_site_block_post_body",
+      "order": 1000
+    },
+    "createdAt": "2026-05-05T00:00:30.000Z"
+  },
+  {
+    "id": "record_a83332ce-88e9-4be3-a01d-23fa251738f8",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_social",
+      "block": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
+      "order": 3000
+    },
+    "createdAt": "2026-05-12T04:27:33.010Z"
+  },
+  {
+    "id": "record_df809264-df03-4773-9eec-4a79e36ccf4b",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_social",
+      "block": "record_0749e061-1ba8-4923-841e-143fc825427c",
+      "order": 4000
+    },
+    "createdAt": "2026-05-12T04:28:23.801Z"
+  },
+  {
+    "id": "record_62cf35f7-0f2f-4179-83c0-e35632ce26d3",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_main",
+      "block": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
+      "order": 500
+    },
+    "createdAt": "2026-05-12T04:30:55.995Z"
+  },
+  {
+    "id": "record_adafde98-6f1b-42b2-a5b4-b54d12d5cb83",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer",
+      "block": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
+      "order": 2000
+    },
+    "createdAt": "2026-05-12T04:31:48.064Z"
+  },
+  {
+    "id": "record_4f205edd-6b96-41da-8f9f-3defac28da1a",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "block": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T04:56:24.201Z"
+  },
+  {
+    "id": "record_bbb296c2-25ec-41e8-8da1-9523297d7f2d",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_blog",
+      "block": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T05:02:46.686Z"
+  },
+  {
+    "id": "record_2182aea7-7023-497e-b9d6-ed3b1ab7ee10",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_resume",
+      "block": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T05:04:06.684Z"
+  },
+  {
+    "id": "record_24fbbfd1-6aec-47d4-8909-99e4bcd52895",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_projects",
+      "block": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
+      "order": 1000
+    },
+    "createdAt": "2026-05-12T05:16:25.529Z"
+  },
+  {
+    "id": "record_aababd9c-df39-475b-8010-ac6a990cd893",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_main",
+      "block": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
+      "order": 750
+    },
+    "createdAt": "2026-05-12T15:14:16.373Z"
+  },
+  {
+    "id": "record_9f4a7ad8-8a9b-4a35-aa97-29af6b7f810d",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_post_draft_notes",
+      "block": "record_30cbf3d3-7f63-44a1-ab29-6a1b9e1b67ee",
+      "order": 1000
+    },
+    "createdAt": "2026-05-13T05:38:22.200Z"
+  },
+  {
     "id": "rec_site_place_blog_posts",
     "entity": "blockPlacement",
     "values": {
@@ -725,123 +847,25 @@
     "createdAt": "2026-05-14T02:41:07.000Z"
   },
   {
-    "id": "rec_site_place_post_body",
+    "id": "record_ada280be-aab1-4cdb-af81-8d32bac06462",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_post_shipped_schema",
-      "block": "rec_site_block_post_body",
-      "order": 1000
+      "parent": "rec_site_block_home_feature_agents",
+      "block": "record_7b0543c5-9002-4a14-857e-7299b60fe7c9",
+      "order": 2000,
+      "slot": "actions"
     },
-    "createdAt": "2026-05-05T00:00:30.000Z"
+    "createdAt": "2026-05-14T03:14:31.372Z"
   },
   {
-    "id": "record_a83332ce-88e9-4be3-a01d-23fa251738f8",
+    "id": "record_250c6c97-9ea5-4b1b-9e6c-e429ff3ebb72",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_footer_social",
-      "block": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
-      "order": 3000
+      "parent": "rec_site_block_home_feature_agents",
+      "block": "record_ea60349a-1061-4394-aa76-be70d02a42fa",
+      "order": 3000,
+      "slot": "actions"
     },
-    "createdAt": "2026-05-12T04:27:33.010Z"
-  },
-  {
-    "id": "record_df809264-df03-4773-9eec-4a79e36ccf4b",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_social",
-      "block": "record_0749e061-1ba8-4923-841e-143fc825427c",
-      "order": 4000
-    },
-    "createdAt": "2026-05-12T04:28:23.801Z"
-  },
-  {
-    "id": "record_62cf35f7-0f2f-4179-83c0-e35632ce26d3",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_main",
-      "block": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
-      "order": 500
-    },
-    "createdAt": "2026-05-12T04:30:55.995Z"
-  },
-  {
-    "id": "record_adafde98-6f1b-42b2-a5b4-b54d12d5cb83",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer",
-      "block": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
-      "order": 2000
-    },
-    "createdAt": "2026-05-12T04:31:48.064Z"
-  },
-  {
-    "id": "record_4f205edd-6b96-41da-8f9f-3defac28da1a",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T04:56:24.201Z"
-  },
-  {
-    "id": "record_bbb296c2-25ec-41e8-8da1-9523297d7f2d",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_blog",
-      "block": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T05:02:46.686Z"
-  },
-  {
-    "id": "record_2182aea7-7023-497e-b9d6-ed3b1ab7ee10",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_resume",
-      "block": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T05:04:06.684Z"
-  },
-  {
-    "id": "record_24fbbfd1-6aec-47d4-8909-99e4bcd52895",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T05:16:25.529Z"
-  },
-  {
-    "id": "record_eaf87639-8e8b-4849-8f02-442dba2ef8e3",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "record_692a7ebd-fe3a-4724-9821-9d94255aa29f",
-      "order": 2000
-    },
-    "createdAt": "2026-05-12T05:24:03.945Z"
-  },
-  {
-    "id": "record_aababd9c-df39-475b-8010-ac6a990cd893",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_main",
-      "block": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
-      "order": 750
-    },
-    "createdAt": "2026-05-12T15:14:16.373Z"
-  },
-  {
-    "id": "record_9f4a7ad8-8a9b-4a35-aa97-29af6b7f810d",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_post_draft_notes",
-      "block": "record_30cbf3d3-7f63-44a1-ab29-6a1b9e1b67ee",
-      "order": 1000
-    },
-    "createdAt": "2026-05-13T05:38:22.200Z"
+    "createdAt": "2026-05-14T03:15:47.149Z"
   }
 ]

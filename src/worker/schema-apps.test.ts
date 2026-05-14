@@ -93,7 +93,7 @@ describe("worker schema app definitions", () => {
     });
     expect(valuesFor("rec_site_block_home_feature_agents")).toMatchObject({
       type: "feature",
-      label: "Tools that keep up with the work",
+      label: "Welcome, Humans and Agents",
       alignment: "right",
     });
     expect(valuesFor("rec_site_place_feature_agents_media")).toMatchObject({

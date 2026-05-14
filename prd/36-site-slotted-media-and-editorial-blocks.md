@@ -331,6 +331,7 @@ Possible changed files:
 - `doc/current.md`: note post lists and detail headers render primary images when present.
 - `doc/current.md`: note project lists render primary images when present.
 - `doc/current.md`: note `feature` blocks render label, markdown body, slotted media, and slotted action links.
+- `doc/current.md`: note post and project summary cards render primary images left on desktop, above text on mobile, and fit images without cropping.
 - `doc/roadmap.md`: mirror release-scope facts for slotted media and feature blocks if they remain in first-release scope.
 
 ## Notes
@@ -360,6 +361,11 @@ Possible changed files:
 - 2026-05-14: SME-05 browser smoke: `bun browser --session sme-05` reset `/api/site/reset/seed`, opened `/pages/home`, `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`; home rendered the seeded feature block with one media image and one action link, blog rendered two post summary images, post detail rendered one primary header image, projects rendered three project summary images, and `bun browser --session sme-05 errors` returned no page errors.
 - 2026-05-14: SME-05 blockers: none.
 - 2026-05-14: SME-05 promotion notes: promote source seed examples for slotted post/project primary images and the seeded feature block when global docs are next updated.
+- 2026-05-14: SME maintenance shipped. `ContentSummary` now renders slotted primary images left of label/body on desktop and above label/body on mobile. Summary images use source aspect ratio, bounded media sizing, and `object-contain` so they fit without cropping.
+- 2026-05-14: SME maintenance evidence: `devstate check` passed; `.devstate/logs/service-test.txt` reported watch tests passing and `.devstate/logs/check-vite.txt` reported formatting plus lint/type checks passed.
+- 2026-05-14: SME maintenance browser smoke: `bun browser --session content-summary-layout` reset Site seed, opened `/pages/blog`, measured first post summary at 1024px with media/content same top and media left of content, measured 390px with media above content, confirmed summary image `object-fit: contain`, and `bun browser --session content-summary-layout errors` returned no page errors.
+- 2026-05-14: SME maintenance blockers: none.
+- 2026-05-14: SME maintenance promotion notes: promote public summary card image layout and fit behavior when global docs are next updated.
 - 2026-05-14: User asked for primary images on posts and projects.
 - 2026-05-14: User asked for a generic left/right image plus label/body block with possible CTA links.
 - 2026-05-14: User asked whether named template slots push beyond the everything-is-blocks model.

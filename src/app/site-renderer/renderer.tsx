@@ -417,7 +417,7 @@ function FeatureBlock({ block }: { block: SiteBlockNode }) {
       {actions.length > 0 ? (
         <nav
           aria-label={`${block.label} actions`}
-          className="flex flex-wrap items-center gap-3 pt-1"
+          className="flex flex-col gap-3"
           data-site-feature-actions
         >
           <SitePlacementList placements={actions} />
@@ -527,7 +527,7 @@ function ContentListBlock({ block }: { block: SiteBlockNode }) {
         <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
       ) : null}
       {items.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex-col flex gap-4">
           {items.map((item) => (
             <ContentSummary key={item.id} block={item} />
           ))}
@@ -564,28 +564,41 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
           <span className="sr-only">{block.label}</span>
         </a>
       ) : null}
-      <div className="pointer-events-none relative z-20 space-y-3">
-        {primaryImage ? <PrimaryImage placement={primaryImage} variant="summary" /> : null}
-        {shouldRenderDate ? (
-          <time
-            className="block text-xs font-medium text-zinc-500 dark:text-zinc-400"
-            dateTime={block.date}
-          >
-            {block.date}
-          </time>
+      <div
+        className={
+          primaryImage
+            ? "pointer-events-none relative z-20 grid gap-4 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)] sm:items-start md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]"
+            : "pointer-events-none relative z-20 space-y-3"
+        }
+        data-site-summary-layout={primaryImage ? "media-start" : "text-only"}
+      >
+        {primaryImage ? (
+          <div className="w-full max-w-md sm:max-w-none" data-site-summary-media>
+            <PrimaryImage placement={primaryImage} variant="summary" />
+          </div>
         ) : null}
-        <h3 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-          <span
-            className={
-              href
-                ? "underline decoration-transparent underline-offset-4 group-hover:decoration-current"
-                : undefined
-            }
-          >
-            {block.label}
-          </span>
-        </h3>
-        <ContentSummaryBody block={block} />
+        <div className="space-y-3" data-site-summary-content>
+          {shouldRenderDate ? (
+            <time
+              className="block text-xs font-medium text-zinc-500 dark:text-zinc-400"
+              dateTime={block.date}
+            >
+              {block.date}
+            </time>
+          ) : null}
+          <h3 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+            <span
+              className={
+                href
+                  ? "underline decoration-transparent underline-offset-4 group-hover:decoration-current"
+                  : undefined
+              }
+            >
+              {block.label}
+            </span>
+          </h3>
+          <ContentSummaryBody block={block} />
+        </div>
       </div>
     </article>
   );
@@ -605,6 +618,14 @@ function PrimaryImage({
   }
 
   const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "4 / 3";
+  const imageClassName =
+    variant === "summary"
+      ? "block h-auto max-h-64 w-full object-contain sm:max-h-52"
+      : "h-full w-full object-cover";
+  const placeholderClassName =
+    variant === "summary"
+      ? "flex min-h-32 items-center justify-center bg-teal-100 p-4 text-center text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"
+      : "flex min-h-48 items-center justify-center bg-teal-100 p-6 text-center text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100";
 
   return (
     <figure
@@ -614,18 +635,14 @@ function PrimaryImage({
       {block.href ? (
         <img
           alt={block.label}
-          className="h-full w-full object-cover"
+          className={imageClassName}
           height={block.height}
           src={block.href}
           style={{ aspectRatio }}
           width={block.width}
         />
       ) : (
-        <div
-          aria-label={block.label}
-          className="flex min-h-48 items-center justify-center bg-teal-100 p-6 text-center text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"
-          style={{ aspectRatio }}
-        >
+        <div aria-label={block.label} className={placeholderClassName} style={{ aspectRatio }}>
           <span>{block.label}</span>
         </div>
       )}
