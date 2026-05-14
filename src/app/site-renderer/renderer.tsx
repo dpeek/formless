@@ -51,10 +51,9 @@ export function SitePageRenderer({
 
 function SiteRoutePage({ tree }: { tree: SitePageTree }) {
   switch (tree.route?.kind) {
-    case "post-index":
-      return <PostIndexPage page={tree.page} />;
     case "post":
       return <ContentDetailPage block={tree.page} />;
+    case "post-index":
     case "page":
     default:
       return <PagePlacementFlow page={tree.page} />;
@@ -93,6 +92,9 @@ function SiteBlockRenderer({
       return <LinkBlock block={block} placement={placement} />;
     case "image":
       return <ImageBlock block={block} />;
+    case "postList":
+    case "projectList":
+      return <ContentListBlock block={block} />;
     case "post":
     case "project":
     case "profile":
@@ -106,51 +108,13 @@ function PageBlock({ block }: { block: SiteBlockNode }) {
   return <PagePlacementFlow page={block} />;
 }
 
-function PageIntro({ block }: { block: SiteBlockNode }) {
-  return (
-    <header className="max-w-3xl space-y-4">
-      <h1 className="text-4xl font-semibold tracking-normal text-zinc-950 dark:text-zinc-50">
-        {block.label}
-      </h1>
-      {block.body ? (
-        <PlainText text={block.body} className="text-base text-zinc-600 dark:text-zinc-300" />
-      ) : null}
-    </header>
-  );
-}
-
-function PostIndexPage({ page }: { page: SiteBlockNode }) {
-  return (
-    <PageMain>
-      <PageIntro block={page} />
-      {page.placements.length > 0 ? (
-        <section className="grid gap-4 md:grid-cols-2" aria-label={page.label}>
-          {page.placements.map((placement) => (
-            <SitePlacementRenderer key={placement.id} placement={placement} />
-          ))}
-        </section>
-      ) : (
-        <p className="text-sm text-zinc-600">No posts published yet.</p>
-      )}
-    </PageMain>
-  );
-}
-
 function ContentDetailPage({ block }: { block: SiteBlockNode }) {
-  const hasBodyPlacements = block.placements.length > 0;
-
   return (
     <PageMain>
       <header className="max-w-3xl space-y-4">
         <h1 className="text-4xl font-semibold tracking-normal text-zinc-950 dark:text-zinc-50">
           {block.label}
         </h1>
-        {!hasBodyPlacements && block.body ? (
-          <PlainText
-            text={block.body}
-            className="text-base leading-7 text-zinc-700 dark:text-zinc-300"
-          />
-        ) : null}
       </header>
       {block.placements.map((placement) => (
         <SitePlacementRenderer key={placement.id} placement={placement} />
@@ -417,6 +381,29 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
   );
 }
 
+function ContentListBlock({ block }: { block: SiteBlockNode }) {
+  const items = block.query?.items ?? [];
+
+  return (
+    <section className="space-y-4" data-site-content-list={block.type}>
+      {block.label ? (
+        <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
+      ) : null}
+      {items.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {items.map((item) => (
+            <ContentSummary key={item.id} block={item} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          No published {block.type === "projectList" ? "projects" : "posts"} yet.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ContentSummary({ block }: { block: SiteBlockNode }) {
   const linkMode = useSitePageLinkMode();
   const href = blockHref(block, linkMode);
@@ -441,6 +428,14 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
       data-block-type={block.type}
     >
       <div className="space-y-2">
+        {block.date ? (
+          <time
+            className="block text-xs font-medium text-zinc-500 dark:text-zinc-400"
+            dateTime={block.date}
+          >
+            {block.date}
+          </time>
+        ) : null}
         {title}
         <ContentSummaryBody block={block} />
       </div>
@@ -501,13 +496,9 @@ function PagePlacementFlow({ page }: { page: SiteBlockNode }) {
 
   return (
     <PageMain>
-      {bodyPlacements.length === 0 ? (
-        <PageIntro block={page} />
-      ) : (
-        bodyPlacements.map((placement) => (
-          <SitePlacementRenderer key={placement.id} placement={placement} />
-        ))
-      )}
+      {bodyPlacements.map((placement) => (
+        <SitePlacementRenderer key={placement.id} placement={placement} />
+      ))}
     </PageMain>
   );
 }

@@ -147,6 +147,63 @@ function footerLinkHtml(footerHtml: string, href: string): string {
   return footerHtml.slice(linkStart, linkEnd + "</a>".length);
 }
 
+function mainHtml(html: string): string {
+  const start = html.indexOf("<main ");
+  const end = html.indexOf("</main>", start);
+
+  if (start === -1 || end === -1) {
+    throw new Error("Missing public site main element.");
+  }
+
+  return html.slice(start, end + "</main>".length);
+}
+
+function recordsWithContentListBlocks(
+  records: StoredRecord[] = testSiteSeedRecords,
+): StoredRecord[] {
+  return [
+    ...records,
+    siteBlockRecord("rec_site_block_blog_posts", {
+      type: "postList",
+      label: "Latest posts",
+    }),
+    siteBlockRecord("rec_site_block_projects_index", {
+      type: "projectList",
+      label: "Project index",
+    }),
+    blockPlacementRecord(
+      "rec_site_place_blog_posts",
+      "rec_site_content_blog",
+      "rec_site_block_blog_posts",
+      1000,
+    ),
+    blockPlacementRecord(
+      "rec_site_place_projects_index",
+      "rec_site_content_projects",
+      "rec_site_block_projects_index",
+      1000,
+    ),
+  ];
+}
+
+function blockPlacementRecord(
+  id: string,
+  parent: string,
+  block: string,
+  order: number,
+): StoredRecord {
+  return {
+    id,
+    entity: "blockPlacement",
+    values: {
+      parent,
+      block,
+      order,
+    },
+    createdAt: "2026-05-05T00:00:40.000Z",
+  };
+}
+
 function requestUrl(input: Parameters<typeof fetch>[0]) {
   if (typeof input === "string") {
     return input;
@@ -827,18 +884,56 @@ describe("public site renderer", () => {
     expect(html).toContain("Formless makes app schema describe enough behavior");
   });
 
-  it("renders /blog as a regular page route", () => {
+  it("does not render page root label or body copy on regular page routes", () => {
     const html = renderSitePage("blog");
+    const main = mainHtml(html);
 
     expect(html).toContain("Blog");
-    expect(html).toContain("Notes on product engineering");
+    expect(main).not.toContain("Blog");
+    expect(main).not.toContain("Notes on product engineering");
     expect(html).not.toContain('href="/pages/blog/generated-editorial-tools"');
     expect(html).not.toContain('href="/pages/blog/shipping-schema-backed-authoring"');
   });
 
+  it("renders post and project list blocks from public tree query items", () => {
+    const records = recordsWithContentListBlocks(
+      testSiteSeedRecords.filter(
+        (record) =>
+          ![
+            "rec_site_place_projects_estii",
+            "rec_site_place_projects_opensurf",
+            "rec_site_place_projects_formless",
+          ].includes(record.id),
+      ),
+    );
+
+    const blogHtml = renderSitePage("blog", records);
+    const projectsHtml = renderSitePage("projects", records);
+
+    expect(blogHtml).toContain('data-site-content-list="postList"');
+    expect(blogHtml).toContain("Latest posts");
+    expect(blogHtml).toContain("Shipping schema-backed authoring");
+    expect(blogHtml).toContain('href="/pages/blog/shipping-schema-backed-authoring"');
+    expect(blogHtml).toContain("Draft notes on generated editorial tools");
+    expect(blogHtml).toContain("2026-05-13");
+    expect(blogHtml).toContain("2026-05-06");
+
+    expect(projectsHtml).toContain('data-site-content-list="projectList"');
+    expect(projectsHtml).toContain("Project index");
+    expect(projectsHtml).toContain("OpenSurf");
+    expect(projectsHtml).toContain('href="/pages/projects/opensurf"');
+    expect(projectsHtml).toContain("Formless");
+    expect(projectsHtml).toContain("Estii");
+    expect(projectsHtml.indexOf("2026-05-08")).toBeLessThan(projectsHtml.indexOf("2026-05-03"));
+    expect(projectsHtml.indexOf("2026-05-03")).toBeLessThan(projectsHtml.indexOf("2026-05-01"));
+  });
+
   it("renders /projects as manually placed project summaries with markdown bodies", () => {
     const html = renderSitePage("projects");
+    const main = mainHtml(html);
 
+    expect(main).not.toContain("Projects");
+    expect(main).not.toContain("Current and recent product work");
     expect(html).toContain("Estii");
     expect(html).toContain("OpenSurf");
     expect(html).toContain("Formless");
@@ -855,10 +950,24 @@ describe("public site renderer", () => {
   });
 
   it("renders post detail routes through the Site frame", () => {
-    const html = renderSitePage("blog/shipping-schema-backed-authoring");
+    const records = testSiteSeedRecords.map((record) => {
+      if (record.id !== "rec_site_content_post_shipped_schema") {
+        return record;
+      }
+
+      return {
+        ...record,
+        values: {
+          ...record.values,
+          body: "Summary-only copy for list cards.",
+        },
+      };
+    });
+    const html = renderSitePage("blog/shipping-schema-backed-authoring", records);
 
     expect(html).toContain("Home");
     expect(html).toContain("Shipping schema-backed authoring");
+    expect(html).not.toContain("Summary-only copy for list cards.");
     expect(html).toContain(
       "The first useful content app should keep records flat and move composition into relationships and views.",
     );

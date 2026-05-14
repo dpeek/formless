@@ -1,7 +1,7 @@
 # PRD 35: Site regular pages and content lists
 
 Status: ready
-Current chunk: SCL-02 ready
+Current chunk: SCL-03 ready
 Last updated: 2026-05-14
 
 ## Goal
@@ -360,7 +360,7 @@ Possible changed files:
 | ID     | Status  | Depends on | Scope             | Summary                                                                                          |
 | ------ | ------- | ---------- | ----------------- | ------------------------------------------------------------------------------------------------ |
 | SCL-01 | shipped | none       | schema, tree      | Add `date`, `postList`, `projectList`; make `/blog` regular; keep dated post detail routing.     |
-| SCL-02 | ready   | SCL-01     | renderer, tests   | Render list blocks, suppress page root label/body, keep post detail label-only heading behavior. |
+| SCL-02 | shipped | SCL-01     | renderer, tests   | Render list blocks, suppress page root label/body, keep post detail label-only heading behavior. |
 | SCL-03 | ready   | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
 | SCL-04 | ready   | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
 | SCL-05 | ready   | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
@@ -373,7 +373,11 @@ Possible changed files:
 - Changed post detail route resolution to require a dated live post.
 - Changed public tree projection so manually placed posts/projects and list items require `date`.
 - Projected list block items through `SiteBlockNode.query.items`, sorted by `date` descending.
-- Renderer-specific cleanup remains in SCL-02; `post-index` protocol/renderer compatibility branch is still present but no longer emitted by the route/tree layer.
+- 2026-05-14 SCL-02 shipped.
+- Public renderer now renders `postList` and `projectList` query items as dated content cards.
+- Public page routes now render only child placements, not root `page.label` or `page.body`.
+- Public post detail routes render the post heading and child placements, not `post.body`.
+- `post-index` renderer compatibility now falls through to normal page placement rendering.
 - Blockers: none.
 
 ## Evidence
@@ -381,6 +385,13 @@ Possible changed files:
 - 2026-05-14 SCL-01 `devstate check`: checks ok, services running, tests pass.
 - 2026-05-14 SCL-01 browser smoke reset Site schema and seed, then opened `/pages/home`, `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`.
 - 2026-05-14 SCL-01 browser smoke: `bun browser --session scl-01 errors` returned no page errors.
+- 2026-05-14 SCL-02 `devstate check`: checks ok, services running, test watcher pass.
+- 2026-05-14 SCL-02 test watcher: `src/app.test.tsx` passed 137 tests.
+- 2026-05-14 SCL-02 browser smoke reset Site schema and seed with `200` responses, opened `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`.
+- 2026-05-14 SCL-02 browser smoke: `/pages/blog` did not include root body copy `Notes on product engineering`.
+- 2026-05-14 SCL-02 browser smoke: `/pages/blog/agents-are-enablers` rendered `Agents are enablers` and child markdown `Test1`, and did not render post summary copy.
+- 2026-05-14 SCL-02 browser smoke: `/pages/projects` rendered projects and did not include root body copy `Current and recent product work`.
+- 2026-05-14 SCL-02 browser smoke: `bun browser --session scl-02 errors` returned no page errors.
 
 ## Out of Scope
 
@@ -404,6 +415,9 @@ Possible changed files:
 - SCL-01 promote: `/blog` resolves through the normal page route path; generated post-index route projection is no longer emitted by the tree layer.
 - SCL-01 promote: `/blog/:slug` still resolves post detail routes and now requires a dated live post.
 - SCL-01 promote: public tree list projection hides tombstoned or undated posts/projects and sorts dated items by `date` descending.
+- SCL-02 promote: public renderer renders `postList` and `projectList` query items as content cards with optional dates.
+- SCL-02 promote: public page routes render only child placements, not root `page.label` or `page.body`.
+- SCL-02 promote: post detail routes render `post.label` and child placements, not `post.body`.
 - `doc/current.md`: note Blog and Projects are regular pages composed from blocks.
 - `doc/current.md`: note `postList` and `projectList` blocks render dated public content.
 - `doc/current.md`: note `block.date` controls public post/project list visibility and order.
