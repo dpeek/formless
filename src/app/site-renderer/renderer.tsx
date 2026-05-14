@@ -27,6 +27,8 @@ type PublicSiteThemeController = {
 
 const SITE_THEME_STORAGE_KEY = "formless:public-site:theme";
 const PRIMARY_IMAGE_SLOT = "primaryImage";
+const FEATURE_MEDIA_SLOT = "media";
+const FEATURE_ACTIONS_SLOT = "actions";
 
 export function SitePageRenderer({
   linkMode = "preview",
@@ -100,6 +102,8 @@ function SiteBlockRenderer({
       return <GroupBlock block={block} placement={placement} />;
     case "hero":
       return <HeroBlock block={block} />;
+    case "feature":
+      return <FeatureBlock block={block} />;
     case "markdown":
       return <MarkdownBlock block={block} />;
     case "link":
@@ -383,6 +387,75 @@ function HeroBlock({ block }: { block: SiteBlockNode }) {
   );
 }
 
+function FeatureBlock({ block }: { block: SiteBlockNode }) {
+  const media = slottedPlacements(block, FEATURE_MEDIA_SLOT, "image");
+  const actions = slottedPlacements(block, FEATURE_ACTIONS_SLOT, "link");
+  const defaultPlacements = block.placements.filter(isDefaultPlacement);
+  const mediaSide = featureMediaSide(block);
+  const mediaNode =
+    media.length > 0 ? (
+      <div className="grid gap-4" data-site-feature-media>
+        {media.map((placement) => (
+          <SitePlacementRenderer key={placement.id} placement={placement} />
+        ))}
+      </div>
+    ) : null;
+  const contentNode = (
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <h2 className="text-3xl font-semibold tracking-normal text-zinc-950 dark:text-zinc-50">
+          {block.label}
+        </h2>
+        {block.body ? (
+          <MarkdownRenderer
+            className="text-base leading-7 text-zinc-700 dark:text-zinc-300"
+            content={block.body}
+            minHeadingLevel={3}
+          />
+        ) : null}
+      </div>
+      {actions.length > 0 ? (
+        <nav
+          aria-label={`${block.label} actions`}
+          className="flex flex-wrap items-center gap-3 pt-1"
+          data-site-feature-actions
+        >
+          <SitePlacementList placements={actions} />
+        </nav>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <section
+      className="space-y-5"
+      data-block-type={block.type}
+      data-site-feature-alignment={mediaSide}
+    >
+      {mediaNode ? (
+        <div className="grid gap-6 md:grid-cols-2 md:items-center">
+          {mediaSide === "left" ? (
+            <>
+              {mediaNode}
+              {contentNode}
+            </>
+          ) : (
+            <>
+              {contentNode}
+              {mediaNode}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="max-w-3xl">{contentNode}</div>
+      )}
+      {defaultPlacements.map((placement) => (
+        <SitePlacementRenderer key={placement.id} placement={placement} />
+      ))}
+    </section>
+  );
+}
+
 function MarkdownBlock({ block }: { block: SiteBlockNode }) {
   return (
     <section className="max-w-3xl space-y-3">
@@ -651,6 +724,12 @@ function mediaPlacements(block: SiteBlockNode): SitePlacementNode[] {
   return block.placements.filter((placement) => placement.block.type === "image");
 }
 
+function slottedPlacements(block: SiteBlockNode, slot: string, type: string): SitePlacementNode[] {
+  return block.placements.filter(
+    (placement) => placement.slot === slot && placement.block.type === type,
+  );
+}
+
 function placementIdSet(placements: SitePlacementNode[]): Set<string> {
   return new Set(placements.map((placement) => placement.id));
 }
@@ -663,6 +742,10 @@ function primaryImagePlacement(block: SiteBlockNode): SitePlacementNode | undefi
 
 function isDefaultPlacement(placement: SitePlacementNode): boolean {
   return !placement.slot;
+}
+
+function featureMediaSide(block: SiteBlockNode): "left" | "right" {
+  return block.alignment === "right" ? "right" : "left";
 }
 
 function partitionHeaderPlacements(placements: SitePlacementNode[]): {

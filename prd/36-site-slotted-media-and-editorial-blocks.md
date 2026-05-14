@@ -1,7 +1,7 @@
 # PRD 36: Site slotted media and editorial blocks
 
 Status: ready
-Current chunk: SME-03 ready
+Current chunk: SME-04 ready
 Last updated: 2026-05-14
 
 ## Goal
@@ -298,7 +298,7 @@ Possible changed files:
 | ------ | ------- | -------------- | ----------------- | ------------------------------------------------------------------------------------------- |
 | SME-01 | shipped | PRD 35 SCL-01  | schema, protocol  | Add `blockPlacement.slot`, `feature` type, feature alignment, and public slot projection.   |
 | SME-02 | shipped | SME-01, SCL-02 | tree, renderer    | Render post/project primary images in list cards and post primary images in detail headers. |
-| SME-03 | ready   | SME-01         | renderer, schema  | Add feature block rendering with media/action slots and left/right desktop alignment.       |
+| SME-03 | shipped | SME-01         | renderer, schema  | Add feature block rendering with media/action slots and left/right desktop alignment.       |
 | SME-04 | ready   | SME-01         | generated tree UI | Add slot-aware tree child creation for primary images, feature media, and feature actions.  |
 | SME-05 | ready   | SME-02, SME-03 | seed, browser     | Update Site seed with primary images and at least one feature block; run browser smoke.     |
 
@@ -345,6 +345,11 @@ Possible changed files:
 - 2026-05-14: SME-02 browser smoke: `bun browser --session sme-02` opened `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`; pages rendered expected public content and `bun browser --session sme-02 errors` returned no page errors.
 - 2026-05-14: SME-02 blockers: none.
 - 2026-05-14: SME-02 promotion notes: promote post and project primary images as slotted image child blocks; promote post/project list cards and post detail headers rendering primary images when present.
+- 2026-05-14: SME-03 shipped. Public `feature` blocks now render the block label, markdown body, ordered `media` slot image placements, ordered `actions` slot link placements, and left/right media alignment. Default-slot feature child placements render after the main feature content; unsupported named slots stay ignored by the first-slice renderer.
+- 2026-05-14: SME-03 evidence: `devstate check` passed; `.devstate/logs/service-test.txt` reported `src/app.test.tsx` 142 passed; `.devstate/logs/check-vite.txt` reported formatting plus lint/type checks passed. Required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; `devstate` wrote `.devstate/status.md` and `.devstate/logs/*`.
+- 2026-05-14: SME-03 browser smoke: `bun browser --session sme-03` opened `/pages/home`, loaded public Site main content, and `bun browser --session sme-03 errors` returned no page errors.
+- 2026-05-14: SME-03 blockers: none.
+- 2026-05-14: SME-03 promotion notes: promote `feature` blocks rendering label, markdown body, slotted media images, slotted action links, and media-side alignment before global docs are updated.
 - 2026-05-14: User asked for primary images on posts and projects.
 - 2026-05-14: User asked for a generic left/right image plus label/body block with possible CTA links.
 - 2026-05-14: User asked whether named template slots push beyond the everything-is-blocks model.

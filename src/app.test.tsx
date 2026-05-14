@@ -1122,6 +1122,124 @@ describe("public site renderer", () => {
     );
   });
 
+  it("renders feature blocks with slotted media, markdown copy, and action links", () => {
+    const records: StoredRecord[] = [
+      ...testSiteSeedRecords,
+      siteBlockRecord("rec_site_block_feature_right", {
+        type: "feature",
+        label: "Ship composable blocks",
+        body: "Use **slotted media** with [clear CTAs](https://example.com/feature).",
+        alignment: "right",
+      }),
+      siteBlockRecord("rec_site_media_feature_right", {
+        type: "image",
+        label: "Feature media right",
+        href: "/api/site/media/site/images/feature-right.webp",
+        width: 1200,
+        height: 800,
+      }),
+      siteBlockRecord("rec_site_action_feature_docs", {
+        type: "link",
+        label: "Read the guide",
+        linkTargetMode: "external",
+        href: "https://example.com/guide",
+      }),
+      siteBlockRecord("rec_site_block_feature_default", {
+        type: "markdown",
+        label: "Follow-up",
+        body: "Default child copy.",
+      }),
+      siteBlockRecord("rec_site_block_feature_ignored", {
+        type: "markdown",
+        label: "Ignored slot",
+        body: "Ignored slot copy.",
+      }),
+      siteBlockRecord("rec_site_block_feature_left", {
+        type: "feature",
+        label: "Media first feature",
+        body: "Left media body.",
+        alignment: "left",
+      }),
+      siteBlockRecord("rec_site_media_feature_left", {
+        type: "image",
+        label: "Feature media left",
+        href: "/api/site/media/site/images/feature-left.webp",
+        width: 1000,
+        height: 750,
+      }),
+      blockPlacementRecord(
+        "rec_site_place_home_feature_right",
+        "rec_site_content_home",
+        "rec_site_block_feature_right",
+        1600,
+      ),
+      blockPlacementRecord(
+        "rec_site_place_feature_right_media",
+        "rec_site_block_feature_right",
+        "rec_site_media_feature_right",
+        100,
+        { slot: "media" },
+      ),
+      blockPlacementRecord(
+        "rec_site_place_feature_right_action",
+        "rec_site_block_feature_right",
+        "rec_site_action_feature_docs",
+        200,
+        { slot: "actions" },
+      ),
+      blockPlacementRecord(
+        "rec_site_place_feature_right_default",
+        "rec_site_block_feature_right",
+        "rec_site_block_feature_default",
+        300,
+      ),
+      blockPlacementRecord(
+        "rec_site_place_feature_right_ignored",
+        "rec_site_block_feature_right",
+        "rec_site_block_feature_ignored",
+        400,
+        { slot: "aside" },
+      ),
+      blockPlacementRecord(
+        "rec_site_place_home_feature_left",
+        "rec_site_content_home",
+        "rec_site_block_feature_left",
+        1700,
+      ),
+      blockPlacementRecord(
+        "rec_site_place_feature_left_media",
+        "rec_site_block_feature_left",
+        "rec_site_media_feature_left",
+        100,
+        { slot: "media" },
+      ),
+    ];
+    const html = renderSitePage("home", records);
+    const actionHtml = linkHtml(html, "https://example.com/guide");
+
+    expect(html).toContain('data-block-type="feature"');
+    expect(html).toContain('data-site-feature-alignment="right"');
+    expect(html).toContain('data-site-feature-alignment="left"');
+    expect(html).toContain("data-site-feature-media");
+    expect(html).toContain("data-site-feature-actions");
+    expect(html).toContain("Ship composable blocks");
+    expect(html).toContain('href="https://example.com/feature"');
+    expect(html).toContain("<strong");
+    expect(html).not.toContain("**slotted media**");
+    expect(actionHtml).toContain("Read the guide");
+    expect(actionHtml).toContain("underline");
+    expect(html).toContain("/api/site/media/site/images/feature-right.webp");
+    expect(html).toContain("/api/site/media/site/images/feature-left.webp");
+    expect(html.indexOf("Ship composable blocks")).toBeLessThan(
+      html.indexOf('src="/api/site/media/site/images/feature-right.webp"'),
+    );
+    expect(html.indexOf('src="/api/site/media/site/images/feature-left.webp"')).toBeLessThan(
+      html.indexOf("Media first feature"),
+    );
+    expect(html).toContain("Default child copy.");
+    expect(html).not.toContain("Ignored slot copy.");
+  });
+
   it("renders public markdown block bodies with the shared markdown renderer", () => {
     const records: StoredRecord[] = [
       ...testSiteSeedRecords,
