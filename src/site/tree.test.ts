@@ -638,6 +638,128 @@ describe("site page tree projection", () => {
     expect(postList.query?.items.map((item) => item.date)).toEqual(["2026-05-13", "2026-05-06"]);
   });
 
+  it("projects ordered primary image placements on post and project list items", () => {
+    const records = [
+      ...baseTreeRecords().filter(
+        (record) =>
+          ![
+            "rec_site_place_projects_estii",
+            "rec_site_place_projects_opensurf",
+            "rec_site_place_projects_formless",
+          ].includes(record.id),
+      ),
+      blockRecord("rec_site_block_blog_posts", {
+        type: "postList",
+        label: "Latest posts",
+      }),
+      blockRecord("rec_site_block_project_list", {
+        type: "projectList",
+        label: "Project index",
+      }),
+      blockRecord("rec_site_media_post_first", {
+        type: "image",
+        label: "Post primary first",
+        href: "/api/site/media/site/images/post-first.webp",
+        width: 1600,
+        height: 900,
+      }),
+      blockRecord("rec_site_media_post_second", {
+        type: "image",
+        label: "Post primary second",
+        href: "/api/site/media/site/images/post-second.webp",
+        width: 1600,
+        height: 900,
+      }),
+      blockRecord("rec_site_media_project_first", {
+        type: "image",
+        label: "Project primary first",
+        href: "/api/site/media/site/images/project-first.webp",
+        width: 1200,
+        height: 900,
+      }),
+      placementRecord(
+        "rec_site_place_blog_posts",
+        "rec_site_content_blog",
+        "rec_site_block_blog_posts",
+        {
+          order: 1000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_projects_project_list",
+        "rec_site_content_projects",
+        "rec_site_block_project_list",
+        {
+          order: 1000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_post_default_image",
+        "rec_site_content_post_shipped_schema",
+        "rec_site_media_avatar",
+        {
+          order: 50,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_post_primary_second",
+        "rec_site_content_post_shipped_schema",
+        "rec_site_media_post_second",
+        {
+          order: 200,
+          slot: "primaryImage",
+        },
+      ),
+      placementRecord(
+        "rec_site_place_post_primary_first",
+        "rec_site_content_post_shipped_schema",
+        "rec_site_media_post_first",
+        {
+          order: 100,
+          slot: "primaryImage",
+        },
+      ),
+      placementRecord(
+        "rec_site_place_project_primary_first",
+        "rec_site_content_project_opensurf",
+        "rec_site_media_project_first",
+        {
+          order: 100,
+          slot: "primaryImage",
+        },
+      ),
+    ];
+    const blogTree = requireTree(
+      buildSitePageTree(siteSourceSchema, records, "blog", { generatedAt }),
+    );
+    const projectsTree = requireTree(
+      buildSitePageTree(siteSourceSchema, records, "projects", { generatedAt }),
+    );
+    const postList = childForPlacement(blogTree.page, "rec_site_place_blog_posts");
+    const projectList = childForPlacement(
+      projectsTree.page,
+      "rec_site_place_projects_project_list",
+    );
+    const post = postList.query?.items.find(
+      (item) => item.id === "rec_site_content_post_shipped_schema",
+    );
+    const project = projectList.query?.items.find(
+      (item) => item.id === "rec_site_content_project_opensurf",
+    );
+
+    expect(post?.placements.map((placement) => [placement.id, placement.slot])).toEqual([
+      ["rec_site_place_post_primary_first", "primaryImage"],
+      ["rec_site_place_post_primary_second", "primaryImage"],
+    ]);
+    expect(post?.placements.map((placement) => placement.block.type)).toEqual(["image", "image"]);
+    expect(project?.placements.map((placement) => [placement.id, placement.slot])).toEqual([
+      ["rec_site_place_project_primary_first", "primaryImage"],
+    ]);
+    expect(project?.placements.map((placement) => placement.block.href)).toEqual([
+      "/api/site/media/site/images/project-first.webp",
+    ]);
+  });
+
   it("resolves post detail routes under /blog", () => {
     const tree = requireTree(
       buildSitePageTree(

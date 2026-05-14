@@ -43,6 +43,7 @@ type SiteTreeBuildContext = {
 };
 
 const DEFAULT_MAX_DEPTH = 16;
+const PRIMARY_IMAGE_SLOT = "primaryImage";
 const LIST_BLOCK_ITEM_TYPES = {
   postList: "post",
   projectList: "project",
@@ -226,11 +227,16 @@ function buildPlacementNodes(
   context: SiteTreeBuildContext,
   depth: number,
   ancestors: Set<string>,
+  filter?: (placement: StoredRecord) => boolean,
 ): SitePlacementNode[] {
   const placements = context.indexes.placementsByParent.get(parentId) ?? [];
   const nodes: SitePlacementNode[] = [];
 
   for (const placement of placements) {
+    if (filter && !filter(placement)) {
+      continue;
+    }
+
     const childBlockId = stringValue(placement.values.block);
 
     if (!childBlockId) {
@@ -329,13 +335,31 @@ function buildContentListItems(
       (record) => stringValue(record.values.type) === itemType && isPublicRenderableBlock(record),
     )
     .sort(compareDatedContentRecords)
-    .map((record) => projectBlock(record, context));
+    .map((record) => buildContentListItemNode(record, context));
 }
 
 function listItemTypeForBlock(
   type: string,
 ): (typeof LIST_BLOCK_ITEM_TYPES)[keyof typeof LIST_BLOCK_ITEM_TYPES] | undefined {
   return LIST_BLOCK_ITEM_TYPES[type as keyof typeof LIST_BLOCK_ITEM_TYPES];
+}
+
+function buildContentListItemNode(
+  record: StoredRecord,
+  context: SiteTreeBuildContext,
+): SiteBlockNode {
+  const node = projectBlock(record, context);
+  const ancestors = new Set([record.id]);
+
+  node.placements = buildPlacementNodes(
+    record.id,
+    context,
+    0,
+    ancestors,
+    (placement) => stringValue(placement.values.slot) === PRIMARY_IMAGE_SLOT,
+  ).filter((placement) => placement.block.type === "image");
+
+  return node;
 }
 
 function isPublicRenderableBlock(record: StoredRecord): boolean {

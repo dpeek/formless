@@ -207,6 +207,10 @@ function blockPlacementRecord(
   parent: string,
   block: string,
   order: number,
+  options: {
+    label?: string;
+    slot?: string;
+  } = {},
 ): StoredRecord {
   return {
     id,
@@ -215,9 +219,63 @@ function blockPlacementRecord(
       parent,
       block,
       order,
+      ...(options.label === undefined ? {} : { label: options.label }),
+      ...(options.slot === undefined ? {} : { slot: options.slot }),
     },
     createdAt: "2026-05-05T00:00:40.000Z",
   };
+}
+
+function recordsWithPrimaryImages(records: StoredRecord[] = testSiteSeedRecords): StoredRecord[] {
+  return [
+    ...records,
+    siteBlockRecord("rec_site_media_post_primary_first", {
+      type: "image",
+      label: "Shipping primary first",
+      href: "/api/site/media/site/images/post-primary-first.webp",
+      width: 1600,
+      height: 900,
+    }),
+    siteBlockRecord("rec_site_media_post_primary_second", {
+      type: "image",
+      label: "Shipping primary second",
+      href: "/api/site/media/site/images/post-primary-second.webp",
+      width: 1600,
+      height: 900,
+    }),
+    siteBlockRecord("rec_site_media_project_primary", {
+      type: "image",
+      label: "OpenSurf primary",
+      href: "/api/site/media/site/images/project-primary.webp",
+      width: 1200,
+      height: 900,
+    }),
+    blockPlacementRecord(
+      "rec_site_place_post_primary_second",
+      "rec_site_content_post_shipped_schema",
+      "rec_site_media_post_primary_second",
+      200,
+      { slot: "primaryImage" },
+    ),
+    blockPlacementRecord(
+      "rec_site_place_post_primary_first",
+      "rec_site_content_post_shipped_schema",
+      "rec_site_media_post_primary_first",
+      100,
+      { slot: "primaryImage" },
+    ),
+    blockPlacementRecord(
+      "rec_site_place_project_primary",
+      "rec_site_content_project_opensurf",
+      "rec_site_media_project_primary",
+      100,
+      { slot: "primaryImage" },
+    ),
+  ];
+}
+
+function countOccurrences(text: string, search: string): number {
+  return text.split(search).length - 1;
 }
 
 function requestUrl(input: Parameters<typeof fetch>[0]) {
@@ -970,6 +1028,32 @@ describe("public site renderer", () => {
     expect(projectsHtml).not.toContain("2026-05-01");
   });
 
+  it("renders first slotted primary images in post and project list cards", () => {
+    const records = recordsWithPrimaryImages(
+      recordsWithContentListBlocks(
+        testSiteSeedRecords.filter(
+          (record) =>
+            ![
+              "rec_site_place_projects_estii",
+              "rec_site_place_projects_opensurf",
+              "rec_site_place_projects_formless",
+            ].includes(record.id),
+        ),
+      ),
+    );
+    const blogHtml = renderSitePage("blog", records);
+    const projectsHtml = renderSitePage("projects", records);
+
+    expect(blogHtml).toContain('data-site-primary-image="summary"');
+    expect(blogHtml).toContain("/api/site/media/site/images/post-primary-first.webp");
+    expect(blogHtml).toContain("Shipping primary first");
+    expect(blogHtml).not.toContain("/api/site/media/site/images/post-primary-second.webp");
+    expect(projectsHtml).toContain('data-site-primary-image="summary"');
+    expect(projectsHtml).toContain("/api/site/media/site/images/project-primary.webp");
+    expect(projectsHtml).toContain("OpenSurf primary");
+    expect(projectsHtml).toContain('href="/pages/projects/opensurf"');
+  });
+
   it("renders /projects as manually placed project summaries with markdown bodies", () => {
     const html = renderSitePage("projects");
     const main = mainHtml(html);
@@ -1020,6 +1104,22 @@ describe("public site renderer", () => {
       "I design and build schema-backed software for teams that need their tools to keep up with the work.",
     );
     expect(html).toContain("GitHub");
+  });
+
+  it("renders post detail primary images once in the header", () => {
+    const records = recordsWithPrimaryImages(testSiteSeedRecords);
+    const html = renderSitePage("blog/shipping-schema-backed-authoring", records);
+
+    expect(html).toContain('data-site-primary-image="post-detail"');
+    expect(html).toContain("/api/site/media/site/images/post-primary-first.webp");
+    expect(html).toContain("Shipping primary first");
+    expect(
+      countOccurrences(html, 'src="/api/site/media/site/images/post-primary-first.webp"'),
+    ).toBe(1);
+    expect(html).not.toContain("/api/site/media/site/images/post-primary-second.webp");
+    expect(html).toContain(
+      "The first useful content app should keep records flat and move composition into relationships and views.",
+    );
   });
 
   it("renders public markdown block bodies with the shared markdown renderer", () => {

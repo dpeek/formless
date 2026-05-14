@@ -26,6 +26,7 @@ type PublicSiteThemeController = {
 };
 
 const SITE_THEME_STORAGE_KEY = "formless:public-site:theme";
+const PRIMARY_IMAGE_SLOT = "primaryImage";
 
 export function SitePageRenderer({
   linkMode = "preview",
@@ -122,14 +123,18 @@ function PageBlock({ block }: { block: SiteBlockNode }) {
 }
 
 function ContentDetailPage({ block }: { block: SiteBlockNode }) {
+  const primaryImage = primaryImagePlacement(block);
+  const bodyPlacements = block.placements.filter(isDefaultPlacement);
+
   return (
     <PageMain>
       <header className="max-w-3xl space-y-4">
         <h1 className="text-4xl font-semibold tracking-normal text-zinc-950 dark:text-zinc-50">
           {block.label}
         </h1>
+        {primaryImage ? <PrimaryImage placement={primaryImage} variant="post-detail" /> : null}
       </header>
-      {block.placements.map((placement) => (
+      {bodyPlacements.map((placement) => (
         <SitePlacementRenderer key={placement.id} placement={placement} />
       ))}
     </PageMain>
@@ -466,6 +471,7 @@ function ContentListBlock({ block }: { block: SiteBlockNode }) {
 function ContentSummary({ block }: { block: SiteBlockNode }) {
   const linkMode = useSitePageLinkMode();
   const href = blockHref(block, linkMode);
+  const primaryImage = primaryImagePlacement(block);
   const shouldRenderDate = Boolean(block.date && block.type !== "project");
 
   return (
@@ -485,7 +491,8 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
           <span className="sr-only">{block.label}</span>
         </a>
       ) : null}
-      <div className="pointer-events-none relative z-20 space-y-2">
+      <div className="pointer-events-none relative z-20 space-y-3">
+        {primaryImage ? <PrimaryImage placement={primaryImage} variant="summary" /> : null}
         {shouldRenderDate ? (
           <time
             className="block text-xs font-medium text-zinc-500 dark:text-zinc-400"
@@ -508,6 +515,48 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
         <ContentSummaryBody block={block} />
       </div>
     </article>
+  );
+}
+
+function PrimaryImage({
+  placement,
+  variant,
+}: {
+  placement: SitePlacementNode;
+  variant: "post-detail" | "summary";
+}) {
+  const block = placement.block;
+
+  if (block.type !== "image") {
+    return null;
+  }
+
+  const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "4 / 3";
+
+  return (
+    <figure
+      className="overflow-hidden rounded-md border border-zinc-200 bg-teal-50 dark:border-zinc-800 dark:bg-teal-950/40"
+      data-site-primary-image={variant}
+    >
+      {block.href ? (
+        <img
+          alt={block.label}
+          className="h-full w-full object-cover"
+          height={block.height}
+          src={block.href}
+          style={{ aspectRatio }}
+          width={block.width}
+        />
+      ) : (
+        <div
+          aria-label={block.label}
+          className="flex min-h-48 items-center justify-center bg-teal-100 p-6 text-center text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"
+          style={{ aspectRatio }}
+        >
+          <span>{block.label}</span>
+        </div>
+      )}
+    </figure>
   );
 }
 
@@ -604,6 +653,16 @@ function mediaPlacements(block: SiteBlockNode): SitePlacementNode[] {
 
 function placementIdSet(placements: SitePlacementNode[]): Set<string> {
   return new Set(placements.map((placement) => placement.id));
+}
+
+function primaryImagePlacement(block: SiteBlockNode): SitePlacementNode | undefined {
+  return block.placements.find(
+    (placement) => placement.slot === PRIMARY_IMAGE_SLOT && placement.block.type === "image",
+  );
+}
+
+function isDefaultPlacement(placement: SitePlacementNode): boolean {
+  return !placement.slot;
 }
 
 function partitionHeaderPlacements(placements: SitePlacementNode[]): {
