@@ -1,7 +1,7 @@
 # PRD 35: Site regular pages and content lists
 
-Status: ready
-Current chunk: SCL-05 ready
+Status: complete
+Current chunk: SCL-05 shipped
 Last updated: 2026-05-14
 
 ## Goal
@@ -363,7 +363,7 @@ Possible changed files:
 | SCL-02 | shipped | SCL-01     | renderer, tests   | Render list blocks, suppress page root label/body, keep post detail label-only heading behavior. |
 | SCL-03 | shipped | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
 | SCL-04 | shipped | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
-| SCL-05 | ready   | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
+| SCL-05 | shipped | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
 
 ## Status Notes
 
@@ -388,6 +388,10 @@ Possible changed files:
 - Generated tree placement cards now render only Remove placement as a top-right `x` icon button.
 - Generated tree placement cards no longer render Delete child actions, even when child block delete is enabled.
 - Primary Site composition no longer exposes the broad `Add placement` collection action; tree add controls remain available.
+- 2026-05-14 SCL-05 shipped.
+- Source Blog seed now places `rec_site_block_blog_posts` as a `postList` block under the Blog page.
+- Source Projects seed now places `rec_site_block_projects_index` as a `projectList` block under the Projects page.
+- Source Projects seed no longer manually places individual project blocks under the Projects page.
 - Blockers: none.
 
 ## Evidence
@@ -411,6 +415,13 @@ Possible changed files:
 - 2026-05-14 SCL-04 requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` files were absent in this checkout; devstate wrote `.devstate/status.md` and `.devstate/logs/*`.
 - 2026-05-14 SCL-04 browser smoke reset Site schema and seed with `200` responses, opened `/site`, found two `data-formless-tree-remove-placement` controls, found zero `data-formless-tree-delete-child` controls, verified first remove control text `x`, and verified primary `Add placement` text was absent.
 - 2026-05-14 SCL-04 browser smoke: `bun browser --session scl-04 errors` returned no page errors.
+- 2026-05-14 SCL-05 `devstate check`: `.devstate/status.md` reported checks ok and services running; `.devstate/logs/service-test.txt` reported 20 files and 509 tests passed; `.devstate/logs/check-vite.txt` reported formatting, lint, and type checks passed.
+- 2026-05-14 SCL-05 requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` files were absent in this checkout; devstate wrote `.devstate/status.md` and `.devstate/logs/*`.
+- 2026-05-14 SCL-05 browser smoke reset Site schema and seed with `200` responses, then opened `/pages/home`, `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`.
+- 2026-05-14 SCL-05 browser smoke: `/pages/blog` rendered `Latest posts` with dated `Agents are enablers` and `Schema-driven apps` cards.
+- 2026-05-14 SCL-05 browser smoke: `/pages/blog/agents-are-enablers` rendered `Agents are enablers` and child markdown `Test1`, and did not render the post summary copy.
+- 2026-05-14 SCL-05 browser smoke: `/pages/projects` rendered the `Projects` list in date order: Devstate, OpenSurf, Formless, Estii, StreamWolf.
+- 2026-05-14 SCL-05 browser smoke: `bun browser --session scl-05 errors` returned no page errors.
 
 ## Out of Scope
 
@@ -445,6 +456,8 @@ Possible changed files:
 - SCL-03 promote: internal link projection inherits target block icons when a link has no own icon; explicit link icons override target icons.
 - SCL-04 promote: generated tree placement cards show only a top-right `x` remove-placement control and no child delete action.
 - SCL-04 promote: primary Site composition no longer exposes the broad `Add placement` collection action.
+- SCL-05 promote: source Blog seed places a `postList` block under the Blog page.
+- SCL-05 promote: source Projects seed places a `projectList` block under the Projects page instead of manually placing project blocks.
 - `doc/current.md`: note Blog and Projects are regular pages composed from blocks.
 - `doc/current.md`: note `postList` and `projectList` blocks render dated public content.
 - `doc/current.md`: note `block.date` controls public post/project list visibility and order.

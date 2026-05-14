@@ -381,6 +381,24 @@
     "createdAt": "2026-05-13T07:19:58.013Z"
   },
   {
+    "id": "rec_site_block_blog_posts",
+    "entity": "block",
+    "values": {
+      "type": "postList",
+      "label": "Latest posts"
+    },
+    "createdAt": "2026-05-14T01:31:00.000Z"
+  },
+  {
+    "id": "rec_site_block_projects_index",
+    "entity": "block",
+    "values": {
+      "type": "projectList",
+      "label": "Projects"
+    },
+    "createdAt": "2026-05-14T01:31:01.000Z"
+  },
+  {
     "id": "rec_site_place_header_primary",
     "entity": "blockPlacement",
     "values": {
@@ -501,34 +519,24 @@
     "createdAt": "2026-05-05T00:00:26.300Z"
   },
   {
-    "id": "rec_site_place_projects_estii",
+    "id": "rec_site_place_blog_posts",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_projects",
-      "block": "rec_site_content_project_estii",
+      "parent": "rec_site_content_blog",
+      "block": "rec_site_block_blog_posts",
       "order": 2000
     },
-    "createdAt": "2026-05-05T00:00:29.600Z"
+    "createdAt": "2026-05-14T01:31:02.000Z"
   },
   {
-    "id": "rec_site_place_projects_opensurf",
+    "id": "rec_site_place_projects_index",
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_projects",
-      "block": "rec_site_content_project_opensurf",
-      "order": 3000
+      "block": "rec_site_block_projects_index",
+      "order": 2000
     },
-    "createdAt": "2026-05-05T00:00:29.700Z"
-  },
-  {
-    "id": "rec_site_place_projects_formless",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "rec_site_content_project_formless",
-      "order": 4000
-    },
-    "createdAt": "2026-05-05T00:00:29.800Z"
+    "createdAt": "2026-05-14T01:31:03.000Z"
   },
   {
     "id": "rec_site_place_post_body",
@@ -649,25 +657,5 @@
       "order": 1000
     },
     "createdAt": "2026-05-13T05:38:22.200Z"
-  },
-  {
-    "id": "record_9cb2db64-4f6e-4150-92f9-4484d96127cc",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "record_95f5f21a-521f-48ba-a725-bc43e6d78d2d",
-      "order": 3500
-    },
-    "createdAt": "2026-05-13T05:58:51.590Z"
-  },
-  {
-    "id": "record_6ee266c3-2267-4c97-a445-20697fa5d968",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "record_ec81c3b8-929d-48e3-a4a2-63a185c54ede",
-      "order": 5000
-    },
-    "createdAt": "2026-05-13T07:20:13.613Z"
   }
 ]
