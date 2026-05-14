@@ -45,7 +45,6 @@ import {
   type ResultOrderingDragFact,
 } from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
-import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 import {
@@ -397,8 +396,9 @@ function PlacementTreeItem({
       data-formless-sortable-tree-placement={placement.id}
       ref={itemRef}
     >
-      <div className="rounded border border-slate-200 bg-white">
-        <div className="grid min-w-0 gap-3 p-3">
+      <div className="relative rounded border border-slate-200 bg-white">
+        <TreePlacementActions entityName={entityName} placement={placement} result={result} />
+        <div className="grid min-w-0 gap-3 p-3 pr-8">
           <div className="flex min-w-0 items-start gap-2">
             <PlacementOrderingControls
               index={index}
@@ -427,12 +427,6 @@ function PlacementTreeItem({
               ) : null}
               <TreeReadinessWarnings recordId={placement.id} />
               {childRecord ? <TreeReadinessWarnings recordId={childRecord.id} /> : null}
-              <TreePlacementActions
-                childRecord={childRecord}
-                entityName={entityName}
-                placement={placement}
-                result={result}
-              />
             </div>
           </div>
         </div>
@@ -545,39 +539,21 @@ function TreeChildAddControls({
 }
 
 function TreePlacementActions({
-  childRecord,
   entityName,
   placement,
   result,
 }: {
-  childRecord: StoredRecord | undefined;
   entityName: string;
   placement: StoredRecord;
   result: TreeResultConfig;
 }) {
-  const canDeleteChild = childRecord !== undefined && result.childEntity.mutations.delete.enabled;
-
-  if (!result.composition?.remove && !canDeleteChild) {
+  if (!result.composition?.remove) {
     return null;
   }
 
   return (
-    <div className="flex justify-end gap-2">
+    <div className="absolute right-2 top-2">
       <TreePlacementRemoveButton entityName={entityName} placement={placement} result={result} />
-      {childRecord && canDeleteChild ? (
-        <DeleteRecordButton
-          ariaLabel={`Delete child ${result.childEntity.label.toLowerCase()}`}
-          entityLabel={result.childEntity.label}
-          entityName={result.childEntityName}
-          labelFields={selectRecordFieldsForActiveUnion(
-            result.childRecordFields,
-            result.childRecordUnion,
-            childRecord,
-          )}
-          recordId={childRecord.id}
-          triggerData={{ "data-formless-tree-delete-child": childRecord.id }}
-        />
-      ) : null}
     </div>
   );
 }
@@ -628,11 +604,12 @@ function TreePlacementRemoveButton({
       data-formless-tree-remove-placement={placement.id}
       disabled={isRemoving}
       onClick={() => void removePlacement()}
-      size="xs"
+      size="icon-xs"
+      title="Remove child placement"
       type="button"
-      variant="outline"
+      variant="ghost"
     >
-      {isRemoving ? "Removing..." : "Remove"}
+      <span aria-hidden="true">{isRemoving ? "..." : "x"}</span>
     </Button>
   );
 }

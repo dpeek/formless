@@ -1,7 +1,7 @@
 # PRD 35: Site regular pages and content lists
 
 Status: ready
-Current chunk: SCL-04 ready
+Current chunk: SCL-05 ready
 Last updated: 2026-05-14
 
 ## Goal
@@ -362,7 +362,7 @@ Possible changed files:
 | SCL-01 | shipped | none       | schema, tree      | Add `date`, `postList`, `projectList`; make `/blog` regular; keep dated post detail routing.     |
 | SCL-02 | shipped | SCL-01     | renderer, tests   | Render list blocks, suppress page root label/body, keep post detail label-only heading behavior. |
 | SCL-03 | shipped | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
-| SCL-04 | ready   | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
+| SCL-04 | shipped | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
 | SCL-05 | ready   | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
 
 ## Status Notes
@@ -384,6 +384,10 @@ Possible changed files:
 - Public renderer now lays header primary navigation left and secondary navigation centered on desktop, with secondary links in the mobile menu.
 - Header links now mark active routes with dashed underline styling; Blog is active on `/blog/:slug`, Projects is active on project-section routes, and Home is active only on Home.
 - Internal link projection now inherits the target block `icon` when the link has no own `icon`; explicit `link.icon` still wins.
+- 2026-05-14 SCL-04 shipped.
+- Generated tree placement cards now render only Remove placement as a top-right `x` icon button.
+- Generated tree placement cards no longer render Delete child actions, even when child block delete is enabled.
+- Primary Site composition no longer exposes the broad `Add placement` collection action; tree add controls remain available.
 - Blockers: none.
 
 ## Evidence
@@ -403,6 +407,10 @@ Possible changed files:
 - 2026-05-14 SCL-03 browser smoke reset Site schema and seed with `200` responses, then opened `/pages/home`, `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`.
 - 2026-05-14 SCL-03 browser smoke: active header nav projected `Blog` on `/pages/blog/agents-are-enablers` and `Projects` on `/pages/projects`.
 - 2026-05-14 SCL-03 browser smoke: `bun browser --session scl-03 errors` returned no page errors.
+- 2026-05-14 SCL-04 `devstate` evidence: `.devstate/status.md` reported checks ok and services running; `.devstate/logs/service-test.txt` reported `src/shared/schema.test.ts` 101 passed after final rerun; `.devstate/logs/check-vite.txt` reported formatting, lint, and type checks passed.
+- 2026-05-14 SCL-04 requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` files were absent in this checkout; devstate wrote `.devstate/status.md` and `.devstate/logs/*`.
+- 2026-05-14 SCL-04 browser smoke reset Site schema and seed with `200` responses, opened `/site`, found two `data-formless-tree-remove-placement` controls, found zero `data-formless-tree-delete-child` controls, verified first remove control text `x`, and verified primary `Add placement` text was absent.
+- 2026-05-14 SCL-04 browser smoke: `bun browser --session scl-04 errors` returned no page errors.
 
 ## Out of Scope
 
@@ -435,6 +443,8 @@ Possible changed files:
 - SCL-03 promote: public header rendering lays primary navigation left, secondary navigation centered, and mobile secondary navigation in the menu.
 - SCL-03 promote: public header links use active route dashed underline styling; Blog stays active on post detail routes and Home is active only on Home.
 - SCL-03 promote: internal link projection inherits target block icons when a link has no own icon; explicit link icons override target icons.
+- SCL-04 promote: generated tree placement cards show only a top-right `x` remove-placement control and no child delete action.
+- SCL-04 promote: primary Site composition no longer exposes the broad `Add placement` collection action.
 - `doc/current.md`: note Blog and Projects are regular pages composed from blocks.
 - `doc/current.md`: note `postList` and `projectList` blocks render dated public content.
 - `doc/current.md`: note `block.date` controls public post/project list visibility and order.

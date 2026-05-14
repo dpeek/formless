@@ -1592,7 +1592,7 @@ describe("generated collection home", () => {
     expect(enabledHtml).toContain('aria-label="Delete Disposable page"');
   });
 
-  it("renders tree child delete controls separately from placement remove", () => {
+  it("renders tree placement remove controls without child delete actions", () => {
     const disabledSchema = schemaWithEntityDeletePolicy(siteSourceSchema, "block", false);
     const disabledCollection = requiredCollectionModel(disabledSchema, "siteCompositionHome");
     const enabledCollection = requiredSiteCollectionModel("siteCompositionHome");
@@ -1636,9 +1636,11 @@ describe("generated collection home", () => {
     expect(disabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
     expect(disabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
     expect(enabledHtml).toContain('data-formless-tree-remove-placement="placement-1"');
-    expect(enabledHtml).toContain('data-formless-tree-delete-child="block-1"');
+    expect(enabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
     expect(enabledHtml).toContain('aria-label="Remove child placement"');
-    expect(enabledHtml).toContain('aria-label="Delete child block"');
+    expect(enabledHtml).toContain("absolute right-2 top-2");
+    expect(enabledHtml).toContain('<span aria-hidden="true">x</span>');
+    expect(enabledHtml).not.toContain('aria-label="Delete child block"');
   });
 
   it("renders synthetic stack sections in order with independent selected queries", () => {
@@ -1705,9 +1707,14 @@ describe("generated collection home", () => {
     expect(backupSection).not.toContain('value="$475.00"');
   });
 
-  it("labels generated action rows from the active entity", () => {
+  it("labels generated placement action rows from the active entity", () => {
+    const collection = requiredSiteCollectionModel("pageCompositionHome");
+
     bootstrapSiteEditor();
-    const html = renderRoute("/site");
+    const html = renderGeneratedHomeCollection(collection, {
+      selectedContextRecordId: "rec_site_content_home",
+      today: "2026-05-05",
+    });
 
     expect(html).toContain('aria-label="Placement actions"');
     expect(html).not.toContain('aria-label="Task actions"');
@@ -1849,7 +1856,7 @@ describe("generated collection home", () => {
     expect(html).not.toContain('aria-label="Pages records"');
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).toContain('aria-label="Placement tree"');
-    expect(html).toContain("Add placement");
+    expect(html).not.toContain("Add placement");
     expect(html).not.toContain("Create Block<");
     expect(html).not.toContain('data-slot="table"');
     expect(html).toContain('data-web-autosize-text-input="true"');
@@ -1890,7 +1897,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Site roots list detail"');
     expect(html).toContain("Home");
     expect(html).toContain('aria-label="Placement tree"');
-    expect(html).toContain("Add placement");
+    expect(html).not.toContain("Add placement");
     expect(html).not.toContain('data-slot="table"');
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).not.toContain(">Blocks</h1>");
@@ -4208,7 +4215,7 @@ describe("generated forms and records", () => {
   });
 
   it("resolves site scoped create defaults for block placements", () => {
-    const collection = requiredSiteCollectionModel("siteCompositionHome");
+    const collection = requiredSiteCollectionModel("pageCompositionHome");
     const placementAction = collection.actions.find((action) => action.type === "create");
 
     if (!placementAction || placementAction.type !== "create") {

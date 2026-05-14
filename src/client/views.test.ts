@@ -1457,16 +1457,7 @@ describe("home view model collections", () => {
           orderingPresentations: ["dragHandle"],
           maxDepth: 8,
         },
-        actions: [
-          {
-            type: "create",
-            label: "Add placement",
-            entityName: "blockPlacement",
-            fields: ["block", "label"],
-            defaults: ["parent"],
-            enabled: true,
-          },
-        ],
+        actions: [],
       },
     ]);
   });

@@ -1123,14 +1123,7 @@
           "presentations": ["dragHandle"]
         },
         "maxDepth": 8
-      },
-      "actions": [
-        {
-          "type": "create",
-          "createView": "blockPlacementCreate",
-          "label": "Add placement"
-        }
-      ]
+      }
     },
     "pageCompositionHome": {
       "type": "collection",

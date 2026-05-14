@@ -4592,8 +4592,8 @@ describe("personal site sample schema", () => {
         },
         maxDepth: 8,
       },
-      actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
+    expect(schema.views.siteCompositionHome).not.toHaveProperty("actions");
     expect(schema.views.blockPostCreate).toMatchObject({
       type: "create",
       entity: "block",
@@ -5017,9 +5017,7 @@ describe("personal site sample schema", () => {
         href: { editor: "href", commit: "field-commit" },
       },
     });
-    expect(siteCompositionHome.actions).toEqual([
-      { type: "create", createView: "blockPlacementCreate", label: "Add placement" },
-    ]);
+    expect(siteCompositionHome.actions).toBeUndefined();
     expect(blockPlacementCreate).toMatchObject({
       type: "create",
       entity: "blockPlacement",
