@@ -410,6 +410,7 @@ function PlacementTreeItem({
               siblingCount={siblingCount}
             />
             <div className="min-w-0 flex-1 space-y-3">
+              <TreePlacementSlotBadge placement={placement} />
               <PlacementRecordFields canPatch={canPatch} placement={placement} result={result} />
               {childRecord ? (
                 <ChildRecordEditor
@@ -475,6 +476,10 @@ function TreeChildAddControls({
     <div
       className={["flex", className].filter(Boolean).join(" ")}
       data-formless-tree-add-parent={parentRecord.id}
+      data-formless-tree-add-labels={allowedChildVariants.map((variant) => variant.label).join("|")}
+      data-formless-tree-add-slots={allowedChildVariants
+        .map((variant) => stringValue(variant.placementValues?.slot) ?? "default")
+        .join(" ")}
       data-formless-tree-add-variants={allowedChildVariants
         .map((variant) => variant.variantValue)
         .join(" ")}
@@ -499,6 +504,7 @@ function TreeChildAddControls({
             <DropdownMenuItem
               aria-label={`Add ${variant.label} child`}
               data-formless-tree-add-variant={variant.variantValue}
+              data-formless-tree-add-slot={stringValue(variant.placementValues?.slot) ?? undefined}
               disabled={!result.composition?.create}
               key={variant.variantValue}
               onClick={() => {
@@ -529,12 +535,37 @@ function TreeChildAddControls({
               action={createAction}
               onSuccess={() => setActiveVariant(null)}
               submitValues={(values) =>
-                submitTreeChildCreateAction(schemaKey, result, parentRecord, values)
+                submitTreeChildCreateAction(
+                  schemaKey,
+                  result,
+                  parentRecord,
+                  values,
+                  activeVariant.placementValues,
+                )
               }
             />
           </DialogContent>
         </Dialog>
       ) : null}
+    </div>
+  );
+}
+
+function TreePlacementSlotBadge({ placement }: { placement: StoredRecord }) {
+  const slot = stringValue(placement.values.slot);
+
+  if (!slot) {
+    return null;
+  }
+
+  return (
+    <div className="flex">
+      <span
+        className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
+        data-formless-tree-placement-slot={slot}
+      >
+        {slot}
+      </span>
     </div>
   );
 }
@@ -973,6 +1004,7 @@ async function submitTreeChildCreateAction(
   result: TreeResultConfig,
   parentRecord: StoredRecord,
   childValues: RecordValues,
+  placementValues?: RecordValues,
 ): Promise<{ recordId: string }> {
   const createAction = result.composition?.create;
 
@@ -987,6 +1019,7 @@ async function submitTreeChildCreateAction(
     {
       parentRecordId: parentRecord.id,
       childValues,
+      ...(placementValues === undefined ? {} : { placementValues }),
     },
   );
   const childRecord = selectCreatedTreeChildRecord(response, result.childEntityName);

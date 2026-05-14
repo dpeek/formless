@@ -359,11 +359,19 @@ export type CollectionViewQuerySlotSchema = {
 
 export type TreeBranchActionSchema = "leaf";
 
+export type TreeBranchChildVariantSchema =
+  | string
+  | {
+      variant: string;
+      label?: string;
+      placementValues?: Record<string, FieldVisibilityValue>;
+    };
+
 export type TreeBranchVariantPolicySchema =
   | TreeBranchActionSchema
   | {
       action?: TreeBranchActionSchema;
-      children?: string[];
+      children?: TreeBranchChildVariantSchema[];
     };
 
 export type TreeBranchPolicySchema = {

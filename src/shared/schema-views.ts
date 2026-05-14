@@ -52,6 +52,7 @@ import type {
   ToManyRelationshipSchema,
   TableViewSchema,
   TreeBranchActionSchema,
+  TreeBranchChildVariantSchema,
   TreeBranchPolicySchema,
   TreeBranchVariantPolicySchema,
   TreeCompositionActionSchema,
@@ -1306,6 +1307,12 @@ function parseCollectionResult(
       childItemViewName,
       childItemView,
       unions,
+      entity,
+      new Set([
+        relationship.to.field,
+        childFieldName,
+        ...(ordering === undefined ? [] : [ordering.field]),
+      ]),
     );
     const composition = parseOptionalTreeCompositionActions(
       `Collection view "${viewName}" result composition`,
@@ -1349,6 +1356,8 @@ function parseOptionalTreeBranchPolicy(
   childItemViewName: string,
   childItemView: ItemViewSchema,
   unions: Record<string, EntityUnionSchema> | undefined,
+  placementEntity: EntitySchema,
+  reservedPlacementFieldNames: Set<string>,
 ): TreeBranchPolicySchema | undefined {
   if (value === undefined) {
     return undefined;
@@ -1375,7 +1384,13 @@ function parseOptionalTreeBranchPolicy(
   }
 
   return {
-    variants: parseTreeBranchVariantPolicy(`${context} variants`, value.variants, union),
+    variants: parseTreeBranchVariantPolicy(
+      `${context} variants`,
+      value.variants,
+      union,
+      placementEntity,
+      reservedPlacementFieldNames,
+    ),
   };
 }
 
@@ -1383,6 +1398,8 @@ function parseTreeBranchVariantPolicy(
   context: string,
   value: unknown,
   union: EntityUnionSchema,
+  placementEntity: EntitySchema,
+  reservedPlacementFieldNames: Set<string>,
 ): Record<string, TreeBranchVariantPolicySchema> {
   if (!isRecord(value)) {
     throw new Error(`${context} must be an object.`);
@@ -1408,7 +1425,13 @@ function parseTreeBranchVariantPolicy(
 
       return [
         variantName,
-        parseTreeBranchVariantPolicyValue(`${context} variant "${variantName}"`, policy, union),
+        parseTreeBranchVariantPolicyValue(
+          `${context} variant "${variantName}"`,
+          policy,
+          union,
+          placementEntity,
+          reservedPlacementFieldNames,
+        ),
       ];
     }),
   );
@@ -1418,6 +1441,8 @@ function parseTreeBranchVariantPolicyValue(
   context: string,
   value: unknown,
   union: EntityUnionSchema,
+  placementEntity: EntitySchema,
+  reservedPlacementFieldNames: Set<string>,
 ): TreeBranchVariantPolicySchema {
   if (value === "leaf") {
     return value;
@@ -1434,7 +1459,13 @@ function parseTreeBranchVariantPolicyValue(
   }
 
   const action = parseOptionalTreeBranchAction(`${context} action`, value.action);
-  const children = parseOptionalTreeBranchChildren(`${context} children`, value.children, union);
+  const children = parseOptionalTreeBranchChildren(
+    `${context} children`,
+    value.children,
+    union,
+    placementEntity,
+    reservedPlacementFieldNames,
+  );
 
   return {
     ...(action === undefined ? {} : { action }),
@@ -1461,7 +1492,9 @@ function parseOptionalTreeBranchChildren(
   context: string,
   value: unknown,
   union: EntityUnionSchema,
-): string[] | undefined {
+  placementEntity: EntitySchema,
+  reservedPlacementFieldNames: Set<string>,
+): TreeBranchChildVariantSchema[] | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -1477,24 +1510,116 @@ function parseOptionalTreeBranchChildren(
   const seen = new Set<string>();
 
   return value.map((childVariant, index) => {
-    if (typeof childVariant !== "string" || childVariant.trim() === "") {
-      throw new Error(`${context} item ${index + 1} must be a non-empty string.`);
+    const childContext =
+      typeof childVariant === "string" ? context : `${context} item ${index + 1}`;
+    const parsed = parseTreeBranchChildVariant(
+      childContext,
+      childVariant,
+      union,
+      placementEntity,
+      reservedPlacementFieldNames,
+    );
+    const childVariantName = typeof parsed === "string" ? parsed : parsed.variant;
+
+    if (seen.has(childVariantName)) {
+      throw new Error(`${context} variant "${childVariantName}" must be unique.`);
     }
 
-    if (seen.has(childVariant)) {
-      throw new Error(`${context} variant "${childVariant}" must be unique.`);
-    }
+    seen.add(childVariantName);
 
-    seen.add(childVariant);
-
-    if (union.variants[childVariant] === undefined) {
-      throw new Error(
-        `${context} variant "${childVariant}" must match a variant in union "${union.entity}.${union.discriminator}".`,
-      );
-    }
-
-    return childVariant;
+    return parsed;
   });
+}
+
+function parseTreeBranchChildVariant(
+  context: string,
+  value: unknown,
+  union: EntityUnionSchema,
+  placementEntity: EntitySchema,
+  reservedPlacementFieldNames: Set<string>,
+): TreeBranchChildVariantSchema {
+  if (typeof value === "string") {
+    return parseTreeBranchChildVariantName(context, value, union);
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be a non-empty string or an object.`);
+  }
+
+  assertExactKeys(context, value, ["variant"], ["label", "placementValues"]);
+
+  const variant = parseTreeBranchChildVariantName(`${context} variant`, value.variant, union);
+  const label = parseOptionalNonEmptyString(`${context} label`, value.label);
+  const placementValues = parseOptionalTreeBranchChildPlacementValues(
+    `${context} placementValues`,
+    value.placementValues,
+    placementEntity,
+    reservedPlacementFieldNames,
+  );
+
+  return {
+    variant,
+    ...(label === undefined ? {} : { label }),
+    ...(placementValues === undefined ? {} : { placementValues }),
+  };
+}
+
+function parseTreeBranchChildVariantName(
+  context: string,
+  value: unknown,
+  union: EntityUnionSchema,
+): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${context} must be a non-empty string.`);
+  }
+
+  if (union.variants[value] === undefined) {
+    throw new Error(
+      `${context} variant "${value}" must match a variant in union "${union.entity}.${union.discriminator}".`,
+    );
+  }
+
+  return value;
+}
+
+function parseOptionalTreeBranchChildPlacementValues(
+  context: string,
+  value: unknown,
+  placementEntity: EntitySchema,
+  reservedPlacementFieldNames: Set<string>,
+): Record<string, FieldVisibilityValue> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+
+  if (entries.length === 0) {
+    throw new Error(`${context} must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([fieldName, fieldValue]) => {
+      const field = placementEntity.fields[fieldName];
+
+      if (!field) {
+        throw new Error(`${context} field "${fieldName}" must reference a placement field.`);
+      }
+
+      if (reservedPlacementFieldNames.has(fieldName)) {
+        throw new Error(`${context} field "${fieldName}" is controlled by tree creation.`);
+      }
+
+      return [
+        fieldName,
+        parseFieldVisibilityValue(`${context} field "${fieldName}"`, fieldValue, field),
+      ];
+    }),
+  );
 }
 
 function parseOptionalTreeCompositionActions(

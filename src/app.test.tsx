@@ -1787,7 +1787,47 @@ describe("generated collection home", () => {
     );
 
     expect(postRootHtml).toContain('data-formless-tree-add-parent="post-1"');
-    expect(postRootHtml).toContain('data-formless-tree-add-variants="markdown"');
+    expect(postRootHtml).toContain('data-formless-tree-add-variants="markdown image"');
+    expect(postRootHtml).toContain('data-formless-tree-add-labels="Markdown|Primary image"');
+    expect(postRootHtml).toContain('data-formless-tree-add-slots="default primaryImage"');
+
+    resetClientStore();
+    bootstrapSiteEditor([
+      siteBlockRecord("project-1", { type: "project", label: "Blank project" }),
+    ]);
+    const projectRootHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "project-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(projectRootHtml).toContain('data-formless-tree-add-parent="project-1"');
+    expect(projectRootHtml).toContain('data-formless-tree-add-variants="image"');
+    expect(projectRootHtml).toContain('data-formless-tree-add-labels="Primary image"');
+    expect(projectRootHtml).toContain('data-formless-tree-add-slots="primaryImage"');
+
+    resetClientStore();
+    bootstrapSiteEditor([
+      siteBlockRecord("feature-1", { type: "feature", label: "Blank feature" }),
+    ]);
+    const featureRootHtml = renderToStaticMarkup(
+      <RecordTree
+        context={collection.context}
+        entity={collection.entity}
+        entityName={collection.entityName}
+        queryContext={{ today: "2026-05-02", values: { block: "feature-1" } }}
+        result={collection.result}
+      />,
+    );
+
+    expect(featureRootHtml).toContain('data-formless-tree-add-parent="feature-1"');
+    expect(featureRootHtml).toContain('data-formless-tree-add-variants="image link"');
+    expect(featureRootHtml).toContain('data-formless-tree-add-labels="Feature image|Action link"');
+    expect(featureRootHtml).toContain('data-formless-tree-add-slots="media actions"');
 
     resetClientStore();
     bootstrapSiteEditor([
@@ -1811,6 +1851,7 @@ describe("generated collection home", () => {
           parent: "page-1",
           block: "link-1",
           order: 2000,
+          slot: "actions",
         },
         createdAt: "2026-05-05T00:00:41.000Z",
       },
@@ -1827,6 +1868,7 @@ describe("generated collection home", () => {
 
     expect(nestedHtml).toContain('data-formless-tree-add-parent="group-1"');
     expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
+    expect(nestedHtml).toContain('data-formless-tree-placement-slot="actions"');
     expect(nestedHtml).toContain('data-formless-tree-remove-placement="placement-1"');
     expect(nestedHtml).toContain('aria-label="Remove child placement"');
   });

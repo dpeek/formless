@@ -48,6 +48,7 @@ export type RemoveSelectedJoinRecordsActionInput = {
 export type CreateTreeChildActionInput = {
   parentRecordId: string;
   childValues: RecordValues;
+  placementValues?: RecordValues;
 };
 
 export type RemoveTreePlacementActionInput = {

@@ -32,7 +32,10 @@ describe("table model", () => {
 
     expect(result.ordering).toMatchObject({
       fieldName: "order",
-      scope: [{ kind: "field", fieldName: "parent" }],
+      scope: [
+        { kind: "field", fieldName: "parent" },
+        { kind: "field", fieldName: "slot" },
+      ],
       presentations: ["dragHandle", "moveMenu"],
     });
     expect(actionsColumn).toMatchObject({

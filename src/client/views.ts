@@ -17,6 +17,7 @@ import type {
   FieldCommitPolicy,
   FieldEditor,
   FieldVisibilityConditionSchema,
+  FieldVisibilityValue,
   FieldSchema,
   ItemViewSchema,
   ScreenNavigationSchema,
@@ -28,6 +29,7 @@ import type {
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
+  TreeBranchChildVariantSchema,
   TreeBranchVariantPolicySchema,
   ViewSchema,
 } from "../shared/schema.ts";
@@ -279,6 +281,7 @@ export type TreeAllowedChildVariantConfig = {
   variantValue: string;
   label: string;
   unionVariant: EntityUnionVariantSchema;
+  placementValues?: Record<string, FieldVisibilityValue>;
 };
 
 export type TreeVariantBranchPolicyConfig = {
@@ -989,12 +992,15 @@ function selectAllowedChildVariantsByParentVariant(
   return Object.fromEntries(
     Object.entries(variants)
       .map(([parentVariantValue, policy]) => {
-        const childVariantValues =
-          typeof policy === "object" ? (policy.children ?? []) : ([] as string[]);
+        const childVariantPolicies =
+          typeof policy === "object"
+            ? (policy.children ?? [])
+            : ([] as TreeBranchChildVariantSchema[]);
 
         return [
           parentVariantValue,
-          childVariantValues.map((childVariantValue) => {
+          childVariantPolicies.map((childVariantPolicy) => {
+            const childVariantValue = treeChildVariantPolicyValue(childVariantPolicy);
             const unionVariant = childRecordUnion.union.variants[childVariantValue];
 
             if (!unionVariant) {
@@ -1003,14 +1009,25 @@ function selectAllowedChildVariantsByParentVariant(
 
             return {
               variantValue: childVariantValue,
-              label: unionVariant.label,
+              label:
+                typeof childVariantPolicy === "string"
+                  ? unionVariant.label
+                  : (childVariantPolicy.label ?? unionVariant.label),
               unionVariant,
+              ...(typeof childVariantPolicy === "string" ||
+              childVariantPolicy.placementValues === undefined
+                ? {}
+                : { placementValues: childVariantPolicy.placementValues }),
             };
           }),
         ] as const;
       })
       .filter(([, childVariants]) => childVariants.length > 0),
   );
+}
+
+function treeChildVariantPolicyValue(policy: TreeBranchChildVariantSchema) {
+  return typeof policy === "string" ? policy : policy.variant;
 }
 
 function treeBranchVariantPolicyIsLeaf(policy: TreeBranchVariantPolicySchema): boolean {

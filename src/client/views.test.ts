@@ -911,7 +911,9 @@ describe("home view model collections", () => {
         "postList",
         "projectList",
       ],
-      post: ["markdown"],
+      post: ["markdown", "image"],
+      project: ["image"],
+      feature: ["image", "link"],
       header: ["headerPrimary", "headerSecondary"],
       headerPrimary: ["link"],
       headerSecondary: ["link"],
@@ -919,8 +921,34 @@ describe("home view model collections", () => {
       footerSection: ["link"],
       footerSocial: ["link"],
     });
-    expect(treeResult.branches?.variants.leafVariantValues).toContain("project");
-    expect(treeResult.branches?.variants.leafVariantValues).toContain("feature");
+    expect(
+      treeResult.branches?.variants.allowedChildVariantsByParentVariant.post?.find(
+        (child) => child.label === "Primary image",
+      ),
+    ).toMatchObject({
+      variantValue: "image",
+      placementValues: { slot: "primaryImage" },
+    });
+    expect(
+      treeResult.branches?.variants.allowedChildVariantsByParentVariant.feature?.map((child) => ({
+        label: child.label,
+        variantValue: child.variantValue,
+        placementValues: child.placementValues,
+      })),
+    ).toEqual([
+      {
+        label: "Feature image",
+        variantValue: "image",
+        placementValues: { slot: "media" },
+      },
+      {
+        label: "Action link",
+        variantValue: "link",
+        placementValues: { slot: "actions" },
+      },
+    ]);
+    expect(treeResult.branches?.variants.leafVariantValues).not.toContain("project");
+    expect(treeResult.branches?.variants.leafVariantValues).not.toContain("feature");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("postList");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("projectList");
     expect(treeResult.childRecordUnion?.variants).toEqual(
@@ -1497,7 +1525,7 @@ describe("home view model collections", () => {
       placementModel.result.type === "table" ? placementModel.result.ordering : undefined,
     ).toMatchObject({
       fieldName: "order",
-      scope: [{ fieldName: "parent" }],
+      scope: [{ fieldName: "parent" }, { fieldName: "slot" }],
       presentations: ["dragHandle", "moveMenu"],
     });
     expect(

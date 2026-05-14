@@ -962,6 +962,10 @@
           {
             "kind": "field",
             "field": "parent"
+          },
+          {
+            "kind": "field",
+            "field": "slot"
           }
         ],
         "presentations": ["dragHandle", "moveMenu"]
@@ -1148,10 +1152,46 @@
               ]
             },
             "post": {
-              "children": ["markdown"]
+              "children": [
+                "markdown",
+                {
+                  "variant": "image",
+                  "label": "Primary image",
+                  "placementValues": {
+                    "slot": "primaryImage"
+                  }
+                }
+              ]
             },
-            "project": "leaf",
-            "feature": "leaf",
+            "project": {
+              "children": [
+                {
+                  "variant": "image",
+                  "label": "Primary image",
+                  "placementValues": {
+                    "slot": "primaryImage"
+                  }
+                }
+              ]
+            },
+            "feature": {
+              "children": [
+                {
+                  "variant": "image",
+                  "label": "Feature image",
+                  "placementValues": {
+                    "slot": "media"
+                  }
+                },
+                {
+                  "variant": "link",
+                  "label": "Action link",
+                  "placementValues": {
+                    "slot": "actions"
+                  }
+                }
+              ]
+            },
             "postList": "leaf",
             "projectList": "leaf",
             "header": {
@@ -1186,6 +1226,10 @@
             {
               "kind": "field",
               "field": "parent"
+            },
+            {
+              "kind": "field",
+              "field": "slot"
             }
           ],
           "presentations": ["dragHandle"]

@@ -980,9 +980,12 @@ describe("authority", () => {
       input: {
         parentRecordId: parent.record.id,
         childValues: {
-          type: "markdown",
-          label: "Inline note",
-          body: "Tree-created content",
+          type: "image",
+          label: "Primary image",
+          href: "/api/site/media/site/images/primary.webp",
+        },
+        placementValues: {
+          slot: "primaryImage",
         },
       },
     };
@@ -1010,14 +1013,15 @@ describe("authority", () => {
     expect(added.changes).toHaveLength(2);
     expect(added.changes.every((change) => change.op === "action")).toBe(true);
     expect(child.values).toEqual({
-      type: "markdown",
-      label: "Inline note",
-      body: "Tree-created content",
+      type: "image",
+      label: "Primary image",
+      href: "/api/site/media/site/images/primary.webp",
     });
     expect(placement.values).toEqual({
       parent: parent.record.id,
       block: child.id,
       order: 1000,
+      slot: "primaryImage",
     });
     expect(replay).toEqual(added);
 

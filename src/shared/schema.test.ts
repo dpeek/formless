@@ -1737,7 +1737,15 @@ describe("schema table views", () => {
     const siteSchema = siteSchemaWithTreeBranches({
       variants: {
         page: {
-          children: ["group", "markdown"],
+          children: [
+            "group",
+            "markdown",
+            {
+              variant: "image",
+              label: "Primary image",
+              placementValues: { slot: "primaryImage" },
+            },
+          ],
         },
         header: {
           action: "leaf",
@@ -1762,7 +1770,15 @@ describe("schema table views", () => {
     expect(siteHome.result.branches).toEqual({
       variants: {
         page: {
-          children: ["group", "markdown"],
+          children: [
+            "group",
+            "markdown",
+            {
+              variant: "image",
+              label: "Primary image",
+              placementValues: { slot: "primaryImage" },
+            },
+          ],
         },
         header: {
           action: "leaf",
@@ -1839,6 +1855,24 @@ describe("schema table views", () => {
       ),
     ).toThrow(
       'Collection view "siteCompositionHome" result branches variants variant "header" children variant "missing" must match a variant in union "block.type".',
+    );
+    expect(() =>
+      parseAppSchema(
+        siteSchemaWithTreeBranches({
+          variants: {
+            header: {
+              children: [
+                {
+                  variant: "link",
+                  placementValues: { parent: "block-1" },
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    ).toThrow(
+      'Collection view "siteCompositionHome" result branches variants variant "header" children item 1 placementValues field "parent" is controlled by tree creation.',
     );
   });
 
@@ -4603,7 +4637,10 @@ describe("personal site sample schema", () => {
         childItemView: "blockTreeNode",
         ordering: {
           field: "order",
-          scope: [{ kind: "field", field: "parent" }],
+          scope: [
+            { kind: "field", field: "parent" },
+            { kind: "field", field: "slot" },
+          ],
           presentations: ["dragHandle"],
         },
         composition: {
@@ -4776,9 +4813,39 @@ describe("personal site sample schema", () => {
       "postList",
       "projectList",
     ]);
-    expect(branchVariants.post).toEqual({ children: ["markdown"] });
-    expect(branchVariants.project).toBe("leaf");
-    expect(branchVariants.feature).toBe("leaf");
+    expect(branchVariants.post).toEqual({
+      children: [
+        "markdown",
+        {
+          variant: "image",
+          label: "Primary image",
+          placementValues: { slot: "primaryImage" },
+        },
+      ],
+    });
+    expect(branchVariants.project).toEqual({
+      children: [
+        {
+          variant: "image",
+          label: "Primary image",
+          placementValues: { slot: "primaryImage" },
+        },
+      ],
+    });
+    expect(branchVariants.feature).toEqual({
+      children: [
+        {
+          variant: "image",
+          label: "Feature image",
+          placementValues: { slot: "media" },
+        },
+        {
+          variant: "link",
+          label: "Action link",
+          placementValues: { slot: "actions" },
+        },
+      ],
+    });
     expect(branchVariants.postList).toBe("leaf");
     expect(branchVariants.projectList).toBe("leaf");
     expect(branchVariants.header).toEqual({
@@ -5017,10 +5084,38 @@ describe("personal site sample schema", () => {
             ],
           },
           post: {
-            children: ["markdown"],
+            children: [
+              "markdown",
+              {
+                variant: "image",
+                label: "Primary image",
+                placementValues: { slot: "primaryImage" },
+              },
+            ],
           },
-          project: "leaf",
-          feature: "leaf",
+          project: {
+            children: [
+              {
+                variant: "image",
+                label: "Primary image",
+                placementValues: { slot: "primaryImage" },
+              },
+            ],
+          },
+          feature: {
+            children: [
+              {
+                variant: "image",
+                label: "Feature image",
+                placementValues: { slot: "media" },
+              },
+              {
+                variant: "link",
+                label: "Action link",
+                placementValues: { slot: "actions" },
+              },
+            ],
+          },
           postList: "leaf",
           projectList: "leaf",
           header: {

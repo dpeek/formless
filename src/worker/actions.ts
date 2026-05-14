@@ -470,9 +470,21 @@ function validateCreateTreeChildActionInput(
     );
   }
 
+  if (
+    value.placementValues !== undefined &&
+    (!isRecord(value.placementValues) || !Object.values(value.placementValues).every(isFieldValue))
+  ) {
+    throw new BadRequestError(
+      `Action "${context.actionName}" input placementValues must contain scalar field values.`,
+    );
+  }
+
   return {
     parentRecordId: value.parentRecordId,
     childValues: value.childValues as RecordValues,
+    ...(value.placementValues === undefined
+      ? {}
+      : { placementValues: value.placementValues as RecordValues }),
   };
 }
 
@@ -749,12 +761,14 @@ function selectTreeChildCreatePlans(
         return validateRecordValues(
           createTreePlacementValues(
             storage,
+            request,
             request.entity,
             placementEntity,
             relationship,
             action,
             parentRecord.id,
             childRecord.id,
+            input.placementValues ?? {},
           ),
           placementEntity,
           storage,
@@ -766,15 +780,24 @@ function selectTreeChildCreatePlans(
 
 function createTreePlacementValues(
   storage: DurableObjectStorage,
+  request: ActionRequest,
   placementEntityName: string,
   placementEntity: EntitySchema,
   relationship: ToManyRelationshipSchema,
   action: Extract<EntityActionSchema, { kind: "create-tree-child" }>,
   parentRecordId: string,
   childRecordId: string,
+  placementValues: RecordValues,
 ): RecordValues {
   const relationshipField = relationship.to.field;
-  const values: RecordValues = {};
+  validateTreePlacementInputValues(
+    request,
+    placementEntity,
+    relationshipField,
+    action,
+    placementValues,
+  );
+  const values: RecordValues = { ...placementValues };
 
   for (const [fieldName, field] of Object.entries(placementEntity.fields)) {
     if (fieldName === relationshipField) {
@@ -806,6 +829,34 @@ function createTreePlacementValues(
   }
 
   return values;
+}
+
+function validateTreePlacementInputValues(
+  request: ActionRequest,
+  placementEntity: EntitySchema,
+  relationshipField: string,
+  action: Extract<EntityActionSchema, { kind: "create-tree-child" }>,
+  placementValues: RecordValues,
+) {
+  const controlledFields = new Set([
+    relationshipField,
+    action.childField,
+    ...(action.orderField === undefined ? [] : [action.orderField]),
+  ]);
+
+  for (const fieldName of Object.keys(placementValues)) {
+    if (!placementEntity.fields[fieldName]) {
+      throw new BadRequestError(
+        `Action "${request.action}" placementValues field "${fieldName}" is unknown.`,
+      );
+    }
+
+    if (controlledFields.has(fieldName)) {
+      throw new BadRequestError(
+        `Action "${request.action}" placementValues field "${fieldName}" is controlled by tree creation.`,
+      );
+    }
+  }
 }
 
 function nextTreePlacementOrder(
@@ -968,6 +1019,9 @@ function requireCreateTreeChildInput(request: ActionRequest): CreateTreeChildAct
   return {
     parentRecordId: input.parentRecordId,
     childValues: input.childValues as RecordValues,
+    ...("placementValues" in input && isRecord(input.placementValues)
+      ? { placementValues: input.placementValues as RecordValues }
+      : {}),
   };
 }
 
