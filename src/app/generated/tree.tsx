@@ -51,6 +51,7 @@ import {
   selectRecordContextLinkForActiveUnion,
   selectRecordFieldsForActiveUnion,
 } from "./union-presentation.ts";
+import { MenuIcon, PlusIcon, XIcon } from "lucide-react";
 
 type TreeResultConfig = Extract<HomeResultConfig, { type: "tree" }>;
 
@@ -489,7 +490,7 @@ function TreeChildAddControls({
               type="button"
               variant="outline"
             >
-              <span aria-hidden="true">+</span>
+              <PlusIcon aria-hidden="true" />
             </Button>
           }
         />
@@ -609,7 +610,7 @@ function TreePlacementRemoveButton({
       type="button"
       variant="ghost"
     >
-      <span aria-hidden="true">{isRemoving ? "..." : "x"}</span>
+      <span aria-hidden="true">{isRemoving ? "..." : <XIcon />}</span>
     </Button>
   );
 }
@@ -678,7 +679,7 @@ function PlacementOrderingControls({
           type="button"
           variant="ghost"
         >
-          <span aria-hidden="true">::</span>
+          <MenuIcon aria-hidden="true" />
         </Button>
       ) : null}
       {moveItems.map((item) => (

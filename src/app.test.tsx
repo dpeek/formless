@@ -151,6 +151,18 @@ function linkHtml(html: string, href: string): string {
   return html.slice(linkStart, linkEnd + "</a>".length);
 }
 
+function articleHtml(html: string, text: string): string {
+  const textIndex = html.indexOf(text);
+  const articleStart = html.lastIndexOf("<article", textIndex);
+  const articleEnd = html.indexOf("</article>", textIndex);
+
+  if (textIndex === -1 || articleStart === -1 || articleEnd === -1) {
+    throw new Error(`Missing article for "${text}".`);
+  }
+
+  return html.slice(articleStart, articleEnd + "</article>".length);
+}
+
 function mainHtml(html: string): string {
   const start = html.indexOf("<main ");
   const end = html.indexOf("</main>", start);
@@ -930,11 +942,15 @@ describe("public site renderer", () => {
 
     const blogHtml = renderSitePage("blog", records);
     const projectsHtml = renderSitePage("projects", records);
+    const postCardHtml = articleHtml(blogHtml, "Shipping schema-backed authoring");
+    const projectCardHtml = articleHtml(projectsHtml, "OpenSurf");
 
     expect(blogHtml).toContain('data-site-content-list="postList"');
     expect(blogHtml).toContain("Latest posts");
     expect(blogHtml).toContain("Shipping schema-backed authoring");
     expect(blogHtml).toContain('href="/pages/blog/shipping-schema-backed-authoring"');
+    expect(postCardHtml).toContain('data-site-summary-link="post"');
+    expect(postCardHtml).toContain("absolute inset-0");
     expect(blogHtml).toContain("Draft notes on generated editorial tools");
     expect(blogHtml).toContain("2026-05-13");
     expect(blogHtml).toContain("2026-05-06");
@@ -945,8 +961,13 @@ describe("public site renderer", () => {
     expect(projectsHtml).toContain('href="/pages/projects/opensurf"');
     expect(projectsHtml).toContain("Formless");
     expect(projectsHtml).toContain("Estii");
-    expect(projectsHtml.indexOf("2026-05-08")).toBeLessThan(projectsHtml.indexOf("2026-05-03"));
-    expect(projectsHtml.indexOf("2026-05-03")).toBeLessThan(projectsHtml.indexOf("2026-05-01"));
+    expect(projectCardHtml).toContain('data-site-summary-link="project"');
+    expect(projectCardHtml).toContain("absolute inset-0");
+    expect(projectsHtml.indexOf("OpenSurf")).toBeLessThan(projectsHtml.indexOf("Formless"));
+    expect(projectsHtml.indexOf("Formless")).toBeLessThan(projectsHtml.indexOf("Estii"));
+    expect(projectsHtml).not.toContain("2026-05-08");
+    expect(projectsHtml).not.toContain("2026-05-03");
+    expect(projectsHtml).not.toContain("2026-05-01");
   });
 
   it("renders /projects as manually placed project summaries with markdown bodies", () => {
@@ -961,6 +982,9 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/pages/projects/estii"');
     expect(html).toContain('href="/pages/projects/opensurf"');
     expect(html).toContain('href="/pages/projects/formless"');
+    expect(main).not.toContain("2026-05-08");
+    expect(main).not.toContain("2026-05-03");
+    expect(main).not.toContain("2026-05-01");
     expect(html).toContain('data-web-markdown-renderer="server"');
     expect(html).toContain("operational assumptions");
     expect(html).toContain("<strong");
@@ -1174,7 +1198,40 @@ describe("public site renderer", () => {
     const projectsLinkHtml = footerLinkHtml(footerHtml, "/pages/projects");
 
     expect(projectsLinkHtml).toContain('data-web-svg-icon="svg"');
+    expect(projectsLinkHtml).toContain("gap-2.5");
     expect(projectsLinkHtml).toContain(">Projects<");
+  });
+
+  it("omits inherited target icons from header navigation links", () => {
+    const projectIcon = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>';
+    const records = testSiteSeedRecords.map((record) =>
+      record.id === "rec_site_content_projects"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              icon: projectIcon,
+            },
+          }
+        : record.id === "rec_site_content_link_projects"
+          ? {
+              ...record,
+              values: {
+                ...record.values,
+                linkTargetMode: "internal",
+                linkTargetBlock: "rec_site_content_projects",
+              },
+            }
+          : record,
+    );
+    const html = renderSitePage("home", records);
+    const headerStart = html.indexOf("<header");
+    const headerEnd = html.indexOf("</header>", headerStart);
+    const headerHtml = html.slice(headerStart, headerEnd);
+    const projectsLinkHtml = linkHtml(headerHtml, "/pages/projects");
+
+    expect(projectsLinkHtml).not.toContain('data-web-svg-icon="svg"');
+    expect(projectsLinkHtml).toContain(">Projects</a>");
   });
 
   it("renders a 404 state for missing public site pages", () => {
@@ -1639,7 +1696,7 @@ describe("generated collection home", () => {
     expect(enabledHtml).not.toContain('data-formless-tree-delete-child="block-1"');
     expect(enabledHtml).toContain('aria-label="Remove child placement"');
     expect(enabledHtml).toContain("absolute right-2 top-2");
-    expect(enabledHtml).toContain('<span aria-hidden="true">x</span>');
+    expect(enabledHtml).toContain("lucide-x");
     expect(enabledHtml).not.toContain('aria-label="Delete child block"');
   });
 

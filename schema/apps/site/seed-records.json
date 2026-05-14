@@ -6,7 +6,8 @@
       "type": "page",
       "label": "Home",
       "body": "A concise personal site for current work, writing, and project notes.",
-      "href": "/"
+      "href": "/",
+      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\" />\n    <polyline points=\"9 22 9 12 15 12 15 22\" />\n</svg>"
     },
     "createdAt": "2026-05-05T00:00:04.000Z"
   },
@@ -17,7 +18,8 @@
       "type": "page",
       "label": "Blog",
       "body": "Notes on product engineering",
-      "href": "/blog"
+      "href": "/blog",
+      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z\" />\n    <path d=\"M12 9v4\" />\n    <path d=\"M12 17h0.01\" />\n</svg>"
     },
     "createdAt": "2026-05-05T00:00:05.000Z"
   },
@@ -28,7 +30,8 @@
       "type": "page",
       "label": "Resume",
       "body": "A practical summary of roles, projects, and strengths.",
-      "href": "/resume"
+      "href": "/resume",
+      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16\" />\n    <rect width=\"20\" height=\"14\" rx=\"2\" x=\"2\" y=\"6\" />\n</svg>"
     },
     "createdAt": "2026-05-05T00:00:06.000Z"
   },
@@ -39,7 +42,8 @@
       "type": "page",
       "label": "Projects",
       "body": "Current and recent product work",
-      "href": "/projects"
+      "href": "/projects",
+      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18z\" />\n    <path d=\"M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2\" />\n    <path d=\"M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2\" />\n    <path d=\"M10 6h4\" />\n    <path d=\"M10 10h4\" />\n    <path d=\"M10 14h4\" />\n    <path d=\"M10 18h4\" />\n</svg>"
     },
     "createdAt": "2026-05-05T00:00:07.000Z"
   },
@@ -87,7 +91,7 @@
       "label": "Agents are enablers",
       "body": "Like when they help you build a schema driven application runtime instead of writing your CV like you're supposed to.",
       "href": "/blog/agents-are-enablers",
-      "date": "2026-05-13"
+      "date": "2026-05-12"
     },
     "createdAt": "2026-05-05T00:00:11.000Z"
   },
@@ -99,7 +103,7 @@
       "label": "Schema-driven apps",
       "body": "What if your schema gave you a local-first, synchronising date store and CRUD UI for free? Low-code for coders.",
       "href": "/blog/schema-driven-apps",
-      "date": "2026-05-06"
+      "date": "2026-05-13"
     },
     "createdAt": "2026-05-05T00:00:12.000Z"
   },
@@ -330,7 +334,7 @@
     "values": {
       "type": "markdown",
       "label": "Greetings, Robot",
-      "body": "My name is David Peek and I'm a developer and entrepreneur working in Sydney, Australia. I build things like [estii.com](https://estii.com) and [opensurf.ai](https://opensurf.ai) and work with businesses building ambitious ideas and capable teams.\n\nI love helping high-agency teams move fast with modern agentic tooling.\n\nIt is an _amazing_ time to be a builder."
+      "body": "I'm a developer and entrepreneur working in Sydney, Australia. I founded [estii.com](https://estii.com) and [opensurf.ai](https://opensurf.ai) and work with businesses building ambitious ideas and capable teams.\n\nI love helping high-agency developers move fast with modern tooling and workflows.\n\nWhat an _amazing_ time to be a builder."
     },
     "createdAt": "2026-05-12T05:24:03.945Z"
   },
@@ -519,26 +523,6 @@
     "createdAt": "2026-05-05T00:00:26.300Z"
   },
   {
-    "id": "rec_site_place_blog_posts",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_blog",
-      "block": "rec_site_block_blog_posts",
-      "order": 2000
-    },
-    "createdAt": "2026-05-14T01:31:02.000Z"
-  },
-  {
-    "id": "rec_site_place_projects_index",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "rec_site_block_projects_index",
-      "order": 2000
-    },
-    "createdAt": "2026-05-14T01:31:03.000Z"
-  },
-  {
     "id": "rec_site_place_post_body",
     "entity": "blockPlacement",
     "values": {
@@ -657,5 +641,25 @@
       "order": 1000
     },
     "createdAt": "2026-05-13T05:38:22.200Z"
+  },
+  {
+    "id": "rec_site_place_blog_posts",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_blog",
+      "block": "rec_site_block_blog_posts",
+      "order": 2000
+    },
+    "createdAt": "2026-05-14T01:31:02.000Z"
+  },
+  {
+    "id": "rec_site_place_projects_index",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_projects",
+      "block": "rec_site_block_projects_index",
+      "order": 2000
+    },
+    "createdAt": "2026-05-14T01:31:03.000Z"
   }
 ]

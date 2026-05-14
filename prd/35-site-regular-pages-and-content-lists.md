@@ -326,6 +326,8 @@ Possible changed files:
 | SCL-D14 | Remove primary broad Add placement actions.                                    | Tree add controls are the intended composition path until create/select-at-any-level ships.        | User decision 2026-05-14                                               |
 | SCL-D15 | Let link icons override inherited target icons.                                | Explicit link presentation should win over target metadata.                                        | User decision 2026-05-14, PRD 33 link target semantics                 |
 | SCL-D16 | Project `postList` and `projectList` blocks as tree query items.               | List queries should stay testable in the tree layer before renderer markup ships.                  | `src/site/tree.ts`, `src/site/tree.test.ts`                            |
+| SCL-D17 | Make public post/project cards whole-card links.                               | List pages should not require visitors to target only the title.                                   | User request 2026-05-14, `src/app/site-renderer/renderer.tsx`          |
+| SCL-D18 | Treat project dates as publish/sort state, not public card metadata.           | Projects need ordering without showing date chrome in public cards.                                | User request 2026-05-14, `src/app/site-renderer/renderer.tsx`          |
 
 ## Deep Modules
 
@@ -392,6 +394,9 @@ Possible changed files:
 - Source Blog seed now places `rec_site_block_blog_posts` as a `postList` block under the Blog page.
 - Source Projects seed now places `rec_site_block_projects_index` as a `projectList` block under the Projects page.
 - Source Projects seed no longer manually places individual project blocks under the Projects page.
+- 2026-05-14 SCL maintenance shipped.
+- Public renderer now stretches the summary link across post and project cards while preserving nested markdown links.
+- Public renderer no longer displays dates on project summary cards; `block.date` still controls visibility and ordering.
 - Blockers: none.
 
 ## Evidence
@@ -422,6 +427,10 @@ Possible changed files:
 - 2026-05-14 SCL-05 browser smoke: `/pages/blog/agents-are-enablers` rendered `Agents are enablers` and child markdown `Test1`, and did not render the post summary copy.
 - 2026-05-14 SCL-05 browser smoke: `/pages/projects` rendered the `Projects` list in date order: Devstate, OpenSurf, Formless, Estii, StreamWolf.
 - 2026-05-14 SCL-05 browser smoke: `bun browser --session scl-05 errors` returned no page errors.
+- 2026-05-14 SCL maintenance `devstate check`: checks ok; web ready at `https://formless.local`; test watcher passed.
+- 2026-05-14 SCL maintenance browser smoke: `/pages/blog` first post card had `data-site-summary-link="post"` with absolute full-card inset and kept its post date visible.
+- 2026-05-14 SCL maintenance browser smoke: `/pages/projects` first project card had `data-site-summary-link="project"` with absolute full-card inset; project card `<time>` count was zero and project date text was absent.
+- 2026-05-14 SCL maintenance browser smoke: `bun browser --session site-summary-cards errors` returned no page errors.
 
 ## Out of Scope
 
@@ -458,6 +467,8 @@ Possible changed files:
 - SCL-04 promote: primary Site composition no longer exposes the broad `Add placement` collection action.
 - SCL-05 promote: source Blog seed places a `postList` block under the Blog page.
 - SCL-05 promote: source Projects seed places a `projectList` block under the Projects page instead of manually placing project blocks.
+- SCL maintenance promote: public post and project summary cards use whole-card links.
+- SCL maintenance promote: public project summary cards hide date display while keeping `block.date` as publish/sort state.
 - `doc/current.md`: note Blog and Projects are regular pages composed from blocks.
 - `doc/current.md`: note `postList` and `projectList` blocks render dated public content.
 - `doc/current.md`: note `block.date` controls public post/project list visibility and order.

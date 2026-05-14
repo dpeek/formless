@@ -12,6 +12,7 @@ import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../share
 const SitePageLinkModeContext = createContext<SitePageLinkMode>("preview");
 const SiteRouteSlugContext = createContext<string | undefined>(undefined);
 const HeaderNavigationContext = createContext(false);
+const FooterNavigationContext = createContext(false);
 const SiteThemeContext = createContext<PublicSiteThemeController>({
   theme: "light",
   toggleTheme: () => {},
@@ -302,7 +303,9 @@ function FooterSection({ block }: { block: SiteBlockNode }) {
   return (
     <section className="w-full max-w-48 space-y-3 sm:w-48">
       <nav aria-label={block.label} className="flex flex-col items-start gap-2">
-        <SitePlacementList placements={block.placements} />
+        <FooterNavigationContext.Provider value={true}>
+          <SitePlacementList placements={block.placements} />
+        </FooterNavigationContext.Provider>
       </nav>
     </section>
   );
@@ -397,6 +400,7 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
   const linkMode = useSitePageLinkMode();
   const routeSlug = useSiteRouteSlug();
   const isHeaderNavigation = useHeaderNavigation();
+  const isFooterNavigation = useFooterNavigation();
   const href = blockHref(block, linkMode);
 
   if (!href) {
@@ -404,17 +408,18 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
   }
 
   const isActive = isHeaderNavigation && siteHrefMatchesRoute(href, routeSlug);
+  const shouldRenderIcon = Boolean(block.icon && !isHeaderNavigation);
 
   return (
     <a
       aria-current={isActive ? "page" : undefined}
-      className={linkClassName(isActive)}
+      className={linkClassName(isActive, isFooterNavigation)}
       data-site-nav-active={isActive ? "true" : undefined}
       href={href}
       rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
       target={isExternalSiteHref(href) ? "_blank" : undefined}
     >
-      {block.icon ? (
+      {shouldRenderIcon ? (
         <>
           <SvgIcon className="size-4" source={block.icon} />
           <span className="min-w-0 truncate">{displayLabel(block, placement)}</span>
@@ -426,9 +431,9 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
   );
 }
 
-function linkClassName(isActive: boolean): string {
-  const base =
-    "inline-flex max-w-full items-center gap-1.5 whitespace-nowrap font-medium text-current underline underline-offset-4 transition";
+function linkClassName(isActive: boolean, isFooterNavigation: boolean): string {
+  const iconGap = isFooterNavigation ? "gap-2.5" : "gap-1.5";
+  const base = `inline-flex max-w-full items-center ${iconGap} whitespace-nowrap font-medium text-current underline underline-offset-4 transition`;
 
   return isActive
     ? `${base} decoration-current decoration-dashed hover:decoration-solid`
@@ -461,28 +466,27 @@ function ContentListBlock({ block }: { block: SiteBlockNode }) {
 function ContentSummary({ block }: { block: SiteBlockNode }) {
   const linkMode = useSitePageLinkMode();
   const href = blockHref(block, linkMode);
-  const title = (
-    <h3 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-      {href ? (
-        <a
-          className="underline decoration-transparent underline-offset-4 hover:decoration-current"
-          href={href}
-        >
-          {block.label}
-        </a>
-      ) : (
-        block.label
-      )}
-    </h3>
-  );
+  const shouldRenderDate = Boolean(block.date && block.type !== "project");
 
   return (
     <article
-      className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      className="group relative rounded-md border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
       data-block-type={block.type}
     >
-      <div className="space-y-2">
-        {block.date ? (
+      {href ? (
+        <a
+          aria-label={block.label}
+          className="absolute inset-0 z-10 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-600"
+          data-site-summary-link={block.type}
+          href={href}
+          rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
+          target={isExternalSiteHref(href) ? "_blank" : undefined}
+        >
+          <span className="sr-only">{block.label}</span>
+        </a>
+      ) : null}
+      <div className="pointer-events-none relative z-20 space-y-2">
+        {shouldRenderDate ? (
           <time
             className="block text-xs font-medium text-zinc-500 dark:text-zinc-400"
             dateTime={block.date}
@@ -490,7 +494,17 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
             {block.date}
           </time>
         ) : null}
-        {title}
+        <h3 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+          <span
+            className={
+              href
+                ? "underline decoration-transparent underline-offset-4 group-hover:decoration-current"
+                : undefined
+            }
+          >
+            {block.label}
+          </span>
+        </h3>
         <ContentSummaryBody block={block} />
       </div>
     </article>
@@ -505,7 +519,7 @@ function ContentSummaryBody({ block }: { block: SiteBlockNode }) {
   if (block.type === "project") {
     return (
       <MarkdownRenderer
-        className="text-sm text-zinc-600 dark:text-zinc-300"
+        className="text-sm text-zinc-600 dark:text-zinc-300 [&_a]:pointer-events-auto [&_a]:relative [&_a]:z-30"
         content={block.body}
         minHeadingLevel={4}
       />
@@ -654,6 +668,10 @@ function useSiteRouteSlug(): string | undefined {
 
 function useHeaderNavigation(): boolean {
   return useContext(HeaderNavigationContext);
+}
+
+function useFooterNavigation(): boolean {
+  return useContext(FooterNavigationContext);
 }
 
 function useSiteTheme(): PublicSiteThemeController {
