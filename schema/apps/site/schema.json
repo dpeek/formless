@@ -57,6 +57,9 @@
             "hero": {
               "label": "Hero"
             },
+            "feature": {
+              "label": "Feature"
+            },
             "image": {
               "label": "Image"
             },
@@ -119,6 +122,19 @@
           "label": "Color",
           "format": "color"
         },
+        "alignment": {
+          "type": "enum",
+          "required": false,
+          "label": "Media side",
+          "values": {
+            "left": {
+              "label": "Left"
+            },
+            "right": {
+              "label": "Right"
+            }
+          }
+        },
         "width": {
           "type": "number",
           "required": false,
@@ -174,6 +190,11 @@
           "type": "text",
           "required": false,
           "label": "Label"
+        },
+        "slot": {
+          "type": "text",
+          "required": false,
+          "label": "Slot"
         }
       },
       "mutations": {
@@ -325,6 +346,10 @@
         "hero": {
           "label": "Hero",
           "fields": ["label", "body"]
+        },
+        "feature": {
+          "label": "Feature",
+          "fields": ["label", "body", "alignment"]
         },
         "image": {
           "label": "Image",
@@ -654,6 +679,19 @@
             }
           }
         },
+        "feature": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "alignment": {
+              "editor": "enum",
+              "commit": "immediate"
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -774,6 +812,19 @@
             }
           }
         },
+        "feature": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "alignment": {
+              "editor": "enum",
+              "commit": "immediate"
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -867,6 +918,13 @@
         },
         {
           "type": "field",
+          "field": "alignment",
+          "editor": "enum",
+          "commit": "immediate",
+          "width": "sm"
+        },
+        {
+          "type": "field",
           "field": "width",
           "editor": "number",
           "commit": "field-commit",
@@ -926,6 +984,13 @@
           "editor": "text",
           "commit": "field-commit",
           "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "slot",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "sm"
         },
         {
           "type": "invokeAction",
@@ -1060,6 +1125,7 @@
               "children": [
                 "group",
                 "hero",
+                "feature",
                 "markdown",
                 "image",
                 "link",
@@ -1072,6 +1138,7 @@
               "children": [
                 "group",
                 "hero",
+                "feature",
                 "markdown",
                 "image",
                 "link",
@@ -1084,6 +1151,7 @@
               "children": ["markdown"]
             },
             "project": "leaf",
+            "feature": "leaf",
             "postList": "leaf",
             "projectList": "leaf",
             "header": {
@@ -1300,6 +1368,17 @@
             }
           }
         },
+        "feature": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            },
+            "alignment": {
+              "editor": "enum"
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -1483,6 +1562,19 @@
             "body": {
               "editor": "markdown",
               "commit": "field-commit"
+            }
+          }
+        },
+        "feature": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "alignment": {
+              "editor": "enum",
+              "commit": "immediate"
             }
           }
         },

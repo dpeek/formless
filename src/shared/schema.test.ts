@@ -3991,7 +3991,9 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
+        "field",
         "orderingHandle",
+        "field",
         "field",
         "field",
         "invokeAction",
@@ -4212,6 +4214,7 @@ describe("personal site sample schema", () => {
         link: { label: "Link" },
         markdown: { label: "Markdown" },
         hero: { label: "Hero" },
+        feature: { label: "Feature" },
         image: { label: "Image" },
         custom: { label: "Custom" },
       },
@@ -4236,6 +4239,15 @@ describe("personal site sample schema", () => {
       required: false,
       label: "Date",
     });
+    expect(schema.entities.block?.fields.alignment).toEqual({
+      type: "enum",
+      required: false,
+      label: "Media side",
+      values: {
+        left: { label: "Left" },
+        right: { label: "Right" },
+      },
+    });
     expect(Object.keys(schema.entities.block?.fields ?? {})).toEqual([
       "type",
       "label",
@@ -4246,6 +4258,7 @@ describe("personal site sample schema", () => {
       "linkTargetBlock",
       "icon",
       "color",
+      "alignment",
       "width",
       "height",
     ]);
@@ -4265,11 +4278,17 @@ describe("personal site sample schema", () => {
       to: "block",
       displayField: "label",
     });
+    expect(schema.entities.blockPlacement?.fields.slot).toEqual({
+      type: "text",
+      required: false,
+      label: "Slot",
+    });
     expect(Object.keys(schema.entities.blockPlacement?.fields ?? {})).toEqual([
       "parent",
       "block",
       "order",
       "label",
+      "slot",
     ]);
     expect(schema.entities.blockPlacement?.actions).toMatchObject({
       addTreeChild: {
@@ -4306,6 +4325,7 @@ describe("personal site sample schema", () => {
           requiredFields: ["label", "linkTargetMode"],
         },
         markdown: { label: "Markdown", fields: ["label", "body"] },
+        feature: { label: "Feature", fields: ["label", "body", "alignment"] },
         image: {
           label: "Image",
           fields: ["label", "href", "width", "height"],
@@ -4724,6 +4744,7 @@ describe("personal site sample schema", () => {
       "group",
       "post",
       "project",
+      "feature",
       "postList",
       "projectList",
       "header",
@@ -4736,6 +4757,7 @@ describe("personal site sample schema", () => {
     expect(pageChildren).toEqual([
       "group",
       "hero",
+      "feature",
       "markdown",
       "image",
       "link",
@@ -4746,6 +4768,7 @@ describe("personal site sample schema", () => {
     expect(groupChildren).toEqual([
       "group",
       "hero",
+      "feature",
       "markdown",
       "image",
       "link",
@@ -4755,6 +4778,7 @@ describe("personal site sample schema", () => {
     ]);
     expect(branchVariants.post).toEqual({ children: ["markdown"] });
     expect(branchVariants.project).toBe("leaf");
+    expect(branchVariants.feature).toBe("leaf");
     expect(branchVariants.postList).toBe("leaf");
     expect(branchVariants.projectList).toBe("leaf");
     expect(branchVariants.header).toEqual({
@@ -4911,6 +4935,13 @@ describe("personal site sample schema", () => {
         height: { editor: "number" },
       },
     });
+    expect(blockCreate.variants?.feature).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+        alignment: { editor: "enum" },
+      },
+    });
     expect(blockEdit.variants?.page).toMatchObject({
       presentation: "fields",
       fields: {
@@ -4937,6 +4968,13 @@ describe("personal site sample schema", () => {
         height: { editor: "number", commit: "field-commit" },
       },
     });
+    expect(blockEdit.variants?.feature).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        alignment: { editor: "enum", commit: "immediate" },
+      },
+    });
 
     for (const blockType of plannedRemovedBlockTypes) {
       expect(blockCreate.variants).not.toHaveProperty(blockType);
@@ -4956,6 +4994,7 @@ describe("personal site sample schema", () => {
             children: [
               "group",
               "hero",
+              "feature",
               "markdown",
               "image",
               "link",
@@ -4968,6 +5007,7 @@ describe("personal site sample schema", () => {
             children: [
               "group",
               "hero",
+              "feature",
               "markdown",
               "image",
               "link",
@@ -4980,6 +5020,7 @@ describe("personal site sample schema", () => {
             children: ["markdown"],
           },
           project: "leaf",
+          feature: "leaf",
           postList: "leaf",
           projectList: "leaf",
           header: {

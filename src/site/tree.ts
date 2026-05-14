@@ -285,6 +285,7 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
       linkProjection === null ? record.values.icon : linkProjection.icon,
     ),
     ...optionalStringField("color", record.values.color),
+    ...optionalStringField("alignment", record.values.alignment),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
     placements: [],
@@ -314,6 +315,7 @@ function projectPlacement(placement: StoredRecord, childBlock: SiteBlockNode): S
     id: placement.id,
     order: numberValue(placement.values.order) ?? 0,
     ...optionalStringField("label", placement.values.label),
+    ...optionalStringField("slot", placement.values.slot),
     block: childBlock,
   };
 }

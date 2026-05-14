@@ -204,6 +204,7 @@ export type SiteBlockNode = {
   date?: string;
   icon?: string;
   color?: string;
+  alignment?: string;
   width?: number;
   height?: number;
   placements: SitePlacementNode[];
@@ -217,6 +218,7 @@ export type SitePlacementNode = {
   id: string;
   order: number;
   label?: string;
+  slot?: string;
   block: SiteBlockNode;
 };
 

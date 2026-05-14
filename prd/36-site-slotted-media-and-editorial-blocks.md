@@ -1,7 +1,7 @@
 # PRD 36: Site slotted media and editorial blocks
 
 Status: ready
-Current chunk: SME-01 ready
+Current chunk: SME-02 ready
 Last updated: 2026-05-14
 
 ## Goal
@@ -294,13 +294,13 @@ Possible changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on     | Scope             | Summary                                                                                     |
-| ------ | ------ | -------------- | ----------------- | ------------------------------------------------------------------------------------------- |
-| SME-01 | ready  | PRD 35 SCL-01  | schema, protocol  | Add `blockPlacement.slot`, `feature` type, feature alignment, and public slot projection.   |
-| SME-02 | ready  | SME-01, SCL-02 | tree, renderer    | Render post/project primary images in list cards and post primary images in detail headers. |
-| SME-03 | ready  | SME-01         | renderer, schema  | Add feature block rendering with media/action slots and left/right desktop alignment.       |
-| SME-04 | ready  | SME-01         | generated tree UI | Add slot-aware tree child creation for primary images, feature media, and feature actions.  |
-| SME-05 | ready  | SME-02, SME-03 | seed, browser     | Update Site seed with primary images and at least one feature block; run browser smoke.     |
+| ID     | Status  | Depends on     | Scope             | Summary                                                                                     |
+| ------ | ------- | -------------- | ----------------- | ------------------------------------------------------------------------------------------- |
+| SME-01 | shipped | PRD 35 SCL-01  | schema, protocol  | Add `blockPlacement.slot`, `feature` type, feature alignment, and public slot projection.   |
+| SME-02 | ready   | SME-01, SCL-02 | tree, renderer    | Render post/project primary images in list cards and post primary images in detail headers. |
+| SME-03 | ready   | SME-01         | renderer, schema  | Add feature block rendering with media/action slots and left/right desktop alignment.       |
+| SME-04 | ready   | SME-01         | generated tree UI | Add slot-aware tree child creation for primary images, feature media, and feature actions.  |
+| SME-05 | ready   | SME-02, SME-03 | seed, browser     | Update Site seed with primary images and at least one feature block; run browser smoke.     |
 
 ## Out of Scope
 
@@ -335,6 +335,11 @@ Possible changed files:
 
 ## Notes
 
+- 2026-05-14: SME-01 shipped. Added optional `blockPlacement.slot`, `block.type = feature`, flat `block.alignment`, public `SitePlacementNode.slot`, and public `SiteBlockNode.alignment`.
+- 2026-05-14: SME-01 evidence: `devstate check` passed; `.devstate/logs/service-test.txt` reported `src/app.test.tsx` 139 passed after watcher rerun; `.devstate/logs/check-vite.txt` reported formatting plus lint/type checks passed.
+- 2026-05-14: SME-01 browser smoke: `bun browser --ignore-https-errors open https://36-site-slotted-media-and-editorial-blocks.formless.local/site`; browser eval confirmed tree add variants include `group hero feature markdown image link project postList projectList`.
+- 2026-05-14: SME-01 blockers: none.
+- 2026-05-14: SME-01 promotion notes: promote `blockPlacement.slot` edge roles, `feature` block type, and `block.alignment` public projection before global docs are updated.
 - 2026-05-14: User asked for primary images on posts and projects.
 - 2026-05-14: User asked for a generic left/right image plus label/body block with possible CTA links.
 - 2026-05-14: User asked whether named template slots push beyond the everything-is-blocks model.

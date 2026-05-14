@@ -1551,7 +1551,7 @@ describe("generated collection home", () => {
     expect(emptyRootHtml).toContain("No records yet.");
     expect(emptyRootHtml).toContain('data-formless-tree-add-parent="page-1"');
     expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variants="group hero markdown image link project postList projectList"',
+      'data-formless-tree-add-variants="group hero feature markdown image link project postList projectList"',
     );
     expect(emptyRootHtml).toContain('aria-label="Add child"');
     expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');

@@ -162,6 +162,70 @@ describe("site page tree projection", () => {
     });
   });
 
+  it("projects placement slots and feature alignment without changing default placements", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_feature", {
+        type: "feature",
+        label: "Featured writing",
+        body: "A reusable editorial block.",
+        alignment: "right",
+      }),
+      blockRecord("rec_site_media_feature", {
+        type: "image",
+        label: "Feature image",
+        href: "/api/site/media/site/images/feature.webp",
+        width: 1600,
+        height: 900,
+      }),
+      placementRecord(
+        "rec_site_place_home_feature",
+        "rec_site_content_home",
+        "rec_site_block_feature",
+        {
+          order: 900,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_feature_media",
+        "rec_site_block_feature",
+        "rec_site_media_feature",
+        {
+          order: 100,
+          slot: "media",
+        },
+      ),
+      placementRecord(
+        "rec_site_place_feature_action",
+        "rec_site_block_feature",
+        "rec_site_content_link_projects",
+        {
+          order: 200,
+          slot: "actions",
+        },
+      ),
+    ];
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const featurePlacement = tree.page.placements.find(
+      (placement) => placement.id === "rec_site_place_home_feature",
+    );
+    const feature = childForPlacement(tree.page, "rec_site_place_home_feature");
+
+    expect(featurePlacement).not.toHaveProperty("slot");
+    expect(feature).toMatchObject({
+      id: "rec_site_block_feature",
+      type: "feature",
+      label: "Featured writing",
+      body: "A reusable editorial block.",
+      alignment: "right",
+    });
+    expect(feature.placements.map((placement) => [placement.id, placement.slot])).toEqual([
+      ["rec_site_place_feature_media", "media"],
+      ["rec_site_place_feature_action", "actions"],
+    ]);
+  });
+
   it("keeps legacy link href strings unchanged in the public tree", () => {
     const records = baseTreeRecords().map((record) => {
       if (record.id === "rec_site_content_link_blog") {
@@ -821,6 +885,7 @@ function placementRecord(
   options: {
     order?: number;
     label?: string;
+    slot?: string;
   } = {},
 ): StoredRecord {
   return {
@@ -831,6 +896,7 @@ function placementRecord(
       block,
       order: options.order ?? 99,
       label: options.label ?? id,
+      ...(options.slot === undefined ? {} : { slot: options.slot }),
     },
     createdAt: "2026-05-06T00:00:00.000Z",
   };

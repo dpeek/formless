@@ -889,8 +889,28 @@ describe("home view model collections", () => {
     );
 
     expect(allowedChildVariants).toEqual({
-      page: ["group", "hero", "markdown", "image", "link", "project", "postList", "projectList"],
-      group: ["group", "hero", "markdown", "image", "link", "project", "postList", "projectList"],
+      page: [
+        "group",
+        "hero",
+        "feature",
+        "markdown",
+        "image",
+        "link",
+        "project",
+        "postList",
+        "projectList",
+      ],
+      group: [
+        "group",
+        "hero",
+        "feature",
+        "markdown",
+        "image",
+        "link",
+        "project",
+        "postList",
+        "projectList",
+      ],
       post: ["markdown"],
       header: ["headerPrimary", "headerSecondary"],
       headerPrimary: ["link"],
@@ -900,6 +920,7 @@ describe("home view model collections", () => {
       footerSocial: ["link"],
     });
     expect(treeResult.branches?.variants.leafVariantValues).toContain("project");
+    expect(treeResult.branches?.variants.leafVariantValues).toContain("feature");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("postList");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("projectList");
     expect(treeResult.childRecordUnion?.variants).toEqual(
@@ -1526,6 +1547,17 @@ describe("home view model collections", () => {
         format: "plain",
       },
       {
+        type: "field",
+        key: "field:slot",
+        label: "Slot",
+        editor: "text",
+        commit: "field-commit",
+        display: "editor",
+        align: null,
+        width: "sm",
+        format: "plain",
+      },
+      {
         type: "invokeAction",
         key: "invokeAction:editChildBlock,ordering",
         label: "",
@@ -1574,12 +1606,24 @@ describe("home view model collections", () => {
       "field:date",
       "field:icon",
       "field:color",
+      "field:alignment",
       "field:width",
       "field:height",
     ]);
     expect(
       contentModel?.result.type === "table" ? tableColumnEditors(contentModel.result.columns) : [],
-    ).toEqual(["enum", "text", "markdown", "href", "date", "icon", "color", "number", "number"]);
+    ).toEqual([
+      "enum",
+      "text",
+      "markdown",
+      "href",
+      "date",
+      "icon",
+      "color",
+      "enum",
+      "number",
+      "number",
+    ]);
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "type",
       "label",
@@ -1590,6 +1634,7 @@ describe("home view model collections", () => {
       project: ["date", "body", "href"],
       link: ["linkTargetMode", "linkTargetBlock", "href", "icon"],
       markdown: ["body"],
+      feature: ["body", "alignment"],
       image: ["href", "width", "height"],
     });
   });
