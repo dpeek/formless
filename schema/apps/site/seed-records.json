@@ -108,6 +108,101 @@
     "createdAt": "2026-05-05T00:00:12.000Z"
   },
   {
+    "id": "rec_site_media_post_agents_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Agents article primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Ccircle%20cx%3D%271180%27%20cy%3D%27320%27%20r%3D%27180%27%20fill%3D%27%23ccfbf1%27%20opacity%3D%270.35%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27470%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3EAgents%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27595%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eenablers%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:00.000Z"
+  },
+  {
+    "id": "rec_site_media_post_schema_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Schema-driven apps primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%231e3a8a%27%2F%3E%3Cpath%20d%3D%27M160%20740%20L520%20340%20L860%20580%20L1200%20260%20L1440%20740Z%27%20fill%3D%27%2393c5fd%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27270%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3ESchema-driven%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27380%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eapps%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:01.000Z"
+  },
+  {
+    "id": "rec_site_media_project_estii_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Estii project primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Crect%20x%3D%27120%27%20y%3D%27160%27%20width%3D%271360%27%20height%3D%27680%27%20rx%3D%2748%27%20fill%3D%27%23f8fafc%27%20opacity%3D%270.14%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27535%27%20font-size%3D%27128%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EEstii%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:02.000Z"
+  },
+  {
+    "id": "rec_site_media_project_opensurf_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "OpenSurf project primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f172a%27%2F%3E%3Cpath%20d%3D%27M0%20640%20C260%20510%20390%20510%20640%20640%20C890%20770%201030%20770%201600%20540%20L1600%201000%20L0%201000Z%27%20fill%3D%27%232dd4bf%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27470%27%20font-size%3D%27120%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EOpenSurf%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:03.000Z"
+  },
+  {
+    "id": "rec_site_media_project_formless_primary",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Formless project primary image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%233f3f46%27%2F%3E%3Crect%20x%3D%27200%27%20y%3D%27200%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23a7f3d0%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%27640%27%20y%3D%27360%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23bfdbfe%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%271080%27%20y%3D%27520%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23fecaca%27%20opacity%3D%270.75%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27855%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EFormless%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:04.000Z"
+  },
+  {
+    "id": "rec_site_block_home_feature_agents",
+    "entity": "block",
+    "values": {
+      "type": "feature",
+      "label": "Tools that keep up with the work",
+      "body": "Schema-backed interfaces let small teams ship authoring workflows, runtime checks, and public pages from the same flat records.",
+      "alignment": "right"
+    },
+    "createdAt": "2026-05-14T02:40:05.000Z"
+  },
+  {
+    "id": "rec_site_media_home_feature_agents",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Feature block media image",
+      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%2314514a%27%2F%3E%3Crect%20x%3D%27160%27%20y%3D%27160%27%20width%3D%27540%27%20height%3D%27320%27%20rx%3D%2732%27%20fill%3D%27%23ccfbf1%27%20opacity%3D%270.86%27%2F%3E%3Crect%20x%3D%27880%27%20y%3D%27320%27%20width%3D%27560%27%20height%3D%27380%27%20rx%3D%2732%27%20fill%3D%27%23f0fdfa%27%20opacity%3D%270.72%27%2F%3E%3Cpath%20d%3D%27M700%20320%20C800%20320%20780%20540%20880%20540%27%20stroke%3D%27white%27%20stroke-width%3D%2732%27%20fill%3D%27none%27%20opacity%3D%270.8%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27855%27%20font-size%3D%2788%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EFlat%20records%2C%20rich%20views%3C%2Ftext%3E%3C%2Fsvg%3E",
+      "width": 1600,
+      "height": 1000
+    },
+    "createdAt": "2026-05-14T02:40:06.000Z"
+  },
+  {
+    "id": "rec_site_link_home_feature_notes",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "Read notes",
+      "href": "/blog",
+      "linkTargetMode": "internal",
+      "linkTargetBlock": "rec_site_content_blog"
+    },
+    "createdAt": "2026-05-14T02:40:07.000Z"
+  },
+  {
     "id": "rec_site_content_link_home",
     "entity": "block",
     "values": {
@@ -523,6 +618,113 @@
     "createdAt": "2026-05-05T00:00:26.300Z"
   },
   {
+    "id": "rec_site_place_blog_posts",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_blog",
+      "block": "rec_site_block_blog_posts",
+      "order": 2000
+    },
+    "createdAt": "2026-05-14T01:31:02.000Z"
+  },
+  {
+    "id": "rec_site_place_projects_index",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_projects",
+      "block": "rec_site_block_projects_index",
+      "order": 2000
+    },
+    "createdAt": "2026-05-14T01:31:03.000Z"
+  },
+  {
+    "id": "rec_site_place_post_agents_primary_image",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_post_shipped_schema",
+      "block": "rec_site_media_post_agents_primary",
+      "order": 500,
+      "slot": "primaryImage"
+    },
+    "createdAt": "2026-05-14T02:41:00.000Z"
+  },
+  {
+    "id": "rec_site_place_post_schema_primary_image",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_post_draft_notes",
+      "block": "rec_site_media_post_schema_primary",
+      "order": 500,
+      "slot": "primaryImage"
+    },
+    "createdAt": "2026-05-14T02:41:01.000Z"
+  },
+  {
+    "id": "rec_site_place_project_estii_primary_image",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_project_estii",
+      "block": "rec_site_media_project_estii_primary",
+      "order": 500,
+      "slot": "primaryImage"
+    },
+    "createdAt": "2026-05-14T02:41:02.000Z"
+  },
+  {
+    "id": "rec_site_place_project_opensurf_primary_image",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_project_opensurf",
+      "block": "rec_site_media_project_opensurf_primary",
+      "order": 500,
+      "slot": "primaryImage"
+    },
+    "createdAt": "2026-05-14T02:41:03.000Z"
+  },
+  {
+    "id": "rec_site_place_project_formless_primary_image",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_project_formless",
+      "block": "rec_site_media_project_formless_primary",
+      "order": 500,
+      "slot": "primaryImage"
+    },
+    "createdAt": "2026-05-14T02:41:04.000Z"
+  },
+  {
+    "id": "rec_site_place_home_feature_agents",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_home",
+      "block": "rec_site_block_home_feature_agents",
+      "order": 3000
+    },
+    "createdAt": "2026-05-14T02:41:05.000Z"
+  },
+  {
+    "id": "rec_site_place_feature_agents_media",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_feature_agents",
+      "block": "rec_site_media_home_feature_agents",
+      "order": 1000,
+      "slot": "media"
+    },
+    "createdAt": "2026-05-14T02:41:06.000Z"
+  },
+  {
+    "id": "rec_site_place_feature_agents_action",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_block_home_feature_agents",
+      "block": "rec_site_link_home_feature_notes",
+      "order": 1000,
+      "slot": "actions"
+    },
+    "createdAt": "2026-05-14T02:41:07.000Z"
+  },
+  {
     "id": "rec_site_place_post_body",
     "entity": "blockPlacement",
     "values": {
@@ -641,25 +843,5 @@
       "order": 1000
     },
     "createdAt": "2026-05-13T05:38:22.200Z"
-  },
-  {
-    "id": "rec_site_place_blog_posts",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_blog",
-      "block": "rec_site_block_blog_posts",
-      "order": 2000
-    },
-    "createdAt": "2026-05-14T01:31:02.000Z"
-  },
-  {
-    "id": "rec_site_place_projects_index",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "rec_site_block_projects_index",
-      "order": 2000
-    },
-    "createdAt": "2026-05-14T01:31:03.000Z"
   }
 ]

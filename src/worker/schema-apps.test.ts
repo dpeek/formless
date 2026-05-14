@@ -56,7 +56,7 @@ describe("worker schema app definitions", () => {
       "assetKey",
       "limit",
     ];
-    const removedPlacementFields = ["slot", "visible", "variant"];
+    const removedPlacementFields = ["visible", "variant"];
 
     for (const record of site.seedRecords) {
       const removedFields =
@@ -70,6 +70,42 @@ describe("worker schema app definitions", () => {
         expect(record.values).not.toHaveProperty(field);
       }
     }
+  });
+
+  it("loads Site source seed examples for slotted media and feature blocks", () => {
+    const site = getWorkerSchemaAppDefinition("site");
+    const valuesFor = (id: string) => site.seedRecords.find((record) => record.id === id)?.values;
+
+    expect(valuesFor("rec_site_place_post_agents_primary_image")).toMatchObject({
+      parent: "rec_site_content_post_shipped_schema",
+      block: "rec_site_media_post_agents_primary",
+      slot: "primaryImage",
+    });
+    expect(valuesFor("rec_site_place_post_schema_primary_image")).toMatchObject({
+      parent: "rec_site_content_post_draft_notes",
+      block: "rec_site_media_post_schema_primary",
+      slot: "primaryImage",
+    });
+    expect(valuesFor("rec_site_place_project_opensurf_primary_image")).toMatchObject({
+      parent: "rec_site_content_project_opensurf",
+      block: "rec_site_media_project_opensurf_primary",
+      slot: "primaryImage",
+    });
+    expect(valuesFor("rec_site_block_home_feature_agents")).toMatchObject({
+      type: "feature",
+      label: "Tools that keep up with the work",
+      alignment: "right",
+    });
+    expect(valuesFor("rec_site_place_feature_agents_media")).toMatchObject({
+      parent: "rec_site_block_home_feature_agents",
+      block: "rec_site_media_home_feature_agents",
+      slot: "media",
+    });
+    expect(valuesFor("rec_site_place_feature_agents_action")).toMatchObject({
+      parent: "rec_site_block_home_feature_agents",
+      block: "rec_site_link_home_feature_notes",
+      slot: "actions",
+    });
   });
 
   it("returns undefined for unknown worker schema keys", () => {

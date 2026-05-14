@@ -1,7 +1,7 @@
 # PRD 36: Site slotted media and editorial blocks
 
-Status: ready
-Current chunk: SME-05 ready
+Status: complete
+Current chunk: SME-05 shipped
 Last updated: 2026-05-14
 
 ## Goal
@@ -300,7 +300,7 @@ Possible changed files:
 | SME-02 | shipped | SME-01, SCL-02 | tree, renderer    | Render post/project primary images in list cards and post primary images in detail headers. |
 | SME-03 | shipped | SME-01         | renderer, schema  | Add feature block rendering with media/action slots and left/right desktop alignment.       |
 | SME-04 | shipped | SME-01         | generated tree UI | Add slot-aware tree child creation for primary images, feature media, and feature actions.  |
-| SME-05 | ready   | SME-02, SME-03 | seed, browser     | Update Site seed with primary images and at least one feature block; run browser smoke.     |
+| SME-05 | shipped | SME-02, SME-03 | seed, browser     | Update Site seed with primary images and at least one feature block; run browser smoke.     |
 
 ## Out of Scope
 
@@ -355,6 +355,11 @@ Possible changed files:
 - 2026-05-14: SME-04 browser smoke: `bun browser --session sme-04` opened `/site`; after runtime source schema reset, post tree controls exposed `Markdown|Primary image` with slots `default primaryImage`, project tree controls exposed `Primary image` with slot `primaryImage`, and `bun browser --session sme-04 errors` returned no page errors.
 - 2026-05-14: SME-04 blockers: none.
 - 2026-05-14: SME-04 promotion notes: promote slot-aware generated tree add controls for post/project primary images and feature media/action children; promote placement ordering scoped by `parent` and `slot`.
+- 2026-05-14: SME-05 shipped. Site source seed now includes slotted primary image blocks for both seeded posts and the Estii, OpenSurf, and Formless projects. Home source seed includes a `feature` block with right-side media, one `media` slot image placement, and one `actions` slot link placement.
+- 2026-05-14: SME-05 evidence: `devstate check` passed; `.devstate/logs/service-test.txt` reported 20 files and 515 tests passed after watcher rerun; `.devstate/logs/check-vite.txt` reported formatting plus lint/type checks passed. Required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this checkout; `devstate` wrote `.devstate/status.md` and `.devstate/logs/*`.
+- 2026-05-14: SME-05 browser smoke: `bun browser --session sme-05` reset `/api/site/reset/seed`, opened `/pages/home`, `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`; home rendered the seeded feature block with one media image and one action link, blog rendered two post summary images, post detail rendered one primary header image, projects rendered three project summary images, and `bun browser --session sme-05 errors` returned no page errors.
+- 2026-05-14: SME-05 blockers: none.
+- 2026-05-14: SME-05 promotion notes: promote source seed examples for slotted post/project primary images and the seeded feature block when global docs are next updated.
 - 2026-05-14: User asked for primary images on posts and projects.
 - 2026-05-14: User asked for a generic left/right image plus label/body block with possible CTA links.
 - 2026-05-14: User asked whether named template slots push beyond the everything-is-blocks model.
