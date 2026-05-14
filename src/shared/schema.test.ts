@@ -4204,6 +4204,8 @@ describe("personal site sample schema", () => {
         profile: { label: "Profile" },
         group: { label: "Group" },
         header: { label: "Header" },
+        headerPrimary: { label: "Header primary" },
+        headerSecondary: { label: "Header secondary" },
         footer: { label: "Footer" },
         footerSection: { label: "Footer section" },
         footerSocial: { label: "Footer social" },
@@ -4287,12 +4289,14 @@ describe("personal site sample schema", () => {
       entity: "block",
       discriminator: "type",
       variants: {
-        page: { label: "Page", fields: ["label", "href"] },
+        page: { label: "Page", fields: ["label", "href", "icon"] },
         post: { label: "Post", fields: ["label", "date", "body", "href"] },
         project: { label: "Project", fields: ["label", "date", "body", "href"] },
         postList: { label: "Post list", fields: ["label"] },
         projectList: { label: "Project list", fields: ["label"] },
         header: { label: "Header", fields: ["label"] },
+        headerPrimary: { label: "Header primary", fields: ["label"] },
+        headerSecondary: { label: "Header secondary", fields: ["label"] },
         footer: { label: "Footer", fields: ["label"] },
         footerSection: { label: "Footer section", fields: ["label"] },
         footerSocial: { label: "Footer social", fields: ["label"] },
@@ -4491,6 +4495,7 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "href", commit: "field-commit" },
+            icon: { editor: "icon", commit: "field-commit" },
           },
         },
         post: {
@@ -4722,6 +4727,8 @@ describe("personal site sample schema", () => {
       "postList",
       "projectList",
       "header",
+      "headerPrimary",
+      "headerSecondary",
       "footer",
       "footerSection",
       "footerSocial",
@@ -4750,6 +4757,12 @@ describe("personal site sample schema", () => {
     expect(branchVariants.project).toBe("leaf");
     expect(branchVariants.postList).toBe("leaf");
     expect(branchVariants.projectList).toBe("leaf");
+    expect(branchVariants.header).toEqual({
+      action: "leaf",
+      children: ["headerPrimary", "headerSecondary"],
+    });
+    expect(branchVariants.headerPrimary).toEqual({ children: ["link"] });
+    expect(branchVariants.headerSecondary).toEqual({ children: ["link"] });
     expect(branchVariants.footer).toEqual({
       action: "leaf",
       children: ["footerSection", "footerSocial", "link"],
@@ -4885,6 +4898,7 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         href: { editor: "href" },
+        icon: { editor: "icon" },
       },
     });
     expect(blockCreate.variants?.page?.fields).not.toHaveProperty("body");
@@ -4901,6 +4915,7 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         href: { editor: "href", commit: "field-commit" },
+        icon: { editor: "icon", commit: "field-commit" },
       },
     });
     expect(blockEdit.variants?.page?.fields).not.toHaveProperty("body");
@@ -4969,6 +4984,12 @@ describe("personal site sample schema", () => {
           projectList: "leaf",
           header: {
             action: "leaf",
+            children: ["headerPrimary", "headerSecondary"],
+          },
+          headerPrimary: {
+            children: ["link"],
+          },
+          headerSecondary: {
             children: ["link"],
           },
           footer: {

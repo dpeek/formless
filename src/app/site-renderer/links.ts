@@ -48,6 +48,22 @@ export function profileAwareSiteHref(href: string, linkMode: SitePageLinkMode): 
   return href;
 }
 
+export function siteHrefMatchesRoute(href: string, currentSlug: string | undefined): boolean {
+  const linkSlug = routeSlugForSiteHref(href);
+
+  if (!linkSlug || !currentSlug) {
+    return false;
+  }
+
+  const routeSlug = normalizeSiteSlug(currentSlug);
+
+  if (linkSlug === "home") {
+    return routeSlug === "home";
+  }
+
+  return routeSlug === linkSlug || routeSlug.startsWith(`${linkSlug}/`);
+}
+
 export function isExternalSiteHref(href: string): boolean {
   return /^https?:\/\//.test(href);
 }
@@ -63,6 +79,34 @@ function splitHrefSuffix(href: string): { path: string; suffix: string } {
     path: href.slice(0, suffixStart),
     suffix: href.slice(suffixStart),
   };
+}
+
+function routeSlugForSiteHref(href: string): string | null {
+  if (isExternalSiteHref(href)) {
+    return null;
+  }
+
+  const { path } = splitHrefSuffix(href);
+
+  if (path === "/" || path === "/pages" || path === "/pages/") {
+    return "home";
+  }
+
+  if (path.startsWith("/pages/")) {
+    return normalizeSiteSlug(path.slice("/pages/".length));
+  }
+
+  if (path.startsWith("/") && !path.startsWith("//")) {
+    return normalizeSiteSlug(path.slice(1));
+  }
+
+  return null;
+}
+
+function normalizeSiteSlug(slug: string): string {
+  const normalized = slug.trim().replace(/^\/+/, "").replace(/\/+$/, "");
+
+  return normalized === "" ? "home" : normalized;
 }
 
 function encodeSiteSlugPath(slug: string): string {

@@ -185,6 +185,24 @@
     "createdAt": "2026-05-05T00:00:16.000Z"
   },
   {
+    "id": "rec_site_content_group_header_primary",
+    "entity": "block",
+    "values": {
+      "type": "headerPrimary",
+      "label": "Primary"
+    },
+    "createdAt": "2026-05-05T00:00:16.100Z"
+  },
+  {
+    "id": "rec_site_content_group_header_secondary",
+    "entity": "block",
+    "values": {
+      "type": "headerSecondary",
+      "label": "Secondary"
+    },
+    "createdAt": "2026-05-05T00:00:16.200Z"
+  },
+  {
     "id": "rec_site_content_group_footer",
     "entity": "block",
     "values": {
@@ -363,22 +381,42 @@
     "createdAt": "2026-05-13T07:19:58.013Z"
   },
   {
-    "id": "rec_site_place_header_home",
+    "id": "rec_site_place_header_primary",
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_link_home",
+      "block": "rec_site_content_group_header_primary",
       "order": 1000
     },
     "createdAt": "2026-05-05T00:00:19.000Z"
   },
   {
-    "id": "rec_site_place_header_blog",
+    "id": "rec_site_place_header_secondary",
     "entity": "blockPlacement",
     "values": {
       "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_link_blog",
+      "block": "rec_site_content_group_header_secondary",
       "order": 2000
+    },
+    "createdAt": "2026-05-05T00:00:19.100Z"
+  },
+  {
+    "id": "rec_site_place_header_home",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_header_primary",
+      "block": "rec_site_content_link_home",
+      "order": 1000
+    },
+    "createdAt": "2026-05-05T00:00:19.200Z"
+  },
+  {
+    "id": "rec_site_place_header_blog",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_header_secondary",
+      "block": "rec_site_content_link_blog",
+      "order": 1000
     },
     "createdAt": "2026-05-05T00:00:20.000Z"
   },
@@ -386,9 +424,9 @@
     "id": "rec_site_place_header_projects",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header",
+      "parent": "rec_site_content_group_header_secondary",
       "block": "rec_site_content_link_projects",
-      "order": 3000
+      "order": 2000
     },
     "createdAt": "2026-05-05T00:00:21.000Z"
   },
@@ -396,9 +434,9 @@
     "id": "rec_site_place_header_resume",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header",
+      "parent": "rec_site_content_group_header_secondary",
       "block": "rec_site_content_link_resume",
-      "order": 4000
+      "order": 3000
     },
     "createdAt": "2026-05-05T00:00:22.000Z"
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { profileAwareSiteHref, sitePagePathForSlug } from "./links.ts";
+import { profileAwareSiteHref, siteHrefMatchesRoute, sitePagePathForSlug } from "./links.ts";
 
 describe("site renderer links", () => {
   it("renders preview links through the public preview route", () => {
@@ -24,5 +24,13 @@ describe("site renderer links", () => {
     expect(profileAwareSiteHref("https://example.com/page", "published")).toBe(
       "https://example.com/page",
     );
+  });
+
+  it("matches public route state for header navigation active links", () => {
+    expect(siteHrefMatchesRoute("/pages/home", "home")).toBe(true);
+    expect(siteHrefMatchesRoute("/", "blog")).toBe(false);
+    expect(siteHrefMatchesRoute("/pages/blog", "blog/shipping-schema-backed-authoring")).toBe(true);
+    expect(siteHrefMatchesRoute("/projects", "projects/future-detail")).toBe(true);
+    expect(siteHrefMatchesRoute("https://example.com/page", "home")).toBe(false);
   });
 });

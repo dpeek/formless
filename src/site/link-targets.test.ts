@@ -75,6 +75,39 @@ describe("site link target resolver", () => {
     });
   });
 
+  it("inherits internal target icons unless the link has its own icon", () => {
+    const targetIcon = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>';
+    const linkIcon = '<svg viewBox="0 0 24 24"><path d="M12 4l8 16H4z"/></svg>';
+    const target = blockRecord("rec_site_page_projects", {
+      type: "page",
+      label: "Projects",
+      href: "/projects",
+      icon: targetIcon,
+    });
+
+    expect(
+      resolveSiteLinkHref(internalLink("rec_site_projects_link", target.id), indexBlocks([target])),
+    ).toEqual({
+      href: "/projects",
+      icon: targetIcon,
+      warnings: [],
+    });
+    expect(
+      resolveSiteLinkHref(
+        linkRecord("rec_site_projects_link_with_icon", {
+          [LINK_TARGET_MODE_FIELD]: "internal",
+          [LINK_TARGET_BLOCK_FIELD]: target.id,
+          icon: linkIcon,
+        }),
+        indexBlocks([target]),
+      ),
+    ).toEqual({
+      href: "/projects",
+      icon: linkIcon,
+      warnings: [],
+    });
+  });
+
   it("warns and projects no href for missing internal targets", () => {
     const link = internalLink("rec_site_missing_link", "rec_site_missing_page");
 

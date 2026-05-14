@@ -33,6 +33,12 @@
             "header": {
               "label": "Header"
             },
+            "headerPrimary": {
+              "label": "Header primary"
+            },
+            "headerSecondary": {
+              "label": "Header secondary"
+            },
             "footer": {
               "label": "Footer"
             },
@@ -254,7 +260,7 @@
       "variants": {
         "page": {
           "label": "Page",
-          "fields": ["label", "href"],
+          "fields": ["label", "href", "icon"],
           "requiredFields": ["label", "href"]
         },
         "post": {
@@ -285,6 +291,14 @@
         },
         "header": {
           "label": "Header",
+          "fields": ["label"]
+        },
+        "headerPrimary": {
+          "label": "Header primary",
+          "fields": ["label"]
+        },
+        "headerSecondary": {
+          "label": "Header secondary",
           "fields": ["label"]
         },
         "footer": {
@@ -542,6 +556,10 @@
           "fields": {
             "href": {
               "editor": "href",
+              "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
               "commit": "field-commit"
             }
           }
@@ -1070,6 +1088,12 @@
             "projectList": "leaf",
             "header": {
               "action": "leaf",
+              "children": ["headerPrimary", "headerSecondary"]
+            },
+            "headerPrimary": {
+              "children": ["link"]
+            },
+            "headerSecondary": {
               "children": ["link"]
             },
             "footer": {
@@ -1200,6 +1224,9 @@
           "fields": {
             "href": {
               "editor": "href"
+            },
+            "icon": {
+              "editor": "icon"
             }
           }
         },
@@ -1368,6 +1395,10 @@
           "fields": {
             "href": {
               "editor": "href",
+              "commit": "field-commit"
+            },
+            "icon": {
+              "editor": "icon",
               "commit": "field-commit"
             }
           }

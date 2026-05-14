@@ -9,6 +9,7 @@ const ROUTABLE_TARGET_TYPES = new Set(["page", "post", "project"]);
 
 export type SiteLinkHrefResolution = {
   href?: string;
+  icon?: string;
   warnings: SiteTreeWarning[];
 };
 
@@ -28,6 +29,7 @@ export function resolveSiteLinkHref(
 
   return {
     href: stringValue(link.values.href),
+    ...optionalStringField("icon", link.values.icon),
     warnings: [],
   };
 }
@@ -58,6 +60,7 @@ function resolveInternalLinkHref(
 
   const targetType = stringValue(target.values.type);
   const targetHref = stringValue(target.values.href);
+  const icon = stringValue(link.values.icon) ?? stringValue(target.values.icon);
 
   if (!targetType || !ROUTABLE_TARGET_TYPES.has(targetType) || !targetHref) {
     return {
@@ -68,6 +71,7 @@ function resolveInternalLinkHref(
 
   return {
     href: targetHref,
+    ...optionalStringField("icon", icon),
     warnings: [],
   };
 }
@@ -84,6 +88,7 @@ function resolveExternalLinkHref(link: StoredRecord): SiteLinkHrefResolution {
 
   return {
     href,
+    ...optionalStringField("icon", link.values.icon),
     warnings: [],
   };
 }
@@ -128,4 +133,13 @@ function invalidExternalLinkWarning(link: StoredRecord, href: string | undefined
 
 function stringValue(value: FieldValue | undefined): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+function optionalStringField<Key extends string>(
+  key: Key,
+  value: FieldValue | undefined,
+): Partial<Record<Key, string>> {
+  const string = stringValue(value);
+
+  return string === undefined ? {} : ({ [key]: string } as Partial<Record<Key, string>>);
 }

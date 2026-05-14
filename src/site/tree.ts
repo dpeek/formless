@@ -268,15 +268,22 @@ function buildPlacementNodes(
 
 function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): SiteBlockNode {
   const type = stringValue(record.values.type) ?? "";
+  const linkProjection = projectedLinkFields(record, type, context);
 
   return {
     id: record.id,
     type,
     label: stringValue(record.values.label) ?? "",
     ...optionalStringField("body", record.values.body),
-    ...optionalStringField("href", projectedBlockHref(record, type, context)),
+    ...optionalStringField(
+      "href",
+      linkProjection === null ? record.values.href : linkProjection.href,
+    ),
     ...optionalStringField("date", record.values.date),
-    ...optionalStringField("icon", record.values.icon),
+    ...optionalStringField(
+      "icon",
+      linkProjection === null ? record.values.icon : linkProjection.icon,
+    ),
     ...optionalStringField("color", record.values.color),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
@@ -284,19 +291,22 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
   };
 }
 
-function projectedBlockHref(
+function projectedLinkFields(
   record: StoredRecord,
   type: string,
   context: SiteTreeBuildContext,
-): string | FieldValue | undefined {
+): { href?: string; icon?: string } | null {
   if (type !== "link") {
-    return record.values.href;
+    return null;
   }
 
   const resolution = resolveSiteLinkHref(record, context.indexes.blocks);
   context.warnings.push(...resolution.warnings);
 
-  return resolution.href;
+  return {
+    ...optionalStringField("href", resolution.href),
+    ...optionalStringField("icon", resolution.icon),
+  };
 }
 
 function projectPlacement(placement: StoredRecord, childBlock: SiteBlockNode): SitePlacementNode {

@@ -46,19 +46,23 @@ describe("site page tree projection", () => {
       label: "Header",
     });
     expect(header.placements.map((placement) => placement.block.label)).toEqual([
-      "Home",
+      "Primary",
+      "Secondary",
+    ]);
+    expect(header.placements.map((placement) => placement.block.type)).toEqual([
+      "headerPrimary",
+      "headerSecondary",
+    ]);
+    const primaryHeader = childForPlacement(header, "rec_site_place_header_primary");
+    const secondaryHeader = childForPlacement(header, "rec_site_place_header_secondary");
+    expect(primaryHeader.placements.map((placement) => placement.block.label)).toEqual(["Home"]);
+    expect(primaryHeader.placements.map((placement) => placement.block.href)).toEqual(["/"]);
+    expect(secondaryHeader.placements.map((placement) => placement.block.label)).toEqual([
       "Blog",
       "Projects",
       "Resume",
     ]);
-    expect(header.placements.map((placement) => placement.block.type)).toEqual([
-      "link",
-      "link",
-      "link",
-      "link",
-    ]);
-    expect(header.placements.map((placement) => placement.block.href)).toEqual([
-      "/",
+    expect(secondaryHeader.placements.map((placement) => placement.block.href)).toEqual([
       "/blog",
       "/projects",
       "/resume",
@@ -185,7 +189,8 @@ describe("site page tree projection", () => {
 
     const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
     const header = requireBlock(tree.frame.header, "header");
-    const blog = childForPlacement(header, "rec_site_place_header_blog");
+    const secondaryHeader = childForPlacement(header, "rec_site_place_header_secondary");
+    const blog = childForPlacement(secondaryHeader, "rec_site_place_header_blog");
     const footer = requireBlock(tree.frame.footer, "footer");
     const social = childForPlacement(footer, "rec_site_place_footer_section_social");
     const github = childForPlacement(social, "rec_site_place_footer_github");
@@ -240,13 +245,65 @@ describe("site page tree projection", () => {
 
     const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
     const header = requireBlock(tree.frame.header, "header");
-    const blog = childForPlacement(header, "rec_site_place_header_blog");
+    const secondaryHeader = childForPlacement(header, "rec_site_place_header_secondary");
+    const blog = childForPlacement(secondaryHeader, "rec_site_place_header_blog");
     const shipping = childForPlacement(tree.page, "rec_site_place_home_shipping_link");
 
     expect(blog.href).toBe("/writing");
     expect(shipping.href).toBe("/blog/shipping-schema-backed-authoring");
     expect(blog).not.toHaveProperty("linkTargetMode");
     expect(blog).not.toHaveProperty("linkTargetBlock");
+    expect(tree.meta.warnings).toEqual([]);
+  });
+
+  it("projects internal link icons from target blocks unless the link has its own icon", () => {
+    const targetIcon = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>';
+    const linkIcon = '<svg viewBox="0 0 24 24"><path d="M12 4l8 16H4z"/></svg>';
+    const records = baseTreeRecords().map((record) => {
+      if (record.id === "rec_site_content_projects") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            icon: targetIcon,
+          },
+        };
+      }
+
+      if (record.id === "rec_site_content_link_resume") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            linkTargetMode: "internal",
+            linkTargetBlock: "rec_site_content_resume",
+            icon: linkIcon,
+          },
+        };
+      }
+
+      if (record.id === "rec_site_content_link_projects") {
+        return {
+          ...record,
+          values: {
+            ...record.values,
+            linkTargetMode: "internal",
+            linkTargetBlock: "rec_site_content_projects",
+          },
+        };
+      }
+
+      return record;
+    });
+
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const footer = requireBlock(tree.frame.footer, "footer");
+    const explore = childForPlacement(footer, "rec_site_place_footer_section_explore");
+    const projects = childForPlacement(explore, "rec_site_place_footer_projects");
+    const resume = childForPlacement(explore, "rec_site_place_footer_resume");
+
+    expect(projects.icon).toBe(targetIcon);
+    expect(resume.icon).toBe(linkIcon);
     expect(tree.meta.warnings).toEqual([]);
   });
 
@@ -269,7 +326,8 @@ describe("site page tree projection", () => {
 
     const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
     const header = requireBlock(tree.frame.header, "header");
-    const blog = childForPlacement(header, "rec_site_place_header_blog");
+    const secondaryHeader = childForPlacement(header, "rec_site_place_header_secondary");
+    const blog = childForPlacement(secondaryHeader, "rec_site_place_header_blog");
 
     expect(blog.href).toBeUndefined();
     expect(tree.meta.warnings).toEqual([
@@ -398,6 +456,14 @@ describe("site page tree projection", () => {
 
     expect(hero.placements).toEqual([]);
     expect(result.meta.warnings).toEqual([
+      expect.objectContaining({
+        code: "max-depth",
+        recordId: "rec_site_content_group_header_primary",
+      }),
+      expect.objectContaining({
+        code: "max-depth",
+        recordId: "rec_site_content_group_header_secondary",
+      }),
       expect.objectContaining({
         code: "max-depth",
         recordId: "rec_site_content_group_footer_main",

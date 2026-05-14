@@ -1,7 +1,7 @@
 # PRD 35: Site regular pages and content lists
 
 Status: ready
-Current chunk: SCL-03 ready
+Current chunk: SCL-04 ready
 Last updated: 2026-05-14
 
 ## Goal
@@ -361,7 +361,7 @@ Possible changed files:
 | ------ | ------- | ---------- | ----------------- | ------------------------------------------------------------------------------------------------ |
 | SCL-01 | shipped | none       | schema, tree      | Add `date`, `postList`, `projectList`; make `/blog` regular; keep dated post detail routing.     |
 | SCL-02 | shipped | SCL-01     | renderer, tests   | Render list blocks, suppress page root label/body, keep post detail label-only heading behavior. |
-| SCL-03 | ready   | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
+| SCL-03 | shipped | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
 | SCL-04 | ready   | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
 | SCL-05 | ready   | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
 
@@ -378,6 +378,12 @@ Possible changed files:
 - Public page routes now render only child placements, not root `page.label` or `page.body`.
 - Public post detail routes render the post heading and child placements, not `post.body`.
 - `post-index` renderer compatibility now falls through to normal page placement rendering.
+- 2026-05-14 SCL-03 shipped.
+- Site schema now defines `headerPrimary` and `headerSecondary` block variants and exposes editable page `icon`.
+- Site source seed now places Header Primary and Header Secondary groups under the Header root, with Home in Primary and Blog/Projects/Resume in Secondary.
+- Public renderer now lays header primary navigation left and secondary navigation centered on desktop, with secondary links in the mobile menu.
+- Header links now mark active routes with dashed underline styling; Blog is active on `/blog/:slug`, Projects is active on project-section routes, and Home is active only on Home.
+- Internal link projection now inherits the target block `icon` when the link has no own `icon`; explicit `link.icon` still wins.
 - Blockers: none.
 
 ## Evidence
@@ -392,6 +398,11 @@ Possible changed files:
 - 2026-05-14 SCL-02 browser smoke: `/pages/blog/agents-are-enablers` rendered `Agents are enablers` and child markdown `Test1`, and did not render post summary copy.
 - 2026-05-14 SCL-02 browser smoke: `/pages/projects` rendered projects and did not include root body copy `Current and recent product work`.
 - 2026-05-14 SCL-02 browser smoke: `bun browser --session scl-02 errors` returned no page errors.
+- 2026-05-14 SCL-03 `devstate check`: checks ok, services running, test watcher pass.
+- 2026-05-14 SCL-03 test watcher: `src/shared/schema.test.ts` passed 101 tests after the final schema rerun; status reported test service pass.
+- 2026-05-14 SCL-03 browser smoke reset Site schema and seed with `200` responses, then opened `/pages/home`, `/pages/blog`, `/pages/blog/agents-are-enablers`, and `/pages/projects`.
+- 2026-05-14 SCL-03 browser smoke: active header nav projected `Blog` on `/pages/blog/agents-are-enablers` and `Projects` on `/pages/projects`.
+- 2026-05-14 SCL-03 browser smoke: `bun browser --session scl-03 errors` returned no page errors.
 
 ## Out of Scope
 
@@ -418,6 +429,12 @@ Possible changed files:
 - SCL-02 promote: public renderer renders `postList` and `projectList` query items as content cards with optional dates.
 - SCL-02 promote: public page routes render only child placements, not root `page.label` or `page.body`.
 - SCL-02 promote: post detail routes render `post.label` and child placements, not `post.body`.
+- SCL-03 promote: Site schema defines `headerPrimary` and `headerSecondary` block types for explicit header navigation groups.
+- SCL-03 promote: Site schema exposes editable page `icon`.
+- SCL-03 promote: source Header seed uses Primary and Secondary child groups; Primary contains Home and Secondary contains Blog, Projects, and Resume.
+- SCL-03 promote: public header rendering lays primary navigation left, secondary navigation centered, and mobile secondary navigation in the menu.
+- SCL-03 promote: public header links use active route dashed underline styling; Blog stays active on post detail routes and Home is active only on Home.
+- SCL-03 promote: internal link projection inherits target block icons when a link has no own icon; explicit link icons override target icons.
 - `doc/current.md`: note Blog and Projects are regular pages composed from blocks.
 - `doc/current.md`: note `postList` and `projectList` blocks render dated public content.
 - `doc/current.md`: note `block.date` controls public post/project list visibility and order.

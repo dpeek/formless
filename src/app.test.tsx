@@ -136,15 +136,19 @@ function siteTreeFetcher(fetchPaths: string[], tree: SitePageTree): typeof fetch
 }
 
 function footerLinkHtml(footerHtml: string, href: string): string {
-  const hrefIndex = footerHtml.indexOf(`href="${href}"`);
-  const linkStart = footerHtml.lastIndexOf("<a", hrefIndex);
-  const linkEnd = footerHtml.indexOf("</a>", hrefIndex);
+  return linkHtml(footerHtml, href);
+}
+
+function linkHtml(html: string, href: string): string {
+  const hrefIndex = html.indexOf(`href="${href}"`);
+  const linkStart = html.lastIndexOf("<a", hrefIndex);
+  const linkEnd = html.indexOf("</a>", hrefIndex);
 
   if (hrefIndex === -1 || linkStart === -1 || linkEnd === -1) {
-    throw new Error(`Missing footer link for "${href}".`);
+    throw new Error(`Missing link for "${href}".`);
   }
 
-  return footerHtml.slice(linkStart, linkEnd + "</a>".length);
+  return html.slice(linkStart, linkEnd + "</a>".length);
 }
 
 function mainHtml(html: string): string {
@@ -703,6 +707,8 @@ describe("public site renderer", () => {
 
     expect(html).toContain("data-site-header");
     expect(html).toContain('data-site-header-nav="desktop"');
+    expect(html).toContain("data-site-header-primary");
+    expect(html).toContain("data-site-header-secondary");
     expect(html).toContain('href="/pages/home"');
     expect(html).toContain("Home");
     expect(html).toContain('href="/pages/blog"');
@@ -720,6 +726,21 @@ describe("public site renderer", () => {
     expect(html).toContain(
       "I design and build schema-backed software for teams that need their tools to keep up with the work.",
     );
+  });
+
+  it("marks active header navigation from the current public route", () => {
+    const homeHtml = renderSitePage("home");
+    const blogHtml = renderSitePage("blog");
+    const postHtml = renderSitePage("blog/shipping-schema-backed-authoring");
+    const projectsHtml = renderSitePage("projects");
+
+    expect(linkHtml(homeHtml, "/pages/home")).toContain('data-site-nav-active="true"');
+    expect(linkHtml(homeHtml, "/pages/home")).toContain("decoration-dashed");
+    expect(linkHtml(homeHtml, "/pages/blog")).not.toContain('data-site-nav-active="true"');
+    expect(linkHtml(blogHtml, "/pages/blog")).toContain('data-site-nav-active="true"');
+    expect(linkHtml(postHtml, "/pages/blog")).toContain('data-site-nav-active="true"');
+    expect(linkHtml(projectsHtml, "/pages/projects")).toContain('data-site-nav-active="true"');
+    expect(linkHtml(projectsHtml, "/pages/home")).not.toContain('data-site-nav-active="true"');
   });
 
   it("renders explicit internal link targets through preview and published link modes", () => {
@@ -1122,6 +1143,38 @@ describe("public site renderer", () => {
     expect(linkedInLinkHtml).toContain('rel="noreferrer"');
     expect(linkedInLinkHtml).not.toContain(">LinkedIn<");
     expect(footerHtml).not.toContain("&lt;svg");
+  });
+
+  it("renders inherited target icons for internal footer links", () => {
+    const projectIcon = '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>';
+    const records = testSiteSeedRecords.map((record) =>
+      record.id === "rec_site_content_projects"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              icon: projectIcon,
+            },
+          }
+        : record.id === "rec_site_content_link_projects"
+          ? {
+              ...record,
+              values: {
+                ...record.values,
+                linkTargetMode: "internal",
+                linkTargetBlock: "rec_site_content_projects",
+              },
+            }
+          : record,
+    );
+    const html = renderSitePage("home", records);
+    const footerStart = html.indexOf("<footer");
+    const footerEnd = html.indexOf("</footer>", footerStart);
+    const footerHtml = html.slice(footerStart, footerEnd);
+    const projectsLinkHtml = footerLinkHtml(footerHtml, "/pages/projects");
+
+    expect(projectsLinkHtml).toContain('data-web-svg-icon="svg"');
+    expect(projectsLinkHtml).toContain(">Projects<");
   });
 
   it("renders a 404 state for missing public site pages", () => {
@@ -1945,13 +1998,15 @@ describe("generated collection home", () => {
 
     expect(html).toContain('aria-label="Block records"');
     expect(html).toContain("Header");
-    expect(html).toMatch(/aria-label="Header Placements count"[^>]*>4</);
+    expect(html).toMatch(/aria-label="Header Placements count"[^>]*>2</);
     expect(html).toContain("Add placement");
     expect(html).not.toContain('value="link"');
-    expect(html).toContain('value="rec_site_content_link_home" selected="">Home</option>');
-    expect(html).toContain('value="rec_site_content_link_blog" selected="">Blog</option>');
-    expect(html).toContain('value="rec_site_content_link_projects" selected="">Projects</option>');
-    expect(html).toContain('value="rec_site_content_link_resume" selected="">Resume</option>');
+    expect(html).toContain(
+      'value="rec_site_content_group_header_primary" selected="">Primary</option>',
+    );
+    expect(html).toContain(
+      'value="rec_site_content_group_header_secondary" selected="">Secondary</option>',
+    );
   });
 
   it("renders only primary rate-card collection navigation", () => {

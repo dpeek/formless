@@ -1,10 +1,17 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { MarkdownRenderer } from "@formless/ui/markdown-renderer";
 import { SvgIcon } from "@formless/ui/svg-icon";
-import { isExternalSiteHref, profileAwareSiteHref, type SitePageLinkMode } from "./links.ts";
+import {
+  isExternalSiteHref,
+  profileAwareSiteHref,
+  siteHrefMatchesRoute,
+  type SitePageLinkMode,
+} from "./links.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
 
 const SitePageLinkModeContext = createContext<SitePageLinkMode>("preview");
+const SiteRouteSlugContext = createContext<string | undefined>(undefined);
+const HeaderNavigationContext = createContext(false);
 const SiteThemeContext = createContext<PublicSiteThemeController>({
   theme: "light",
   toggleTheme: () => {},
@@ -31,20 +38,22 @@ export function SitePageRenderer({
 
   return (
     <SitePageLinkModeContext.Provider value={linkMode}>
-      <SiteThemeContext.Provider value={theme}>
-        <article
-          className={
-            theme.theme === "dark"
-              ? "dark flex min-h-dvh flex-col bg-zinc-950 text-zinc-100"
-              : "flex min-h-dvh flex-col bg-white text-zinc-950"
-          }
-          data-site-theme={theme.theme}
-        >
-          {frame.header ? <HeaderGroup block={frame.header} /> : null}
-          <SiteRoutePage tree={tree} />
-          {frame.footer ? <FooterGroup block={frame.footer} /> : null}
-        </article>
-      </SiteThemeContext.Provider>
+      <SiteRouteSlugContext.Provider value={tree.route?.slug}>
+        <SiteThemeContext.Provider value={theme}>
+          <article
+            className={
+              theme.theme === "dark"
+                ? "dark flex min-h-dvh flex-col bg-zinc-950 text-zinc-100"
+                : "flex min-h-dvh flex-col bg-white text-zinc-950"
+            }
+            data-site-theme={theme.theme}
+          >
+            {frame.header ? <HeaderGroup block={frame.header} /> : null}
+            <SiteRoutePage tree={tree} />
+            {frame.footer ? <FooterGroup block={frame.footer} /> : null}
+          </article>
+        </SiteThemeContext.Provider>
+      </SiteRouteSlugContext.Provider>
     </SitePageLinkModeContext.Provider>
   );
 }
@@ -76,6 +85,9 @@ function SiteBlockRenderer({
       return <PageBlock block={block} />;
     case "header":
       return <HeaderGroup block={block} />;
+    case "headerPrimary":
+    case "headerSecondary":
+      return <HeaderNavGroup block={block} />;
     case "footer":
       return <FooterGroup block={block} />;
     case "footerSection":
@@ -140,43 +152,70 @@ function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: Si
 }
 
 function HeaderGroup({ block }: { block: SiteBlockNode }) {
-  const { overflow, primary } = partitionHeaderPlacements(block.placements);
+  const { primary, secondary } = partitionHeaderPlacements(block.placements);
 
   return (
     <header className="text-zinc-900 dark:text-zinc-100" data-site-header>
-      <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-6 py-8 sm:items-center">
-        <nav aria-label={block.label} className="min-w-0">
-          <div
-            className="hidden flex-wrap items-center gap-4 sm:flex text-lg"
-            data-site-header-nav="desktop"
+      <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-6 py-8 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+        <HeaderNavigationContext.Provider value={true}>
+          <nav
+            aria-label={`${block.label} primary`}
+            className="min-w-0 justify-self-start"
+            data-site-header-primary
           >
-            <SitePlacementList placements={block.placements} />
-          </div>
-          <div className="flex min-w-0 items-center gap-2 sm:hidden" data-site-header-nav="mobile">
-            {primary ? (
-              <div className="min-w-0 truncate" data-site-header-mobile-primary>
-                <SitePlacementRenderer placement={primary} />
+            <div
+              className="hidden flex-wrap items-center gap-4 text-lg sm:flex"
+              data-site-header-nav="desktop"
+            >
+              <SitePlacementList placements={primary} />
+            </div>
+            <div
+              className="flex min-w-0 items-center gap-2 sm:hidden"
+              data-site-header-mobile-primary
+            >
+              <SitePlacementList placements={primary} />
+            </div>
+          </nav>
+          {secondary.length > 0 ? (
+            <nav
+              aria-label={`${block.label} secondary`}
+              className="hidden min-w-0 justify-self-center sm:block"
+              data-site-header-secondary
+            >
+              <div
+                className="flex flex-wrap items-center justify-center gap-4 text-lg"
+                data-site-header-nav="secondary"
+              >
+                <SitePlacementList placements={secondary} />
               </div>
-            ) : null}
-            {overflow.length > 0 ? (
-              <details className="group relative shrink-0" data-site-header-mobile-menu>
+            </nav>
+          ) : (
+            <div className="hidden sm:block" />
+          )}
+          <div className="flex items-center justify-end gap-2 justify-self-end">
+            {secondary.length > 0 ? (
+              <details className="group relative shrink-0 sm:hidden" data-site-header-mobile-menu>
                 <summary
                   aria-label={`${block.label} menu`}
                   className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md px-2 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 hover:text-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-400 [&::-webkit-details-marker]:hidden dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
                 >
                   <span>Menu</span>
                 </summary>
-                <div className="absolute left-0 z-10 mt-2 grid min-w-36 gap-2 rounded-md border border-zinc-200 bg-white p-3 text-zinc-900 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
-                  <SitePlacementList placements={overflow} />
+                <div className="absolute right-0 z-10 mt-2 grid min-w-36 gap-2 rounded-md border border-zinc-200 bg-white p-3 text-zinc-900 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+                  <SitePlacementList placements={secondary} />
                 </div>
               </details>
             ) : null}
+            <SiteThemeToggle />
           </div>
-        </nav>
-        <SiteThemeToggle />
+        </HeaderNavigationContext.Provider>
       </div>
     </header>
   );
+}
+
+function HeaderNavGroup({ block }: { block: SiteBlockNode }) {
+  return <SitePlacementList placements={block.placements} />;
 }
 
 function SiteThemeToggle() {
@@ -356,15 +395,21 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
 
 function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: SitePlacementNode }) {
   const linkMode = useSitePageLinkMode();
+  const routeSlug = useSiteRouteSlug();
+  const isHeaderNavigation = useHeaderNavigation();
   const href = blockHref(block, linkMode);
 
   if (!href) {
     return null;
   }
 
+  const isActive = isHeaderNavigation && siteHrefMatchesRoute(href, routeSlug);
+
   return (
     <a
-      className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap font-medium text-current underline decoration-transparent underline-offset-4 transition hover:decoration-current"
+      aria-current={isActive ? "page" : undefined}
+      className={linkClassName(isActive)}
+      data-site-nav-active={isActive ? "true" : undefined}
       href={href}
       rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
       target={isExternalSiteHref(href) ? "_blank" : undefined}
@@ -379,6 +424,15 @@ function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: Sit
       )}
     </a>
   );
+}
+
+function linkClassName(isActive: boolean): string {
+  const base =
+    "inline-flex max-w-full items-center gap-1.5 whitespace-nowrap font-medium text-current underline underline-offset-4 transition";
+
+  return isActive
+    ? `${base} decoration-current decoration-dashed hover:decoration-solid`
+    : `${base} decoration-transparent hover:decoration-current`;
 }
 
 function ContentListBlock({ block }: { block: SiteBlockNode }) {
@@ -539,12 +593,30 @@ function placementIdSet(placements: SitePlacementNode[]): Set<string> {
 }
 
 function partitionHeaderPlacements(placements: SitePlacementNode[]): {
-  overflow: SitePlacementNode[];
-  primary: SitePlacementNode | null;
+  primary: SitePlacementNode[];
+  secondary: SitePlacementNode[];
 } {
+  const primaryGroup = placements.find((placement) => placement.block.type === "headerPrimary");
+  const secondaryGroup = placements.find((placement) => placement.block.type === "headerSecondary");
+
+  if (primaryGroup || secondaryGroup) {
+    const directPlacements = placements.filter(
+      (placement) =>
+        placement.block.type !== "headerPrimary" && placement.block.type !== "headerSecondary",
+    );
+
+    return {
+      primary: primaryGroup?.block.placements ?? directPlacements.slice(0, 1),
+      secondary: [
+        ...(secondaryGroup?.block.placements ?? []),
+        ...(primaryGroup ? directPlacements : directPlacements.slice(1)),
+      ],
+    };
+  }
+
   return {
-    primary: placements[0] ?? null,
-    overflow: placements.slice(1),
+    primary: placements.slice(0, 1),
+    secondary: placements.slice(1),
   };
 }
 
@@ -574,6 +646,14 @@ function PlainText({ className, text }: { className?: string; text: string }) {
 
 function useSitePageLinkMode(): SitePageLinkMode {
   return useContext(SitePageLinkModeContext);
+}
+
+function useSiteRouteSlug(): string | undefined {
+  return useContext(SiteRouteSlugContext);
+}
+
+function useHeaderNavigation(): boolean {
+  return useContext(HeaderNavigationContext);
 }
 
 function useSiteTheme(): PublicSiteThemeController {
