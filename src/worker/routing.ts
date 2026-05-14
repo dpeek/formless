@@ -9,15 +9,35 @@ const clientRoutePrefixes = [
 ] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 
-export function shouldHandlePublishedSiteDocument(request: Request): boolean {
+type WorkerRuntimeProfileKind = "dev" | "app" | "publishedSite";
+
+export type WorkerRuntimeProfileInput = {
+  hostname?: string | undefined;
+  profile?: string | undefined;
+};
+
+export function workerRuntimeProfileInput(profile: string | undefined): WorkerRuntimeProfileInput {
+  return {
+    profile: stringConfigValue(profile),
+  };
+}
+
+export function shouldHandlePublishedSiteDocument(
+  request: Request,
+  input: WorkerRuntimeProfileInput = {},
+): boolean {
   if (request.method !== "GET") {
     return false;
   }
 
   const url = new URL(request.url);
+  const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
+
+  if (profileKind !== "publishedSite") {
+    return false;
+  }
 
   if (
-    isAppProfileHost(url.hostname) ||
     isApiPath(url.pathname) ||
     isClientShellRoute(url.pathname) ||
     looksLikeStaticAssetPath(url.pathname)
@@ -28,7 +48,10 @@ export function shouldHandlePublishedSiteDocument(request: Request): boolean {
   return acceptsHtml(request.headers.get("Accept"));
 }
 
-export function shouldDeferToStaticAssets(request: Request): boolean {
+export function shouldDeferToStaticAssets(
+  request: Request,
+  input: WorkerRuntimeProfileInput = {},
+): boolean {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return false;
   }
@@ -39,8 +62,10 @@ export function shouldDeferToStaticAssets(request: Request): boolean {
     return false;
   }
 
+  const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
+
   return (
-    isAppProfileHost(url.hostname) ||
+    profileKind !== "publishedSite" ||
     isClientShellRoute(url.pathname) ||
     looksLikeStaticAssetPath(url.pathname)
   );
@@ -67,6 +92,49 @@ export function looksLikeStaticAssetPath(pathname: string): boolean {
 
 function isAppProfileHost(hostname: string): boolean {
   return hostname.toLowerCase().startsWith("app.");
+}
+
+function resolveWorkerRuntimeProfileKind(
+  input: WorkerRuntimeProfileInput,
+): WorkerRuntimeProfileKind {
+  return (
+    parseRuntimeProfileKind(input.profile) ?? runtimeProfileKindFromHost(input.hostname) ?? "dev"
+  );
+}
+
+function parseRuntimeProfileKind(value: string | undefined): WorkerRuntimeProfileKind | undefined {
+  switch (value) {
+    case "dev":
+    case "app":
+    case "publishedSite":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function stringConfigValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function runtimeProfileKindFromHost(
+  hostname: string | undefined,
+): WorkerRuntimeProfileKind | undefined {
+  if (!hostname) {
+    return undefined;
+  }
+
+  const normalized = hostname.toLowerCase();
+
+  if (normalized.startsWith("published-site.")) {
+    return "publishedSite";
+  }
+
+  if (isAppProfileHost(normalized)) {
+    return "app";
+  }
+
+  return undefined;
 }
 
 function acceptsHtml(acceptHeader: string | null): boolean {

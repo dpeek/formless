@@ -7,7 +7,7 @@ import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { Env } from "./index.ts";
-import { shouldHandlePublishedSiteDocument } from "./routing.ts";
+import { shouldHandlePublishedSiteDocument, workerRuntimeProfileInput } from "./routing.ts";
 import {
   publishedSiteDocumentCacheControl,
   type PublishedSiteDocumentCacheKind,
@@ -15,6 +15,7 @@ import {
 
 const SITE_SCHEMA_KEY = "site";
 const CLIENT_MODULE_PATH = "/src/main.tsx";
+const CLIENT_SHELL_PATH = "/index.html";
 const VITE_REACT_REFRESH_PREAMBLE = `<script type="module">
 import RefreshRuntime from "/@react-refresh";
 RefreshRuntime.injectIntoGlobalHook(window);
@@ -22,12 +23,28 @@ window.$RefreshReg$ = () => {};
 window.$RefreshSig$ = () => (type) => type;
 window.__vite_plugin_react_preamble_installed__ = true;
 </script>`;
+const DEVELOPMENT_CLIENT_ASSETS: ClientDocumentAssets = {
+  body: `${VITE_REACT_REFRESH_PREAMBLE}
+    <script type="module" src="${CLIENT_MODULE_PATH}"></script>`,
+  head: "",
+};
+const EMPTY_CLIENT_ASSETS: ClientDocumentAssets = { body: "", head: "" };
+
+type ClientDocumentAssets = {
+  body: string;
+  head: string;
+};
 
 export async function handlePublishedSiteDocumentRequest(
   request: Request,
   env: Env,
 ): Promise<Response | undefined> {
-  if (!shouldHandlePublishedSiteDocument(request)) {
+  if (
+    !shouldHandlePublishedSiteDocument(
+      request,
+      workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
+    )
+  ) {
     return undefined;
   }
 
@@ -36,19 +53,20 @@ export async function handlePublishedSiteDocumentRequest(
 
 async function renderPublishedSiteDocument(request: Request, env: Env): Promise<Response> {
   const slug = publishedSiteSlugFromUrl(new URL(request.url));
+  const clientAssets = await loadClientDocumentAssets(request, env);
 
   try {
     const treeResponse = await fetchSitePageTree(request, env, slug);
 
     if (treeResponse.status === 404) {
-      return htmlResponse(await renderNotFoundDocument(slug), {
+      return htmlResponse(await renderNotFoundDocument(slug, clientAssets), {
         cacheKind: "not-found",
         status: 404,
       });
     }
 
     if (!treeResponse.ok) {
-      return htmlResponse(await renderErrorDocument(slug), {
+      return htmlResponse(await renderErrorDocument(slug, clientAssets), {
         cacheKind: "error",
         status: 500,
       });
@@ -61,9 +79,9 @@ async function renderPublishedSiteDocument(request: Request, env: Env): Promise<
       </PublishedSiteDocumentShell>,
     );
 
-    return htmlResponse(renderDocument(appHtml, { initialTree: tree }));
+    return htmlResponse(renderDocument(appHtml, { clientAssets, initialTree: tree }));
   } catch {
-    return htmlResponse(await renderErrorDocument(slug), {
+    return htmlResponse(await renderErrorDocument(slug, clientAssets), {
       cacheKind: "error",
       status: 500,
     });
@@ -83,7 +101,10 @@ async function fetchSitePageTree(request: Request, env: Env, slug: string): Prom
   );
 }
 
-async function renderNotFoundDocument(slug: string): Promise<string> {
+async function renderNotFoundDocument(
+  slug: string,
+  clientAssets: ClientDocumentAssets,
+): Promise<string> {
   return renderDocument(
     await renderReactToString(
       <PublishedSiteDocumentShell>
@@ -98,10 +119,14 @@ async function renderNotFoundDocument(slug: string): Promise<string> {
         </section>
       </PublishedSiteDocumentShell>,
     ),
+    { clientAssets },
   );
 }
 
-async function renderErrorDocument(slug: string): Promise<string> {
+async function renderErrorDocument(
+  slug: string,
+  clientAssets: ClientDocumentAssets,
+): Promise<string> {
   return renderDocument(
     await renderReactToString(
       <PublishedSiteDocumentShell>
@@ -111,6 +136,7 @@ async function renderErrorDocument(slug: string): Promise<string> {
         </section>
       </PublishedSiteDocumentShell>,
     ),
+    { clientAssets },
   );
 }
 
@@ -126,10 +152,61 @@ async function renderReactToString(node: ReactNode): Promise<string> {
   return new Response(stream).text();
 }
 
-function renderDocument(appHtml: string, options: { initialTree?: SitePageTree } = {}): string {
+async function loadClientDocumentAssets(request: Request, env: Env): Promise<ClientDocumentAssets> {
+  if (!env.ASSETS) {
+    return DEVELOPMENT_CLIENT_ASSETS;
+  }
+
+  let shellHtml = "";
+
+  try {
+    const shellUrl = new URL(CLIENT_SHELL_PATH, request.url);
+    const shellResponse = await env.ASSETS.fetch(
+      new Request(shellUrl, {
+        headers: { Accept: "text/html" },
+        method: "GET",
+      }),
+    );
+
+    if (!shellResponse.ok) {
+      return EMPTY_CLIENT_ASSETS;
+    }
+
+    shellHtml = await shellResponse.text();
+  } catch {
+    return EMPTY_CLIENT_ASSETS;
+  }
+
+  const assetTags = extractClientAssetTags(shellHtml);
+
+  if (assetTags.length > 0) {
+    return { body: "", head: assetTags.join("\n    ") };
+  }
+
+  if (shellHtml.includes(CLIENT_MODULE_PATH) || shellHtml.includes("/@react-refresh")) {
+    return DEVELOPMENT_CLIENT_ASSETS;
+  }
+
+  return EMPTY_CLIENT_ASSETS;
+}
+
+function extractClientAssetTags(html: string): string[] {
+  const headContent = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? "";
+  const assetTagPattern =
+    /<script\b[^>]*\bsrc="\/assets\/[^"]+"[^>]*><\/script>|<link\b[^>]*\bhref="\/assets\/[^"]+"[^>]*>/g;
+
+  return [...headContent.matchAll(assetTagPattern)].map((match) => match[0].trim());
+}
+
+function renderDocument(
+  appHtml: string,
+  options: { clientAssets: ClientDocumentAssets; initialTree?: SitePageTree },
+): string {
   const initialTreeScript = options.initialTree
     ? `\n    ${renderInitialSitePageTreeScript(options.initialTree)}`
     : "";
+  const clientAssetHeadTags = options.clientAssets.head ? `\n    ${options.clientAssets.head}` : "";
+  const clientAssetBodyTags = options.clientAssets.body ? `\n    ${options.clientAssets.body}` : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -138,12 +215,10 @@ function renderDocument(appHtml: string, options: { initialTree?: SitePageTree }
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />
-    <title>formless</title>
+    <title>formless</title>${clientAssetHeadTags}
   </head>
   <body>
-    <div id="app">${appHtml}</div>${initialTreeScript}
-    ${VITE_REACT_REFRESH_PREAMBLE}
-    <script type="module" src="${CLIENT_MODULE_PATH}"></script>
+    <div id="app">${appHtml}</div>${initialTreeScript}${clientAssetBodyTags}
   </body>
 </html>`;
 }

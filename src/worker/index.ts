@@ -1,7 +1,7 @@
 import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
 import { handleSiteMediaRequest } from "./media.ts";
-import { shouldDeferToStaticAssets } from "./routing.ts";
+import { shouldDeferToStaticAssets, workerRuntimeProfileInput } from "./routing.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 
 export { FormlessAuthority } from "./authority.ts";
@@ -11,6 +11,7 @@ export type Env = {
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace<FormlessAuthority>;
   FORMLESS_MEDIA: R2Bucket;
+  FORMLESS_RUNTIME_PROFILE?: string;
 };
 
 export default {
@@ -37,7 +38,10 @@ export default {
       return siteDocumentResponse;
     }
 
-    if (env.ASSETS && shouldDeferToStaticAssets(request)) {
+    if (
+      env.ASSETS &&
+      shouldDeferToStaticAssets(request, workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE))
+    ) {
       return env.ASSETS.fetch(request);
     }
 

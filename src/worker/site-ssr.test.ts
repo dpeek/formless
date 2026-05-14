@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { INITIAL_SITE_PAGE_TREE_SCRIPT_ID } from "../app/site-renderer/initial-tree.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
+import type { SitePageTreeResponse } from "../shared/protocol.ts";
 import type { Env } from "./index.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
@@ -25,7 +26,10 @@ beforeAll(async () => {
       FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
     },
     {
-      bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
+      bindings: {
+        FORMLESS_RUNTIME_PROFILE: "publishedSite",
+        FORMLESS_ADMIN_TOKEN: adminToken,
+      },
       compatibilityDate: "2026-04-28",
     },
   );
@@ -40,6 +44,17 @@ afterAll(async () => {
 });
 
 describe("published Site Worker SSR", () => {
+  it("does not render published Site documents outside the published runtime profile", async () => {
+    const response = await handlePublishedSiteDocumentRequest(
+      new Request("https://example.com/", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(Response.json(testSitePageTree("home")), undefined, "dev"),
+    );
+
+    expect(response).toBeUndefined();
+  });
+
   it("returns server-rendered HTML for the published home route", async () => {
     const response = await getDocument("/");
     const html = await response.text();
@@ -70,6 +85,33 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain("window.__vite_plugin_react_preamble_installed__ = true;");
     expect(html).toContain('<script type="module" src="/src/main.tsx"></script>');
     expect(html).not.toContain("Loading site page...");
+  });
+
+  it("injects production client assets from the built client shell", async () => {
+    const response = await handlePublishedSiteDocumentRequest(
+      new Request("https://example.com/projects", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(Response.json(testSitePageTree("projects")), builtClientShellHtml()),
+    );
+
+    if (!response) {
+      throw new Error("Expected a published Site document response.");
+    }
+
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("Projects");
+    expect(html).toContain(
+      '<link rel="modulepreload" crossorigin href="/assets/schema-apps-test.js">',
+    );
+    expect(html).toContain('<link rel="stylesheet" crossorigin href="/assets/index-test.css">');
+    expect(html).toContain(
+      '<script type="module" crossorigin src="/assets/index-test.js"></script>',
+    );
+    expect(html).not.toContain("/@react-refresh");
+    expect(html).not.toContain("/src/main.tsx");
   });
 
   it("returns server-rendered HTML for nested published Site slugs", async () => {
@@ -260,13 +302,63 @@ function initialTreeScriptText(html: string): string {
   return html.slice(contentStart, end);
 }
 
-function envWithTreeResponse(response: Response): Env {
+function envWithTreeResponse(
+  response: Response,
+  clientShellHtml?: string,
+  runtimeProfile = "publishedSite",
+): Env {
   return {
+    ASSETS: clientShellHtml
+      ? {
+          fetch: async () =>
+            new Response(clientShellHtml, {
+              headers: { "Content-Type": "text/html; charset=utf-8" },
+            }),
+        }
+      : undefined,
     FORMLESS_AUTHORITY: {
       get: () => ({
         fetch: async () => response,
       }),
       idFromName: () => "site-id",
     },
+    FORMLESS_RUNTIME_PROFILE: runtimeProfile,
   } as unknown as Env;
+}
+
+function builtClientShellHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>formless</title>
+    <script type="module" crossorigin src="/assets/index-test.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/schema-apps-test.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-test.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>`;
+}
+
+function testSitePageTree(slug: string): SitePageTreeResponse {
+  return {
+    page: {
+      id: `rec_site_page_${slug}`,
+      type: "page",
+      label: "Projects",
+      placements: [],
+    },
+    frame: {},
+    meta: {
+      slug,
+      generatedAt: "2026-05-13T00:00:00.000Z",
+      warnings: [],
+    },
+    route: {
+      kind: "page",
+      slug,
+    },
+  };
 }

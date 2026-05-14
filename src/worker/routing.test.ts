@@ -7,11 +7,57 @@ import {
 } from "./routing.ts";
 
 describe("Worker document routing", () => {
-  it("routes published Site documents to the Worker SSR path", () => {
-    expect(shouldHandlePublishedSiteDocument(documentRequest("http://example.com/"))).toBe(true);
-    expect(shouldHandlePublishedSiteDocument(documentRequest("http://example.com/blog/post"))).toBe(
-      true,
+  it("routes published Site documents to the Worker SSR path only in the published profile", () => {
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://example.com/"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://published-site.example.com/")),
+    ).toBe(true);
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://example.com/blog/post"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(shouldHandlePublishedSiteDocument(documentRequest("http://example.com/"))).toBe(false);
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://published-site.example.com/"), {
+        profile: "dev",
+      }),
+    ).toBe(false);
+  });
+
+  it("marks non-published document routes for asset serving fallback", () => {
+    expect(shouldDeferToStaticAssets(documentRequest("http://example.com/"))).toBe(true);
+    expect(shouldDeferToStaticAssets(documentRequest("http://example.com/blog/post"))).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(false);
+    expect(shouldDeferToStaticAssets(documentRequest("http://published-site.example.com/"))).toBe(
+      false,
     );
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://published-site.example.com/"), {
+        profile: "dev",
+      }),
+    ).toBe(true);
+  });
+
+  it("lets explicit profile config override host-derived profile config", () => {
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://published-site.example.com/"), {
+        profile: "app",
+      }),
+    ).toBe(false);
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://app.example.com/"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
   });
 
   it("keeps API, preview, generated app, app-profile, asset, and non-HTML routes out of SSR", () => {
@@ -22,7 +68,6 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/estii/setup"),
       documentRequest("http://example.com/site/schema"),
       documentRequest("http://example.com/schema"),
-      documentRequest("http://app.example.com/"),
       documentRequest("http://example.com/assets/index.js"),
       new Request("http://example.com/@vite/client", { headers: { Accept: "*/*" } }),
       new Request("http://example.com/@react-refresh", { headers: { Accept: "*/*" } }),
@@ -30,8 +75,14 @@ describe("Worker document routing", () => {
       new Request("http://example.com/blog/post", { headers: { Accept: "application/json" } }),
     ];
 
-    expect(nonSsrRequests.map(shouldHandlePublishedSiteDocument)).toEqual(
-      nonSsrRequests.map(() => false),
+    expect(
+      nonSsrRequests.map((request) =>
+        shouldHandlePublishedSiteDocument(request, { profile: "publishedSite" }),
+      ),
+    ).toEqual(nonSsrRequests.map(() => false));
+
+    expect(shouldHandlePublishedSiteDocument(documentRequest("http://app.example.com/"))).toBe(
+      false,
     );
   });
 
