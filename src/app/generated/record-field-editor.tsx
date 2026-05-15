@@ -22,7 +22,7 @@ import {
   SourcePreviewFieldEditor,
   sourcePreviewPanelClassName,
 } from "@formless/ui/source-preview";
-import { SvgIcon } from "@formless/ui/svg-icon";
+import { parseSvgIconSource, SvgIcon } from "@formless/ui/svg-icon";
 import { Textarea } from "@formless/ui/textarea";
 import { AutosizeTextInput } from "@formless/ui/text-input";
 import { ValueUnitInput } from "@formless/ui/value-unit-input";
@@ -682,34 +682,37 @@ function IconFieldEditor({
   open: boolean;
   previewSource: string;
 }) {
+  const hasRenderableIcon = parseSvgIconSource(previewSource) !== null;
+  const triggerSize = density === "compact" ? "icon-sm" : "icon-lg";
+  const iconSizeClassName = density === "compact" ? "size-4" : "size-5";
+  const triggerClassName = hasRenderableIcon
+    ? "border-transparent bg-transparent p-0 text-slate-700 hover:bg-slate-100"
+    : "border-dashed border-slate-300 bg-slate-50 p-0 text-slate-500 hover:border-slate-400 hover:bg-slate-100";
+
   return (
     <>
       <div
         className={
           density === "compact"
-            ? "flex h-6 w-full min-w-0 items-center gap-2"
-            : "flex min-h-8 w-full min-w-0 items-center gap-2"
+            ? "flex h-6 w-full min-w-0 items-center"
+            : "flex min-h-8 w-full min-w-0 items-center"
         }
         data-web-field-kind="icon"
       >
-        <span className="flex min-w-0 flex-1 items-center" data-web-icon-field-preview="compact">
-          <SvgIcon
-            ariaLabel={`${label} preview`}
-            className={density === "compact" ? "size-4" : "size-5"}
-            source={previewSource}
-          />
-        </span>
         <Button
           aria-label={`Edit ${label}`}
+          className={triggerClassName}
           data-web-icon-field-edit="trigger"
+          data-web-icon-field-empty={hasRenderableIcon ? undefined : "true"}
+          data-web-icon-field-preview="compact"
           disabled={!canPatch || isPending}
           onClick={() => onOpenChange(true)}
-          size={density === "compact" ? "icon-xs" : "icon-sm"}
+          size={triggerSize}
           title={`Edit ${label}`}
           type="button"
-          variant="outline"
+          variant="ghost"
         >
-          <EditGlyphIcon />
+          <SvgIcon className={iconSizeClassName} source={previewSource} />
         </Button>
       </div>
       <Dialog
@@ -755,20 +758,6 @@ function IconFieldEditor({
   );
 }
 
-function EditGlyphIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        d="m5 19 4.2-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L5 19Z"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-      />
-      <path d="m13.5 6.5 4 4" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
 function IconSourcePreview({ label, source }: { label: string; source: string }) {
   return (
     <div
@@ -807,6 +796,20 @@ function ImageFieldEditor({
   required: boolean;
   uploadEnabled: boolean;
 }) {
+  const uploadDisabled = !canPatch || isPending || !uploadEnabled;
+  const previewClassName =
+    density === "compact"
+      ? `relative flex h-16 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 ${
+          uploadDisabled
+            ? "cursor-not-allowed opacity-70"
+            : "cursor-pointer hover:border-slate-300 hover:bg-slate-100"
+        }`
+      : `relative flex aspect-[4/3] max-h-72 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 ${
+          uploadDisabled
+            ? "cursor-not-allowed opacity-70"
+            : "cursor-pointer hover:border-slate-300 hover:bg-slate-100"
+        }`;
+
   function handleUrlKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -825,16 +828,16 @@ function ImageFieldEditor({
       className={density === "compact" ? "w-full min-w-0 space-y-2" : "w-full min-w-0 space-y-3"}
       data-web-field-kind="image"
     >
-      <div
-        className={
-          density === "compact"
-            ? "flex h-16 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50"
-            : "flex aspect-[4/3] max-h-72 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50"
-        }
+      <label
+        className={previewClassName}
         data-web-image-field-preview={draft === "" ? "empty" : "image"}
+        data-web-image-field-upload="trigger"
+        title={`Upload ${label}`}
       >
         {draft === "" ? (
-          <span className="text-xs text-slate-500">No image</span>
+          <span aria-hidden="true" className="text-2xl leading-none text-slate-500">
+            +
+          </span>
         ) : (
           <img
             alt={`${label} preview`}
@@ -843,17 +846,11 @@ function ImageFieldEditor({
             src={draft}
           />
         )}
-      </div>
-      <div className={density === "compact" ? "space-y-1" : "grid gap-2 sm:grid-cols-[1fr_1.5fr]"}>
-        <Input
+        <input
           accept={SITE_IMAGE_UPLOAD_ACCEPT}
           aria-label={`Upload ${label}`}
-          className={
-            density === "compact"
-              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
-              : "w-full rounded border border-slate-300 px-3 py-2"
-          }
-          disabled={!canPatch || isPending || !uploadEnabled}
+          className="sr-only"
+          disabled={uploadDisabled}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
 
@@ -862,6 +859,8 @@ function ImageFieldEditor({
           }}
           type="file"
         />
+      </label>
+      <div className="space-y-1">
         <Input
           aria-invalid={error !== null ? true : undefined}
           aria-label={`${label} URL`}

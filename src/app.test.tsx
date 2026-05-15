@@ -69,7 +69,6 @@ import type { NumericExpression } from "./shared/read-model.ts";
 import {
   rateSeedRecords as rateCardSeedRecords,
   rateSourceSchema as rateCardSchema,
-  siteSeedRecords,
   siteSourceSchema,
   taskSeedRecords,
   taskSourceSchema as appSchema,
@@ -448,7 +447,7 @@ describe("App smoke routes", () => {
   });
 
   it("renders sync details in workbench chrome instead of generated page content", () => {
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site");
 
     expectSyncStatusControl(html, "site");
@@ -1745,6 +1744,7 @@ describe("generated collection home", () => {
     expect(html).toContain('data-web-field-kind="icon"');
     expect(html).toContain('data-web-svg-icon="empty"');
     expect(html).toContain('aria-label="Edit Icon"');
+    expect(html).toMatch(/data-web-icon-field-edit="trigger"[\s\S]*data-web-svg-icon="empty"/);
     expect(html).not.toContain('aria-label="Choose Color"');
   });
 
@@ -2209,6 +2209,7 @@ describe("generated collection home", () => {
     expect(html).toContain("Posts");
     expect(html).toContain("Projects");
     expect(html).toContain("Navigation");
+    expect(html).toContain('aria-label="Create Page"');
     expect(html).toContain('aria-label="Create Post"');
     expect(html).toContain('aria-label="Create Project"');
     expect(html).toContain('aria-label="Site roots list detail"');
@@ -2221,13 +2222,13 @@ describe("generated collection home", () => {
   });
 
   it("does not route site navigation as a separate top-level screen", () => {
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
 
     expect(renderRoute("/site/navigation")).toContain("Not found");
   });
 
   it("does not route site header and footer as top-level screens", () => {
-    applyBootstrapResponse(bootstrap(siteSeedRecords, siteSourceSchema), "site");
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
 
     expect(renderRoute("/site/header")).toContain("Not found");
     expect(renderRoute("/site/footer")).toContain("Not found");
@@ -2960,15 +2961,23 @@ describe("generated forms and records", () => {
     });
   });
 
-  it("renders source site post and project root creates with fixed block types", () => {
+  it("renders source site page, post and project root creates with fixed block types", () => {
+    const pageAction = requiredRootNavigationCreateAction("Pages");
     const postAction = requiredRootNavigationCreateAction("Posts");
     const projectAction = requiredRootNavigationCreateAction("Projects");
+    const pageHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={pageAction} renderDialogCancel={false} />,
+    );
     const postHtml = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={postAction} renderDialogCancel={false} />,
     );
     const projectHtml = renderToStaticMarkup(
       <GeneratedCreateDialogForm action={projectAction} renderDialogCancel={false} />,
     );
+    const pageFormData = new FormData();
+    pageFormData.set("label", "Focused Page");
+    pageFormData.set("href", "/focused-page");
+    pageFormData.set("icon", "page");
     const postFormData = new FormData();
     postFormData.set("label", "A focused post");
     postFormData.set("href", "/blog/focused-post");
@@ -2980,6 +2989,12 @@ describe("generated forms and records", () => {
     projectFormData.set("date", "2026-05-13");
     projectFormData.set("body", "A short **summary**.");
 
+    expect(pageHtml).not.toContain('name="type"');
+    expect(pageHtml).toContain('name="label"');
+    expect(pageHtml).toContain('name="href"');
+    expect(pageHtml).toContain('name="icon"');
+    expect(pageHtml).not.toContain('name="date"');
+    expect(pageHtml).not.toContain('name="body"');
     expect(postHtml).not.toContain('name="type"');
     expect(postHtml).toContain('name="label"');
     expect(postHtml).toContain('name="href"');
@@ -2990,6 +3005,12 @@ describe("generated forms and records", () => {
     expect(projectHtml).toContain('name="href"');
     expect(projectHtml).toContain('name="date"');
     expect(projectHtml).toContain('name="body"');
+    expect(resolveCreateValues(pageFormData, pageAction)).toEqual({
+      label: "Focused Page",
+      href: "/focused-page",
+      icon: "page",
+      type: "page",
+    });
     expect(resolveCreateValues(postFormData, postAction)).toEqual({
       label: "A focused post",
       href: "/blog/focused-post",
@@ -3615,7 +3636,7 @@ describe("generated forms and records", () => {
       entity: placementTable.entity,
       entityName: placementTable.entityName,
       ordering: placementTable.ordering,
-      records: siteSeedRecords,
+      records: testSiteSeedRecords,
       schema: siteSourceSchema,
       schemaKey: "site",
     });
@@ -4024,6 +4045,7 @@ describe("generated forms and records", () => {
     expect(html).toContain('data-web-field-kind="icon"');
     expect(html).toContain('data-web-svg-icon="empty"');
     expect(html).toContain('aria-label="Edit Icon"');
+    expect(html).toMatch(/data-web-icon-field-edit="trigger"[\s\S]*data-web-svg-icon="empty"/);
     expect(html).not.toContain('value="sparkles"');
     expect(html).toMatch(inputWithAriaLabelAndType("Published at", "date"));
     expect(html).toContain('value="2026-05-06"');
@@ -4421,8 +4443,6 @@ describe("generated forms and records", () => {
       type: "image",
       label: "Cover image",
       href: "https://example.com/cover.png",
-      width: 1200,
-      height: 630,
     });
     expect(resolveCreateValues(imageWithoutHrefFormData, action)).toMatchObject({
       type: "image",
@@ -4446,7 +4466,7 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
   });
 
-  it("renders the generated Site image upload editor with preview and URL fallback", () => {
+  it("renders the generated Site image upload editor as a clickable image well", () => {
     const hrefField = siteSourceSchema.entities.block.fields.href;
 
     if (!hrefField || hrefField.type !== "text") {
@@ -4499,14 +4519,18 @@ describe("generated forms and records", () => {
 
     expect(imageHtml).toContain('data-web-field-kind="image"');
     expect(imageHtml).toContain('data-web-image-field-preview="image"');
+    expect(imageHtml).toContain('data-web-image-field-upload="trigger"');
     expect(imageHtml).toContain('src="/api/site/media/site/images/cover.webp"');
     expect(imageHtml).toContain('type="file"');
     expect(imageHtml).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
     expect(imageHtml).toContain('aria-label="Upload Link"');
+    expect(imageHtml).toMatch(/data-web-image-field-upload="trigger"[\s\S]*type="file"/);
+    expect(imageHtml).toMatch(/<input(?=[^>]*type="file")(?=[^>]*class="sr-only")[^>]*>/);
     expect(imageHtml).toContain('aria-label="Link URL"');
     expect(imageHtml).toContain('value="/api/site/media/site/images/cover.webp"');
     expect(emptyHtml).toContain('data-web-image-field-preview="empty"');
-    expect(emptyHtml).toContain("No image");
+    expect(emptyHtml).toContain('data-web-image-field-upload="trigger"');
+    expect(emptyHtml).not.toContain("No image");
   });
 
   it("still resolves scoped create defaults for views that use them", () => {

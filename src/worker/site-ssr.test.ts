@@ -65,9 +65,18 @@ describe("published Site Worker SSR", () => {
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("Vary")).toBe("Accept");
     expect(html).toContain("<!doctype html>");
+    expect(html).toContain(
+      '<html lang="en" class="light" data-site-theme="light" style="color-scheme: light;">',
+    );
     expect(html).toContain('<div id="app">');
     expect(html).toContain('<main class="min-h-dvh"><article');
     expect(html).toContain('data-site-theme="light"');
+    expect(html).toContain('<script id="formless-public-site-theme">');
+    expect(html).toContain('const storageKey = "formless:public-site:theme";');
+    expect(html).toContain("(prefers-color-scheme: dark)");
+    expect(html).toContain('root.classList.toggle("dark", theme === "dark");');
+    expect(html).toContain('<style id="formless-public-site-theme-style">');
+    expect(html).toContain("html.dark #app");
     expect(html).toContain("Home");
     expect(html).toContain("Code is magic");
     expect(html).toContain("Welcome, Humans and Agents");
@@ -110,6 +119,12 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('<link rel="stylesheet" crossorigin href="/assets/index-test.css">');
     expect(html).toContain(
       '<script type="module" crossorigin src="/assets/index-test.js"></script>',
+    );
+    expect(html.indexOf('<script id="formless-public-site-theme">')).toBeLessThan(
+      html.indexOf('<link rel="stylesheet" crossorigin href="/assets/index-test.css">'),
+    );
+    expect(html.indexOf('<style id="formless-public-site-theme-style">')).toBeGreaterThan(
+      html.indexOf('<link rel="stylesheet" crossorigin href="/assets/index-test.css">'),
     );
     expect(html).not.toContain("/@react-refresh");
     expect(html).not.toContain("/src/main.tsx");

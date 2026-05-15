@@ -1,13 +1,9 @@
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { resetClientStore } from "../../client/store.ts";
-import {
-  rateSeedRecords,
-  rateSourceSchema,
-  siteSeedRecords,
-  siteSourceSchema,
-} from "../../test/schema-apps.ts";
+import { rateSeedRecords, rateSourceSchema, siteSourceSchema } from "../../test/schema-apps.ts";
 import { renderTableViewHtml } from "../../test/generated-table.tsx";
+import { testSiteSeedRecords } from "../../test/site-records.ts";
 
 describe("RecordTable", () => {
   beforeEach(() => {
@@ -28,7 +24,7 @@ describe("RecordTable", () => {
 
   it("uses icon-sized utility columns for placement reordering and row actions", () => {
     const html = renderTableViewHtml({
-      records: siteSeedRecords,
+      records: testSiteSeedRecords,
       schema: siteSourceSchema,
       viewName: "pageCompositionHome",
     });

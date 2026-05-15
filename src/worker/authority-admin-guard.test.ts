@@ -4,10 +4,12 @@ import type {
   BootstrapResponse,
   MutationResponse,
   SitePageTreeResponse,
+  StoreSnapshot,
   StoredRecord,
 } from "../shared/protocol.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
-import { siteSeedRecords, taskSeedRecords } from "../test/schema-apps.ts";
+import { siteSourceSchema, taskSeedRecords } from "../test/schema-apps.ts";
+import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -99,7 +101,10 @@ describe("authority admin guard", () => {
   });
 
   it("keeps public Site tree reads open while guarding Site writes", async () => {
+    await postAdminJson<BootstrapResponse>("/api/site/snapshot/restore", siteStoreSnapshot());
+
     const tree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
+    const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
     const write = await harness.fetch("/api/site/mutations", {
       body: JSON.stringify({
         mutationId: "mutation-site-public-only",
@@ -118,9 +123,22 @@ describe("authority admin guard", () => {
 
     expect(tree.page.id).toBe("rec_site_content_home");
     expect(write.status).toBe(401);
-    expectRecordsIgnoringOrder(bootstrap.records, siteSeedRecords);
+    expectRecordsIgnoringOrder(bootstrap.records, before.records);
   });
 });
+
+function siteStoreSnapshot(): StoreSnapshot {
+  return {
+    kind: "formless.storeSnapshot",
+    version: 1,
+    schemaKey: "site",
+    exportedAt: "2026-05-07T00:00:00.000Z",
+    schemaUpdatedAt: "2026-05-07T00:00:00.000Z",
+    sourceCursor: testSiteSeedRecords.length,
+    schema: siteSourceSchema,
+    records: testSiteSeedRecords,
+  };
+}
 
 async function resetSchemaApp(schemaKey: SchemaKey) {
   const response = await harness.fetch(`/api/${schemaKey}/reset/seed`, {

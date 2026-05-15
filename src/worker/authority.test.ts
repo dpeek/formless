@@ -93,6 +93,7 @@ describe("authority", () => {
 
   it("returns a public page tree for a published site page", async () => {
     useSchemaApp("site");
+    await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());
 
     const response = await harness.fetch(apiPath("/api/tree/home"));
     const body = (await response.json()) as SitePageTreeResponse;

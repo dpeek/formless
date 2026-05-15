@@ -1,8 +1,8 @@
 # PRD 34: Public Site SSR
 
 Status: complete
-Current chunk: PSSR-06 shipped
-Last updated: 2026-05-13
+Current chunk: PSSR maintenance shipped
+Last updated: 2026-05-15
 
 ## Goal
 
@@ -242,6 +242,8 @@ Possible changed files:
 | PSSR-D23 | Production SSR documents load client asset tags from the built client shell through the `ASSETS` binding.                                                         | Hard-coded Vite dev paths omit the built CSS bundle and request React Refresh in production.                                                          | `src/worker/site-ssr.tsx`, `src/worker/site-ssr.test.ts`                                         |
 | PSSR-D24 | Worker SSR only handles top-level public documents in the `publishedSite` runtime profile.                                                                        | The dev and app profiles should serve the client shell at `/`; otherwise the SSR meta hint can force published Site hydration on non-published hosts. | `src/worker/routing.ts`, `src/worker/routing.test.ts`, `src/worker/site-ssr.test.ts`             |
 | PSSR-D25 | Worker SSR reads server profile from `FORMLESS_RUNTIME_PROFILE`, not the client-facing `VITE_FORMLESS_RUNTIME_PROFILE`.                                           | A generated dev var can leak client profile into Worker routing; server document routing needs its own explicit profile input.                        | `src/worker/index.ts`, `src/worker/site-ssr.tsx`, `src/worker/routing.ts`                        |
+| PSSR-D26 | Treat `*.workers.dev` hosts as published Site hosts when no explicit runtime profile is configured.                                                               | The live `formless.twitchy.workers.dev` deployment is the public Site host; without this fallback the Worker serves the static SPA shell.             | `src/worker/routing.ts`, `src/app/runtime-profile.ts`                                            |
+| PSSR-D27 | Bootstrap the public theme in the SSR document before CSS and hydration.                                                                                          | Full document navigation cannot let React `useEffect` be the first dark-mode signal; the browser canvas and Site root need dark facts before paint.   | `src/worker/site-ssr.tsx`, `src/app/site-renderer/renderer.tsx`, `src/worker/site-ssr.test.ts`   |
 
 ### Deep Modules
 
@@ -319,6 +321,8 @@ These modules should expose small interfaces and keep authority storage details 
 - `doc/current.md`: note generated admin routes remain client-rendered.
 - `doc/roadmap.md`: note published Site pages should SSR in the first-release target if shipped before release.
 - PSSR-06: promote the SSR runtime-profile handoff and completed published Site browser smoke.
+- PSSR maintenance: promote `*.workers.dev` published Site host inference for deployed public Site SSR.
+- PSSR maintenance: promote public Site no-flash theme bootstrap for dark-mode SSR navigation.
 - PRD 34 is complete; remaining work is doc/steward promotion of the listed shipped facts into global docs.
 
 ## Blockers
@@ -363,3 +367,11 @@ These modules should expose small interfaces and keep authority storage details 
 - 2026-05-13: PSSR maintenance fixed profile-blind root SSR. `https://formless.local/` served a published Site SSR document even when the runtime profile resolved to dev, because Worker routing treated every non-client HTML route as published. `src/worker/routing.ts` now requires `publishedSite` profile for published document SSR and defers non-published document routes to static assets.
 - 2026-05-13: PSSR maintenance split server and client profile inputs. The Worker uses `FORMLESS_RUNTIME_PROFILE` for server document routing so stale generated `VITE_FORMLESS_RUNTIME_PROFILE` dev vars cannot force SSR. The browser can still use `VITE_FORMLESS_RUNTIME_PROFILE` for client runtime selection.
 - 2026-05-13: PSSR profile-gate evidence: `devstate check` passed after routing and SSR test updates. With `VITE_FORMLESS_RUNTIME_PROFILE=dev FORMLESS_RUNTIME_PROFILE=dev`, `curl -sk -H 'Accept: text/html' https://formless.local/` returned the Vite client shell, and browser smoke `bun browser --session profile-root-dev --ignore-https-errors ...` opened `/`, redirected to `/tasks`, rendered `/site`, and returned no browser errors. `bun run build` passed after the Worker profile gate.
+- 2026-05-14: PSSR maintenance diagnosed deployed `https://formless.twitchy.workers.dev/blog` returning the static SPA shell: empty `<div id="app"></div>`, no `formless-runtime-profile` meta, no `formless.sitePageTree`, and `cf-cache-status: HIT`. `/api/site/tree/blog` still returned the Site tree, so API Worker routing was healthy.
+- 2026-05-14: PSSR maintenance fixed deployed host inference. `src/worker/routing.ts` and `src/app/runtime-profile.ts` now treat `*.workers.dev` as `publishedSite` when no explicit runtime profile is configured, while explicit `FORMLESS_RUNTIME_PROFILE` / `VITE_FORMLESS_RUNTIME_PROFILE` values still override host inference.
+- 2026-05-14: PSSR maintenance check evidence: regression tests first failed for `formless.twitchy.workers.dev` host inference in `src/worker/routing.test.ts` and `src/app/runtime-profile.test.ts`; after the fix, `devstate check` reported checks ok, web ready at `https://formless.local`, and test watcher passing. Local dev host smoke with `curl -sk -H 'Accept: text/html' https://formless.local/` still returned the Vite client shell with empty app root and no SSR profile meta.
+- 2026-05-14: PSSR maintenance browser smoke: `bun browser --session workers-dev-profile-fix --ignore-https-errors open https://formless.local/` redirected to `/tasks`, rendered the generated Tasks app, and `bun browser --session workers-dev-profile-fix errors` returned no page errors.
+- 2026-05-15: PSSR maintenance diagnosed dark-mode navigation flash. Published SSR rendered deterministic light Site markup and the browser only read `formless:public-site:theme` or `prefers-color-scheme` in React effect, so full document navigation could expose a light browser canvas before hydration corrected the Site.
+- 2026-05-15: PSSR maintenance fixed public theme bootstrap. `src/worker/site-ssr.tsx` now emits a head script before CSS that reads the stored theme or system dark preference and sets `html.dark`/`html.light`, `data-site-theme`, and `color-scheme`; it also emits critical canvas/Site-root theme CSS. `src/app/site-renderer/renderer.tsx` keeps the document root in sync when the public theme effect and toggle run.
+- 2026-05-15: PSSR theme bootstrap check evidence: `devstate check` reported checks ok, web ready at `https://formless.local`, and test watcher passing. `.devstate/logs/service-test.txt` reran `src/worker/site-ssr.tsx` with 10 tests passing. `.devstate/logs/check-vite.txt` reported no warnings, lint errors, or type errors in 232 files.
+- 2026-05-15: PSSR theme bootstrap browser smoke: local `published-site.formless.local` alias was unavailable through portless, so the exact published SSR host could not be browser-smoked locally. Preview-route smoke on `https://formless.local/pages/home` with `formless:public-site:theme = dark` verified `html.dark`, root `data-site-theme="dark"`, dark body background, article `data-site-theme="dark"`, toggle text `Light`, and no browser page errors.

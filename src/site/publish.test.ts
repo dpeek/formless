@@ -8,9 +8,13 @@ import {
   type SitePublishOptions,
 } from "./publish.ts";
 import { buildSiteSourceSnapshot } from "./source-snapshot.ts";
+import { siteSourceMediaAssetsFromRecords } from "./source-media.ts";
+import type { StoredRecord } from "../shared/protocol.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 
 describe("Site publish workflow", () => {
+  const sourceMediaAssets = siteSourceMediaAssetsFromRecords(siteSeedRecords);
+
   it("parses a dry-run command by default and exposes safe apply modes", () => {
     expect(parseSitePublishArgs([], {})).toEqual({
       apply: false,
@@ -73,6 +77,14 @@ describe("Site publish workflow", () => {
       exportedAt: "2026-05-12T03:00:00.000Z",
     });
     harness.queueJson(backupSnapshot);
+    for (const asset of sourceMediaAssets) {
+      harness.queueJson({
+        contentType: asset.contentType,
+        href: asset.href,
+        key: asset.key,
+        size: harness.sourceMediaBytes.byteLength,
+      });
+    }
     harness.queueJson({
       cursor: 8,
       records: siteSeedRecords,
@@ -86,14 +98,26 @@ describe("Site publish workflow", () => {
     expect(harness.commands).toEqual(["devstate check", "bun run deploy"]);
     expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://live.example/api/site/snapshot",
+      ...sourceMediaAssets.map((asset) => `PUT https://live.example/api/site/media/${asset.key}`),
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/pages/home",
     ]);
-    expect(harness.requests[1]?.headers).toMatchObject({
+    expect(harness.reads).toEqual(
+      sourceMediaAssets.map((asset) => `/workspace/${asset.sourcePath}`),
+    );
+    if (sourceMediaAssets.length > 0) {
+      expect(harness.requests[1]?.headers).toMatchObject({
+        authorization: "Bearer secret-token",
+        "content-type": sourceMediaAssets[0]?.contentType,
+      });
+    }
+    const restoreRequest = harness.requests[1 + sourceMediaAssets.length];
+
+    expect(restoreRequest?.headers).toMatchObject({
       authorization: "Bearer secret-token",
       "content-type": "application/json",
     });
-    const restoreBody = harness.requests[1]?.body;
+    const restoreBody = restoreRequest?.body;
 
     if (typeof restoreBody !== "string") {
       throw new Error("Expected restore request body to be JSON text.");
@@ -122,6 +146,14 @@ describe("Site publish workflow", () => {
         exportedAt: "2026-05-12T03:00:00.000Z",
       }),
     );
+    for (const asset of sourceMediaAssets) {
+      harness.queueJson({
+        contentType: asset.contentType,
+        href: asset.href,
+        key: asset.key,
+        size: harness.sourceMediaBytes.byteLength,
+      });
+    }
     harness.queueText("restore rejected", 500);
 
     await expect(runSitePublish(harness.input())).rejects.toThrow(
@@ -132,13 +164,44 @@ describe("Site publish workflow", () => {
     expect(harness.writes).toHaveLength(1);
     expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://live.example/api/site/snapshot",
+      ...sourceMediaAssets.map((asset) => `PUT https://live.example/api/site/media/${asset.key}`),
       "POST https://live.example/api/site/snapshot/restore",
     ]);
+  });
+
+  it("fails before deploy when a referenced source media file is missing", async () => {
+    const harness = publishHarness({
+      apply: true,
+      readFileError: new Error("ENOENT"),
+      sourceSeedRecords: [
+        {
+          id: "source-image",
+          entity: "block",
+          values: {
+            href: "/api/site/media/site/images/missing.png",
+            label: "Image",
+            type: "image",
+          },
+          createdAt: "2026-05-14T00:00:00.000Z",
+        },
+      ],
+      target: "https://live.example",
+    });
+
+    await expect(runSitePublish(harness.input())).rejects.toThrow(
+      'Missing Site source media file schema/apps/site/media/site/images/missing.png. Run "bun run site:pull-seed" before publishing.',
+    );
+
+    expect(harness.commands).toEqual([]);
+    expect(harness.requests).toEqual([]);
+    expect(harness.writes).toEqual([]);
   });
 });
 
 type PublishHarnessOptions = Partial<SitePublishOptions> & {
   adminToken?: string;
+  readFileError?: Error;
+  sourceSeedRecords?: StoredRecord[];
 };
 
 type CapturedRequest = {
@@ -153,6 +216,8 @@ function publishHarness(options: PublishHarnessOptions) {
   const commands: string[] = [];
   const logs: string[] = [];
   const requests: CapturedRequest[] = [];
+  const reads: string[] = [];
+  const sourceMediaBytes = new Uint8Array([1, 2, 3]);
   const writes: Array<{ contents: string; path: string }> = [];
   const mkdirs: string[] = [];
   const dependencies: SitePublishDependencies = {
@@ -177,6 +242,15 @@ function publishHarness(options: PublishHarnessOptions) {
       mkdirs.push(directoryPath);
     },
     now: () => "2026-05-12T02:00:00.000Z",
+    readFile: async (filePath) => {
+      reads.push(filePath);
+
+      if (options.readFileError) {
+        throw options.readFileError;
+      }
+
+      return sourceMediaBytes;
+    },
     runCommand: async (command, args) => {
       commands.push([command, ...args].join(" "));
     },
@@ -200,14 +274,16 @@ function publishHarness(options: PublishHarnessOptions) {
         target: options.target ?? null,
       },
       sourceSchema: siteSourceSchema,
-      sourceSeedRecords: siteSeedRecords,
+      sourceSeedRecords: options.sourceSeedRecords ?? siteSeedRecords,
     }),
     logs,
     mkdirs,
     queueJson: (value: unknown, status = 200) =>
       responses.push(textResponse(JSON.stringify(value), status)),
     queueText: (value: string, status = 200) => responses.push(textResponse(value, status)),
+    reads,
     requests,
+    sourceMediaBytes,
     writes,
   };
 }

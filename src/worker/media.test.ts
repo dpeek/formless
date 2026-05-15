@@ -124,6 +124,50 @@ describe("site media worker routes", () => {
     await expectMediaBucketKeys(guardedHarness, [expect.stringMatching(/^site\/images\/.+\.png$/)]);
   });
 
+  it("restores source media to an exact guarded R2 key", async () => {
+    const key = "site/images/restored.png";
+    const rejected = await restoreMedia(guardedHarness, key, "image/png", pngBytes);
+    const accepted = await restoreMedia(guardedHarness, key, "image/png", pngBytes, {
+      Authorization: `Bearer ${adminToken}`,
+    });
+
+    expect(rejected.status).toBe(401);
+    expect(accepted.status).toBe(200);
+    expect((await accepted.json()) as unknown).toEqual({
+      contentType: "image/png",
+      href: `/api/site/media/${key}`,
+      key,
+      size: pngBytes.byteLength,
+    });
+    await expectMediaBucketKeys(guardedHarness, [key]);
+
+    const served = await guardedHarness.fetch(`/api/site/media/${key}`);
+
+    expect(served.status).toBe(200);
+    expect(served.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
+  });
+
+  it("rejects invalid source media restore keys and mismatched content types", async () => {
+    const invalidKey = await restoreMedia(harness, "site/videos/clip.mp4", "video/mp4", pngBytes);
+    const mismatchedContentType = await restoreMedia(
+      harness,
+      "site/images/restored.png",
+      "image/jpeg",
+      pngBytes,
+    );
+
+    expect(invalidKey.status).toBe(400);
+    expect((await invalidKey.json()) as { error: string }).toEqual({
+      error: "Unsupported media restore key.",
+    });
+    expect(mismatchedContentType.status).toBe(415);
+    expect((await mismatchedContentType.json()) as { error: string }).toEqual({
+      error: "Media restore content type must match the media key.",
+    });
+    await expectMediaBucketKeys(harness, []);
+  });
+
   it("keeps public media reads open when the admin token is configured", async () => {
     const bucket = await guardedHarness.mf.getR2Bucket(mediaBinding);
     const key = "site/images/public.png";
@@ -168,6 +212,23 @@ async function uploadForm(
       "Content-Type": `multipart/form-data; boundary=${formData.boundary}`,
     },
     method: "POST",
+  });
+}
+
+async function restoreMedia(
+  harness: Harness,
+  key: string,
+  contentType: string,
+  body: Uint8Array,
+  headers: Record<string, string> = {},
+) {
+  return harness.fetch(`/api/site/media/${key}`, {
+    body,
+    headers: {
+      ...headers,
+      "Content-Type": contentType,
+    },
+    method: "PUT",
   });
 }
 

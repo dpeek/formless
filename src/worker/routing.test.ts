@@ -17,6 +17,11 @@ describe("Worker document routing", () => {
       shouldHandlePublishedSiteDocument(documentRequest("http://published-site.example.com/")),
     ).toBe(true);
     expect(
+      shouldHandlePublishedSiteDocument(
+        documentRequest("https://formless.twitchy.workers.dev/blog"),
+      ),
+    ).toBe(true);
+    expect(
       shouldHandlePublishedSiteDocument(documentRequest("http://example.com/blog/post"), {
         profile: "publishedSite",
       }),
@@ -41,6 +46,9 @@ describe("Worker document routing", () => {
       false,
     );
     expect(
+      shouldDeferToStaticAssets(documentRequest("https://formless.twitchy.workers.dev/blog")),
+    ).toBe(false);
+    expect(
       shouldDeferToStaticAssets(documentRequest("http://published-site.example.com/"), {
         profile: "dev",
       }),
@@ -58,6 +66,14 @@ describe("Worker document routing", () => {
         profile: "publishedSite",
       }),
     ).toBe(true);
+    expect(
+      shouldHandlePublishedSiteDocument(
+        documentRequest("https://formless.twitchy.workers.dev/blog"),
+        {
+          profile: "dev",
+        },
+      ),
+    ).toBe(false);
   });
 
   it("keeps API, preview, generated app, app-profile, asset, and non-HTML routes out of SSR", () => {

@@ -74,10 +74,19 @@ describe("runtime profile resolver", () => {
   it("uses explicit config first and host config only as a deterministic fallback", () => {
     expect(resolveRuntimeProfile({ profile: "app", schemaKey: "estii" }).kind).toBe("app");
     expect(resolveRuntimeProfile({ profile: "publishedSite" }).kind).toBe("publishedSite");
+    expect(
+      resolveRuntimeProfile({
+        hostname: "formless.twitchy.workers.dev",
+        profile: "dev",
+      }).kind,
+    ).toBe("dev");
     expect(resolveRuntimeProfile({ hostname: "app.formless.local", schemaKey: "site" }).kind).toBe(
       "app",
     );
     expect(resolveRuntimeProfile({ hostname: "published-site.formless.local" }).kind).toBe(
+      "publishedSite",
+    );
+    expect(resolveRuntimeProfile({ hostname: "formless.twitchy.workers.dev" }).kind).toBe(
       "publishedSite",
     );
     expect(resolveRuntimeProfile({ profile: "missing", schemaKey: "missing" }).kind).toBe("dev");

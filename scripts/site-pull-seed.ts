@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -7,6 +7,11 @@ import {
   buildSiteSeedRecordsFromSnapshot,
   formatSiteSeedRecords,
 } from "../src/site/seed-promotion.ts";
+import {
+  SITE_SOURCE_MEDIA_ROOT,
+  siteSourceMediaAssetsFromRecords,
+  type SiteSourceMediaAsset,
+} from "../src/site/source-media.ts";
 import { parseAppSchema } from "../src/shared/schema.ts";
 
 type CliOptions = {
@@ -17,6 +22,11 @@ type CliOptions = {
 const seedPath = "schema/apps/site/seed-records.json";
 const devstateStatusPath = ".devstate/status.json";
 const sourceSchema = parseAppSchema(rawSiteSourceSchema);
+
+type PulledSiteSourceMediaAsset = {
+  asset: SiteSourceMediaAsset;
+  bytes: Uint8Array;
+};
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
@@ -30,21 +40,33 @@ async function main() {
   const snapshot = await fetchJson(siteSnapshotUrl(source));
   const records = buildSiteSeedRecordsFromSnapshot(snapshot, sourceSchema);
   const nextSeed = formatSiteSeedRecords(records);
+  const mediaAssets = await fetchSiteSourceMediaAssets(source, records);
   const absoluteSeedPath = path.resolve(process.cwd(), seedPath);
 
   if (options.check) {
     const currentSeed = await readFile(absoluteSeedPath, "utf8");
+    const staleMediaPaths = await staleSiteSourceMediaPaths(mediaAssets);
 
-    if (currentSeed !== nextSeed) {
-      throw new Error(`Site seed is stale. Run "bun run site:pull-seed" to update ${seedPath}.`);
+    if (currentSeed !== nextSeed || staleMediaPaths.length > 0) {
+      const staleMedia =
+        staleMediaPaths.length === 0 ? "" : ` Stale media: ${staleMediaPaths.join(", ")}.`;
+
+      throw new Error(
+        `Site source seed is stale. Run "bun run site:pull-seed" to update ${seedPath} and ${SITE_SOURCE_MEDIA_ROOT}.${staleMedia}`,
+      );
     }
 
-    console.log(`Site seed is current: ${records.length} records from ${source}.`);
+    console.log(
+      `Site source seed is current: ${records.length} records and ${mediaAssets.length} media files from ${source}.`,
+    );
     return;
   }
 
   await writeFile(absoluteSeedPath, nextSeed);
-  console.log(`Wrote ${seedPath}: ${records.length} records from ${source}.`);
+  await writeSiteSourceMediaAssets(mediaAssets);
+  console.log(
+    `Wrote ${seedPath}: ${records.length} records and ${mediaAssets.length} media files from ${source}.`,
+  );
 }
 
 function parseArgs(args: string[]): CliOptions | "help" {
@@ -139,13 +161,96 @@ async function fetchJson(url: string): Promise<unknown> {
   return response.json();
 }
 
+async function fetchSiteSourceMediaAssets(
+  source: string,
+  records: ReturnType<typeof buildSiteSeedRecordsFromSnapshot>,
+): Promise<PulledSiteSourceMediaAsset[]> {
+  const assets = siteSourceMediaAssetsFromRecords(records);
+
+  return Promise.all(
+    assets.map(async (asset) => {
+      const url = new URL(asset.href, `${source}/`).toString();
+      const response = await fetch(url, {
+        headers: {
+          accept: asset.contentType,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${url}: HTTP ${response.status} ${await response.text()}`);
+      }
+
+      const responseContentType = normalizeContentType(response.headers.get("Content-Type"));
+
+      if (responseContentType && responseContentType !== asset.contentType) {
+        throw new Error(
+          `Failed to fetch ${url}: expected ${asset.contentType}, received ${responseContentType}.`,
+        );
+      }
+
+      return {
+        asset,
+        bytes: new Uint8Array(await response.arrayBuffer()),
+      };
+    }),
+  );
+}
+
+async function staleSiteSourceMediaPaths(
+  mediaAssets: PulledSiteSourceMediaAsset[],
+): Promise<string[]> {
+  const stalePaths: string[] = [];
+
+  for (const mediaAsset of mediaAssets) {
+    try {
+      const current = await readFile(path.resolve(process.cwd(), mediaAsset.asset.sourcePath));
+
+      if (!bytesEqual(current, mediaAsset.bytes)) {
+        stalePaths.push(mediaAsset.asset.sourcePath);
+      }
+    } catch {
+      stalePaths.push(mediaAsset.asset.sourcePath);
+    }
+  }
+
+  return stalePaths;
+}
+
+async function writeSiteSourceMediaAssets(mediaAssets: PulledSiteSourceMediaAsset[]) {
+  for (const mediaAsset of mediaAssets) {
+    const mediaPath = path.resolve(process.cwd(), mediaAsset.asset.sourcePath);
+
+    await mkdir(path.dirname(mediaPath), { recursive: true });
+    await writeFile(mediaPath, mediaAsset.bytes);
+  }
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) {
+    return false;
+  }
+
+  for (let index = 0; index < left.byteLength; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function normalizeContentType(value: string | null): string {
+  return value?.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
 function printUsage() {
   console.log(
     [
       "Usage: bun run site:pull-seed [--check] [--source <url>]",
       "",
       "Fetches the local Site authority snapshot and writes schema/apps/site/seed-records.json.",
-      "--check exits non-zero when the source seed file is stale.",
+      `Referenced Site media is written under ${SITE_SOURCE_MEDIA_ROOT}.`,
+      "--check exits non-zero when the source seed file or source media files are stale.",
     ].join("\n"),
   );
 }

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -38,6 +38,7 @@ function nodePublishDependencies(): SitePublishDependencies {
       await mkdir(directoryPath, options);
     },
     now: () => new Date().toISOString(),
+    readFile,
     runCommand,
     writeFile,
   };

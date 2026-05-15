@@ -89,7 +89,7 @@
     "values": {
       "type": "post",
       "label": "Agents are enablers",
-      "body": "Like when they help you build a schema driven application runtime instead of writing your CV like you're supposed to.",
+      "body": "A quick introduction to Formless: the schema-as-data runtime I built instead of updating my CV.",
       "href": "/blog/agents-are-enablers",
       "date": "2026-05-12"
     },
@@ -239,7 +239,7 @@
     "values": {
       "type": "markdown",
       "label": "Body",
-      "body": "Test1"
+      "body": "This whole site started as pure developer hedonism.\n\nI sat down to update my CV and, in the most predictable developer move imaginable, rebuilt my personal site instead.\n\nThe sensible version of that story is: pick a Markdown site generator, write the pages, ship the thing. I did not do that. I used the excuse to build something I have wanted for a while: Formless, a schema-as-data app runtime.\n\nThe idea is simple: describe your app as data. The schema defines entities, fields, relationships, queries, read models, views, screens, mutations, and actions. The runtime uses that schema to give you a working app surface: local browser state, authority-backed storage, generated editing UI, generic create and patch flows, and named domain actions for behavior that needs more than CRUD.\n\nThat changes the usual stack shape. Instead of spreading the same product knowledge across a database schema, ORM models, API handlers, client state, validation, form components, labels, locale strings, and display formatting, Formless asks a more interesting question: what if the schema was allowed to carry the useful product metadata too?\n\nSo a field is not just `email: text`. It can know its label, validation, display behavior, editor, help copy, defaults, and where it should appear. A relationship is not just a foreign key you rediscover in every screen. It can be named runtime data. A read model is not another persisted column. It can be a display-only value computed from flat records.\n\nThat is the part that feels newly interesting in an agentic world.\n\nAgents are much better when the system gives them a map. A codebase full of implicit conventions asks an agent to infer intent from scattered implementation details. A schema-as-data runtime gives it a structured description of what exists, what is editable, which relationships matter, and which commands are valid. The metadata is not just for rendering UI. It is a shared contract for humans, runtime code, and agents.\n\nThis site is the first dogfood pass. The CMS behind it is built in Formless. The Site schema has block and placement records; public pages render from a tree projection; posts and projects are content blocks with dates, routes, summaries, and child markdown placements. I get an admin UI mostly because the runtime can read the schema and generate one.\n\nIt is still a toy. There are lots of missing grown-up things: users, permissions, richer publishing, imports, a media library, dashboards, all of that. But it works well enough to write this post inside the thing itself, which is exactly the unreasonable loop I wanted.\n\nThis is the first note in a series. Next I want to dig into the data model, the generated UI, the local-first browser replica and Durable Object authority split, and what schema-driven apps make possible when agents can use the schema as a real interface instead of a pile of hints."
     },
     "createdAt": "2026-05-05T00:00:18.400Z"
   },
@@ -293,7 +293,7 @@
     "entity": "block",
     "values": {
       "type": "hero",
-      "label": "Code is magic ✨",
+      "label": "Code ✨",
       "body": "Helping humans and agents build amazing software together"
     },
     "createdAt": "2026-05-12T04:56:24.201Z"
@@ -303,7 +303,7 @@
     "entity": "block",
     "values": {
       "type": "hero",
-      "label": "Assorted shower thoughts",
+      "label": "Shower thoughts",
       "body": "Sometimes a blog post is as far as you should take your next startup idea."
     },
     "createdAt": "2026-05-12T05:02:46.686Z"
@@ -323,7 +323,7 @@
     "entity": "block",
     "values": {
       "type": "hero",
-      "label": "Things I have built",
+      "label": "Active projects",
       "body": "Products, libraries and half-baked ideas."
     },
     "createdAt": "2026-05-12T05:16:25.529Z"
@@ -421,10 +421,10 @@
     "entity": "block",
     "values": {
       "type": "image",
-      "label": "Estii project primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Crect%20x%3D%27120%27%20y%3D%27160%27%20width%3D%271360%27%20height%3D%27680%27%20rx%3D%2748%27%20fill%3D%27%23f8fafc%27%20opacity%3D%270.14%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27535%27%20font-size%3D%27128%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EEstii%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
+      "label": "Image",
+      "href": "/api/site/media/site/images/9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
+      "width": 2978,
+      "height": 1906
     },
     "createdAt": "2026-05-14T02:40:02.000Z"
   },
@@ -433,10 +433,10 @@
     "entity": "block",
     "values": {
       "type": "image",
-      "label": "OpenSurf project primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f172a%27%2F%3E%3Cpath%20d%3D%27M0%20640%20C260%20510%20390%20510%20640%20640%20C890%20770%201030%20770%201600%20540%20L1600%201000%20L0%201000Z%27%20fill%3D%27%232dd4bf%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27470%27%20font-size%3D%27120%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EOpenSurf%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
+      "label": "Image",
+      "href": "/api/site/media/site/images/180343e6-8764-4c17-9b53-51bb7da665b4.png",
+      "width": 4020,
+      "height": 2132
     },
     "createdAt": "2026-05-14T02:40:03.000Z"
   },
@@ -445,10 +445,10 @@
     "entity": "block",
     "values": {
       "type": "image",
-      "label": "Formless project primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%233f3f46%27%2F%3E%3Crect%20x%3D%27200%27%20y%3D%27200%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23a7f3d0%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%27640%27%20y%3D%27360%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23bfdbfe%27%20opacity%3D%270.75%27%2F%3E%3Crect%20x%3D%271080%27%20y%3D%27520%27%20width%3D%27320%27%20height%3D%27240%27%20fill%3D%27%23fecaca%27%20opacity%3D%270.75%27%2F%3E%3Ctext%20x%3D%27800%27%20y%3D%27855%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EFormless%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
+      "label": "Image",
+      "href": "/api/site/media/site/images/3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
+      "width": 2936,
+      "height": 1886
     },
     "createdAt": "2026-05-14T02:40:04.000Z"
   },
@@ -468,7 +468,7 @@
     "entity": "block",
     "values": {
       "type": "image",
-      "label": "Feature block media image",
+      "label": "David Peek",
       "href": "/api/site/media/site/images/5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
       "width": 2226,
       "height": 2226
@@ -483,7 +483,7 @@
       "label": "Who is this guy?",
       "href": "/blog",
       "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_blog"
+      "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
     },
     "createdAt": "2026-05-14T02:40:07.000Z"
   },
@@ -508,6 +508,85 @@
       "linkTargetBlock": "rec_site_content_resume"
     },
     "createdAt": "2026-05-14T03:15:47.149Z"
+  },
+  {
+    "id": "record_9acd9f8f-d672-4ac6-8c58-dfd2f79ce8e4",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Image",
+      "href": "/api/site/media/site/images/8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
+      "width": 1840,
+      "height": 1334
+    },
+    "createdAt": "2026-05-14T04:00:54.315Z"
+  },
+  {
+    "id": "record_90f019da-bb87-4f32-ae89-c268bca85c99",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Image",
+      "href": "/api/site/media/site/images/c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
+      "width": 2276,
+      "height": 1310
+    },
+    "createdAt": "2026-05-14T04:01:21.269Z"
+  },
+  {
+    "id": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
+    "entity": "block",
+    "values": {
+      "type": "page",
+      "label": "About",
+      "href": "/about",
+      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <circle cx=\"12\" cy=\"12\" r=\"10\" />\n    <circle cx=\"12\" cy=\"10\" r=\"3\" />\n    <path d=\"M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662\" />\n</svg>"
+    },
+    "createdAt": "2026-05-14T05:50:12.427Z"
+  },
+  {
+    "id": "record_3e33390e-4c81-4887-a812-b9a398f13343",
+    "entity": "block",
+    "values": {
+      "type": "markdown",
+      "label": "Ten things about me",
+      "body": "1. My dad worked as an Australian Diplomat so I grew up in Malaysia, South Africa, Chile and France\n2. I once sat next to an actual princess at a lunch\n3. I'm frustratingly close to a round 200cm tall\n4. I love languages and speak Spanish, French and a bit of Italian and German (recovering DuoLingo addict)\n5. I am on a lifelong quest to make the perfect coffee, sour dough, pizza and smoked brisket\n6. I lived in London with my wife and two kids for six years (we planned to be there for 12 months)\n7. I'm a great whistler\n8. I can somehow experience both incredible optimism and abject doomerism for the future simultaneously\n9. I am a huge space nerd\n10. My wife is a volunteer for Sydney Wildlife Rescue, meaning I generally have a possum living in my office (see below)"
+    },
+    "createdAt": "2026-05-14T05:52:31.254Z"
+  },
+  {
+    "id": "record_c398f4ca-27d6-495b-bf99-19b263e7afc0",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "About",
+      "linkTargetMode": "internal",
+      "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
+    },
+    "createdAt": "2026-05-14T05:52:57.238Z"
+  },
+  {
+    "id": "record_060a4f34-188a-4881-a5c1-e8bb015a65d8",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "About",
+      "linkTargetMode": "internal",
+      "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
+    },
+    "createdAt": "2026-05-14T05:53:34.601Z"
+  },
+  {
+    "id": "record_aa9fa4ad-6cd6-4f79-aaf2-6e95a63e284e",
+    "entity": "block",
+    "values": {
+      "type": "image",
+      "label": "Brush tail possums exhibiting weapons-grade cuteness",
+      "href": "/api/site/media/site/images/b6227945-be74-4946-a055-9171d08a0b02.png",
+      "width": 1578,
+      "height": 892
+    },
+    "createdAt": "2026-05-14T06:13:22.256Z"
   },
   {
     "id": "rec_site_place_header_primary",
@@ -760,28 +839,6 @@
     "createdAt": "2026-05-14T01:31:03.000Z"
   },
   {
-    "id": "rec_site_place_post_agents_primary_image",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_post_shipped_schema",
-      "block": "rec_site_media_post_agents_primary",
-      "order": 500,
-      "slot": "primaryImage"
-    },
-    "createdAt": "2026-05-14T02:41:00.000Z"
-  },
-  {
-    "id": "rec_site_place_post_schema_primary_image",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_post_draft_notes",
-      "block": "rec_site_media_post_schema_primary",
-      "order": 500,
-      "slot": "primaryImage"
-    },
-    "createdAt": "2026-05-14T02:41:01.000Z"
-  },
-  {
     "id": "rec_site_place_project_estii_primary_image",
     "entity": "blockPlacement",
     "values": {
@@ -867,5 +924,67 @@
       "slot": "actions"
     },
     "createdAt": "2026-05-14T03:15:47.149Z"
+  },
+  {
+    "id": "record_ccb322f8-07bc-4fdd-ac77-53f24653a27c",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "record_95f5f21a-521f-48ba-a725-bc43e6d78d2d",
+      "block": "record_9acd9f8f-d672-4ac6-8c58-dfd2f79ce8e4",
+      "order": 1000,
+      "slot": "primaryImage"
+    },
+    "createdAt": "2026-05-14T04:00:54.315Z"
+  },
+  {
+    "id": "record_f7f59edb-6126-454a-ba74-36114a757492",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "record_ec81c3b8-929d-48e3-a4a2-63a185c54ede",
+      "block": "record_90f019da-bb87-4f32-ae89-c268bca85c99",
+      "order": 1000,
+      "slot": "primaryImage"
+    },
+    "createdAt": "2026-05-14T04:01:21.269Z"
+  },
+  {
+    "id": "record_cc0031df-0f32-4c2c-8cbb-a6a142bb58f5",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
+      "block": "record_3e33390e-4c81-4887-a812-b9a398f13343",
+      "order": 1000
+    },
+    "createdAt": "2026-05-14T05:52:31.254Z"
+  },
+  {
+    "id": "record_bf3cc2de-5feb-420e-bd0e-41ad37afb42b",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_header_secondary",
+      "block": "record_c398f4ca-27d6-495b-bf99-19b263e7afc0",
+      "order": 500
+    },
+    "createdAt": "2026-05-14T05:52:57.238Z"
+  },
+  {
+    "id": "record_afa1ab82-876a-4f04-8235-7e6fe38ce5d2",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_content_group_footer_main",
+      "block": "record_060a4f34-188a-4881-a5c1-e8bb015a65d8",
+      "order": 625
+    },
+    "createdAt": "2026-05-14T05:53:34.601Z"
+  },
+  {
+    "id": "record_0b57298f-2552-4428-96e0-ef4654644410",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
+      "block": "record_aa9fa4ad-6cd6-4f79-aaf2-6e95a63e284e",
+      "order": 2000
+    },
+    "createdAt": "2026-05-14T06:13:22.256Z"
   }
 ]

@@ -10,6 +10,11 @@ import {
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import { buildSiteSourceSnapshot } from "./source-snapshot.ts";
+import {
+  SITE_MEDIA_ROUTE_PREFIX,
+  siteSourceMediaAssetsFromRecords,
+  type SiteSourceMediaAsset,
+} from "./source-media.ts";
 
 export type SitePublishOptions = {
   apply: boolean;
@@ -42,6 +47,7 @@ export type SitePublishDependencies = {
   log: (message: string) => void;
   mkdir: (directoryPath: string, options: { recursive: true }) => Promise<void>;
   now: () => string;
+  readFile: (filePath: string) => Promise<Uint8Array>;
   runCommand: (
     command: string,
     args: string[],
@@ -62,6 +68,10 @@ export type SitePublishInput = {
 type SitePublishModeFlags = {
   codeOnly: boolean;
   dataOnly: boolean;
+};
+
+type SourceMediaFile = SiteSourceMediaAsset & {
+  bytes: Uint8Array<ArrayBuffer>;
 };
 
 const defaultBackupDir = "tmp/site-publish-backups";
@@ -142,6 +152,7 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
   const sourceSnapshot = buildSiteSourceSnapshot(input.sourceSchema, input.sourceSeedRecords, {
     exportedAt: plannedAt,
   });
+  const sourceMediaAssets = siteSourceMediaAssetsFromRecords(sourceSnapshot.records);
 
   if (input.options.apply && input.options.data && !input.options.target) {
     throw new Error(
@@ -149,7 +160,7 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
     );
   }
 
-  logPublishPlan(input, sourceSnapshot);
+  logPublishPlan(input, sourceSnapshot, sourceMediaAssets.length);
 
   if (!input.options.apply) {
     return {
@@ -159,6 +170,10 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
       target: input.options.target,
     };
   }
+
+  const sourceMediaFiles = input.options.data
+    ? await readSourceMediaFiles(input, sourceMediaAssets)
+    : [];
 
   if (!input.options.skipCheck) {
     input.dependencies.log("Check: devstate check");
@@ -171,7 +186,7 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
   }
 
   const backupPath = input.options.data
-    ? await publishSiteData(input, sourceSnapshot, plannedAt)
+    ? await publishSiteData(input, sourceSnapshot, sourceMediaFiles, plannedAt)
     : null;
 
   input.dependencies.log("Site publish complete.");
@@ -193,7 +208,11 @@ export function sitePublishUsage(): string {
   ].join("\n");
 }
 
-function logPublishPlan(input: SitePublishInput, sourceSnapshot: StoreSnapshot) {
+function logPublishPlan(
+  input: SitePublishInput,
+  sourceSnapshot: StoreSnapshot,
+  sourceMediaAssetCount: number,
+) {
   const mode = input.options.apply ? "APPLY" : "DRY RUN";
   const codeStep = input.options.code ? "enabled" : "skipped";
   const dataStep = input.options.data ? "enabled" : "skipped";
@@ -202,6 +221,7 @@ function logPublishPlan(input: SitePublishInput, sourceSnapshot: StoreSnapshot) 
 
   input.dependencies.log(`${mode}: Site publish workflow.`);
   input.dependencies.log(`Source: ${sourceSnapshot.records.length} Site seed records validated.`);
+  input.dependencies.log(`Source media: ${sourceMediaAssetCount} files referenced.`);
   input.dependencies.log(`Target: ${target}`);
   input.dependencies.log(`Steps: check=${checkStep}; code=${codeStep}; data=${dataStep}.`);
 
@@ -218,6 +238,7 @@ function logPublishPlan(input: SitePublishInput, sourceSnapshot: StoreSnapshot) 
 async function publishSiteData(
   input: SitePublishInput,
   sourceSnapshot: StoreSnapshot,
+  sourceMediaFiles: SourceMediaFile[],
   plannedAt: string,
 ): Promise<string> {
   const target = input.options.target;
@@ -239,6 +260,8 @@ async function publishSiteData(
   input.dependencies.log(`Data backup written: ${backupPath}`);
 
   try {
+    await restoreSourceMedia(input, target, sourceMediaFiles);
+
     input.dependencies.log("Data restore: POST /api/site/snapshot/restore");
     const restoreResponse = validateRestoreResponse(
       await fetchJson(input, sitePublishUrl(target, "/api/site/snapshot/restore"), {
@@ -266,6 +289,82 @@ async function publishSiteData(
   }
 
   return backupPath;
+}
+
+async function readSourceMediaFiles(
+  input: SitePublishInput,
+  sourceMediaAssets: SiteSourceMediaAsset[],
+): Promise<SourceMediaFile[]> {
+  const files: SourceMediaFile[] = [];
+
+  for (const asset of sourceMediaAssets) {
+    const filePath = path.resolve(input.cwd, asset.sourcePath);
+    let bytes: Uint8Array;
+
+    try {
+      bytes = await input.dependencies.readFile(filePath);
+    } catch {
+      throw new Error(
+        `Missing Site source media file ${asset.sourcePath}. Run "bun run site:pull-seed" before publishing.`,
+      );
+    }
+
+    files.push({
+      ...asset,
+      bytes: copyBytes(bytes),
+    });
+  }
+
+  return files;
+}
+
+function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(bytes.byteLength);
+
+  copy.set(bytes);
+
+  return copy;
+}
+
+async function restoreSourceMedia(
+  input: SitePublishInput,
+  target: string,
+  sourceMediaFiles: SourceMediaFile[],
+) {
+  if (sourceMediaFiles.length === 0) {
+    return;
+  }
+
+  input.dependencies.log(`Media restore: PUT ${sourceMediaFiles.length} source media files.`);
+
+  for (const file of sourceMediaFiles) {
+    validateMediaRestoreResponse(
+      await fetchJson(input, sitePublishUrl(target, `${SITE_MEDIA_ROUTE_PREFIX}${file.key}`), {
+        body: file.bytes,
+        headers: authHeaders(input.adminToken, {
+          accept: "application/json",
+          "content-type": file.contentType,
+        }),
+        method: "PUT",
+      }),
+      file,
+    );
+  }
+}
+
+function validateMediaRestoreResponse(value: unknown, file: SourceMediaFile) {
+  if (!isRecord(value)) {
+    throw new Error("Site media restore response must be an object.");
+  }
+
+  if (
+    value.contentType !== file.contentType ||
+    value.href !== file.href ||
+    value.key !== file.key ||
+    value.size !== file.bytes.byteLength
+  ) {
+    throw new Error(`Site media restore response did not match source media "${file.key}".`);
+  }
 }
 
 function validateRestoreResponse(value: unknown, sourceSnapshot: StoreSnapshot): BootstrapResponse {

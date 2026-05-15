@@ -134,6 +134,10 @@ function runtimeProfileKindFromHost(
     return "app";
   }
 
+  if (isWorkersDevHost(normalized)) {
+    return "publishedSite";
+  }
+
   return undefined;
 }
 
@@ -141,4 +145,8 @@ function acceptsHtml(acceptHeader: string | null): boolean {
   return (
     acceptHeader === null || acceptHeader.includes("text/html") || acceptHeader.includes("*/*")
   );
+}
+
+function isWorkersDevHost(hostname: string): boolean {
+  return hostname === "workers.dev" || hostname.endsWith(".workers.dev");
 }

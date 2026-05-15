@@ -24,9 +24,6 @@
             "projectList": {
               "label": "Project list"
             },
-            "profile": {
-              "label": "Profile"
-            },
             "group": {
               "label": "Group"
             },
@@ -62,9 +59,6 @@
             },
             "image": {
               "label": "Image"
-            },
-            "custom": {
-              "label": "Custom"
             }
           }
         },
@@ -302,10 +296,6 @@
           "label": "Project list",
           "fields": ["label"]
         },
-        "profile": {
-          "label": "Profile",
-          "fields": ["label", "body"]
-        },
         "group": {
           "label": "Group",
           "fields": ["label"]
@@ -353,7 +343,7 @@
         },
         "image": {
           "label": "Image",
-          "fields": ["label", "href", "width", "height"],
+          "fields": ["label", "href"],
           "requiredFields": ["label"]
         }
       },
@@ -623,15 +613,6 @@
             }
           }
         },
-        "profile": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            }
-          }
-        },
         "link": {
           "presentation": "fields",
           "fields": {
@@ -697,14 +678,6 @@
           "fields": {
             "href": {
               "editor": "image",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
               "commit": "field-commit"
             }
           }
@@ -830,14 +803,6 @@
           "fields": {
             "href": {
               "editor": "image",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
               "commit": "field-commit"
             }
           }
@@ -1090,7 +1055,8 @@
           "groups": [
             {
               "label": "Pages",
-              "query": "blockPages"
+              "query": "blockPages",
+              "createView": "blockPageCreate"
             },
             {
               "label": "Posts",
@@ -1363,14 +1329,6 @@
             }
           }
         },
-        "profile": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown"
-            }
-          }
-        },
         "link": {
           "presentation": "fields",
           "fields": {
@@ -1428,12 +1386,6 @@
           "fields": {
             "href": {
               "editor": "image"
-            },
-            "width": {
-              "editor": "number"
-            },
-            "height": {
-              "editor": "number"
             }
           }
         }
@@ -1444,6 +1396,27 @@
           "label": {
             "editor": "text"
           }
+        }
+      }
+    },
+    "blockPageCreate": {
+      "type": "create",
+      "entity": "block",
+      "fields": {
+        "label": {
+          "editor": "text"
+        },
+        "href": {
+          "editor": "href"
+        },
+        "icon": {
+          "editor": "icon"
+        }
+      },
+      "defaults": {
+        "type": {
+          "kind": "literal",
+          "value": "page"
         }
       }
     },
@@ -1553,15 +1526,6 @@
             }
           }
         },
-        "profile": {
-          "presentation": "fields",
-          "fields": {
-            "body": {
-              "editor": "markdown",
-              "commit": "field-commit"
-            }
-          }
-        },
         "link": {
           "presentation": "fields",
           "fields": {
@@ -1627,14 +1591,6 @@
           "fields": {
             "href": {
               "editor": "image",
-              "commit": "field-commit"
-            },
-            "width": {
-              "editor": "number",
-              "commit": "field-commit"
-            },
-            "height": {
-              "editor": "number",
               "commit": "field-commit"
             }
           }

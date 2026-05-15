@@ -24,8 +24,8 @@ The first slice should:
 - remove primary Site editor `Add placement` actions;
 - let footer links inherit the target page icon when the link has no own icon.
 
-This PRD owns public Site list blocks, Blog/Projects regular-page rendering, public navigation polish, and the narrow tree placement action cleanup.
-It does not own page sidebar creation/deletion/ordering, project detail routes, automatic orphan deletion, hero semantics, tags, search, RSS, or a general query block DSL.
+This PRD owns public Site list blocks, Blog/Projects regular-page rendering, public navigation polish, the narrow tree placement action cleanup, and a maintenance slice for page root creation/deletion affordances.
+It does not own page ordering, project detail routes, automatic orphan deletion, hero semantics, tags, search, RSS, or a general query block DSL.
 
 ## Problem Statement
 
@@ -328,6 +328,8 @@ Possible changed files:
 | SCL-D16 | Project `postList` and `projectList` blocks as tree query items.               | List queries should stay testable in the tree layer before renderer markup ships.                  | `src/site/tree.ts`, `src/site/tree.test.ts`                            |
 | SCL-D17 | Make public post/project cards whole-card links.                               | List pages should not require visitors to target only the title.                                   | User request 2026-05-14, `src/app/site-renderer/renderer.tsx`          |
 | SCL-D18 | Treat project dates as publish/sort state, not public card metadata.           | Projects need ordering without showing date chrome in public cards.                                | User request 2026-05-14, `src/app/site-renderer/renderer.tsx`          |
+| SCL-D19 | Give Pages the same fixed root create affordance as Posts and Projects.        | Page roots are normal author-created blocks and should not require the raw block create surface.   | User request 2026-05-14, `schema/apps/site/schema.json`                |
+| SCL-D20 | Remove unused `profile` and `custom` from the source Site block type schema.   | Current source content does not use these block types, and hidden authoring choices should shrink. | User request 2026-05-14, `schema/apps/site/schema.json`                |
 
 ## Deep Modules
 
@@ -366,6 +368,7 @@ Possible changed files:
 | SCL-03 | shipped | SCL-01     | header, links     | Split header primary/secondary blocks, add active route styles, inherit target icons for links.  |
 | SCL-04 | shipped | none       | generated tree UI | Remove Delete child, make Remove placement an `x` icon button, remove primary Add placement UI.  |
 | SCL-05 | shipped | SCL-02     | seed, browser     | Update Site seed to use Blog/Projects list blocks and run public browser smoke.                  |
+| SCL-06 | shipped | SCL-05     | schema, tests     | Add Pages root create, verify page delete control, and remove unused source block types.         |
 
 ## Status Notes
 
@@ -397,6 +400,11 @@ Possible changed files:
 - 2026-05-14 SCL maintenance shipped.
 - Public renderer now stretches the summary link across post and project cards while preserving nested markdown links.
 - Public renderer no longer displays dates on project summary cards; `block.date` still controls visibility and ordering.
+- 2026-05-14 SCL-06 shipped.
+- Source Site sidebar Pages group now has fixed `blockPageCreate` root creation with hidden `type = page`.
+- Source Site page roots remain deletable through the generated generic block delete control when reference-safety allows it.
+- Source Site schema no longer exposes unused `profile` or `custom` block type values or authoring variants.
+- Source Site seed reconnects existing post primary image blocks to their post roots through `primaryImage` placements.
 - Blockers: none.
 
 ## Evidence
@@ -431,10 +439,13 @@ Possible changed files:
 - 2026-05-14 SCL maintenance browser smoke: `/pages/blog` first post card had `data-site-summary-link="post"` with absolute full-card inset and kept its post date visible.
 - 2026-05-14 SCL maintenance browser smoke: `/pages/projects` first project card had `data-site-summary-link="project"` with absolute full-card inset; project card `<time>` count was zero and project date text was absent.
 - 2026-05-14 SCL maintenance browser smoke: `bun browser --session site-summary-cards errors` returned no page errors.
+- 2026-05-14 SCL-06 `devstate check`: checks ok; web ready at `https://formless.local`; test watcher passed.
+- 2026-05-14 SCL-06 browser smoke reset Site schema and seed with `200` responses, opened `/site`, and verified Create Page, Create Post, Create Project, Pages roots, seeded page labels, and `data-formless-delete-record="rec_site_content_home"`.
+- 2026-05-14 SCL-06 browser smoke: `bun browser --session page-create-delete errors` returned no page errors.
 
 ## Out of Scope
 
-- Page creation, deletion, and ordering in the Site sidebar.
+- Page ordering in the Site sidebar.
 - Create-or-select tree add flow at every tree level.
 - Automatic child block deletion when removing the last placement.
 - Project detail routes.
@@ -469,6 +480,9 @@ Possible changed files:
 - SCL-05 promote: source Projects seed places a `projectList` block under the Projects page instead of manually placing project blocks.
 - SCL maintenance promote: public post and project summary cards use whole-card links.
 - SCL maintenance promote: public project summary cards hide date display while keeping `block.date` as publish/sort state.
+- SCL-06 promote: Pages root navigation has a fixed create action that creates `block.type = page` records with label, href, and icon fields.
+- SCL-06 promote: generated Site root detail delete controls can delete page blocks when generic reference-safety allows deletion.
+- SCL-06 promote: source Site schema no longer exposes unused `profile` or `custom` block types.
 - `doc/current.md`: note Blog and Projects are regular pages composed from blocks.
 - `doc/current.md`: note `postList` and `projectList` blocks render dated public content.
 - `doc/current.md`: note `block.date` controls public post/project list visibility and order.
@@ -488,6 +502,6 @@ Possible changed files:
 - 2026-05-14: User confirmed post detail should render `post.label` but not `post.body`.
 - 2026-05-14: User confirmed header primary/secondary should be separate blocks.
 - 2026-05-14: User deferred hero/title semantics.
-- 2026-05-14: User deferred page sidebar creation/deletion/ordering.
+- 2026-05-14: User requested page sidebar creation, page deletion, and cleanup of unused current source schema parts.
 - 2026-05-14: User deferred auto-delete/orphan business logic.
 - 2026-05-14: User confirmed `link.icon` overrides inherited target icon.

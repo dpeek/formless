@@ -233,6 +233,10 @@ function runtimeProfileKindFromHost(hostname: string | undefined): RuntimeProfil
     return "app";
   }
 
+  if (isWorkersDevHost(normalized)) {
+    return "publishedSite";
+  }
+
   return undefined;
 }
 
@@ -246,4 +250,8 @@ function stringConfigValue(value: unknown): string | undefined {
 
 function browserDocument(): RuntimeProfileHintDocument | undefined {
   return typeof document === "undefined" ? undefined : document;
+}
+
+function isWorkersDevHost(hostname: string): boolean {
+  return hostname === "workers.dev" || hostname.endsWith(".workers.dev");
 }

@@ -63,5 +63,6 @@ When user says `done`:
 - Use `./.devstate/status.md` as check evidence.
 - Preserve user changes.
 - Keep data model flat; compose in view/query layer.
+- Tests must not depend on exact `schema/apps/site/seed-records.json` content; use `src/test/site-records.ts` fixtures for Site record shape.
 - Claims in docs must point to code, schema, tests, or shipped behavior.
 - Write short: facts, paths, status.

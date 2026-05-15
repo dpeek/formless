@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { renderToReadableStream } from "react-dom/server.edge";
 
 import { renderInitialSitePageTreeScript } from "../app/site-renderer/initial-tree.ts";
-import { SitePageRenderer } from "../app/site-renderer/renderer.tsx";
+import { PUBLIC_SITE_THEME_STORAGE_KEY, SitePageRenderer } from "../app/site-renderer/renderer.tsx";
 import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
@@ -29,6 +29,53 @@ const DEVELOPMENT_CLIENT_ASSETS: ClientDocumentAssets = {
   head: "",
 };
 const EMPTY_CLIENT_ASSETS: ClientDocumentAssets = { body: "", head: "" };
+const PUBLIC_SITE_THEME_BOOT_SCRIPT_ID = "formless-public-site-theme";
+const PUBLIC_SITE_THEME_BOOT_STYLE_ID = "formless-public-site-theme-style";
+const PUBLIC_SITE_THEME_BOOT_SCRIPT = `<script id="${PUBLIC_SITE_THEME_BOOT_SCRIPT_ID}">
+(() => {
+  const storageKey = ${JSON.stringify(PUBLIC_SITE_THEME_STORAGE_KEY)};
+  const root = document.documentElement;
+  let theme = "light";
+
+  try {
+    const stored = window.localStorage.getItem(storageKey);
+
+    if (stored === "dark" || stored === "light") {
+      theme = stored;
+    } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      theme = "dark";
+    }
+  } catch {
+    try {
+      if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+        theme = "dark";
+      }
+    } catch {}
+  }
+
+  root.classList.toggle("dark", theme === "dark");
+  root.classList.toggle("light", theme === "light");
+  root.dataset.siteTheme = theme;
+  root.style.setProperty("color-scheme", theme);
+})();
+</script>`;
+const PUBLIC_SITE_THEME_BOOT_STYLE = `<style id="${PUBLIC_SITE_THEME_BOOT_STYLE_ID}">
+html.light,
+html.light body {
+  background: #ffffff;
+  color: #09090b;
+  color-scheme: light;
+}
+
+html.dark,
+html.dark body,
+html.dark #app,
+html.dark [data-site-theme] {
+  background: #09090b;
+  color: #f4f4f5;
+  color-scheme: dark;
+}
+</style>`;
 
 type ClientDocumentAssets = {
   body: string;
@@ -209,13 +256,16 @@ function renderDocument(
   const clientAssetBodyTags = options.clientAssets.body ? `\n    ${options.clientAssets.body}` : "";
 
   return `<!doctype html>
-<html lang="en">
+<html lang="en" class="light" data-site-theme="light" style="color-scheme: light;">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />
-    <title>formless</title>${clientAssetHeadTags}
+    <title>formless</title>
+    ${PUBLIC_SITE_THEME_BOOT_SCRIPT}${clientAssetHeadTags}
+    ${PUBLIC_SITE_THEME_BOOT_STYLE}
   </head>
   <body>
     <div id="app">${appHtml}</div>${initialTreeScript}${clientAssetBodyTags}

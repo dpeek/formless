@@ -2,7 +2,7 @@
 
 Status: complete
 Current chunk: SIF-05 shipped
-Last updated: 2026-05-13
+Last updated: 2026-05-15
 
 ## Goal
 
@@ -46,7 +46,7 @@ Generated field UI should render:
 
 - an icon preview when SVG source is valid enough to render;
 - an empty icon outline when no source is defined;
-- an edit button that opens a dialog;
+- a clickable icon or empty icon well that opens a dialog;
 - a textarea inside the dialog for editing raw SVG source;
 - generic patch/create values that still submit one flat string field.
 
@@ -216,6 +216,7 @@ Likely changed files:
 | SIF-D10 | Public Site link icons are content data, not hard-coded chrome. | Footer social links already live as link blocks in the Site tree.                     | `src/app/site-renderer/renderer.tsx`, Site seed data      |
 | SIF-D11 | Do not add an icon catalog in this PRD.                         | The first use case needs pasted SVG; catalog semantics can come later.                | User direction 2026-05-12                                 |
 | SIF-D12 | Use a strict SVG tag and attribute allowlist in the renderer.   | Unsafe or unsupported SVG should fall back without broad HTML/SVG execution surface.  | `lib/ui/src/svg-icon.tsx`, `lib/ui/src/svg-icon.test.tsx` |
+| SIF-D13 | Make the icon preview or empty well the edit trigger.           | Compact authoring should not render separate icon and edit-button controls.           | User direction 2026-05-15                                 |
 
 ### Deep Modules
 
@@ -274,10 +275,12 @@ Likely changed files:
 - 2026-05-12 SIF-03: `bun browser` generated `/site` smoke could not verify generated icon editing because this agent shell has `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite`, so the dev URL serves published-site routes and `/site` renders "No site page exists for site." Clear or override that env before SIF-05 browser smoke.
 - 2026-05-12 SIF-04: no new chunk blocker. Required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent again; evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
 - 2026-05-13 SIF-05: previous `/site` smoke blocker resolved by restarting devstate with `VITE_FORMLESS_RUNTIME_PROFILE` unset. No new blocker.
+- 2026-05-15 follow-up: first `devstate check` returned nonzero because the service state was stale after `formless.local` registration conflicts, but final `devstate check` cleared the stale marker and reported checks ok with services running.
 
 ## Promote after ship
 
 - `doc/current.md`: generated icon fields render SVG previews, empty outlines for missing/invalid values, and dialog textarea editing while preserving flat string storage.
+- `doc/current.md`: generated inline icon fields open the editor by clicking the icon preview or empty plus well; they no longer show a separate edit glyph button.
 - `doc/current.md`: public Site link blocks can render text-backed SVG icons, used by footer social links.
 - `doc/current.md`: shared SVG icon renderer lives in `lib/ui` and is reused by generated UI and public Site rendering.
 - `doc/roadmap.md`: no change unless icon support becomes explicit first-release scope wording.
@@ -335,3 +338,8 @@ Likely changed files:
 - SIF-05: `bun browser --session sif05 errors` returned no page errors.
 - SIF-05: `devstate check` on 2026-05-13 reported checks ok, web ready/running, and test service pass in `.devstate/status.md`; watcher log showed 45 test files and 671 tests passed.
 - SIF-05: required `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; final evidence came from `.devstate/status.md`, `.devstate/status.json`, and `.devstate/logs/`.
+- 2026-05-15 follow-up: `src/app/generated/record-field-editor.tsx` changed generated inline icon editing so the rendered SVG preview or parser-backed empty well is the only `Edit Icon` trigger.
+- 2026-05-15 follow-up: `src/app.test.tsx` asserts the empty SVG placeholder renders inside `data-web-icon-field-edit="trigger"` for generated inline icon fields.
+- 2026-05-15 follow-up: final `devstate check` reported checks ok and services running; logs showed formatting/lint/typecheck pass and 52 test files / 750 tests passing.
+- 2026-05-15 follow-up: `bun browser --session icon-editor-smoke` opened `http://127.0.0.1:4764/site`; eval found 4 icon edit triggers, 3 empty trigger wells, 1 SVG trigger, 0 icon fields with multiple buttons, and 0 split preview spans.
+- 2026-05-15 follow-up: browser smoke clicked an empty icon trigger and opened the `Edit Icon` dialog with one SVG source textarea; `bun browser --session icon-editor-smoke errors` returned no page errors.

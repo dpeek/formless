@@ -121,7 +121,7 @@ describe("generated authoring root navigation", () => {
     ]);
   });
 
-  it("exposes Site posts and projects as root navigation groups with fixed creates", () => {
+  it("exposes Site pages, posts and projects as root navigation groups with fixed creates", () => {
     const facts = selectGeneratedRootNavigationFacts(requiredSiteScreen());
 
     expect(siteSourceSchema.queries.blockPosts?.label).toBe("Posts");
@@ -137,7 +137,7 @@ describe("generated authoring root navigation", () => {
         ]) ?? [],
       ]),
     ).toEqual([
-      ["Pages", "blockPages", null, []],
+      ["Pages", "blockPages", "Create Page", [["type", { kind: "literal", value: "page" }]]],
       ["Posts", "blockPosts", "Create Post", [["type", { kind: "literal", value: "post" }]]],
       [
         "Projects",

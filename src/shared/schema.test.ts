@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import rawRateCardSchema from "../../schema/apps/estii/schema.json";
-import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
 import { sourceLikeSchemas, sourceLikeSiteSchema } from "../test/schema-builders.ts";
+import { testSiteSeedRecords } from "../test/site-records.ts";
 import { parseAppSchema, stringifySchema } from "./schema.ts";
 
 describe("schema mutation policies", () => {
@@ -4237,7 +4237,6 @@ describe("personal site sample schema", () => {
         project: { label: "Project" },
         postList: { label: "Post list" },
         projectList: { label: "Project list" },
-        profile: { label: "Profile" },
         group: { label: "Group" },
         header: { label: "Header" },
         headerPrimary: { label: "Header primary" },
@@ -4250,7 +4249,6 @@ describe("personal site sample schema", () => {
         hero: { label: "Hero" },
         feature: { label: "Feature" },
         image: { label: "Image" },
-        custom: { label: "Custom" },
       },
     });
     expect(schema.entities.block?.fields.label).toEqual({
@@ -4362,7 +4360,7 @@ describe("personal site sample schema", () => {
         feature: { label: "Feature", fields: ["label", "body", "alignment"] },
         image: {
           label: "Image",
-          fields: ["label", "href", "width", "height"],
+          fields: ["label", "href"],
           requiredFields: ["label"],
         },
       },
@@ -4531,8 +4529,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "image" },
-            width: { editor: "number" },
-            height: { editor: "number" },
           },
         },
       },
@@ -4579,8 +4575,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "image", commit: "field-commit" },
-            width: { editor: "number", commit: "field-commit" },
-            height: { editor: "number", commit: "field-commit" },
           },
         },
       },
@@ -4623,7 +4617,7 @@ describe("personal site sample schema", () => {
         navigation: {
           placement: "sidebar",
           groups: [
-            { label: "Pages", query: "blockPages" },
+            { label: "Pages", query: "blockPages", createView: "blockPageCreate" },
             { label: "Posts", query: "blockPosts", createView: "blockPostCreate" },
             { label: "Projects", query: "blockProjects", createView: "blockProjectCreate" },
             { label: "Navigation", query: "blockNavigationRoots" },
@@ -4651,6 +4645,18 @@ describe("personal site sample schema", () => {
       },
     });
     expect(schema.views.siteCompositionHome).not.toHaveProperty("actions");
+    expect(schema.views.blockPageCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        icon: { editor: "icon" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "page" },
+      },
+    });
     expect(schema.views.blockPostCreate).toMatchObject({
       type: "create",
       entity: "block",
@@ -4745,11 +4751,23 @@ describe("personal site sample schema", () => {
     expect(navigationQueries).toContain("blockPosts");
     expect(navigationQueries).toContain("blockProjects");
     expect(navigationGroups.map((group) => [group.label, group.createView ?? null])).toEqual([
-      ["Pages", null],
+      ["Pages", "blockPageCreate"],
       ["Posts", "blockPostCreate"],
       ["Projects", "blockProjectCreate"],
       ["Navigation", null],
     ]);
+    expect(schema.views.blockPageCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        icon: { editor: "icon" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "page" },
+      },
+    });
     expect(schema.views.blockPostCreate).toMatchObject({
       type: "create",
       entity: "block",
@@ -4871,6 +4889,8 @@ describe("personal site sample schema", () => {
       "file",
       "cta",
       "subscribe",
+      "profile",
+      "custom",
     ];
 
     const blockTypeField = schema.entities.block?.fields.type;
@@ -4940,8 +4960,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "image", commit: "field-commit" },
-            width: { editor: "number", commit: "field-commit" },
-            height: { editor: "number", commit: "field-commit" },
           },
         },
       },
@@ -4968,8 +4986,6 @@ describe("personal site sample schema", () => {
           presentation: "fields",
           fields: {
             href: { editor: "image", commit: "field-commit" },
-            width: { editor: "number", commit: "field-commit" },
-            height: { editor: "number", commit: "field-commit" },
           },
         },
       },
@@ -4998,8 +5014,6 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         href: { editor: "image" },
-        width: { editor: "number" },
-        height: { editor: "number" },
       },
     });
     expect(blockCreate.variants?.feature).toMatchObject({
@@ -5031,8 +5045,6 @@ describe("personal site sample schema", () => {
       presentation: "fields",
       fields: {
         href: { editor: "image", commit: "field-commit" },
-        width: { editor: "number", commit: "field-commit" },
-        height: { editor: "number", commit: "field-commit" },
       },
     });
     expect(blockEdit.variants?.feature).toMatchObject({
@@ -5165,6 +5177,18 @@ describe("personal site sample schema", () => {
         parent: { kind: "context", name: "block" },
       },
     });
+    expect(schema.views.blockPageCreate).toMatchObject({
+      type: "create",
+      entity: "block",
+      fields: {
+        label: { editor: "text" },
+        href: { editor: "href" },
+        icon: { editor: "icon" },
+      },
+      defaults: {
+        type: { kind: "literal", value: "page" },
+      },
+    });
     expect(schema.views.blockPostCreate).toMatchObject({
       type: "create",
       entity: "block",
@@ -5195,12 +5219,51 @@ describe("personal site sample schema", () => {
     expect(blockPlacementCreate.fields).not.toHaveProperty("type");
   });
 
-  it("parses site link target authoring fields and explicit seed target modes", () => {
+  it("parses site link target authoring fields and fixture link target modes", () => {
     const schema = parseAppSchema(rawSiteSchema);
     const seedRecords = new Map(
-      (rawSiteSeedRecords as Array<{ id: string; values: Record<string, unknown> }>).map(
-        (record) => [record.id, record],
-      ),
+      testSiteSeedRecords.map((record) => {
+        const internalTargets: Record<string, string> = {
+          rec_site_content_link_home: "rec_site_content_home",
+          rec_site_content_link_blog: "rec_site_content_blog",
+          rec_site_content_link_projects: "rec_site_content_projects",
+          rec_site_content_link_resume: "rec_site_content_resume",
+        };
+
+        const targetBlock = internalTargets[record.id];
+
+        if (targetBlock) {
+          return [
+            record.id,
+            {
+              ...record,
+              values: {
+                ...record.values,
+                linkTargetMode: "internal",
+                linkTargetBlock: targetBlock,
+              },
+            },
+          ] as const;
+        }
+
+        if (
+          record.id === "rec_site_content_link_github" ||
+          record.id === "rec_site_content_link_linkedin"
+        ) {
+          return [
+            record.id,
+            {
+              ...record,
+              values: {
+                ...record.values,
+                linkTargetMode: "external",
+              },
+            },
+          ] as const;
+        }
+
+        return [record.id, record] as const;
+      }),
     );
     const valuesFor = (id: string) => {
       const record = seedRecords.get(id);
@@ -5313,8 +5376,6 @@ describe("personal site sample schema", () => {
       ["rec_site_content_link_blog", "rec_site_content_blog", "/blog"],
       ["rec_site_content_link_projects", "rec_site_content_projects", "/projects"],
       ["rec_site_content_link_resume", "rec_site_content_resume", "/resume"],
-      ["record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1", "rec_site_content_home", "/"],
-      ["record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde", "rec_site_content_blog", "/blog"],
     ]) {
       expect(valuesFor(id)).toMatchObject({
         type: "link",
@@ -5327,8 +5388,6 @@ describe("personal site sample schema", () => {
     for (const [id, href] of [
       ["rec_site_content_link_github", "https://github.com/dpeek"],
       ["rec_site_content_link_linkedin", "https://linkedin.com/in/dpeekdotcom"],
-      ["record_1c4c18d8-e1f1-4cd6-b298-012542519487", "https://bsky.app/profile/dpeek.com"],
-      ["record_0749e061-1ba8-4923-841e-143fc825427c", "https://x.com/dpeekdotcom"],
     ]) {
       const values = valuesFor(id);
 

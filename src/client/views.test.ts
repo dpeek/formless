@@ -1419,7 +1419,18 @@ describe("home view model collections", () => {
       ),
     ).toEqual([
       [
-        { label: "Pages", queryName: "blockPages", createAction: null },
+        {
+          label: "Pages",
+          queryName: "blockPages",
+          createAction: {
+            type: "create",
+            label: "Create Page",
+            entityName: "block",
+            fields: ["label", "href", "icon"],
+            defaults: ["type"],
+            enabled: true,
+          },
+        },
         {
           label: "Posts",
           queryName: "blockPosts",
@@ -1663,7 +1674,7 @@ describe("home view model collections", () => {
       link: ["linkTargetMode", "linkTargetBlock", "href", "icon"],
       markdown: ["body"],
       feature: ["body", "alignment"],
-      image: ["href", "width", "height"],
+      image: ["href"],
     });
   });
 

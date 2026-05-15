@@ -2,7 +2,7 @@
 
 Status: complete
 Current chunk: none
-Last updated: 2026-05-13
+Last updated: 2026-05-15
 
 ## Goal
 
@@ -155,6 +155,9 @@ Possible changed files:
 - Upload does not create or patch a Site record by itself.
 - Upload uses the same optional bearer-token policy as other authoring writes when `FORMLESS_ADMIN_TOKEN` is configured.
 - Local development remains no-token when `FORMLESS_ADMIN_TOKEN` is absent.
+- Source media restore uses guarded `PUT /api/site/media/site/images/*`.
+- Source media restore writes bytes to the exact R2 key encoded in the route.
+- Source media restore accepts the same first-slice raster image types and size limit.
 
 ### Media Serving API
 
@@ -168,6 +171,17 @@ Possible changed files:
 - Public media reads do not require admin authorization.
 - Public media reads do not touch the Authority Durable Object.
 - Public media reads are same-origin with public Site pages.
+
+### Source Seed Media
+
+- `site:pull-seed` writes source Site records and referenced same-origin media files.
+- Source media files live under `schema/apps/site/media/`.
+- Source media paths mirror the R2 key after `/api/site/media/`.
+- `block.href = "/api/site/media/site/images/example.png"` maps to `schema/apps/site/media/site/images/example.png`.
+- `site:pull-seed --check` fails when source media files are missing or stale.
+- `site:publish --apply` reads referenced source media files before deploy or target mutation.
+- `site:publish --apply` restores source media files to the target before snapshot restore.
+- Data URLs and external media URLs stay record-only.
 
 ### Generated Authoring UI
 
@@ -213,21 +227,25 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                     | Reason                                                                                     | Evidence                                                 |
-| ------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| SMU-D1  | Keep image content in `block` records.                       | Site media is already represented as block variants and flat records are a core bet.       | `doc/current.md`, `schema/apps/site/schema.json`         |
-| SMU-D2  | Store the served media URL in `block.href`.                  | The public tree and renderer already project and render `href` for image blocks.           | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx` |
-| SMU-D3  | Do not add a media asset entity in the first slice.          | Upload can ship without changing storage shape or public tree protocol.                    | User direction 2026-05-13                                |
-| SMU-D4  | Serve private R2 objects through a same-origin Worker route. | Public pages can use stable URLs without exposing a public bucket domain or CORS policy.   | `wrangler.jsonc`, Worker routes                          |
-| SMU-D5  | Keep media reads outside the Authority Durable Object.       | File serving does not need record invariants, sync cursor, or Durable Object storage.      | `src/worker/index.ts`, `src/worker/authority.ts`         |
-| SMU-D6  | Protect uploads with the existing admin guard policy.        | Upload creates durable content and belongs with authoring writes.                          | `src/worker/authority-admin-guard.ts`                    |
-| SMU-D7  | Keep record patching separate from upload.                   | Normal mutations already drive sync, local replica merge, and public preview invalidation. | `src/client/sync.ts`, `src/app/routes/site-page.tsx`     |
-| SMU-D8  | Relax image variant `href` requiredness.                     | Authors need to create an image block before there is an uploaded URL.                     | Current Site image placeholder behavior                  |
-| SMU-D9  | Accept raster images only.                                   | SVG upload has a different safety profile and icon SVGs are already covered separately.    | `prd/30-svg-icon-field-renderer-editor.md`               |
-| SMU-D10 | Use immutable object keys and tolerate first-slice orphans.  | Cleanup needs a registry or reference scan; neither is needed to prove authoring upload.   | First-slice scope                                        |
-| SMU-D11 | Detect dimensions in the browser, not the Worker.            | The Worker can stay a byte validator/store; browser image APIs can populate layout hints.  | Existing `width` and `height` fields                     |
-| SMU-D12 | Keep manual URL support.                                     | Existing authored external image URLs and seeds should keep rendering.                     | Public renderer accepts any `href` string                |
-| SMU-D13 | Parse the single upload multipart field in `media.ts`.       | The Worker route owns file validation and byte preservation before R2 writes.              | `src/worker/media.ts`, `src/worker/media.test.ts`        |
+| ID      | Decision                                                     | Reason                                                                                       | Evidence                                                 |
+| ------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| SMU-D1  | Keep image content in `block` records.                       | Site media is already represented as block variants and flat records are a core bet.         | `doc/current.md`, `schema/apps/site/schema.json`         |
+| SMU-D2  | Store the served media URL in `block.href`.                  | The public tree and renderer already project and render `href` for image blocks.             | `src/site/tree.ts`, `src/app/site-renderer/renderer.tsx` |
+| SMU-D3  | Do not add a media asset entity in the first slice.          | Upload can ship without changing storage shape or public tree protocol.                      | User direction 2026-05-13                                |
+| SMU-D4  | Serve private R2 objects through a same-origin Worker route. | Public pages can use stable URLs without exposing a public bucket domain or CORS policy.     | `wrangler.jsonc`, Worker routes                          |
+| SMU-D5  | Keep media reads outside the Authority Durable Object.       | File serving does not need record invariants, sync cursor, or Durable Object storage.        | `src/worker/index.ts`, `src/worker/authority.ts`         |
+| SMU-D6  | Protect uploads with the existing admin guard policy.        | Upload creates durable content and belongs with authoring writes.                            | `src/worker/authority-admin-guard.ts`                    |
+| SMU-D7  | Keep record patching separate from upload.                   | Normal mutations already drive sync, local replica merge, and public preview invalidation.   | `src/client/sync.ts`, `src/app/routes/site-page.tsx`     |
+| SMU-D8  | Relax image variant `href` requiredness.                     | Authors need to create an image block before there is an uploaded URL.                       | Current Site image placeholder behavior                  |
+| SMU-D9  | Accept raster images only.                                   | SVG upload has a different safety profile and icon SVGs are already covered separately.      | `prd/30-svg-icon-field-renderer-editor.md`               |
+| SMU-D10 | Use immutable object keys and tolerate first-slice orphans.  | Cleanup needs a registry or reference scan; neither is needed to prove authoring upload.     | First-slice scope                                        |
+| SMU-D11 | Detect dimensions in the browser, not the Worker.            | The Worker can stay a byte validator/store; browser image APIs can populate layout hints.    | Existing `width` and `height` fields                     |
+| SMU-D12 | Keep manual URL support.                                     | Existing authored external image URLs and seeds should keep rendering.                       | Public renderer accepts any `href` string                |
+| SMU-D13 | Parse the single upload multipart field in `media.ts`.       | The Worker route owns file validation and byte preservation before R2 writes.                | `src/worker/media.ts`, `src/worker/media.test.ts`        |
+| SMU-D14 | Store seed media as sidecar files beside Site source data.   | Seed records can restore R2-backed media only if the referenced bytes are source artifacts.  | User direction 2026-05-14                                |
+| SMU-D15 | Restore sidecar media by exact same-origin media key.        | Seed `block.href` values should stay stable across publish and source restore.               | `src/site/source-media.ts`, `src/worker/media.ts`        |
+| SMU-D16 | Make the image well the upload trigger.                      | Image authoring should not show separate preview and native choose-file controls.            | User direction 2026-05-15                                |
+| SMU-D17 | Hide image width and height from image variant authoring.    | The fields can stay flat storage and upload outputs while the editor stays focused on media. | User direction 2026-05-15                                |
 
 ### Deep Modules
 
@@ -362,7 +380,6 @@ Acceptance:
 - Alt-text-specific field semantics beyond existing `label`.
 - R2 object deletion.
 - R2 garbage collection.
-- Replacing source seed media with bundled binary assets.
 - Direct browser-to-R2 multipart upload.
 - Upload progress beyond basic pending state.
 - Production editor login or token management UI.
@@ -383,6 +400,8 @@ Acceptance:
 - 2026-05-13: SMU-03 shipped. Text-backed fields now support `editor: "image"` metadata, the client can upload one Site image through `/api/site/media/images`, generated inline editors preview current image URLs, expose upload and manual URL fallback, and patch `href` plus numeric `width`/`height` when the active schema exposes those sibling fields. Next ready chunk is SMU-04.
 - 2026-05-13: SMU-04 shipped. Site image variants now require only `label`, use `editor: "image"` in Site image authoring views, and tests prove uploaded-style media URLs continue through the unchanged `href` tree and public renderer path. Next ready chunk is SMU-05.
 - 2026-05-13: SMU-05 shipped. Devstate is green, `/site` authoring can create an image block before upload, generated image upload patches `href`/`width`/`height`, `/pages/home` renders the uploaded same-origin media URL, and this PRD is complete.
+- 2026-05-14: Follow-up scope added from user direction: pulling Site seed records must also write referenced same-origin media files to disk so publish can restore R2 objects from source artifacts.
+- 2026-05-15: Image editor follow-up shipped from screenshot feedback. Generated image upload uses the image preview or empty well as the file input trigger, and Site image variant authoring hides width and height fields.
 
 ## Evidence
 
@@ -411,11 +430,23 @@ Acceptance:
 - 2026-05-13 SMU-05 browser setup: the shell still had `VITE_FORMLESS_RUNTIME_PROFILE=publishedSite`, so `/site` initially rendered `No site page exists for site`; restarting devstate with `VITE_FORMLESS_RUNTIME_PROFILE` unset restored the generated dev app at `http://127.0.0.1:4281/site`.
 - 2026-05-13 SMU-05 `/site` browser smoke: `bun browser --session smu-05` opened the generated Site editor, created image children with empty `href`, uploaded `/tmp/formless-smoke/smu-05.png`, and verified the editor patched a same-origin `/api/site/media/site/images/*.png` URL plus `width = 1` and `height = 1`; the editor preview image loaded with natural size `1x1`.
 - 2026-05-13 SMU-05 `/pages/home` browser smoke: `bun browser --session smu-05` rendered public Home with the uploaded media URL in `<img src>`, `alt = "Home smoke image"`, natural size `1x1`, and `bun browser --session smu-05 errors` returned no page errors.
+- 2026-05-14 source media follow-up: `src/site/source-media.ts` maps same-origin media hrefs to `schema/apps/site/media/` sidecar paths; `scripts/site-pull-seed.ts` pulls those files; `src/worker/media.ts` accepts guarded key-preserving media restore; `src/site/publish.ts` restores referenced source media files before Site snapshot restore.
+- 2026-05-14 `bun run site:pull-seed`: wrote 83 Site seed records and 6 media files from `https://formless.local`.
+- 2026-05-14 `bun run site:pull-seed --check`: Site source seed current with 83 records and 6 media files.
+- 2026-05-14 `bun run site:publish`: dry run validated 83 Site seed records and 6 referenced source media files.
+- 2026-05-14 `devstate check`: checks ok; web service ready at `https://formless.local`; watcher tests pass.
+- 2026-05-15 follow-up: `src/app/generated/record-field-editor.tsx` now renders the image preview or empty plus well as `data-web-image-field-upload="trigger"` with the file input visually hidden.
+- 2026-05-15 follow-up: `schema/apps/site/schema.json` keeps `block.width` and `block.height` fields, but image variant authoring presentations now expose only `href`.
+- 2026-05-15 follow-up: `src/app.test.tsx`, `src/client/views.test.ts`, and `src/shared/schema.test.ts` cover image upload well markup and hidden image width/height presentation.
+- 2026-05-15 follow-up: `devstate check` reported checks ok and services running; watcher tests pass.
+- 2026-05-15 follow-up: `bun browser --session image-editor-smoke` reset Site schema, opened `/site`, and found one image upload well, zero visible file inputs, no `Choose file` or `No file chosen` text, and zero Width/Height labels; browser errors were empty.
 
 ## Promote after ship
 
 - `doc/current.md`: add `FORMLESS_MEDIA` R2 binding, `src/worker/media.ts`, `/api/site/media/images`, `/api/site/media/*`, upload auth, public read, and Miniflare R2 test facts after SMU-02 ships.
 - `doc/current.md`: add `editor: "image"` text-backed field metadata, `src/client/media.ts`, generated image preview/upload/manual URL fallback, and existing mutation patch of `href`/`width`/`height` after SMU-03 ships.
 - `doc/current.md`: add Site image `href` optional create behavior, `editor: "image"` Site authoring metadata, and public rendering through unchanged `href` tree facts after SMU-04 ships.
+- `doc/current.md`: add generated image editor fact that preview or empty plus well opens file selection, and Site image variant authoring hides width/height while keeping flat stored dimension fields.
+- `doc/current.md`: add source media sidecar facts for `schema/apps/site/media/`, `site:pull-seed` media writes/checks, guarded key-preserving media restore, and `site:publish` source media restore before Site snapshot restore.
 - `doc/current.md`: add SMU-05 smoke facts only as evidence notes if the doc steward wants browser-verified examples; durable current facts are the SMU-02 through SMU-04 code, schema, and test anchors above.
 - `doc/roadmap.md`: keep Site image upload in first-release scope and keep general media library/video/file/transforms/cleanup out of scope.
