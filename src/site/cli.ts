@@ -536,7 +536,12 @@ async function runSiteProjectDev(
   const devCommand = packageRunScriptCommand("dev", dependencies.env);
   const child = dependencies.spawn(devCommand.command, devCommand.args, {
     cwd: dependencies.packageRoot,
-    env: siteProjectDevEnv(dependencies.env, projectId, publishBroker ?? undefined),
+    env: siteProjectDevEnv(
+      dependencies.env,
+      project.projectRoot,
+      projectId,
+      publishBroker ?? undefined,
+    ),
     stdio: "pipe",
   });
   const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
@@ -1376,12 +1381,14 @@ function defaultDevSourceCandidates(env: NodeJS.ProcessEnv): string[] {
 
 function siteProjectDevEnv(
   env: NodeJS.ProcessEnv,
+  projectRoot: string,
   projectId: string,
   publishBroker?: Pick<SiteProjectLocalPublishBroker, "endpoint" | "token">,
 ): NodeJS.ProcessEnv {
   const nextEnv: NodeJS.ProcessEnv = {
     ...env,
     FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
+    FORMLESS_SITE_PROJECT_ROOT: projectRoot,
     FORMLESS_SITE_PROJECT_ID: projectId,
     VITE_FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
     VITE_FORMLESS_SITE_PROJECT_ID: projectId,
