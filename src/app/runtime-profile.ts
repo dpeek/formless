@@ -39,12 +39,18 @@ export type RuntimePublishedSiteRoutes = {
   homeSlug: "home";
 };
 
+export type RuntimeLocalPublishBroker = {
+  endpoint: string;
+  token: string;
+};
+
 export type RuntimeProfile = {
   kind: RuntimeProfileKind;
   shell: RuntimeShellKind;
   worlds: readonly RuntimeWorldMount[];
   defaultRedirect?: `/${string}`;
   legacyRedirects: readonly RuntimeRedirect[];
+  localPublish?: RuntimeLocalPublishBroker;
   publicSitePreview?: RuntimePublicSitePreview;
   publishedSite?: RuntimePublishedSiteRoutes;
 };
@@ -57,6 +63,7 @@ export type RuntimeProfileResolverInput = {
 
 export type SiteAuthoringRuntimeProfileOptions = {
   exposeSchemaRoute?: boolean;
+  localPublish?: RuntimeLocalPublishBroker;
 };
 
 export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
@@ -76,7 +83,9 @@ export function resolveRuntimeProfile(
     case "app":
       return createAppRuntimeProfile(schemaKey);
     case "siteAuthoring":
-      return createSiteAuthoringRuntimeProfile();
+      return createSiteAuthoringRuntimeProfile({
+        localPublish: browserLocalPublishBrokerConfig(),
+      });
     case "publishedSite":
       return createPublishedSiteRuntimeProfile();
     case "dev":
@@ -142,6 +151,7 @@ export function createSiteAuthoringRuntimeProfile(
       },
     ],
     legacyRedirects: [],
+    localPublish: options.localPublish,
     publicSitePreview: {
       rootRoute: "/",
       routePattern: "/*",
@@ -238,6 +248,23 @@ function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {
     schemaKey: stringConfigValue(import.meta.env.VITE_FORMLESS_SCHEMA_KEY),
     hostname: typeof window === "undefined" ? undefined : window.location.hostname,
   };
+}
+
+function browserLocalPublishBrokerConfig(): RuntimeLocalPublishBroker | undefined {
+  const endpoint = stringConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL);
+  const token = stringConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN);
+
+  if (!endpoint || !token) {
+    return undefined;
+  }
+
+  try {
+    new URL(endpoint);
+  } catch {
+    return undefined;
+  }
+
+  return { endpoint, token };
 }
 
 export function readRuntimeProfileDocumentHint(

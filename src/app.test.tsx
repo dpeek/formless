@@ -667,6 +667,25 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/site/schema"');
     expect(html).not.toContain('href="/admin/schema"');
+    expect(html).not.toContain('aria-label="Publish Site through local CLI"');
+  });
+
+  it("renders Site authoring publish only when a local CLI broker is configured", () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute(
+      "/admin",
+      createSiteAuthoringRuntimeProfile({
+        localPublish: {
+          endpoint: "http://127.0.0.1:43123/publish",
+          token: "local-broker-token",
+        },
+      }),
+    );
+
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('aria-label="Publish Site through local CLI"');
+    expect(html).toContain(">Publish</span>");
+    expect(html).not.toContain("local-broker-token");
   });
 
   it('keeps Site authoring schema editing hidden at "/admin/schema" by default', () => {

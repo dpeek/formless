@@ -2,6 +2,7 @@ import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:ch
 import { createHash, randomBytes } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { access, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -102,6 +103,17 @@ export type PublishSiteProjectResult = SitePublishResult & {
   projectRoot: string;
 };
 
+export type LocalAdminPublishResult = {
+  publish: PublishSiteProjectResult;
+  save: SaveSiteProjectResult;
+};
+
+export type SiteProjectLocalPublishBroker = {
+  close: () => Promise<void>;
+  endpoint: string;
+  token: string;
+};
+
 export type SiteProjectSource = {
   config: SiteProjectConfig;
   projectRoot: string;
@@ -135,6 +147,8 @@ const projectPublishBackupDirectory = `${projectStateDirectory}/backups`;
 const projectGitignoreFile = ".gitignore";
 const projectStateGitignoreEntry = ".formless/";
 const adminTokenEnvName = "FORMLESS_ADMIN_TOKEN";
+const localPublishBrokerUrlEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL";
+const localPublishBrokerTokenEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN";
 const devServerReadyTimeoutMs = 30_000;
 const devServerPollIntervalMs = 250;
 
@@ -429,6 +443,34 @@ export async function publishSiteProject(
   };
 }
 
+export async function startSiteProjectLocalPublishBroker(
+  input: { projectPath: string; source: () => string | null },
+  dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
+): Promise<SiteProjectLocalPublishBroker> {
+  const token = dependencies.randomToken();
+  let isPublishing = false;
+  const server = createServer((request, response) => {
+    void handleLocalPublishBrokerRequest({
+      dependencies,
+      input,
+      isPublishing: () => isPublishing,
+      request,
+      response,
+      setPublishing: (nextPublishing) => {
+        isPublishing = nextPublishing;
+      },
+      token,
+    });
+  });
+  const endpoint = await listenLocalPublishBroker(server);
+
+  return {
+    close: () => closeLocalPublishBroker(server),
+    endpoint,
+    token,
+  };
+}
+
 export async function readSiteProjectSource(projectRoot: string): Promise<SiteProjectSource> {
   const configPath = path.join(projectRoot, SITE_PROJECT_CONFIG_FILE);
   const config = parseSiteProjectConfigJson(await readFile(configPath, "utf8"));
@@ -471,9 +513,19 @@ async function runSiteProjectDev(
 ) {
   const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
   const projectId = siteProjectStorageId(project.projectRoot);
+  let localSource: string | null = null;
+  const publishBroker = (await isSiteProjectPublishConfigured(project, dependencies))
+    ? await startSiteProjectLocalPublishBroker(
+        {
+          projectPath: project.projectRoot,
+          source: () => localSource,
+        },
+        dependencies,
+      )
+    : null;
   const child = dependencies.spawn("bun", ["run", "dev"], {
     cwd: dependencies.packageRoot,
-    env: siteProjectDevEnv(dependencies.env, projectId),
+    env: siteProjectDevEnv(dependencies.env, projectId, publishBroker ?? undefined),
     stdio: "pipe",
   });
   const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
@@ -483,12 +535,15 @@ async function runSiteProjectDev(
   try {
     const source = await waitForDevServer(child, dependencies.fetch, candidateOrigins);
     await restoreSiteProjectToLocalAuthority(project, source, dependencies, projectId);
+    localSource = source;
     dependencies.log(`Public preview: ${source}/`);
     dependencies.log(`Admin: ${source}/admin`);
     await waitForChildExit(child);
   } catch (error) {
     child.kill();
     throw error;
+  } finally {
+    await publishBroker?.close();
   }
 }
 
@@ -533,6 +588,46 @@ async function restoreSiteProjectToLocalAuthority(
     sourceUrl: source,
     startedAt: dependencies.now(),
   });
+}
+
+async function runLocalAdminPublish(
+  input: { projectPath: string; source: string },
+  dependencies: FormlessCliDependencies,
+): Promise<LocalAdminPublishResult> {
+  const save = await saveSiteProject(
+    {
+      projectPath: input.projectPath,
+      source: input.source,
+    },
+    dependencies,
+  );
+  const publish = await publishSiteProject(
+    {
+      projectPath: input.projectPath,
+      yes: true,
+    },
+    dependencies,
+  );
+
+  return {
+    publish,
+    save,
+  };
+}
+
+async function isSiteProjectPublishConfigured(
+  project: SiteProjectSource,
+  dependencies: Pick<FormlessCliDependencies, "env">,
+): Promise<boolean> {
+  try {
+    requiredSiteProjectDeployConfig(project.config.deploy);
+  } catch {
+    return false;
+  }
+
+  return Boolean(
+    dependencies.env[adminTokenEnvName] ?? (await readProjectDeployAdminToken(project.projectRoot)),
+  );
 }
 
 function requiredSiteProjectDeployConfig(
@@ -645,6 +740,178 @@ async function readProjectDeployAdminToken(projectRoot: string): Promise<string 
   }
 
   return parseDotEnv(contents)[adminTokenEnvName];
+}
+
+async function handleLocalPublishBrokerRequest({
+  dependencies,
+  input,
+  isPublishing,
+  request,
+  response,
+  setPublishing,
+  token,
+}: {
+  dependencies: FormlessCliDependencies;
+  input: { projectPath: string; source: () => string | null };
+  isPublishing: () => boolean;
+  request: IncomingMessage;
+  response: ServerResponse;
+  setPublishing: (isPublishing: boolean) => void;
+  token: string;
+}) {
+  response.setHeader("Access-Control-Allow-Origin", "*");
+  response.setHeader("Access-Control-Allow-Headers", "authorization,content-type,accept");
+  response.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  response.setHeader("Access-Control-Max-Age", "600");
+
+  const pathname = localPublishBrokerPathname(request);
+
+  if (request.method === "OPTIONS") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+
+  if (pathname !== "/publish") {
+    writeLocalPublishBrokerJson(response, 404, {
+      error: "Local publish broker endpoint not found.",
+      ok: false,
+    });
+    return;
+  }
+
+  if (request.method !== "POST") {
+    response.setHeader("Allow", "POST,OPTIONS");
+    writeLocalPublishBrokerJson(response, 405, {
+      error: "Local publish broker only accepts POST.",
+      ok: false,
+    });
+    return;
+  }
+
+  if (request.headers.authorization !== `Bearer ${token}`) {
+    writeLocalPublishBrokerJson(response, 401, {
+      error: "Local publish broker token is invalid.",
+      ok: false,
+    });
+    return;
+  }
+
+  if (isPublishing()) {
+    writeLocalPublishBrokerJson(response, 409, {
+      error: "A Site publish is already running.",
+      ok: false,
+    });
+    return;
+  }
+
+  const source = input.source();
+
+  if (!source) {
+    writeLocalPublishBrokerJson(response, 503, {
+      error: "Site project dev server is not ready.",
+      ok: false,
+    });
+    return;
+  }
+
+  setPublishing(true);
+
+  try {
+    const result = await runLocalAdminPublish(
+      {
+        projectPath: input.projectPath,
+        source,
+      },
+      dependencies,
+    );
+
+    writeLocalPublishBrokerJson(response, 200, {
+      ok: true,
+      result: localAdminPublishResponse(result),
+    });
+  } catch (error) {
+    writeLocalPublishBrokerJson(response, 500, {
+      error: errorMessage(error),
+      ok: false,
+    });
+  } finally {
+    setPublishing(false);
+  }
+}
+
+function localPublishBrokerPathname(request: IncomingMessage): string {
+  try {
+    const host = request.headers.host ?? "127.0.0.1";
+
+    return new URL(request.url ?? "/", `http://${host}`).pathname;
+  } catch {
+    return "/";
+  }
+}
+
+function localAdminPublishResponse(result: LocalAdminPublishResult) {
+  return {
+    publish: {
+      backupPath: result.publish.backupPath,
+      mode: result.publish.mode,
+      sourceRecordCount: result.publish.sourceRecordCount,
+      target: result.publish.target,
+    },
+    save: {
+      mediaCount: result.save.mediaCount,
+      recordCount: result.save.recordCount,
+      source: result.save.source,
+    },
+  };
+}
+
+function writeLocalPublishBrokerJson(
+  response: ServerResponse,
+  status: number,
+  body:
+    | { error: string; ok: false }
+    | { ok: true; result: ReturnType<typeof localAdminPublishResponse> },
+) {
+  response.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+  });
+  response.end(`${JSON.stringify(body)}\n`);
+}
+
+async function listenLocalPublishBroker(server: Server): Promise<string> {
+  await new Promise<void>((resolve, reject) => {
+    const rejectOnError = (error: Error) => {
+      reject(error);
+    };
+
+    server.once("error", rejectOnError);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", rejectOnError);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+
+  if (!address || typeof address === "string") {
+    throw new Error("Local publish broker did not bind to a TCP port.");
+  }
+
+  return `http://127.0.0.1:${address.port}/publish`;
+}
+
+async function closeLocalPublishBroker(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error && (error as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING") {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
 
 async function ensureProjectStateIgnored(gitignorePath: string) {
@@ -1055,7 +1322,11 @@ function defaultDevSourceCandidates(env: NodeJS.ProcessEnv): string[] {
   return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 }
 
-function siteProjectDevEnv(env: NodeJS.ProcessEnv, projectId: string): NodeJS.ProcessEnv {
+function siteProjectDevEnv(
+  env: NodeJS.ProcessEnv,
+  projectId: string,
+  publishBroker?: Pick<SiteProjectLocalPublishBroker, "endpoint" | "token">,
+): NodeJS.ProcessEnv {
   const nextEnv: NodeJS.ProcessEnv = {
     ...env,
     FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
@@ -1065,6 +1336,14 @@ function siteProjectDevEnv(env: NodeJS.ProcessEnv, projectId: string): NodeJS.Pr
   };
 
   delete nextEnv.FORMLESS_ADMIN_TOKEN;
+  delete nextEnv[localPublishBrokerUrlEnvName];
+  delete nextEnv[localPublishBrokerTokenEnvName];
+
+  if (publishBroker) {
+    nextEnv[localPublishBrokerUrlEnvName] = publishBroker.endpoint;
+    nextEnv[localPublishBrokerTokenEnvName] = publishBroker.token;
+  }
+
   return nextEnv;
 }
 
@@ -1289,6 +1568,10 @@ async function readFileIfExists(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function runCommandWithSpawn(

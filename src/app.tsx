@@ -43,6 +43,7 @@ import {
   normalizeSitePageSlug,
 } from "./app/routes/site-page.tsx";
 import type { SitePageLinkMode } from "./app/site-renderer/links.ts";
+import { LocalSitePublishControl } from "./app/local-site-publish.tsx";
 import { SyncStatusControl } from "./app/routes/status-line.tsx";
 import {
   findRuntimeWorldMountByRoute,
@@ -130,6 +131,11 @@ export function App({
   const generatedAppFrame = (
     <GeneratedAppFrame
       activeScreenPath={activeScreenPath}
+      localPublish={
+        runtimeProfile.kind === "siteAuthoring" && routeApp?.key === "site"
+          ? runtimeProfile.localPublish
+          : undefined
+      }
       routeApp={routeApp}
       routeWorld={routeWorld}
       screenModels={routeAppScreenModels}
@@ -253,6 +259,7 @@ function WorkbenchToolbarActions({ world }: { world: RuntimeWorldMount | undefin
 function GeneratedAppFrame({
   activeScreenPath,
   children,
+  localPublish,
   routeApp,
   routeWorld,
   screenModels,
@@ -260,6 +267,7 @@ function GeneratedAppFrame({
 }: {
   activeScreenPath: string | undefined;
   children: ReactNode;
+  localPublish: RuntimeProfile["localPublish"];
   routeApp: RuntimeWorldMount["app"] | undefined;
   routeWorld: RuntimeWorldMount | undefined;
   screenModels: HomeScreenModel[];
@@ -294,7 +302,10 @@ function GeneratedAppFrame({
               <SidebarTrigger />
               <h1 className="truncate text-sm font-medium">{headerTitle}</h1>
             </div>
-            {showSyncStatus ? <SyncStatusControl appKey={routeApp?.key} /> : null}
+            <div className="flex shrink-0 items-center gap-2">
+              {localPublish ? <LocalSitePublishControl broker={localPublish} /> : null}
+              {showSyncStatus ? <SyncStatusControl appKey={routeApp?.key} /> : null}
+            </div>
           </header>
           <div className="min-w-0 flex-1 p-4 sm:p-6">{children}</div>
         </SidebarInset>

@@ -84,6 +84,22 @@ describe("runtime profile resolver", () => {
     expect(profile.worlds[0]?.schemaRoute).toBe("/admin/schema");
   });
 
+  it("carries a local publish broker only when configured explicitly", () => {
+    expect(createSiteAuthoringRuntimeProfile().localPublish).toBeUndefined();
+
+    expect(
+      createSiteAuthoringRuntimeProfile({
+        localPublish: {
+          endpoint: "http://127.0.0.1:43123/publish",
+          token: "local-broker-token",
+        },
+      }).localPublish,
+    ).toEqual({
+      endpoint: "http://127.0.0.1:43123/publish",
+      token: "local-broker-token",
+    });
+  });
+
   it("resolves the published Site profile without generated admin routes", () => {
     const profile = createPublishedSiteRuntimeProfile();
     const world = profile.worlds[0];

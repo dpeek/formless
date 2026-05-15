@@ -28,6 +28,7 @@ import {
   publishSiteProject,
   saveSiteProject,
   setupSiteProjectDeploy,
+  startSiteProjectLocalPublishBroker,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
 } from "./cli.ts";
@@ -325,6 +326,117 @@ describe("Formless Site CLI", () => {
     );
   });
 
+  it("brokers local admin publish through CLI-owned save and publish steps", async () => {
+    const tempDir = await makeTempDir();
+    const projectRoot = path.join(tempDir, "site");
+    const sourceRecords = publishRecords();
+    const config = {
+      ...defaultSiteProjectConfig(),
+      deploy: {
+        workerName: "brother-site",
+        publishUrl: "https://live.example",
+        mediaBucket: "brother-site-media",
+      },
+    };
+    const commands: CapturedCommand[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+
+    await writeFileTree(projectRoot, sourceRecords.slice(0, 1), config);
+    await mkdir(path.join(projectRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(projectRoot, ".formless/deploy.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    const mediaAsset = siteProjectMediaAssetsFromRecords(sourceRecords)[0];
+
+    if (!mediaAsset) {
+      throw new Error("Expected a project media asset.");
+    }
+
+    responses.queueJson(snapshot(sourceRecords));
+    responses.queueBinary(Buffer.from([7, 8, 9]), mediaAsset.contentType);
+    responses.queueJson(snapshot(sourceRecords));
+    responses.queueJson({
+      contentType: mediaAsset.contentType,
+      href: mediaAsset.href,
+      key: mediaAsset.key,
+      size: 3,
+    });
+    responses.queueJson({
+      cursor: 8,
+      records: sourceRecords,
+      schema: siteSourceSchema,
+      schemaUpdatedAt: "2026-05-12T04:00:00.000Z",
+    });
+    responses.queueText("<!doctype html><title>Home</title>");
+    responses.queueText("<!doctype html><title>About</title>");
+
+    const broker = await startSiteProjectLocalPublishBroker(
+      {
+        projectPath: projectRoot,
+        source: () => "http://localhost:5173",
+      },
+      cliDeps(tempDir, {
+        commands,
+        fetch: responses.fetcher(requests),
+        packageRoot: "/package",
+      }),
+    );
+
+    try {
+      await expect(fetch(broker.endpoint, { method: "POST" })).resolves.toMatchObject({
+        status: 401,
+      });
+
+      const response = await fetch(broker.endpoint, {
+        headers: {
+          Authorization: `Bearer ${broker.token}`,
+          Origin: "http://localhost:5173",
+        },
+        method: "POST",
+      });
+      const body = (await response.json()) as {
+        ok: true;
+        result: { publish: { target: string }; save: { recordCount: number } };
+      };
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(body).toMatchObject({
+        ok: true,
+        result: {
+          publish: { target: "https://live.example" },
+          save: { recordCount: sourceRecords.length },
+        },
+      });
+    } finally {
+      await broker.close();
+    }
+
+    await expect(readFile(path.join(projectRoot, "site.records.json"), "utf8")).resolves.toBe(
+      formatSiteProjectRecords(sourceRecords),
+    );
+    await expect(readFile(path.join(projectRoot, "media/site/images/cover.png"))).resolves.toEqual(
+      Buffer.from([7, 8, 9]),
+    );
+    expect(commands.map((command) => [command.command, ...command.args].join(" "))).toEqual([
+      "bun run build",
+      "bun x wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
+    ]);
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:5173/api/site/snapshot",
+      "GET http://localhost:5173/api/site/media/site/images/cover.png",
+      "GET https://live.example/api/site/snapshot",
+      "PUT https://live.example/api/site/media/site/images/cover.png",
+      "POST https://live.example/api/site/snapshot/restore",
+      "GET https://live.example/",
+      "GET https://live.example/about",
+    ]);
+    expect(requests[3]?.headers.authorization).toBe("Bearer local-token");
+  });
+
   it("normalizes local source URLs", () => {
     expect(normalizeSourceUrl("http://localhost:5173/pages/home?x=1#top")).toBe(
       "http://localhost:5173/pages/home",
@@ -421,6 +533,13 @@ function responseQueue() {
 
         return response;
       },
+    queueBinary: (value: Uint8Array, contentType: string, status = 200) =>
+      responses.push(
+        new Response(Buffer.from(value), {
+          headers: { "content-type": contentType },
+          status,
+        }),
+      ),
     queueJson: (value: unknown, status = 200) => responses.push(Response.json(value, { status })),
     queueText: (value: string, status = 200) => responses.push(new Response(value, { status })),
   };
