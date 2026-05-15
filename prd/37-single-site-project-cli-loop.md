@@ -1,7 +1,7 @@
 # PRD 37: Single Site project and CLI loop
 
 Status: ready
-Current chunk: SSP-05
+Current chunk: SSP-06
 Last updated: 2026-05-15
 
 Start after PRD 31, PRD 34, PRD 35, and PRD 36 shipped behavior is stable on the active branch.
@@ -402,6 +402,9 @@ Possible changed files:
 | SSP-D18 | Parse project records against the package-owned Site schema.                                  | User project records must stay compatible with the shipped Site runtime and publish path. | `src/site/project-source.ts`                         |
 | SSP-D19 | Load project dev data by restoring project records and media after the local server is ready. | The Worker stays package-owned and does not need filesystem reads for user project files. | `src/site/cli.ts`                                    |
 | SSP-D20 | Scope browser DB and broadcast names with the Site project identity when present.             | Two local Site projects should not share one browser replica namespace.                   | `src/client/db.ts`, `src/client/broadcast.ts`        |
+| SSP-D21 | Store the local publish admin token in project `.formless/deploy.env`.                        | Publish needs the bearer token, but checked-in project config must stay non-secret.       | `src/site/cli.ts`                                    |
+| SSP-D22 | Ensure project `.gitignore` ignores `.formless/` during deploy setup.                         | Local dev state, backups, and deploy token files should stay out of committed projects.   | `src/site/cli.ts`, `src/site/cli.test.ts`            |
+| SSP-D23 | Adapt existing guarded Site publish for project media, records, smoke paths, and deploy env.  | Project publish should reuse backup, media restore, snapshot restore, and auth behavior.  | `src/site/publish.ts`, `src/site/cli.ts`             |
 
 ### Deep Modules
 
@@ -443,8 +446,8 @@ Possible changed files:
 | SSP-02 | shipped | SSP-01     | runtime profile, app routes, worker     | Site authoring profile mounts `/` preview and `/admin` generated admin with no multi-app shell.                  |
 | SSP-03 | shipped | SSP-02     | project source/config modules, tests    | Project records, media, and config parse/write deterministically and validate against package-owned Site schema. |
 | SSP-04 | shipped | SSP-03     | CLI init/dev/save, package entry, tests | `npx formless init`, `dev`, and `save` work against a Site project without repo-specific paths.                  |
-| SSP-05 | ready   | SSP-04     | CLI deploy setup/publish, publish tests | `npx formless publish` deploys code, media, and records from project config without manual env toggles.          |
-| SSP-06 | pending | SSP-05     | local admin publish action, tests       | Local admin can trigger the configured publish flow only through the local CLI broker.                           |
+| SSP-05 | shipped | SSP-04     | CLI deploy setup/publish, publish tests | `npx formless publish` deploys code, media, and records from project config without manual env toggles.          |
+| SSP-06 | ready   | SSP-05     | local admin publish action, tests       | Local admin can trigger the configured publish flow only through the local CLI broker.                           |
 | SSP-07 | pending | SSP-05     | migration project, smoke notes, PRD     | Brother-site migration proves init/dev/save/publish dry-run with real content and records follow Site schema.    |
 
 ## Out of Scope
@@ -478,7 +481,6 @@ Possible changed files:
 ## Blockers
 
 - Package boundary is first-slice only: the package bin points at a Bun TypeScript entrypoint, so npm/Node packaging still needs hardening before external release.
-- Secrets storage for `npx formless deploy setup` needs a concrete policy before implementation.
 
 ## Promote after ship
 
@@ -506,6 +508,10 @@ Possible changed files:
 - 2026-05-15: SSP-04 shipped `scripts/formless.ts`, package `bin.formless`, and `src/site/cli.ts`. CLI parsing supports `init`, `dev`, and `save`; init writes `formless.config.json`, `site.records.json`, and starter media; dev runs the Site authoring profile and restores project records/media into the local Site authority; save/check promotes a local Site authority snapshot back to project records and media.
 - 2026-05-15: SSP-04 added project-scoped browser DB and broadcast names through `VITE_FORMLESS_SITE_PROJECT_ID`.
 - 2026-05-15: SSP-04 tests added `src/site/cli.test.ts` and `src/client/broadcast.test.ts`; `src/client/db.test.ts` covers project-scoped DB names. `devstate check` reported checks ok and watcher tests passing. `bun run formless --help` printed the init/dev/save usage. Requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent, so `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence.
+- 2026-05-15: SSP-05 shipped `npx formless deploy setup` and `npx formless publish` support in `src/site/cli.ts`. Deploy setup writes non-secret deploy config to `formless.config.json`, writes `FORMLESS_ADMIN_TOKEN` to ignored `.formless/deploy.env`, ensures `.formless/` is gitignored, and can call Wrangler R2 bucket creation and secret bulk upload.
+- 2026-05-15: SSP-05 extended `src/site/publish.ts` so project publish can reuse guarded backup, media restore, snapshot restore, admin bearer auth, and smoke checks with project media paths and explicit published-site deploy commands.
+- 2026-05-15: SSP-05 tests in `src/site/cli.test.ts` cover deploy setup parsing and files, optional Wrangler command planning, publish command planning, project media restore before snapshot restore, admin auth forwarding, root and nested public smoke requests, and project backup paths.
+- 2026-05-15: SSP-05 `devstate check` reported checks ok, web ready at `https://37-single-site-project-cli-loop.formless.local`, and watcher tests passing. `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent, so `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence. Browser smoke skipped because SSP-05 changed CLI/project publish behavior, not app UI behavior.
 
 ## Status Notes
 
@@ -513,7 +519,8 @@ Possible changed files:
 - SSP-02 shipped 2026-05-15.
 - SSP-03 shipped 2026-05-15.
 - SSP-04 shipped 2026-05-15.
-- Current chunk: SSP-05.
-- Current blocker: deploy setup must choose where local publish secrets live before `npx formless publish` can become the normal mutating path.
+- SSP-05 shipped 2026-05-15.
+- Current chunk: SSP-06.
+- Current blocker: none recorded for SSP-06.
 - Decision: the first user-facing product path is Site-only, even though the internal runtime remains schema-keyed.
 - Decision: CLI publish is the first one-command publish path; admin publish follows only through a local CLI broker.

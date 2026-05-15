@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { access, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -20,18 +20,42 @@ import {
   buildSiteProjectRecordsFromSnapshot,
   buildSiteProjectSourceSnapshot,
   formatSiteProjectRecords,
+  packageSiteSourceSchema,
   parseSiteProjectRecords,
   parseSiteProjectRecordsJson,
   siteProjectMediaAssetsFromRecords,
   type SiteProjectMediaAsset,
 } from "./project-source.ts";
+import {
+  runSitePublish,
+  type SitePublishCommand,
+  type SitePublishDependencies,
+  type SitePublishResult,
+} from "./publish.ts";
 import { SITE_MEDIA_ROUTE_PREFIX, SITE_SOURCE_MEDIA_ROOT } from "./source-media.ts";
 
 export type FormlessCliCommand =
+  | {
+      accountId: string | null;
+      adminToken: string | null;
+      createBucket: boolean;
+      kind: "deploySetup";
+      mediaBucket: string;
+      projectPath: string;
+      publishUrl: string;
+      uploadSecret: boolean;
+      workerName: string;
+    }
   | { kind: "dev"; projectPath: string }
   | { kind: "help" }
   | { kind: "init"; targetDir: string }
+  | { dryRun: boolean; kind: "publish"; projectPath: string; yes: boolean }
   | { check: boolean; kind: "save"; projectPath: string; source: string | null };
+
+export type FormlessCliRunCommandOptions = {
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+};
 
 export type FormlessCliDependencies = {
   cwd: string;
@@ -40,6 +64,12 @@ export type FormlessCliDependencies = {
   log: (message: string) => void;
   now: () => string;
   packageRoot: string;
+  randomToken: () => string;
+  runCommand: (
+    command: string,
+    args: string[],
+    options: FormlessCliRunCommandOptions,
+  ) => Promise<void>;
   spawn: typeof nodeSpawn;
 };
 
@@ -59,6 +89,19 @@ export type SaveSiteProjectResult = {
   source: string;
 };
 
+export type SetupSiteProjectDeployResult = {
+  bucketCreated: boolean;
+  configPath: string;
+  envPath: string;
+  gitignorePath: string;
+  projectRoot: string;
+  secretUploaded: boolean;
+};
+
+export type PublishSiteProjectResult = SitePublishResult & {
+  projectRoot: string;
+};
+
 export type SiteProjectSource = {
   config: SiteProjectConfig;
   projectRoot: string;
@@ -67,6 +110,13 @@ export type SiteProjectSource = {
 
 type ProjectMediaFile = SiteProjectMediaAsset & {
   bytes: Uint8Array<ArrayBuffer>;
+};
+
+type CompleteSiteProjectDeployConfig = {
+  accountId?: string;
+  mediaBucket: string;
+  publishUrl: string;
+  workerName: string;
 };
 
 type ProjectDevState = {
@@ -80,6 +130,11 @@ type ProjectDevState = {
 const defaultLocalSource = "http://localhost:5173";
 const projectStateDirectory = ".formless";
 const projectDevStateFile = `${projectStateDirectory}/dev.json`;
+const projectDeployEnvFile = `${projectStateDirectory}/deploy.env`;
+const projectPublishBackupDirectory = `${projectStateDirectory}/backups`;
+const projectGitignoreFile = ".gitignore";
+const projectStateGitignoreEntry = ".formless/";
+const adminTokenEnvName = "FORMLESS_ADMIN_TOKEN";
 const devServerReadyTimeoutMs = 30_000;
 const devServerPollIntervalMs = 250;
 
@@ -97,6 +152,10 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
       return parseDevArgs(rest);
     case "save":
       return parseSaveArgs(rest);
+    case "deploy":
+      return parseDeployArgs(rest);
+    case "publish":
+      return parsePublishArgs(rest);
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -129,6 +188,33 @@ export async function runFormlessCli(
     case "dev":
       await runSiteProjectDev(command, dependencies);
       return;
+    case "deploySetup": {
+      const result = await setupSiteProjectDeploy(command, dependencies);
+      dependencies.log(
+        [
+          `Configured Site deploy for ${result.projectRoot}.`,
+          `Wrote ${path.relative(result.projectRoot, result.configPath)} and ${path.relative(result.projectRoot, result.envPath)}.`,
+          `Ensured ${path.relative(result.projectRoot, result.gitignorePath)} ignores ${projectStateGitignoreEntry}.`,
+          result.bucketCreated ? "Verified or created the configured R2 bucket." : null,
+          result.secretUploaded ? "Uploaded the admin token as a Worker secret." : null,
+          "",
+          "Next:",
+          "  npx formless publish --yes",
+        ]
+          .filter((line): line is string => line !== null)
+          .join("\n"),
+      );
+      return;
+    }
+    case "publish": {
+      const result = await publishSiteProject(command, dependencies);
+      dependencies.log(
+        result.mode === "dry-run"
+          ? `Site project publish dry run: ${result.sourceRecordCount} records for ${result.target}.`
+          : `Site project published: ${result.sourceRecordCount} records to ${result.target}. Backup: ${result.backupPath}.`,
+      );
+      return;
+    }
     case "save": {
       const result = await saveSiteProject(command, dependencies);
       dependencies.log(
@@ -150,6 +236,9 @@ export function formlessCliUsage(): string {
     "  dev [--project <path>]             Run local public preview and /admin editor",
     "  save [--project <path>] [--check]   Save local Site edits back to project files",
     "       [--source <url>]",
+    "  deploy setup [options]              Store deploy config and local admin token",
+    "  publish [--project <path>]          Deploy code, media, and records",
+    "       [--dry-run] [--yes]",
   ].join("\n");
 }
 
@@ -223,6 +312,120 @@ export async function saveSiteProject(
     projectRoot: project.projectRoot,
     recordCount: records.length,
     source,
+  };
+}
+
+export async function setupSiteProjectDeploy(
+  input: {
+    accountId?: string | null;
+    adminToken?: string | null;
+    createBucket?: boolean;
+    mediaBucket: string;
+    projectPath?: string;
+    publishUrl: string;
+    uploadSecret?: boolean;
+    workerName: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "randomToken" | "runCommand" | "packageRoot"
+  > = nodeFormlessCliDependencies(),
+): Promise<SetupSiteProjectDeployResult> {
+  const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
+  const deploy = {
+    workerName: input.workerName,
+    ...(input.accountId ? { accountId: input.accountId } : {}),
+    publishUrl: normalizeSourceUrl(input.publishUrl),
+    mediaBucket: input.mediaBucket,
+  };
+  const config = {
+    ...project.config,
+    deploy,
+  };
+  const configPath = path.join(project.projectRoot, SITE_PROJECT_CONFIG_FILE);
+  const envPath = path.join(project.projectRoot, projectDeployEnvFile);
+  const gitignorePath = path.join(project.projectRoot, projectGitignoreFile);
+  const adminToken = input.adminToken ?? dependencies.randomToken();
+
+  await writeFile(configPath, formatSiteProjectConfig(config));
+  await writeProjectDeployEnv(envPath, { [adminTokenEnvName]: adminToken });
+  await ensureProjectStateIgnored(gitignorePath);
+
+  const commandEnv = cloudflareCommandEnv(dependencies.env, deploy.accountId);
+
+  if (input.createBucket) {
+    await dependencies.runCommand(
+      "bun",
+      ["x", "wrangler", "r2", "bucket", "create", deploy.mediaBucket],
+      {
+        cwd: dependencies.packageRoot,
+        env: commandEnv,
+      },
+    );
+  }
+
+  if (input.uploadSecret ?? true) {
+    await dependencies.runCommand(
+      "bun",
+      ["x", "wrangler", "secret", "bulk", envPath, "--name", deploy.workerName],
+      {
+        cwd: dependencies.packageRoot,
+        env: commandEnv,
+      },
+    );
+  }
+
+  return {
+    bucketCreated: Boolean(input.createBucket),
+    configPath,
+    envPath,
+    gitignorePath,
+    projectRoot: project.projectRoot,
+    secretUploaded: input.uploadSecret ?? true,
+  };
+}
+
+export async function publishSiteProject(
+  input: { dryRun?: boolean; projectPath?: string; yes?: boolean },
+  dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
+): Promise<PublishSiteProjectResult> {
+  const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
+  const deploy = requiredSiteProjectDeployConfig(project.config.deploy);
+  const adminToken =
+    dependencies.env[adminTokenEnvName] ?? (await readProjectDeployAdminToken(project.projectRoot));
+
+  if (!input.dryRun && !adminToken) {
+    throw new Error(
+      `Missing ${adminTokenEnvName}. Run "npx formless deploy setup" or set ${adminTokenEnvName}.`,
+    );
+  }
+
+  const result = await runSitePublish({
+    adminToken,
+    codeDeployCommands: siteProjectCodeDeployCommands(deploy, dependencies),
+    cwd: project.projectRoot,
+    dependencies: sitePublishDependenciesFromCli(dependencies),
+    missingSourceMediaMessage: (asset) =>
+      `Missing Site project media file ${asset.sourcePath}. Run "npx formless save" or restore the file before publishing.`,
+    options: {
+      apply: !input.dryRun,
+      backupDir: projectPublishBackupDirectory,
+      code: true,
+      data: true,
+      skipCheck: true,
+      target: deploy.publishUrl,
+    },
+    smokePaths: siteProjectPublishSmokePaths(project.records),
+    sourceMediaAssets: siteProjectMediaAssetsFromRecords(project.records, {
+      mediaRoot: project.config.mediaRoot,
+    }),
+    sourceSchema: packageSiteSourceSchema,
+    sourceSeedRecords: project.records,
+  });
+
+  return {
+    ...result,
+    projectRoot: project.projectRoot,
   };
 }
 
@@ -332,6 +535,196 @@ async function restoreSiteProjectToLocalAuthority(
   });
 }
 
+function requiredSiteProjectDeployConfig(
+  config: SiteProjectConfig["deploy"],
+): CompleteSiteProjectDeployConfig {
+  if (!config?.workerName) {
+    throw new Error(
+      `Missing deploy.workerName in ${SITE_PROJECT_CONFIG_FILE}. Run "npx formless deploy setup".`,
+    );
+  }
+
+  if (!config.publishUrl) {
+    throw new Error(
+      `Missing deploy.publishUrl in ${SITE_PROJECT_CONFIG_FILE}. Run "npx formless deploy setup".`,
+    );
+  }
+
+  if (!config.mediaBucket) {
+    throw new Error(
+      `Missing deploy.mediaBucket in ${SITE_PROJECT_CONFIG_FILE}. Run "npx formless deploy setup".`,
+    );
+  }
+
+  return {
+    ...(config.accountId ? { accountId: config.accountId } : {}),
+    mediaBucket: config.mediaBucket,
+    publishUrl: config.publishUrl,
+    workerName: config.workerName,
+  };
+}
+
+function sitePublishDependenciesFromCli(
+  dependencies: FormlessCliDependencies,
+): SitePublishDependencies {
+  return {
+    fetch: (url, init) => dependencies.fetch(url, init),
+    log: dependencies.log,
+    mkdir: async (directoryPath, options) => {
+      await mkdir(directoryPath, options);
+    },
+    now: dependencies.now,
+    readFile,
+    runCommand: dependencies.runCommand,
+    writeFile,
+  };
+}
+
+function siteProjectCodeDeployCommands(
+  deploy: CompleteSiteProjectDeployConfig,
+  dependencies: Pick<FormlessCliDependencies, "env" | "packageRoot">,
+): SitePublishCommand[] {
+  const env = publishedSiteDeployEnv(dependencies.env, deploy.accountId);
+
+  return [
+    {
+      args: ["run", "build"],
+      command: "bun",
+      cwd: dependencies.packageRoot,
+      env,
+      label: "bun run build",
+    },
+    {
+      args: [
+        "x",
+        "wrangler",
+        "deploy",
+        "--name",
+        deploy.workerName,
+        "--var",
+        "FORMLESS_RUNTIME_PROFILE:publishedSite",
+      ],
+      command: "bun",
+      cwd: dependencies.packageRoot,
+      env,
+      label: `bun x wrangler deploy --name ${deploy.workerName}`,
+    },
+  ];
+}
+
+function siteProjectPublishSmokePaths(records: StoredRecord[]): string[] {
+  const nestedPagePath = records
+    .map((record) => record.values.href)
+    .find(
+      (href): href is string =>
+        typeof href === "string" &&
+        href.startsWith("/") &&
+        href !== "/" &&
+        !href.startsWith("/api/"),
+    );
+
+  return nestedPagePath ? ["/", nestedPagePath] : ["/"];
+}
+
+async function writeProjectDeployEnv(envPath: string, values: Record<string, string>) {
+  await mkdir(path.dirname(envPath), { recursive: true });
+  await writeFile(
+    envPath,
+    Object.entries(values)
+      .map(([key, value]) => `${key}=${formatDotEnvValue(value)}`)
+      .join("\n")
+      .concat("\n"),
+  );
+}
+
+async function readProjectDeployAdminToken(projectRoot: string): Promise<string | undefined> {
+  const contents = await readFileIfExists(path.join(projectRoot, projectDeployEnvFile), "utf8");
+
+  if (!contents) {
+    return undefined;
+  }
+
+  return parseDotEnv(contents)[adminTokenEnvName];
+}
+
+async function ensureProjectStateIgnored(gitignorePath: string) {
+  const current = (await readFileIfExists(gitignorePath, "utf8")) ?? "";
+  const lines = current.split(/\r?\n/);
+
+  if (lines.some((line) => line.trim() === projectStateGitignoreEntry)) {
+    return;
+  }
+
+  const prefix = current.length === 0 || current.endsWith("\n") ? current : `${current}\n`;
+
+  await writeFile(gitignorePath, `${prefix}${projectStateGitignoreEntry}\n`);
+}
+
+function cloudflareCommandEnv(
+  env: NodeJS.ProcessEnv,
+  accountId: string | undefined,
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    ...(accountId ? { CLOUDFLARE_ACCOUNT_ID: accountId } : {}),
+  };
+}
+
+function publishedSiteDeployEnv(
+  env: NodeJS.ProcessEnv,
+  accountId: string | undefined,
+): NodeJS.ProcessEnv {
+  return {
+    ...cloudflareCommandEnv(env, accountId),
+    FORMLESS_RUNTIME_PROFILE: "publishedSite",
+    VITE_FORMLESS_RUNTIME_PROFILE: "publishedSite",
+  };
+}
+
+function formatDotEnvValue(value: string): string {
+  return /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function parseDotEnv(contents: string): Record<string, string> {
+  const values: Record<string, string> = {};
+
+  for (const line of contents.split(/\r?\n/)) {
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const equalsIndex = trimmed.indexOf("=");
+
+    if (equalsIndex <= 0) {
+      continue;
+    }
+
+    const key = trimmed.slice(0, equalsIndex);
+    const value = trimmed.slice(equalsIndex + 1);
+
+    values[key] = parseDotEnvValue(value);
+  }
+
+  return values;
+}
+
+function parseDotEnvValue(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+
+  return value;
+}
+
 function parseInitArgs(args: string[]): FormlessCliCommand {
   if (args.length !== 1 || args[0]?.startsWith("-")) {
     throw new Error("Usage: formless init <dir>");
@@ -373,6 +766,126 @@ function parseSaveArgs(args: string[]): FormlessCliCommand {
   }
 
   return { check, kind: "save", projectPath: options.projectPath, source };
+}
+
+function parseDeployArgs(args: string[]): FormlessCliCommand {
+  const [subcommand, ...rest] = args;
+
+  if (subcommand !== "setup") {
+    throw new Error(
+      "Usage: formless deploy setup [--project <path>] --worker <name> --publish-url <url> --media-bucket <bucket>",
+    );
+  }
+
+  return parseDeploySetupArgs(rest);
+}
+
+function parseDeploySetupArgs(args: string[]): FormlessCliCommand {
+  const options = parseProjectOptions(args, "formless deploy setup");
+  let accountId: string | null = null;
+  let adminToken: string | null = null;
+  let createBucket = false;
+  let mediaBucket: string | null = null;
+  let publishUrl: string | null = null;
+  let uploadSecret = true;
+  let workerName: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--worker") {
+      workerName = readOptionValue(options.rest, index, "--worker");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--publish-url") {
+      publishUrl = normalizeSourceUrl(readOptionValue(options.rest, index, "--publish-url"));
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--media-bucket") {
+      mediaBucket = readOptionValue(options.rest, index, "--media-bucket");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--account-id") {
+      accountId = readOptionValue(options.rest, index, "--account-id");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--generate-admin-token") {
+      adminToken = null;
+      continue;
+    }
+
+    if (arg === "--create-bucket") {
+      createBucket = true;
+      continue;
+    }
+
+    if (arg === "--skip-secret-upload") {
+      uploadSecret = false;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless deploy setup: ${arg}`);
+  }
+
+  if (!workerName) {
+    throw new Error("Missing required option for formless deploy setup: --worker.");
+  }
+
+  if (!publishUrl) {
+    throw new Error("Missing required option for formless deploy setup: --publish-url.");
+  }
+
+  if (!mediaBucket) {
+    throw new Error("Missing required option for formless deploy setup: --media-bucket.");
+  }
+
+  return {
+    accountId,
+    adminToken,
+    createBucket,
+    kind: "deploySetup",
+    mediaBucket,
+    projectPath: options.projectPath,
+    publishUrl,
+    uploadSecret,
+    workerName,
+  };
+}
+
+function parsePublishArgs(args: string[]): FormlessCliCommand {
+  const options = parseProjectOptions(args, "formless publish");
+  let dryRun = false;
+  let yes = false;
+
+  for (const arg of options.rest) {
+    if (arg === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+
+    if (arg === "--yes" || arg === "-y") {
+      yes = true;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless publish: ${arg}`);
+  }
+
+  return { dryRun, kind: "publish", projectPath: options.projectPath, yes };
 }
 
 function parseProjectOptions(
@@ -778,7 +1291,40 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function runCommandWithSpawn(
+  spawn: typeof nodeSpawn,
+  command: string,
+  args: string[],
+  options: FormlessCliRunCommandOptions,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env ?? process.env,
+      stdio: "inherit",
+    });
+
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          signal
+            ? `${command} ${args.join(" ")} exited with signal ${signal}.`
+            : `${command} ${args.join(" ")} exited with code ${code ?? "unknown"}.`,
+        ),
+      );
+    });
+  });
+}
+
 function nodeFormlessCliDependencies(): FormlessCliDependencies {
+  const spawn = nodeSpawn;
+
   return {
     cwd: process.cwd(),
     env: process.env,
@@ -786,6 +1332,8 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     log: (message) => console.log(message),
     now: () => new Date().toISOString(),
     packageRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
-    spawn: nodeSpawn,
+    randomToken: () => randomBytes(32).toString("base64url"),
+    runCommand: (command, args, options) => runCommandWithSpawn(spawn, command, args, options),
+    spawn,
   };
 }

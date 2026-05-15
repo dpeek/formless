@@ -44,11 +44,15 @@ function nodePublishDependencies(): SitePublishDependencies {
   };
 }
 
-function runCommand(command: string, args: string[], options: { cwd: string }): Promise<void> {
+function runCommand(
+  command: string,
+  args: string[],
+  options: { cwd: string; env?: NodeJS.ProcessEnv },
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: process.env,
+      env: options.env ?? process.env,
       stdio: "inherit",
     });
 

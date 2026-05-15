@@ -34,6 +34,7 @@ export type SitePublishResult = {
 
 export type SitePublishRunCommandOptions = {
   cwd: string;
+  env?: NodeJS.ProcessEnv;
 };
 
 export type SitePublishHttpResponse = {
@@ -56,11 +57,23 @@ export type SitePublishDependencies = {
   writeFile: (filePath: string, contents: string) => Promise<void>;
 };
 
+export type SitePublishCommand = {
+  args: string[];
+  command: string;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  label?: string;
+};
+
 export type SitePublishInput = {
   adminToken?: string;
+  codeDeployCommands?: SitePublishCommand[];
   cwd: string;
   dependencies: SitePublishDependencies;
+  missingSourceMediaMessage?: (asset: SiteSourceMediaAsset) => string;
   options: SitePublishOptions;
+  smokePaths?: string[];
+  sourceMediaAssets?: SiteSourceMediaAsset[];
   sourceSchema: AppSchema;
   sourceSeedRecords: StoredRecord[];
 };
@@ -152,7 +165,8 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
   const sourceSnapshot = buildSiteSourceSnapshot(input.sourceSchema, input.sourceSeedRecords, {
     exportedAt: plannedAt,
   });
-  const sourceMediaAssets = siteSourceMediaAssetsFromRecords(sourceSnapshot.records);
+  const sourceMediaAssets =
+    input.sourceMediaAssets ?? siteSourceMediaAssetsFromRecords(sourceSnapshot.records);
 
   if (input.options.apply && input.options.data && !input.options.target) {
     throw new Error(
@@ -181,8 +195,13 @@ export async function runSitePublish(input: SitePublishInput): Promise<SitePubli
   }
 
   if (input.options.code) {
-    input.dependencies.log("Code deploy: bun run deploy");
-    await input.dependencies.runCommand("bun", ["run", "deploy"], { cwd: input.cwd });
+    for (const command of codeDeployCommands(input)) {
+      input.dependencies.log(`Code deploy: ${command.label ?? formatCommand(command)}`);
+      await input.dependencies.runCommand(command.command, command.args, {
+        cwd: command.cwd ?? input.cwd,
+        env: command.env,
+      });
+    }
   }
 
   const backupPath = input.options.data
@@ -278,7 +297,7 @@ async function publishSiteData(
       `Data restore complete: cursor ${restoreResponse.cursor}, ${restoreResponse.records.length} records.`,
     );
 
-    for (const smokePath of defaultSmokePaths) {
+    for (const smokePath of input.smokePaths ?? defaultSmokePaths) {
       input.dependencies.log(`Smoke: GET ${smokePath}`);
       await fetchOk(input, sitePublishUrl(target, smokePath), {
         headers: { accept: "text/html,application/json" },
@@ -305,7 +324,8 @@ async function readSourceMediaFiles(
       bytes = await input.dependencies.readFile(filePath);
     } catch {
       throw new Error(
-        `Missing Site source media file ${asset.sourcePath}. Run "bun run site:pull-seed" before publishing.`,
+        input.missingSourceMediaMessage?.(asset) ??
+          `Missing Site source media file ${asset.sourcePath}. Run "bun run site:pull-seed" before publishing.`,
       );
     }
 
@@ -410,6 +430,21 @@ function sitePublishBackupPath(cwd: string, backupDir: string, timestamp: string
   const safeTimestamp = timestamp.replace(/[:.]/g, "-");
 
   return path.resolve(cwd, backupDir, `site-${safeTimestamp}.snapshot.json`);
+}
+
+function codeDeployCommands(input: SitePublishInput): SitePublishCommand[] {
+  return (
+    input.codeDeployCommands ?? [
+      {
+        args: ["run", "deploy"],
+        command: "bun",
+      },
+    ]
+  );
+}
+
+function formatCommand(command: SitePublishCommand): string {
+  return [command.command, ...command.args].join(" ");
 }
 
 async function fetchJson(
