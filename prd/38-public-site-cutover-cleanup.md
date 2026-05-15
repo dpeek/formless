@@ -1,7 +1,7 @@
 # PRD 38: Public Site cutover cleanup
 
 Status: ready
-Current chunk: PSC-04 ready
+Current chunk: PSC-05 ready
 Last updated: 2026-05-15
 
 Start after PRD 34, PRD 35, PRD 36, and PRD 37 shipped behavior is stable on the active branch.
@@ -386,7 +386,7 @@ Possible changed files:
 | PSC-01 | shipped | none                 | metadata and SSR document code, SSR tests                              | Public SSR documents have route-specific title, description, canonical, OG, and Twitter tags from existing tree data; `og:image` is absent.        |
 | PSC-02 | shipped | none                 | routing code, Worker dispatch, routing tests                           | Public profile redirects `/pages*` and `/work`, blocks generated app/admin shells, and keeps API/assets working.                                   |
 | PSC-03 | shipped | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
-| PSC-04 | ready   | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
+| PSC-04 | shipped | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
 | PSC-05 | ready   | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests                         | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                                 |
 | PSC-06 | ready   | none                 | public renderer CSS/classes, app render tests                          | Footer note text is readable in dark mode.                                                                                                         |
 
@@ -398,7 +398,11 @@ Possible changed files:
 - 2026-05-15: PSC-02 blocks generated app/admin client shell routes from published static fallback; API routes and asset-like paths still bypass Site document SSR.
 - 2026-05-15: PSC-03 shipped. `src/site/public-indexing.ts` builds deterministic public route entries from live page blocks and dated post blocks, canonicalizes old `/pages/*` hrefs to clean public paths, validates candidates through `resolveSiteRoute`, and excludes API, generated app, and static-like paths.
 - 2026-05-15: PSC-03 serves `/robots.txt` as plain text and `/sitemap.xml` as XML from current Site bootstrap records before static asset fallback.
+- 2026-05-15: PSC-04 shipped. Package-owned `public/` now includes `favicon.ico` and `apple-touch-icon.png` generated from the existing `favicon.svg`.
+- 2026-05-15: PSC-04 links SVG favicon, ICO favicon, and Apple touch icon from the static SPA shell and public SSR document shell.
+- 2026-05-15: PSC-04 keeps launch icons on the package static asset path. Wrangler static routing excludes `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` from Worker-first public document handling, while Worker fallback still defers asset-like icon paths to `ASSETS`.
 - Decisions: no new PSC-03 decisions. Implementation follows PSC-D14 and PSC-D15.
+- Decisions: no new PSC-04 decisions. Implementation follows PSC-D9, PSC-D20, and PSC-D21.
 - Blockers: none.
 
 ## Acceptance Checks
@@ -455,3 +459,12 @@ Possible changed files:
 - 2026-05-15: After rebase on local `main`, `.devstate/status.md` reports checks ok and services running.
 - 2026-05-15: After rebase, `.devstate/logs/service-test.txt` reports 6 test files passed, 135 tests.
 - 2026-05-15: After rebase, `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 250 files.
+- 2026-05-15: `.devstate/status.md` reports checks ok and services running after PSC-04.
+- 2026-05-15: `.devstate/logs/service-test.txt` reports 10 test files passed, 172 tests.
+- 2026-05-15: `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 251 files.
+- 2026-05-15: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/`.
+- 2026-05-15: Browser smoke `bun browser --session psc-04-assets --ignore-https-errors open https://38-public-site-cutover-cleanup.formless.local/apple-touch-icon.png` rendered the 180 x 180 PNG asset.
+- 2026-05-15: Browser smoke `bun browser --session psc-04-assets --ignore-https-errors open https://38-public-site-cutover-cleanup.formless.local/favicon.ico` rendered the ICO asset.
+- 2026-05-15: After rebase on local `main`, `.devstate/status.md` reports checks ok and services running.
+- 2026-05-15: After rebase, `.devstate/logs/service-test.txt` reports 10 test files passed, 172 tests.
+- 2026-05-15: After rebase, `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 251 files.

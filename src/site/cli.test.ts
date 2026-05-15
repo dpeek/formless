@@ -297,6 +297,7 @@ describe("Formless Site CLI", () => {
       "npm run build",
       "npm exec -- wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
     ]);
+    expect(commands.every((command) => command.cwd === "/package")).toBe(true);
     expect(commands[0]?.env).toMatchObject({
       FORMLESS_RUNTIME_PROFILE: "publishedSite",
       VITE_FORMLESS_RUNTIME_PROFILE: "publishedSite",

@@ -101,6 +101,8 @@ describe("Worker document routing", () => {
       new Request("http://example.com/@vite/client", { headers: { Accept: "*/*" } }),
       new Request("http://example.com/@react-refresh", { headers: { Accept: "*/*" } }),
       documentRequest("http://example.com/favicon.svg"),
+      documentRequest("http://example.com/favicon.ico"),
+      documentRequest("http://example.com/apple-touch-icon.png"),
       new Request("http://example.com/blog/post", { headers: { Accept: "application/json" } }),
     ];
 
@@ -202,6 +204,16 @@ describe("Worker document routing", () => {
     ).toBe(true);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/favicon.svg"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/favicon.ico"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/apple-touch-icon.png"), {
         profile: "publishedSite",
       }),
     ).toBe(true);

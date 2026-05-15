@@ -4,6 +4,7 @@ import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 
 type DispatchFetchInit = Parameters<Miniflare["dispatchFetch"]>[1];
+type ServiceBindingHandler = (request: Request) => Promise<Response> | Response;
 
 type DurableObjectBindings = Record<
   string,
@@ -17,6 +18,7 @@ type WorkerHarnessOptions = {
   bindings?: Record<string, string>;
   compatibilityDate?: string;
   r2Buckets?: string[];
+  serviceBindings?: Record<string, ServiceBindingHandler>;
 };
 
 export async function createWorkerHarness(
@@ -46,6 +48,7 @@ export async function createWorkerHarness(
     r2Buckets: options.r2Buckets,
     r2Persist: false,
     scriptPath,
+    serviceBindings: options.serviceBindings,
   });
 
   return {

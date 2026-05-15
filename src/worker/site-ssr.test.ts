@@ -68,6 +68,9 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain(
       '<html lang="en" class="light" data-site-theme="light" style="color-scheme: light;">',
     );
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />');
+    expect(html).toContain('<link rel="icon" sizes="any" href="/favicon.ico" />');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
     expect(html).toContain('<div id="app">');
     expect(html).toContain('<main class="min-h-dvh"><article');
     expect(html).toContain('data-site-theme="light"');
@@ -330,10 +333,12 @@ describe("published Site Worker SSR", () => {
     const responses = await Promise.all([
       getDocument("/assets/index.js"),
       getDocument("/favicon.svg"),
+      getDocument("/favicon.ico"),
+      getDocument("/apple-touch-icon.png"),
     ]);
     const bodies = await Promise.all(responses.map((response) => response.text()));
 
-    expect(responses.map((response) => response.status)).toEqual([404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404]);
     expect(bodies.join("\n")).not.toContain("data-site-header");
     expect(bodies.join("\n")).not.toContain("Loading site page...");
   });
