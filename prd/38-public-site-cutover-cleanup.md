@@ -16,6 +16,7 @@ The first version should:
 - avoid adding new Site block fields;
 - keep `og:image` out of scope for now;
 - serve favicon and touch icon assets correctly;
+- serve package launch assets correctly when Formless runs outside the monorepo;
 - serve real `robots.txt` and `sitemap.xml` responses;
 - make public route behavior match a normal top-level website;
 - keep generated app/admin shells off the public published host;
@@ -43,6 +44,30 @@ Current deployed behavior observed before this PRD:
 
 The domain cutover should not expose implementation names, stale preview routes, or missing launch files.
 
+## Landed Context Since Draft
+
+PRD 37 has shipped the first single-Site project loop.
+
+Current shipped facts:
+
+- The public package is `@dpeek/formless`.
+- The shared UI package is `@dpeek/formless-ui`.
+- The package exposes `bin/formless.js`.
+- The package includes `index.html`, `public/`, `schema/`, `src/`, `vite.config.ts`, and `wrangler.jsonc`.
+- `formless init <dir>` creates `formless.config.json`, `site.records.json`, and starter media.
+- `formless dev` runs the package-owned Site authoring profile from the package root.
+- `formless dev` sets `FORMLESS_SITE_PROJECT_ROOT` and `FORMLESS_SITE_PROJECT_ID`.
+- `vite.config.ts` allows the package root, installed package `node_modules`, and the active Site project root.
+- `formless publish` deploys code from the package root, restores project media, restores project records, and runs public smoke checks.
+- Site project source media lives under project `media/`.
+- Site project records live in project `site.records.json`.
+- Project-owned general static asset directories are not part of the shipped project format.
+- Repo `public/` currently contains `favicon.svg`; `favicon.ico` and `apple-touch-icon.png` still need this PRD.
+
+This PRD must therefore avoid monorepo-only path assumptions.
+Default launch assets should resolve from the package-owned `public/` directory, whether the package root is the repo root during development or an installed package under `node_modules`.
+Project media remains separate and continues to flow through `media/` and `/api/site/media/*`.
+
 ## Solution
 
 Use the existing public `SitePageTree` as the metadata source.
@@ -66,7 +91,11 @@ Do not add `seoTitle`, `seoDescription`, `seoImage`, or any other new Site block
 
 Serve launch assets and indexing resources deliberately:
 
-- static repo `public/` owns `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` for this pass;
+- package-owned `public/` owns default `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` for this pass;
+- in repo development, package-owned `public/` is repo `public/`;
+- in `npx @dpeek/formless` use, package-owned `public/` is the installed package `public/`;
+- launch asset serving, build, and publish paths resolve from the package root or deployed asset binding, not from the Site project cwd;
+- Site project `media/` remains the source for authored image media and does not own launch icons in this PRD;
 - `robots.txt` returns a plain text policy;
 - `sitemap.xml` returns XML for public routable Site pages and posts;
 - route redirects are handled by the Worker before static SPA fallback;
@@ -93,7 +122,18 @@ Existing anchors:
 - Public Site renderer: `src/app/site-renderer/renderer.tsx`.
 - Public Site link helpers: `src/app/site-renderer/links.ts`.
 - Public tree response types: `src/shared/protocol.ts`.
+- Site project CLI: `src/site/cli.ts`.
+- Site project config: `src/site/project-config.ts`.
+- Site project source adapter: `src/site/project-source.ts`.
+- Site project publish flow: `src/site/publish.ts`.
+- Site project source media adapter: `src/site/source-media.ts`.
+- Package build script: `scripts/build-package.ts`.
+- Package CLI bin source: `scripts/formless-bin.ts`.
+- Package manifest: `package.json`.
+- UI package manifest: `lib/ui/package.json`.
+- Vite package/project path config: `vite.config.ts`.
 - SSR characterization tests: `src/site/public-site-ssr-characterization.test.tsx`.
+- Site CLI tests: `src/site/cli.test.ts`.
 - Worker routing tests: `src/worker/routing.test.ts`.
 - Worker SSR tests: `src/worker/site-ssr.test.ts`.
 - App render tests: `src/app.test.tsx`.
@@ -110,8 +150,12 @@ Likely changed files:
 - `src/worker/site-cache.ts`.
 - `src/site/tree.ts`.
 - `src/shared/protocol.ts`.
+- `src/site/cli.ts`.
+- `src/site/publish.ts`.
 - `index.html`.
 - `wrangler.jsonc`.
+- `package.json`.
+- `scripts/build-package.ts`.
 - `public/favicon.svg`.
 - `public/favicon.ico`.
 - `public/apple-touch-icon.png`.
@@ -146,8 +190,10 @@ Possible changed files:
 18. As the Site owner, I want image metadata left alone for now, so that I can clean image labels through content editing.
 19. As the runtime developer, I want metadata generation isolated in a testable module, so that later schema-backed SEO fields can plug in cleanly.
 20. As the runtime developer, I want route hygiene isolated from the renderer, so that public routing remains easy to test.
-21. As the runtime developer, I want favicon/static launch assets handled by the existing build static path, so that this PRD does not block on a Site-project asset pipeline.
+21. As the runtime developer, I want favicon/static launch assets handled by the package static path, so that this PRD works in repo development and installed-package Site projects.
 22. As the runtime developer, I want no new block fields in this PRD, so that the current flat content model stays stable for cutover.
+23. As a Site project owner, I want `npx @dpeek/formless dev` and `npx @dpeek/formless publish` to serve launch assets without a monorepo checkout, so that the CLI path matches the product path.
+24. As the runtime developer, I want launch assets and authored Site media to stay on separate paths, so that favicon handling does not disturb `/api/site/media/*`.
 
 ## Requirements
 
@@ -194,8 +240,16 @@ Possible changed files:
 - `favicon.svg` continues to serve as an SVG favicon.
 - `favicon.ico` returns icon bytes, not HTML.
 - `apple-touch-icon.png` returns PNG bytes, not HTML.
-- Launch icons live in repo `public/` for this PRD.
-- A Site-project-owned `public/` directory is out of scope for this PRD.
+- Launch icons live in package-owned `public/` for this PRD.
+- Repo development uses repo `public/` as the package-owned static source.
+- Installed package usage uses the installed package `public/` as the static source.
+- Package publishing includes launch icon assets.
+- `formless dev` serves launch icon assets when run from a Site project outside the monorepo.
+- `formless publish` deploys launch icon assets from the package root when run from a Site project outside the monorepo.
+- Static launch asset resolution does not depend on `process.cwd()` being the repo root.
+- `FORMLESS_SITE_PROJECT_ROOT` is used for project access, not for default launch icon lookup.
+- Project `media/` remains for authored Site media under `/api/site/media/*`.
+- Project-owned custom `public/` overrides are out of scope for this PRD.
 - The static asset routing path must not send these icon requests through Site document SSR.
 
 ### Robots And Sitemap
@@ -249,27 +303,29 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                                               | Reason                                                                                       |
-| ------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| PSC-D1  | Do not add SEO-specific Site block fields in this PRD.                                 | The cutover needs launch hygiene, not content-model expansion.                               |
-| PSC-D2  | Use the public page label for the page title source.                                   | The label already names the route for visitors and authors.                                  |
-| PSC-D3  | Use the public page body for the description source.                                   | The body already stores concise page summary copy for regular pages.                         |
-| PSC-D4  | Strip markdown and collapse whitespace before using body copy in metadata.             | Metadata should be plain text, not markdown or rendered HTML.                                |
-| PSC-D5  | Use the first primary header link label as the Site name source.                       | The current content already stores `David Peek` there and no new field is needed.            |
-| PSC-D6  | Fall back from header label to page label, then `Site`.                                | Broken or minimal content should still produce valid documents.                              |
-| PSC-D7  | Render no `og:image` until image metadata has a real content policy.                   | The user will first fix descriptive image labels, and no image field should be added yet.    |
-| PSC-D8  | Keep Twitter cards as `summary`.                                                       | Without an image, large image cards would be misleading.                                     |
-| PSC-D9  | Put launch favicon assets in repo static assets for now.                               | This is the shortest path to correct public responses before cutover.                        |
-| PSC-D10 | Leave Site-project-owned static asset directories to a later PRD.                      | Project asset publishing is a broader CLI/source pipeline feature.                           |
-| PSC-D11 | Handle old preview routes with redirects instead of rendering preview shells publicly. | The public domain should expose clean top-level URLs.                                        |
-| PSC-D12 | Redirect old `/work` to `/projects`.                                                   | The existing `dpeek.com` route should survive the domain swap.                               |
-| PSC-D13 | Return public 404s for generated app/admin routes on the published host.               | Implementation shells should not be discoverable as public pages.                            |
-| PSC-D14 | Generate robots and sitemap responses through the Worker, not the SPA fallback.        | These are machine resources with specific content types.                                     |
-| PSC-D15 | Build sitemap entries from public routable Site records.                               | Sitemap should reflect authored Site content and public visibility rules.                    |
-| PSC-D16 | Support `HEAD` at the routing layer by reusing `GET` status/header decisions.          | Link checkers and monitors should see accurate status without downloading full documents.    |
-| PSC-D17 | Keep schema-keyed API paths unchanged.                                                 | Cutover cleanup should not disturb authority, sync, media upload, or generated write routes. |
-| PSC-D18 | Keep route metadata generation independent of React rendering.                         | Metadata should be testable without rendering the full page tree.                            |
-| PSC-D19 | Treat dark footer note contrast as opportunistic cleanup inside this PRD.              | It is a small shipped public-site polish issue found during the cutover audit.               |
+| ID      | Decision                                                                                | Reason                                                                                       |
+| ------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| PSC-D1  | Do not add SEO-specific Site block fields in this PRD.                                  | The cutover needs launch hygiene, not content-model expansion.                               |
+| PSC-D2  | Use the public page label for the page title source.                                    | The label already names the route for visitors and authors.                                  |
+| PSC-D3  | Use the public page body for the description source.                                    | The body already stores concise page summary copy for regular pages.                         |
+| PSC-D4  | Strip markdown and collapse whitespace before using body copy in metadata.              | Metadata should be plain text, not markdown or rendered HTML.                                |
+| PSC-D5  | Use the first primary header link label as the Site name source.                        | The current content already stores `David Peek` there and no new field is needed.            |
+| PSC-D6  | Fall back from header label to page label, then `Site`.                                 | Broken or minimal content should still produce valid documents.                              |
+| PSC-D7  | Render no `og:image` until image metadata has a real content policy.                    | The user will first fix descriptive image labels, and no image field should be added yet.    |
+| PSC-D8  | Keep Twitter cards as `summary`.                                                        | Without an image, large image cards would be misleading.                                     |
+| PSC-D9  | Put default launch favicon assets in package-owned static assets for now.               | The same static source must work in repo development and installed-package Site projects.    |
+| PSC-D10 | Leave custom Site-project-owned static asset overrides to a later PRD.                  | The shipped project format owns records and media, not a general public asset directory.     |
+| PSC-D11 | Handle old preview routes with redirects instead of rendering preview shells publicly.  | The public domain should expose clean top-level URLs.                                        |
+| PSC-D12 | Redirect old `/work` to `/projects`.                                                    | The existing `dpeek.com` route should survive the domain swap.                               |
+| PSC-D13 | Return public 404s for generated app/admin routes on the published host.                | Implementation shells should not be discoverable as public pages.                            |
+| PSC-D14 | Generate robots and sitemap responses through the Worker, not the SPA fallback.         | These are machine resources with specific content types.                                     |
+| PSC-D15 | Build sitemap entries from public routable Site records.                                | Sitemap should reflect authored Site content and public visibility rules.                    |
+| PSC-D16 | Support `HEAD` at the routing layer by reusing `GET` status/header decisions.           | Link checkers and monitors should see accurate status without downloading full documents.    |
+| PSC-D17 | Keep schema-keyed API paths unchanged.                                                  | Cutover cleanup should not disturb authority, sync, media upload, or generated write routes. |
+| PSC-D18 | Keep route metadata generation independent of React rendering.                          | Metadata should be testable without rendering the full page tree.                            |
+| PSC-D19 | Treat dark footer note contrast as opportunistic cleanup inside this PRD.               | It is a small shipped public-site polish issue found during the cutover audit.               |
+| PSC-D20 | Resolve launch assets from the package root or deployed asset binding, not project cwd. | `npx @dpeek/formless` now runs from external Site projects without a monorepo checkout.      |
+| PSC-D21 | Keep launch icons separate from project source media.                                   | Project media restore/publish already owns `/api/site/media/*`; favicons are site chrome.    |
 
 ### Deep Modules
 
@@ -277,6 +333,7 @@ Possible changed files:
 - **Public launch route policy:** classifies public document, redirect, machine resource, API, asset, and blocked generated-app paths.
 - **Public sitemap builder:** accepts routable public Site facts; returns deterministic sitemap entries and XML.
 - **Head response adapter:** reuses document/media route decisions and strips response bodies for `HEAD`.
+- **Package launch asset source:** ensures default public assets come from the Formless package static output in both monorepo and installed-package CLI flows.
 
 ## Testing Decisions
 
@@ -290,6 +347,8 @@ Possible changed files:
 - Robots and sitemap tests should assert content type, body shape, and route inclusion/exclusion.
 - Sitemap tests should assert preview routes, app routes, drafts/unpublished posts, deleted records, and non-routable blocks are excluded.
 - `HEAD` tests should assert status/header parity and empty bodies for success, redirect, not-found, and media routes.
+- Package/outside-monorepo tests should assert launch icon assets are served or deployed from the package root when the cwd is an external Site project.
+- Package/outside-monorepo tests should assert project `media/` is still used only for `/api/site/media/*`.
 - Prior art exists in public SSR, worker routing, app render, and Site tree tests.
 - Browser smoke with `bun browser ...` is required if public app behavior changes visibly.
 
@@ -299,6 +358,8 @@ Possible changed files:
 - PRD 35 regular pages and content lists must stay stable.
 - PRD 36 slotted media and editorial blocks must stay stable.
 - PRD 37 single-Site published profile behavior must stay stable.
+- PRD 37 package/outside-monorepo CLI behavior must stay stable.
+- Package publish surface must keep `public/`, `index.html`, `wrangler.jsonc`, `src/`, and `schema/` available to the CLI.
 - Content image label cleanup is owned outside this PRD.
 
 ## Out Of Scope
@@ -310,7 +371,7 @@ Possible changed files:
 - RSS feeds.
 - Search.
 - Structured data / JSON-LD.
-- Project-owned `public/` directory support.
+- Custom project-owned `public/` directory support.
 - Custom per-project favicon upload.
 - Production admin auth.
 - Changing public page content.
@@ -320,14 +381,14 @@ Possible changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on           | Main files                                          | Acceptance                                                                                                                                  |
-| ------ | ------ | -------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| PSC-01 | ready  | none                 | metadata and SSR document code, SSR tests           | Public SSR documents have route-specific title, description, canonical, OG, and Twitter tags from existing tree data; `og:image` is absent. |
-| PSC-02 | ready  | none                 | routing code, Worker dispatch, routing tests        | Public profile redirects `/pages*` and `/work`, blocks generated app/admin shells, and keeps API/assets working.                            |
-| PSC-03 | ready  | PSC-02               | robots/sitemap code, Site tree/route helpers, tests | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                        |
-| PSC-04 | ready  | PSC-02               | static assets, Worker/static routing tests          | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets.                                                           |
-| PSC-05 | ready  | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests      | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                          |
-| PSC-06 | ready  | none                 | public renderer CSS/classes, app render tests       | Footer note text is readable in dark mode.                                                                                                  |
+| ID     | Status | Depends on           | Main files                                                             | Acceptance                                                                                                                                         |
+| ------ | ------ | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PSC-01 | ready  | none                 | metadata and SSR document code, SSR tests                              | Public SSR documents have route-specific title, description, canonical, OG, and Twitter tags from existing tree data; `og:image` is absent.        |
+| PSC-02 | ready  | none                 | routing code, Worker dispatch, routing tests                           | Public profile redirects `/pages*` and `/work`, blocks generated app/admin shells, and keeps API/assets working.                                   |
+| PSC-03 | ready  | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
+| PSC-04 | ready  | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
+| PSC-05 | ready  | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests                         | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                                 |
+| PSC-06 | ready  | none                 | public renderer CSS/classes, app render tests                          | Footer note text is readable in dark mode.                                                                                                         |
 
 ## Acceptance Checks
 
@@ -340,10 +401,14 @@ Possible changed files:
 - `GET /site` does not return the generated app shell on the published host.
 - `GET /robots.txt` returns text, not HTML.
 - `GET /sitemap.xml` returns XML, not HTML.
+- `GET /favicon.svg` returns SVG from package static assets, not HTML.
 - `GET /favicon.ico` returns icon bytes, not HTML.
 - `GET /apple-touch-icon.png` returns PNG bytes, not HTML.
+- `npx @dpeek/formless dev` from a Site project outside the monorepo can serve favicon and touch icon assets.
+- `npx @dpeek/formless publish` from a Site project outside the monorepo deploys the package launch assets.
 - `HEAD /` returns the same status and important headers as `GET /` with no body.
 - Existing API routes keep working.
+- Existing `/api/site/media/*` project media restore and serving keep working.
 - Existing public SSR hydration keeps working.
 - `.devstate/status.md` shows checks passing after implementation.
 
@@ -352,5 +417,6 @@ Possible changed files:
 - Public Site SSR documents include route metadata from existing Site tree facts.
 - Public Site uses clean top-level route redirects for old preview paths.
 - Public Site serves `robots.txt`, `sitemap.xml`, favicon, and touch icon assets.
+- Package CLI Site projects outside the monorepo serve and publish default launch assets from package-owned `public/`.
 - Published profile blocks generated app/admin shells from the public host.
 - Public document and media routes support `HEAD`.
