@@ -1,7 +1,7 @@
 # PRD 37: Single Site project and CLI loop
 
-Status: ready
-Current chunk: SSP-07
+Status: complete
+Current chunk: SSP-07 shipped
 Last updated: 2026-05-15
 
 Start after PRD 31, PRD 34, PRD 35, and PRD 36 shipped behavior is stable on the active branch.
@@ -450,7 +450,7 @@ Possible changed files:
 | SSP-04 | shipped | SSP-03     | CLI init/dev/save, package entry, tests | `npx formless init`, `dev`, and `save` work against a Site project without repo-specific paths.                  |
 | SSP-05 | shipped | SSP-04     | CLI deploy setup/publish, publish tests | `npx formless publish` deploys code, media, and records from project config without manual env toggles.          |
 | SSP-06 | shipped | SSP-05     | local admin publish action, tests       | Local admin can trigger the configured publish flow only through the local CLI broker.                           |
-| SSP-07 | ready   | SSP-05     | migration project, smoke notes, PRD     | Brother-site migration proves init/dev/save/publish dry-run with real content and records follow Site schema.    |
+| SSP-07 | shipped | SSP-05     | migration project, smoke notes, PRD     | Brother-site migration proves init/dev/save/publish dry-run with real content and records follow Site schema.    |
 
 ## Out of Scope
 
@@ -520,6 +520,14 @@ Possible changed files:
 - 2026-05-15: SSP-06 tests added `src/client/local-publish.test.ts` and extended `src/site/cli.test.ts`, `src/app.test.tsx`, and `src/app/runtime-profile.test.ts` for broker auth, save-then-publish behavior, browser broker request shape, hidden default admin publish UI, and explicit broker-gated publish UI.
 - 2026-05-15: SSP-06 `devstate check` reported checks ok, web ready at `https://37-single-site-project-cli-loop.formless.local`, and watcher tests passing. `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent, so `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence.
 - 2026-05-15: SSP-06 browser smoke opened `https://37-single-site-project-cli-loop.formless.local/site`; the generated Site admin rendered and `bun browser --session ssp-06 errors` reported no page errors.
+- 2026-05-15: SSP-07 migration proof created an ignored project at `tmp/ssp-07-brother-site` with `bun run formless -- init tmp/ssp-07-brother-site`. Init wrote `formless.config.json`, `site.records.json`, and 7 media files from the package-owned Site source content. No private migrated content was committed.
+- 2026-05-15: SSP-07 deploy setup proof ran `bun run formless -- deploy setup --project tmp/ssp-07-brother-site --worker ssp-07-brother-site --publish-url https://ssp-07.example --media-bucket ssp-07-brother-site-media --skip-secret-upload`. It wrote non-secret deploy config and local ignored `.formless/deploy.env`.
+- 2026-05-15: SSP-07 dev proof ran `bun run formless -- dev --project tmp/ssp-07-brother-site`; the CLI restored 92 Site records and 7 media files into local Site authority state, wrote `.formless/dev.json`, and exposed `http://localhost:5173/` plus `http://localhost:5173/admin`.
+- 2026-05-15: SSP-07 smoke fetched `http://localhost:5173/` and `http://localhost:5173/admin`; both returned HTTP 200.
+- 2026-05-15: SSP-07 save check ran `bun run formless -- save --project tmp/ssp-07-brother-site --check --source http://localhost:5173` and reported source current with 92 records and 7 media files.
+- 2026-05-15: SSP-07 publish dry-run ran `bun run formless -- publish --project tmp/ssp-07-brother-site --dry-run --yes`; it validated 92 Site records, found 7 referenced source media files, targeted `https://ssp-07.example`, and did not mutate code or live data.
+- 2026-05-15: SSP-07 `devstate check` reported checks ok, web ready at `https://37-single-site-project-cli-loop.formless.local`, formatting passed, lint/type checks found no issues in 243 files, and watcher tests reported 6 files with 183 tests passing.
+- 2026-05-15: SSP-07 final evidence read found `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` absent; `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence.
 
 ## Status Notes
 
@@ -529,7 +537,9 @@ Possible changed files:
 - SSP-04 shipped 2026-05-15.
 - SSP-05 shipped 2026-05-15.
 - SSP-06 shipped 2026-05-15.
-- Current chunk: SSP-07.
+- SSP-07 shipped 2026-05-15.
+- Current chunk: none.
 - Current blocker: package boundary still needs npm/Node hardening before external release.
 - Decision: the first user-facing product path is Site-only, even though the internal runtime remains schema-keyed.
 - Decision: CLI publish is the first one-command publish path; admin publish follows only through a local CLI broker and publishes current local authority state after saving it to project source.
+- Decision: private migrated content stays outside committed repo history unless the user explicitly approves committing it.
