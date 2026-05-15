@@ -110,6 +110,19 @@ describe("published Site Worker SSR", () => {
     expect(html).not.toContain("Loading site page...");
   });
 
+  it("returns HEAD headers for public documents without a response body", async () => {
+    const getResponse = await getDocument("/");
+    const headResponse = await headDocument("/");
+
+    expect(headResponse.status).toBe(getResponse.status);
+    expect(headResponse.headers.get("Cache-Control")).toBe(
+      getResponse.headers.get("Cache-Control"),
+    );
+    expect(headResponse.headers.get("Content-Type")).toBe(getResponse.headers.get("Content-Type"));
+    expect(headResponse.headers.get("Vary")).toBe(getResponse.headers.get("Vary"));
+    expect(await headResponse.text()).toBe("");
+  });
+
   it("injects production client assets from the built client shell", async () => {
     const response = await handlePublishedSiteDocumentRequest(
       new Request("https://example.com/projects", {
@@ -210,6 +223,16 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain("No site page exists for");
     expect(html).toContain("<code>missing-page</code>");
     expect(html).not.toContain(INITIAL_SITE_PAGE_TREE_SCRIPT_ID);
+  });
+
+  it("returns HEAD not-found document headers without a response body", async () => {
+    const response = await headDocument("/missing-page");
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLISHED_SITE_NOT_FOUND_CACHE_CONTROL);
+    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("Vary")).toBe("Accept");
+    expect(await response.text()).toBe("");
   });
 
   it("returns a no-store error document when the public tree read fails", async () => {
@@ -314,6 +337,14 @@ describe("published Site Worker SSR", () => {
     ]);
   });
 
+  it("returns HEAD redirects without a response body", async () => {
+    const response = await headDocumentWithoutFollowingRedirect("/pages/home");
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get("Location")).toBe("/");
+    expect(await response.text()).toBe("");
+  });
+
   it("returns 404 responses for generated admin routes in the published profile", async () => {
     const responses = await Promise.all([
       getDocument("/site"),
@@ -327,6 +358,13 @@ describe("published Site Worker SSR", () => {
     expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404]);
     expect(bodies.join("\n")).not.toContain("data-site-header");
     expect(bodies.join("\n")).not.toContain("Loading site page...");
+  });
+
+  it("returns empty HEAD responses for generated admin routes in the published profile", async () => {
+    const response = await headDocument("/site");
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("");
   });
 
   it("keeps API and asset-like routes outside the SSR document path", async () => {
@@ -367,6 +405,25 @@ async function getDocumentWithoutFollowingRedirect(path: string) {
     headers: {
       Accept: "text/html",
     },
+    redirect: "manual",
+  });
+}
+
+async function headDocument(path: string) {
+  return harness.fetch(path, {
+    headers: {
+      Accept: "text/html",
+    },
+    method: "HEAD",
+  });
+}
+
+async function headDocumentWithoutFollowingRedirect(path: string) {
+  return harness.fetch(path, {
+    headers: {
+      Accept: "text/html",
+    },
+    method: "HEAD",
     redirect: "manual",
   });
 }

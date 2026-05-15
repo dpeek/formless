@@ -8,6 +8,7 @@ import {
   siteMediaKeyFromPathname,
 } from "../site/source-media.ts";
 import { authorizeAdminWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
+import { responseWithoutBodyForHead } from "./head-response.ts";
 
 export const SITE_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 export const SITE_MEDIA_CACHE_CONTROL = "public, max-age=31536000, immutable";
@@ -53,8 +54,12 @@ export async function handleSiteMediaRequest(request: Request, env: SiteMediaEnv
     return restoreSiteMedia(request, env, url.pathname);
   }
 
-  if (request.method === "GET") {
-    return serveSiteMedia(url.pathname, env);
+  if (request.method === "GET" || request.method === "HEAD") {
+    const response = await serveSiteMedia(url.pathname, env, {
+      includeBody: request.method === "GET",
+    });
+
+    return responseWithoutBodyForHead(request, response);
   }
 
   return jsonResponse({ error: "Not found." }, 404);
@@ -150,7 +155,11 @@ async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: s
   } satisfies UploadResponse);
 }
 
-async function serveSiteMedia(pathname: string, env: SiteMediaEnv) {
+async function serveSiteMedia(
+  pathname: string,
+  env: SiteMediaEnv,
+  options: { includeBody?: boolean } = {},
+) {
   const key = siteMediaKeyFromPathname(pathname);
 
   if (!key) {
@@ -171,7 +180,9 @@ async function serveSiteMedia(pathname: string, env: SiteMediaEnv) {
   headers.set("Cache-Control", SITE_MEDIA_CACHE_CONTROL);
   headers.set("ETag", object.httpEtag);
 
-  return new Response(object.body, { headers });
+  const body = (options.includeBody ?? true) ? object.body : null;
+
+  return new Response(body, { headers });
 }
 
 async function writeSiteMediaObject(

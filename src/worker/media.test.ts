@@ -186,6 +186,29 @@ describe("site media worker routes", () => {
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(pngBytes);
   });
 
+  it("returns HEAD headers for public media without a response body", async () => {
+    const bucket = await harness.mf.getR2Bucket(mediaBinding);
+    const key = "site/images/head.png";
+
+    await bucket.put(key, pngBytes, {
+      httpMetadata: {
+        cacheControl: SITE_MEDIA_CACHE_CONTROL,
+        contentType: "image/png",
+      },
+    });
+
+    const getResponse = await harness.fetch(`/api/site/media/${key}`);
+    const headResponse = await harness.fetch(`/api/site/media/${key}`, { method: "HEAD" });
+
+    expect(headResponse.status).toBe(getResponse.status);
+    expect(headResponse.headers.get("Content-Type")).toBe(getResponse.headers.get("Content-Type"));
+    expect(headResponse.headers.get("Cache-Control")).toBe(
+      getResponse.headers.get("Cache-Control"),
+    );
+    expect(headResponse.headers.get("ETag")).toBe(getResponse.headers.get("ETag"));
+    expect((await headResponse.arrayBuffer()).byteLength).toBe(0);
+  });
+
   it("returns 404 for missing public media objects", async () => {
     const response = await harness.fetch("/api/site/media/site/images/missing.png");
 
@@ -193,6 +216,17 @@ describe("site media worker routes", () => {
     expect((await response.json()) as { error: string }).toEqual({
       error: "Media object not found.",
     });
+  });
+
+  it("returns HEAD missing-media headers without a response body", async () => {
+    const getResponse = await harness.fetch("/api/site/media/site/images/missing.png");
+    const headResponse = await harness.fetch("/api/site/media/site/images/missing.png", {
+      method: "HEAD",
+    });
+
+    expect(headResponse.status).toBe(getResponse.status);
+    expect(headResponse.headers.get("Content-Type")).toBe(getResponse.headers.get("Content-Type"));
+    expect(await headResponse.text()).toBe("");
   });
 });
 

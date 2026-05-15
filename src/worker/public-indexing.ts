@@ -4,6 +4,7 @@ import {
   renderPublicRobotsTxt,
 } from "../site/public-indexing.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
+import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
 import { shouldHandlePublishedSiteIndexingResource, workerRuntimeProfileInput } from "./routing.ts";
 import {
@@ -26,8 +27,18 @@ export async function handlePublishedSiteIndexingRequest(
     return undefined;
   }
 
-  const url = new URL(request.url);
+  const getRequest = getEquivalentRequestForHead(request);
+  const url = new URL(getRequest.url);
+  const response = await renderPublishedSiteIndexingResponse(getRequest, env, url);
 
+  return responseWithoutBodyForHead(request, response);
+}
+
+async function renderPublishedSiteIndexingResponse(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response> {
   if (url.pathname === "/robots.txt") {
     return textResponse(renderPublicRobotsTxt(url.origin), "text/plain; charset=utf-8");
   }

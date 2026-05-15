@@ -117,6 +117,23 @@ Sitemap: http://example.com/sitemap.xml
     expect(body).not.toContain("<loc>http://example.com/site</loc>");
     expect(body).not.toContain("undated-draft");
   });
+
+  it("returns HEAD indexing headers without response bodies", async () => {
+    const robotsGet = await harness.fetch("/robots.txt");
+    const robotsHead = await harness.fetch("/robots.txt", { method: "HEAD" });
+    const sitemapGet = await harness.fetch("/sitemap.xml");
+    const sitemapHead = await harness.fetch("/sitemap.xml", { method: "HEAD" });
+
+    expect(robotsHead.status).toBe(robotsGet.status);
+    expect(robotsHead.headers.get("Content-Type")).toBe(robotsGet.headers.get("Content-Type"));
+    expect(robotsHead.headers.get("Cache-Control")).toBe(robotsGet.headers.get("Cache-Control"));
+    expect(await robotsHead.text()).toBe("");
+
+    expect(sitemapHead.status).toBe(sitemapGet.status);
+    expect(sitemapHead.headers.get("Content-Type")).toBe(sitemapGet.headers.get("Content-Type"));
+    expect(sitemapHead.headers.get("Cache-Control")).toBe(sitemapGet.headers.get("Cache-Control"));
+    expect(await sitemapHead.text()).toBe("");
+  });
 });
 
 async function resetSchemaApp(schemaKey: SchemaKey) {

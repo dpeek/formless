@@ -32,7 +32,7 @@ export function shouldHandlePublishedSiteDocument(
   request: Request,
   input: WorkerRuntimeProfileInput = {},
 ): boolean {
-  if (request.method !== "GET") {
+  if (!isReadRequestMethod(request.method)) {
     return false;
   }
 
@@ -59,7 +59,7 @@ export function shouldHandlePublishedSiteIndexingResource(
   request: Request,
   input: WorkerRuntimeProfileInput = {},
 ): boolean {
-  if (request.method !== "GET") {
+  if (!isReadRequestMethod(request.method)) {
     return false;
   }
 
@@ -95,7 +95,7 @@ export function publishedSiteRedirectForRequest(
   request: Request,
   input: WorkerRuntimeProfileInput = {},
 ): PublishedSiteRedirect | undefined {
-  if (request.method !== "GET") {
+  if (!isReadRequestMethod(request.method)) {
     return undefined;
   }
 
@@ -220,6 +220,10 @@ function acceptsHtml(acceptHeader: string | null): boolean {
   return (
     acceptHeader === null || acceptHeader.includes("text/html") || acceptHeader.includes("*/*")
   );
+}
+
+function isReadRequestMethod(method: string): boolean {
+  return method === "GET" || method === "HEAD";
 }
 
 function isWorkersDevHost(hostname: string): boolean {

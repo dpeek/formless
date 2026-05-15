@@ -10,6 +10,7 @@ import {
   type PublicDocumentMetadata,
 } from "../site/public-document-metadata.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
+import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
 import { shouldHandlePublishedSiteDocument, workerRuntimeProfileInput } from "./routing.ts";
 import {
@@ -99,7 +100,9 @@ export async function handlePublishedSiteDocumentRequest(
     return undefined;
   }
 
-  return renderPublishedSiteDocument(request, env);
+  const response = await renderPublishedSiteDocument(getEquivalentRequestForHead(request), env);
+
+  return responseWithoutBodyForHead(request, response);
 }
 
 async function renderPublishedSiteDocument(request: Request, env: Env): Promise<Response> {

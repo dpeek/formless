@@ -28,6 +28,15 @@ describe("Worker document routing", () => {
         profile: "publishedSite",
       }),
     ).toBe(true);
+    expect(
+      shouldHandlePublishedSiteDocument(
+        new Request("http://example.com/projects", {
+          headers: { Accept: "text/html" },
+          method: "HEAD",
+        }),
+        { profile: "publishedSite" },
+      ),
+    ).toBe(true);
     expect(shouldHandlePublishedSiteDocument(documentRequest("http://example.com/"))).toBe(false);
     expect(
       shouldHandlePublishedSiteDocument(documentRequest("http://published-site.example.com/"), {
@@ -136,7 +145,7 @@ describe("Worker document routing", () => {
         new Request("http://example.com/sitemap.xml", { method: "HEAD" }),
         { profile: "publishedSite" },
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldDeferToStaticAssets(new Request("http://example.com/sitemap.xml"), {
         profile: "publishedSite",
@@ -268,9 +277,18 @@ describe("Worker document routing", () => {
         profile: "publishedSite",
       }),
     ).toEqual({ location: "/projects", status: 308 });
+    expect(
+      publishedSiteRedirectForRequest(
+        new Request("http://example.com/pages/home", {
+          headers: { Accept: "text/html" },
+          method: "HEAD",
+        }),
+        { profile: "publishedSite" },
+      ),
+    ).toEqual({ location: "/", status: 308 });
   });
 
-  it("does not redirect outside the published profile or for API, asset, or non-GET requests", () => {
+  it("does not redirect outside the published profile or for API, asset, or mutating requests", () => {
     expect(publishedSiteRedirectForRequest(documentRequest("http://example.com/pages/home"))).toBe(
       undefined,
     );
