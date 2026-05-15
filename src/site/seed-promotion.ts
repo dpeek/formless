@@ -1,4 +1,4 @@
-import { isValidStoredFieldValue } from "../shared/field-types.ts";
+import { validateAuthorityFieldValue } from "../shared/field-types.ts";
 import { parseStoreSnapshot, type StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema, EntitySchema } from "../shared/schema.ts";
 
@@ -107,7 +107,9 @@ function validateRecordFields(
   for (const [fieldName, field] of Object.entries(entity.fields)) {
     const value = record.values[fieldName];
 
-    if (!isValidStoredFieldValue(value, field)) {
+    try {
+      validateAuthorityFieldValue(fieldName, field, value, value !== undefined);
+    } catch {
       throw new Error(`${context} has invalid field "${record.entity}.${fieldName}".`);
     }
 

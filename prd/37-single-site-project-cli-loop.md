@@ -1,7 +1,7 @@
 # PRD 37: Single Site project and CLI loop
 
 Status: ready
-Current chunk: SSP-03
+Current chunk: SSP-04
 Last updated: 2026-05-15
 
 Start after PRD 31, PRD 34, PRD 35, and PRD 36 shipped behavior is stable on the active branch.
@@ -398,6 +398,8 @@ Possible changed files:
 | SSP-D14 | Allow a local admin publish action only after CLI publish is stable. | Browser-only admin cannot safely own Cloudflare secrets.                                  | Existing `FORMLESS_ADMIN_TOKEN` admin guard behavior |
 | SSP-D15 | Prove the flow with one real migrated Site project.                  | The first target is a specific personal website, and migration will expose product gaps.  | User direction 2026-05-15                            |
 | SSP-D16 | Use `siteAuthoring` as the local single-Site runtime profile kind.   | It keeps the profile explicit while reusing generated app chrome for `/admin`.            | `src/app/runtime-profile.ts`                         |
+| SSP-D17 | Keep project format v1 fixed to Site records and media paths.        | The first project format should be predictable before custom schema or path support.      | `src/site/project-config.ts`                         |
+| SSP-D18 | Parse project records against the package-owned Site schema.         | User project records must stay compatible with the shipped Site runtime and publish path. | `src/site/project-source.ts`                         |
 
 ### Deep Modules
 
@@ -437,8 +439,8 @@ Possible changed files:
 | ------ | ------- | ---------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | SSP-01 | shipped | none       | PRD                                     | PRD captures scope, decisions, chunks, blockers, and promote notes.                                              |
 | SSP-02 | shipped | SSP-01     | runtime profile, app routes, worker     | Site authoring profile mounts `/` preview and `/admin` generated admin with no multi-app shell.                  |
-| SSP-03 | ready   | SSP-02     | project source/config modules, tests    | Project records, media, and config parse/write deterministically and validate against package-owned Site schema. |
-| SSP-04 | pending | SSP-03     | CLI init/dev/save, package entry, tests | `npx formless init`, `dev`, and `save` work against a Site project without repo-specific paths.                  |
+| SSP-03 | shipped | SSP-02     | project source/config modules, tests    | Project records, media, and config parse/write deterministically and validate against package-owned Site schema. |
+| SSP-04 | ready   | SSP-03     | CLI init/dev/save, package entry, tests | `npx formless init`, `dev`, and `save` work against a Site project without repo-specific paths.                  |
 | SSP-05 | pending | SSP-04     | CLI deploy setup/publish, publish tests | `npx formless publish` deploys code, media, and records from project config without manual env toggles.          |
 | SSP-06 | pending | SSP-05     | local admin publish action, tests       | Local admin can trigger the configured publish flow only through the local CLI broker.                           |
 | SSP-07 | pending | SSP-05     | migration project, smoke notes, PRD     | Brother-site migration proves init/dev/save/publish dry-run with real content and records follow Site schema.    |
@@ -497,12 +499,15 @@ Possible changed files:
 - 2026-05-15: SSP-02 route/link tests cover authoring top-level Site links and live preview sync behavior while keeping `/api/site/*` unchanged.
 - 2026-05-15: SSP-02 `devstate check` reported checks ok, web ready at `https://37-single-site-project-cli-loop.formless.local`, and watcher tests passing.
 - 2026-05-15: SSP-02 browser smoke opened `https://37-single-site-project-cli-loop.formless.local/pages/home` and `/site`; both rendered and `bun browser --session ssp-02 errors` returned no page errors. Direct `site-authoring.*.formless.local` smoke was not possible because the hostname did not resolve in this devstate environment.
+- 2026-05-15: SSP-03 shipped `src/site/project-config.ts` and `src/site/project-source.ts`. Config parsing fixes project format v1 to Site, `site.records.json`, and `media`; rejects checked-in secret fields; and formats deterministically. Source parsing validates records against the package-owned Site schema, omits tombstones from snapshot promotion, formats deterministic records, and maps same-origin Site media to project `media/` paths.
+- 2026-05-15: SSP-03 tests added `src/site/project-config.test.ts` and `src/site/project-source.test.ts`. `devstate check` reported checks ok and watcher tests passing. Requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this devstate environment, so `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence.
 
 ## Status Notes
 
 - SSP-01 shipped 2026-05-15.
 - SSP-02 shipped 2026-05-15.
-- Current chunk: SSP-03.
-- Current blocker: package boundary and project-local dev entrypoint need design during SSP-03/SSP-04.
+- SSP-03 shipped 2026-05-15.
+- Current chunk: SSP-04.
+- Current blocker: package boundary and project-local dev entrypoint need design during SSP-04.
 - Decision: the first user-facing product path is Site-only, even though the internal runtime remains schema-keyed.
 - Decision: CLI publish is the first one-command publish path; admin publish follows only through a local CLI broker.
