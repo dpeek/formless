@@ -23,7 +23,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
-} from "@formless/ui/sidebar";
+} from "@dpeek/formless-ui/sidebar";
 import { GeneratedCreateDialog } from "./app/generated/create.tsx";
 import { SchemaAppProvider } from "./app/generated/schema-app-context.tsx";
 import {

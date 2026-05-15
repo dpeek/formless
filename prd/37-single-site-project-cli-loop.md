@@ -451,6 +451,7 @@ Possible changed files:
 | SSP-05 | shipped | SSP-04     | CLI deploy setup/publish, publish tests | `npx formless publish` deploys code, media, and records from project config without manual env toggles.          |
 | SSP-06 | shipped | SSP-05     | local admin publish action, tests       | Local admin can trigger the configured publish flow only through the local CLI broker.                           |
 | SSP-07 | shipped | SSP-05     | migration project, smoke notes, PRD     | Brother-site migration proves init/dev/save/publish dry-run with real content and records follow Site schema.    |
+| SSP-08 | shipped | SSP-07     | package metadata, CLI bin, package docs | `@dpeek/formless` and `@dpeek/formless-ui` are public npm packages with dry-run packable publish surfaces.       |
 
 ## Out of Scope
 
@@ -482,7 +483,7 @@ Possible changed files:
 
 ## Blockers
 
-- Package boundary is first-slice only: the package bin points at a Bun TypeScript entrypoint, so npm/Node packaging still needs hardening before external release.
+- npm publish waits for local npm authentication; `npm whoami` returned E401 on 2026-05-15.
 
 ## Promote after ship
 
@@ -528,6 +529,12 @@ Possible changed files:
 - 2026-05-15: SSP-07 publish dry-run ran `bun run formless -- publish --project tmp/ssp-07-brother-site --dry-run --yes`; it validated 92 Site records, found 7 referenced source media files, targeted `https://ssp-07.example`, and did not mutate code or live data.
 - 2026-05-15: SSP-07 `devstate check` reported checks ok, web ready at `https://37-single-site-project-cli-loop.formless.local`, formatting passed, lint/type checks found no issues in 243 files, and watcher tests reported 6 files with 183 tests passing.
 - 2026-05-15: SSP-07 final evidence read found `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` absent; `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence.
+- 2026-05-15: npm availability checks returned E404 for `@dpeek/formless`, `@dpeek/formless-ui`, and `@dpeek/ui`; package metadata uses `@dpeek/formless` and `@dpeek/formless-ui` for the first publish.
+- 2026-05-15: SSP-08 replaced the package bin with built `bin/formless.js`, added `scripts/build-package.ts`, and kept the source CLI entrypoint as `bun run scripts/formless.ts` for repo work.
+- 2026-05-15: SSP-08 made the CLI use Bun package commands when launched by Bun and npm package commands when launched by `npx`.
+- 2026-05-15: SSP-08 `node bin/formless.js --help` printed the Formless CLI usage.
+- 2026-05-15: SSP-08 `npm pack --dry-run --json` succeeded for `lib/ui` as `@dpeek/formless-ui@0.0.1` and for the repo root as `@dpeek/formless@0.0.1`.
+- 2026-05-15: SSP-08 `npm publish --dry-run --access public` succeeded for both packages after npm normalized `bin.formless` to `bin/formless.js`.
 
 ## Status Notes
 
@@ -538,8 +545,9 @@ Possible changed files:
 - SSP-05 shipped 2026-05-15.
 - SSP-06 shipped 2026-05-15.
 - SSP-07 shipped 2026-05-15.
+- SSP-08 shipped 2026-05-15.
 - Current chunk: none.
-- Current blocker: package boundary still needs npm/Node hardening before external release.
+- Current blocker: npm publish needs an authenticated npm session.
 - Decision: the first user-facing product path is Site-only, even though the internal runtime remains schema-keyed.
 - Decision: CLI publish is the first one-command publish path; admin publish follows only through a local CLI broker and publishes current local authority state after saving it to project source.
 - Decision: private migrated content stays outside committed repo history unless the user explicitly approves committing it.

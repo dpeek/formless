@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
-import { Button } from "@formless/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@formless/ui/dialog";
+import { Button } from "@dpeek/formless-ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@dpeek/formless-ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@formless/ui/dropdown-menu";
+} from "@dpeek/formless-ui/dropdown-menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";

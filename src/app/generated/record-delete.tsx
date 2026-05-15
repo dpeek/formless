@@ -9,8 +9,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@formless/ui/alert-dialog";
-import { Button } from "@formless/ui/button";
+} from "@dpeek/formless-ui/alert-dialog";
+import { Button } from "@dpeek/formless-ui/button";
 import { useRecord } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitDeleteMutation } from "../../client/sync.ts";

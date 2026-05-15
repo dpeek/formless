@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./app.tsx";
-import "@formless/ui/global.css";
+import "@dpeek/formless-ui/global.css";
 import "./style.css";
 
 const app = document.getElementById("app");

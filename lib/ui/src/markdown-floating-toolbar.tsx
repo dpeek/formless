@@ -10,11 +10,17 @@ import {
 } from "@platejs/floating";
 import { unwrapLink, upsertLink } from "@platejs/link";
 import { toggleList } from "@platejs/list";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@formless/ui/select";
-import { Separator } from "@formless/ui/separator";
-import { TextTooltip } from "@formless/ui/tooltip";
-import { Toggle } from "@formless/ui/toggle";
-import { cn } from "@formless/ui/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@dpeek/formless-ui/select";
+import { Separator } from "@dpeek/formless-ui/separator";
+import { TextTooltip } from "@dpeek/formless-ui/tooltip";
+import { Toggle } from "@dpeek/formless-ui/toggle";
+import { cn } from "@dpeek/formless-ui/utils";
 import {
   BoldIcon,
   Code2Icon,

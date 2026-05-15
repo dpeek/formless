@@ -4,9 +4,9 @@ import {
   FormattedNumberInput,
   type FormattedNumberInputDecodeResult,
   type FormattedNumberInputValue,
-} from "@formless/ui/number-input";
-import { NativeSelect, NativeSelectOption } from "@formless/ui/native-select";
-import { cn } from "@formless/ui/utils";
+} from "@dpeek/formless-ui/number-input";
+import { NativeSelect, NativeSelectOption } from "@dpeek/formless-ui/native-select";
+import { cn } from "@dpeek/formless-ui/utils";
 
 export type ValueUnitInputOption = {
   value: string;

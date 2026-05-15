@@ -1,4 +1,4 @@
-import { Button } from "@formless/ui/button";
+import { Button } from "@dpeek/formless-ui/button";
 import { Loader2Icon, RocketIcon } from "lucide-react";
 import { useState } from "react";
 

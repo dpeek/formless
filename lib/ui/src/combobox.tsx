@@ -3,14 +3,14 @@
 import * as React from "react";
 import { Combobox as ComboboxPrimitive } from "@base-ui/react";
 
-import { cn } from "@formless/ui/utils";
-import { Button } from "@formless/ui/button";
+import { cn } from "@dpeek/formless-ui/utils";
+import { Button } from "@dpeek/formless-ui/button";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "@formless/ui/input-group";
+} from "@dpeek/formless-ui/input-group";
 import { ChevronDownIcon, XIcon, CheckIcon } from "lucide-react";
 
 const Combobox = ComboboxPrimitive.Root;

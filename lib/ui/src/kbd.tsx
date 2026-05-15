@@ -1,4 +1,4 @@
-import { cn } from "@formless/ui/utils";
+import { cn } from "@dpeek/formless-ui/utils";
 
 function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
   return (

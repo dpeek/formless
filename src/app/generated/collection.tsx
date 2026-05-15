@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
-import { Badge } from "@formless/ui/badge";
-import { Button } from "@formless/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@formless/ui/tabs";
+import { Badge } from "@dpeek/formless-ui/badge";
+import { Button } from "@dpeek/formless-ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@dpeek/formless-ui/tabs";
 import {
   useAggregateValueMatchingQuery,
   useEntityRecordCountMatchingQuery,

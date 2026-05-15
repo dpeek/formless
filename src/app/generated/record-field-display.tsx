@@ -1,6 +1,6 @@
-import { isHexColor, toPickerHexColor } from "@formless/ui/color-utils";
-import { MarkdownRenderer } from "@formless/ui/markdown";
-import { SvgIcon } from "@formless/ui/svg-icon";
+import { isHexColor, toPickerHexColor } from "@dpeek/formless-ui/color-utils";
+import { MarkdownRenderer } from "@dpeek/formless-ui/markdown";
+import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
 import type {
   FieldTableColumnConfig,

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { MarkdownRenderer } from "@formless/ui/markdown-renderer";
-import { SvgIcon } from "@formless/ui/svg-icon";
+import { MarkdownRenderer } from "@dpeek/formless-ui/markdown-renderer";
+import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import {
   isExternalSiteHref,
   profileAwareSiteHref,

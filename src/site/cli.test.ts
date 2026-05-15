@@ -225,8 +225,8 @@ describe("Formless Site CLI", () => {
       secretUploaded: true,
     });
     expect(commands.map((command) => [command.command, ...command.args].join(" "))).toEqual([
-      "bun x wrangler r2 bucket create brother-site-media",
-      `bun x wrangler secret bulk ${path.join(projectRoot, ".formless/deploy.env")} --name brother-site`,
+      "npm exec -- wrangler r2 bucket create brother-site-media",
+      `npm exec -- wrangler secret bulk ${path.join(projectRoot, ".formless/deploy.env")} --name brother-site`,
     ]);
     expect(commands.every((command) => command.cwd === "/package")).toBe(true);
     expect(commands.every((command) => command.env?.CLOUDFLARE_ACCOUNT_ID === "account-123")).toBe(
@@ -296,8 +296,8 @@ describe("Formless Site CLI", () => {
     );
 
     expect(commands.map((command) => [command.command, ...command.args].join(" "))).toEqual([
-      "bun run build",
-      "bun x wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
+      "npm run build",
+      "npm exec -- wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
     ]);
     expect(commands[0]?.env).toMatchObject({
       FORMLESS_RUNTIME_PROFILE: "publishedSite",
@@ -422,8 +422,8 @@ describe("Formless Site CLI", () => {
       Buffer.from([7, 8, 9]),
     );
     expect(commands.map((command) => [command.command, ...command.args].join(" "))).toEqual([
-      "bun run build",
-      "bun x wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
+      "npm run build",
+      "npm exec -- wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
     ]);
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:5173/api/site/snapshot",

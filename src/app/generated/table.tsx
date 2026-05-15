@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
-import { Button } from "@formless/ui/button";
+import { Button } from "@dpeek/formless-ui/button";
 import {
   Dialog,
   DialogClose,
@@ -10,7 +10,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@formless/ui/dialog";
+} from "@dpeek/formless-ui/dialog";
 import {
   Table,
   TableBody,
@@ -19,7 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@formless/ui/table";
+} from "@dpeek/formless-ui/table";
 import {
   useAggregateValueMatchingQuery,
   useEntityRecordIdsMatchingQuery,

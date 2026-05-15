@@ -1,7 +1,7 @@
 import { NavigationMenu as NavigationMenuPrimitive } from "@base-ui/react/navigation-menu";
 import { cva } from "class-variance-authority";
 
-import { cn } from "@formless/ui/utils";
+import { cn } from "@dpeek/formless-ui/utils";
 import { ChevronDownIcon } from "lucide-react";
 
 function NavigationMenu({

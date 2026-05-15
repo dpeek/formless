@@ -1,4 +1,5 @@
 node_modules
+bin
 .wrangler
 .worker-test-*
 .storage-harness-*

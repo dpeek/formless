@@ -3,8 +3,8 @@
 import * as React from "react";
 import { DayPicker, getDefaultClassNames, type DayButton, type Locale } from "react-day-picker";
 
-import { cn } from "@formless/ui/utils";
-import { Button, buttonVariants } from "@formless/ui/button";
+import { cn } from "@dpeek/formless-ui/utils";
+import { Button, buttonVariants } from "@dpeek/formless-ui/button";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react";
 
 function Calendar({

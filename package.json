@@ -1,14 +1,29 @@
 {
-  "name": "formless",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@dpeek/formless",
+  "version": "0.1.0",
   "bin": {
-    "formless": "./scripts/formless.ts"
+    "formless": "bin/formless.js"
   },
   "workspaces": [
     "lib/*"
   ],
+  "files": [
+    "bin",
+    "icons",
+    "index.html",
+    "public",
+    "README.md",
+    "schema",
+    "scripts",
+    "src",
+    "tsconfig.json",
+    "vite.config.ts",
+    "wrangler.jsonc"
+  ],
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "ralph": "bun run scripts/ralph-loop.ts",
     "browser": "agent-browser",
@@ -16,6 +31,8 @@
     "test": "vp test --reporter=agent",
     "dev": "vp dev",
     "build": "vp build",
+    "package:build": "bun run scripts/build-package.ts",
+    "prepack": "bun run package:build",
     "preview": "vp preview",
     "formless": "bun run scripts/formless.ts",
     "site:pull-seed": "bun run scripts/site-pull-seed.ts",
@@ -23,30 +40,30 @@
     "deploy": "vp build && wrangler deploy"
   },
   "dependencies": {
+    "@cloudflare/vite-plugin": "^1.33.2",
     "@dnd-kit/react": "^0.4.0",
+    "@dpeek/formless-ui": "0.0.1",
+    "@tailwindcss/vite": "^4.2.4",
+    "@vitejs/plugin-react": "^6.0.1",
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "wouter": "^3.9.0"
+    "tailwindcss": "^4.2.4",
+    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+    "vite-plus": "latest",
+    "wouter": "^3.9.0",
+    "wrangler": "^4.85.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.33.2",
     "@cloudflare/workers-types": "^4.20260426.1",
-    "@formless/ui": "workspace:*",
-    "@tailwindcss/vite": "^4.2.4",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
     "devstate": "^0.1.6",
     "esbuild": "^0.28.0",
     "fake-indexeddb": "^6.2.5",
     "miniflare": "^4.20260424.0",
-    "tailwindcss": "^4.2.4",
-    "typescript": "~6.0.2",
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vite-plus": "latest",
-    "wrangler": "^4.85.0"
+    "typescript": "~6.0.2"
   },
   "overrides": {
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",

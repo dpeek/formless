@@ -3,10 +3,10 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 
-import { cn } from "@formless/ui/utils";
-import { Button } from "@formless/ui/button";
-import { Input } from "@formless/ui/input";
-import { Textarea } from "@formless/ui/textarea";
+import { cn } from "@dpeek/formless-ui/utils";
+import { Button } from "@dpeek/formless-ui/button";
+import { Input } from "@dpeek/formless-ui/input";
+import { Textarea } from "@dpeek/formless-ui/textarea";
 
 function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (

@@ -9,8 +9,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@formless/ui/alert-dialog";
-import { Button } from "@formless/ui/button";
+} from "@dpeek/formless-ui/alert-dialog";
+import { Button } from "@dpeek/formless-ui/button";
 import { exportStoreSnapshot, resetSeedData, restoreStoreSnapshot } from "../client/sync.ts";
 import { setSyncStatus } from "../client/sync-status.ts";
 import type { BootstrapResponse, StoreSnapshot } from "../shared/protocol.ts";

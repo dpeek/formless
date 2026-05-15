@@ -7,7 +7,7 @@ import {
   MarkdownRenderer,
   SvgIcon,
   ValueUnitInput,
-} from "@formless/ui";
+} from "@dpeek/formless-ui";
 
 describe("web ui root export", () => {
   it("re-exports browser primitives used by shell packages", () => {

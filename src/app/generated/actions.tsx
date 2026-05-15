@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Badge } from "@formless/ui/badge";
-import { Button } from "@formless/ui/button";
+import { Badge } from "@dpeek/formless-ui/badge";
+import { Button } from "@dpeek/formless-ui/button";
 import { useEntityRecordCountMatchingQuery } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";

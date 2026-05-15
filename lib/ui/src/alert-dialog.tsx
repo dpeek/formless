@@ -3,8 +3,8 @@
 import * as React from "react";
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 
-import { cn } from "@formless/ui/utils";
-import { Button } from "@formless/ui/button";
+import { cn } from "@dpeek/formless-ui/utils";
+import { Button } from "@dpeek/formless-ui/button";
 
 function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;

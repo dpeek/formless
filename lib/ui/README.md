@@ -1,6 +1,6 @@
-# Graphle Web UI
+# Formless UI
 
-`@formless/ui` owns the shared browser primitives and editor chrome
+`@dpeek/formless-ui` owns the shared browser primitives and editor chrome
 used by browser shells and product-specific web surfaces.
 
 ## Package Docs
@@ -17,7 +17,7 @@ used by browser shells and product-specific web surfaces.
 - browser-only building blocks that do not depend on graph runtime types
 
 Markdown editing is rich and Plate-backed. SVG source editing remains plain
-text through `SourceEditor` in `@formless/ui/source-preview`; this
+text through `SourceEditor` in `@dpeek/formless-ui/source-preview`; this
 package does not depend on Monaco.
 
 ## What It Does Not Own
@@ -30,6 +30,6 @@ package does not depend on Monaco.
 
 ## Validation
 
-Run `turbo check --filter=@formless/ui` from the repo root, or `bun run check` in
+Run `turbo check --filter=@dpeek/formless-ui` from the repo root, or `bun run check` in
 this package, for the package-local lint/format/type/test pass. Run
 `turbo check` from the repo root before landing repo-wide changes.

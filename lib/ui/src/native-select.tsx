@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { cn } from "@formless/ui/utils";
+import { cn } from "@dpeek/formless-ui/utils";
 import { ChevronDownIcon } from "lucide-react";
 
 type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> & {

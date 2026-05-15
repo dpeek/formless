@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { SvgIcon } from "@formless/ui/svg-icon";
+import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("SvgIcon", () => {

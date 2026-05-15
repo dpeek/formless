@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@formless/ui/button";
-import { cn } from "@formless/ui/utils";
+import { Button } from "@dpeek/formless-ui/button";
+import { cn } from "@dpeek/formless-ui/utils";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {

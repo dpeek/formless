@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import { cn } from "@formless/ui/utils";
-import { Button } from "@formless/ui/button";
+import { cn } from "@dpeek/formless-ui/utils";
+import { Button } from "@dpeek/formless-ui/button";
 import { ChevronLeftIcon, ChevronRightIcon, MoreHorizontalIcon } from "lucide-react";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {

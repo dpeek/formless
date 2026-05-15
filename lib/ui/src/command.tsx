@@ -3,15 +3,15 @@
 import * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 
-import { cn } from "@formless/ui/utils";
+import { cn } from "@dpeek/formless-ui/utils";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@formless/ui/dialog";
-import { InputGroup, InputGroupAddon } from "@formless/ui/input-group";
+} from "@dpeek/formless-ui/dialog";
+import { InputGroup, InputGroupAddon } from "@dpeek/formless-ui/input-group";
 import { SearchIcon, CheckIcon } from "lucide-react";
 
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { cn } from "@formless/ui/utils";
+import { cn } from "@dpeek/formless-ui/utils";
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (

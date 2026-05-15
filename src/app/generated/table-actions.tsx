@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@formless/ui/button";
+import { Button } from "@dpeek/formless-ui/button";
 import {
   Dialog,
   DialogClose,
@@ -8,14 +8,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@formless/ui/dialog";
+} from "@dpeek/formless-ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@formless/ui/dropdown-menu";
+} from "@dpeek/formless-ui/dropdown-menu";
 import { useRecord, useRecordField } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import type {

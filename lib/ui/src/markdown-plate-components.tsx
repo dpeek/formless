@@ -1,4 +1,4 @@
-import { cn } from "@formless/ui/utils";
+import { cn } from "@dpeek/formless-ui/utils";
 import { createElement, type ComponentPropsWithoutRef, type CSSProperties } from "react";
 import type { NodeComponents } from "platejs";
 import {

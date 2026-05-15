@@ -5,14 +5,20 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 
-import { useIsMobile } from "@formless/ui/use-mobile";
-import { cn } from "@formless/ui/utils";
-import { Button } from "@formless/ui/button";
-import { Input } from "@formless/ui/input";
-import { Separator } from "@formless/ui/separator";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@formless/ui/sheet";
-import { Skeleton } from "@formless/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@formless/ui/tooltip";
+import { useIsMobile } from "@dpeek/formless-ui/use-mobile";
+import { cn } from "@dpeek/formless-ui/utils";
+import { Button } from "@dpeek/formless-ui/button";
+import { Input } from "@dpeek/formless-ui/input";
+import { Separator } from "@dpeek/formless-ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@dpeek/formless-ui/sheet";
+import { Skeleton } from "@dpeek/formless-ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@dpeek/formless-ui/tooltip";
 import { PanelLeftIcon } from "lucide-react";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";

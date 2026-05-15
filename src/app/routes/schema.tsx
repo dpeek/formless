@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button } from "@formless/ui/button";
+import { Button } from "@dpeek/formless-ui/button";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,

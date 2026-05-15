@@ -1,5 +1,5 @@
-import { Button } from "@formless/ui/button";
-import { cn } from "@formless/ui/utils";
+import { Button } from "@dpeek/formless-ui/button";
+import { cn } from "@dpeek/formless-ui/utils";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
 import diff from "highlight.js/lib/languages/diff";

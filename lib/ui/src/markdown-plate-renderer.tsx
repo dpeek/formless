@@ -1,4 +1,4 @@
-import { cn } from "@formless/ui/utils";
+import { cn } from "@dpeek/formless-ui/utils";
 import { useMemo } from "react";
 import { createStaticEditor, PlateStatic } from "platejs/static";
 

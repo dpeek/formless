@@ -1,6 +1,6 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, existsSync } from "node:fs";
 import { access, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
@@ -122,6 +122,12 @@ export type SiteProjectSource = {
 
 type ProjectMediaFile = SiteProjectMediaAsset & {
   bytes: Uint8Array<ArrayBuffer>;
+};
+
+type PackageCommand = {
+  args: string[];
+  command: string;
+  label: string;
 };
 
 type CompleteSiteProjectDeployConfig = {
@@ -368,25 +374,29 @@ export async function setupSiteProjectDeploy(
   const commandEnv = cloudflareCommandEnv(dependencies.env, deploy.accountId);
 
   if (input.createBucket) {
-    await dependencies.runCommand(
-      "bun",
-      ["x", "wrangler", "r2", "bucket", "create", deploy.mediaBucket],
-      {
-        cwd: dependencies.packageRoot,
-        env: commandEnv,
-      },
+    const createBucketCommand = packageExecCommand(
+      "wrangler",
+      ["r2", "bucket", "create", deploy.mediaBucket],
+      dependencies.env,
     );
+
+    await dependencies.runCommand(createBucketCommand.command, createBucketCommand.args, {
+      cwd: dependencies.packageRoot,
+      env: commandEnv,
+    });
   }
 
   if (input.uploadSecret ?? true) {
-    await dependencies.runCommand(
-      "bun",
-      ["x", "wrangler", "secret", "bulk", envPath, "--name", deploy.workerName],
-      {
-        cwd: dependencies.packageRoot,
-        env: commandEnv,
-      },
+    const uploadSecretCommand = packageExecCommand(
+      "wrangler",
+      ["secret", "bulk", envPath, "--name", deploy.workerName],
+      dependencies.env,
     );
+
+    await dependencies.runCommand(uploadSecretCommand.command, uploadSecretCommand.args, {
+      cwd: dependencies.packageRoot,
+      env: commandEnv,
+    });
   }
 
   return {
@@ -523,7 +533,8 @@ async function runSiteProjectDev(
         dependencies,
       )
     : null;
-  const child = dependencies.spawn("bun", ["run", "dev"], {
+  const devCommand = packageRunScriptCommand("dev", dependencies.env);
+  const child = dependencies.spawn(devCommand.command, devCommand.args, {
     cwd: dependencies.packageRoot,
     env: siteProjectDevEnv(dependencies.env, projectId, publishBroker ?? undefined),
     stdio: "pipe",
@@ -680,31 +691,72 @@ function siteProjectCodeDeployCommands(
   dependencies: Pick<FormlessCliDependencies, "env" | "packageRoot">,
 ): SitePublishCommand[] {
   const env = publishedSiteDeployEnv(dependencies.env, deploy.accountId);
+  const buildCommand = packageRunScriptCommand("build", dependencies.env);
+  const deployCommand = packageExecCommand(
+    "wrangler",
+    ["deploy", "--name", deploy.workerName, "--var", "FORMLESS_RUNTIME_PROFILE:publishedSite"],
+    dependencies.env,
+  );
 
   return [
     {
-      args: ["run", "build"],
-      command: "bun",
+      args: buildCommand.args,
+      command: buildCommand.command,
       cwd: dependencies.packageRoot,
       env,
-      label: "bun run build",
+      label: buildCommand.label,
     },
     {
-      args: [
-        "x",
-        "wrangler",
-        "deploy",
-        "--name",
-        deploy.workerName,
-        "--var",
-        "FORMLESS_RUNTIME_PROFILE:publishedSite",
-      ],
-      command: "bun",
+      args: deployCommand.args,
+      command: deployCommand.command,
       cwd: dependencies.packageRoot,
       env,
-      label: `bun x wrangler deploy --name ${deploy.workerName}`,
+      label: deployCommand.label,
     },
   ];
+}
+
+function packageRunScriptCommand(scriptName: string, env: NodeJS.ProcessEnv): PackageCommand {
+  if (packageCommandRunner(env) === "bun") {
+    return {
+      args: ["run", scriptName],
+      command: "bun",
+      label: `bun run ${scriptName}`,
+    };
+  }
+
+  return {
+    args: ["run", scriptName],
+    command: "npm",
+    label: `npm run ${scriptName}`,
+  };
+}
+
+function packageExecCommand(
+  executable: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): PackageCommand {
+  if (packageCommandRunner(env) === "bun") {
+    return {
+      args: ["x", executable, ...args],
+      command: "bun",
+      label: `bun x ${[executable, ...args].join(" ")}`,
+    };
+  }
+
+  return {
+    args: ["exec", "--", executable, ...args],
+    command: "npm",
+    label: `npm exec -- ${[executable, ...args].join(" ")}`,
+  };
+}
+
+function packageCommandRunner(env: NodeJS.ProcessEnv): "bun" | "npm" {
+  const userAgent = env.npm_config_user_agent ?? "";
+  const execPath = env.npm_execpath ?? "";
+
+  return userAgent.startsWith("bun/") || path.basename(execPath).startsWith("bun") ? "bun" : "npm";
 }
 
 function siteProjectPublishSmokePaths(records: StoredRecord[]): string[] {
@@ -1614,9 +1666,27 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     fetch,
     log: (message) => console.log(message),
     now: () => new Date().toISOString(),
-    packageRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
+    packageRoot: resolvePackageRoot(path.dirname(fileURLToPath(import.meta.url))),
     randomToken: () => randomBytes(32).toString("base64url"),
     runCommand: (command, args, options) => runCommandWithSpawn(spawn, command, args, options),
     spawn,
   };
+}
+
+function resolvePackageRoot(startDirectory: string): string {
+  let directory = path.resolve(startDirectory);
+
+  while (true) {
+    if (existsSync(path.join(directory, "package.json"))) {
+      return directory;
+    }
+
+    const parent = path.dirname(directory);
+
+    if (parent === directory) {
+      throw new Error(`Could not resolve Formless package root from ${startDirectory}.`);
+    }
+
+    directory = parent;
+  }
 }

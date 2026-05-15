@@ -1,6 +1,6 @@
 ---
 name: Formless UI Primitives
-description: "Browser primitive ownership, exports, and package boundary for @formless/ui."
+description: "Browser primitive ownership, exports, and package boundary for @dpeek/formless-ui."
 last_updated: 2026-04-20
 ---
 
@@ -14,7 +14,7 @@ last_updated: 2026-04-20
 
 ## Current Contract
 
-`@formless/ui` is the canonical package for reusable browser
+`@dpeek/formless-ui` is the canonical package for reusable browser
 presentation primitives. It owns controls, layout helpers, markdown rendering,
 theme CSS, and small browser utility hooks.
 
@@ -47,6 +47,6 @@ stable attributes such as `data-web-svg-source="textarea"` for tests and
 debugging. The package has no Monaco dependency or `./monaco` subpath.
 
 The package exports source-level component subpaths such as
-`@formless/ui/button`, `@formless/ui/badge`, and
-`@formless/ui/markdown`. The root export re-exports the same primitive
+`@dpeek/formless-ui/button`, `@dpeek/formless-ui/badge`, and
+`@dpeek/formless-ui/markdown`. The root export re-exports the same primitive
 surface for packages that prefer a single import.

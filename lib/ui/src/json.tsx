@@ -1,4 +1,4 @@
-import { Button, buttonVariants } from "@formless/ui/button";
+import { Button, buttonVariants } from "@dpeek/formless-ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,11 +6,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@formless/ui/dialog";
-import { ErrorBoundary } from "@formless/ui/error-boundary";
-import { Skeleton } from "@formless/ui/skeleton";
-import { TextTooltip } from "@formless/ui/tooltip";
-import { cn } from "@formless/ui/utils";
+} from "@dpeek/formless-ui/dialog";
+import { ErrorBoundary } from "@dpeek/formless-ui/error-boundary";
+import { Skeleton } from "@dpeek/formless-ui/skeleton";
+import { TextTooltip } from "@dpeek/formless-ui/tooltip";
+import { cn } from "@dpeek/formless-ui/utils";
 import { encode as encodeToon } from "@toon-format/toon";
 import { Braces, CopyIcon, DownloadIcon, LinkIcon, Maximize2, Minimize2 } from "lucide-react";
 import { Children, useCallback, useEffect, useMemo, useState } from "react";

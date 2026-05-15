@@ -7,7 +7,7 @@ import {
   sourcePreviewEditorFrameClassName,
   sourcePreviewPanelClassName,
   sourcePreviewTextareaClassName,
-} from "@formless/ui/source-preview";
+} from "@dpeek/formless-ui/source-preview";
 import { renderToStaticMarkup } from "react-dom/server";
 
 describe("SourcePreviewFieldEditor", () => {

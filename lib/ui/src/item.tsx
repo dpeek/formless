@@ -3,8 +3,8 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 
-import { cn } from "@formless/ui/utils";
-import { Separator } from "@formless/ui/separator";
+import { cn } from "@dpeek/formless-ui/utils";
+import { Separator } from "@dpeek/formless-ui/separator";
 
 function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
