@@ -1,990 +1,436 @@
 [
   {
-    "id": "rec_site_content_home",
+    "id": "rec_site_starter_page_home",
     "entity": "block",
     "values": {
       "type": "page",
       "label": "Home",
-      "body": "A concise personal site for current work, writing, and project notes.",
-      "href": "/",
-      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\" />\n    <polyline points=\"9 22 9 12 15 12 15 22\" />\n</svg>"
+      "href": "/"
     },
-    "createdAt": "2026-05-05T00:00:04.000Z"
+    "createdAt": "2026-05-15T00:00:01.000Z"
   },
   {
-    "id": "rec_site_content_blog",
+    "id": "rec_site_starter_page_about",
+    "entity": "block",
+    "values": {
+      "type": "page",
+      "label": "About",
+      "href": "/about"
+    },
+    "createdAt": "2026-05-15T00:00:02.000Z"
+  },
+  {
+    "id": "rec_site_starter_page_blog",
     "entity": "block",
     "values": {
       "type": "page",
       "label": "Blog",
-      "body": "Notes on product engineering",
-      "href": "/blog",
-      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z\" />\n    <path d=\"M12 9v4\" />\n    <path d=\"M12 17h0.01\" />\n</svg>"
+      "href": "/blog"
     },
-    "createdAt": "2026-05-05T00:00:05.000Z"
+    "createdAt": "2026-05-15T00:00:03.000Z"
   },
   {
-    "id": "rec_site_content_resume",
-    "entity": "block",
-    "values": {
-      "type": "page",
-      "label": "Resume",
-      "body": "A practical summary of roles, projects, and strengths.",
-      "href": "/resume",
-      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16\" />\n    <rect width=\"20\" height=\"14\" rx=\"2\" x=\"2\" y=\"6\" />\n</svg>"
-    },
-    "createdAt": "2026-05-05T00:00:06.000Z"
-  },
-  {
-    "id": "rec_site_content_projects",
+    "id": "rec_site_starter_page_projects",
     "entity": "block",
     "values": {
       "type": "page",
       "label": "Projects",
-      "body": "Current and recent product work",
-      "href": "/projects",
-      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18z\" />\n    <path d=\"M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2\" />\n    <path d=\"M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2\" />\n    <path d=\"M10 6h4\" />\n    <path d=\"M10 10h4\" />\n    <path d=\"M10 14h4\" />\n    <path d=\"M10 18h4\" />\n</svg>"
+      "href": "/projects"
     },
-    "createdAt": "2026-05-05T00:00:07.000Z"
+    "createdAt": "2026-05-15T00:00:04.000Z"
   },
   {
-    "id": "rec_site_content_project_estii",
+    "id": "rec_site_starter_page_resume",
     "entity": "block",
     "values": {
-      "type": "project",
-      "label": "Estii",
-      "body": "Estimation and pricing for service providers.",
-      "href": "https://estii.com",
-      "date": "2026-05-01"
+      "type": "page",
+      "label": "Resume",
+      "href": "/resume"
     },
-    "createdAt": "2026-05-05T00:00:08.000Z"
+    "createdAt": "2026-05-15T00:00:05.000Z"
   },
   {
-    "id": "rec_site_content_project_opensurf",
-    "entity": "block",
-    "values": {
-      "type": "project",
-      "label": "OpenSurf",
-      "body": "Framework for building reliable web agents.",
-      "href": "https://opensurf.ai",
-      "date": "2026-05-08"
-    },
-    "createdAt": "2026-05-05T00:00:09.000Z"
-  },
-  {
-    "id": "rec_site_content_project_formless",
-    "entity": "block",
-    "values": {
-      "type": "project",
-      "label": "Formless",
-      "body": "Schema-driven synchronised app runtime.",
-      "href": "https://github.com/dpeek/formless",
-      "date": "2026-05-03"
-    },
-    "createdAt": "2026-05-05T00:00:10.000Z"
-  },
-  {
-    "id": "rec_site_content_post_shipped_schema",
+    "id": "rec_site_starter_post",
     "entity": "block",
     "values": {
       "type": "post",
-      "label": "Agents are enablers",
-      "body": "A quick introduction to Formless: the schema-as-data runtime I built instead of updating my CV.",
-      "href": "/blog/agents-are-enablers",
-      "date": "2026-05-12"
+      "label": "Starter post",
+      "body": "A short starter post summary.",
+      "href": "/blog/starter-post",
+      "date": "2026-05-15"
     },
-    "createdAt": "2026-05-05T00:00:11.000Z"
+    "createdAt": "2026-05-15T00:00:06.000Z"
   },
   {
-    "id": "rec_site_content_post_draft_notes",
+    "id": "rec_site_starter_project",
     "entity": "block",
     "values": {
-      "type": "post",
-      "label": "The schema is the app",
-      "body": "What if your schema gave you a local-first, synchronising date store and CRUD UI for free? Low-code for coders.",
-      "href": "/blog/the-schema-is-the-app",
-      "date": "2026-05-13"
+      "type": "project",
+      "label": "Starter project",
+      "body": "A short neutral project summary.",
+      "date": "2026-05-15"
     },
-    "createdAt": "2026-05-05T00:00:12.000Z"
+    "createdAt": "2026-05-15T00:00:07.000Z"
   },
   {
-    "id": "rec_site_content_link_home",
+    "id": "rec_site_starter_link_home",
     "entity": "block",
     "values": {
       "type": "link",
-      "label": "David Peek",
-      "href": "/",
+      "label": "Home",
       "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_home"
+      "linkTargetBlock": "rec_site_starter_page_home"
     },
-    "createdAt": "2026-05-05T00:00:12.100Z"
+    "createdAt": "2026-05-15T00:00:08.000Z"
   },
   {
-    "id": "rec_site_content_link_blog",
+    "id": "rec_site_starter_link_about",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "About",
+      "linkTargetMode": "internal",
+      "linkTargetBlock": "rec_site_starter_page_about"
+    },
+    "createdAt": "2026-05-15T00:00:09.000Z"
+  },
+  {
+    "id": "rec_site_starter_link_blog",
     "entity": "block",
     "values": {
       "type": "link",
       "label": "Blog",
-      "href": "/blog",
       "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_blog"
+      "linkTargetBlock": "rec_site_starter_page_blog"
     },
-    "createdAt": "2026-05-05T00:00:12.200Z"
+    "createdAt": "2026-05-15T00:00:10.000Z"
   },
   {
-    "id": "rec_site_content_link_projects",
+    "id": "rec_site_starter_link_projects",
     "entity": "block",
     "values": {
       "type": "link",
       "label": "Projects",
-      "href": "/projects",
       "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_projects"
+      "linkTargetBlock": "rec_site_starter_page_projects"
     },
-    "createdAt": "2026-05-05T00:00:12.300Z"
+    "createdAt": "2026-05-15T00:00:11.000Z"
   },
   {
-    "id": "rec_site_content_link_resume",
+    "id": "rec_site_starter_link_resume",
     "entity": "block",
     "values": {
       "type": "link",
       "label": "Resume",
-      "href": "/resume",
       "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_resume"
+      "linkTargetBlock": "rec_site_starter_page_resume"
     },
-    "createdAt": "2026-05-05T00:00:12.400Z"
+    "createdAt": "2026-05-15T00:00:12.000Z"
   },
   {
-    "id": "rec_site_content_link_github",
+    "id": "rec_site_starter_link_github",
     "entity": "block",
     "values": {
       "type": "link",
       "label": "GitHub",
-      "href": "https://github.com/dpeek",
-      "linkTargetMode": "external",
-      "icon": "<svg viewBox=\"0 0 32 32\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path class=\"cls-1\" d=\"M16 2a14 14 0 0 0-4.43 27.28c0.7 0.13 1-0.3 1-0.67s0-1.21 0-2.38c-3.89 0.84-4.71-1.88-4.71-1.88a3.71 3.71 0 0 0-1.62-2.05c-1.27-0.86 0.1-0.85 0.1-0.85a2.94 2.94 0 0 1 2.14 1.45 3 3 0 0 0 4.08 1.16 2.93 2.93 0 0 1 0.88-1.87c-3.1-0.36-6.37-1.56-6.37-6.92a5.4 5.4 0 0 1 1.44-3.76 5 5 0 0 1 0.14-3.7c0 0 1.17-0.38 3.85 1.43a13.3 13.3 0 0 1 7 0c2.67-1.81 3.84-1.43 3.84-1.43a5 5 0 0 1 0.14 3.7 5.4 5.4 0 0 1 1.44 3.76c0 5.38-3.27 6.56-6.39 6.91a3.33 3.33 0 0 1 0.95 2.59c0 1.87 0 3.38 0 3.84s0.25 0.81 1 0.67A14 14 0 0 0 16 2z\" fill-rule=\"evenodd\" />\n</svg>"
+      "href": "https://github.com/your-handle",
+      "linkTargetMode": "external"
     },
-    "createdAt": "2026-05-05T00:00:13.000Z"
+    "createdAt": "2026-05-15T00:00:13.000Z"
   },
   {
-    "id": "rec_site_content_link_linkedin",
+    "id": "rec_site_starter_link_linkedin",
     "entity": "block",
     "values": {
       "type": "link",
       "label": "LinkedIn",
-      "href": "https://linkedin.com/in/dpeekdotcom",
-      "linkTargetMode": "external",
-      "icon": "<svg viewBox=\"0 0 32 32\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M26.2 4H5.8C4.8 4 4 4.8 4 5.7v20.5c0 0.9 0.8 1.7 1.8 1.7h20.4c1 0 1.8-0.8 1.8-1.7V5.7C28 4.8 27.2 4 26.2 4zM11.1 24.4H7.6V13h3.5zM9.4 11.4c-1.1 0-2.1-0.9-2.1-2.1s0.9-2.1 2.1-2.1c1.1 0 2.1 0.9 2.1 2.1s-1 2.1-2.1 2.1zM24.5 24.3H21v-5.6c0-1.3 0-3.1-1.9-3.1S17 17.1 17 18.5v5.7h-3.5V13h3.3v1.5h0.1c0.5-0.9 1.7-1.9 3.4-1.9 3.6 0 4.3 2.4 4.3 5.5v6.2z\" />\n</svg>"
+      "href": "https://www.linkedin.com/in/your-handle",
+      "linkTargetMode": "external"
     },
-    "createdAt": "2026-05-05T00:00:14.000Z"
+    "createdAt": "2026-05-15T00:00:14.000Z"
   },
   {
-    "id": "rec_site_content_group_header",
+    "id": "rec_site_starter_link_x",
+    "entity": "block",
+    "values": {
+      "type": "link",
+      "label": "X",
+      "href": "https://x.com/your-handle",
+      "linkTargetMode": "external"
+    },
+    "createdAt": "2026-05-15T00:00:15.000Z"
+  },
+  {
+    "id": "rec_site_starter_header",
     "entity": "block",
     "values": {
       "type": "header",
       "label": "Header"
     },
-    "createdAt": "2026-05-05T00:00:16.000Z"
+    "createdAt": "2026-05-15T00:00:16.000Z"
   },
   {
-    "id": "rec_site_content_group_header_primary",
+    "id": "rec_site_starter_header_primary",
     "entity": "block",
     "values": {
       "type": "headerPrimary",
       "label": "Primary"
     },
-    "createdAt": "2026-05-05T00:00:16.100Z"
+    "createdAt": "2026-05-15T00:00:17.000Z"
   },
   {
-    "id": "rec_site_content_group_header_secondary",
+    "id": "rec_site_starter_header_secondary",
     "entity": "block",
     "values": {
       "type": "headerSecondary",
       "label": "Secondary"
     },
-    "createdAt": "2026-05-05T00:00:16.200Z"
+    "createdAt": "2026-05-15T00:00:18.000Z"
   },
   {
-    "id": "rec_site_content_group_footer",
+    "id": "rec_site_starter_footer",
     "entity": "block",
     "values": {
       "type": "footer",
       "label": "Footer"
     },
-    "createdAt": "2026-05-05T00:00:16.500Z"
+    "createdAt": "2026-05-15T00:00:19.000Z"
   },
   {
-    "id": "rec_site_content_group_footer_main",
-    "entity": "block",
-    "values": {
-      "type": "footerSection",
-      "label": "Pages"
-    },
-    "createdAt": "2026-05-05T00:00:17.000Z"
-  },
-  {
-    "id": "rec_site_content_group_footer_social",
+    "id": "rec_site_starter_footer_social",
     "entity": "block",
     "values": {
       "type": "footerSocial",
       "label": "Social"
     },
-    "createdAt": "2026-05-05T00:00:18.000Z"
+    "createdAt": "2026-05-15T00:00:20.000Z"
   },
   {
-    "id": "rec_site_block_post_body",
-    "entity": "block",
-    "values": {
-      "type": "markdown",
-      "label": "Body",
-      "body": "This whole site started as pure developer hedonism.\n\nI sat down to update my CV and, in the most predictable developer move imaginable, rebuilt my personal site instead.\n\nThe sensible version of that story is: pick a Markdown site generator, write the pages, ship the thing. I did not do that. I used the excuse to build something I have wanted for a while: Formless, a schema-as-data app runtime.\n\nThe idea is simple: describe your app as data. The schema defines entities, fields, relationships, queries, read models, views, screens, mutations, and actions. The runtime uses that schema to give you a working app surface: local browser state, authority-backed storage, generated editing UI, generic create and patch flows, and named domain actions for behavior that needs more than CRUD.\n\nThat changes the usual stack shape. Instead of spreading the same product knowledge across a database schema, ORM models, API handlers, client state, validation, form components, labels, locale strings, and display formatting, Formless asks a more interesting question: what if the schema was allowed to carry the useful product metadata too?\n\nSo a field is not just `email: text`. It can know its label, validation, display behavior, editor, help copy, defaults, and where it should appear. A relationship is not just a foreign key you rediscover in every screen. It can be named runtime data. A read model is not another persisted column. It can be a display-only value computed from flat records.\n\nThat is the part that feels newly interesting in an agentic world.\n\nAgents are much better when the system gives them a map. A codebase full of implicit conventions asks an agent to infer intent from scattered implementation details. A schema-as-data runtime gives it a structured description of what exists, what is editable, which relationships matter, and which commands are valid. The metadata is not just for rendering UI. It is a shared contract for humans, runtime code, and agents.\n\nThis site is the first dogfood pass. The CMS behind it is built in Formless. The Site schema has block and placement records; public pages render from a tree projection; posts and projects are content blocks with dates, routes, summaries, and child markdown placements. I get an admin UI mostly because the runtime can read the schema and generate one.\n\nIt is still a toy. There are lots of missing grown-up things: users, permissions, richer publishing, imports, a media library, dashboards, all of that. But it works well enough to write this post inside the thing itself, which is exactly the unreasonable loop I wanted.\n\nThis is the first note in a series. Next I want to dig into the data model, the generated UI, the local-first browser replica and Durable Object authority split, and what schema-driven apps make possible when agents can use the schema as a real interface instead of a pile of hints."
-    },
-    "createdAt": "2026-05-05T00:00:18.400Z"
-  },
-  {
-    "id": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "Bluesky",
-      "href": "https://bsky.app/profile/dpeek.com",
-      "linkTargetMode": "external",
-      "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M12 10.8c-1.087-2.114-4.046-6.053-6.798-7.995-2.636-1.861-3.641-1.539-4.3-1.24C0.139 1.908 0 3.08 0 3.768c0 0.69 0.378 5.65 0.624 6.479 0.815 2.736 3.713 3.66 6.383 3.364 0.136-0.02 0.275-0.039 0.415-0.056-0.138 0.022-0.276 0.04-0.415 0.056-3.912 0.58-7.387 2.005-2.83 7.078 5.013 5.19 6.87-1.113 7.823-4.308 0.953 3.195 2.05 9.271 7.733 4.308 4.267-4.308 1.172-6.498-2.74-7.078a8.741 8.741 0 0 1-0.415-0.056c0.14 0.017 0.279 0.036 0.415 0.056 2.67 0.297 5.568-0.628 6.383-3.364C23.622 9.419 24 4.457 24 3.769c0-0.69-0.139-1.861-0.902-2.206-0.659-0.298-1.664-0.62-4.3 1.24C16.046 4.748 13.087 8.687 12 10.8z\" />\n</svg>"
-    },
-    "createdAt": "2026-05-12T04:27:33.010Z"
-  },
-  {
-    "id": "record_0749e061-1ba8-4923-841e-143fc825427c",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "X",
-      "href": "https://x.com/dpeekdotcom",
-      "linkTargetMode": "external",
-      "icon": "<svg viewBox=\"0 0 32 32\" fill=\"currentColor\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <path d=\"M18.2342 14.1624 26.9766 4h-2.0717l-7.591 8.8238L11.251 4H4.2581l9.1684 13.3432L4.2581 28h2.0718l8.0163-9.3183L20.7491 28h6.9929l-9.5083-13.8376zM15.3966 17.4608l-0.9289-1.3287L7.0763 5.5596h3.1822l5.9649 8.5323 0.9289 1.3287 7.7536 11.0907h-3.1822l-6.3272-9.05z\" />\n</svg>"
-    },
-    "createdAt": "2026-05-12T04:28:23.801Z"
-  },
-  {
-    "id": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "Home",
-      "href": "/",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_home"
-    },
-    "createdAt": "2026-05-12T04:30:55.995Z"
-  },
-  {
-    "id": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
-    "entity": "block",
-    "values": {
-      "type": "group",
-      "label": "All rights reserved © David Peek 2026"
-    },
-    "createdAt": "2026-05-12T04:31:48.064Z"
-  },
-  {
-    "id": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
+    "id": "rec_site_starter_home_hero",
     "entity": "block",
     "values": {
       "type": "hero",
-      "label": "Code ✨",
-      "body": "Helping humans and agents build amazing software together"
+      "label": "Your site starts here",
+      "body": "Replace this hero with a short introduction and the next action you want visitors to take."
     },
-    "createdAt": "2026-05-12T04:56:24.201Z"
+    "createdAt": "2026-05-15T00:00:21.000Z"
   },
   {
-    "id": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
-    "entity": "block",
-    "values": {
-      "type": "hero",
-      "label": "Shower thoughts",
-      "body": "Sometimes a blog post is as far as you should take your next startup idea."
-    },
-    "createdAt": "2026-05-12T05:02:46.686Z"
-  },
-  {
-    "id": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
+    "id": "rec_site_starter_about_body",
     "entity": "block",
     "values": {
       "type": "markdown",
-      "label": "David Peek",
-      "body": "> Lead / Staff Software Engineer based in Sydney, Australia\n> AI-native systems, automation, distributed architecture\n\n## Summary\n\nStaff-level engineer with 15+ years experience designing and shipping complex systems across frontend platforms, distributed infrastructure, and AI-native automation.\n\nCombines deep technical execution with product and commercial understanding, with a track record of building high-leverage systems in small teams, from multi-platform video SDKs used by major broadcasters to an offline-first commercial estimation platform and a next-generation browser automation runtime.\n\n## Experience\n\n### Co-founder - [OpenSurf](https://opensurf.ai/)\n\n_2025 - Present_\n\nBuilding an AI-native browser automation platform focused on reliable, local-first agent execution.\n\n* Designed and implemented a typed actor runtime for coordinating browser sessions, agents, and UI across Playwright and Chrome extension environments, using synchronized TinyBase stores and RPC-style communication.\n* Built a semantic graph and fingerprinting system to replace brittle DOM selectors with resilient, structure-aware targeting across UI changes.\n* Developed a deterministic validation platform for browser automation, enabling repeatable testing, regression detection, and safe evolution of agent behaviour.\n* Architected a local-first execution model to avoid limitations of cloud browsers (latency, blocking, auth fragility).\n* Built tooling for artefact capture, replay, and scoring of automation workflows (DOM snapshots, screenshots, semantic state).\n\nImpact:\n\n* Established the core technical foundation for reliable web automation beyond script-based approaches.\n* Enabled measurable benchmarking and validation of agent performance.\n\n### Co-founder & CTO - [Estii](https://estii.com/)\n\n_2021 - Present_\n\nBuilt and operated a commercial estimation platform for services businesses, replacing spreadsheet-based workflows with a structured, real-time system.\n\n* Architected an offline-first, real-time collaborative system using Next.js, Replicache, and Cloudflare Durable Objects.\n* Designed a typed document graph model and shared calculation engine linking scope, pricing, scheduling, and forecasting.\n* Built a financially correct feedback loop between estimation and scheduling, handling complex pricing models (multi-currency, tiered pricing, margins, recurring services).\n* Implemented a heuristic scheduling engine exploring and ranking valid project plans under business constraints.\n* Designed an asynchronous forecasting pipeline to aggregate distributed deal data under serverless memory constraints.\n* Built full platform infrastructure: sync, schema validation (Zod), migrations, backups, exports, E2E automation, and CI/CD.\n\nTechnical scope:\n\n* Custom replication model with cross-entity sync (between deal and workspace).\n* Memoized calculation engine with selective invalidation.\n* Distributed data model using Durable Objects (sharded by workspace/deal).\n* Comprehensive unit, integration and E2E test suite\n* Automated product documentation pipeline (screenshots + videos update on CI)\n\nCommercial outcomes:\n\n* 30 active users across 3 paying customers ($30K ARR).\n* Supported multi-million EUR deal pipelines (10M+ handled by a single customer).\n* Zero major incidents or data loss over 4+ years of operation.\n\nKey insight: Delivered a high-complexity, financially critical system with a two-person team by investing heavily in system primitives and automation.\n\n### Director of Solution Engineering - [Deltatre](https://deltatre.com/)\n\n_2017 - 2021_\n\nLed solution design and commercial estimation for large-scale video platform integrations.\n\n* Owned end-to-end RFP response process for $1-5M+ deals across OTT video platforms.\n* Translated ambiguous client requirements into scoped architecture, delivery plans, and pricing models.\n* Built structured estimation workflows that later evolved into Estii.\n* Coordinated stakeholders across design, frontend, backend, video delivery, and infrastructure teams.\n* Influenced product roadmap through analysis of pipeline demand.\n\nScope:\n\n* Video ingest, encoding, DRM (Widevine, FairPlay), streaming (HLS).\n* Authentication, payments, analytics, ad integration.\n* Multi-platform frontend delivery.\n\nImpact:\n\n* Developed data-driven estimation workflow that increased accuracy and improved delivery margins.\n* Key role in winning DAZN and WWE, growing revenue to $40M leading to a $130M aquisition.\n\n### Lead Frontend Engineer / Architect - [Deltatre](https://deltatre.com/)\n\n_2009 - 2017_\n\nLed development of a cross-platform application SDK powering OTT apps across web, mobile, and connected devices.\n\n* Built a multi-platform SDK enabling shared code across 20+ device platforms (Web, iOS, Android, Samsung, PlayStation, LG, etc.).\n* Designed a runtime abstraction layer spanning HTML, Flash, and native (OpenGL/SDL) environments.\n* Developed a UI framework, component system, and application architecture.\n* Led a team building tooling for cross-device testing and deployment.\n\nImpact:\n\n* SDK used in applications for BBC, ITV, DAZN, WWE Network, Channel 5, YouView, and others.\n* Enabled reuse of application logic across a fragmented device ecosystem.\n\n## Technical Skills\n\n* Languages: TypeScript, JavaScript\n* Architecture: Distributed systems, offline-first sync, actor models\n* AI/Automation: LLM-driven workflows, agent systems, browser automation\n* Frontend: React, Next.js, Tailwind\n* Infrastructure: Cloudflare, AWS, Vercel\n* Data: Replicache, TinyBase, Zod, Drizzle\n* Testing: Playwright, E2E automation, deterministic validation systems"
+      "label": "About",
+      "body": "Write a short introduction for yourself, your project, or your organization."
     },
-    "createdAt": "2026-05-12T05:04:06.684Z"
+    "createdAt": "2026-05-15T00:00:22.000Z"
   },
   {
-    "id": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
-    "entity": "block",
-    "values": {
-      "type": "hero",
-      "label": "Active projects",
-      "body": "Products, libraries and half-baked ideas."
-    },
-    "createdAt": "2026-05-12T05:16:25.529Z"
-  },
-  {
-    "id": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "Blog",
-      "href": "/blog",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_blog"
-    },
-    "createdAt": "2026-05-12T15:14:16.373Z"
-  },
-  {
-    "id": "record_95f5f21a-521f-48ba-a725-bc43e6d78d2d",
-    "entity": "block",
-    "values": {
-      "type": "project",
-      "label": "Devstate",
-      "body": "Agent-first development-loop supervisor.",
-      "href": "https://github.com/dpeek/devstate",
-      "date": "2026-05-10"
-    },
-    "createdAt": "2026-05-13T05:27:49.348Z"
-  },
-  {
-    "id": "record_30cbf3d3-7f63-44a1-ab29-6a1b9e1b67ee",
+    "id": "rec_site_starter_resume_body",
     "entity": "block",
     "values": {
       "type": "markdown",
-      "label": "Body",
-      "body": "In the first post I described the idea: Formless is a schema-as-data app runtime.\n\nThis post is the slower version. What does that actually mean? What goes in the schema? What does the runtime do with it? And which layers of normal app boilerplate disappear when the schema carries more intent?\n\n## 1. Start with an entity\n\nMost apps start with a model.\n\nIn a conventional stack, the same concept gets described several times:\n\n* database table\n* ORM model\n* validation schema\n* API request/response types\n* form fields\n* labels and help text\n* client-side state shape\n* display formatting\n\nIn Formless, the entity starts as runtime data:\n\n```json\n{\n  \"entities\": {\n    \"task\": {\n      \"label\": \"Task\",\n      \"fields\": {\n        \"title\": {\n          \"type\": \"text\",\n          \"label\": \"Title\",\n          \"required\": true\n        },\n        \"done\": {\n          \"type\": \"boolean\",\n          \"label\": \"Done\",\n          \"default\": false\n        },\n        \"dueDate\": {\n          \"type\": \"date\",\n          \"label\": \"Due date\"\n        }\n      },\n      \"mutations\": {\n        \"create\": { \"enabled\": true },\n        \"patch\": { \"enabled\": true },\n        \"delete\": { \"enabled\": false }\n      }\n    }\n  }\n}\n```\n\nThat is already more than a database shape. It describes storage-facing fields, validation, editor defaults, display labels, and mutation policy.\n\n## 2. Add queries\n\nA model is not enough. Apps need useful subsets of data.\n\n```json\n{\n  \"queries\": {\n    \"taskActive\": {\n      \"entity\": \"task\",\n      \"where\": {\n        \"field\": \"done\",\n        \"equals\": false\n      }\n    },\n    \"taskCompleted\": {\n      \"entity\": \"task\",\n      \"where\": {\n        \"field\": \"done\",\n        \"equals\": true\n      }\n    }\n  }\n}\n```\n\nIn a typical app, this logic might appear in an API route, a SQL query, a React selector, and a tab count calculation.\n\nIn Formless, it is named once. The runtime can use it for generated UI, local projections, and sync-safe display.\n\n## 3. Add views\n\nQueries say what records exist. Views say how people interact with them.\n\n```json\n{\n  \"views\": {\n    \"taskCreate\": {\n      \"type\": \"create\",\n      \"entity\": \"task\",\n      \"fields\": {\n        \"title\": {},\n        \"dueDate\": {}\n      }\n    },\n    \"taskHome\": {\n      \"type\": \"collection\",\n      \"entity\": \"task\",\n      \"groups\": [\n        {\n          \"label\": \"Active\",\n          \"query\": \"taskActive\",\n          \"createView\": \"taskCreate\"\n        },\n        {\n          \"label\": \"Completed\",\n          \"query\": \"taskCompleted\"\n        }\n      ]\n    }\n  }\n}\n```\n\nThis is where the schema starts to feel like an app description rather than a data description.\n\nThe runtime now knows:\n\n* which records are visible\n* how they are grouped\n* which create form belongs to the collection\n* which fields should appear when creating records\n* which generic mutations are allowed\n\n## 4. Add a screen\n\nA screen turns views into routes and workspaces.\n\n```json\n{\n  \"screens\": {\n    \"taskHome\": {\n      \"type\": \"workspace\",\n      \"navigation\": {\n        \"primary\": true,\n        \"label\": \"Tasks\"\n      },\n      \"layout\": {\n        \"type\": \"stack\",\n        \"sections\": [\n          {\n            \"id\": \"tasks\",\n            \"type\": \"collection\",\n            \"view\": \"taskHome\"\n          }\n        ]\n      }\n    }\n  }\n}\n```\n\nAt this point the schema can generate a usable app surface.\n\nNot a mockup. A real route. Real records. Real create and patch flows. Local browser state. Authority-backed writes.\n\n## 5. The runtime takes over the boring parts\n\nThe payoff is not that JSON is magically better than code. The payoff is that runtime code can become generic.\n\nA normal stack often needs bespoke code for:\n\n* DB schema\n* ORM model\n* API create route\n* API patch route\n* API validation\n* request/response types\n* React query/cache wiring\n* form components\n* field labels\n* field validation messages\n* list filters\n* empty states\n* optimistic local updates\n* sync merge behavior\n\nFormless tries to move the repeatable parts into the runtime.\n\nThe schema says:\n\n* what exists\n* what fields mean\n* what can be edited\n* what queries matter\n* what views should exist\n* what screens compose those views\n* what actions are valid\n\nThe runtime handles:\n\n* parsing the schema\n* validating writes\n* storing flat records\n* syncing browser replicas\n* generating editors\n* rendering collections\n* running generic create/patch mutations\n* dispatching named actions\n\n## 6. Where this sits in the ecosystem\n\nFormless overlaps with a few familiar layers, but it is not exactly any of them.\n\n### Compared to an ORM\n\nAn ORM maps code objects to storage.\n\nFormless starts higher up. It describes the app model and interaction surface. Storage is one consumer of the schema, not the whole point.\n\n### Compared to validation libraries\n\nValidation libraries answer: \"is this input allowed?\"\n\nFormless wants the same field definition to also answer: \"how should this be edited, displayed, labeled, defaulted, queried, and patched?\"\n\n### Compared to generated admin tools\n\nAdmin generators usually introspect a database and give you CRUD.\n\nFormless makes the authoring surface explicit in schema data: views, screens, relationships, read models, and actions are part of the app definition.\n\n### Compared to sync frameworks\n\nSync frameworks move data around.\n\nFormless still needs sync, but the schema gives sync more context: records are keyed by schema app, mutations are generic, read models are display-only, and the authority owns invariants.\n\n### Compared to local state libraries\n\nLocal state libraries help the UI remember things.\n\nFormless uses a browser replica as part of the runtime. The app state is not hand-modeled per screen; it is projected from schema, records, queries, and selected context.\n\n## 7. Why this matters for agents\n\nThis is the agentic-world bit.\n\nAgents work better when the app exposes a structured map of itself.\n\nA schema can tell an agent:\n\n* these are the entities\n* these fields are editable\n* these fields are required\n* these relationships matter\n* these views are user-facing\n* these actions are valid commands\n* these values are computed, not stored\n\nThat is much better than asking an agent to infer product rules from scattered UI components, ORM models, route handlers, and validation helpers.\n\nThe schema becomes an interface. Not just for rendering UI, but for understanding and safely changing the app.\n\n## 8. The honest boundary\n\nFormless does not remove all code.\n\nThe current Site app still has a public renderer. The authority still owns invariants. Named actions still need runtime implementations. Complex product behavior still deserves real code.\n\nThe goal is narrower and more useful:\n\n* ordinary app structure should be data\n* specific domain behaviour should be code\n* the runtime should know the difference"
+      "label": "Resume",
+      "body": "Add resume highlights, experience, or a link to a downloadable resume."
     },
-    "createdAt": "2026-05-13T05:38:22.200Z"
+    "createdAt": "2026-05-15T00:00:23.000Z"
   },
   {
-    "id": "record_ec81c3b8-929d-48e3-a4a2-63a185c54ede",
-    "entity": "block",
-    "values": {
-      "type": "project",
-      "label": "StreamWolf",
-      "body": "Manage your streaming subscriptions.",
-      "href": "https://streamwolf.com",
-      "date": "2026-04-15"
-    },
-    "createdAt": "2026-05-13T07:19:58.013Z"
-  },
-  {
-    "id": "rec_site_block_blog_posts",
+    "id": "rec_site_starter_blog_list",
     "entity": "block",
     "values": {
       "type": "postList",
       "label": "Latest posts"
     },
-    "createdAt": "2026-05-14T01:31:00.000Z"
+    "createdAt": "2026-05-15T00:00:24.000Z"
   },
   {
-    "id": "rec_site_block_projects_index",
+    "id": "rec_site_starter_projects_list",
     "entity": "block",
     "values": {
       "type": "projectList",
       "label": "Projects"
     },
-    "createdAt": "2026-05-14T01:31:01.000Z"
+    "createdAt": "2026-05-15T00:00:25.000Z"
   },
   {
-    "id": "rec_site_media_post_agents_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Agents article primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%230f766e%27%2F%3E%3Ccircle%20cx%3D%271180%27%20cy%3D%27320%27%20r%3D%27180%27%20fill%3D%27%23ccfbf1%27%20opacity%3D%270.35%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27470%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3EAgents%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27595%27%20font-size%3D%27104%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eenablers%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:00.000Z"
-  },
-  {
-    "id": "rec_site_media_post_schema_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Schema-driven apps primary image",
-      "href": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%201000%27%3E%3Crect%20width%3D%271600%27%20height%3D%271000%27%20fill%3D%27%231e3a8a%27%2F%3E%3Cpath%20d%3D%27M160%20740%20L520%20340%20L860%20580%20L1200%20260%20L1440%20740Z%27%20fill%3D%27%2393c5fd%27%20opacity%3D%270.55%27%2F%3E%3Ctext%20x%3D%27120%27%20y%3D%27270%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3ESchema-driven%3C%2Ftext%3E%3Ctext%20x%3D%27120%27%20y%3D%27380%27%20font-size%3D%2792%27%20font-family%3D%27Arial%2C%20sans-serif%27%20fill%3D%27white%27%3Eapps%3C%2Ftext%3E%3C%2Fsvg%3E",
-      "width": 1600,
-      "height": 1000
-    },
-    "createdAt": "2026-05-14T02:40:01.000Z"
-  },
-  {
-    "id": "rec_site_media_project_estii_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Image",
-      "href": "/api/site/media/site/images/9a4cfb73-b5bc-4691-b038-fa4e52b69696.png",
-      "width": 2978,
-      "height": 1906
-    },
-    "createdAt": "2026-05-14T02:40:02.000Z"
-  },
-  {
-    "id": "rec_site_media_project_opensurf_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Image",
-      "href": "/api/site/media/site/images/180343e6-8764-4c17-9b53-51bb7da665b4.png",
-      "width": 4020,
-      "height": 2132
-    },
-    "createdAt": "2026-05-14T02:40:03.000Z"
-  },
-  {
-    "id": "rec_site_media_project_formless_primary",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Image",
-      "href": "/api/site/media/site/images/3038a3f9-b5c2-41c4-9e53-8b2f3255487c.png",
-      "width": 2936,
-      "height": 1886
-    },
-    "createdAt": "2026-05-14T02:40:04.000Z"
-  },
-  {
-    "id": "rec_site_block_home_feature_agents",
-    "entity": "block",
-    "values": {
-      "type": "feature",
-      "label": "Welcome, Humans and Agents",
-      "body": "This is David and he's a developer based in Sydney.\n\nHe founded [estii.com](https://estii.com) and [opensurf.ai](https://opensurf.ai) and absolutely loves building ambitious teams, codebases and products.\n\nWith the right tooling and workflows, it is now possible for small, high-agency teams to ship incredibly ambitious ideas. And the scope of what is possible will only continue to grow.\n\nIt is an _amazing_ time to be a builder.\n\n### Commonly asked questions",
-      "alignment": "right"
-    },
-    "createdAt": "2026-05-14T02:40:05.000Z"
-  },
-  {
-    "id": "rec_site_media_home_feature_agents",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "David Peek",
-      "href": "/api/site/media/site/images/5c715b48-7820-4d5c-b0b0-23a5039b0ec2.jpg",
-      "width": 2226,
-      "height": 2226
-    },
-    "createdAt": "2026-05-14T02:40:06.000Z"
-  },
-  {
-    "id": "rec_site_link_home_feature_notes",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "Who is this guy?",
-      "href": "/blog",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
-    },
-    "createdAt": "2026-05-14T02:40:07.000Z"
-  },
-  {
-    "id": "record_7b0543c5-9002-4a14-857e-7299b60fe7c9",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "What has he done?",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_projects"
-    },
-    "createdAt": "2026-05-14T03:14:31.372Z"
-  },
-  {
-    "id": "record_ea60349a-1061-4394-aa76-be70d02a42fa",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "Should we hire him?",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "rec_site_content_resume"
-    },
-    "createdAt": "2026-05-14T03:15:47.149Z"
-  },
-  {
-    "id": "record_9acd9f8f-d672-4ac6-8c58-dfd2f79ce8e4",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Image",
-      "href": "/api/site/media/site/images/8b50f8b9-b712-45e3-8e7f-f4680f5e8a6e.png",
-      "width": 1840,
-      "height": 1334
-    },
-    "createdAt": "2026-05-14T04:00:54.315Z"
-  },
-  {
-    "id": "record_90f019da-bb87-4f32-ae89-c268bca85c99",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Image",
-      "href": "/api/site/media/site/images/c99fdda7-af55-4c6f-9f50-3e7253aa9931.png",
-      "width": 2276,
-      "height": 1310
-    },
-    "createdAt": "2026-05-14T04:01:21.269Z"
-  },
-  {
-    "id": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
-    "entity": "block",
-    "values": {
-      "type": "page",
-      "label": "About",
-      "href": "/about",
-      "icon": "<svg viewBox=\"0 0 24 24\" stroke-width=\"2\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\" width=\"32\" height=\"32\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n    <circle cx=\"12\" cy=\"12\" r=\"10\" />\n    <circle cx=\"12\" cy=\"10\" r=\"3\" />\n    <path d=\"M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662\" />\n</svg>"
-    },
-    "createdAt": "2026-05-14T05:50:12.427Z"
-  },
-  {
-    "id": "record_3e33390e-4c81-4887-a812-b9a398f13343",
+    "id": "rec_site_starter_post_body",
     "entity": "block",
     "values": {
       "type": "markdown",
-      "label": "Ten things about me",
-      "body": "1. My dad worked as an Australian Diplomat so I grew up in Malaysia, South Africa, Chile and France\n2. I once sat next to an actual princess at a lunch\n3. I'm frustratingly close to a round 200cm tall\n4. I love languages and speak Spanish, French and a bit of Italian and German (recovering DuoLingo addict)\n5. I am on a lifelong quest to make the perfect coffee, sour dough, pizza and smoked brisket\n6. I lived in London with my wife and two kids for six years (we planned to be there for 12 months)\n7. I'm a great whistler\n8. I can somehow experience both incredible optimism and abject doomerism for the future simultaneously\n9. I am a huge space nerd\n10. My wife is a volunteer for Sydney Wildlife Rescue, meaning I generally have a possum living in my office (see below)"
+      "label": "Body",
+      "body": "Write the full post here."
     },
-    "createdAt": "2026-05-14T05:52:31.254Z"
+    "createdAt": "2026-05-15T00:00:26.000Z"
   },
   {
-    "id": "record_c398f4ca-27d6-495b-bf99-19b263e7afc0",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "About",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
-    },
-    "createdAt": "2026-05-14T05:52:57.238Z"
-  },
-  {
-    "id": "record_060a4f34-188a-4881-a5c1-e8bb015a65d8",
-    "entity": "block",
-    "values": {
-      "type": "link",
-      "label": "About",
-      "linkTargetMode": "internal",
-      "linkTargetBlock": "record_4172c5b5-be84-493f-a8f2-4788294bc670"
-    },
-    "createdAt": "2026-05-14T05:53:34.601Z"
-  },
-  {
-    "id": "record_aa9fa4ad-6cd6-4f79-aaf2-6e95a63e284e",
-    "entity": "block",
-    "values": {
-      "type": "image",
-      "label": "Brush tail possums exhibiting weapons-grade cuteness",
-      "href": "/api/site/media/site/images/b6227945-be74-4946-a055-9171d08a0b02.png",
-      "width": 1578,
-      "height": 892
-    },
-    "createdAt": "2026-05-14T06:13:22.256Z"
-  },
-  {
-    "id": "rec_site_place_header_primary",
+    "id": "rec_site_starter_place_header_primary",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_group_header_primary",
+      "parent": "rec_site_starter_header",
+      "block": "rec_site_starter_header_primary",
       "order": 1000
     },
-    "createdAt": "2026-05-05T00:00:19.000Z"
+    "createdAt": "2026-05-15T00:01:01.000Z"
   },
   {
-    "id": "rec_site_place_header_secondary",
+    "id": "rec_site_starter_place_header_secondary",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header",
-      "block": "rec_site_content_group_header_secondary",
+      "parent": "rec_site_starter_header",
+      "block": "rec_site_starter_header_secondary",
       "order": 2000
     },
-    "createdAt": "2026-05-05T00:00:19.100Z"
+    "createdAt": "2026-05-15T00:01:02.000Z"
   },
   {
-    "id": "rec_site_place_header_home",
+    "id": "rec_site_starter_place_header_home",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header_primary",
-      "block": "rec_site_content_link_home",
+      "parent": "rec_site_starter_header_primary",
+      "block": "rec_site_starter_link_home",
       "order": 1000
     },
-    "createdAt": "2026-05-05T00:00:19.200Z"
+    "createdAt": "2026-05-15T00:01:03.000Z"
   },
   {
-    "id": "rec_site_place_header_blog",
+    "id": "rec_site_starter_place_header_about",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header_secondary",
-      "block": "rec_site_content_link_blog",
+      "parent": "rec_site_starter_header_secondary",
+      "block": "rec_site_starter_link_about",
       "order": 1000
     },
-    "createdAt": "2026-05-05T00:00:20.000Z"
+    "createdAt": "2026-05-15T00:01:04.000Z"
   },
   {
-    "id": "rec_site_place_header_projects",
+    "id": "rec_site_starter_place_header_blog",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header_secondary",
-      "block": "rec_site_content_link_projects",
+      "parent": "rec_site_starter_header_secondary",
+      "block": "rec_site_starter_link_blog",
       "order": 2000
     },
-    "createdAt": "2026-05-05T00:00:21.000Z"
+    "createdAt": "2026-05-15T00:01:05.000Z"
   },
   {
-    "id": "rec_site_place_header_resume",
+    "id": "rec_site_starter_place_header_projects",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header_secondary",
-      "block": "rec_site_content_link_resume",
+      "parent": "rec_site_starter_header_secondary",
+      "block": "rec_site_starter_link_projects",
       "order": 3000
     },
-    "createdAt": "2026-05-05T00:00:22.000Z"
+    "createdAt": "2026-05-15T00:01:06.000Z"
   },
   {
-    "id": "rec_site_place_footer_projects",
+    "id": "rec_site_starter_place_header_resume",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_footer_main",
-      "block": "rec_site_content_link_projects",
-      "order": 1000
-    },
-    "createdAt": "2026-05-05T00:00:23.000Z"
-  },
-  {
-    "id": "rec_site_place_footer_resume",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_main",
-      "block": "rec_site_content_link_resume",
-      "order": 2000
-    },
-    "createdAt": "2026-05-05T00:00:24.000Z"
-  },
-  {
-    "id": "rec_site_place_footer_github",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_social",
-      "block": "rec_site_content_link_github",
-      "order": 1000
-    },
-    "createdAt": "2026-05-05T00:00:25.000Z"
-  },
-  {
-    "id": "rec_site_place_footer_linkedin",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_social",
-      "block": "rec_site_content_link_linkedin",
-      "order": 2000
-    },
-    "createdAt": "2026-05-05T00:00:26.000Z"
-  },
-  {
-    "id": "rec_site_place_footer_section_explore",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer",
-      "block": "rec_site_content_group_footer_main",
-      "order": 1000
-    },
-    "createdAt": "2026-05-05T00:00:26.200Z"
-  },
-  {
-    "id": "rec_site_place_footer_section_social",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer",
-      "block": "rec_site_content_group_footer_social",
-      "order": 1500
-    },
-    "createdAt": "2026-05-05T00:00:26.300Z"
-  },
-  {
-    "id": "rec_site_place_post_body",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_post_shipped_schema",
-      "block": "rec_site_block_post_body",
-      "order": 1000
-    },
-    "createdAt": "2026-05-05T00:00:30.000Z"
-  },
-  {
-    "id": "record_a83332ce-88e9-4be3-a01d-23fa251738f8",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_social",
-      "block": "record_1c4c18d8-e1f1-4cd6-b298-012542519487",
-      "order": 3000
-    },
-    "createdAt": "2026-05-12T04:27:33.010Z"
-  },
-  {
-    "id": "record_df809264-df03-4773-9eec-4a79e36ccf4b",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_social",
-      "block": "record_0749e061-1ba8-4923-841e-143fc825427c",
+      "parent": "rec_site_starter_header_secondary",
+      "block": "rec_site_starter_link_resume",
       "order": 4000
     },
-    "createdAt": "2026-05-12T04:28:23.801Z"
+    "createdAt": "2026-05-15T00:01:07.000Z"
   },
   {
-    "id": "record_62cf35f7-0f2f-4179-83c0-e35632ce26d3",
+    "id": "rec_site_starter_place_footer_social",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_footer_main",
-      "block": "record_7c4da43e-cb36-48f2-bde3-b1202f9dafe1",
-      "order": 500
+      "parent": "rec_site_starter_footer",
+      "block": "rec_site_starter_footer_social",
+      "order": 1000
     },
-    "createdAt": "2026-05-12T04:30:55.995Z"
+    "createdAt": "2026-05-15T00:01:08.000Z"
   },
   {
-    "id": "record_adafde98-6f1b-42b2-a5b4-b54d12d5cb83",
+    "id": "rec_site_starter_place_footer_github",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_footer",
-      "block": "record_3fa892f8-f58c-4025-81c6-77487aa3a4ef",
+      "parent": "rec_site_starter_footer_social",
+      "block": "rec_site_starter_link_github",
+      "order": 1000
+    },
+    "createdAt": "2026-05-15T00:01:09.000Z"
+  },
+  {
+    "id": "rec_site_starter_place_footer_linkedin",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_starter_footer_social",
+      "block": "rec_site_starter_link_linkedin",
       "order": 2000
     },
-    "createdAt": "2026-05-12T04:31:48.064Z"
+    "createdAt": "2026-05-15T00:01:10.000Z"
   },
   {
-    "id": "record_4f205edd-6b96-41da-8f9f-3defac28da1a",
+    "id": "rec_site_starter_place_footer_x",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_home",
-      "block": "record_bad74e4c-0a35-4514-a3fc-280d66a4d226",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T04:56:24.201Z"
-  },
-  {
-    "id": "record_bbb296c2-25ec-41e8-8da1-9523297d7f2d",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_blog",
-      "block": "record_abf75c18-61c1-4b56-92af-2ac432ac8ca7",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T05:02:46.686Z"
-  },
-  {
-    "id": "record_2182aea7-7023-497e-b9d6-ed3b1ab7ee10",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_resume",
-      "block": "record_5c278e67-0971-4dd0-bc89-78e7656f276c",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T05:04:06.684Z"
-  },
-  {
-    "id": "record_24fbbfd1-6aec-47d4-8909-99e4bcd52895",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "record_c641afdb-e94a-4e09-9e23-23154f0fdb0b",
-      "order": 1000
-    },
-    "createdAt": "2026-05-12T05:16:25.529Z"
-  },
-  {
-    "id": "record_aababd9c-df39-475b-8010-ac6a990cd893",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_group_footer_main",
-      "block": "record_1c1f4232-ba21-44b4-9c1e-30a7ba9dcfde",
-      "order": 750
-    },
-    "createdAt": "2026-05-12T15:14:16.373Z"
-  },
-  {
-    "id": "record_9f4a7ad8-8a9b-4a35-aa97-29af6b7f810d",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_post_draft_notes",
-      "block": "record_30cbf3d3-7f63-44a1-ab29-6a1b9e1b67ee",
-      "order": 1000
-    },
-    "createdAt": "2026-05-13T05:38:22.200Z"
-  },
-  {
-    "id": "rec_site_place_blog_posts",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_blog",
-      "block": "rec_site_block_blog_posts",
-      "order": 2000
-    },
-    "createdAt": "2026-05-14T01:31:02.000Z"
-  },
-  {
-    "id": "rec_site_place_projects_index",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_projects",
-      "block": "rec_site_block_projects_index",
-      "order": 2000
-    },
-    "createdAt": "2026-05-14T01:31:03.000Z"
-  },
-  {
-    "id": "rec_site_place_project_estii_primary_image",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_project_estii",
-      "block": "rec_site_media_project_estii_primary",
-      "order": 500,
-      "slot": "primaryImage"
-    },
-    "createdAt": "2026-05-14T02:41:02.000Z"
-  },
-  {
-    "id": "rec_site_place_project_opensurf_primary_image",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_project_opensurf",
-      "block": "rec_site_media_project_opensurf_primary",
-      "order": 500,
-      "slot": "primaryImage"
-    },
-    "createdAt": "2026-05-14T02:41:03.000Z"
-  },
-  {
-    "id": "rec_site_place_project_formless_primary_image",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_project_formless",
-      "block": "rec_site_media_project_formless_primary",
-      "order": 500,
-      "slot": "primaryImage"
-    },
-    "createdAt": "2026-05-14T02:41:04.000Z"
-  },
-  {
-    "id": "rec_site_place_home_feature_agents",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_content_home",
-      "block": "rec_site_block_home_feature_agents",
+      "parent": "rec_site_starter_footer_social",
+      "block": "rec_site_starter_link_x",
       "order": 3000
     },
-    "createdAt": "2026-05-14T02:41:05.000Z"
+    "createdAt": "2026-05-15T00:01:11.000Z"
   },
   {
-    "id": "rec_site_place_feature_agents_media",
+    "id": "rec_site_starter_place_home_hero",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_block_home_feature_agents",
-      "block": "rec_site_media_home_feature_agents",
-      "order": 1000,
-      "slot": "media"
-    },
-    "createdAt": "2026-05-14T02:41:06.000Z"
-  },
-  {
-    "id": "rec_site_place_feature_agents_action",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_block_home_feature_agents",
-      "block": "rec_site_link_home_feature_notes",
-      "order": 1000,
-      "slot": "actions"
-    },
-    "createdAt": "2026-05-14T02:41:07.000Z"
-  },
-  {
-    "id": "record_ada280be-aab1-4cdb-af81-8d32bac06462",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_block_home_feature_agents",
-      "block": "record_7b0543c5-9002-4a14-857e-7299b60fe7c9",
-      "order": 2000,
-      "slot": "actions"
-    },
-    "createdAt": "2026-05-14T03:14:31.372Z"
-  },
-  {
-    "id": "record_250c6c97-9ea5-4b1b-9e6c-e429ff3ebb72",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "rec_site_block_home_feature_agents",
-      "block": "record_ea60349a-1061-4394-aa76-be70d02a42fa",
-      "order": 3000,
-      "slot": "actions"
-    },
-    "createdAt": "2026-05-14T03:15:47.149Z"
-  },
-  {
-    "id": "record_ccb322f8-07bc-4fdd-ac77-53f24653a27c",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "record_95f5f21a-521f-48ba-a725-bc43e6d78d2d",
-      "block": "record_9acd9f8f-d672-4ac6-8c58-dfd2f79ce8e4",
-      "order": 1000,
-      "slot": "primaryImage"
-    },
-    "createdAt": "2026-05-14T04:00:54.315Z"
-  },
-  {
-    "id": "record_f7f59edb-6126-454a-ba74-36114a757492",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "record_ec81c3b8-929d-48e3-a4a2-63a185c54ede",
-      "block": "record_90f019da-bb87-4f32-ae89-c268bca85c99",
-      "order": 1000,
-      "slot": "primaryImage"
-    },
-    "createdAt": "2026-05-14T04:01:21.269Z"
-  },
-  {
-    "id": "record_cc0031df-0f32-4c2c-8cbb-a6a142bb58f5",
-    "entity": "blockPlacement",
-    "values": {
-      "parent": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
-      "block": "record_3e33390e-4c81-4887-a812-b9a398f13343",
+      "parent": "rec_site_starter_page_home",
+      "block": "rec_site_starter_home_hero",
       "order": 1000
     },
-    "createdAt": "2026-05-14T05:52:31.254Z"
+    "createdAt": "2026-05-15T00:01:12.000Z"
   },
   {
-    "id": "record_bf3cc2de-5feb-420e-bd0e-41ad37afb42b",
+    "id": "rec_site_starter_place_about_body",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_header_secondary",
-      "block": "record_c398f4ca-27d6-495b-bf99-19b263e7afc0",
-      "order": 500
+      "parent": "rec_site_starter_page_about",
+      "block": "rec_site_starter_about_body",
+      "order": 1000
     },
-    "createdAt": "2026-05-14T05:52:57.238Z"
+    "createdAt": "2026-05-15T00:01:13.000Z"
   },
   {
-    "id": "record_afa1ab82-876a-4f04-8235-7e6fe38ce5d2",
+    "id": "rec_site_starter_place_blog_list",
     "entity": "blockPlacement",
     "values": {
-      "parent": "rec_site_content_group_footer_main",
-      "block": "record_060a4f34-188a-4881-a5c1-e8bb015a65d8",
-      "order": 625
+      "parent": "rec_site_starter_page_blog",
+      "block": "rec_site_starter_blog_list",
+      "order": 1000
     },
-    "createdAt": "2026-05-14T05:53:34.601Z"
+    "createdAt": "2026-05-15T00:01:14.000Z"
   },
   {
-    "id": "record_0b57298f-2552-4428-96e0-ef4654644410",
+    "id": "rec_site_starter_place_projects_list",
     "entity": "blockPlacement",
     "values": {
-      "parent": "record_4172c5b5-be84-493f-a8f2-4788294bc670",
-      "block": "record_aa9fa4ad-6cd6-4f79-aaf2-6e95a63e284e",
-      "order": 2000
+      "parent": "rec_site_starter_page_projects",
+      "block": "rec_site_starter_projects_list",
+      "order": 1000
     },
-    "createdAt": "2026-05-14T06:13:22.256Z"
+    "createdAt": "2026-05-15T00:01:15.000Z"
+  },
+  {
+    "id": "rec_site_starter_place_resume_body",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_starter_page_resume",
+      "block": "rec_site_starter_resume_body",
+      "order": 1000
+    },
+    "createdAt": "2026-05-15T00:01:16.000Z"
+  },
+  {
+    "id": "rec_site_starter_place_post_body",
+    "entity": "blockPlacement",
+    "values": {
+      "parent": "rec_site_starter_post",
+      "block": "rec_site_starter_post_body",
+      "order": 1000
+    },
+    "createdAt": "2026-05-15T00:01:17.000Z"
   }
 ]
