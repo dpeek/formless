@@ -433,7 +433,13 @@ function FeatureBlock({ block }: { block: SiteBlockNode }) {
       data-site-feature-alignment={mediaSide}
     >
       {mediaNode ? (
-        <div className="grid gap-6 md:grid-cols-2 md:items-center">
+        <div
+          className={
+            mediaSide === "left"
+              ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:items-center"
+              : "grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-center"
+          }
+        >
           {mediaSide === "left" ? (
             <>
               {mediaNode}

@@ -1359,6 +1359,8 @@ describe("public site renderer", () => {
     expect(html).toContain('data-block-type="feature"');
     expect(html).toContain('data-site-feature-alignment="right"');
     expect(html).toContain('data-site-feature-alignment="left"');
+    expect(html).toContain("md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+    expect(html).toContain("md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]");
     expect(html).toContain("data-site-feature-media");
     expect(html).toContain("data-site-feature-actions");
     expect(html).toContain("Ship composable blocks");
