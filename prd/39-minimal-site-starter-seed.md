@@ -1,7 +1,7 @@
 # PRD 39: Minimal Site starter seed
 
 Status: ready
-Current chunk: MSS-01 ready
+Current chunk: MSS-02 ready
 Last updated: 2026-05-15
 
 Start after PRD 37 shipped behavior is stable on the active branch.
@@ -267,13 +267,13 @@ Prior art:
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files                          | Acceptance                                                                                                     |
-| ------ | ------ | ---------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| MSS-01 | ready  | none       | PRD                                 | PRD captures seed scope, no-media decision, route decision, chunks, blockers, tests, and promote notes.        |
-| MSS-02 | ready  | MSS-01     | site seed records, seed tests       | Default Site seed is neutral, minimal, validates, has no media references, and includes starter pages/content. |
-| MSS-03 | ready  | MSS-02     | CLI tests, project source tests     | `formless init` creates a no-media starter project and reports `mediaCount: 0`.                                |
-| MSS-04 | ready  | MSS-03     | affected renderer/tree/schema tests | Tests use fixtures for rich Site behavior and no longer depend on personal default seed content.               |
-| MSS-05 | ready  | MSS-04     | PRD                                 | Closeout records checks, decisions, blockers, and promote notes after implementation ships.                    |
+| ID     | Status  | Depends on | Main files                          | Acceptance                                                                                                     |
+| ------ | ------- | ---------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| MSS-01 | shipped | none       | PRD                                 | PRD captures seed scope, no-media decision, route decision, chunks, blockers, tests, and promote notes.        |
+| MSS-02 | ready   | MSS-01     | site seed records, seed tests       | Default Site seed is neutral, minimal, validates, has no media references, and includes starter pages/content. |
+| MSS-03 | ready   | MSS-02     | CLI tests, project source tests     | `formless init` creates a no-media starter project and reports `mediaCount: 0`.                                |
+| MSS-04 | ready   | MSS-03     | affected renderer/tree/schema tests | Tests use fixtures for rich Site behavior and no longer depend on personal default seed content.               |
+| MSS-05 | ready   | MSS-04     | PRD                                 | Closeout records checks, decisions, blockers, and promote notes after implementation ships.                    |
 
 ## Out of Scope
 
@@ -318,10 +318,11 @@ Prior art:
 - 2026-05-15: Current default Site seed has 92 records, 9 media/image blocks, 39 placements, personal links, personal posts, and personal projects.
 - 2026-05-15: Current route resolver normalizes empty slug to `home` and treats published Home href as `/`.
 - 2026-05-15: `devstate start` reported checks ok, web ready at `https://formless.local`, and watcher tests passing.
+- 2026-05-15: MSS-01 agent read `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, and this PRD; PRD already captured seed scope, no-media decision, route decision, chunks, blockers, tests, and promote notes.
 
 ## Status Notes
 
-- MSS-01 ready 2026-05-15.
-- Current chunk: MSS-01 ready.
+- MSS-01 shipped 2026-05-15.
+- Current chunk: MSS-02 ready.
 - Decision: this PRD is data/test cleanup, not asset scaffolding.
 - Decision: default starter should have zero media references and let existing CLI media discovery report zero media files.
