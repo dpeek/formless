@@ -8,12 +8,18 @@ const clientRoutePrefixes = [
   ...legacyClientRoutePrefixes,
 ] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
+const PUBLISHED_SITE_REDIRECT_STATUS = 308;
 
 type WorkerRuntimeProfileKind = "dev" | "app" | "siteAuthoring" | "publishedSite";
 
 export type WorkerRuntimeProfileInput = {
   hostname?: string | undefined;
   profile?: string | undefined;
+};
+
+export type PublishedSiteRedirect = {
+  location: string;
+  status: typeof PUBLISHED_SITE_REDIRECT_STATUS;
 };
 
 export function workerRuntimeProfileInput(profile: string | undefined): WorkerRuntimeProfileInput {
@@ -39,6 +45,7 @@ export function shouldHandlePublishedSiteDocument(
 
   if (
     isApiPath(url.pathname) ||
+    publishedSiteRedirectLocation(url.pathname, url.search) ||
     isClientShellRoute(url.pathname) ||
     looksLikeStaticAssetPath(url.pathname)
   ) {
@@ -64,11 +71,31 @@ export function shouldDeferToStaticAssets(
 
   const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
 
-  return (
+  return profileKind !== "publishedSite" || looksLikeStaticAssetPath(url.pathname);
+}
+
+export function publishedSiteRedirectForRequest(
+  request: Request,
+  input: WorkerRuntimeProfileInput = {},
+): PublishedSiteRedirect | undefined {
+  if (request.method !== "GET") {
+    return undefined;
+  }
+
+  const url = new URL(request.url);
+  const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
+
+  if (
     profileKind !== "publishedSite" ||
-    isClientShellRoute(url.pathname) ||
+    isApiPath(url.pathname) ||
     looksLikeStaticAssetPath(url.pathname)
-  );
+  ) {
+    return undefined;
+  }
+
+  const location = publishedSiteRedirectLocation(url.pathname, url.search);
+
+  return location ? { location, status: PUBLISHED_SITE_REDIRECT_STATUS } : undefined;
 }
 
 export function isApiPath(pathname: string): boolean {
@@ -144,6 +171,32 @@ function runtimeProfileKindFromHost(
   }
 
   return undefined;
+}
+
+function publishedSiteRedirectLocation(pathname: string, search: string): string | undefined {
+  const withoutTrailingSlash = trimTrailingSlash(pathname);
+
+  if (withoutTrailingSlash === "/work") {
+    return `/projects${search}`;
+  }
+
+  if (withoutTrailingSlash === "/pages" || withoutTrailingSlash === "/pages/home") {
+    return `/${search}`;
+  }
+
+  if (pathname.startsWith("/pages/")) {
+    const cleanPath = trimTrailingSlash(pathname.slice("/pages/".length).replace(/^\/+/, ""));
+
+    return `/${cleanPath}${search}`;
+  }
+
+  return undefined;
+}
+
+function trimTrailingSlash(pathname: string): string {
+  const trimmed = pathname.replace(/\/+$/, "");
+
+  return trimmed === "" ? "/" : trimmed;
 }
 
 function acceptsHtml(acceptHeader: string | null): boolean {

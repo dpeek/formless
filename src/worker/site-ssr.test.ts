@@ -294,17 +294,46 @@ describe("published Site Worker SSR", () => {
     expect(body.meta.slug).toBe("home");
   });
 
-  it("leaves preview, generated admin, and asset-like routes outside the SSR document path", async () => {
+  it("redirects old preview and work routes before public document rendering", async () => {
     const responses = await Promise.all([
-      getDocument("/pages/home"),
+      getDocumentWithoutFollowingRedirect("/pages/home"),
+      getDocumentWithoutFollowingRedirect("/pages/projects"),
+      getDocumentWithoutFollowingRedirect("/pages/blog/agents-are-enablers?ref=preview"),
+      getDocumentWithoutFollowingRedirect("/work"),
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([308, 308, 308, 308]);
+    expect(responses.map((response) => response.headers.get("Location"))).toEqual([
+      "/",
+      "/projects",
+      "/blog/agents-are-enablers?ref=preview",
+      "/projects",
+    ]);
+  });
+
+  it("returns 404 responses for generated admin routes in the published profile", async () => {
+    const responses = await Promise.all([
       getDocument("/site"),
       getDocument("/tasks"),
+      getDocument("/estii/setup"),
+      getDocument("/rates"),
+      getDocument("/schema"),
+    ]);
+    const bodies = await Promise.all(responses.map((response) => response.text()));
+
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404]);
+    expect(bodies.join("\n")).not.toContain("data-site-header");
+    expect(bodies.join("\n")).not.toContain("Loading site page...");
+  });
+
+  it("keeps API and asset-like routes outside the SSR document path", async () => {
+    const responses = await Promise.all([
       getDocument("/assets/index.js"),
       getDocument("/favicon.svg"),
     ]);
     const bodies = await Promise.all(responses.map((response) => response.text()));
 
-    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([404, 404]);
     expect(bodies.join("\n")).not.toContain("data-site-header");
     expect(bodies.join("\n")).not.toContain("Loading site page...");
   });
@@ -325,6 +354,15 @@ async function getDocument(path: string) {
     headers: {
       Accept: "text/html",
     },
+  });
+}
+
+async function getDocumentWithoutFollowingRedirect(path: string) {
+  return harness.fetch(path, {
+    headers: {
+      Accept: "text/html",
+    },
+    redirect: "manual",
   });
 }
 

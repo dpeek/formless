@@ -1,7 +1,11 @@
 import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
 import { handleSiteMediaRequest } from "./media.ts";
-import { shouldDeferToStaticAssets, workerRuntimeProfileInput } from "./routing.ts";
+import {
+  publishedSiteRedirectForRequest,
+  shouldDeferToStaticAssets,
+  workerRuntimeProfileInput,
+} from "./routing.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 
 export { FormlessAuthority } from "./authority.ts";
@@ -20,6 +24,15 @@ export default {
 
     if (mediaResponse) {
       return mediaResponse;
+    }
+
+    const publishedSiteRedirect = publishedSiteRedirectForRequest(
+      request,
+      workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
+    );
+
+    if (publishedSiteRedirect) {
+      return redirectResponse(publishedSiteRedirect.location, publishedSiteRedirect.status);
     }
 
     const url = new URL(request.url);
@@ -48,6 +61,15 @@ export default {
     return new Response(null, { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
+
+function redirectResponse(location: string, status: number): Response {
+  return new Response(null, {
+    headers: {
+      Location: location,
+    },
+    status,
+  });
+}
 
 function parseApiSchemaApp(pathname: string) {
   const [apiSegment, schemaKey, routeSegment] = pathname.split("/").filter(Boolean);

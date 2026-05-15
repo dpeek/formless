@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   isClientShellRoute,
+  publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
   shouldHandlePublishedSiteDocument,
 } from "./routing.ts";
@@ -86,10 +87,11 @@ describe("Worker document routing", () => {
     ).toBe(false);
   });
 
-  it("keeps API, preview, generated app, app-profile, asset, and non-HTML routes out of SSR", () => {
+  it("keeps API, preview redirect, generated app, app-profile, asset, and non-HTML routes out of SSR", () => {
     const nonSsrRequests = [
       documentRequest("http://example.com/api/site/tree/home"),
       documentRequest("http://example.com/pages/home"),
+      documentRequest("http://example.com/work"),
       documentRequest("http://example.com/tasks"),
       documentRequest("http://example.com/estii/setup"),
       documentRequest("http://example.com/site/schema"),
@@ -110,6 +112,28 @@ describe("Worker document routing", () => {
     expect(shouldHandlePublishedSiteDocument(documentRequest("http://app.example.com/"))).toBe(
       false,
     );
+  });
+
+  it("blocks generated app paths from published document and static shell handling", () => {
+    const generatedAppRequests = [
+      documentRequest("http://example.com/tasks"),
+      documentRequest("http://example.com/estii/setup"),
+      documentRequest("http://example.com/rates"),
+      documentRequest("http://example.com/site/schema"),
+      documentRequest("http://example.com/schema"),
+    ];
+
+    expect(
+      generatedAppRequests.map((request) =>
+        shouldHandlePublishedSiteDocument(request, { profile: "publishedSite" }),
+      ),
+    ).toEqual(generatedAppRequests.map(() => false));
+
+    expect(
+      generatedAppRequests.map((request) =>
+        shouldDeferToStaticAssets(request, { profile: "publishedSite" }),
+      ),
+    ).toEqual(generatedAppRequests.map(() => false));
   });
 
   it("marks client-shell and static asset requests for asset serving fallback", () => {
@@ -140,6 +164,100 @@ describe("Worker document routing", () => {
         }),
       ),
     ).toBe(false);
+  });
+
+  it("limits published profile static fallback to asset-like paths", () => {
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/assets/index.js"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/favicon.svg"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/pages/home"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/site"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(false);
+  });
+
+  it("builds published Site redirects for old preview and work routes", () => {
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/pages"), {
+        profile: "publishedSite",
+      }),
+    ).toEqual({ location: "/", status: 308 });
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/pages/"), {
+        profile: "publishedSite",
+      }),
+    ).toEqual({ location: "/", status: 308 });
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/pages/home"), {
+        profile: "publishedSite",
+      }),
+    ).toEqual({ location: "/", status: 308 });
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/pages/projects"), {
+        profile: "publishedSite",
+      }),
+    ).toEqual({ location: "/projects", status: 308 });
+    expect(
+      publishedSiteRedirectForRequest(
+        documentRequest("http://example.com/pages/blog/agents?ref=old"),
+        {
+          profile: "publishedSite",
+        },
+      ),
+    ).toEqual({ location: "/blog/agents?ref=old", status: 308 });
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/pages//projects"), {
+        profile: "publishedSite",
+      }),
+    ).toEqual({ location: "/projects", status: 308 });
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/work/"), {
+        profile: "publishedSite",
+      }),
+    ).toEqual({ location: "/projects", status: 308 });
+  });
+
+  it("does not redirect outside the published profile or for API, asset, or non-GET requests", () => {
+    expect(publishedSiteRedirectForRequest(documentRequest("http://example.com/pages/home"))).toBe(
+      undefined,
+    );
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/pages/home"), {
+        profile: "siteAuthoring",
+      }),
+    ).toBe(undefined);
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/api/site/pages/home"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(undefined);
+    expect(
+      publishedSiteRedirectForRequest(documentRequest("http://example.com/pages/logo.svg"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(undefined);
+    expect(
+      publishedSiteRedirectForRequest(
+        new Request("http://example.com/pages/home", {
+          headers: { Accept: "text/html" },
+          method: "POST",
+        }),
+        { profile: "publishedSite" },
+      ),
+    ).toBe(undefined);
   });
 
   it("recognizes generated app and preview route prefixes as client shell routes", () => {
