@@ -1,7 +1,7 @@
 # PRD 38: Public Site cutover cleanup
 
-Status: ready
-Current chunk: PSC-06 ready
+Status: shipped
+Current chunk: complete
 Last updated: 2026-05-15
 
 Start after PRD 34, PRD 35, PRD 36, and PRD 37 shipped behavior is stable on the active branch.
@@ -388,7 +388,7 @@ Possible changed files:
 | PSC-03 | shipped | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
 | PSC-04 | shipped | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
 | PSC-05 | shipped | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests                         | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                                 |
-| PSC-06 | ready   | none                 | public renderer CSS/classes, app render tests                          | Footer note text is readable in dark mode.                                                                                                         |
+| PSC-06 | shipped | none                 | public renderer CSS/classes, app render tests                          | Footer note text is readable in dark mode.                                                                                                         |
 
 ## Status Notes
 
@@ -403,9 +403,11 @@ Possible changed files:
 - 2026-05-15: PSC-04 keeps launch icons on the package static asset path. Wrangler static routing excludes `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` from Worker-first public document handling, while Worker fallback still defers asset-like icon paths to `ASSETS`.
 - 2026-05-15: PSC-05 shipped. `src/worker/head-response.ts` adapts `HEAD` to the matching `GET` route decision and returns matching status/headers with no response body.
 - 2026-05-15: PSC-05 supports `HEAD` for public Site documents, public redirects, generated-app public 404s, Site media reads and misses, and Worker indexing resources.
+- 2026-05-15: PSC-06 shipped. Footer note text now uses a readable dark-mode text color in the public Site renderer.
 - Decisions: no new PSC-03 decisions. Implementation follows PSC-D14 and PSC-D15.
 - Decisions: no new PSC-04 decisions. Implementation follows PSC-D9, PSC-D20, and PSC-D21.
 - Decisions: no new PSC-05 decisions. Implementation follows PSC-D16.
+- Decisions: no new PSC-06 decisions. Implementation follows PSC-D19.
 - Blockers: none.
 
 ## Acceptance Checks
@@ -440,6 +442,7 @@ Possible changed files:
 - Package CLI Site projects outside the monorepo serve and publish default launch assets from package-owned `public/`.
 - Published profile blocks generated app/admin shells from the public host.
 - Public document and media routes support `HEAD`.
+- Footer note text remains readable in dark mode.
 
 ## Evidence
 
@@ -484,5 +487,15 @@ Possible changed files:
 - 2026-05-15: Rebase on local `main` was a no-op.
 - 2026-05-15: After rebase, `.devstate/status.md` reports checks ok and services running.
 - 2026-05-15: After rebase, `.devstate/logs/service-test.txt` reports 4 test files passed, 40 tests.
+- 2026-05-15: After rebase, `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 252 files.
+- 2026-05-15: After rebase, `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/`.
+- 2026-05-15: `.devstate/status.md` reports checks ok and services running after PSC-06.
+- 2026-05-15: `.devstate/logs/service-test.txt` reports `src/app.test.tsx` passed, 151 tests.
+- 2026-05-15: `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 252 files.
+- 2026-05-15: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/`.
+- 2026-05-15: Browser smoke `bun browser --session psc-06-footer ... /pages/home` set the public Site theme to dark, found the footer note, reported computed note color `oklch(0.871 0.006 286.286)`, and reported no page errors.
+- 2026-05-15: Rebase on local `main` was a no-op after PSC-06.
+- 2026-05-15: After rebase, `.devstate/status.md` reports checks ok and services running.
+- 2026-05-15: After rebase, `.devstate/logs/service-test.txt` reports 4 test files passed, 181 tests.
 - 2026-05-15: After rebase, `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 252 files.
 - 2026-05-15: After rebase, `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/`.

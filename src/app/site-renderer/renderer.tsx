@@ -279,7 +279,7 @@ function FooterNote({ placement }: { placement: SitePlacementNode }) {
     const text = block.body ?? displayLabel(block, placement);
 
     return text ? (
-      <PlainText text={text} className="text-sm text-zinc-700 dark:text-zinc-700" />
+      <PlainText text={text} className="text-sm text-zinc-700 dark:text-zinc-300" />
     ) : null;
   }
 

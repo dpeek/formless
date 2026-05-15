@@ -1550,6 +1550,7 @@ describe("public site renderer", () => {
     expect(html).toContain("Explore");
     expect(html).toContain("Social");
     expect(footerHtml).toContain("Copyright 2026 David Peek. All rights reserved.");
+    expect(footerHtml).toContain("text-sm text-zinc-700 dark:text-zinc-300");
     expect(html).toContain('href="https://github.com/dpeek"');
     expect(githubLinkHtml).toContain('aria-label="GitHub"');
     expect(githubLinkHtml).toContain('data-web-svg-icon="svg"');
