@@ -1,10 +1,9 @@
 "use client";
 
 import { Button } from "@formless/ui/button";
-import { TextTooltip } from "@formless/ui/tooltip";
 import { cn } from "@formless/ui/utils";
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import {
   PlateElement,
   PlateLeaf,
@@ -156,27 +155,18 @@ function MarkdownCodeCopyButton({ code }: { code: string }) {
   }
 
   return (
-    <MarkdownCodeTooltip text={label}>
-      <Button
-        aria-label={label}
-        className="graph-markdown-code-block-copy-button"
-        onClick={() => void copyCode()}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
-      </Button>
-    </MarkdownCodeTooltip>
+    <Button
+      aria-label={label}
+      className="graph-markdown-code-block-copy-button"
+      onClick={() => void copyCode()}
+      size="icon-sm"
+      title={label}
+      type="button"
+      variant="ghost"
+    >
+      {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
+    </Button>
   );
-}
-
-function MarkdownCodeTooltip({ children, text }: { children: ReactNode; text: string }) {
-  if (typeof document === "undefined") {
-    return <>{children}</>;
-  }
-
-  return <TextTooltip text={text}>{children}</TextTooltip>;
 }
 
 function codeBlockText(element: MarkdownPlateElementNode): string {

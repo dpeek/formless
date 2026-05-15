@@ -1068,7 +1068,7 @@ describe("public site renderer", () => {
     expect(main).not.toContain("2026-05-08");
     expect(main).not.toContain("2026-05-03");
     expect(main).not.toContain("2026-05-01");
-    expect(html).toContain('data-web-markdown-renderer="server"');
+    expect(html).toContain('data-web-markdown-renderer="shared"');
     expect(html).toContain("operational assumptions");
     expect(html).toContain("<strong");
     expect(html).toContain('href="https://estii.com/"');
@@ -1265,12 +1265,51 @@ describe("public site renderer", () => {
     ];
     const html = renderSitePage("home", records);
 
-    expect(html).toContain('data-web-markdown-renderer="server"');
+    expect(html).toContain('data-web-markdown-renderer="shared"');
     expect(html).toContain('href="https://estii.com/"');
     expect(html).toContain(">estii.com<");
     expect(html).toContain("<strong");
     expect(html).not.toContain("[estii.com](https://estii.com)");
     expect(html).not.toContain("**OpenSurf**");
+  });
+
+  it("renders public markdown JSON fences with syntax highlighting", () => {
+    const records: StoredRecord[] = [
+      ...testSiteSeedRecords,
+      {
+        id: "rec_site_content_home_json_markdown",
+        entity: "block",
+        values: {
+          type: "markdown",
+          label: "JSON markdown",
+          body: ["```json", "{", '  "name": "Formless",', '  "enabled": true', "}", "```"].join(
+            "\n",
+          ),
+        },
+        createdAt: "2026-05-05T00:00:34.000Z",
+      },
+      {
+        id: "rec_site_place_home_json_markdown",
+        entity: "blockPlacement",
+        values: {
+          parent: "rec_site_content_home",
+          block: "rec_site_content_home_json_markdown",
+          order: 1501,
+        },
+        createdAt: "2026-05-05T00:00:35.000Z",
+      },
+    ];
+    const html = renderSitePage("home", records);
+
+    expect(html).toContain('data-web-markdown-renderer="shared"');
+    expect(html).toContain("graph-markdown-code-block");
+    expect(html).toContain('data-code-block="true"');
+    expect(html).toContain('data-highlight-language="json"');
+    expect(html).toContain('data-language="json"');
+    expect(html).toContain("hljs-attr");
+    expect(html).toContain("hljs-string");
+    expect(html).toContain("hljs-literal");
+    expect(html).toContain("Formless");
   });
 
   it("renders image media blocks from uploaded and external href metadata", () => {
@@ -3438,7 +3477,7 @@ describe("generated forms and records", () => {
       <RecordTable columns={columns} entity={task} entityName="task" query={{ kind: "all" }} />,
     );
 
-    expect(html).toContain('data-web-markdown-renderer="plate"');
+    expect(html).toContain('data-web-markdown-renderer="shared"');
     expect(html).toContain("<h2");
     expect(html).toContain("Draft");
     expect(html).not.toContain("<textarea");

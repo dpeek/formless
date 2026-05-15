@@ -18,7 +18,7 @@ import {
   type MarkdownPlateValue,
 } from "./markdown-plate-value.js";
 
-export { MarkdownRenderer } from "./markdown-plate-renderer.js";
+export { MarkdownRenderer } from "./markdown-renderer.js";
 export type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
 
 export function MarkdownEditor({

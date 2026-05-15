@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe("MarkdownRenderer", () => {
-  it("uses the Plate renderer even when Bun markdown is available", () => {
+  it("uses the shared renderer even when Bun markdown is available", () => {
     setBunMarkdown({
       react(content: string) {
         return <article data-bun-rendered="true">{content.toUpperCase()}</article>;
@@ -53,8 +53,8 @@ describe("MarkdownRenderer", () => {
     expect(markup).toContain("prose");
     expect(markup).toContain("max-w-none");
     expect(markup).toContain("dark:prose-invert");
-    expect(markup).toContain('data-web-markdown-renderer="plate"');
-    expect(markup).toContain('<h1 data-slate-node="element"');
+    expect(markup).toContain('data-web-markdown-renderer="shared"');
+    expect(markup).toContain("<h1");
     expect(markup).toContain('id="heading"');
     expect(markup).toContain("Heading");
     expect(markup).not.toContain("data-bun-rendered");
@@ -136,7 +136,7 @@ describe("MarkdownRenderer", () => {
     expect(markup).not.toContain("javascript:alert");
   });
 
-  it("renders fenced code blocks through Plate syntax leaves", () => {
+  it("renders fenced code blocks with syntax highlighting", () => {
     const markup = renderToStaticMarkup(
       <MarkdownRenderer
         content={[
@@ -153,8 +153,7 @@ describe("MarkdownRenderer", () => {
     expect(markup).toContain('data-language="tsx"');
     expect(markup).toContain("lib/graphle-web-ui/src/markdown.tsx");
     expect(markup).toContain('aria-label="Copy code"');
-    expect(markup).toContain("graph-markdown-code-line");
-    expect(markup).toContain("graph-markdown-code-syntax");
+    expect(markup).toContain('title="Copy code"');
     expect(markup).toContain("hljs-keyword");
     expect(markup).toContain("const");
     expect(markup).toContain("value");

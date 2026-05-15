@@ -1,10 +1,43 @@
+import { Button } from "@formless/ui/button";
 import { cn } from "@formless/ui/utils";
+import bash from "highlight.js/lib/languages/bash";
+import css from "highlight.js/lib/languages/css";
+import diff from "highlight.js/lib/languages/diff";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import scss from "highlight.js/lib/languages/scss";
+import sql from "highlight.js/lib/languages/sql";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
+import hljs from "highlight.js/lib/core";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { lexer, type Token, type Tokens } from "marked";
-import { createElement, type ReactNode } from "react";
+import { createElement, useEffect, useState, type ReactNode } from "react";
 
+import { parseMarkdownCodeInfo } from "./markdown-code-info.js";
 import type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
 
 export type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
+
+const HIGHLIGHT_LANGUAGE_ALIASES: Record<string, string> = {
+  html: "xml",
+  jsx: "javascript",
+  tsx: "typescript",
+};
+
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("diff", diff);
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("scss", scss);
+hljs.registerLanguage("sql", sql);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("yaml", yaml);
 
 export function MarkdownRenderer({
   className,
@@ -21,7 +54,7 @@ export function MarkdownRenderer({
   return (
     <div
       className={cn("graph-markdown prose max-w-none dark:prose-invert", className)}
-      data-web-markdown-renderer="server"
+      data-web-markdown-renderer="shared"
     >
       {renderTokens(tokens, {
         headingSlugger,
@@ -81,14 +114,8 @@ function renderToken(
     }
     case "br":
       return <br key={context.key} />;
-    case "code": {
-      const code = token as Tokens.Code;
-      return (
-        <pre key={context.key}>
-          <code className={code.lang ? `language-${code.lang}` : undefined}>{code.text}</code>
-        </pre>
-      );
-    }
+    case "code":
+      return <MarkdownCodeBlock code={token as Tokens.Code} key={context.key} />;
     case "heading": {
       const heading = token as Tokens.Heading;
       const level = normalizeHeadingLevel(heading.depth, context.minHeadingLevel);
@@ -114,12 +141,19 @@ function renderToken(
       const List = list.ordered ? "ol" : "ul";
       return (
         <List
-          className="graph-markdown-list"
+          className={
+            list.items.some((item) => item.task)
+              ? "graph-markdown-task-list"
+              : "graph-markdown-list"
+          }
           key={context.key}
           start={list.ordered && list.start ? list.start : undefined}
         >
           {list.items.map((item: Tokens.ListItem, index: number) => (
-            <li className="graph-markdown-list-item" key={`${context.key}:li:${index}`}>
+            <li
+              className={item.task ? "graph-markdown-task-list-item" : "graph-markdown-list-item"}
+              key={`${context.key}:li:${index}`}
+            >
               {item.task ? (
                 <input checked={item.checked ?? false} disabled readOnly type="checkbox" />
               ) : null}
@@ -230,6 +264,115 @@ function renderInlineToken(
     }
     default:
       return null;
+  }
+}
+
+function MarkdownCodeBlock({ code }: { code: Tokens.Code }) {
+  const codeInfo = parseMarkdownCodeInfo(splitCodeInfo(code.lang));
+  const highlightedHtml = codeInfo.highlightLanguage
+    ? highlightCodeHtml(code.text, codeInfo.highlightLanguage)
+    : null;
+
+  return (
+    <div
+      className="not-prose graph-markdown-code-block"
+      data-code-block="true"
+      data-highlight-language={codeInfo.highlightLanguage ?? undefined}
+      data-language={codeInfo.language ?? undefined}
+    >
+      <div className="graph-markdown-code-block-header">
+        {codeInfo.label ? (
+          <span className="graph-markdown-code-block-label">{codeInfo.label}</span>
+        ) : (
+          <span aria-hidden="true" />
+        )}
+        <MarkdownCodeCopyButton code={code.text} />
+      </div>
+      <div className="graph-markdown-code-block-body">
+        <pre className="graph-markdown-code-block-pre">
+          {highlightedHtml ? (
+            <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+          ) : (
+            <code>{code.text}</code>
+          )}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function MarkdownCodeCopyButton({ code }: { code: string }) {
+  const [copyState, setCopyState] = useState<"copied" | "failed" | "idle">("idle");
+
+  useEffect(() => {
+    if (copyState === "idle") {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCopyState("idle");
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [copyState]);
+
+  const label =
+    copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy code";
+
+  async function copyCode(): Promise<void> {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable");
+      }
+
+      await navigator.clipboard.writeText(code);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  }
+
+  return (
+    <Button
+      aria-label={label}
+      className="graph-markdown-code-block-copy-button"
+      onClick={() => void copyCode()}
+      size="icon-sm"
+      title={label}
+      type="button"
+      variant="ghost"
+    >
+      {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
+    </Button>
+  );
+}
+
+function splitCodeInfo(info: string | undefined): {
+  language?: string | null;
+  meta?: string | null;
+} {
+  const trimmed = info?.trim();
+
+  if (!trimmed) {
+    return {};
+  }
+
+  const [language = "", ...metaParts] = trimmed.split(/\s+/);
+  return {
+    language,
+    meta: metaParts.length > 0 ? metaParts.join(" ") : null,
+  };
+}
+
+function highlightCodeHtml(code: string, language: string): string | null {
+  const highlightLanguage = HIGHLIGHT_LANGUAGE_ALIASES[language] ?? language;
+
+  try {
+    return hljs.highlight(code, { ignoreIllegals: true, language: highlightLanguage }).value;
+  } catch {
+    return null;
   }
 }
 
