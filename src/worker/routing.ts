@@ -55,6 +55,23 @@ export function shouldHandlePublishedSiteDocument(
   return acceptsHtml(request.headers.get("Accept"));
 }
 
+export function shouldHandlePublishedSiteIndexingResource(
+  request: Request,
+  input: WorkerRuntimeProfileInput = {},
+): boolean {
+  if (request.method !== "GET") {
+    return false;
+  }
+
+  const url = new URL(request.url);
+  const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
+
+  return (
+    profileKind === "publishedSite" &&
+    (url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml")
+  );
+}
+
 export function shouldDeferToStaticAssets(
   request: Request,
   input: WorkerRuntimeProfileInput = {},

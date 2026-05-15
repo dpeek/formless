@@ -1,0 +1,149 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
+
+import type { SchemaKey } from "../shared/schema-apps.ts";
+import { createWorkerHarness } from "./miniflare-test.ts";
+import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
+
+type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
+
+const adminToken = "test-admin-token";
+
+let harness: Harness;
+
+beforeAll(async () => {
+  harness = await createWorkerHarness(
+    "src/worker/index.ts",
+    {
+      FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+    },
+    {
+      bindings: {
+        FORMLESS_RUNTIME_PROFILE: "publishedSite",
+        FORMLESS_ADMIN_TOKEN: adminToken,
+      },
+      compatibilityDate: "2026-04-28",
+    },
+  );
+});
+
+beforeEach(async () => {
+  await resetSchemaApp("site");
+});
+
+afterAll(async () => {
+  await harness.dispose();
+});
+
+describe("published Site indexing resources", () => {
+  it("serves robots.txt as plain text instead of the client shell", async () => {
+    const response = await harness.fetch("/robots.txt", {
+      headers: { Accept: "text/html" },
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLIC_SITE_INDEXING_CACHE_CONTROL);
+    expect(response.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    expect(response.headers.get("Content-Type")).not.toContain("text/html");
+    expect(body).toBe(`User-agent: *
+Allow: /
+
+Sitemap: http://example.com/sitemap.xml
+`);
+    expect(body).not.toContain("<html");
+  });
+
+  it("serves sitemap.xml from public Site routes instead of the client shell", async () => {
+    await postAdminJson("/api/site/mutations", {
+      mutationId: "mutation-public-sitemap-page",
+      entity: "block",
+      op: "create",
+      values: {
+        type: "page",
+        label: "Launch check",
+        body: "Sitemap launch check.",
+        href: "/launch-check",
+      },
+    });
+    await postAdminJson("/api/site/mutations", {
+      mutationId: "mutation-public-sitemap-post",
+      entity: "block",
+      op: "create",
+      values: {
+        type: "post",
+        label: "Sitemap post",
+        body: "Sitemap post check.",
+        href: "/blog/sitemap-post",
+        date: "2026-05-15",
+      },
+    });
+    await postAdminJson("/api/site/mutations", {
+      mutationId: "mutation-public-sitemap-undated-post",
+      entity: "block",
+      op: "create",
+      values: {
+        type: "post",
+        label: "Undated draft",
+        body: "Hidden until dated.",
+        href: "/blog/undated-draft",
+      },
+    });
+    await postAdminJson("/api/site/mutations", {
+      mutationId: "mutation-public-sitemap-blocked-app-route",
+      entity: "block",
+      op: "create",
+      values: {
+        type: "page",
+        label: "Blocked app route",
+        body: "Generated app route.",
+        href: "/site",
+      },
+    });
+
+    const response = await harness.fetch("/sitemap.xml", {
+      headers: { Accept: "text/html" },
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(PUBLIC_SITE_INDEXING_CACHE_CONTROL);
+    expect(response.headers.get("Content-Type")).toBe("application/xml; charset=utf-8");
+    expect(body).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+    expect(body).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
+    expect(body).toContain("<loc>http://example.com/launch-check</loc>");
+    expect(body).toContain("<loc>http://example.com/blog/sitemap-post</loc>");
+    expect(body).not.toContain("<html");
+    expect(body).not.toContain("/pages/");
+    expect(body).not.toContain("<loc>http://example.com/site</loc>");
+    expect(body).not.toContain("undated-draft");
+  });
+});
+
+async function resetSchemaApp(schemaKey: SchemaKey) {
+  const response = await harness.fetch(`/api/${schemaKey}/reset/seed`, {
+    body: "{}",
+    headers: adminHeaders(),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+}
+
+async function postAdminJson(path: string, body: unknown) {
+  const response = await harness.fetch(path, {
+    body: JSON.stringify(body),
+    headers: adminHeaders(),
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+
+  return response;
+}
+
+function adminHeaders() {
+  return {
+    Authorization: `Bearer ${adminToken}`,
+    "Content-Type": "application/json",
+  };
+}

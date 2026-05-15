@@ -1,7 +1,7 @@
 # PRD 38: Public Site cutover cleanup
 
 Status: ready
-Current chunk: PSC-03 ready
+Current chunk: PSC-04 ready
 Last updated: 2026-05-15
 
 Start after PRD 34, PRD 35, PRD 36, and PRD 37 shipped behavior is stable on the active branch.
@@ -385,7 +385,7 @@ Possible changed files:
 | ------ | ------- | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | PSC-01 | shipped | none                 | metadata and SSR document code, SSR tests                              | Public SSR documents have route-specific title, description, canonical, OG, and Twitter tags from existing tree data; `og:image` is absent.        |
 | PSC-02 | shipped | none                 | routing code, Worker dispatch, routing tests                           | Public profile redirects `/pages*` and `/work`, blocks generated app/admin shells, and keeps API/assets working.                                   |
-| PSC-03 | ready   | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
+| PSC-03 | shipped | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
 | PSC-04 | ready   | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
 | PSC-05 | ready   | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests                         | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                                 |
 | PSC-06 | ready   | none                 | public renderer CSS/classes, app render tests                          | Footer note text is readable in dark mode.                                                                                                         |
@@ -396,7 +396,9 @@ Possible changed files:
 - 2026-05-15: PSC-01 keeps `og:image` absent and adds no Site block fields.
 - 2026-05-15: PSC-02 shipped. Worker dispatch now redirects published `/pages`, `/pages/home`, `/pages/*`, and `/work` routes before API/static/document fallback.
 - 2026-05-15: PSC-02 blocks generated app/admin client shell routes from published static fallback; API routes and asset-like paths still bypass Site document SSR.
-- Decisions: no new PSC-02 decisions. Implementation follows PSC-D11, PSC-D12, PSC-D13, and PSC-D17.
+- 2026-05-15: PSC-03 shipped. `src/site/public-indexing.ts` builds deterministic public route entries from live page blocks and dated post blocks, canonicalizes old `/pages/*` hrefs to clean public paths, validates candidates through `resolveSiteRoute`, and excludes API, generated app, and static-like paths.
+- 2026-05-15: PSC-03 serves `/robots.txt` as plain text and `/sitemap.xml` as XML from current Site bootstrap records before static asset fallback.
+- Decisions: no new PSC-03 decisions. Implementation follows PSC-D14 and PSC-D15.
 - Blockers: none.
 
 ## Acceptance Checks
@@ -426,7 +428,8 @@ Possible changed files:
 - Public Site SSR documents include route metadata from existing Site tree facts: title, description, canonical URL, OG title/description/type/url/site_name, and Twitter card.
 - Public Site SSR metadata uses the first primary header link label as the Site name when available, falls back through page label to `Site`, and does not emit `og:image`.
 - Public Site uses clean top-level route redirects for old preview paths.
-- Public Site serves `robots.txt`, `sitemap.xml`, favicon, and touch icon assets.
+- Public Site serves `robots.txt` and `sitemap.xml` through Worker-generated indexing resources.
+- Public Site serves favicon and touch icon assets.
 - Package CLI Site projects outside the monorepo serve and publish default launch assets from package-owned `public/`.
 - Published profile blocks generated app/admin shells from the public host.
 - Public document and media routes support `HEAD`.
@@ -444,3 +447,11 @@ Possible changed files:
 - 2026-05-15: `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 246 files.
 - 2026-05-15: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/`.
 - 2026-05-15: Browser smoke `bun browser --session psc-02-dev --ignore-https-errors ... /pages/home` rendered the public preview with Home content and no page errors. Published-host browser smoke was unavailable because `published-site.*.formless.local` did not resolve locally; Worker routing and Miniflare tests cover published redirects and shell blocking.
+- 2026-05-15: `.devstate/status.md` reports checks ok and services running after PSC-03.
+- 2026-05-15: `.devstate/logs/service-test.txt` reports `src/worker/public-indexing.test.ts` passed, 2 tests.
+- 2026-05-15: `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 250 files.
+- 2026-05-15: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/`.
+- 2026-05-15: Browser smoke attempted `bun browser --session psc-03-indexing --ignore-https-errors open https://published-site.38-public-site-cutover-cleanup.formless.local/robots.txt`; local published-profile hostname failed with `net::ERR_NAME_NOT_RESOLVED`, so Miniflare Worker tests cover `/robots.txt` and `/sitemap.xml`.
+- 2026-05-15: After rebase on local `main`, `.devstate/status.md` reports checks ok and services running.
+- 2026-05-15: After rebase, `.devstate/logs/service-test.txt` reports 6 test files passed, 135 tests.
+- 2026-05-15: After rebase, `.devstate/logs/check-vite.txt` reports formatting completed and no warnings, lint errors, or type errors in 250 files.

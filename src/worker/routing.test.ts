@@ -5,6 +5,7 @@ import {
   publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
   shouldHandlePublishedSiteDocument,
+  shouldHandlePublishedSiteIndexingResource,
 } from "./routing.ts";
 
 describe("Worker document routing", () => {
@@ -112,6 +113,33 @@ describe("Worker document routing", () => {
     expect(shouldHandlePublishedSiteDocument(documentRequest("http://app.example.com/"))).toBe(
       false,
     );
+  });
+
+  it("routes published Site indexing resources before static asset fallback", () => {
+    expect(
+      shouldHandlePublishedSiteIndexingResource(new Request("http://example.com/robots.txt"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldHandlePublishedSiteIndexingResource(new Request("http://example.com/sitemap.xml"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldHandlePublishedSiteIndexingResource(new Request("http://example.com/sitemap.xml")),
+    ).toBe(false);
+    expect(
+      shouldHandlePublishedSiteIndexingResource(
+        new Request("http://example.com/sitemap.xml", { method: "HEAD" }),
+        { profile: "publishedSite" },
+      ),
+    ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(new Request("http://example.com/sitemap.xml"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
   });
 
   it("blocks generated app paths from published document and static shell handling", () => {

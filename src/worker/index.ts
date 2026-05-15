@@ -1,6 +1,7 @@
 import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
 import { handleSiteMediaRequest } from "./media.ts";
+import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
   publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
@@ -33,6 +34,12 @@ export default {
 
     if (publishedSiteRedirect) {
       return redirectResponse(publishedSiteRedirect.location, publishedSiteRedirect.status);
+    }
+
+    const publishedSiteIndexingResponse = await handlePublishedSiteIndexingRequest(request, env);
+
+    if (publishedSiteIndexingResponse) {
+      return publishedSiteIndexingResponse;
     }
 
     const url = new URL(request.url);
