@@ -1,7 +1,7 @@
 # PRD 39: Minimal Site starter seed
 
-Status: ready
-Current chunk: MSS-05 ready
+Status: complete
+Current chunk: MSS-05 shipped
 Last updated: 2026-05-15
 
 Start after PRD 37 shipped behavior is stable on the active branch.
@@ -273,7 +273,7 @@ Prior art:
 | MSS-02 | shipped | MSS-01     | site seed records, seed tests       | Default Site seed is neutral, minimal, validates, has no media references, and includes starter pages/content. |
 | MSS-03 | shipped | MSS-02     | CLI tests, project source tests     | `formless init` creates a no-media starter project and reports `mediaCount: 0`.                                |
 | MSS-04 | shipped | MSS-03     | affected renderer/tree/schema tests | Tests use fixtures for rich Site behavior and no longer depend on personal default seed content.               |
-| MSS-05 | ready   | MSS-04     | PRD                                 | Closeout records checks, decisions, blockers, and promote notes after implementation ships.                    |
+| MSS-05 | shipped | MSS-04     | PRD                                 | Closeout records checks, decisions, blockers, and promote notes after implementation ships.                    |
 
 ## Out of Scope
 
@@ -307,6 +307,7 @@ Prior art:
 - MSS-02: source Site seed is neutral and no-media; promote after init/project-source chunks verify CLI output.
 - MSS-03: project media discovery returns zero assets for the default starter, and init reports `mediaCount: 0` without creating a project `media/` tree.
 - MSS-04: published Site SSR source-seed tests use neutral starter route/record IDs, while richer public tree and renderer coverage stays on `src/test/site-records.ts`.
+- MSS-05: PRD complete; promote the listed shipped facts during a doc/steward pass.
 - `doc/current.md`: note default `formless init` creates a neutral no-media Site starter.
 - `doc/current.md`: note starter pages are Home, About, Blog, Projects, and Resume with one post and one project.
 - `doc/current.md`: note init writes zero starter media files for the default starter.
@@ -334,6 +335,11 @@ Prior art:
 - 2026-05-15: MSS-04 attempted to read `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt`; this repo currently exposes managed evidence under `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` instead.
 - 2026-05-15: MSS-04 watcher evidence: `.devstate/logs/service-test.txt` reports `src/worker/site-ssr.test.ts` passing with 10 tests.
 - 2026-05-15: MSS-04 `devstate check` passed; `.devstate/status.json` reports checks ok, web ready, and watcher tests passing.
+- 2026-05-15: MSS-05 closeout read `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, this PRD, `.devstate/status.md`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt`.
+- 2026-05-15: MSS-05 compatibility check found `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` absent; current devstate evidence remains under `.devstate/`.
+- 2026-05-15: MSS-05 devstate evidence: `.devstate/status.json` reports checks ok, web ready at `https://39-minimal-site-starter-seed.formless.local`, and watcher tests passing.
+- 2026-05-15: MSS-05 log evidence: `.devstate/logs/service-test.txt` reports `src/worker/site-ssr.test.ts` passing with 10 tests, and `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 246 files.
+- 2026-05-15: MSS-05 final `devstate check` passed; `.devstate/status.md` reports checks ok, web ready, and watcher tests passing.
 
 ## Status Notes
 
@@ -341,8 +347,12 @@ Prior art:
 - MSS-02 shipped 2026-05-15.
 - MSS-03 shipped 2026-05-15.
 - MSS-04 shipped 2026-05-15.
-- Current chunk: MSS-05 ready.
+- MSS-05 shipped 2026-05-15.
+- Current chunk: MSS-05 shipped.
+- PRD 39 is complete; remaining work is doc/steward promotion of the listed shipped facts into global docs and PRD 37 cleanup notes.
 - Decision: this PRD is data/test cleanup, not asset scaffolding.
 - Decision: default starter should have zero media references and let existing CLI media discovery report zero media files.
 - Decision: MSS-03 stayed test-only because existing init/project-source code already supports zero media records through normal discovery.
 - Decision: MSS-04 stayed test-only because production SSR already renders whatever source seed the authority exposes; the brittle part was the test's old default-seed assumptions.
+- Decision: MSS-05 is PRD-only closeout; no app behavior changed, so no browser smoke is required.
+- Blockers: none known.
