@@ -6,7 +6,7 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
-import { siteSourceSchema } from "../test/schema-apps.ts";
+import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 import {
   buildSiteProjectRecordsFromSnapshot,
   buildSiteProjectSourceSnapshot,
@@ -157,6 +157,10 @@ describe("Site project source", () => {
     expect(
       siteProjectMediaPathForKey("site/images/photo.webp", { mediaRoot: "source-media" }),
     ).toBe("source-media/site/images/photo.webp");
+  });
+
+  it("finds no project media assets in the package starter records", () => {
+    expect(siteProjectMediaAssetsFromRecords(siteSeedRecords)).toEqual([]);
   });
 
   it("rejects unsupported project media paths", () => {

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -111,7 +111,7 @@ describe("Formless Site CLI", () => {
     );
   });
 
-  it("initializes a Site project with config, deterministic records, and starter media", async () => {
+  it("initializes a Site project with config, deterministic records, and no starter media", async () => {
     const tempDir = await makeTempDir();
     const result = await initSiteProject(
       { targetDir: "my-site" },
@@ -124,13 +124,11 @@ describe("Formless Site CLI", () => {
     expect(config).toEqual(defaultSiteProjectConfig());
     expect(records.length).toBeGreaterThan(0);
     expect(result.recordCount).toBe(records.length);
-    expect(result.mediaCount).toBe(mediaAssets.length);
-
-    for (const asset of mediaAssets) {
-      await expect(
-        readFile(path.join(result.projectRoot, asset.sourcePath)),
-      ).resolves.toBeInstanceOf(Buffer);
-    }
+    expect(mediaAssets).toEqual([]);
+    expect(result.mediaCount).toBe(0);
+    await expect(stat(path.join(result.projectRoot, config.mediaRoot))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
 
     await expect(
       initSiteProject({ targetDir: "my-site" }, { cwd: tempDir, packageRoot: process.cwd() }),

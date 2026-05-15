@@ -1,7 +1,7 @@
 # PRD 39: Minimal Site starter seed
 
 Status: ready
-Current chunk: MSS-03 ready
+Current chunk: MSS-04 ready
 Last updated: 2026-05-15
 
 Start after PRD 37 shipped behavior is stable on the active branch.
@@ -271,7 +271,7 @@ Prior art:
 | ------ | ------- | ---------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | MSS-01 | shipped | none       | PRD                                 | PRD captures seed scope, no-media decision, route decision, chunks, blockers, tests, and promote notes.        |
 | MSS-02 | shipped | MSS-01     | site seed records, seed tests       | Default Site seed is neutral, minimal, validates, has no media references, and includes starter pages/content. |
-| MSS-03 | ready   | MSS-02     | CLI tests, project source tests     | `formless init` creates a no-media starter project and reports `mediaCount: 0`.                                |
+| MSS-03 | shipped | MSS-02     | CLI tests, project source tests     | `formless init` creates a no-media starter project and reports `mediaCount: 0`.                                |
 | MSS-04 | ready   | MSS-03     | affected renderer/tree/schema tests | Tests use fixtures for rich Site behavior and no longer depend on personal default seed content.               |
 | MSS-05 | ready   | MSS-04     | PRD                                 | Closeout records checks, decisions, blockers, and promote notes after implementation ships.                    |
 
@@ -305,6 +305,7 @@ Prior art:
 ## Promote after ship
 
 - MSS-02: source Site seed is neutral and no-media; promote after init/project-source chunks verify CLI output.
+- MSS-03: project media discovery returns zero assets for the default starter, and init reports `mediaCount: 0` without creating a project `media/` tree.
 - `doc/current.md`: note default `formless init` creates a neutral no-media Site starter.
 - `doc/current.md`: note starter pages are Home, About, Blog, Projects, and Resume with one post and one project.
 - `doc/current.md`: note init writes zero starter media files for the default starter.
@@ -324,11 +325,16 @@ Prior art:
 - 2026-05-15: MSS-02 `devstate check` passed; `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 246 files; `.devstate/logs/service-test.txt` reports the starter seed test passing.
 - 2026-05-15: MSS-02 browser smoke reset Site schema and seed, opened `/pages/home`, `/pages/blog`, and `/pages/projects`, verified the starter hero/post/project content, found no old personal starter content, and `bun browser --session mss-02 errors` returned no page errors.
 - 2026-05-15: MSS-01 agent read `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, and this PRD; PRD already captured seed scope, no-media decision, route decision, chunks, blockers, tests, and promote notes.
+- 2026-05-15: MSS-03 updated `src/site/project-source.test.ts` to assert `siteProjectMediaAssetsFromRecords(siteSeedRecords)` returns `[]`.
+- 2026-05-15: MSS-03 updated `src/site/cli.test.ts` so `initSiteProject` asserts no discovered starter media, `mediaCount: 0`, and no generated project `media/` directory.
+- 2026-05-15: MSS-03 `devstate check` passed; `.devstate/logs/check-vite.txt` reports formatting, lint, and type checks passing across 246 files, and `.devstate/logs/service-test.txt` reports the changed CLI test passing.
 
 ## Status Notes
 
 - MSS-01 shipped 2026-05-15.
 - MSS-02 shipped 2026-05-15.
-- Current chunk: MSS-03 ready.
+- MSS-03 shipped 2026-05-15.
+- Current chunk: MSS-04 ready.
 - Decision: this PRD is data/test cleanup, not asset scaffolding.
 - Decision: default starter should have zero media references and let existing CLI media discovery report zero media files.
+- Decision: MSS-03 stayed test-only because existing init/project-source code already supports zero media records through normal discovery.
