@@ -9,7 +9,7 @@ await mkdir(path.dirname(outfile), { recursive: true });
 
 await build({
   bundle: true,
-  entryPoints: ["scripts/formless.ts"],
+  entryPoints: ["scripts/formless-bin.ts"],
   format: "esm",
   outfile,
   platform: "node",

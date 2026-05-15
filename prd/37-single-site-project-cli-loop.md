@@ -535,6 +535,15 @@ Possible changed files:
 - 2026-05-15: SSP-08 `node bin/formless.js --help` printed the Formless CLI usage.
 - 2026-05-15: SSP-08 `npm pack --dry-run --json` succeeded for `lib/ui` as `@dpeek/formless-ui@0.0.1` and for the repo root as `@dpeek/formless@0.0.1`.
 - 2026-05-15: SSP-08 `npm publish --dry-run --access public` succeeded for both packages after npm normalized `bin.formless` to `bin/formless.js`.
+- 2026-05-15: SSP-08 follow-up fixed the npm bin wrapper. `scripts/formless-bin.ts` always runs the CLI for published bins; `scripts/formless.ts` keeps the import guard for repo source usage.
+- 2026-05-15: SSP-08 follow-up repro showed `npm exec --package . -- formless --help` exiting 0 with no CLI output before the wrapper fix, then printing CLI usage after rebuilding `bin/formless.js`.
+- 2026-05-15: SSP-08 follow-up reproduced the published `@dpeek/formless@0.1.3` failure in a fresh npm install. `formless dev` reached `vp dev`, then workerd failed with `ReferenceError: module is not defined`.
+- 2026-05-15: SSP-08 follow-up debug showed the Worker SSR import path reached `src/app/site-renderer/renderer.tsx`, `@dpeek/formless-ui/markdown-renderer`, and `highlight.js/lib/core`. The root cause was the shared public markdown renderer statically importing CommonJS Highlight.js modules into the Worker SSR graph.
+- 2026-05-15: SSP-08 follow-up replaced the shared markdown renderer's static Highlight.js dependency with a Worker-safe escaped highlighter for the public renderer. JSON and TypeScript fences still emit the CSS classes covered by tests.
+- 2026-05-15: SSP-08 follow-up confirmed `vite-plus` is a package dependency of `@dpeek/formless@0.1.3`; the reported dev failure was not a missing global `vp` install.
+- 2026-05-15: SSP-08 follow-up bumped publish coordinates to `@dpeek/formless-ui@0.1.1` and `@dpeek/formless@0.1.4` because npm already has `@dpeek/formless-ui@0.1.0` and `@dpeek/formless@0.1.3`.
+- 2026-05-15: SSP-08 follow-up packed local `@dpeek/formless-ui@0.1.1` and `@dpeek/formless@0.1.4` tarballs, installed them into `/tmp/formless-local-repro`, ran `formless init site`, and `formless dev` reached `http://localhost:5173/` plus `/admin`.
+- 2026-05-15: SSP-08 follow-up `npm publish --dry-run --access public` succeeded for `@dpeek/formless-ui@0.1.1` and `@dpeek/formless@0.1.4`.
 
 ## Status Notes
 

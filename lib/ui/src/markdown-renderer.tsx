@@ -1,17 +1,5 @@
 import { Button } from "@dpeek/formless-ui/button";
 import { cn } from "@dpeek/formless-ui/utils";
-import bash from "highlight.js/lib/languages/bash";
-import css from "highlight.js/lib/languages/css";
-import diff from "highlight.js/lib/languages/diff";
-import javascript from "highlight.js/lib/languages/javascript";
-import json from "highlight.js/lib/languages/json";
-import markdown from "highlight.js/lib/languages/markdown";
-import scss from "highlight.js/lib/languages/scss";
-import sql from "highlight.js/lib/languages/sql";
-import typescript from "highlight.js/lib/languages/typescript";
-import xml from "highlight.js/lib/languages/xml";
-import yaml from "highlight.js/lib/languages/yaml";
-import hljs from "highlight.js/lib/core";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { lexer, type Token, type Tokens } from "marked";
 import { createElement, useEffect, useState, type ReactNode } from "react";
@@ -26,18 +14,6 @@ const HIGHLIGHT_LANGUAGE_ALIASES: Record<string, string> = {
   jsx: "javascript",
   tsx: "typescript",
 };
-
-hljs.registerLanguage("bash", bash);
-hljs.registerLanguage("css", css);
-hljs.registerLanguage("diff", diff);
-hljs.registerLanguage("javascript", javascript);
-hljs.registerLanguage("json", json);
-hljs.registerLanguage("markdown", markdown);
-hljs.registerLanguage("scss", scss);
-hljs.registerLanguage("sql", sql);
-hljs.registerLanguage("typescript", typescript);
-hljs.registerLanguage("xml", xml);
-hljs.registerLanguage("yaml", yaml);
 
 export function MarkdownRenderer({
   className,
@@ -368,12 +344,110 @@ function splitCodeInfo(info: string | undefined): {
 
 function highlightCodeHtml(code: string, language: string): string | null {
   const highlightLanguage = HIGHLIGHT_LANGUAGE_ALIASES[language] ?? language;
+  const escaped = escapeHtml(code);
 
-  try {
-    return hljs.highlight(code, { ignoreIllegals: true, language: highlightLanguage }).value;
-  } catch {
-    return null;
+  if (highlightLanguage === "javascript" || highlightLanguage === "typescript") {
+    return escaped.replace(
+      /\b(async|await|catch|class|const|else|export|extends|finally|for|from|function|if|import|interface|let|new|return|throw|try|type|var)\b/g,
+      '<span class="hljs-keyword">$1</span>',
+    );
   }
+
+  if (highlightLanguage === "json") {
+    return highlightJsonCodeHtml(code);
+  }
+
+  return escaped;
+}
+
+function highlightJsonCodeHtml(code: string): string {
+  let html = "";
+  let index = 0;
+
+  while (index < code.length) {
+    const char = code[index];
+
+    if (char === '"') {
+      const end = findJsonStringEnd(code, index);
+      const stringValue = code.slice(index, end);
+      const nextToken = findNextJsonToken(code, end);
+      const className = nextToken === ":" ? "hljs-attr" : "hljs-string";
+      html += `<span class="${className}">${escapeHtml(stringValue)}</span>`;
+      index = end;
+      continue;
+    }
+
+    const literal = jsonLiteralAt(code, index);
+
+    if (literal) {
+      html += `<span class="hljs-literal">${literal}</span>`;
+      index += literal.length;
+      continue;
+    }
+
+    html += escapeHtml(char);
+    index += 1;
+  }
+
+  return html;
+}
+
+function findJsonStringEnd(code: string, start: number): number {
+  let escaped = false;
+
+  for (let index = start + 1; index < code.length; index += 1) {
+    const char = code[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      return index + 1;
+    }
+  }
+
+  return code.length;
+}
+
+function findNextJsonToken(code: string, start: number): string | null {
+  for (let index = start; index < code.length; index += 1) {
+    const char = code[index];
+
+    if (/\S/.test(char)) {
+      return char;
+    }
+  }
+
+  return null;
+}
+
+function jsonLiteralAt(code: string, index: number): "false" | "null" | "true" | null {
+  for (const literal of ["false", "null", "true"] as const) {
+    if (
+      code.startsWith(literal, index) &&
+      !/[A-Za-z0-9_$]/.test(code[index - 1] ?? "") &&
+      !/[A-Za-z0-9_$]/.test(code[index + literal.length] ?? "")
+    ) {
+      return literal;
+    }
+  }
+
+  return null;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function renderInlineTextToken(token: Tokens.Text, keyPrefix: string): ReactNode {
