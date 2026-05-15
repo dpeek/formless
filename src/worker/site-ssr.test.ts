@@ -77,6 +77,18 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('root.classList.toggle("dark", theme === "dark");');
     expect(html).toContain('<style id="formless-public-site-theme-style">');
     expect(html).toContain("html.dark #app");
+    expect(html).toContain("<title>David Peek</title>");
+    expect(html).toContain(
+      '<meta name="description" content="A concise personal site for current work, writing, and project notes." />',
+    );
+    expect(html).toContain('<meta property="og:title" content="David Peek" />');
+    expect(html).toContain(
+      '<meta property="og:description" content="A concise personal site for current work, writing, and project notes." />',
+    );
+    expect(html).toContain('<meta property="og:type" content="website" />');
+    expect(html).toContain('<meta property="og:site_name" content="David Peek" />');
+    expect(html).toContain('<meta name="twitter:card" content="summary" />');
+    expect(html).not.toContain("og:image");
     expect(html).toContain("Home");
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
@@ -111,6 +123,7 @@ describe("published Site Worker SSR", () => {
 
     expect(response.status).toBe(200);
     expect(html).toContain("Projects");
+    expect(html).toContain("<title>Projects | David Peek</title>");
     expect(html).toContain(
       '<link rel="modulepreload" crossorigin href="/assets/schema-apps-test.js">',
     );
@@ -134,11 +147,51 @@ describe("published Site Worker SSR", () => {
 
     expect(response.status).toBe(200);
     expect(html).toContain("Starter post");
+    expect(html).toContain("<title>Starter post | Home</title>");
+    expect(html).toContain('<meta property="og:type" content="article" />');
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
     expect(html).toContain('href="/blog"');
     expect(html).not.toContain('href="/pages/blog"');
     expect(html).not.toContain("Loading site page...");
+  });
+
+  it("renders escaped clean metadata from public tree facts", async () => {
+    const response = await handlePublishedSiteDocumentRequest(
+      new Request("https://example.com/projects?preview=1", {
+        headers: { Accept: "text/html" },
+      }),
+      envWithTreeResponse(
+        Response.json(
+          testSitePageTree("projects", {
+            body: "# Launch **clean** [public routes](https://example.com)\n\nwith    spacing",
+            label: "Projects & plans",
+            siteName: "David & <Peek>",
+          }),
+        ),
+      ),
+    );
+
+    if (!response) {
+      throw new Error("Expected a published Site document response.");
+    }
+
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<title>Projects &amp; plans | David &amp; &lt;Peek&gt;</title>");
+    expect(html).toContain(
+      '<meta name="description" content="Launch clean public routes with spacing" />',
+    );
+    expect(html).toContain('<link rel="canonical" href="https://example.com/projects" />');
+    expect(html).toContain(
+      '<meta property="og:title" content="Projects &amp; plans | David &amp; &lt;Peek&gt;" />',
+    );
+    expect(html).toContain('<meta property="og:site_name" content="David &amp; &lt;Peek&gt;" />');
+    expect(html).toContain('<meta property="og:url" content="https://example.com/projects" />');
+    expect(html).toContain('<meta property="og:type" content="website" />');
+    expect(html).toContain('<meta name="twitter:card" content="summary" />');
+    expect(html).not.toContain("og:image");
   });
 
   it("returns an explicitly cached not-found document for missing published Site slugs", async () => {
@@ -149,6 +202,7 @@ describe("published Site Worker SSR", () => {
     expect(response.headers.get("Cache-Control")).toBe(PUBLISHED_SITE_NOT_FOUND_CACHE_CONTROL);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("Vary")).toBe("Accept");
+    expect(html).toContain("<title>Page not found | Site</title>");
     expect(html).toContain("Page not found");
     expect(html).toContain("No site page exists for");
     expect(html).toContain("<code>missing-page</code>");
@@ -173,6 +227,8 @@ describe("published Site Worker SSR", () => {
     expect(response.headers.get("Cache-Control")).toBe(PUBLISHED_SITE_ERROR_CACHE_CONTROL);
     expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("Vary")).toBe("Accept");
+    expect(html).toContain("<title>Site page failed to load | Site</title>");
+    expect(html).toContain('<link rel="canonical" href="https://example.com/broken-page" />');
     expect(html).toContain("Site page failed to load");
     expect(html).toContain("broken-page");
     expect(html).toContain("Site page failed to render.");
@@ -356,23 +412,66 @@ function builtClientShellHtml(): string {
 </html>`;
 }
 
-function testSitePageTree(slug: string): SitePageTreeResponse {
+function testSitePageTree(
+  slug: string,
+  options: {
+    body?: string;
+    label?: string;
+    routeKind?: "page" | "post";
+    siteName?: string;
+  } = {},
+): SitePageTreeResponse {
   return {
     page: {
       id: `rec_site_page_${slug}`,
       type: "page",
-      label: "Projects",
+      label: options.label ?? "Projects",
+      ...(options.body ? { body: options.body } : {}),
       placements: [],
     },
-    frame: {},
+    frame: siteFrame(options.siteName ?? "David Peek"),
     meta: {
       slug,
       generatedAt: "2026-05-13T00:00:00.000Z",
       warnings: [],
     },
     route: {
-      kind: "page",
+      kind: options.routeKind ?? "page",
       slug,
+    },
+  };
+}
+
+function siteFrame(siteName: string): SitePageTreeResponse["frame"] {
+  return {
+    header: {
+      id: "rec_site_content_group_header",
+      type: "header",
+      label: "Header",
+      placements: [
+        {
+          id: "rec_site_place_header_primary",
+          order: 1000,
+          block: {
+            id: "rec_site_content_group_header_primary",
+            type: "headerPrimary",
+            label: "Primary",
+            placements: [
+              {
+                id: "rec_site_place_header_home",
+                order: 1000,
+                block: {
+                  id: "rec_site_content_link_home",
+                  type: "link",
+                  label: siteName,
+                  href: "/",
+                  placements: [],
+                },
+              },
+            ],
+          },
+        },
+      ],
     },
   };
 }

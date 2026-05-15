@@ -5,6 +5,10 @@ import { renderInitialSitePageTreeScript } from "../app/site-renderer/initial-tr
 import { PUBLIC_SITE_THEME_STORAGE_KEY, SitePageRenderer } from "../app/site-renderer/renderer.tsx";
 import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
+import {
+  buildPublicDocumentMetadata,
+  type PublicDocumentMetadata,
+} from "../site/public-document-metadata.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { Env } from "./index.ts";
 import { shouldHandlePublishedSiteDocument, workerRuntimeProfileInput } from "./routing.ts";
@@ -100,20 +104,21 @@ export async function handlePublishedSiteDocumentRequest(
 
 async function renderPublishedSiteDocument(request: Request, env: Env): Promise<Response> {
   const slug = publishedSiteSlugFromUrl(new URL(request.url));
+  const requestUrl = new URL(request.url);
   const clientAssets = await loadClientDocumentAssets(request, env);
 
   try {
     const treeResponse = await fetchSitePageTree(request, env, slug);
 
     if (treeResponse.status === 404) {
-      return htmlResponse(await renderNotFoundDocument(slug, clientAssets), {
+      return htmlResponse(await renderNotFoundDocument(slug, requestUrl, clientAssets), {
         cacheKind: "not-found",
         status: 404,
       });
     }
 
     if (!treeResponse.ok) {
-      return htmlResponse(await renderErrorDocument(slug, clientAssets), {
+      return htmlResponse(await renderErrorDocument(slug, requestUrl, clientAssets), {
         cacheKind: "error",
         status: 500,
       });
@@ -126,9 +131,20 @@ async function renderPublishedSiteDocument(request: Request, env: Env): Promise<
       </PublishedSiteDocumentShell>,
     );
 
-    return htmlResponse(renderDocument(appHtml, { clientAssets, initialTree: tree }));
+    return htmlResponse(
+      renderDocument(appHtml, {
+        clientAssets,
+        initialTree: tree,
+        metadata: buildPublicDocumentMetadata({
+          kind: "success",
+          requestUrl,
+          slug,
+          tree,
+        }),
+      }),
+    );
   } catch {
-    return htmlResponse(await renderErrorDocument(slug, clientAssets), {
+    return htmlResponse(await renderErrorDocument(slug, requestUrl, clientAssets), {
       cacheKind: "error",
       status: 500,
     });
@@ -150,6 +166,7 @@ async function fetchSitePageTree(request: Request, env: Env, slug: string): Prom
 
 async function renderNotFoundDocument(
   slug: string,
+  requestUrl: URL,
   clientAssets: ClientDocumentAssets,
 ): Promise<string> {
   return renderDocument(
@@ -166,12 +183,20 @@ async function renderNotFoundDocument(
         </section>
       </PublishedSiteDocumentShell>,
     ),
-    { clientAssets },
+    {
+      clientAssets,
+      metadata: buildPublicDocumentMetadata({
+        kind: "not-found",
+        requestUrl,
+        slug,
+      }),
+    },
   );
 }
 
 async function renderErrorDocument(
   slug: string,
+  requestUrl: URL,
   clientAssets: ClientDocumentAssets,
 ): Promise<string> {
   return renderDocument(
@@ -183,7 +208,14 @@ async function renderErrorDocument(
         </section>
       </PublishedSiteDocumentShell>,
     ),
-    { clientAssets },
+    {
+      clientAssets,
+      metadata: buildPublicDocumentMetadata({
+        kind: "error",
+        requestUrl,
+        slug,
+      }),
+    },
   );
 }
 
@@ -247,13 +279,18 @@ function extractClientAssetTags(html: string): string[] {
 
 function renderDocument(
   appHtml: string,
-  options: { clientAssets: ClientDocumentAssets; initialTree?: SitePageTree },
+  options: {
+    clientAssets: ClientDocumentAssets;
+    initialTree?: SitePageTree;
+    metadata: PublicDocumentMetadata;
+  },
 ): string {
   const initialTreeScript = options.initialTree
     ? `\n    ${renderInitialSitePageTreeScript(options.initialTree)}`
     : "";
   const clientAssetHeadTags = options.clientAssets.head ? `\n    ${options.clientAssets.head}` : "";
   const clientAssetBodyTags = options.clientAssets.body ? `\n    ${options.clientAssets.body}` : "";
+  const metadataTags = renderMetadataTags(options.metadata);
 
   return `<!doctype html>
 <html lang="en" class="light" data-site-theme="light" style="color-scheme: light;">
@@ -263,7 +300,7 @@ function renderDocument(
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="publishedSite" />
-    <title>formless</title>
+    ${metadataTags}
     ${PUBLIC_SITE_THEME_BOOT_SCRIPT}${clientAssetHeadTags}
     ${PUBLIC_SITE_THEME_BOOT_STYLE}
   </head>
@@ -271,6 +308,31 @@ function renderDocument(
     <div id="app">${appHtml}</div>${initialTreeScript}${clientAssetBodyTags}
   </body>
 </html>`;
+}
+
+function renderMetadataTags(metadata: PublicDocumentMetadata): string {
+  const title = escapeHtmlText(metadata.title);
+  const description = escapeHtmlAttribute(metadata.description);
+  const canonicalUrl = escapeHtmlAttribute(metadata.canonicalUrl);
+  const siteName = escapeHtmlAttribute(metadata.siteName);
+
+  return `<title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${canonicalUrl}" />
+    <meta property="og:title" content="${escapeHtmlAttribute(metadata.title)}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:type" content="${escapeHtmlAttribute(metadata.ogType)}" />
+    <meta property="og:url" content="${canonicalUrl}" />
+    <meta property="og:site_name" content="${siteName}" />
+    <meta name="twitter:card" content="${escapeHtmlAttribute(metadata.twitterCard)}" />`;
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return escapeHtmlText(value).replaceAll('"', "&quot;");
 }
 
 function htmlResponse(

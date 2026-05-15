@@ -1,7 +1,7 @@
 # PRD 38: Public Site cutover cleanup
 
 Status: ready
-Current chunk: PSC-01 ready
+Current chunk: PSC-02 ready
 Last updated: 2026-05-15
 
 Start after PRD 34, PRD 35, PRD 36, and PRD 37 shipped behavior is stable on the active branch.
@@ -381,14 +381,21 @@ Possible changed files:
 
 ## Chunks
 
-| ID     | Status | Depends on           | Main files                                                             | Acceptance                                                                                                                                         |
-| ------ | ------ | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PSC-01 | ready  | none                 | metadata and SSR document code, SSR tests                              | Public SSR documents have route-specific title, description, canonical, OG, and Twitter tags from existing tree data; `og:image` is absent.        |
-| PSC-02 | ready  | none                 | routing code, Worker dispatch, routing tests                           | Public profile redirects `/pages*` and `/work`, blocks generated app/admin shells, and keeps API/assets working.                                   |
-| PSC-03 | ready  | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
-| PSC-04 | ready  | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
-| PSC-05 | ready  | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests                         | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                                 |
-| PSC-06 | ready  | none                 | public renderer CSS/classes, app render tests                          | Footer note text is readable in dark mode.                                                                                                         |
+| ID     | Status  | Depends on           | Main files                                                             | Acceptance                                                                                                                                         |
+| ------ | ------- | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PSC-01 | shipped | none                 | metadata and SSR document code, SSR tests                              | Public SSR documents have route-specific title, description, canonical, OG, and Twitter tags from existing tree data; `og:image` is absent.        |
+| PSC-02 | ready   | none                 | routing code, Worker dispatch, routing tests                           | Public profile redirects `/pages*` and `/work`, blocks generated app/admin shells, and keeps API/assets working.                                   |
+| PSC-03 | ready   | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
+| PSC-04 | ready   | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
+| PSC-05 | ready   | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests                         | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                                 |
+| PSC-06 | ready   | none                 | public renderer CSS/classes, app render tests                          | Footer note text is readable in dark mode.                                                                                                         |
+
+## Status Notes
+
+- 2026-05-15: PSC-01 shipped. `src/site/public-document-metadata.ts` builds public document metadata from `SitePageTree` facts and request origin. `src/worker/site-ssr.tsx` renders title, description, canonical URL, OG title/description/type/url/site_name, and Twitter card metadata for public SSR documents.
+- 2026-05-15: PSC-01 keeps `og:image` absent and adds no Site block fields.
+- Decisions: no new PSC-01 decisions. Implementation follows PSC-D1, PSC-D4, PSC-D5, PSC-D7, PSC-D8, and PSC-D18.
+- Blockers: none.
 
 ## Acceptance Checks
 
@@ -414,9 +421,17 @@ Possible changed files:
 
 ## Promote After Ship
 
-- Public Site SSR documents include route metadata from existing Site tree facts.
+- Public Site SSR documents include route metadata from existing Site tree facts: title, description, canonical URL, OG title/description/type/url/site_name, and Twitter card.
+- Public Site SSR metadata uses the first primary header link label as the Site name when available, falls back through page label to `Site`, and does not emit `og:image`.
 - Public Site uses clean top-level route redirects for old preview paths.
 - Public Site serves `robots.txt`, `sitemap.xml`, favicon, and touch icon assets.
 - Package CLI Site projects outside the monorepo serve and publish default launch assets from package-owned `public/`.
 - Published profile blocks generated app/admin shells from the public host.
 - Public document and media routes support `HEAD`.
+
+## Evidence
+
+- 2026-05-15: `.devstate/status.md` reports checks ok and services running.
+- 2026-05-15: `.devstate/logs/check-vite.txt` reports `vp check --fix` passed with no warnings, lint errors, or type errors.
+- 2026-05-15: `.devstate/logs/service-test.txt` reports `src/worker/site-ssr.test.ts` passed, 11 tests.
+- 2026-05-15: `./tmp/devstate.json`, `./tmp/test.txt`, and `./tmp/check.txt` were absent; devstate evidence is under `.devstate/`.
