@@ -32,6 +32,11 @@ describe("Worker document routing", () => {
         profile: "dev",
       }),
     ).toBe(false);
+    expect(
+      shouldHandlePublishedSiteDocument(documentRequest("http://example.com/"), {
+        profile: "siteAuthoring",
+      }),
+    ).toBe(false);
   });
 
   it("marks non-published document routes for asset serving fallback", () => {
@@ -51,6 +56,11 @@ describe("Worker document routing", () => {
     expect(
       shouldDeferToStaticAssets(documentRequest("http://published-site.example.com/"), {
         profile: "dev",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/admin"), {
+        profile: "siteAuthoring",
       }),
     ).toBe(true);
   });

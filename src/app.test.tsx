@@ -44,6 +44,7 @@ import {
   createDevRuntimeProfile,
   createAppRuntimeProfile,
   createPublishedSiteRuntimeProfile,
+  createSiteAuthoringRuntimeProfile,
   type RuntimeProfile,
 } from "./app/runtime-profile.ts";
 import {
@@ -106,6 +107,14 @@ function SchemaKeyProbeHomeRoute({
   return (
     <main data-route-schema-key={routeSchemaKey} data-schema-key={contextSchemaKey}>
       Schema key {contextSchemaKey}
+    </main>
+  );
+}
+
+function SitePageRouteProbe({ linkMode, slug }: { linkMode?: string; slug: string }) {
+  return (
+    <main data-site-link-mode={linkMode} data-site-slug={slug}>
+      Site page {slug}
     </main>
   );
 }
@@ -601,6 +610,88 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Formless</span>");
   });
 
+  it('renders a Site authoring profile home preview at "/" with top-level links', () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/">
+        <App
+          routeComponents={{
+            HomeRoute,
+            SchemaRoute,
+            SitePageRoute: SitePageRouteProbe,
+          }}
+          runtimeProfile={createSiteAuthoringRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-site-link-mode="authoring"');
+    expect(html).toContain('data-site-slug="home"');
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).not.toContain('href="/tasks"');
+    expect(html).not.toContain('href="/site/schema"');
+  });
+
+  it("renders Site authoring profile slug paths through the public preview", () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/blog/shipping-schema-backed-authoring">
+        <App
+          routeComponents={{
+            HomeRoute,
+            SchemaRoute,
+            SitePageRoute: SitePageRouteProbe,
+          }}
+          runtimeProfile={createSiteAuthoringRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-site-link-mode="authoring"');
+    expect(html).toContain('data-site-slug="blog/shipping-schema-backed-authoring"');
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+  });
+
+  it('renders Site authoring profile admin at "/admin" without the multi-app shell', () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute("/admin", createSiteAuthoringRuntimeProfile());
+
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectSyncStatusControl(html, "site");
+    expect(html).toContain('<div class="px-2 py-1 text-sm font-semibold">Site</div>');
+    expect(html).toContain('<h1 class="truncate text-sm font-medium">');
+    expect(html).toContain('aria-label="Pages roots"');
+    expect(html).not.toContain('href="/tasks"');
+    expect(html).not.toContain('href="/estii"');
+    expect(html).not.toContain('href="/site"');
+    expect(html).not.toContain('href="/site/schema"');
+    expect(html).not.toContain('href="/admin/schema"');
+  });
+
+  it('keeps Site authoring schema editing hidden at "/admin/schema" by default', () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute("/admin/schema", createSiteAuthoringRuntimeProfile());
+
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain("Not found");
+    expect(html).not.toContain("Site Schema");
+    expect(html).not.toContain("Save schema");
+  });
+
+  it('can render the Site authoring schema editor at "/admin/schema" when exposed', () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute(
+      "/admin/schema",
+      createSiteAuthoringRuntimeProfile({ exposeSchemaRoute: true }),
+    );
+
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain("Site Schema");
+    expect(html).toContain("<code>site</code>");
+    expect(html).toContain("Save schema");
+  });
+
   it("renders a published Site profile slug path outside generated admin navigation", () => {
     const html = renderRoute("/projects/estii", createPublishedSiteRuntimeProfile());
 
@@ -699,6 +790,36 @@ describe("public site renderer", () => {
     }
 
     expect(stoppedPreviewSync).toBe(true);
+  });
+
+  it("refetches the active authoring preview tree after pushed Site sync", async () => {
+    const fetchPaths: string[] = [];
+    const states: SitePageRouteState[] = [];
+    let notifySynced: (() => void) | undefined;
+
+    const stop = startSitePageRouteSession({
+      fetcher: siteTreeFetcher(fetchPaths, sitePageTree("blog")),
+      linkMode: "authoring",
+      listenForPreviewChanges: () => () => {},
+      onState: (state) => states.push(state),
+      slug: "blog",
+      startPreviewSync: (onSynced) => {
+        notifySynced = onSynced;
+        return () => {};
+      },
+    });
+
+    try {
+      await waitFor(() => states.some((state) => state.status === "ready"));
+      expect(fetchPaths).toEqual(["/api/site/tree/blog"]);
+
+      notifySynced?.();
+
+      await waitFor(() => states.filter((state) => state.status === "ready").length === 2);
+      expect(fetchPaths).toEqual(["/api/site/tree/blog", "/api/site/tree/blog"]);
+    } finally {
+      stop();
+    }
   });
 
   it("refetches the active preview tree after same-profile Site changes", async () => {
@@ -938,7 +1059,7 @@ describe("public site renderer", () => {
     const ReadySitePageRoute = ({
       linkMode = "preview",
     }: {
-      linkMode?: "preview" | "published";
+      linkMode?: "preview" | "authoring" | "published";
       slug: string;
     }) => <SitePageRouteView linkMode={linkMode} state={{ status: "ready", tree }} />;
     const ssrHtml = renderToString(

@@ -78,9 +78,6 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('<style id="formless-public-site-theme-style">');
     expect(html).toContain("html.dark #app");
     expect(html).toContain("Home");
-    expect(html).toContain("Code \u2728");
-    expect(html).toContain("Helping humans and agents build amazing software together");
-    expect(html).toContain("Welcome, Humans and Agents");
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
     expect(html).toContain(

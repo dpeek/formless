@@ -119,7 +119,7 @@ export function startSitePageRouteSession({
     loadTree(false);
   }
 
-  if (linkMode === "preview") {
+  if (usesPreviewSync(linkMode)) {
     loadTree(true);
     stopPreviewSync = startPreviewSync(refetchActiveTree);
     stopPreviewChanges = listenForPreviewChanges(refetchActiveTree);
@@ -135,6 +135,10 @@ export function startSitePageRouteSession({
     stopPreviewChanges();
     stopPreviewSync();
   };
+}
+
+function usesPreviewSync(linkMode: SitePageLinkMode): boolean {
+  return linkMode === "preview" || linkMode === "authoring";
 }
 
 function sitePageRouteInitialState({

@@ -3,6 +3,7 @@ import {
   createAppRuntimeProfile,
   createDevRuntimeProfile,
   createPublishedSiteRuntimeProfile,
+  createSiteAuthoringRuntimeProfile,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
   readRuntimeProfileDocumentHint,
   resolveRuntimeProfile,
@@ -50,6 +51,39 @@ describe("runtime profile resolver", () => {
     expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
   });
 
+  it("resolves the Site authoring profile with top-level preview and admin routes", () => {
+    const profile = createSiteAuthoringRuntimeProfile();
+    const world = profile.worlds[0];
+
+    if (!world) {
+      throw new Error("Missing Site authoring profile world mount.");
+    }
+
+    expect(profile.kind).toBe("siteAuthoring");
+    expect(profile.shell).toBe("app");
+    expect(profile.defaultRedirect).toBeUndefined();
+    expect(world.app.key).toBe("site");
+    expect(world.generatedRoutes).toBe(true);
+    expect(world.route).toBe("/admin");
+    expect(world.schemaRoute).toBeUndefined();
+    expect(profile.publicSitePreview).toEqual({
+      rootRoute: "/",
+      routePattern: "/*",
+      homeSlug: "home",
+      linkMode: "authoring",
+    });
+    expect(runtimeScreenRoute(world, "/")).toBe("/admin");
+    expect(runtimeScreenRoute(world, "/header")).toBe("/admin/header");
+    expect(runtimeScreenPathFromRoute(world, "/admin")).toBe("/");
+    expect(runtimeScreenPathFromRoute(world, "/admin/header")).toBe("/header");
+  });
+
+  it("can expose the Site authoring schema route explicitly", () => {
+    const profile = createSiteAuthoringRuntimeProfile({ exposeSchemaRoute: true });
+
+    expect(profile.worlds[0]?.schemaRoute).toBe("/admin/schema");
+  });
+
   it("resolves the published Site profile without generated admin routes", () => {
     const profile = createPublishedSiteRuntimeProfile();
     const world = profile.worlds[0];
@@ -73,6 +107,7 @@ describe("runtime profile resolver", () => {
 
   it("uses explicit config first and host config only as a deterministic fallback", () => {
     expect(resolveRuntimeProfile({ profile: "app", schemaKey: "estii" }).kind).toBe("app");
+    expect(resolveRuntimeProfile({ profile: "siteAuthoring" }).kind).toBe("siteAuthoring");
     expect(resolveRuntimeProfile({ profile: "publishedSite" }).kind).toBe("publishedSite");
     expect(
       resolveRuntimeProfile({
@@ -82,6 +117,9 @@ describe("runtime profile resolver", () => {
     ).toBe("dev");
     expect(resolveRuntimeProfile({ hostname: "app.formless.local", schemaKey: "site" }).kind).toBe(
       "app",
+    );
+    expect(resolveRuntimeProfile({ hostname: "site-authoring.formless.local" }).kind).toBe(
+      "siteAuthoring",
     );
     expect(resolveRuntimeProfile({ hostname: "published-site.formless.local" }).kind).toBe(
       "publishedSite",

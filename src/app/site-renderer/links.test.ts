@@ -17,8 +17,18 @@ describe("site renderer links", () => {
     expect(profileAwareSiteHref("/pages/blog", "published")).toBe("/blog");
   });
 
+  it("renders authoring links at top-level paths", () => {
+    expect(sitePagePathForSlug("home", "authoring")).toBe("/");
+    expect(profileAwareSiteHref("/", "authoring")).toBe("/");
+    expect(profileAwareSiteHref("/blog", "authoring")).toBe("/blog");
+    expect(profileAwareSiteHref("/pages/blog", "authoring")).toBe("/blog");
+  });
+
   it("leaves external links unchanged", () => {
     expect(profileAwareSiteHref("https://example.com/page", "preview")).toBe(
+      "https://example.com/page",
+    );
+    expect(profileAwareSiteHref("https://example.com/page", "authoring")).toBe(
       "https://example.com/page",
     );
     expect(profileAwareSiteHref("https://example.com/page", "published")).toBe(

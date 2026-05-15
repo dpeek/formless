@@ -1,9 +1,9 @@
-export type SitePageLinkMode = "preview" | "published";
+export type SitePageLinkMode = "preview" | "authoring" | "published";
 
 export function sitePagePathForSlug(slug: string, linkMode: SitePageLinkMode): `/${string}` {
   const encodedSlug = encodeSiteSlugPath(slug) || "home";
 
-  if (linkMode === "published") {
+  if (usesTopLevelSitePaths(linkMode)) {
     return encodedSlug === "home" ? "/" : (`/${encodedSlug}` as const);
   }
 
@@ -17,7 +17,7 @@ export function profileAwareSiteHref(href: string, linkMode: SitePageLinkMode): 
 
   const { path, suffix } = splitHrefSuffix(href);
 
-  if (linkMode === "preview") {
+  if (!usesTopLevelSitePaths(linkMode)) {
     if (path === "/pages" || path === "/pages/") {
       return `${sitePagePathForSlug("home", linkMode)}${suffix}`;
     }
@@ -46,6 +46,10 @@ export function profileAwareSiteHref(href: string, linkMode: SitePageLinkMode): 
   }
 
   return href;
+}
+
+function usesTopLevelSitePaths(linkMode: SitePageLinkMode): boolean {
+  return linkMode === "authoring" || linkMode === "published";
 }
 
 export function siteHrefMatchesRoute(href: string, currentSlug: string | undefined): boolean {

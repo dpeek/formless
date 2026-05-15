@@ -9,7 +9,7 @@ const clientRoutePrefixes = [
 ] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 
-type WorkerRuntimeProfileKind = "dev" | "app" | "publishedSite";
+type WorkerRuntimeProfileKind = "dev" | "app" | "siteAuthoring" | "publishedSite";
 
 export type WorkerRuntimeProfileInput = {
   hostname?: string | undefined;
@@ -106,6 +106,7 @@ function parseRuntimeProfileKind(value: string | undefined): WorkerRuntimeProfil
   switch (value) {
     case "dev":
     case "app":
+    case "siteAuthoring":
     case "publishedSite":
       return value;
     default:
@@ -132,6 +133,10 @@ function runtimeProfileKindFromHost(
 
   if (isAppProfileHost(normalized)) {
     return "app";
+  }
+
+  if (normalized.startsWith("site-authoring.")) {
+    return "siteAuthoring";
   }
 
   if (isWorkersDevHost(normalized)) {

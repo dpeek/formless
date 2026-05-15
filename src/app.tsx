@@ -42,6 +42,7 @@ import {
   SitePageRoute as DefaultSitePageRoute,
   normalizeSitePageSlug,
 } from "./app/routes/site-page.tsx";
+import type { SitePageLinkMode } from "./app/site-renderer/links.ts";
 import { SyncStatusControl } from "./app/routes/status-line.tsx";
 import {
   findRuntimeWorldMountByRoute,
@@ -72,7 +73,7 @@ import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.
 
 type HomeRouteProps = { schemaKey: SchemaKey; screenPath: string };
 type SchemaRouteProps = { schemaKey: SchemaKey };
-type SitePageRouteProps = { linkMode?: "preview" | "published"; slug: string };
+type SitePageRouteProps = { linkMode?: SitePageLinkMode; slug: string };
 
 export type AppRouteComponents = {
   HomeRoute: ElementType<HomeRouteProps>;
@@ -545,18 +546,6 @@ function AppRoutes({
           <Redirect replace to={runtimeProfile.defaultRedirect} />
         </Route>
       ) : null}
-      {runtimeProfile.publicSitePreview ? (
-        <Route path={runtimeProfile.publicSitePreview.rootRoute}>
-          <Redirect replace to={runtimeProfile.publicSitePreview.homeRoute} />
-        </Route>
-      ) : null}
-      {runtimeProfile.publicSitePreview ? (
-        <Route path={runtimeProfile.publicSitePreview.routePattern}>
-          {(params) => (
-            <SitePageRoute linkMode="preview" slug={normalizeSitePageSlug(params["*"])} />
-          )}
-        </Route>
-      ) : null}
       {runtimeProfile.publishedSite ? (
         <Route path={runtimeProfile.publishedSite.rootRoute}>
           <SitePageRoute linkMode="published" slug={runtimeProfile.publishedSite.homeSlug} />
@@ -565,7 +554,7 @@ function AppRoutes({
       {runtimeProfile.publishedSite ? (
         <Route path={runtimeProfile.publishedSite.routePattern}>
           {(params) => (
-            <SitePageRoute linkMode="published" slug={normalizeSitePageSlug(params["*"])} />
+            <SitePageRoute linkMode="published" slug={runtimeWildcardSiteSlug(params)} />
           )}
         </Route>
       ) : null}
@@ -593,6 +582,28 @@ function AppRoutes({
           )}
         </Route>
       ))}
+      {runtimeProfile.publicSitePreview ? (
+        <Route path={runtimeProfile.publicSitePreview.rootRoute}>
+          {runtimeProfile.publicSitePreview.homeRoute ? (
+            <Redirect replace to={runtimeProfile.publicSitePreview.homeRoute} />
+          ) : (
+            <SitePageRoute
+              linkMode={runtimeProfile.publicSitePreview.linkMode}
+              slug={runtimeProfile.publicSitePreview.homeSlug}
+            />
+          )}
+        </Route>
+      ) : null}
+      {runtimeProfile.publicSitePreview ? (
+        <Route path={runtimeProfile.publicSitePreview.routePattern}>
+          {(params) => (
+            <SitePageRoute
+              linkMode={runtimeProfile.publicSitePreview?.linkMode}
+              slug={runtimeWildcardSiteSlug(params)}
+            />
+          )}
+        </Route>
+      ) : null}
       <Route>
         <NotFoundRoute />
       </Route>
@@ -618,4 +629,10 @@ function runtimeWildcardScreenPath(params: unknown): string {
   const wildcard = (params as { "*": string | undefined })["*"];
 
   return `/${wildcard ?? ""}`;
+}
+
+function runtimeWildcardSiteSlug(params: unknown): string {
+  const wildcard = (params as { "*": string | undefined })["*"];
+
+  return normalizeSitePageSlug(wildcard);
 }

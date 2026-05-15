@@ -7,7 +7,7 @@ import {
   type SchemaKey,
 } from "../shared/schema-apps.ts";
 
-export type RuntimeProfileKind = "dev" | "app" | "publishedSite";
+export type RuntimeProfileKind = "dev" | "app" | "siteAuthoring" | "publishedSite";
 
 export type RuntimeShellKind = "dev" | "app" | "publishedSite";
 
@@ -23,10 +23,14 @@ export type RuntimeRedirect = {
   to: `/${string}`;
 };
 
+export type RuntimePublicSitePreviewLinkMode = "preview" | "authoring";
+
 export type RuntimePublicSitePreview = {
-  rootRoute: "/pages";
-  routePattern: "/pages/*";
-  homeRoute: "/pages/home";
+  rootRoute: `/${string}`;
+  routePattern: `/${string}`;
+  homeRoute?: `/${string}`;
+  homeSlug: string;
+  linkMode: RuntimePublicSitePreviewLinkMode;
 };
 
 export type RuntimePublishedSiteRoutes = {
@@ -51,6 +55,10 @@ export type RuntimeProfileResolverInput = {
   hostname?: string | undefined;
 };
 
+export type SiteAuthoringRuntimeProfileOptions = {
+  exposeSchemaRoute?: boolean;
+};
+
 export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
 
 type RuntimeProfileHintDocument = {
@@ -67,6 +75,8 @@ export function resolveRuntimeProfile(
   switch (profileKind) {
     case "app":
       return createAppRuntimeProfile(schemaKey);
+    case "siteAuthoring":
+      return createSiteAuthoringRuntimeProfile();
     case "publishedSite":
       return createPublishedSiteRuntimeProfile();
     case "dev":
@@ -93,6 +103,8 @@ export function createDevRuntimeProfile(): RuntimeProfile {
       rootRoute: "/pages",
       routePattern: "/pages/*",
       homeRoute: "/pages/home",
+      homeSlug: "home",
+      linkMode: "preview",
     },
   };
 }
@@ -112,6 +124,30 @@ export function createAppRuntimeProfile(schemaKey: SchemaKey = defaultSchemaKey)
       },
     ],
     legacyRedirects: [],
+  };
+}
+
+export function createSiteAuthoringRuntimeProfile(
+  options: SiteAuthoringRuntimeProfileOptions = {},
+): RuntimeProfile {
+  return {
+    kind: "siteAuthoring",
+    shell: "app",
+    worlds: [
+      {
+        app: getSchemaAppDefinition("site"),
+        generatedRoutes: true,
+        route: "/admin",
+        schemaRoute: options.exposeSchemaRoute ? "/admin/schema" : undefined,
+      },
+    ],
+    legacyRedirects: [],
+    publicSitePreview: {
+      rootRoute: "/",
+      routePattern: "/*",
+      homeSlug: "home",
+      linkMode: "authoring",
+    },
   };
 }
 
@@ -151,8 +187,15 @@ export function hasGeneratedRoutes(world: RuntimeWorldMount): boolean {
 export function isRuntimePublicSiteRoute(profile: RuntimeProfile, pathname: string): boolean {
   const preview = profile.publicSitePreview;
 
+  if (!preview || findRuntimeWorldMountByRoute(profile, pathname)) {
+    return false;
+  }
+
   return Boolean(
-    preview && (pathname === preview.rootRoute || pathname.startsWith(`${preview.rootRoute}/`)),
+    pathname === preview.rootRoute ||
+    (preview.rootRoute === "/"
+      ? pathname.startsWith("/")
+      : pathname.startsWith(`${preview.rootRoute}/`)),
   );
 }
 
@@ -211,6 +254,7 @@ function parseRuntimeProfileKind(value: string | undefined): RuntimeProfileKind 
   switch (value) {
     case "dev":
     case "app":
+    case "siteAuthoring":
     case "publishedSite":
       return value;
     default:
@@ -231,6 +275,10 @@ function runtimeProfileKindFromHost(hostname: string | undefined): RuntimeProfil
 
   if (normalized.startsWith("app.")) {
     return "app";
+  }
+
+  if (normalized.startsWith("site-authoring.")) {
+    return "siteAuthoring";
   }
 
   if (isWorkersDevHost(normalized)) {
