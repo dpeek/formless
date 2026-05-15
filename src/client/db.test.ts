@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 import {
+  clientDbName,
   deleteClientDb,
   saveBootstrapResponse,
   saveSchema,
@@ -58,6 +59,11 @@ describe("client db", () => {
       records: [],
       cursor: 0,
     });
+  });
+
+  it("can scope browser storage by Site project identity", () => {
+    expect(clientDbName("site", "project-123")).toBe("formless:project-123:site");
+    expect(clientDbName("site", "../project")).toBe("formless:site");
   });
 
   it("merges records and advances the cursor", async () => {

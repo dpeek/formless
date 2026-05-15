@@ -52,8 +52,15 @@ function createChannel(schemaKey: SchemaKey) {
   return new BroadcastChannel(channelName(schemaKey));
 }
 
-function channelName(schemaKey: SchemaKey) {
-  return `${CHANNEL_NAME_PREFIX}:${schemaKey}`;
+export function channelName(
+  schemaKey: SchemaKey,
+  projectId: string | undefined = clientProjectStorageId(),
+) {
+  const normalizedProjectId = normalizeProjectStorageId(projectId);
+
+  return normalizedProjectId
+    ? `${CHANNEL_NAME_PREFIX}:${normalizedProjectId}:${schemaKey}`
+    : `${CHANNEL_NAME_PREFIX}:${schemaKey}`;
 }
 
 function isBroadcastEvent(value: unknown): value is BroadcastEvent {
@@ -67,4 +74,20 @@ function isBroadcastEvent(value: unknown): value is BroadcastEvent {
       value.type === "schema-updated" ||
       value.type === "sync-requested")
   );
+}
+
+function clientProjectStorageId(): string | undefined {
+  return stringConfigValue(import.meta.env.VITE_FORMLESS_SITE_PROJECT_ID);
+}
+
+function stringConfigValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function normalizeProjectStorageId(value: string | undefined): string | undefined {
+  if (!value || !/^[A-Za-z0-9._-]+$/.test(value)) {
+    return undefined;
+  }
+
+  return value;
 }

@@ -169,6 +169,17 @@ export function deleteClientDb(schemaKey: SchemaKey) {
   });
 }
 
+export function clientDbName(
+  schemaKey: SchemaKey,
+  projectId: string | undefined = clientProjectStorageId(),
+) {
+  const normalizedProjectId = normalizeProjectStorageId(projectId);
+
+  return normalizedProjectId
+    ? `${DB_NAME_PREFIX}:${normalizedProjectId}:${schemaKey}`
+    : `${DB_NAME_PREFIX}:${schemaKey}`;
+}
+
 function openClientDb(schemaKey: SchemaKey) {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(clientDbName(schemaKey), DB_VERSION);
@@ -190,10 +201,6 @@ function openClientDb(schemaKey: SchemaKey) {
   });
 }
 
-function clientDbName(schemaKey: SchemaKey) {
-  return `${DB_NAME_PREFIX}:${schemaKey}`;
-}
-
 function requestToPromise<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -213,4 +220,20 @@ function transactionDone(transaction: IDBTransaction) {
 
 function sortRecords(records: StoredRecord[]) {
   return records.toSorted((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+function clientProjectStorageId(): string | undefined {
+  return stringConfigValue(import.meta.env.VITE_FORMLESS_SITE_PROJECT_ID);
+}
+
+function stringConfigValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function normalizeProjectStorageId(value: string | undefined): string | undefined {
+  if (!value || !/^[A-Za-z0-9._-]+$/.test(value)) {
+    return undefined;
+  }
+
+  return value;
 }

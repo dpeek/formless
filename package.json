@@ -2,6 +2,9 @@
   "name": "formless",
   "version": "0.0.0",
   "private": true,
+  "bin": {
+    "formless": "./scripts/formless.ts"
+  },
   "workspaces": [
     "lib/*"
   ],
@@ -14,6 +17,7 @@
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
+    "formless": "bun run scripts/formless.ts",
     "site:pull-seed": "bun run scripts/site-pull-seed.ts",
     "site:publish": "bun run scripts/site-publish.ts",
     "deploy": "vp build && wrangler deploy"

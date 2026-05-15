@@ -1,7 +1,7 @@
 # PRD 37: Single Site project and CLI loop
 
 Status: ready
-Current chunk: SSP-04
+Current chunk: SSP-05
 Last updated: 2026-05-15
 
 Start after PRD 31, PRD 34, PRD 35, and PRD 36 shipped behavior is stable on the active branch.
@@ -380,26 +380,28 @@ Possible changed files:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                             | Reason                                                                                    | Evidence                                             |
-| ------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| SSP-D1  | Keep `site` as the internal schema key.                              | Authority, sync, browser replica, and API routes already depend on schema-key isolation.  | PRD 17, `src/shared/schema-apps.ts`                  |
-| SSP-D2  | Add a Site authoring profile instead of removing the dev shell.      | Repo development still needs multi-app routes; users need a separate product shell.       | PRD 17 runtime profile seam                          |
-| SSP-D3  | Use `/` for local public preview in the Site project flow.           | Local preview should match published route shape.                                         | PRD 34 published Site top-level route behavior       |
-| SSP-D4  | Use `/admin` for local generated Site authoring.                     | It is recognizable and avoids exposing the schema key in user-facing paths.               | Current `/site` admin route is dev-shell terminology |
-| SSP-D5  | Keep `/api/site/*` as the internal API surface.                      | Changing browser route shape should not churn Authority, storage, sync, or media paths.   | PRD 17 and PRD 26                                    |
-| SSP-D6  | Keep the first project format Site-specific.                         | Onboarding one personal website does not require arbitrary schema packaging.              | Roadmap excludes app marketplace/import-export       |
-| SSP-D7  | Make the Site schema package-owned in the first slice.               | It avoids schema migration and compatibility work before the Site product path is proven. | Existing Site schema under `schema/apps/site`        |
-| SSP-D8  | Store user records in `site.records.json`.                           | The user project should own content as a reviewable JSON source artifact.                 | PRD 26 seed promotion contract                       |
-| SSP-D9  | Store source media under project `media/`.                           | R2-backed media needs source bytes for repeatable publish.                                | PRD 31 source media sidecar follow-up                |
-| SSP-D10 | Save from the Authority snapshot, not browser IndexedDB.             | The Authority is authoritative; browser storage is a local replica.                       | PRD 15 and PRD 26                                    |
-| SSP-D11 | Reuse source snapshot restore for publish.                           | Existing publish safety already validates, backs up, restores, and smokes data.           | `src/site/publish.ts`, PRD 26                        |
-| SSP-D12 | Treat `npx formless publish` as the user-facing one-command action.  | The user should not toggle env vars or remember repo script flags.                        | User direction 2026-05-15                            |
-| SSP-D13 | Keep production admin UI out of the first slice.                     | Production auth and hosted secret handling are separate product problems.                 | Roadmap excludes users and permissions               |
-| SSP-D14 | Allow a local admin publish action only after CLI publish is stable. | Browser-only admin cannot safely own Cloudflare secrets.                                  | Existing `FORMLESS_ADMIN_TOKEN` admin guard behavior |
-| SSP-D15 | Prove the flow with one real migrated Site project.                  | The first target is a specific personal website, and migration will expose product gaps.  | User direction 2026-05-15                            |
-| SSP-D16 | Use `siteAuthoring` as the local single-Site runtime profile kind.   | It keeps the profile explicit while reusing generated app chrome for `/admin`.            | `src/app/runtime-profile.ts`                         |
-| SSP-D17 | Keep project format v1 fixed to Site records and media paths.        | The first project format should be predictable before custom schema or path support.      | `src/site/project-config.ts`                         |
-| SSP-D18 | Parse project records against the package-owned Site schema.         | User project records must stay compatible with the shipped Site runtime and publish path. | `src/site/project-source.ts`                         |
+| ID      | Decision                                                                                      | Reason                                                                                    | Evidence                                             |
+| ------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| SSP-D1  | Keep `site` as the internal schema key.                                                       | Authority, sync, browser replica, and API routes already depend on schema-key isolation.  | PRD 17, `src/shared/schema-apps.ts`                  |
+| SSP-D2  | Add a Site authoring profile instead of removing the dev shell.                               | Repo development still needs multi-app routes; users need a separate product shell.       | PRD 17 runtime profile seam                          |
+| SSP-D3  | Use `/` for local public preview in the Site project flow.                                    | Local preview should match published route shape.                                         | PRD 34 published Site top-level route behavior       |
+| SSP-D4  | Use `/admin` for local generated Site authoring.                                              | It is recognizable and avoids exposing the schema key in user-facing paths.               | Current `/site` admin route is dev-shell terminology |
+| SSP-D5  | Keep `/api/site/*` as the internal API surface.                                               | Changing browser route shape should not churn Authority, storage, sync, or media paths.   | PRD 17 and PRD 26                                    |
+| SSP-D6  | Keep the first project format Site-specific.                                                  | Onboarding one personal website does not require arbitrary schema packaging.              | Roadmap excludes app marketplace/import-export       |
+| SSP-D7  | Make the Site schema package-owned in the first slice.                                        | It avoids schema migration and compatibility work before the Site product path is proven. | Existing Site schema under `schema/apps/site`        |
+| SSP-D8  | Store user records in `site.records.json`.                                                    | The user project should own content as a reviewable JSON source artifact.                 | PRD 26 seed promotion contract                       |
+| SSP-D9  | Store source media under project `media/`.                                                    | R2-backed media needs source bytes for repeatable publish.                                | PRD 31 source media sidecar follow-up                |
+| SSP-D10 | Save from the Authority snapshot, not browser IndexedDB.                                      | The Authority is authoritative; browser storage is a local replica.                       | PRD 15 and PRD 26                                    |
+| SSP-D11 | Reuse source snapshot restore for publish.                                                    | Existing publish safety already validates, backs up, restores, and smokes data.           | `src/site/publish.ts`, PRD 26                        |
+| SSP-D12 | Treat `npx formless publish` as the user-facing one-command action.                           | The user should not toggle env vars or remember repo script flags.                        | User direction 2026-05-15                            |
+| SSP-D13 | Keep production admin UI out of the first slice.                                              | Production auth and hosted secret handling are separate product problems.                 | Roadmap excludes users and permissions               |
+| SSP-D14 | Allow a local admin publish action only after CLI publish is stable.                          | Browser-only admin cannot safely own Cloudflare secrets.                                  | Existing `FORMLESS_ADMIN_TOKEN` admin guard behavior |
+| SSP-D15 | Prove the flow with one real migrated Site project.                                           | The first target is a specific personal website, and migration will expose product gaps.  | User direction 2026-05-15                            |
+| SSP-D16 | Use `siteAuthoring` as the local single-Site runtime profile kind.                            | It keeps the profile explicit while reusing generated app chrome for `/admin`.            | `src/app/runtime-profile.ts`                         |
+| SSP-D17 | Keep project format v1 fixed to Site records and media paths.                                 | The first project format should be predictable before custom schema or path support.      | `src/site/project-config.ts`                         |
+| SSP-D18 | Parse project records against the package-owned Site schema.                                  | User project records must stay compatible with the shipped Site runtime and publish path. | `src/site/project-source.ts`                         |
+| SSP-D19 | Load project dev data by restoring project records and media after the local server is ready. | The Worker stays package-owned and does not need filesystem reads for user project files. | `src/site/cli.ts`                                    |
+| SSP-D20 | Scope browser DB and broadcast names with the Site project identity when present.             | Two local Site projects should not share one browser replica namespace.                   | `src/client/db.ts`, `src/client/broadcast.ts`        |
 
 ### Deep Modules
 
@@ -440,8 +442,8 @@ Possible changed files:
 | SSP-01 | shipped | none       | PRD                                     | PRD captures scope, decisions, chunks, blockers, and promote notes.                                              |
 | SSP-02 | shipped | SSP-01     | runtime profile, app routes, worker     | Site authoring profile mounts `/` preview and `/admin` generated admin with no multi-app shell.                  |
 | SSP-03 | shipped | SSP-02     | project source/config modules, tests    | Project records, media, and config parse/write deterministically and validate against package-owned Site schema. |
-| SSP-04 | ready   | SSP-03     | CLI init/dev/save, package entry, tests | `npx formless init`, `dev`, and `save` work against a Site project without repo-specific paths.                  |
-| SSP-05 | pending | SSP-04     | CLI deploy setup/publish, publish tests | `npx formless publish` deploys code, media, and records from project config without manual env toggles.          |
+| SSP-04 | shipped | SSP-03     | CLI init/dev/save, package entry, tests | `npx formless init`, `dev`, and `save` work against a Site project without repo-specific paths.                  |
+| SSP-05 | ready   | SSP-04     | CLI deploy setup/publish, publish tests | `npx formless publish` deploys code, media, and records from project config without manual env toggles.          |
 | SSP-06 | pending | SSP-05     | local admin publish action, tests       | Local admin can trigger the configured publish flow only through the local CLI broker.                           |
 | SSP-07 | pending | SSP-05     | migration project, smoke notes, PRD     | Brother-site migration proves init/dev/save/publish dry-run with real content and records follow Site schema.    |
 
@@ -475,15 +477,15 @@ Possible changed files:
 
 ## Blockers
 
-- Package boundary is not yet designed: the current repo is an app/runtime repo, not an npm product package.
-- The local dev server entrypoint for a project outside the repo is not yet defined.
+- Package boundary is first-slice only: the package bin points at a Bun TypeScript entrypoint, so npm/Node packaging still needs hardening before external release.
 - Secrets storage for `npx formless deploy setup` needs a concrete policy before implementation.
 
 ## Promote after ship
 
 - `doc/current.md`: note the Site authoring runtime profile and its `/` and `/admin` route shape.
 - `doc/current.md`: note Formless Site project source files: `formless.config.json`, `site.records.json`, and `media/`.
-- `doc/current.md`: note `npx formless init`, `npx formless dev`, `npx formless save`, and `npx formless publish` after they ship.
+- `doc/current.md`: note `npx formless init`, `npx formless dev`, and `npx formless save`.
+- `doc/current.md`: note `npx formless publish` after SSP-05 ships.
 - `doc/current.md`: note project publish backs up live data, restores media before records, and uses guarded snapshot restore.
 - `doc/roadmap.md`: replace repo-shaped Site authoring/publish language with the first-release single-Site project loop if this becomes release scope.
 - `AGENTS.md`: add CLI command summary only after these commands become standard agent procedure.
@@ -501,13 +503,17 @@ Possible changed files:
 - 2026-05-15: SSP-02 browser smoke opened `https://37-single-site-project-cli-loop.formless.local/pages/home` and `/site`; both rendered and `bun browser --session ssp-02 errors` returned no page errors. Direct `site-authoring.*.formless.local` smoke was not possible because the hostname did not resolve in this devstate environment.
 - 2026-05-15: SSP-03 shipped `src/site/project-config.ts` and `src/site/project-source.ts`. Config parsing fixes project format v1 to Site, `site.records.json`, and `media`; rejects checked-in secret fields; and formats deterministically. Source parsing validates records against the package-owned Site schema, omits tombstones from snapshot promotion, formats deterministic records, and maps same-origin Site media to project `media/` paths.
 - 2026-05-15: SSP-03 tests added `src/site/project-config.test.ts` and `src/site/project-source.test.ts`. `devstate check` reported checks ok and watcher tests passing. Requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent in this devstate environment, so `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence.
+- 2026-05-15: SSP-04 shipped `scripts/formless.ts`, package `bin.formless`, and `src/site/cli.ts`. CLI parsing supports `init`, `dev`, and `save`; init writes `formless.config.json`, `site.records.json`, and starter media; dev runs the Site authoring profile and restores project records/media into the local Site authority; save/check promotes a local Site authority snapshot back to project records and media.
+- 2026-05-15: SSP-04 added project-scoped browser DB and broadcast names through `VITE_FORMLESS_SITE_PROJECT_ID`.
+- 2026-05-15: SSP-04 tests added `src/site/cli.test.ts` and `src/client/broadcast.test.ts`; `src/client/db.test.ts` covers project-scoped DB names. `devstate check` reported checks ok and watcher tests passing. `bun run formless --help` printed the init/dev/save usage. Requested `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent, so `.devstate/status.md`, `.devstate/logs/check-vite.txt`, and `.devstate/logs/service-test.txt` were used as check evidence.
 
 ## Status Notes
 
 - SSP-01 shipped 2026-05-15.
 - SSP-02 shipped 2026-05-15.
 - SSP-03 shipped 2026-05-15.
-- Current chunk: SSP-04.
-- Current blocker: package boundary and project-local dev entrypoint need design during SSP-04.
+- SSP-04 shipped 2026-05-15.
+- Current chunk: SSP-05.
+- Current blocker: deploy setup must choose where local publish secrets live before `npx formless publish` can become the normal mutating path.
 - Decision: the first user-facing product path is Site-only, even though the internal runtime remains schema-keyed.
 - Decision: CLI publish is the first one-command publish path; admin publish follows only through a local CLI broker.
