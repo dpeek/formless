@@ -128,12 +128,12 @@ describe("published Site Worker SSR", () => {
     expect(html).not.toContain("/src/main.tsx");
   });
 
-  it("returns server-rendered HTML for nested published Site slugs", async () => {
-    const response = await getDocument("/blog/agents-are-enablers");
+  it("returns server-rendered HTML for starter nested published Site slugs", async () => {
+    const response = await getDocument("/blog/starter-post");
     const html = await response.text();
 
     expect(response.status).toBe(200);
-    expect(html).toContain("Agents are enablers");
+    expect(html).toContain("Starter post");
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
     expect(html).toContain('href="/blog"');
@@ -207,7 +207,7 @@ describe("published Site Worker SSR", () => {
       mutationId: "mutation-site-ssr-hostile-home-label",
       entity: "block",
       op: "patch",
-      recordId: "rec_site_content_home",
+      recordId: "rec_site_starter_page_home",
       values: {
         label: hostileLabel,
       },
