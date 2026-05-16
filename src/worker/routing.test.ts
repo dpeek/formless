@@ -101,7 +101,6 @@ describe("Worker document routing", () => {
     const nonSsrRequests = [
       documentRequest("http://example.com/api/site/tree/home"),
       documentRequest("http://example.com/pages/home"),
-      documentRequest("http://example.com/work"),
       documentRequest("http://example.com/tasks"),
       documentRequest("http://example.com/estii/setup"),
       documentRequest("http://example.com/site/schema"),
@@ -238,7 +237,7 @@ describe("Worker document routing", () => {
     ).toBe(false);
   });
 
-  it("builds published Site redirects for old preview and work routes", () => {
+  it("builds published Site redirects for old preview routes", () => {
     expect(
       publishedSiteRedirectForRequest(documentRequest("http://example.com/pages"), {
         profile: "publishedSite",
@@ -269,11 +268,6 @@ describe("Worker document routing", () => {
     ).toEqual({ location: "/blog/agents?ref=old", status: 308 });
     expect(
       publishedSiteRedirectForRequest(documentRequest("http://example.com/pages//projects"), {
-        profile: "publishedSite",
-      }),
-    ).toEqual({ location: "/projects", status: 308 });
-    expect(
-      publishedSiteRedirectForRequest(documentRequest("http://example.com/work/"), {
         profile: "publishedSite",
       }),
     ).toEqual({ location: "/projects", status: 308 });

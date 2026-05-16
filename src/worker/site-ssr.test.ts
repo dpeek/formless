@@ -80,16 +80,12 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('root.classList.toggle("dark", theme === "dark");');
     expect(html).toContain('<style id="formless-public-site-theme-style">');
     expect(html).toContain("html.dark #app");
-    expect(html).toContain("<title>David Peek</title>");
-    expect(html).toContain(
-      '<meta name="description" content="A concise personal site for current work, writing, and project notes." />',
-    );
-    expect(html).toContain('<meta property="og:title" content="David Peek" />');
-    expect(html).toContain(
-      '<meta property="og:description" content="A concise personal site for current work, writing, and project notes." />',
-    );
+    expect(html).toContain("<title>Home</title>");
+    expect(html).toContain('<meta name="description" content="A public page from Home." />');
+    expect(html).toContain('<meta property="og:title" content="Home" />');
+    expect(html).toContain('<meta property="og:description" content="A public page from Home." />');
     expect(html).toContain('<meta property="og:type" content="website" />');
-    expect(html).toContain('<meta property="og:site_name" content="David Peek" />');
+    expect(html).toContain('<meta property="og:site_name" content="Home" />');
     expect(html).toContain('<meta name="twitter:card" content="summary" />');
     expect(html).not.toContain("og:image");
     expect(html).toContain("Home");
@@ -139,7 +135,7 @@ describe("published Site Worker SSR", () => {
 
     expect(response.status).toBe(200);
     expect(html).toContain("Projects");
-    expect(html).toContain("<title>Projects | David Peek</title>");
+    expect(html).toContain("<title>Projects | Example Site</title>");
     expect(html).toContain(
       '<link rel="modulepreload" crossorigin href="/assets/schema-apps-test.js">',
     );
@@ -182,7 +178,7 @@ describe("published Site Worker SSR", () => {
           testSitePageTree("projects", {
             body: "# Launch **clean** [public routes](https://example.com)\n\nwith    spacing",
             label: "Projects & plans",
-            siteName: "David & <Peek>",
+            siteName: "Example & <Site>",
           }),
         ),
       ),
@@ -195,15 +191,15 @@ describe("published Site Worker SSR", () => {
     const html = await response.text();
 
     expect(response.status).toBe(200);
-    expect(html).toContain("<title>Projects &amp; plans | David &amp; &lt;Peek&gt;</title>");
+    expect(html).toContain("<title>Projects &amp; plans | Example &amp; &lt;Site&gt;</title>");
     expect(html).toContain(
       '<meta name="description" content="Launch clean public routes with spacing" />',
     );
     expect(html).toContain('<link rel="canonical" href="https://example.com/projects" />');
     expect(html).toContain(
-      '<meta property="og:title" content="Projects &amp; plans | David &amp; &lt;Peek&gt;" />',
+      '<meta property="og:title" content="Projects &amp; plans | Example &amp; &lt;Site&gt;" />',
     );
-    expect(html).toContain('<meta property="og:site_name" content="David &amp; &lt;Peek&gt;" />');
+    expect(html).toContain('<meta property="og:site_name" content="Example &amp; &lt;Site&gt;" />');
     expect(html).toContain('<meta property="og:url" content="https://example.com/projects" />');
     expect(html).toContain('<meta property="og:type" content="website" />');
     expect(html).toContain('<meta name="twitter:card" content="summary" />');
@@ -320,20 +316,18 @@ describe("published Site Worker SSR", () => {
     expect(body.meta.slug).toBe("home");
   });
 
-  it("redirects old preview and work routes before public document rendering", async () => {
+  it("redirects old preview routes before public document rendering", async () => {
     const responses = await Promise.all([
       getDocumentWithoutFollowingRedirect("/pages/home"),
       getDocumentWithoutFollowingRedirect("/pages/projects"),
       getDocumentWithoutFollowingRedirect("/pages/blog/agents-are-enablers?ref=preview"),
-      getDocumentWithoutFollowingRedirect("/work"),
     ]);
 
-    expect(responses.map((response) => response.status)).toEqual([308, 308, 308, 308]);
+    expect(responses.map((response) => response.status)).toEqual([308, 308, 308]);
     expect(responses.map((response) => response.headers.get("Location"))).toEqual([
       "/",
       "/projects",
       "/blog/agents-are-enablers?ref=preview",
-      "/projects",
     ]);
   });
 
@@ -529,7 +523,7 @@ function testSitePageTree(
       ...(options.body ? { body: options.body } : {}),
       placements: [],
     },
-    frame: siteFrame(options.siteName ?? "David Peek"),
+    frame: siteFrame(options.siteName ?? "Example Site"),
     meta: {
       slug,
       generatedAt: "2026-05-13T00:00:00.000Z",

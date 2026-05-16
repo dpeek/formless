@@ -193,10 +193,6 @@ function runtimeProfileKindFromHost(
 function publishedSiteRedirectLocation(pathname: string, search: string): string | undefined {
   const withoutTrailingSlash = trimTrailingSlash(pathname);
 
-  if (withoutTrailingSlash === "/work") {
-    return `/projects${search}`;
-  }
-
   if (withoutTrailingSlash === "/pages" || withoutTrailingSlash === "/pages/home") {
     return `/${search}`;
   }

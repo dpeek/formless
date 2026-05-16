@@ -8,7 +8,7 @@ Start after PRD 34, PRD 35, PRD 36, and PRD 37 shipped behavior is stable on the
 
 ## Goal
 
-Clean up the published public Site before swapping `https://dpeek.com` to `https://dpeek.twitchy.workers.dev/`.
+Clean up the published public Site route and document behavior.
 
 The first version should:
 
@@ -21,7 +21,6 @@ The first version should:
 - make public route behavior match a normal top-level website;
 - keep generated app/admin shells off the public published host;
 - make `HEAD` responses match public `GET` routing without a response body;
-- preserve the old `/work` route with a redirect.
 
 This PRD owns the final public-site launch hygiene pass.
 It does not own content editing, new schema fields, image alt copy cleanup, project-owned static asset publishing, auth, or broader SEO tooling.
@@ -40,7 +39,6 @@ Current deployed behavior observed before this PRD:
 - `/pages/home` returns the old preview SPA shell instead of redirecting to `/`.
 - Published-profile app routes such as `/site`, `/tasks`, `/estii`, and `/schema` return a client shell instead of staying off the public host.
 - `HEAD /` returns `404` while `GET /` returns the public Site document.
-- The old live site has `/work`; the replacement Site uses `/projects`.
 
 The domain cutover should not expose implementation names, stale preview routes, or missing launch files.
 
@@ -83,7 +81,6 @@ For successful public documents:
 - the Site name comes from existing public frame content, not a new field.
 
 The first Site name source is the first primary header link label in the public frame.
-The current content makes that `David Peek`.
 If that lookup fails, fall back to the page label, then a generic `Site` title.
 
 Add a small document metadata module so public SSR, not-found documents, and tests share one source of truth.
@@ -173,27 +170,26 @@ Possible changed files:
 1. As a visitor, I want each browser tab title to describe the current page, so that the Site feels finished.
 2. As a visitor, I want shared links to show the right page title, so that the link preview is useful.
 3. As a visitor, I want shared links to show a useful description, so that I know what I am opening.
-4. As a visitor, I want the home page title to be the Site name, so that it does not say `Home | David Peek`.
+4. As a visitor, I want the home page title to be the Site name, so that it does not duplicate the page label.
 5. As a visitor, I want subpage titles to include the page label and Site name, so that multiple tabs are easy to distinguish.
 6. As a visitor, I want `/about`, `/blog`, `/projects`, `/resume`, and blog post routes to be clean top-level URLs, so that the Site behaves like a normal website.
-7. As a visitor following old links, I want `/work` to redirect to the replacement work page, so that old `dpeek.com` links do not break.
-8. As a visitor following old preview links, I want `/pages/home` to redirect to `/`, so that stale preview URLs recover cleanly.
-9. As a visitor following old preview links, I want `/pages/<slug>` to redirect to `/<slug>`, so that stale preview URLs recover cleanly.
-10. As a visitor, I want missing pages to return a real 404 document, so that broken links are clear.
-11. As a visitor, I do not want public admin or generated app shells to appear on the public domain, so that implementation routes stay private.
-12. As a visitor, I want a favicon in browser tabs, so that the Site is identifiable.
-13. As a visitor on a mobile device, I want a touch icon, so that saved bookmarks look intentional.
-14. As a crawler, I want `robots.txt` to be plain text, so that crawl policy is machine-readable.
-15. As a crawler, I want `sitemap.xml` to be XML, so that public routes are discoverable.
-16. As a link checker, I want `HEAD` to return the same status and headers as `GET`, so that health checks are accurate.
-17. As the Site owner, I want metadata to use existing page content, so that I do not need extra SEO fields before launch.
-18. As the Site owner, I want image metadata left alone for now, so that I can clean image labels through content editing.
-19. As the runtime developer, I want metadata generation isolated in a testable module, so that later schema-backed SEO fields can plug in cleanly.
-20. As the runtime developer, I want route hygiene isolated from the renderer, so that public routing remains easy to test.
-21. As the runtime developer, I want favicon/static launch assets handled by the package static path, so that this PRD works in repo development and installed-package Site projects.
-22. As the runtime developer, I want no new block fields in this PRD, so that the current flat content model stays stable for cutover.
-23. As a Site project owner, I want `npx @dpeek/formless dev` and `npx @dpeek/formless publish` to serve launch assets without a monorepo checkout, so that the CLI path matches the product path.
-24. As the runtime developer, I want launch assets and authored Site media to stay on separate paths, so that favicon handling does not disturb `/api/site/media/*`.
+7. As a visitor following old preview links, I want `/pages/home` to redirect to `/`, so that stale preview URLs recover cleanly.
+8. As a visitor following old preview links, I want `/pages/<slug>` to redirect to `/<slug>`, so that stale preview URLs recover cleanly.
+9. As a visitor, I want missing pages to return a real 404 document, so that broken links are clear.
+10. As a visitor, I do not want public admin or generated app shells to appear on the public domain, so that implementation routes stay private.
+11. As a visitor, I want a favicon in browser tabs, so that the Site is identifiable.
+12. As a visitor on a mobile device, I want a touch icon, so that saved bookmarks look intentional.
+13. As a crawler, I want `robots.txt` to be plain text, so that crawl policy is machine-readable.
+14. As a crawler, I want `sitemap.xml` to be XML, so that public routes are discoverable.
+15. As a link checker, I want `HEAD` to return the same status and headers as `GET`, so that health checks are accurate.
+16. As the Site owner, I want metadata to use existing page content, so that I do not need extra SEO fields before launch.
+17. As the Site owner, I want image metadata left alone for now, so that I can clean image labels through content editing.
+18. As the runtime developer, I want metadata generation isolated in a testable module, so that later schema-backed SEO fields can plug in cleanly.
+19. As the runtime developer, I want route hygiene isolated from the renderer, so that public routing remains easy to test.
+20. As the runtime developer, I want favicon/static launch assets handled by the package static path, so that this PRD works in repo development and installed-package Site projects.
+21. As the runtime developer, I want no new block fields in this PRD, so that the current flat content model stays stable for cutover.
+22. As a Site project owner, I want `npx @dpeek/formless dev` and `npx @dpeek/formless publish` to serve launch assets without a monorepo checkout, so that the CLI path matches the product path.
+23. As the runtime developer, I want launch assets and authored Site media to stay on separate paths, so that favicon handling does not disturb `/api/site/media/*`.
 
 ## Requirements
 
@@ -229,7 +225,6 @@ Possible changed files:
 
 - The first Site name source is existing public frame content.
 - The preferred source is the first primary header link label.
-- The current content should resolve to `David Peek`.
 - If no primary header label exists, fall back to the page label.
 - If no page label exists, fall back to `Site`.
 - No new Site block fields are added for Site name in this PRD.
@@ -279,8 +274,6 @@ Possible changed files:
 - `/pages/home` redirects to `/`.
 - `/pages/home/` redirects to `/`.
 - `/pages/*` redirects to the matching top-level route.
-- `/work` redirects to `/projects`.
-- `/work/` redirects to `/projects`.
 - Generated app routes do not serve the static client shell on the public published host.
 - `/site`, `/tasks`, `/estii`, `/rates`, `/schema`, and matching nested app routes return a public 404 unless a specific redirect is listed.
 - Static assets continue to serve normally.
@@ -309,14 +302,13 @@ Possible changed files:
 | PSC-D2  | Use the public page label for the page title source.                                    | The label already names the route for visitors and authors.                                  |
 | PSC-D3  | Use the public page body for the description source.                                    | The body already stores concise page summary copy for regular pages.                         |
 | PSC-D4  | Strip markdown and collapse whitespace before using body copy in metadata.              | Metadata should be plain text, not markdown or rendered HTML.                                |
-| PSC-D5  | Use the first primary header link label as the Site name source.                        | The current content already stores `David Peek` there and no new field is needed.            |
+| PSC-D5  | Use the first primary header link label as the Site name source.                        | The public frame already stores editable identity copy and no new field is needed.           |
 | PSC-D6  | Fall back from header label to page label, then `Site`.                                 | Broken or minimal content should still produce valid documents.                              |
 | PSC-D7  | Render no `og:image` until image metadata has a real content policy.                    | The user will first fix descriptive image labels, and no image field should be added yet.    |
 | PSC-D8  | Keep Twitter cards as `summary`.                                                        | Without an image, large image cards would be misleading.                                     |
 | PSC-D9  | Put default launch favicon assets in package-owned static assets for now.               | The same static source must work in repo development and installed-package Site projects.    |
 | PSC-D10 | Leave custom Site-project-owned static asset overrides to a later PRD.                  | The shipped project format owns records and media, not a general public asset directory.     |
 | PSC-D11 | Handle old preview routes with redirects instead of rendering preview shells publicly.  | The public domain should expose clean top-level URLs.                                        |
-| PSC-D12 | Redirect old `/work` to `/projects`.                                                    | The existing `dpeek.com` route should survive the domain swap.                               |
 | PSC-D13 | Return public 404s for generated app/admin routes on the published host.                | Implementation shells should not be discoverable as public pages.                            |
 | PSC-D14 | Generate robots and sitemap responses through the Worker, not the SPA fallback.         | These are machine resources with specific content types.                                     |
 | PSC-D15 | Build sitemap entries from public routable Site records.                                | Sitemap should reflect authored Site content and public visibility rules.                    |
@@ -341,7 +333,7 @@ Possible changed files:
 - Metadata tests should assert the rendered document head for home, normal pages, posts, not-found pages, and error pages.
 - Metadata tests should include markdown body stripping and whitespace normalization.
 - Metadata tests should assert that `og:image` is absent.
-- Route tests should assert redirect status and `Location` for `/pages`, `/pages/home`, `/pages/*`, and `/work`.
+- Route tests should assert redirect status and `Location` for `/pages`, `/pages/home`, and `/pages/*`.
 - Route tests should assert public 404 behavior for generated app/admin routes in the published profile.
 - Static asset tests should assert favicon and touch icon routes do not return HTML.
 - Robots and sitemap tests should assert content type, body shape, and route inclusion/exclusion.
@@ -384,7 +376,7 @@ Possible changed files:
 | ID     | Status  | Depends on           | Main files                                                             | Acceptance                                                                                                                                         |
 | ------ | ------- | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | PSC-01 | shipped | none                 | metadata and SSR document code, SSR tests                              | Public SSR documents have route-specific title, description, canonical, OG, and Twitter tags from existing tree data; `og:image` is absent.        |
-| PSC-02 | shipped | none                 | routing code, Worker dispatch, routing tests                           | Public profile redirects `/pages*` and `/work`, blocks generated app/admin shells, and keeps API/assets working.                                   |
+| PSC-02 | shipped | none                 | routing code, Worker dispatch, routing tests                           | Public profile redirects `/pages*`, blocks generated app/admin shells, and keeps API/assets working.                                               |
 | PSC-03 | shipped | PSC-02               | robots/sitemap code, Site tree/route helpers, tests                    | `/robots.txt` and `/sitemap.xml` return correct content types and public route data.                                                               |
 | PSC-04 | shipped | PSC-02               | package static assets, Worker/static routing tests, package path tests | `favicon.svg`, `favicon.ico`, and `apple-touch-icon.png` return real icon assets from the package asset source in repo and external project flows. |
 | PSC-05 | shipped | PSC-01 PSC-02 PSC-04 | HEAD response adapter and media/document tests                         | `HEAD` status/header behavior matches public `GET` routes without response bodies.                                                                 |
@@ -394,7 +386,7 @@ Possible changed files:
 
 - 2026-05-15: PSC-01 shipped. `src/site/public-document-metadata.ts` builds public document metadata from `SitePageTree` facts and request origin. `src/worker/site-ssr.tsx` renders title, description, canonical URL, OG title/description/type/url/site_name, and Twitter card metadata for public SSR documents.
 - 2026-05-15: PSC-01 keeps `og:image` absent and adds no Site block fields.
-- 2026-05-15: PSC-02 shipped. Worker dispatch now redirects published `/pages`, `/pages/home`, `/pages/*`, and `/work` routes before API/static/document fallback.
+- 2026-05-15: PSC-02 shipped. Worker dispatch now redirects published `/pages`, `/pages/home`, and `/pages/*` routes before API/static/document fallback.
 - 2026-05-15: PSC-02 blocks generated app/admin client shell routes from published static fallback; API routes and asset-like paths still bypass Site document SSR.
 - 2026-05-15: PSC-03 shipped. `src/site/public-indexing.ts` builds deterministic public route entries from live page blocks and dated post blocks, canonicalizes old `/pages/*` hrefs to clean public paths, validates candidates through `resolveSiteRoute`, and excludes API, generated app, and static-like paths.
 - 2026-05-15: PSC-03 serves `/robots.txt` as plain text and `/sitemap.xml` as XML from current Site bootstrap records before static asset fallback.
@@ -404,6 +396,7 @@ Possible changed files:
 - 2026-05-15: PSC-05 shipped. `src/worker/head-response.ts` adapts `HEAD` to the matching `GET` route decision and returns matching status/headers with no response body.
 - 2026-05-15: PSC-05 supports `HEAD` for public Site documents, public redirects, generated-app public 404s, Site media reads and misses, and Worker indexing resources.
 - 2026-05-15: PSC-06 shipped. Footer note text now uses a readable dark-mode text color in the public Site renderer.
+- 2026-05-15: Maintenance removed the obsolete legacy-route redirect from Worker routing, route tests, SSR redirect tests, and PRD requirements. Preview-route redirects remain.
 - Decisions: no new PSC-03 decisions. Implementation follows PSC-D14 and PSC-D15.
 - Decisions: no new PSC-04 decisions. Implementation follows PSC-D9, PSC-D20, and PSC-D21.
 - Decisions: no new PSC-05 decisions. Implementation follows PSC-D16.
@@ -412,12 +405,11 @@ Possible changed files:
 
 ## Acceptance Checks
 
-- `GET /` returns public HTML with title `David Peek`.
-- `GET /projects` returns public HTML with title `Projects | David Peek`.
+- `GET /` returns public HTML with the current Site name as the title.
+- `GET /projects` returns public HTML with the current page label and Site name in the title.
 - `GET /blog/the-schema-is-the-app` returns public HTML with article metadata.
 - `GET /pages/home` redirects to `/`.
 - `GET /pages/projects` redirects to `/projects`.
-- `GET /work` redirects to `/projects`.
 - `GET /site` does not return the generated app shell on the published host.
 - `GET /robots.txt` returns text, not HTML.
 - `GET /sitemap.xml` returns XML, not HTML.
@@ -446,6 +438,7 @@ Possible changed files:
 
 ## Evidence
 
+- 2026-05-15: Maintenance `devstate check` reports checks ok, web ready, and test watcher passing after legacy redirect removal and neutral SSR metadata assertions.
 - 2026-05-15: `.devstate/status.md` reports checks ok and services running.
 - 2026-05-15: `.devstate/logs/check-vite.txt` reports `vp check --fix` passed with no warnings, lint errors, or type errors.
 - 2026-05-15: `.devstate/logs/service-test.txt` reports `src/worker/site-ssr.test.ts` passed, 11 tests.
