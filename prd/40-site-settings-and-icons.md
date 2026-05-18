@@ -1,7 +1,7 @@
 # PRD 40: Site settings and icons
 
 Status: ready
-Current chunk: SSI-01 ready
+Current chunk: SSI-02 ready
 Last updated: 2026-05-18
 
 Start after PRD 30, PRD 31, PRD 38, and PRD 39 shipped behavior is stable on the active branch.
@@ -424,7 +424,7 @@ Prior art:
 
 | ID     | Status | Depends on | Main files                                              | Acceptance                                                                                                                                               |
 | ------ | ------ | ---------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSI-01 | ready  | none       | PRD                                                     | PRD captures data model, public tree, metadata, icon route, dependency, authoring, tests, blockers, and promotion notes.                                 |
+| SSI-01 | done   | none       | PRD                                                     | PRD captures data model, public tree, metadata, icon route, dependency, authoring, tests, blockers, and promotion notes.                                 |
 | SSI-02 | ready  | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record with a simple SVG icon, create/delete disabled, patch enabled, unique key constraint covered.          |
 | SSI-03 | ready  | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
 | SSI-04 | ready  | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
@@ -511,6 +511,10 @@ Prior art:
 
 - 2026-05-18: `devstate start` reported checks ok and services running at `https://formless.local`.
 - 2026-05-18: Read `.devstate/status.md`; checks were ok and watcher tests were passing.
+- 2026-05-18: Current `devstate start` reported checks ok and services running at `https://40-site-settings-and-icons.formless.local`.
+- 2026-05-18: `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; read `devstate.json`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` instead.
+- 2026-05-18: Watcher tests reported 62 files and 813 tests passing.
+- 2026-05-18: Check log reported formatting complete and no warnings, lint errors, or type errors in 256 files.
 - 2026-05-18: Read `doc/overview.md`, `doc/current.md`, and `doc/roadmap.md`.
 - 2026-05-18: Read `CONTEXT.md`; records stay flat and public tree is the Site projection.
 - 2026-05-18: Read `doc/adr/README.md`; no ADRs exist.
@@ -536,9 +540,10 @@ Prior art:
 
 ## Status Notes
 
-- SSI-01 is ready.
-- Current chunk: SSI-01 ready.
-- Implementation has not started.
+- SSI-01 is done.
+- Current chunk: SSI-02 ready.
+- Implementation code has not started.
 - PRD only changed in this pass.
+- Promote notes remain staged under `Promote after ship`; no global docs changed.
 - No app behavior changed, so browser smoke was not required for this pass.
 - Blockers are dependency measurement and generated settings UX validation.
