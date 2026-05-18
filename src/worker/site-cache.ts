@@ -6,6 +6,7 @@ export const PUBLIC_SITE_TREE_CACHE_CONTROL = "no-store";
 export const PUBLIC_SITE_INDEXING_CACHE_CONTROL =
   "public, max-age=300, stale-while-revalidate=3600";
 export const PUBLIC_SITE_INDEXING_ERROR_CACHE_CONTROL = "no-store";
+export const PUBLIC_SITE_ICON_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=86400";
 
 export type PublishedSiteDocumentCacheKind = "success" | "not-found" | "error";
 

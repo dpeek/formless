@@ -34,6 +34,7 @@ export async function createWorkerHarness(
     entryPoints: [resolve(entryPoint)],
     external: ["cloudflare:workers"],
     format: "esm",
+    loader: { ".wasm": "copy" },
     outfile: scriptPath,
     platform: "browser",
   });
@@ -44,7 +45,8 @@ export async function createWorkerHarness(
     durableObjects,
     durableObjectsPersist: false,
     modules: true,
-    modulesRoot: process.cwd(),
+    modulesRoot: tempDir,
+    modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }],
     r2Buckets: options.r2Buckets,
     r2Persist: false,
     scriptPath,

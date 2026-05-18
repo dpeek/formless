@@ -1,7 +1,7 @@
 # PRD 40: Site settings and icons
 
 Status: ready
-Current chunk: SSI-06 ready
+Current chunk: SSI-07 ready
 Last updated: 2026-05-18
 
 Start after PRD 30, PRD 31, PRD 38, and PRD 39 shipped behavior is stable on the active branch.
@@ -434,7 +434,7 @@ Prior art:
 | SSI-03 | done   | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
 | SSI-04 | done   | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
 | SSI-05 | done   | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.                       |
-| SSI-06 | ready  | SSI-05     | icon renderer/cache modules, Worker routes, tests       | `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` derive from Site/default SVG, cache by content hash, and no longer depend on package assets. |
+| SSI-06 | done   | SSI-05     | icon renderer/cache modules, Worker routes, tests       | `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` derive from Site/default SVG, cache by content hash, and no longer depend on package assets. |
 | SSI-07 | ready  | SSI-06     | SSR/routing/indexing tests, browser smoke               | SSR icon links and Worker routing are correct; sitemap remains block-based; `HEAD` parity and browser smoke pass.                                        |
 | SSI-08 | ready  | SSI-07     | PRD                                                     | PRD closeout records checks, decisions, blockers, and promote notes after implementation ships.                                                          |
 
@@ -495,7 +495,7 @@ Prior art:
 
 ## Blockers
 
-- Need to confirm Cache API support in local Miniflare tests for generated icon bytes.
+- None.
 
 ## Promote after ship
 
@@ -603,6 +603,29 @@ Prior art:
 - 2026-05-18: SSI-05 browser smoke skipped because dependency/package/probe/PRD changes did not change app or Worker route behavior.
 - 2026-05-18: SSI-05 rebase on local `main` reported the branch was already up to date and reapplied the autostash cleanly.
 - 2026-05-18: SSI-05 post-rebase `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-06 started from clean worktree; `git status --short` returned no output before edits.
+- 2026-05-18: SSI-06 `devstate start` reported checks ok, services running at `https://40-site-settings-and-icons.formless.local`, and watcher tests passing.
+- 2026-05-18: SSI-06 read `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, and this PRD.
+- 2026-05-18: SSI-06 selected `SSI-06` because `SSI-01` through `SSI-05` were done and no active agent owned `SSI-06`.
+- 2026-05-18: SSI-06 added default Site icon source sanitizing that reuses the existing SVG icon parser and falls back to the source-seed default SVG for empty or unsafe source.
+- 2026-05-18: SSI-06 added an internal ICO encoder for generated PNG payloads with 16x16 and 32x32 entries.
+- 2026-05-18: SSI-06 added dynamic Worker handling for `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` before static asset fallback.
+- 2026-05-18: SSI-06 dynamic icon responses derive from the active `site.icon`, fall back to the default Site SVG, set content-hash ETags, and use `public, max-age=3600, stale-while-revalidate=86400`.
+- 2026-05-18: SSI-06 PNG and ICO bytes render through `@cf-wasm/resvg/workerd`; generated icon responses use Cache API keyed by SVG content hash and output kind.
+- 2026-05-18: SSI-06 Miniflare Worker harness now supports copied Wasm modules and `CompiledWasm` rules for Worker icon tests.
+- 2026-05-18: SSI-06 removed package-owned `public/favicon.svg`, `public/favicon.ico`, and `public/apple-touch-icon.png`.
+- 2026-05-18: SSI-06 updated `wrangler.jsonc` so root icon convention paths are no longer excluded from Worker-first routing.
+- 2026-05-18: SSI-06 tests cover Site icon sanitizing/default source, ICO headers and offsets, dynamic SVG/PNG/ICO responses, unsafe icon fallback, ETags, `HEAD` parity, and avoiding the `ASSETS` binding for root icon paths.
+- 2026-05-18: SSI-06 `devstate check` first failed on type issues in `src/worker/site-icons.ts`, then passed after fixing byte response bodies, `caches.default` typing, and the stale catch binding.
+- 2026-05-18: SSI-06 `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; read `.devstate/status.md`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` instead.
+- 2026-05-18: SSI-06 final `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-06 watcher evidence reported 7 test files and 138 tests passing; check log reported formatting complete and no warnings, lint errors, or type errors in 263 files.
+- 2026-05-18: SSI-06 browser smoke opened `https://40-site-settings-and-icons.formless.local/`; local dev profile redirected to `/tasks`.
+- 2026-05-18: SSI-06 browser smoke fetched `/favicon.svg`, `/apple-touch-icon.png`, and `/favicon.ico`; all returned HTTP 200 with expected content types, ETags, cache headers, and SVG/PNG/ICO signatures.
+- 2026-05-18: SSI-06 browser smoke checked `HEAD` parity for the icon routes; status, content type, and ETag matched `GET`.
+- 2026-05-18: SSI-06 `bun browser --session ssi-06 errors` returned no page errors.
+- 2026-05-18: SSI-06 rebase on local `main` reported the branch was already up to date and reapplied the stash cleanly.
+- 2026-05-18: SSI-06 post-rebase `devstate check` reported checks ok, web service ready, and watcher tests passing.
 
 ## Status Notes
 
@@ -611,11 +634,13 @@ Prior art:
 - SSI-03 is done.
 - SSI-04 is done.
 - SSI-05 is done.
-- Current chunk: SSI-06 ready.
-- Implementation changed source Site schema generated settings query/table/view/screen sections, generated model tests, app tests, and this PRD.
+- SSI-06 is done.
+- Current chunk: SSI-07 ready.
+- SSI-06 implementation changed Site icon source helpers, ICO encoding, dynamic Worker icon routes, route/static asset tests, Worker harness Wasm support, `wrangler.jsonc`, package public icon assets, and this PRD.
 - Site settings authoring UI now ships through generated table/edit/icon controls.
 - The generated one-row settings table is acceptable for the first slice; a custom singleton section remains out of scope.
 - Public tree and metadata projection now ship `tree.site` and settings-first metadata.
 - `@cf-wasm/resvg/workerd` is the selected first icon renderer path after Wrangler and Miniflare spike evidence.
+- Root SVG, PNG, and ICO icon routes now derive from `site.icon` or the default Site SVG, cache generated bytes through Cache API by content hash, and no longer depend on `public/` icon files.
 - Promote notes remain staged under `Promote after ship`; no global docs changed.
-- Remaining blocker is Cache API support for generated icon bytes.
+- Cache API support for generated icon bytes is confirmed in the Miniflare Worker test path.

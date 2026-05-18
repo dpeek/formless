@@ -8,6 +8,7 @@ const clientRoutePrefixes = [
   ...legacyClientRoutePrefixes,
 ] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
+const dynamicSiteIconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;
 const PUBLISHED_SITE_REDIRECT_STATUS = 308;
 
 type WorkerRuntimeProfileKind = "dev" | "app" | "siteAuthoring" | "publishedSite";
@@ -82,7 +83,7 @@ export function shouldDeferToStaticAssets(
 
   const url = new URL(request.url);
 
-  if (isApiPath(url.pathname)) {
+  if (isApiPath(url.pathname) || isDynamicSiteIconPath(url.pathname)) {
     return false;
   }
 
@@ -132,6 +133,10 @@ export function looksLikeStaticAssetPath(pathname: string): boolean {
     staticAssetPathPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix)) ||
     /\.[a-zA-Z0-9]+$/.test(lastSegment)
   );
+}
+
+export function isDynamicSiteIconPath(pathname: string): boolean {
+  return dynamicSiteIconPaths.includes(pathname as (typeof dynamicSiteIconPaths)[number]);
 }
 
 function isAppProfileHost(hostname: string): boolean {

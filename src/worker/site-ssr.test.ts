@@ -370,7 +370,13 @@ describe("published Site Worker SSR", () => {
     ]);
     const bodies = await Promise.all(responses.map((response) => response.text()));
 
-    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([404, 200, 200, 200]);
+    expect(responses.map((response) => response.headers.get("Content-Type"))).toEqual([
+      null,
+      "image/svg+xml; charset=utf-8",
+      "image/x-icon",
+      "image/png",
+    ]);
     expect(bodies.join("\n")).not.toContain("data-site-header");
     expect(bodies.join("\n")).not.toContain("Loading site page...");
   });

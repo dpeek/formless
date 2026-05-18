@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   isClientShellRoute,
+  isDynamicSiteIconPath,
   publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
   shouldHandlePublishedSiteDocument,
@@ -214,17 +215,17 @@ describe("Worker document routing", () => {
       shouldDeferToStaticAssets(documentRequest("http://example.com/favicon.svg"), {
         profile: "publishedSite",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/favicon.ico"), {
         profile: "publishedSite",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/apple-touch-icon.png"), {
         profile: "publishedSite",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/pages/home"), {
         profile: "publishedSite",
@@ -318,6 +319,13 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/estii/setup")).toBe(true);
     expect(isClientShellRoute("/site/schema")).toBe(true);
     expect(isClientShellRoute("/blog")).toBe(false);
+  });
+
+  it("recognizes root Site icon convention paths as dynamic Worker routes", () => {
+    expect(isDynamicSiteIconPath("/favicon.svg")).toBe(true);
+    expect(isDynamicSiteIconPath("/favicon.ico")).toBe(true);
+    expect(isDynamicSiteIconPath("/apple-touch-icon.png")).toBe(true);
+    expect(isDynamicSiteIconPath("/assets/favicon.svg")).toBe(false);
   });
 });
 

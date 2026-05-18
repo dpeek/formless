@@ -8,6 +8,7 @@ import {
   shouldDeferToStaticAssets,
   workerRuntimeProfileInput,
 } from "./routing.ts";
+import { handleSiteIconRequest } from "./site-icons.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 
 export { FormlessAuthority } from "./authority.ts";
@@ -27,6 +28,12 @@ export default {
 
     if (mediaResponse) {
       return mediaResponse;
+    }
+
+    const siteIconResponse = await handleSiteIconRequest(request, env);
+
+    if (siteIconResponse) {
+      return siteIconResponse;
     }
 
     const publishedSiteRedirect = publishedSiteRedirectForRequest(

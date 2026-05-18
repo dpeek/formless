@@ -23,9 +23,6 @@
       "!/src/*",
       "!/@vite/*",
       "!/@react-refresh",
-      "!/favicon.svg",
-      "!/favicon.ico",
-      "!/apple-touch-icon.png",
     ],
   },
   "durable_objects": {

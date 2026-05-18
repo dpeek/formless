@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
@@ -35,7 +35,7 @@ describe("public Site SSR characterization", () => {
     expect(entry).toContain("createRoot(app).render(");
   });
 
-  it("characterizes Cloudflare routing as Worker-first for API and published documents", () => {
+  it("characterizes Cloudflare routing as Worker-first for API, published documents, and root icons", () => {
     const wrangler = readRepoFile("../../wrangler.jsonc");
 
     expect(wrangler).toContain('"not_found_handling": "single-page-application"');
@@ -49,22 +49,18 @@ describe("public Site SSR characterization", () => {
     expect(wrangler).toContain('"!/site/*"');
     expect(wrangler).toContain('"!/assets/*"');
     expect(wrangler).toContain('"!/src/*"');
-    expect(wrangler).toContain('"!/favicon.svg"');
-    expect(wrangler).toContain('"!/favicon.ico"');
-    expect(wrangler).toContain('"!/apple-touch-icon.png"');
+    expect(wrangler).not.toContain('"!/favicon.svg"');
+    expect(wrangler).not.toContain('"!/favicon.ico"');
+    expect(wrangler).not.toContain('"!/apple-touch-icon.png"');
   });
 
-  it("packages launch icon assets in the package-owned public directory", () => {
+  it("does not package launch icon assets in the package-owned public directory", () => {
     const packageJson = JSON.parse(readRepoFile("../../package.json")) as { files?: string[] };
 
     expect(packageJson.files).toContain("public");
-    expect(readRepoBinary("../../public/favicon.svg").byteLength).toBeGreaterThan(0);
-    expect(readRepoBinary("../../public/favicon.ico").subarray(0, 4)).toEqual(
-      Buffer.from([0, 0, 1, 0]),
-    );
-    expect(readRepoBinary("../../public/apple-touch-icon.png").subarray(0, 4)).toEqual(
-      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
-    );
+    expect(repoFileExists("../../public/favicon.svg")).toBe(false);
+    expect(repoFileExists("../../public/favicon.ico")).toBe(false);
+    expect(repoFileExists("../../public/apple-touch-icon.png")).toBe(false);
   });
 
   it("renders published Site document routes as loading shells before tree data arrives", () => {
@@ -148,8 +144,8 @@ function readRepoFile(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
-function readRepoBinary(relativePath: string): Buffer {
-  return readFileSync(new URL(relativePath, import.meta.url));
+function repoFileExists(relativePath: string): boolean {
+  return existsSync(new URL(relativePath, import.meta.url));
 }
 
 function requestUrl(input: Parameters<typeof fetch>[0]) {
