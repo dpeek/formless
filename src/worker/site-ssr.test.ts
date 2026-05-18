@@ -136,6 +136,9 @@ describe("published Site Worker SSR", () => {
     expect(response.status).toBe(200);
     expect(html).toContain("Projects");
     expect(html).toContain("<title>Projects | Example Site</title>");
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />');
+    expect(html).toContain('<link rel="icon" sizes="any" href="/favicon.ico" />');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
     expect(html).toContain(
       '<link rel="modulepreload" crossorigin href="/assets/schema-apps-test.js">',
     );
@@ -151,6 +154,7 @@ describe("published Site Worker SSR", () => {
     );
     expect(html).not.toContain("/@react-refresh");
     expect(html).not.toContain("/src/main.tsx");
+    expect(html).not.toContain("/favicon-32x32.png");
   });
 
   it("returns server-rendered HTML for starter nested published Site slugs", async () => {

@@ -238,6 +238,27 @@ describe("Worker document routing", () => {
     ).toBe(false);
   });
 
+  it("keeps dynamic root icon requests out of static fallback for read methods", () => {
+    for (const method of ["GET", "HEAD"]) {
+      for (const path of ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"]) {
+        expect(
+          shouldDeferToStaticAssets(new Request(`http://example.com${path}`, { method }), {
+            profile: "publishedSite",
+          }),
+        ).toBe(false);
+        expect(
+          shouldDeferToStaticAssets(new Request(`http://example.com${path}?v=preview`, { method })),
+        ).toBe(false);
+      }
+    }
+
+    expect(
+      shouldDeferToStaticAssets(new Request("http://example.com/favicon.svg", { method: "POST" }), {
+        profile: "publishedSite",
+      }),
+    ).toBe(false);
+  });
+
   it("builds published Site redirects for old preview routes", () => {
     expect(
       publishedSiteRedirectForRequest(documentRequest("http://example.com/pages"), {

@@ -118,6 +118,31 @@ Sitemap: http://example.com/sitemap.xml
     expect(body).not.toContain("undated-draft");
   });
 
+  it("keeps sitemap entries unchanged when only Site settings change", async () => {
+    const beforeResponse = await harness.fetch("/sitemap.xml");
+    const beforeBody = await beforeResponse.text();
+
+    await postAdminJson("/api/site/mutations", {
+      mutationId: "mutation-public-sitemap-site-settings",
+      entity: "site",
+      op: "patch",
+      recordId: "rec_site_settings_primary",
+      values: {
+        label: "Renamed Site",
+        description: "Settings should not change sitemap routes.",
+        icon: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="#0f766e"/></svg>',
+      },
+    });
+
+    const afterResponse = await harness.fetch("/sitemap.xml");
+    const afterBody = await afterResponse.text();
+
+    expect(afterResponse.status).toBe(beforeResponse.status);
+    expect(afterBody).toBe(beforeBody);
+    expect(afterBody).not.toContain("Renamed Site");
+    expect(afterBody).not.toContain("rec_site_settings_primary");
+  });
+
   it("returns HEAD indexing headers without response bodies", async () => {
     const robotsGet = await harness.fetch("/robots.txt");
     const robotsHead = await harness.fetch("/robots.txt", { method: "HEAD" });

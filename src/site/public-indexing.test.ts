@@ -12,10 +12,20 @@ describe("public Site indexing", () => {
   it("builds deterministic public routes from live pages and dated posts", () => {
     const routes = buildPublicSiteRouteEntries([
       ...testSiteSeedRecords,
+      siteRecord("rec_site_settings_route_shaped", {
+        key: "secondary",
+        label: "Route-shaped settings",
+        href: "/settings-owned-route",
+      }),
       blockRecord("rec_site_content_preview_page", {
         type: "page",
         label: "Preview page",
         href: "/pages/preview-page?draft=1#top",
+      }),
+      blockRecord("rec_site_content_icon_path_page", {
+        type: "page",
+        label: "Icon route",
+        href: "/favicon.svg",
       }),
       blockRecord("rec_site_content_preview_post", {
         type: "post",
@@ -73,7 +83,9 @@ describe("public Site indexing", () => {
       "/api/report",
       "/deleted",
       "/downloads/resume.pdf",
+      "/favicon.svg",
       "/pages/preview-page",
+      "/settings-owned-route",
       "/site",
       "/blog/undated-post",
     ]) {
@@ -115,6 +127,15 @@ function blockRecord(id: string, values: StoredRecord["values"], deletedAt?: str
     values,
     createdAt: "2026-05-15T00:00:00.000Z",
     ...(deletedAt === undefined ? {} : { deletedAt }),
+  };
+}
+
+function siteRecord(id: string, values: StoredRecord["values"]): StoredRecord {
+  return {
+    id,
+    entity: "site",
+    values,
+    createdAt: "2026-05-15T00:00:00.000Z",
   };
 }
 
