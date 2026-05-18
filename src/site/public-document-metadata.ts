@@ -58,9 +58,10 @@ function documentTitle(
 }
 
 function documentDescription(tree: SitePageTree | undefined, siteName: string): string {
+  const siteDescription = normalizedText(tree?.site?.description);
   const body = normalizedText(stripMarkdown(tree?.page.body ?? ""));
 
-  return truncateDescription(body ?? defaultDescription(siteName));
+  return truncateDescription(siteDescription ?? body ?? defaultDescription(siteName));
 }
 
 function defaultDescription(siteName: string): string {
@@ -68,7 +69,12 @@ function defaultDescription(siteName: string): string {
 }
 
 function resolveSiteName(tree: SitePageTree | undefined, pageLabel: string | undefined): string {
-  return siteNameFromHeader(tree?.frame.header) ?? pageLabel ?? DEFAULT_SITE_NAME;
+  return (
+    normalizedText(tree?.site?.label) ??
+    siteNameFromHeader(tree?.frame.header) ??
+    pageLabel ??
+    DEFAULT_SITE_NAME
+  );
 }
 
 function siteNameFromHeader(header: SiteBlockNode | undefined): string | undefined {

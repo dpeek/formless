@@ -164,10 +164,18 @@ export type SitePageTreeProjection = {
 export type SitePageTreeResponse = SitePageTree;
 
 export type SitePageTree = {
+  site?: SiteSettingsNode;
   page: SiteBlockNode;
   frame: SitePageFrame;
   meta: SiteTreeMeta;
   route?: SiteTreeRoute;
+};
+
+export type SiteSettingsNode = {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: string;
 };
 
 export type SitePageFrame = {

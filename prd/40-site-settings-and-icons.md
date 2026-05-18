@@ -1,7 +1,7 @@
 # PRD 40: Site settings and icons
 
 Status: ready
-Current chunk: SSI-03 ready
+Current chunk: SSI-04 ready
 Last updated: 2026-05-18
 
 Start after PRD 30, PRD 31, PRD 38, and PRD 39 shipped behavior is stable on the active branch.
@@ -426,7 +426,7 @@ Prior art:
 | ------ | ------ | ---------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SSI-01 | done   | none       | PRD                                                     | PRD captures data model, public tree, metadata, icon route, dependency, authoring, tests, blockers, and promotion notes.                                 |
 | SSI-02 | done   | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record with a simple SVG icon, create/delete disabled, patch enabled, unique key constraint covered.          |
-| SSI-03 | ready  | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
+| SSI-03 | done   | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
 | SSI-04 | ready  | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
 | SSI-05 | ready  | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.                       |
 | SSI-06 | ready  | SSI-05     | icon renderer/cache modules, Worker routes, tests       | `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` derive from Site/default SVG, cache by content hash, and no longer depend on package assets. |
@@ -555,14 +555,28 @@ Prior art:
 - 2026-05-18: SSI-02 post-rebase `devstate check` reported checks ok, web service ready, and watcher tests passing.
 - 2026-05-18: SSI-02 post-rebase watcher evidence reported 23 test files and 543 tests passing.
 - 2026-05-18: SSI-02 post-rebase check log reported formatting complete and no warnings, lint errors, or type errors in 256 files.
+- 2026-05-18: SSI-03 started from clean worktree; `git status --short` returned no output before edits.
+- 2026-05-18: SSI-03 `devstate start` reported checks ok and services running at `https://40-site-settings-and-icons.formless.local`.
+- 2026-05-18: SSI-03 read `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, and this PRD.
+- 2026-05-18: SSI-03 selected `SSI-03` because `SSI-01` and `SSI-02` were done and no active agent owned `SSI-03`.
+- 2026-05-18: SSI-03 added optional `SitePageTree.site` with projected settings `id`, `label`, `description`, and SVG `icon`.
+- 2026-05-18: SSI-03 public tree projection selects the active `site` record with `key = "primary"` and warns with `missing-site-settings` when absent.
+- 2026-05-18: SSI-03 public document metadata now prefers `tree.site.label` and `tree.site.description`, with the prior header/page fallback preserved.
+- 2026-05-18: SSI-03 updated Site test records with one primary settings record for source-faithful public tree fixtures.
+- 2026-05-18: SSI-03 `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; read `.devstate/status.md`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` instead.
+- 2026-05-18: SSI-03 `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-03 watcher evidence after touching changed source files reported 22 test files and 503 tests passing.
+- 2026-05-18: SSI-03 check log reported formatting complete and no warnings, lint errors, or type errors in 257 files.
+- 2026-05-18: SSI-03 browser smoke opened `/pages/home`, fetched `/api/site/tree/home`, confirmed `tree.site.label = "Starter Site"` and `tree.site.description = "A small starter site."`, and `bun browser --session ssi-03 errors` returned no page errors.
 
 ## Status Notes
 
 - SSI-01 is done.
 - SSI-02 is done.
-- Current chunk: SSI-03 ready.
-- Implementation changed only Site source schema, Site source seed, tests, and this PRD.
+- SSI-03 is done.
+- Current chunk: SSI-04 ready.
+- Implementation changed public Site tree protocol/projection, public metadata, test fixtures, tests, and this PRD.
 - Site settings authoring UI is still future SSI-04 work.
-- Public tree and metadata projection are still future SSI-03 work.
+- Public tree and metadata projection now ship `tree.site` and settings-first metadata.
 - Promote notes remain staged under `Promote after ship`; no global docs changed.
 - Blockers are dependency measurement and generated settings UX validation.

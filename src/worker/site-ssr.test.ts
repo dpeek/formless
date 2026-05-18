@@ -80,12 +80,12 @@ describe("published Site Worker SSR", () => {
     expect(html).toContain('root.classList.toggle("dark", theme === "dark");');
     expect(html).toContain('<style id="formless-public-site-theme-style">');
     expect(html).toContain("html.dark #app");
-    expect(html).toContain("<title>Home</title>");
-    expect(html).toContain('<meta name="description" content="A public page from Home." />');
-    expect(html).toContain('<meta property="og:title" content="Home" />');
-    expect(html).toContain('<meta property="og:description" content="A public page from Home." />');
+    expect(html).toContain("<title>Starter Site</title>");
+    expect(html).toContain('<meta name="description" content="A small starter site." />');
+    expect(html).toContain('<meta property="og:title" content="Starter Site" />');
+    expect(html).toContain('<meta property="og:description" content="A small starter site." />');
     expect(html).toContain('<meta property="og:type" content="website" />');
-    expect(html).toContain('<meta property="og:site_name" content="Home" />');
+    expect(html).toContain('<meta property="og:site_name" content="Starter Site" />');
     expect(html).toContain('<meta name="twitter:card" content="summary" />');
     expect(html).not.toContain("og:image");
     expect(html).toContain("Home");
@@ -159,7 +159,7 @@ describe("published Site Worker SSR", () => {
 
     expect(response.status).toBe(200);
     expect(html).toContain("Starter post");
-    expect(html).toContain("<title>Starter post | Home</title>");
+    expect(html).toContain("<title>Starter post | Starter Site</title>");
     expect(html).toContain('<meta property="og:type" content="article" />');
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
@@ -516,6 +516,10 @@ function testSitePageTree(
   } = {},
 ): SitePageTreeResponse {
   return {
+    site: {
+      id: "rec_site_settings_primary",
+      label: options.siteName ?? "Example Site",
+    },
     page: {
       id: `rec_site_page_${slug}`,
       type: "page",

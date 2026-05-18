@@ -7,6 +7,17 @@ const linkedInIconSource =
   '<svg viewBox="0 0 24 24"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm7 0h3.8v1.64h.05c.53-1 1.83-2.06 3.77-2.06 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.6c0-1.34-.02-3.06-1.86-3.06-1.87 0-2.16 1.46-2.16 2.96V21h-4V9Z"/></svg>';
 
 export const testSiteSeedRecords: StoredRecord[] = [
+  {
+    id: "rec_site_settings_primary",
+    entity: "site",
+    values: {
+      key: "primary",
+      label: "Example Site",
+      description: "A public test site.",
+      icon: '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" rx="12" fill="#111827"/><path d="M18 42V22h28v6H25v8h17v6H18Z" fill="#fff"/></svg>',
+    },
+    createdAt: "2026-05-05T00:00:00.000Z",
+  },
   block("rec_site_media_avatar", "2026-05-05T00:00:01.000Z", {
     type: "image",
     label: "Site owner portrait",

@@ -21,6 +21,12 @@ describe("site page tree projection", () => {
       generatedAt,
       warnings: [],
     });
+    expect(tree.site).toEqual({
+      id: "rec_site_settings_primary",
+      label: "Example Site",
+      description: "A public test site.",
+      icon: expect.stringContaining("<svg"),
+    });
     expect(tree.route).toEqual({
       kind: "page",
       slug: "home",
@@ -571,6 +577,24 @@ describe("site page tree projection", () => {
       expect.objectContaining({
         code: "missing-frame-root",
         recordId: "footer",
+      }),
+    ]);
+  });
+
+  it("warns and keeps rendering when the Site settings singleton is missing", () => {
+    const records = baseTreeRecords().filter((record) => record.entity !== "site");
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+
+    expect(tree).not.toHaveProperty("site");
+    expect(tree.page).toMatchObject({
+      id: "rec_site_content_home",
+      type: "page",
+      label: "Home",
+    });
+    expect(tree.meta.warnings).toEqual([
+      expect.objectContaining({
+        code: "missing-site-settings",
+        recordId: "site",
       }),
     ]);
   });

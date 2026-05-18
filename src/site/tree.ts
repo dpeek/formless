@@ -2,6 +2,7 @@ import type {
   FieldValue,
   SiteBlockNode,
   SitePageFrame,
+  SiteSettingsNode,
   SitePageTreeProjection,
   SitePlacementNode,
   SiteTreeWarning,
@@ -32,6 +33,7 @@ export type BuildSitePageTreeOptions = {
 
 type SiteTreeIndexes = {
   blocks: Map<string, StoredRecord>;
+  siteSettings: StoredRecord[];
   placementsByParent: Map<string, StoredRecord[]>;
 };
 
@@ -62,6 +64,7 @@ export function buildSitePageTree(
     warnings,
   };
   const indexes = indexSiteRecords(records);
+  const site = projectSiteSettings(indexes.siteSettings, warnings);
   const route = resolveSiteRoute(indexes.blocks.values(), slug, warnings);
 
   if (!route) {
@@ -85,6 +88,7 @@ export function buildSitePageTree(
 
   return {
     tree: {
+      ...(site ? { site } : {}),
       page,
       frame,
       meta,
@@ -96,9 +100,17 @@ export function buildSitePageTree(
 
 function indexSiteRecords(records: StoredRecord[]): SiteTreeIndexes {
   const blocks = new Map<string, StoredRecord>();
+  const siteSettings: StoredRecord[] = [];
   const placementsByParent = new Map<string, StoredRecord[]>();
 
   for (const record of records) {
+    if (record.entity === "site") {
+      if (!record.deletedAt) {
+        siteSettings.push(record);
+      }
+      continue;
+    }
+
     if (record.entity === "block") {
       if (!record.deletedAt) {
         blocks.set(record.id, record);
@@ -125,7 +137,54 @@ function indexSiteRecords(records: StoredRecord[]): SiteTreeIndexes {
     placements.sort(comparePlacements);
   }
 
-  return { blocks, placementsByParent };
+  siteSettings.sort(compareRecords);
+
+  return { blocks, siteSettings, placementsByParent };
+}
+
+function projectSiteSettings(
+  siteSettings: StoredRecord[],
+  warnings: SiteTreeWarning[],
+): SiteSettingsNode | undefined {
+  const primarySettings = siteSettings.filter(
+    (record) => stringValue(record.values.key) === "primary",
+  );
+  const settings = primarySettings[0];
+
+  if (!settings) {
+    warnings.push({
+      code: "missing-site-settings",
+      recordId: "site",
+      message: 'No active Site settings record found for key "primary".',
+    });
+    return undefined;
+  }
+
+  for (const duplicate of primarySettings.slice(1)) {
+    warnings.push({
+      code: "skipped-site-settings",
+      recordId: duplicate.id,
+      message: `Skipped duplicate Site settings record "${duplicate.id}".`,
+    });
+  }
+
+  const label = stringValue(settings.values.label);
+
+  if (!label) {
+    warnings.push({
+      code: "invalid-site-settings",
+      recordId: settings.id,
+      message: `Site settings record "${settings.id}" does not have a label.`,
+    });
+    return undefined;
+  }
+
+  return {
+    id: settings.id,
+    label,
+    ...optionalStringField("description", settings.values.description),
+    ...optionalStringField("icon", settings.values.icon),
+  };
 }
 
 function buildSitePageFrame(context: SiteTreeBuildContext): SitePageFrame {

@@ -106,6 +106,12 @@ describe("authority", () => {
       label: "Home",
       href: "/",
     });
+    expect(body.site).toMatchObject({
+      id: "rec_site_settings_primary",
+      label: "Example Site",
+      description: "A public test site.",
+      icon: expect.stringContaining("<svg"),
+    });
     expect(body.page.placements.length).toBeGreaterThan(0);
     expect(body.meta).toEqual({
       slug: "home",
