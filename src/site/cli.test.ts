@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
+import packageJson from "../../package.json";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -295,11 +296,12 @@ describe("Formless Site CLI", () => {
 
     expect(commands.map((command) => [command.command, ...command.args].join(" "))).toEqual([
       "npm run build",
-      "npm exec -- wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
+      `npm exec -- wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite --var FORMLESS_DEPLOY_VERSION:${packageJson.version}`,
     ]);
     expect(commands.every((command) => command.cwd === "/package")).toBe(true);
     expect(commands[0]?.env).toMatchObject({
       FORMLESS_RUNTIME_PROFILE: "publishedSite",
+      FORMLESS_DEPLOY_VERSION: packageJson.version,
       VITE_FORMLESS_RUNTIME_PROFILE: "publishedSite",
       CLOUDFLARE_ACCOUNT_ID: "account-123",
     });
@@ -325,7 +327,7 @@ describe("Formless Site CLI", () => {
     );
   });
 
-  it("brokers local admin publish through CLI-owned save and publish steps", async () => {
+  it("brokers local admin publish through save and data-only publish when deploy is current", async () => {
     const tempDir = await makeTempDir();
     const projectRoot = path.join(tempDir, "site");
     const sourceRecords = publishRecords();
@@ -356,6 +358,7 @@ describe("Formless Site CLI", () => {
 
     responses.queueJson(snapshot(sourceRecords));
     responses.queueBinary(Buffer.from([7, 8, 9]), mediaAsset.contentType);
+    responses.queueJson({ version: packageJson.version });
     responses.queueJson(snapshot(sourceRecords));
     responses.queueJson({
       contentType: mediaAsset.contentType,
@@ -420,20 +423,18 @@ describe("Formless Site CLI", () => {
     await expect(readFile(path.join(projectRoot, "media/site/images/cover.png"))).resolves.toEqual(
       Buffer.from([7, 8, 9]),
     );
-    expect(commands.map((command) => [command.command, ...command.args].join(" "))).toEqual([
-      "npm run build",
-      "npm exec -- wrangler deploy --name brother-site --var FORMLESS_RUNTIME_PROFILE:publishedSite",
-    ]);
+    expect(commands).toEqual([]);
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:5173/api/site/snapshot",
       "GET http://localhost:5173/api/site/media/site/images/cover.png",
+      "GET https://live.example/api/formless/deploy",
       "GET https://live.example/api/site/snapshot",
       "PUT https://live.example/api/site/media/site/images/cover.png",
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/",
       "GET https://live.example/about",
     ]);
-    expect(requests[3]?.headers.authorization).toBe("Bearer local-token");
+    expect(requests[4]?.headers.authorization).toBe("Bearer local-token");
   });
 
   it("normalizes local source URLs", () => {

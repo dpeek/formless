@@ -6,7 +6,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import packageJson from "../../package.json";
 import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
+import {
+  FORMLESS_DEPLOY_METADATA_PATH,
+  type FormlessDeployMetadata,
+} from "../shared/deploy-metadata.ts";
 import type { StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import {
   defaultSiteProjectConfig,
@@ -153,10 +158,14 @@ const projectPublishBackupDirectory = `${projectStateDirectory}/backups`;
 const projectGitignoreFile = ".gitignore";
 const projectStateGitignoreEntry = ".formless/";
 const adminTokenEnvName = "FORMLESS_ADMIN_TOKEN";
+const deployVersionEnvName = "FORMLESS_DEPLOY_VERSION";
 const localPublishBrokerUrlEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL";
 const localPublishBrokerTokenEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN";
+const formlessPackageVersion = packageJson.version;
 const devServerReadyTimeoutMs = 30_000;
 const devServerPollIntervalMs = 250;
+
+type SiteProjectPublishCodeMode = boolean | "if-stale";
 
 export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
   const [command, ...rest] = args;
@@ -410,7 +419,12 @@ export async function setupSiteProjectDeploy(
 }
 
 export async function publishSiteProject(
-  input: { dryRun?: boolean; projectPath?: string; yes?: boolean },
+  input: {
+    code?: SiteProjectPublishCodeMode;
+    dryRun?: boolean;
+    projectPath?: string;
+    yes?: boolean;
+  },
   dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
 ): Promise<PublishSiteProjectResult> {
   const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
@@ -424,6 +438,8 @@ export async function publishSiteProject(
     );
   }
 
+  const code = await shouldPublishSiteProjectCode(input, deploy, dependencies);
+
   const result = await runSitePublish({
     adminToken,
     codeDeployCommands: siteProjectCodeDeployCommands(deploy, dependencies),
@@ -434,7 +450,7 @@ export async function publishSiteProject(
     options: {
       apply: !input.dryRun,
       backupDir: projectPublishBackupDirectory,
-      code: true,
+      code,
       data: true,
       skipCheck: true,
       target: deploy.publishUrl,
@@ -619,6 +635,7 @@ async function runLocalAdminPublish(
   );
   const publish = await publishSiteProject(
     {
+      code: "if-stale",
       projectPath: input.projectPath,
       yes: true,
     },
@@ -691,6 +708,57 @@ function sitePublishDependenciesFromCli(
   };
 }
 
+async function shouldPublishSiteProjectCode(
+  input: { code?: SiteProjectPublishCodeMode; dryRun?: boolean },
+  deploy: CompleteSiteProjectDeployConfig,
+  dependencies: Pick<FormlessCliDependencies, "fetch" | "log">,
+): Promise<boolean> {
+  const mode = input.code ?? true;
+
+  if (mode === false) {
+    return false;
+  }
+
+  if (mode === true || input.dryRun) {
+    return true;
+  }
+
+  const targetVersion = await fetchTargetDeployVersion(deploy.publishUrl, dependencies.fetch);
+
+  if (targetVersion === formlessPackageVersion) {
+    dependencies.log(
+      `Code/assets deploy skipped: target deploy version ${targetVersion} is current.`,
+    );
+    return false;
+  }
+
+  dependencies.log(
+    targetVersion
+      ? `Code/assets deploy required: target deploy version ${targetVersion} does not match local ${formlessPackageVersion}.`
+      : "Code/assets deploy required: target deploy version is unavailable.",
+  );
+  return true;
+}
+
+async function fetchTargetDeployVersion(
+  target: string,
+  fetcher: typeof fetch,
+): Promise<string | null> {
+  try {
+    const metadata = await fetchJson<FormlessDeployMetadata>(
+      fetcher,
+      new URL(FORMLESS_DEPLOY_METADATA_PATH, `${target}/`).toString(),
+      {
+        headers: { accept: "application/json" },
+      },
+    );
+
+    return typeof metadata.version === "string" ? metadata.version : null;
+  } catch {
+    return null;
+  }
+}
+
 function siteProjectCodeDeployCommands(
   deploy: CompleteSiteProjectDeployConfig,
   dependencies: Pick<FormlessCliDependencies, "env" | "packageRoot">,
@@ -699,7 +767,15 @@ function siteProjectCodeDeployCommands(
   const buildCommand = packageRunScriptCommand("build", dependencies.env);
   const deployCommand = packageExecCommand(
     "wrangler",
-    ["deploy", "--name", deploy.workerName, "--var", "FORMLESS_RUNTIME_PROFILE:publishedSite"],
+    [
+      "deploy",
+      "--name",
+      deploy.workerName,
+      "--var",
+      "FORMLESS_RUNTIME_PROFILE:publishedSite",
+      "--var",
+      `${deployVersionEnvName}:${formlessPackageVersion}`,
+    ],
     dependencies.env,
   );
 
@@ -1000,6 +1076,7 @@ function publishedSiteDeployEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...cloudflareCommandEnv(env, accountId),
+    [deployVersionEnvName]: formlessPackageVersion,
     FORMLESS_RUNTIME_PROFILE: "publishedSite",
     VITE_FORMLESS_RUNTIME_PROFILE: "publishedSite",
   };

@@ -493,6 +493,7 @@ Possible changed files:
 - `doc/current.md`: note `npx formless publish` after SSP-05 ships.
 - `doc/current.md`: note project publish backs up live data, restores media before records, and uses guarded snapshot restore.
 - `doc/current.md`: note local Site admin publish is brokered by `npx formless dev`; the browser gets only a localhost broker endpoint/token, and the CLI saves local authority state before publishing.
+- `doc/current.md`: note local Site admin publish checks the live Formless deploy version and skips code/assets deploy when the target Worker already matches the local package version.
 - `doc/roadmap.md`: replace repo-shaped Site authoring/publish language with the first-release single-Site project loop if this becomes release scope.
 - `AGENTS.md`: add CLI command summary only after these commands become standard agent procedure.
 
@@ -544,6 +545,8 @@ Possible changed files:
 - 2026-05-15: SSP-08 follow-up bumped publish coordinates to `@dpeek/formless-ui@0.1.1` and `@dpeek/formless@0.1.4` because npm already has `@dpeek/formless-ui@0.1.0` and `@dpeek/formless@0.1.3`.
 - 2026-05-15: SSP-08 follow-up packed local `@dpeek/formless-ui@0.1.1` and `@dpeek/formless@0.1.4` tarballs, installed them into `/tmp/formless-local-repro`, ran `formless init site`, and `formless dev` reached `http://localhost:5173/` plus `/admin`.
 - 2026-05-15: SSP-08 follow-up `npm publish --dry-run --access public` succeeded for `@dpeek/formless-ui@0.1.1` and `@dpeek/formless@0.1.4`.
+- 2026-05-18: SSP maintenance added `GET /api/formless/deploy` for no-store deploy metadata, sets `FORMLESS_DEPLOY_VERSION` during project Wrangler deploy, and changed brokered local admin publish to skip code/assets deploy when the live Worker version matches the local package version.
+- 2026-05-18: SSP maintenance evidence: `devstate check` passed; `.devstate/status.md` reports checks ok and services running at `https://formless.local`; `.devstate/logs/check-vite.txt` reports formatting complete and no warnings, lint errors, or type errors in 256 files; `.devstate/logs/service-test.txt` reports `src/site/cli.test.ts` passing with 8 tests; `bun browser --session deploy-version-smoke --ignore-https-errors open https://formless.local/site` opened Site admin and `bun browser --session deploy-version-smoke errors` reported no page errors.
 
 ## Status Notes
 
@@ -559,4 +562,5 @@ Possible changed files:
 - Current blocker: npm publish needs an authenticated npm session.
 - Decision: the first user-facing product path is Site-only, even though the internal runtime remains schema-keyed.
 - Decision: CLI publish is the first one-command publish path; admin publish follows only through a local CLI broker and publishes current local authority state after saving it to project source.
+- Decision: CLI `formless publish` keeps doing an explicit code/assets/data publish by default; brokered Site admin publish may auto-skip code/assets deploy after the target Worker exposes the matching Formless deploy version.
 - Decision: private migrated content stays outside committed repo history unless the user explicitly approves committing it.

@@ -1,5 +1,6 @@
 import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
+import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleSiteMediaRequest } from "./media.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
@@ -15,6 +16,7 @@ export type Env = {
   ASSETS?: Fetcher;
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace<FormlessAuthority>;
+  FORMLESS_DEPLOY_VERSION?: string;
   FORMLESS_MEDIA: R2Bucket;
   FORMLESS_RUNTIME_PROFILE?: string;
 };
@@ -40,6 +42,12 @@ export default {
 
     if (publishedSiteIndexingResponse) {
       return publishedSiteIndexingResponse;
+    }
+
+    const deployMetadataResponse = handleDeployMetadataRequest(request, env);
+
+    if (deployMetadataResponse) {
+      return deployMetadataResponse;
     }
 
     const url = new URL(request.url);
