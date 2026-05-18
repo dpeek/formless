@@ -20,7 +20,8 @@ The first version should:
 - keep generated PNG and ICO artifacts out of editable record data;
 - keep page, post, project, block, and placement records flat;
 - keep all Site content implicitly scoped to the current Site schema instance;
-- preserve package fallback launch icons when no valid Site icon exists.
+- remove package-owned public icon assets;
+- seed a simple default Site SVG icon that authors can replace later.
 
 This PRD owns Site settings data, public tree metadata, and dynamic Site icon routes.
 It does not own multi-site scoping, a media library, editable PNG/ICO fields, general static asset publishing, SEO image metadata, or broader generated settings abstractions.
@@ -55,7 +56,7 @@ The entity stores one active record:
 The `site` entity uses a unique constraint over `key`.
 `create` and `delete` are disabled.
 `patch` is enabled.
-The source seed includes exactly one active `site` record with `key = "primary"`.
+The source seed includes exactly one active `site` record with `key = "primary"` and a simple default SVG icon.
 
 Public tree output gains a top-level `site` object.
 Successful public metadata prefers `tree.site.label` and `tree.site.description`.
@@ -68,9 +69,10 @@ Dynamic icon serving owns the root browser convention paths:
 - `/apple-touch-icon.png`;
 - optional `/favicon-32x32.png` if the implementation adds a linked PNG favicon.
 
-The SVG favicon serves sanitized SVG source.
-PNG and ICO responses are derived from the SVG on demand.
+The SVG favicon serves sanitized SVG source from `site.icon`.
+PNG and ICO responses are derived from that SVG on demand.
 Generated artifacts may be cached, but they are not editable fields and are not source seed facts.
+Package-owned icon files under `public/` are removed; fallback uses the same simple default SVG source instead of static files.
 
 ## Source Map
 
@@ -94,7 +96,7 @@ Existing anchors:
 - Site media Worker module: `src/worker/media.ts`.
 - Site source media helpers: `src/site/source-media.ts`.
 - Static launch asset tests: `src/worker/static-assets.test.ts`.
-- Current package fallback assets: `public/favicon.svg`, `public/favicon.ico`, `public/apple-touch-icon.png`.
+- Current package fallback assets to remove: `public/favicon.svg`, `public/favicon.ico`, `public/apple-touch-icon.png`.
 - SVG icon primitive: `lib/ui/src/svg-icon.tsx`.
 - Generated field editor: `src/app/generated/record-field-editor.tsx`.
 - Generated create renderer: `src/app/generated/create.tsx`.
@@ -147,6 +149,7 @@ Possible changed files:
 - `src/site/source-media.ts` only if icon cache/source helpers need shared key rules.
 - `package.json` if a Worker-compatible SVG-to-PNG dependency is added.
 - `wrangler.jsonc` if `run_worker_first` must route dynamic favicon paths through the Worker before `ASSETS`.
+- `public/favicon.svg`, `public/favicon.ico`, and `public/apple-touch-icon.png` should be deleted.
 
 Do not edit:
 
@@ -161,7 +164,7 @@ Do not edit:
 2. As a Site author, I want the setting field to be named `label`, so that Site records match the existing `block.label` language.
 3. As a Site author, I want to edit a public Site description, so that default page metadata has authored copy.
 4. As a Site author, I want to paste SVG source for the Site icon, so that one canonical field controls launch icons.
-5. As a Site author, I want invalid or empty SVG to fall back to package icons, so that a bad paste does not break public pages.
+5. As a Site author, I want invalid or empty SVG to fall back to the default Site icon, so that a bad paste does not break public pages.
 6. As a Site author, I do not want PNG and ICO fields, so that generated browser assets are not mistaken for source content.
 7. As a Site author, I want Site settings inside the generated Site editor, so that I do not need a custom admin page.
 8. As a Site author, I do not want a normal create/delete workflow for the Site settings record, so that there is only one settings record.
@@ -190,6 +193,8 @@ Do not edit:
 - `site.description` is optional text.
 - `site.icon` is optional text with `format: "icon"`.
 - `site.icon` stores canonical SVG source.
+- The source seed `site.icon` stores a simple default SVG.
+- The default SVG should be small, inline, deterministic, and easy to replace.
 - `site` has a unique constraint over `key`.
 - `site.create.enabled` is `false`.
 - `site.patch.enabled` is `true`.
@@ -208,7 +213,7 @@ Do not edit:
 - Missing `site` must produce a tree warning.
 - Missing `site` falls back to the current metadata Site-name behavior.
 - Missing `site.description` falls back to current page-body/default description behavior.
-- Missing or invalid `site.icon` falls back to package launch icon assets.
+- Missing or invalid `site.icon` falls back to the code-owned default Site SVG source.
 - Generated admin does not expose a normal `Create Site` action.
 - The missing-record repair path is reset seed or project restore in the first slice.
 
@@ -241,12 +246,13 @@ Do not edit:
 - Optional `/favicon-32x32.png` may be added if the HTML document links a PNG favicon.
 - The SSR document keeps stable root icon URLs.
 - The SSR document may add a PNG favicon link only if the route is implemented.
-- Empty `site.icon` delegates to package fallback assets.
-- Invalid `site.icon` delegates to package fallback assets.
-- SVG-to-PNG failure delegates to package fallback assets.
-- Package fallback assets remain `public/favicon.svg`, `public/favicon.ico`, and `public/apple-touch-icon.png`.
-- Dynamic icon routes must run before `ASSETS` fallback in published profile.
-- Non-published app/static behavior should keep using `ASSETS` fallback unless the route is explicitly dynamic.
+- Empty `site.icon` uses the default Site SVG source.
+- Invalid `site.icon` uses the default Site SVG source.
+- SVG-to-PNG failure uses generated assets from the default Site SVG source.
+- Package fallback assets are removed from `public/`.
+- The Worker owns root icon paths; they must not depend on `ASSETS` having icon files.
+- Dynamic icon routes must run before `ASSETS` fallback in deployed Worker profiles.
+- Non-icon app/static behavior should keep using `ASSETS` fallback.
 - `HEAD` responses match `GET` status and headers and return no body.
 - Successful generated icon responses set correct `Content-Type`.
 - SVG favicon content type is `image/svg+xml; charset=utf-8`.
@@ -300,26 +306,26 @@ Do not edit:
 
 ## Implementation Decisions
 
-| ID      | Decision                                                           | Reason                                                                                            | Evidence                                                                        |
-| ------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| SSI-D1  | Name the entity `site`.                                            | The record owns Site-wide facts and should match the app/domain term.                             | `CONTEXT.md`, `doc/current.md`                                                  |
-| SSI-D2  | Use `key = "primary"` with a unique constraint.                    | Current schema constraints can enforce one logical settings record without changing storage.      | `src/shared/schema-fields.ts`, `src/worker/constraints.ts`                      |
-| SSI-D3  | Disable create and delete for `site`.                              | The singleton should be seed/project-owned, not normal content created from the admin list.       | Existing entity mutation model in `schema/apps/site/schema.json`                |
-| SSI-D4  | Keep page/post/project blocks implicitly scoped to the schema app. | One schema key maps to one Site instance today; multi-site scoping is not first-release scope.    | `doc/roadmap.md`, `src/shared/schema-apps.ts`                                   |
-| SSI-D5  | Tolerate a missing singleton with public fallbacks and warnings.   | Existing stores may not have the new seed record until reset or project restore.                  | `src/site/tree.ts`, `src/site/public-document-metadata.ts`                      |
-| SSI-D6  | Add `tree.site` to `SitePageTree`.                                 | Public metadata and icon logic need explicit Site facts instead of deriving identity from chrome. | `src/shared/protocol.ts`, `src/site/tree.ts`                                    |
-| SSI-D7  | Keep sitemap discovery based on routable block records.            | Settings do not represent public routes.                                                          | `src/site/public-indexing.ts`, `src/site/route-resolver.ts`                     |
-| SSI-D8  | Serve dynamic icons at root favicon convention paths.              | Browsers and crawlers already request those paths and SSR already links them.                     | `src/worker/site-ssr.tsx`, `src/worker/routing.ts`                              |
-| SSI-D9  | Preserve package assets as fallback.                               | Empty, invalid, or failed generated icons must not break launch asset behavior.                   | `public/`, `src/worker/static-assets.test.ts`                                   |
-| SSI-D10 | Generate PNG and ICO from canonical SVG on demand.                 | PNG/ICO are derived browser fallbacks, not author-editable facts.                                 | User direction 2026-05-18                                                       |
-| SSI-D11 | Prefer Cache API over R2 for generated icon artifacts.             | The artifacts are deterministic from `site.icon` and can be regenerated.                          | Existing R2 media module stores authored originals, not derived output.         |
-| SSI-D12 | Use a content hash in generated-artifact cache keys.               | Root favicon URLs stay stable while generated bytes change when SVG source changes.               | Google favicon stability requirement from user direction                        |
-| SSI-D13 | Use a short/moderate cache header for dynamic root icons.          | Favicons are browser-cached aggressively and root URLs cannot be content-hashed.                  | Existing `site-cache.ts` route-specific cache ownership                         |
-| SSI-D14 | Evaluate `@cf-wasm/resvg/workerd` first.                           | The package has an explicit workerd entrypoint and wraps `@resvg/resvg-wasm`.                     | `@cf-wasm/resvg` README and package metadata                                    |
-| SSI-D15 | Do not use `sharp` for Worker icon generation.                     | `sharp` is a native Node/libvips package shape, not a direct workerd runtime fit.                 | `sharp` package metadata                                                        |
-| SSI-D16 | Build ICO internally from generated PNG buffers.                   | ICO container writing is small and avoids another dependency.                                     | PNG buffers from SVG renderer are enough for browser favicon fallback.          |
-| SSI-D17 | Use generated settings UI before custom UI.                        | Existing table/edit/icon controls can edit one flat record with no custom screen.                 | `src/app/generated/collection.tsx`, `src/app/generated/record-field-editor.tsx` |
-| SSI-D18 | Keep global docs untouched until ship.                             | Normal PRD agents write promotion notes, not `doc/current.md` or `doc/roadmap.md`.                | `AGENTS.md`                                                                     |
+| ID      | Decision                                                           | Reason                                                                                                           | Evidence                                                                        |
+| ------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| SSI-D1  | Name the entity `site`.                                            | The record owns Site-wide facts and should match the app/domain term.                                            | `CONTEXT.md`, `doc/current.md`                                                  |
+| SSI-D2  | Use `key = "primary"` with a unique constraint.                    | Current schema constraints can enforce one logical settings record without changing storage.                     | `src/shared/schema-fields.ts`, `src/worker/constraints.ts`                      |
+| SSI-D3  | Disable create and delete for `site`.                              | The singleton should be seed/project-owned, not normal content created from the admin list.                      | Existing entity mutation model in `schema/apps/site/schema.json`                |
+| SSI-D4  | Keep page/post/project blocks implicitly scoped to the schema app. | One schema key maps to one Site instance today; multi-site scoping is not first-release scope.                   | `doc/roadmap.md`, `src/shared/schema-apps.ts`                                   |
+| SSI-D5  | Tolerate a missing singleton with public fallbacks and warnings.   | Existing stores may not have the new seed record until reset or project restore.                                 | `src/site/tree.ts`, `src/site/public-document-metadata.ts`                      |
+| SSI-D6  | Add `tree.site` to `SitePageTree`.                                 | Public metadata and icon logic need explicit Site facts instead of deriving identity from chrome.                | `src/shared/protocol.ts`, `src/site/tree.ts`                                    |
+| SSI-D7  | Keep sitemap discovery based on routable block records.            | Settings do not represent public routes.                                                                         | `src/site/public-indexing.ts`, `src/site/route-resolver.ts`                     |
+| SSI-D8  | Serve dynamic icons at root favicon convention paths.              | Browsers and crawlers already request those paths and SSR already links them.                                    | `src/worker/site-ssr.tsx`, `src/worker/routing.ts`                              |
+| SSI-D9  | Remove package icon assets and use the default Site SVG fallback.  | Icon behavior should be driven by Site settings, and missing/invalid authored SVG still needs a stable fallback. | User direction 2026-05-18, `public/`, `src/worker/static-assets.test.ts`        |
+| SSI-D10 | Generate PNG and ICO from canonical SVG on demand.                 | PNG/ICO are derived browser fallbacks, not author-editable facts.                                                | User direction 2026-05-18                                                       |
+| SSI-D11 | Prefer Cache API over R2 for generated icon artifacts.             | The artifacts are deterministic from `site.icon` and can be regenerated.                                         | Existing R2 media module stores authored originals, not derived output.         |
+| SSI-D12 | Use a content hash in generated-artifact cache keys.               | Root favicon URLs stay stable while generated bytes change when SVG source changes.                              | Google favicon stability requirement from user direction                        |
+| SSI-D13 | Use a short/moderate cache header for dynamic root icons.          | Favicons are browser-cached aggressively and root URLs cannot be content-hashed.                                 | Existing `site-cache.ts` route-specific cache ownership                         |
+| SSI-D14 | Evaluate `@cf-wasm/resvg/workerd` first.                           | The package has an explicit workerd entrypoint and wraps `@resvg/resvg-wasm`.                                    | `@cf-wasm/resvg` README and package metadata                                    |
+| SSI-D15 | Do not use `sharp` for Worker icon generation.                     | `sharp` is a native Node/libvips package shape, not a direct workerd runtime fit.                                | `sharp` package metadata                                                        |
+| SSI-D16 | Build ICO internally from generated PNG buffers.                   | ICO container writing is small and avoids another dependency.                                                    | PNG buffers from SVG renderer are enough for browser favicon fallback.          |
+| SSI-D17 | Use generated settings UI before custom UI.                        | Existing table/edit/icon controls can edit one flat record with no custom screen.                                | `src/app/generated/collection.tsx`, `src/app/generated/record-field-editor.tsx` |
+| SSI-D18 | Keep global docs untouched until ship.                             | Normal PRD agents write promotion notes, not `doc/current.md` or `doc/roadmap.md`.                               | `AGENTS.md`                                                                     |
 
 ## Dependency Research
 
@@ -371,21 +377,22 @@ Dependency decision:
 - **SVG icon source sanitizer:** reuses or extracts current SVG icon parsing/sanitization so Worker and UI icon behavior stay aligned.
 - **Site icon asset renderer:** turns one sanitized SVG string into SVG, PNG sizes, and ICO bytes.
 - **Generated icon artifact cache:** caches generated PNG/ICO bytes by SVG content hash and output kind.
-- **Dynamic Site icon Worker route:** owns root favicon paths, fallback to package assets, cache headers, and `HEAD` behavior.
+- **Dynamic Site icon Worker route:** owns root favicon paths, default SVG fallback, cache headers, and `HEAD` behavior.
 - **Generated settings section:** adapts the singleton record to existing generated collection/table/edit controls.
 
 ## Testing Decisions
 
 - Test behavior through public contracts, not implementation details.
 - Schema tests should assert `site` entity fields, mutations, and unique constraint parse.
-- Source schema tests should assert the Site seed includes exactly one active `site` record with `key = "primary"`.
+- Source schema tests should assert the Site seed includes exactly one active `site` record with `key = "primary"` and SVG `icon`.
 - Authority tests should cover unique constraint rejection if a duplicate `site.key` can be created through direct mutation fixtures.
 - Tree tests should assert `tree.site` projects label, description, and icon.
 - Tree tests should assert missing `site` emits a warning and still returns a public page tree.
 - Metadata tests should assert `tree.site.label` drives home and subpage titles.
 - Metadata tests should assert `tree.site.description` drives descriptions before page body fallback.
-- Routing tests should assert root icon paths are handled by the dynamic icon route in published profile.
-- Static asset tests should assert empty/invalid `site.icon` still serves package fallback assets.
+- Routing tests should assert root icon paths are handled by the dynamic icon route before `ASSETS`.
+- Static asset tests should be replaced or updated so root icon paths no longer depend on package `public/` icon files.
+- Worker icon tests should assert empty/invalid `site.icon` serves generated assets from the default Site SVG.
 - Worker icon tests should assert `GET` and `HEAD` parity for SVG, PNG, and ICO routes.
 - Worker icon tests should assert generated SVG responses do not include unsafe SVG features.
 - Worker icon tests should assert PNG responses have a PNG signature.
@@ -406,7 +413,7 @@ Prior art:
 
 - `src/site/tree.test.ts` covers public tree projection and warnings.
 - `src/worker/site-ssr.test.ts` covers metadata and favicon links in SSR HTML.
-- `src/worker/static-assets.test.ts` covers package launch asset fallback.
+- `src/worker/static-assets.test.ts` currently covers package launch asset fallback and should be updated when those files are removed.
 - `src/worker/media.test.ts` covers same-origin asset serving and `HEAD` behavior.
 - `src/worker/public-indexing.test.ts` covers robots/sitemap and `HEAD`.
 - `src/client/generated-authoring.test.ts` covers singleton/list-detail selection facts.
@@ -415,21 +422,23 @@ Prior art:
 
 ## Chunks
 
-| ID     | Status | Depends on | Main files                                              | Acceptance                                                                                                                                 |
-| ------ | ------ | ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| SSI-01 | ready  | none       | PRD                                                     | PRD captures data model, public tree, metadata, icon route, dependency, authoring, tests, blockers, and promotion notes.                   |
-| SSI-02 | ready  | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record, create/delete disabled, patch enabled, unique key constraint covered.                   |
-| SSI-03 | ready  | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                  |
-| SSI-04 | ready  | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow. |
-| SSI-05 | ready  | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.         |
-| SSI-06 | ready  | SSI-05     | icon renderer/cache modules, Worker routes, tests       | `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` derive from SVG, cache by content hash, and fall back to package assets.       |
-| SSI-07 | ready  | SSI-06     | SSR/routing/indexing tests, browser smoke               | SSR icon links and Worker routing are correct; sitemap remains block-based; `HEAD` parity and browser smoke pass.                          |
-| SSI-08 | ready  | SSI-07     | PRD                                                     | PRD closeout records checks, decisions, blockers, and promote notes after implementation ships.                                            |
+| ID     | Status | Depends on | Main files                                              | Acceptance                                                                                                                                               |
+| ------ | ------ | ---------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSI-01 | ready  | none       | PRD                                                     | PRD captures data model, public tree, metadata, icon route, dependency, authoring, tests, blockers, and promotion notes.                                 |
+| SSI-02 | ready  | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record with a simple SVG icon, create/delete disabled, patch enabled, unique key constraint covered.          |
+| SSI-03 | ready  | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
+| SSI-04 | ready  | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
+| SSI-05 | ready  | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.                       |
+| SSI-06 | ready  | SSI-05     | icon renderer/cache modules, Worker routes, tests       | `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` derive from Site/default SVG, cache by content hash, and no longer depend on package assets. |
+| SSI-07 | ready  | SSI-06     | SSR/routing/indexing tests, browser smoke               | SSR icon links and Worker routing are correct; sitemap remains block-based; `HEAD` parity and browser smoke pass.                                        |
+| SSI-08 | ready  | SSI-07     | PRD                                                     | PRD closeout records checks, decisions, blockers, and promote notes after implementation ships.                                                          |
 
 ## Acceptance Checks
 
 - Source schema contains `entities.site`.
 - Source seed contains exactly one active `site` record with `key = "primary"`.
+- Source seed `site.icon` contains a simple valid SVG source.
+- Package icon files under `public/` are removed.
 - Creating another `site` through generic mutation is rejected because create is disabled.
 - Deleting the `site` record through generic mutation is rejected because delete is disabled.
 - Patching `site.label`, `site.description`, and `site.icon` works.
@@ -438,7 +447,7 @@ Prior art:
 - Successful public subpage SSR title is `<page label> | <site label>`.
 - Successful public metadata description prefers Site description when present.
 - Missing `site` does not break public page tree or public SSR.
-- Missing or invalid `site.icon` serves package fallback favicon assets.
+- Missing or invalid `site.icon` serves generated assets from the default Site SVG.
 - Valid `site.icon` serves dynamic `/favicon.svg`.
 - Valid `site.icon` serves generated PNG for `/apple-touch-icon.png`.
 - Valid `site.icon` serves generated ICO for `/favicon.ico`.
@@ -470,14 +479,14 @@ Prior art:
 
 ## Dependencies
 
-| Workstream                   | Type       | Need                                                                                             |
-| ---------------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| PRD 30                       | upstream   | Existing SVG icon editor/rendering behavior for text `format: "icon"`.                           |
-| PRD 31                       | adjacent   | Same-origin media routes stay separate from derived Site icon routes.                            |
-| PRD 38                       | upstream   | Public SSR, root favicon links, static fallback assets, robots, sitemap, and `HEAD` conventions. |
-| PRD 39                       | upstream   | Neutral starter seed is the current default seed that should gain one settings record.           |
-| Cloudflare Workers Wasm docs | dependency | Confirm Wasm import, no `instantiateStreaming`, no threads, bundle/startup/memory constraints.   |
-| `@cf-wasm/resvg`             | dependency | Candidate workerd-compatible SVG-to-PNG renderer.                                                |
+| Workstream                   | Type       | Need                                                                                                               |
+| ---------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------ |
+| PRD 30                       | upstream   | Existing SVG icon editor/rendering behavior for text `format: "icon"`.                                             |
+| PRD 31                       | adjacent   | Same-origin media routes stay separate from derived Site icon routes.                                              |
+| PRD 38                       | upstream   | Public SSR, root favicon links, current static fallback assets to remove, robots, sitemap, and `HEAD` conventions. |
+| PRD 39                       | upstream   | Neutral starter seed is the current default seed that should gain one settings record.                             |
+| Cloudflare Workers Wasm docs | dependency | Confirm Wasm import, no `instantiateStreaming`, no threads, bundle/startup/memory constraints.                     |
+| `@cf-wasm/resvg`             | dependency | Candidate workerd-compatible SVG-to-PNG renderer.                                                                  |
 
 ## Blockers
 
@@ -493,7 +502,8 @@ Prior art:
 - `doc/current.md`: Public Site tree includes top-level `site` settings.
 - `doc/current.md`: Public document metadata prefers Site settings label and description.
 - `doc/current.md`: Public root favicon and touch icon routes can derive SVG, PNG, and ICO assets from `site.icon`.
-- `doc/current.md`: Empty or invalid `site.icon` falls back to package launch assets.
+- `doc/current.md`: Empty or invalid `site.icon` falls back to the default Site SVG source.
+- `doc/current.md`: package-owned `public/favicon.svg`, `public/favicon.ico`, and `public/apple-touch-icon.png` are removed.
 - `doc/current.md`: Generated Site admin includes a Settings section for the singleton record.
 - `doc/roadmap.md`: First release includes authored Site label, description, and icon settings.
 
@@ -514,6 +524,7 @@ Prior art:
 - 2026-05-18: Public SSR currently links `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png`.
 - 2026-05-18: Worker routing currently treats those favicon paths as static assets in published profile.
 - 2026-05-18: Package fallback icon assets exist under `public/`.
+- 2026-05-18: User updated scope to remove `./public/*` icon assets and seed a simple default Site icon.
 - 2026-05-18: Sitemap route discovery currently walks live routable page/post block records.
 - 2026-05-18: Worker media routes already use same-origin routes, R2, immutable cache headers, and `HEAD` parity for authored media.
 - 2026-05-18: Cloudflare Workers docs confirm Wasm import support, no `WebAssembly.instantiateStreaming()`, no threading, 128 MB memory, 3 MB/10 MB Worker size limits, and 1 second startup limit.
