@@ -87,7 +87,7 @@ describe("authority", () => {
     expect(body.cursor).toBe(siteSeedRecords.length);
     expectRecordsIgnoringOrder(body.records, siteSeedRecords);
     expect(new Set(body.records.map((record) => record.entity))).toEqual(
-      new Set(["block", "blockPlacement"]),
+      new Set(["site", "block", "blockPlacement"]),
     );
   });
 

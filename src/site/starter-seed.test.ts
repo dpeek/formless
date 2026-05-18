@@ -20,6 +20,20 @@ describe("Site starter seed", () => {
     expect(serializedSeed()).not.toContain("OpenSurf");
   });
 
+  it("includes one primary Site settings record with authored label, description, and SVG icon", () => {
+    const settings = siteSeedRecords.filter((record) => record.entity === "site");
+
+    expect(settings).toHaveLength(1);
+    expect(settings[0]?.values).toEqual({
+      key: "primary",
+      label: "Starter Site",
+      description: "A small starter site.",
+      icon: expect.stringMatching(/^<svg[\s\S]*<\/svg>$/),
+    });
+    expect(settings[0]?.values).not.toHaveProperty("png");
+    expect(settings[0]?.values).not.toHaveProperty("ico");
+  });
+
   it("includes starter pages, one post, one project, and minimal page composition", () => {
     expect(
       blocksOfType("page").map((record) => ({

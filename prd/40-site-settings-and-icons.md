@@ -1,7 +1,7 @@
 # PRD 40: Site settings and icons
 
 Status: ready
-Current chunk: SSI-02 ready
+Current chunk: SSI-03 ready
 Last updated: 2026-05-18
 
 Start after PRD 30, PRD 31, PRD 38, and PRD 39 shipped behavior is stable on the active branch.
@@ -425,7 +425,7 @@ Prior art:
 | ID     | Status | Depends on | Main files                                              | Acceptance                                                                                                                                               |
 | ------ | ------ | ---------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SSI-01 | done   | none       | PRD                                                     | PRD captures data model, public tree, metadata, icon route, dependency, authoring, tests, blockers, and promotion notes.                                 |
-| SSI-02 | ready  | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record with a simple SVG icon, create/delete disabled, patch enabled, unique key constraint covered.          |
+| SSI-02 | done   | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record with a simple SVG icon, create/delete disabled, patch enabled, unique key constraint covered.          |
 | SSI-03 | ready  | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
 | SSI-04 | ready  | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
 | SSI-05 | ready  | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.                       |
@@ -537,13 +537,32 @@ Prior art:
 - 2026-05-18: `bun pm view @cf-wasm/resvg --json` reported version `0.3.4` and unpacked size `24484929`.
 - 2026-05-18: `bun pm view @resvg/resvg-wasm --json` reported version `2.6.2` and unpacked size `2526600`.
 - 2026-05-18: `bun pm view sharp --json` showed `sharp` is a native Node/libvips-shaped package with many platform optional dependencies, so it is not the Worker dependency path for this PRD.
+- 2026-05-18: SSI-02 started from clean worktree; `git status --short` returned no output before edits.
+- 2026-05-18: SSI-02 `devstate start` reported checks ok and services running at `https://40-site-settings-and-icons.formless.local`.
+- 2026-05-18: SSI-02 source Site schema now defines `entities.site` with flat `key`, `label`, `description`, and SVG `icon` fields.
+- 2026-05-18: SSI-02 `site.create.enabled = false`, `site.patch.enabled = true`, `site.delete.enabled = false`, and `site.uniqueSiteKey` covers `key`.
+- 2026-05-18: SSI-02 source Site seed now has exactly one active `site` record, `rec_site_settings_primary`, with `key = "primary"` and a simple inline SVG icon.
+- 2026-05-18: SSI-02 seed tests assert the Site settings record does not store PNG or ICO fields.
+- 2026-05-18: SSI-02 `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; read `.devstate/status.md`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` instead.
+- 2026-05-18: SSI-02 `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-02 watcher evidence after touching changed test files reported 5 test files and 213 tests passing.
+- 2026-05-18: SSI-02 check log reported formatting complete and no warnings, lint errors, or type errors in 256 files.
+- 2026-05-18: SSI-02 browser smoke reset Site schema and seed with HTTP 200 responses.
+- 2026-05-18: SSI-02 browser smoke fetched `/api/site/bootstrap`; entities were `site`, `block`, and `blockPlacement`, and one settings record had `key = "primary"` and label `Starter Site`.
+- 2026-05-18: SSI-02 browser smoke opened `/site`; the generated Site editor rendered seeded Pages, Posts, Projects, Navigation, and synced status.
+- 2026-05-18: SSI-02 `bun browser --session ssi-02 errors` returned no page errors.
+- 2026-05-18: SSI-02 rebase on local `main` reported the branch was already up to date.
+- 2026-05-18: SSI-02 post-rebase `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-02 post-rebase watcher evidence reported 23 test files and 543 tests passing.
+- 2026-05-18: SSI-02 post-rebase check log reported formatting complete and no warnings, lint errors, or type errors in 256 files.
 
 ## Status Notes
 
 - SSI-01 is done.
-- Current chunk: SSI-02 ready.
-- Implementation code has not started.
-- PRD only changed in this pass.
+- SSI-02 is done.
+- Current chunk: SSI-03 ready.
+- Implementation changed only Site source schema, Site source seed, tests, and this PRD.
+- Site settings authoring UI is still future SSI-04 work.
+- Public tree and metadata projection are still future SSI-03 work.
 - Promote notes remain staged under `Promote after ship`; no global docs changed.
-- No app behavior changed, so browser smoke was not required for this pass.
 - Blockers are dependency measurement and generated settings UX validation.

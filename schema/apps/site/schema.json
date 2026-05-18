@@ -1,6 +1,50 @@
 {
   "version": 1,
   "entities": {
+    "site": {
+      "label": "Site",
+      "fields": {
+        "key": {
+          "type": "text",
+          "required": true,
+          "label": "Key"
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        },
+        "description": {
+          "type": "text",
+          "required": false,
+          "label": "Description",
+          "format": "longText"
+        },
+        "icon": {
+          "type": "text",
+          "required": false,
+          "label": "Icon",
+          "format": "icon"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": false
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueSiteKey": {
+          "kind": "unique",
+          "fields": ["key"]
+        }
+      }
+    },
     "block": {
       "label": "Block",
       "fields": {

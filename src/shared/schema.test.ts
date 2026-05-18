@@ -4226,7 +4226,40 @@ describe("personal site sample schema", () => {
   it("parses the block model, relationships, and source app view", () => {
     const schema = parseAppSchema(rawSiteSchema);
 
-    expect(Object.keys(schema.entities)).toEqual(["block", "blockPlacement"]);
+    expect(Object.keys(schema.entities)).toEqual(["site", "block", "blockPlacement"]);
+    expect(schema.entities.site?.fields).toEqual({
+      key: {
+        type: "text",
+        required: true,
+        label: "Key",
+      },
+      label: {
+        type: "text",
+        required: true,
+        label: "Label",
+      },
+      description: {
+        type: "text",
+        required: false,
+        label: "Description",
+        format: "longText",
+      },
+      icon: {
+        type: "text",
+        required: false,
+        label: "Icon",
+        format: "icon",
+      },
+    });
+    expect(schema.entities.site?.mutations).toEqual({
+      create: { enabled: false },
+      patch: { enabled: true },
+      delete: { enabled: false },
+    });
+    expect(schema.entities.site?.constraints?.uniqueSiteKey).toEqual({
+      kind: "unique",
+      fields: ["key"],
+    });
     expect(schema.entities.block?.fields.type).toEqual({
       type: "enum",
       required: true,

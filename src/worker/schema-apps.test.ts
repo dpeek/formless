@@ -14,8 +14,12 @@ describe("worker schema app definitions", () => {
     expect(workerSchemaApps.map((app) => app.key)).toEqual(["tasks", "estii", "site"]);
     expect(tasks.sourceSchema.entities.task?.label).toBe("Task");
     expect(estii.sourceSchema.entities.rate?.label).toBe("Rate");
+    expect(site.sourceSchema.entities.site?.label).toBe("Site");
     expect(site.sourceSchema.entities.block?.label).toBe("Block");
     expect(site.sourceSchema.entities.blockPlacement?.label).toBe("Placement");
+    expect(site.sourceSchema.entities.site?.mutations.create.enabled).toBe(false);
+    expect(site.sourceSchema.entities.site?.mutations.patch.enabled).toBe(true);
+    expect(site.sourceSchema.entities.site?.mutations.delete.enabled).toBe(false);
     expect(site.sourceSchema.entities.block?.mutations.delete.enabled).toBe(true);
     expect(site.sourceSchema.entities.blockPlacement?.mutations.delete.enabled).toBe(false);
   });
@@ -31,6 +35,13 @@ describe("worker schema app definitions", () => {
     expect(new Set(estii.seedRecords.map((record) => record.entity))).toEqual(
       new Set(["card", "resource", "rate"]),
     );
+    expect(site.seedRecords.filter((record) => record.entity === "site")).toEqual([
+      expect.objectContaining({
+        values: expect.objectContaining({
+          key: "primary",
+        }),
+      }),
+    ]);
     expect(site.seedRecords.length).toBeGreaterThan(0);
     expect(site.seedRecords.every((record) => record.entity in site.sourceSchema.entities)).toBe(
       true,
