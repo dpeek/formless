@@ -37,9 +37,11 @@
     "formless": "bun run scripts/formless.ts",
     "site:pull-seed": "bun run scripts/site-pull-seed.ts",
     "site:publish": "bun run scripts/site-publish.ts",
+    "site:icon-spike": "bun run scripts/site-icon-renderer-spike.ts",
     "deploy": "vp build && wrangler deploy"
   },
   "dependencies": {
+    "@cf-wasm/resvg": "0.3.4",
     "@cloudflare/vite-plugin": "^1.33.2",
     "@dnd-kit/react": "^0.4.0",
     "@dpeek/formless-ui": "^0.1.2",

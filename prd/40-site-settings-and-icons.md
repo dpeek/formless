@@ -1,7 +1,7 @@
 # PRD 40: Site settings and icons
 
 Status: ready
-Current chunk: SSI-05 ready
+Current chunk: SSI-06 ready
 Last updated: 2026-05-18
 
 Start after PRD 30, PRD 31, PRD 38, and PRD 39 shipped behavior is stable on the active branch.
@@ -326,6 +326,7 @@ Do not edit:
 | SSI-D16 | Build ICO internally from generated PNG buffers.                   | ICO container writing is small and avoids another dependency.                                                    | PNG buffers from SVG renderer are enough for browser favicon fallback.          |
 | SSI-D17 | Use generated settings UI before custom UI.                        | Existing table/edit/icon controls can edit one flat record with no custom screen.                                | `src/app/generated/collection.tsx`, `src/app/generated/record-field-editor.tsx` |
 | SSI-D18 | Keep global docs untouched until ship.                             | Normal PRD agents write promotion notes, not `doc/current.md` or `doc/roadmap.md`.                               | `AGENTS.md`                                                                     |
+| SSI-D19 | Use `@cf-wasm/resvg/workerd` for first icon rendering.             | The workerd entrypoint dry-runs under Wrangler and renders PNG bytes in Miniflare within bundle/startup budget.  | `scripts/site-icon-renderer-spike.ts`, `package.json`                           |
 
 ## Dependency Research
 
@@ -360,13 +361,17 @@ Findings:
 - `@cf-wasm/resvg` 0.3.4 depends on `@resvg/resvg-wasm` 2.6.2 and a legacy alias.
 - Registry metadata from `bun pm view` reports `@cf-wasm/resvg` 0.3.4 unpacked size as 24,484,929 bytes.
 - Registry metadata from `bun pm view` reports `@resvg/resvg-wasm` 2.6.2 unpacked size as 2,526,600 bytes.
-- The package size requires an implementation spike to verify actual bundled Worker size and startup before merge.
+- The package size required an implementation spike to verify actual bundled Worker size and startup before icon routes.
+- `bun run site:icon-spike` dry-runs a Wrangler Worker import of `@cf-wasm/resvg/workerd`, then renders a PNG in Miniflare with the Wasm module loaded as `CompiledWasm`.
+- The spike measured Wrangler upload at 2,440.86 KiB and gzip at 941.26 KiB.
+- The spike measured Miniflare first-request import/init/render at 116 ms.
+- The spike output total copied Miniflare Worker bytes as 2,497,935 bytes, including a 2,478,606 byte `resvg.wasm`.
 - `resvg-js` documents SVG to PNG rendering and a pure WebAssembly backend.
 - `resvg` is intended for static SVG rendering and does not support dynamic SVG features such as scripts, events, or animations.
 
 Dependency decision:
 
-- Use `@cf-wasm/resvg/workerd` only after a focused bundle/startup check passes.
+- Use `@cf-wasm/resvg/workerd` for the first dynamic icon renderer.
 - Keep the renderer behind a small module so the dependency can be replaced or deferred without changing Site records or icon routes.
 
 ## Deep Modules
@@ -428,7 +433,7 @@ Prior art:
 | SSI-02 | done   | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record with a simple SVG icon, create/delete disabled, patch enabled, unique key constraint covered.          |
 | SSI-03 | done   | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
 | SSI-04 | done   | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
-| SSI-05 | ready  | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.                       |
+| SSI-05 | done   | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.                       |
 | SSI-06 | ready  | SSI-05     | icon renderer/cache modules, Worker routes, tests       | `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` derive from Site/default SVG, cache by content hash, and no longer depend on package assets. |
 | SSI-07 | ready  | SSI-06     | SSR/routing/indexing tests, browser smoke               | SSR icon links and Worker routing are correct; sitemap remains block-based; `HEAD` parity and browser smoke pass.                                        |
 | SSI-08 | ready  | SSI-07     | PRD                                                     | PRD closeout records checks, decisions, blockers, and promote notes after implementation ships.                                                          |
@@ -490,8 +495,6 @@ Prior art:
 
 ## Blockers
 
-- Must measure actual Worker bundle size and startup time with `@cf-wasm/resvg/workerd`.
-- `@cf-wasm/resvg` 0.3.4 package metadata reports 24,484,929 unpacked bytes, even though `@resvg/resvg-wasm` is 2,526,600 bytes; tree-shaken Worker output is unknown.
 - Need to confirm Cache API support in local Miniflare tests for generated icon bytes.
 
 ## Promote after ship
@@ -584,6 +587,22 @@ Prior art:
 - 2026-05-18: SSI-04 browser smoke eval returned `hasSettings: true`, `hasIconEditor: true`, `hasCreateSite: false`, and `hasSettingsDelete: false`; `bun browser --session ssi-04 errors` returned no page errors.
 - 2026-05-18: SSI-04 rebase on local `main` reported the branch was already up to date and reapplied the autostash cleanly.
 - 2026-05-18: SSI-04 post-rebase `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-05 started from clean worktree; `git status --porcelain` returned no output before edits.
+- 2026-05-18: SSI-05 `devstate start` printed checks ok and services running at `https://40-site-settings-and-icons.formless.local`; `.devstate/status.md` confirmed checks ok and watcher tests passing.
+- 2026-05-18: SSI-05 read `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, and this PRD.
+- 2026-05-18: SSI-05 selected `SSI-05` because `SSI-01` through `SSI-04` were done and no active agent owned `SSI-05`.
+- 2026-05-18: SSI-05 added `@cf-wasm/resvg@0.3.4` to package dependencies and lockfile.
+- 2026-05-18: SSI-05 added `site:icon-spike`, a Bun script that dry-runs Wrangler bundling for `@cf-wasm/resvg/workerd` and renders a PNG through Miniflare/workerd module semantics.
+- 2026-05-18: SSI-05 `bun run site:icon-spike` reported `@cf-wasm/resvg` 0.3.4, `@resvg/resvg-wasm` 2.6.2, and source `resvg.wasm` size 2,478,606 bytes.
+- 2026-05-18: SSI-05 `bun run site:icon-spike` Wrangler dry-run reported upload 2,440.86 KiB, gzip 941.26 KiB, Worker JS 20,837 bytes, and an external `.wasm` module import.
+- 2026-05-18: SSI-05 `bun run site:icon-spike` Miniflare probe reported total copied Worker bytes 2,497,935, first request 116 ms, render 20 ms, HTTP 200, and PNG signature bytes.
+- 2026-05-18: SSI-05 `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; read `.devstate/status.md`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` instead.
+- 2026-05-18: SSI-05 `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-05 watcher evidence reported 63 test files and 820 tests passing.
+- 2026-05-18: SSI-05 check log reported formatting complete and no warnings, lint errors, or type errors in 258 files.
+- 2026-05-18: SSI-05 browser smoke skipped because dependency/package/probe/PRD changes did not change app or Worker route behavior.
+- 2026-05-18: SSI-05 rebase on local `main` reported the branch was already up to date and reapplied the autostash cleanly.
+- 2026-05-18: SSI-05 post-rebase `devstate check` reported checks ok, web service ready, and watcher tests passing.
 
 ## Status Notes
 
@@ -591,10 +610,12 @@ Prior art:
 - SSI-02 is done.
 - SSI-03 is done.
 - SSI-04 is done.
-- Current chunk: SSI-05 ready.
+- SSI-05 is done.
+- Current chunk: SSI-06 ready.
 - Implementation changed source Site schema generated settings query/table/view/screen sections, generated model tests, app tests, and this PRD.
 - Site settings authoring UI now ships through generated table/edit/icon controls.
 - The generated one-row settings table is acceptable for the first slice; a custom singleton section remains out of scope.
 - Public tree and metadata projection now ship `tree.site` and settings-first metadata.
+- `@cf-wasm/resvg/workerd` is the selected first icon renderer path after Wrangler and Miniflare spike evidence.
 - Promote notes remain staged under `Promote after ship`; no global docs changed.
-- Remaining blockers are dependency measurement and Cache API support for generated icon bytes.
+- Remaining blocker is Cache API support for generated icon bytes.
