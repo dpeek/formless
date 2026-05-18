@@ -4004,7 +4004,7 @@ describe("source schemas", () => {
     expect(parsedSchemas.map((schema) => Object.keys(schema.tableViews))).toEqual([
       [],
       ["rateTable"],
-      ["blockTable", "blockPlacementTable"],
+      ["siteSettingsTable", "blockTable", "blockPlacementTable"],
     ]);
     expect(
       parsedSchemas.map((schema) =>
@@ -4016,6 +4016,9 @@ describe("source schemas", () => {
       [],
       ["referenceField", "field", "field", "field", "computed"],
       [
+        "field",
+        "field",
+        "field",
         "field",
         "field",
         "field",
@@ -4429,6 +4432,7 @@ describe("personal site sample schema", () => {
       },
     });
     expect(Object.keys(schema.queries)).toEqual([
+      "sitePrimary",
       "blockAll",
       "blockPages",
       "blockNavigationRoots",
@@ -4440,6 +4444,11 @@ describe("personal site sample schema", () => {
       "blockImages",
       "placementsForSelectedBlock",
     ]);
+    expect(schema.queries.sitePrimary?.expression).toMatchObject({
+      ref: { kind: "value", name: "key" },
+      op: "eq",
+      value: "primary",
+    });
     expect(schema.queries.blockPosts?.expression).toMatchObject({
       ref: { kind: "value", name: "type" },
       op: "eq",
@@ -4471,7 +4480,19 @@ describe("personal site sample schema", () => {
         { ref: { kind: "value", name: "type" }, op: "eq", value: "footer" },
       ],
     });
-    expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
+    expect(Object.keys(schema.tableViews)).toEqual([
+      "siteSettingsTable",
+      "blockTable",
+      "blockPlacementTable",
+    ]);
+    expect(schema.tableViews.siteSettingsTable).toMatchObject({
+      entity: "site",
+      columns: [
+        { type: "field", field: "label", editor: "text", commit: "field-commit" },
+        { type: "field", field: "description", editor: "textarea", commit: "field-commit" },
+        { type: "field", field: "icon", editor: "icon", commit: "field-commit" },
+      ],
+    });
     expect(schema.itemViews.blockTreeNode).toMatchObject({
       entity: "block",
       fields: {
@@ -4634,6 +4655,16 @@ describe("personal site sample schema", () => {
       result: { type: "table", tableView: "blockPlacementTable" },
       actions: [{ type: "create", createView: "blockPlacementCreate", label: "Add placement" }],
     });
+    expect(schema.views.siteSettingsHome).toMatchObject({
+      type: "collection",
+      label: "Settings",
+      entity: "site",
+      navigation: { primary: false },
+      queries: [{ query: "sitePrimary" }],
+      defaultQuery: "sitePrimary",
+      result: { type: "table", tableView: "siteSettingsTable" },
+    });
+    expect(schema.views.siteSettingsHome).not.toHaveProperty("actions");
     expect(schema.views.siteCompositionHome).toMatchObject({
       type: "collection",
       label: "Site",
@@ -4751,7 +4782,10 @@ describe("personal site sample schema", () => {
         label: "Site",
         navigation: { primary: true },
         layout: {
-          sections: [{ id: "site", type: "collection", view: "siteCompositionHome" }],
+          sections: [
+            { id: "settings", type: "collection", view: "siteSettingsHome" },
+            { id: "site", type: "collection", view: "siteCompositionHome" },
+          ],
         },
       },
     });

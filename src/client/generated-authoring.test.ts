@@ -110,6 +110,7 @@ describe("generated authoring root navigation", () => {
     const screen = requiredSiteScreen();
     const facts = selectGeneratedRootNavigationFacts(screen);
 
+    expect(screen.layout.sections.map((section) => section.id)).toEqual(["settings", "site"]);
     expect(facts?.screen.screenName).toBe("siteEditor");
     expect(facts?.section.id).toBe("site");
     expect(facts?.context.name).toBe("block");

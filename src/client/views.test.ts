@@ -1471,6 +1471,45 @@ describe("home view model collections", () => {
     ).toBe(false);
   });
 
+  it("exposes Site settings as a generated non-primary editor section", () => {
+    const settingsModel = requiredCollectionModel(siteSourceSchema, "siteSettingsHome");
+    const columns = settingsModel.result.type === "table" ? settingsModel.result.columns : [];
+
+    expect(settingsModel.label).toBe("Settings");
+    expect(settingsModel.entityName).toBe("site");
+    expect(settingsModel.navigation.primary).toBe(false);
+    expect(settingsModel.context).toBeUndefined();
+    expect(settingsModel.defaultQueryName).toBe("sitePrimary");
+    expect(settingsModel.actions).toEqual([]);
+    expect(settingsModel.result.type).toBe("table");
+    expect(columns.map((column) => column.key)).toEqual([
+      "field:label",
+      "field:description",
+      "field:icon",
+    ]);
+    expect(
+      columns.map((column) =>
+        column.type === "field"
+          ? {
+              fieldName: column.fieldName,
+              editor: column.editor,
+              commit: column.commit,
+              display: column.display,
+            }
+          : null,
+      ),
+    ).toEqual([
+      { fieldName: "label", editor: "text", commit: "field-commit", display: "editor" },
+      {
+        fieldName: "description",
+        editor: "textarea",
+        commit: "field-commit",
+        display: "editor",
+      },
+      { fieldName: "icon", editor: "icon", commit: "field-commit", display: "editor" },
+    ]);
+  });
+
   it("characterizes the site root authoring model contracts", () => {
     const models = selectPrimaryCollectionModels(siteSourceSchema);
 
@@ -1886,6 +1925,12 @@ describe("home view model collections", () => {
         primary: true,
         layoutType: "stack",
         sections: [
+          {
+            id: "settings",
+            label: "Settings",
+            viewName: "siteSettingsHome",
+            entityName: "site",
+          },
           {
             id: "site",
             label: "Site",

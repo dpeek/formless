@@ -1,7 +1,7 @@
 # PRD 40: Site settings and icons
 
 Status: ready
-Current chunk: SSI-04 ready
+Current chunk: SSI-05 ready
 Last updated: 2026-05-18
 
 Start after PRD 30, PRD 31, PRD 38, and PRD 39 shipped behavior is stable on the active branch.
@@ -427,7 +427,7 @@ Prior art:
 | SSI-01 | done   | none       | PRD                                                     | PRD captures data model, public tree, metadata, icon route, dependency, authoring, tests, blockers, and promotion notes.                                 |
 | SSI-02 | done   | SSI-01     | schema, seed, schema tests                              | `site` entity exists, seed has one primary record with a simple SVG icon, create/delete disabled, patch enabled, unique key constraint covered.          |
 | SSI-03 | done   | SSI-02     | tree, protocol, metadata tests                          | `SitePageTree.site` projects settings; metadata prefers settings; missing singleton warns and falls back.                                                |
-| SSI-04 | ready  | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
+| SSI-04 | done   | SSI-02     | generated Site schema/views, app tests                  | Generated Site admin shows Settings before Site composition, edits label/description/icon, and exposes no create/delete settings workflow.               |
 | SSI-05 | ready  | SSI-03     | dependency spike, package config, Worker build evidence | `@cf-wasm/resvg/workerd` or replacement path is proven against Worker bundle size, startup, and Miniflare/workerd import behavior.                       |
 | SSI-06 | ready  | SSI-05     | icon renderer/cache modules, Worker routes, tests       | `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png` derive from Site/default SVG, cache by content hash, and no longer depend on package assets. |
 | SSI-07 | ready  | SSI-06     | SSR/routing/indexing tests, browser smoke               | SSR icon links and Worker routing are correct; sitemap remains block-based; `HEAD` parity and browser smoke pass.                                        |
@@ -493,7 +493,6 @@ Prior art:
 - Must measure actual Worker bundle size and startup time with `@cf-wasm/resvg/workerd`.
 - `@cf-wasm/resvg` 0.3.4 package metadata reports 24,484,929 unpacked bytes, even though `@resvg/resvg-wasm` is 2,526,600 bytes; tree-shaken Worker output is unknown.
 - Need to confirm Cache API support in local Miniflare tests for generated icon bytes.
-- Need to decide whether the generated one-row settings table is acceptable after seeing it in the app.
 
 ## Promote after ship
 
@@ -568,15 +567,34 @@ Prior art:
 - 2026-05-18: SSI-03 watcher evidence after touching changed source files reported 22 test files and 503 tests passing.
 - 2026-05-18: SSI-03 check log reported formatting complete and no warnings, lint errors, or type errors in 257 files.
 - 2026-05-18: SSI-03 browser smoke opened `/pages/home`, fetched `/api/site/tree/home`, confirmed `tree.site.label = "Starter Site"` and `tree.site.description = "A small starter site."`, and `bun browser --session ssi-03 errors` returned no page errors.
+- 2026-05-18: SSI-04 started from clean worktree; `git status --short` returned no output before edits.
+- 2026-05-18: SSI-04 `devstate start` printed checks ok and services running at `https://40-site-settings-and-icons.formless.local`; `.devstate/status.md` confirmed checks ok and watcher tests passing.
+- 2026-05-18: SSI-04 read `doc/overview.md`, `doc/current.md`, `doc/roadmap.md`, and this PRD.
+- 2026-05-18: SSI-04 selected `SSI-04` because `SSI-01`, `SSI-02`, and `SSI-03` were done and no active agent owned `SSI-04`.
+- 2026-05-18: SSI-04 Site schema now defines `sitePrimary`, `siteSettingsTable`, and `siteSettingsHome`.
+- 2026-05-18: SSI-04 `siteEditor` screen renders `settings` before the existing `site` composition section.
+- 2026-05-18: SSI-04 generated Settings table edits `site.label`, textarea `site.description`, and icon `site.icon`; it omits `site.key`.
+- 2026-05-18: SSI-04 generated Settings collection has no create action, and `site.delete.enabled = false` keeps the settings delete control hidden.
+- 2026-05-18: SSI-04 model and app tests cover Settings section order, field editors, hidden key field, and no create/delete settings workflow.
+- 2026-05-18: SSI-04 `tmp/devstate.json`, `tmp/test.txt`, and `tmp/check.txt` were absent; read `.devstate/status.md`, `.devstate/status.json`, `.devstate/logs/service-test.txt`, and `.devstate/logs/check-vite.txt` instead.
+- 2026-05-18: SSI-04 `devstate check` reported checks ok, web service ready, and watcher tests passing.
+- 2026-05-18: SSI-04 watcher evidence after touching changed source files reported `src/shared/schema.test.ts` 101 tests passing; `.devstate/status.json` reported the watcher service in `pass` state.
+- 2026-05-18: SSI-04 check log reported formatting complete and no warnings, lint errors, or type errors in 257 files.
+- 2026-05-18: SSI-04 browser smoke reset Site schema and seed with HTTP 200 responses, opened `/site`, and rendered Settings plus Pages, Posts, Projects, and Navigation roots.
+- 2026-05-18: SSI-04 browser smoke eval returned `hasSettings: true`, `hasIconEditor: true`, `hasCreateSite: false`, and `hasSettingsDelete: false`; `bun browser --session ssi-04 errors` returned no page errors.
+- 2026-05-18: SSI-04 rebase on local `main` reported the branch was already up to date and reapplied the autostash cleanly.
+- 2026-05-18: SSI-04 post-rebase `devstate check` reported checks ok, web service ready, and watcher tests passing.
 
 ## Status Notes
 
 - SSI-01 is done.
 - SSI-02 is done.
 - SSI-03 is done.
-- Current chunk: SSI-04 ready.
-- Implementation changed public Site tree protocol/projection, public metadata, test fixtures, tests, and this PRD.
-- Site settings authoring UI is still future SSI-04 work.
+- SSI-04 is done.
+- Current chunk: SSI-05 ready.
+- Implementation changed source Site schema generated settings query/table/view/screen sections, generated model tests, app tests, and this PRD.
+- Site settings authoring UI now ships through generated table/edit/icon controls.
+- The generated one-row settings table is acceptable for the first slice; a custom singleton section remains out of scope.
 - Public tree and metadata projection now ship `tree.site` and settings-first metadata.
 - Promote notes remain staged under `Promote after ship`; no global docs changed.
-- Blockers are dependency measurement and generated settings UX validation.
+- Remaining blockers are dependency measurement and Cache API support for generated icon bytes.

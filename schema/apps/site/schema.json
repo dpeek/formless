@@ -398,6 +398,19 @@
     }
   },
   "queries": {
+    "sitePrimary": {
+      "label": "Primary",
+      "entity": "site",
+      "expression": {
+        "kind": "where",
+        "ref": {
+          "kind": "value",
+          "name": "key"
+        },
+        "op": "eq",
+        "value": "primary"
+      }
+    },
     "blockAll": {
       "label": "All",
       "entity": "block",
@@ -873,6 +886,32 @@
     }
   },
   "tableViews": {
+    "siteSettingsTable": {
+      "entity": "site",
+      "columns": [
+        {
+          "type": "field",
+          "field": "label",
+          "editor": "text",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "description",
+          "editor": "textarea",
+          "commit": "field-commit",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "icon",
+          "editor": "icon",
+          "commit": "field-commit",
+          "width": "sm"
+        }
+      ]
+    },
     "blockTable": {
       "entity": "block",
       "columns": [
@@ -1016,6 +1055,24 @@
     }
   },
   "views": {
+    "siteSettingsHome": {
+      "type": "collection",
+      "label": "Settings",
+      "entity": "site",
+      "navigation": {
+        "primary": false
+      },
+      "queries": [
+        {
+          "query": "sitePrimary"
+        }
+      ],
+      "defaultQuery": "sitePrimary",
+      "result": {
+        "type": "table",
+        "tableView": "siteSettingsTable"
+      }
+    },
     "blockHome": {
       "type": "collection",
       "label": "Blocks",
@@ -1716,6 +1773,11 @@
       "layout": {
         "type": "stack",
         "sections": [
+          {
+            "id": "settings",
+            "type": "collection",
+            "view": "siteSettingsHome"
+          },
           {
             "id": "site",
             "type": "collection",

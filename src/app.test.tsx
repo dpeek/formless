@@ -576,7 +576,9 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;siteEditor&quot;");
+    expect(html).toContain("&quot;siteSettingsHome&quot;");
     expect(html).toContain("&quot;siteCompositionHome&quot;");
+    expect(html).toContain("&quot;sitePrimary&quot;");
     expect(html).toContain("&quot;blockSiteRoots&quot;");
     expect(html).not.toContain("&quot;siteHeader&quot;");
     expect(html).not.toContain("&quot;siteFooter&quot;");
@@ -1803,14 +1805,24 @@ describe("generated collection home", () => {
   it("renders generated Site workspace with root sidebar nav and tree layout", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
+    const settingsHeadingIndex = html.indexOf(">Settings</h2>");
+    const siteHeadingIndex = html.indexOf(">Site</h2>");
 
     expect(html).toContain('class="mx-auto w-full max-w-[112rem]"');
+    expect(html).toContain('aria-label="Settings"');
+    expect(settingsHeadingIndex).toBeGreaterThan(-1);
+    expect(siteHeadingIndex).toBeGreaterThan(-1);
+    expect(settingsHeadingIndex).toBeLessThan(siteHeadingIndex);
+    expect(html).toContain("Example Site");
+    expect(html).toContain("A public test site.");
     expect(html).toContain('aria-label="Pages roots"');
     expect(html).toContain('aria-label="Posts roots"');
     expect(html).toContain('aria-label="Projects roots"');
     expect(html).toContain('aria-label="Navigation roots"');
     expect(html).toContain('aria-label="Create Post"');
     expect(html).toContain('aria-label="Create Project"');
+    expect(html).not.toContain('aria-label="Create Site"');
+    expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
     expect(html).not.toContain(
       "grid min-w-0 gap-6 md:grid-cols-[minmax(12rem,16rem)_minmax(0,1fr)] xl:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)]",
     );
@@ -1822,7 +1834,24 @@ describe("generated collection home", () => {
     expect(html).toContain("data-formless-sortable-tree-placement=");
     expect(html).not.toContain("Move placement up");
     expect(html).not.toContain("Move placement down");
-    expect(html).not.toContain('data-slot="table"');
+    expect(html).toContain('data-slot="table"');
+  });
+
+  it("renders generated Site settings fields without create or delete workflows", () => {
+    const collection = requiredSiteCollectionModel("siteSettingsHome");
+
+    bootstrapSiteEditor();
+    const html = renderGeneratedHomeCollection(collection, { today: "2026-05-02" });
+
+    expect(html).toContain('aria-label="Label"');
+    expect(html).toContain('aria-label="Description"');
+    expect(html).toContain('aria-label="Edit Icon"');
+    expect(html).toContain('data-web-field-kind="icon"');
+    expect(html).toContain("Example Site");
+    expect(html).toContain("A public test site.");
+    expect(html).not.toContain(">Key<");
+    expect(html).not.toContain('aria-label="Create Site"');
+    expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
   });
 
   it("sorts generated Site tree siblings by result ordering rank", () => {
@@ -2357,7 +2386,9 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Placement tree"');
     expect(html).not.toContain("Add placement");
     expect(html).not.toContain("Create Block<");
-    expect(html).not.toContain('data-slot="table"');
+    expect(html).toContain('data-slot="table"');
+    expect(html).not.toContain('aria-label="Create Site"');
+    expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
     expect(html).toContain('data-web-autosize-text-input="true"');
     expect(html).toContain("h-9 w-full text-2xl font-semibold");
     expect(html).toContain('data-web-markdown-editor="plate"');
@@ -2398,7 +2429,9 @@ describe("generated collection home", () => {
     expect(html).toContain("Home");
     expect(html).toContain('aria-label="Placement tree"');
     expect(html).not.toContain("Add placement");
-    expect(html).not.toContain('data-slot="table"');
+    expect(html).toContain('data-slot="table"');
+    expect(html).not.toContain('aria-label="Create Site"');
+    expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
     expect(html).not.toContain('aria-label="Collections"');
     expect(html).not.toContain(">Blocks</h1>");
   });
