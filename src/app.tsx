@@ -361,15 +361,39 @@ function AppScreenNavigation({
   const rootNavigation = activeScreen
     ? selectGeneratedRootNavigationFacts(activeScreen)
     : undefined;
-
-  if (rootNavigation) {
-    return <AppRootRecordNavigation rootNavigation={rootNavigation} />;
-  }
-
   const screenLinks = screenModels.filter(
     (model): model is HomeScreenModel & { path: string } => model.path !== undefined,
   );
 
+  if (rootNavigation) {
+    return (
+      <>
+        {screenLinks.length > 1 ? (
+          <AppScreenLinks
+            activeScreenPath={activeScreenPath}
+            screenLinks={screenLinks}
+            world={world}
+          />
+        ) : null}
+        <AppRootRecordNavigation rootNavigation={rootNavigation} />
+      </>
+    );
+  }
+
+  return (
+    <AppScreenLinks activeScreenPath={activeScreenPath} screenLinks={screenLinks} world={world} />
+  );
+}
+
+function AppScreenLinks({
+  activeScreenPath,
+  screenLinks,
+  world,
+}: {
+  activeScreenPath: string | undefined;
+  screenLinks: (HomeScreenModel & { path: string })[];
+  world: RuntimeWorldMount;
+}) {
   return (
     <SidebarGroup>
       <SidebarGroupContent>

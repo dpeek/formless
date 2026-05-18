@@ -576,6 +576,7 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Restore store snapshot");
     expect(html).not.toContain("Reset source schema");
     expect(html).toContain("&quot;siteEditor&quot;");
+    expect(html).toContain("&quot;siteSettings&quot;");
     expect(html).toContain("&quot;siteSettingsHome&quot;");
     expect(html).toContain("&quot;siteCompositionHome&quot;");
     expect(html).toContain("&quot;sitePrimary&quot;");
@@ -663,6 +664,8 @@ describe("App smoke routes", () => {
     expectSyncStatusControl(html, "site");
     expect(html).toContain('<div class="px-2 py-1 text-sm font-semibold">Site</div>');
     expect(html).toContain('<h1 class="truncate text-sm font-medium">');
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/admin/settings"');
     expect(html).toContain('aria-label="Pages roots"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/estii"');
@@ -1805,16 +1808,13 @@ describe("generated collection home", () => {
   it("renders generated Site workspace with root sidebar nav and tree layout", () => {
     bootstrapSiteEditor();
     const html = renderRoute("/site");
-    const settingsHeadingIndex = html.indexOf(">Settings</h2>");
-    const siteHeadingIndex = html.indexOf(">Site</h2>");
 
     expect(html).toContain('class="mx-auto w-full max-w-[112rem]"');
-    expect(html).toContain('aria-label="Settings"');
-    expect(settingsHeadingIndex).toBeGreaterThan(-1);
-    expect(siteHeadingIndex).toBeGreaterThan(-1);
-    expect(settingsHeadingIndex).toBeLessThan(siteHeadingIndex);
-    expect(html).toContain("Example Site");
-    expect(html).toContain("A public test site.");
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site/settings"');
+    expect(html).not.toContain('aria-label="Settings"');
+    expect(html).not.toContain("Example Site");
+    expect(html).not.toContain("A public test site.");
     expect(html).toContain('aria-label="Pages roots"');
     expect(html).toContain('aria-label="Posts roots"');
     expect(html).toContain('aria-label="Projects roots"');
@@ -1834,7 +1834,27 @@ describe("generated collection home", () => {
     expect(html).toContain("data-formless-sortable-tree-placement=");
     expect(html).not.toContain("Move placement up");
     expect(html).not.toContain("Move placement down");
+  });
+
+  it("renders generated Site settings on a dedicated screen", () => {
+    bootstrapSiteEditor();
+    const html = renderRoute("/site/settings");
+
+    expect(html).toContain("<h1");
+    expect(html).toContain(">Settings</h1>");
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site"');
+    expect(html).toContain('href="/site/settings"');
+    expect(html).toContain('aria-label="Label"');
+    expect(html).toContain('aria-label="Description"');
+    expect(html).toContain('aria-label="Edit Icon"');
     expect(html).toContain('data-slot="table"');
+    expect(html).toContain("Example Site");
+    expect(html).toContain("A public test site.");
+    expect(html).not.toContain('aria-label="Pages roots"');
+    expect(html).not.toContain('aria-label="Posts roots"');
+    expect(html).not.toContain('aria-label="Create Site"');
+    expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
   });
 
   it("renders generated Site settings fields without create or delete workflows", () => {
@@ -2362,16 +2382,17 @@ describe("generated collection home", () => {
 
     expectGeneratedAppChromeLabels(html, {
       appTitle: "Site",
-      screenTitle: "Site",
+      screenTitle: "Blocks",
       allowSidebarGroupLabel: true,
     });
     expect(html).toContain("<h1");
-    expect(html).toContain(">Site</h1>");
+    expect(html).toContain(">Blocks</h1>");
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site/settings"');
     expect(html).toContain('aria-label="Pages roots"');
     expect(html).toContain('aria-label="Posts roots"');
     expect(html).toContain('aria-label="Projects roots"');
     expect(html).toContain('aria-label="Navigation roots"');
-    expect(html).not.toContain('aria-label="Site screens"');
     expect(html).not.toContain('href="/site/navigation"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
@@ -2386,7 +2407,6 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Placement tree"');
     expect(html).not.toContain("Add placement");
     expect(html).not.toContain("Create Block<");
-    expect(html).toContain('data-slot="table"');
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
     expect(html).toContain('data-web-autosize-text-input="true"');
@@ -2398,7 +2418,9 @@ describe("generated collection home", () => {
     expect(html).toContain("Blog");
     expect(html).toContain("Resume");
     expect(html).toContain("Projects");
+    expect(html).not.toContain("Example Site");
     expect(html).not.toContain("A concise personal site for current work");
+    expect(html).not.toContain("A public test site.");
     expect(html).toContain("Schema-backed software for content-heavy products");
     expect(html).toContain("Site owner portrait");
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
@@ -2409,12 +2431,13 @@ describe("generated collection home", () => {
     const html = renderRoute("/site");
 
     expect(html).toContain("<h1");
-    expect(html).toContain(">Site</h1>");
+    expect(html).toContain(">Blocks</h1>");
+    expect(html).toContain('aria-label="Site screens"');
+    expect(html).toContain('href="/site/settings"');
     expect(html).toContain('aria-label="Pages roots"');
     expect(html).toContain('aria-label="Posts roots"');
     expect(html).toContain('aria-label="Projects roots"');
     expect(html).toContain('aria-label="Navigation roots"');
-    expect(html).not.toContain('aria-label="Site screens"');
     expect(html).not.toContain('href="/site/navigation"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
@@ -2429,17 +2452,22 @@ describe("generated collection home", () => {
     expect(html).toContain("Home");
     expect(html).toContain('aria-label="Placement tree"');
     expect(html).not.toContain("Add placement");
-    expect(html).toContain('data-slot="table"');
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');
     expect(html).not.toContain('aria-label="Collections"');
-    expect(html).not.toContain(">Blocks</h1>");
+    expect(html).not.toContain(">Site</h1>");
   });
 
   it("does not route site navigation as a separate top-level screen", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
 
     expect(renderRoute("/site/navigation")).toContain("Not found");
+  });
+
+  it("routes site settings as a separate top-level screen", () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+
+    expect(renderRoute("/site/settings")).toContain(">Settings</h1>");
   });
 
   it("does not route site header and footer as top-level screens", () => {

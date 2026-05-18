@@ -110,7 +110,7 @@ describe("generated authoring root navigation", () => {
     const screen = requiredSiteScreen();
     const facts = selectGeneratedRootNavigationFacts(screen);
 
-    expect(screen.layout.sections.map((section) => section.id)).toEqual(["settings", "site"]);
+    expect(screen.layout.sections.map((section) => section.id)).toEqual(["site"]);
     expect(facts?.screen.screenName).toBe("siteEditor");
     expect(facts?.section.id).toBe("site");
     expect(facts?.context.name).toBe("block");
@@ -211,7 +211,9 @@ function requiredRateContext(): HomeContextConfig {
 }
 
 function requiredSiteScreen(): HomeScreenModel {
-  const screen = selectPrimaryScreenModels(siteSourceSchema)[0];
+  const screen = selectPrimaryScreenModels(siteSourceSchema).find(
+    (model) => model.screenName === "siteEditor",
+  );
 
   if (!screen) {
     throw new Error("Missing site screen.");

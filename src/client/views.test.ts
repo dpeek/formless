@@ -1912,16 +1912,17 @@ describe("home view model collections", () => {
     });
   });
 
-  it("selects site editor as the primary screen model", () => {
+  it("selects site editor and settings as primary screen models", () => {
     const models = selectPrimaryScreenModels(siteSourceSchema);
 
     expect(models.map((model) => ({ screenName: model.screenName, path: model.path }))).toEqual([
+      { screenName: "siteSettings", path: "/settings" },
       { screenName: "siteEditor", path: "/" },
     ]);
     expect(models.map(summarizeScreenModel)).toEqual([
       {
-        screenName: "siteEditor",
-        label: "Site",
+        screenName: "siteSettings",
+        label: "Settings",
         primary: true,
         layoutType: "stack",
         sections: [
@@ -1931,6 +1932,14 @@ describe("home view model collections", () => {
             viewName: "siteSettingsHome",
             entityName: "site",
           },
+        ],
+      },
+      {
+        screenName: "siteEditor",
+        label: "Blocks",
+        primary: true,
+        layoutType: "stack",
+        sections: [
           {
             id: "site",
             label: "Site",

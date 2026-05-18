@@ -6,5 +6,22 @@
   "editor.formatOnSaveMode": "file",
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "explicit"
-  }
+  },
+  "files.watcherExclude": {
+    "**/.devstate/**": true,
+    "**/tmp/**": true,
+    "**/sites/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/.devstate/**": true,
+    "**/tmp/**": true,
+    "**/sites/**": true,
+    "**/node_modules/**": true
+  },
+  "vitest.rootConfig": "vite.config.ts",
+  "vitest.configSearchPatternInclude": "vite.config.ts",
+  "vitest.configSearchPatternExclude": "{**/node_modules/**,**/vendor/**,**/.*/**,**/*.d.ts,**/tmp/**,**/sites/**}",
+  "vitest.filesWatcherInclude": "{src,lib}/**/*.{test,spec}.{ts,tsx,js,jsx}",
+  "vitest.watchOnStartup": false
 }

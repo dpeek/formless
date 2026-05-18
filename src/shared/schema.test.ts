@@ -4777,15 +4777,21 @@ describe("personal site sample schema", () => {
       },
     });
     expect(schema.screens).toMatchObject({
-      siteEditor: {
+      siteSettings: {
         type: "workspace",
-        label: "Site",
+        label: "Settings",
+        path: "/settings",
         navigation: { primary: true },
         layout: {
-          sections: [
-            { id: "settings", type: "collection", view: "siteSettingsHome" },
-            { id: "site", type: "collection", view: "siteCompositionHome" },
-          ],
+          sections: [{ id: "settings", type: "collection", view: "siteSettingsHome" }],
+        },
+      },
+      siteEditor: {
+        type: "workspace",
+        label: "Blocks",
+        navigation: { primary: true },
+        layout: {
+          sections: [{ id: "site", type: "collection", view: "siteCompositionHome" }],
         },
       },
     });

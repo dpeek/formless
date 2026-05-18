@@ -1763,10 +1763,10 @@
     }
   },
   "screens": {
-    "siteEditor": {
+    "siteSettings": {
       "type": "workspace",
-      "label": "Site",
-      "path": "/",
+      "label": "Settings",
+      "path": "/settings",
       "navigation": {
         "primary": true
       },
@@ -1777,7 +1777,20 @@
             "id": "settings",
             "type": "collection",
             "view": "siteSettingsHome"
-          },
+          }
+        ]
+      }
+    },
+    "siteEditor": {
+      "type": "workspace",
+      "label": "Blocks",
+      "path": "/",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
           {
             "id": "site",
             "type": "collection",

@@ -1,7 +1,7 @@
 import { parseSvgIconSource, type SvgIconElement } from "@dpeek/formless-ui/svg-icon";
 
 export const DEFAULT_SITE_ICON_SVG =
-  '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" rx="12" fill="#111827"/><path d="M18 42V22h28v6H25v8h17v6H18Z" fill="#fff"/></svg>';
+  '<svg viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="none" width="32" height="32" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path d="M18 16l4-4-4-4" /><path d="M6 8 2 12l4 4" /><path d="M14.5 4l-5 16" /></svg>';
 
 const svgAttributeNameMap: Record<string, string> = {
   "aria-hidden": "aria-hidden",
