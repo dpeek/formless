@@ -10,6 +10,7 @@ import {
   resolveSiteProjectRoot,
   type SiteProjectSource,
 } from "./project-files.ts";
+import type { SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
 import {
   prepareSiteProjectStateDirectory,
   siteProjectStatePath,
@@ -23,11 +24,7 @@ export type SiteProjectDevCommand = {
   label: string;
 };
 
-export type SiteProjectLocalPublishBroker = {
-  close: () => Promise<void>;
-  endpoint: string;
-  token: string;
-};
+export type { SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
 
 export type SiteProjectDevDependencies = {
   cwd: string;
