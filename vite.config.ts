@@ -9,14 +9,22 @@ import { defineConfig } from "vite-plus";
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
 const siteProjectRoot = process.env.FORMLESS_SITE_PROJECT_ROOT;
+const wranglerPersistPath = process.env.FORMLESS_WRANGLER_PERSIST;
 const serverFsAllow = [
   packageRoot,
   ...(installedNodeModulesRoot ? [installedNodeModulesRoot] : []),
   ...(siteProjectRoot ? [siteProjectRoot] : []),
 ];
+const cloudflarePluginConfig = wranglerPersistPath
+  ? { persistState: { path: wranglerPersistPath } }
+  : undefined;
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), ...(process.env.VITEST ? [] : [cloudflare()])],
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(process.env.VITEST ? [] : [cloudflare(cloudflarePluginConfig)]),
+  ],
   server: {
     fs: {
       allow: serverFsAllow,

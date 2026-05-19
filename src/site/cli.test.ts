@@ -29,6 +29,8 @@ import {
   publishSiteProject,
   saveSiteProject,
   setupSiteProjectDeploy,
+  siteProjectDevEnv,
+  siteProjectWranglerPersistPath,
   startSiteProjectLocalPublishBroker,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
@@ -231,6 +233,32 @@ describe("Formless Site CLI", () => {
     expect(commands.every((command) => command.env?.CLOUDFLARE_ACCOUNT_ID === "account-123")).toBe(
       true,
     );
+  });
+
+  it("accepts existing .formless gitignore entries without adding duplicates", async () => {
+    const tempDir = await makeTempDir();
+    const projectRoot = path.join(tempDir, "site");
+    const commands: CapturedCommand[] = [];
+
+    await writeFileTree(projectRoot, mediaRecords());
+    await writeFile(path.join(projectRoot, ".gitignore"), ".formless\nnode_modules\n");
+
+    await setupSiteProjectDeploy(
+      {
+        createBucket: false,
+        mediaBucket: "brother-site-media",
+        projectPath: projectRoot,
+        publishUrl: "https://live.example",
+        uploadSecret: false,
+        workerName: "brother-site",
+      },
+      cliDeps(tempDir, { commands, packageRoot: "/package" }),
+    );
+
+    await expect(readFile(path.join(projectRoot, ".gitignore"), "utf8")).resolves.toBe(
+      ".formless\nnode_modules\n",
+    );
+    expect(commands).toEqual([]);
   });
 
   it("publishes project code, media, and records from project config", async () => {
@@ -442,6 +470,27 @@ describe("Formless Site CLI", () => {
       "http://localhost:5173/pages/home",
     );
     expect(() => normalizeSourceUrl("not a url")).toThrow("Source URL is invalid: not a url");
+  });
+
+  it("points Site project dev Wrangler state at the project .formless directory", () => {
+    const projectRoot = path.resolve("/tmp/site");
+    const persistPath = siteProjectWranglerPersistPath(projectRoot);
+
+    expect(persistPath).toBe(path.join(projectRoot, ".formless/wrangler"));
+    expect(
+      siteProjectDevEnv({ FORMLESS_ADMIN_TOKEN: "secret", KEEP: "value" }, projectRoot, "abc123"),
+    ).toMatchObject({
+      FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
+      FORMLESS_SITE_PROJECT_ID: "abc123",
+      FORMLESS_SITE_PROJECT_ROOT: projectRoot,
+      FORMLESS_WRANGLER_PERSIST: persistPath,
+      KEEP: "value",
+      VITE_FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
+      VITE_FORMLESS_SITE_PROJECT_ID: "abc123",
+    });
+    expect(
+      siteProjectDevEnv({ FORMLESS_ADMIN_TOKEN: "secret" }, projectRoot, "abc123"),
+    ).not.toHaveProperty("FORMLESS_ADMIN_TOKEN");
   });
 });
 

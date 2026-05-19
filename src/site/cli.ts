@@ -155,10 +155,12 @@ const projectStateDirectory = ".formless";
 const projectDevStateFile = `${projectStateDirectory}/dev.json`;
 const projectDeployEnvFile = `${projectStateDirectory}/deploy.env`;
 const projectPublishBackupDirectory = `${projectStateDirectory}/backups`;
+const projectWranglerStateDirectory = `${projectStateDirectory}/wrangler`;
 const projectGitignoreFile = ".gitignore";
 const projectStateGitignoreEntry = ".formless/";
 const adminTokenEnvName = "FORMLESS_ADMIN_TOKEN";
 const deployVersionEnvName = "FORMLESS_DEPLOY_VERSION";
+const wranglerPersistEnvName = "FORMLESS_WRANGLER_PERSIST";
 const localPublishBrokerUrlEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL";
 const localPublishBrokerTokenEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN";
 const formlessPackageVersion = packageJson.version;
@@ -521,6 +523,10 @@ export function siteProjectStorageId(projectRoot: string): string {
   return createHash("sha256").update(path.resolve(projectRoot)).digest("hex").slice(0, 16);
 }
 
+export function siteProjectWranglerPersistPath(projectRoot: string): string {
+  return path.resolve(projectRoot, projectWranglerStateDirectory);
+}
+
 export function normalizeSourceUrl(value: string): string {
   try {
     const url = new URL(value);
@@ -540,6 +546,7 @@ async function runSiteProjectDev(
   const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
   const projectId = siteProjectStorageId(project.projectRoot);
   let localSource: string | null = null;
+  await prepareProjectStateDirectory(project.projectRoot);
   const publishBroker = (await isSiteProjectPublishConfigured(project, dependencies))
     ? await startSiteProjectLocalPublishBroker(
         {
@@ -1051,13 +1058,19 @@ async function ensureProjectStateIgnored(gitignorePath: string) {
   const current = (await readFileIfExists(gitignorePath, "utf8")) ?? "";
   const lines = current.split(/\r?\n/);
 
-  if (lines.some((line) => line.trim() === projectStateGitignoreEntry)) {
+  if (lines.some((line) => isProjectStateIgnoreLine(line))) {
     return;
   }
 
   const prefix = current.length === 0 || current.endsWith("\n") ? current : `${current}\n`;
 
   await writeFile(gitignorePath, `${prefix}${projectStateGitignoreEntry}\n`);
+}
+
+function isProjectStateIgnoreLine(line: string): boolean {
+  const value = line.trim();
+
+  return value === projectStateDirectory || value === projectStateGitignoreEntry;
 }
 
 function cloudflareCommandEnv(
@@ -1456,7 +1469,7 @@ function defaultDevSourceCandidates(env: NodeJS.ProcessEnv): string[] {
   return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 }
 
-function siteProjectDevEnv(
+export function siteProjectDevEnv(
   env: NodeJS.ProcessEnv,
   projectRoot: string,
   projectId: string,
@@ -1467,6 +1480,7 @@ function siteProjectDevEnv(
     FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
     FORMLESS_SITE_PROJECT_ROOT: projectRoot,
     FORMLESS_SITE_PROJECT_ID: projectId,
+    [wranglerPersistEnvName]: siteProjectWranglerPersistPath(projectRoot),
     VITE_FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
     VITE_FORMLESS_SITE_PROJECT_ID: projectId,
   };
@@ -1593,6 +1607,11 @@ async function writeProjectDevState(projectRoot: string, state: ProjectDevState)
     path.join(projectRoot, projectDevStateFile),
     `${JSON.stringify(state, null, 2)}\n`,
   );
+}
+
+async function prepareProjectStateDirectory(projectRoot: string) {
+  await mkdir(path.join(projectRoot, projectStateDirectory), { recursive: true });
+  await ensureProjectStateIgnored(path.join(projectRoot, projectGitignoreFile));
 }
 
 async function readProjectDevStateSource(projectRoot: string): Promise<string | null> {
