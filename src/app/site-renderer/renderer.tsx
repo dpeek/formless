@@ -8,15 +8,19 @@ import {
   type SitePageLinkMode,
 } from "./links.ts";
 import {
-  FooterNavigationContext,
-  HeaderNavigationContext,
+  SiteFooter,
+  SiteFooterSection,
+  SiteFooterSocialSection,
+  SiteHeader,
+  SiteHeaderNavGroup,
+} from "./chrome.tsx";
+import {
   PagePlacementFlow,
   SitePageShell,
-  useFooterNavigation,
   useHeaderNavigation,
   useSitePageLinkMode,
   useSiteRouteSlug,
-  useSiteTheme,
+  useFooterNavigation,
   type PublicSiteTheme,
   type PublicSiteThemeController,
 } from "./page.tsx";
@@ -42,11 +46,19 @@ export function SitePageRenderer({
 }
 
 const sitePageRendererParts = {
-  Footer: FooterGroup,
-  Header: HeaderGroup,
+  Footer: SiteRendererFooter,
+  Header: SiteRendererHeader,
   Placement: SitePlacementRenderer,
   PrimaryImage,
 };
+
+function SiteRendererHeader({ block }: { block: SiteBlockNode }) {
+  return <SiteHeader block={block} Placement={SitePlacementRenderer} />;
+}
+
+function SiteRendererFooter({ block }: { block: SiteBlockNode }) {
+  return <SiteFooter block={block} Placement={SitePlacementRenderer} />;
+}
 
 function SitePlacementRenderer({ placement }: { placement: SitePlacementNode }) {
   return <SiteBlockRenderer block={placement.block} placement={placement} />;
@@ -63,16 +75,16 @@ function SiteBlockRenderer({
     case "page":
       return <PageBlock block={block} />;
     case "header":
-      return <HeaderGroup block={block} />;
+      return <SiteRendererHeader block={block} />;
     case "headerPrimary":
     case "headerSecondary":
-      return <HeaderNavGroup block={block} />;
+      return <SiteHeaderNavGroup block={block} Placement={SitePlacementRenderer} />;
     case "footer":
-      return <FooterGroup block={block} />;
+      return <SiteRendererFooter block={block} />;
     case "footerSection":
-      return <FooterSection block={block} />;
+      return <SiteFooterSection block={block} Placement={SitePlacementRenderer} />;
     case "footerSocial":
-      return <FooterSocialSection block={block} />;
+      return <SiteFooterSocialSection block={block} />;
     case "group":
       return <GroupBlock block={block} placement={placement} />;
     case "hero":
@@ -114,206 +126,6 @@ function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: Si
         <SitePlacementRenderer key={placement.id} placement={placement} />
       ))}
     </section>
-  );
-}
-
-function HeaderGroup({ block }: { block: SiteBlockNode }) {
-  const { primary, secondary } = partitionHeaderPlacements(block.placements);
-
-  return (
-    <header className="text-zinc-900 dark:text-zinc-100" data-site-header>
-      <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-6 py-8 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
-        <HeaderNavigationContext.Provider value={true}>
-          <nav
-            aria-label={`${block.label} primary`}
-            className="min-w-0 justify-self-start"
-            data-site-header-primary
-          >
-            <div
-              className="hidden flex-wrap items-center gap-4 text-lg sm:flex"
-              data-site-header-nav="desktop"
-            >
-              <SitePlacementList placements={primary} />
-            </div>
-            <div
-              className="flex min-w-0 items-center gap-2 sm:hidden"
-              data-site-header-mobile-primary
-            >
-              <SitePlacementList placements={primary} />
-            </div>
-          </nav>
-          {secondary.length > 0 ? (
-            <nav
-              aria-label={`${block.label} secondary`}
-              className="hidden min-w-0 justify-self-center sm:block"
-              data-site-header-secondary
-            >
-              <div
-                className="flex flex-wrap items-center justify-center gap-4 text-lg"
-                data-site-header-nav="secondary"
-              >
-                <SitePlacementList placements={secondary} />
-              </div>
-            </nav>
-          ) : (
-            <div className="hidden sm:block" />
-          )}
-          <div className="flex items-center justify-end gap-2 justify-self-end">
-            {secondary.length > 0 ? (
-              <details className="group relative shrink-0 sm:hidden" data-site-header-mobile-menu>
-                <summary
-                  aria-label={`${block.label} menu`}
-                  className="flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md px-2 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 hover:text-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-400 [&::-webkit-details-marker]:hidden dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
-                >
-                  <span>Menu</span>
-                </summary>
-                <div className="absolute right-0 z-10 mt-2 grid min-w-36 gap-2 rounded-md border border-zinc-200 bg-white p-3 text-zinc-900 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
-                  <SitePlacementList placements={secondary} />
-                </div>
-              </details>
-            ) : null}
-            <SiteThemeToggle />
-          </div>
-        </HeaderNavigationContext.Provider>
-      </div>
-    </header>
-  );
-}
-
-function HeaderNavGroup({ block }: { block: SiteBlockNode }) {
-  return <SitePlacementList placements={block.placements} />;
-}
-
-function SiteThemeToggle() {
-  const { theme, toggleTheme } = useSiteTheme();
-  const nextTheme = theme === "dark" ? "light" : "dark";
-
-  return (
-    <button
-      aria-label={`Switch to ${nextTheme} mode`}
-      aria-pressed={theme === "dark"}
-      className="flex h-8 shrink-0 items-center justify-center rounded-md px-2.5 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 hover:text-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-400 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
-      data-site-theme-toggle
-      onClick={toggleTheme}
-      title={`Switch to ${nextTheme} mode`}
-      type="button"
-    >
-      {theme === "dark" ? "Light" : "Dark"}
-    </button>
-  );
-}
-
-function FooterGroup({ block }: { block: SiteBlockNode }) {
-  const { notes, sections } = partitionFooterPlacements(block.placements);
-
-  return (
-    <footer className="border-t border-dashed" data-site-footer>
-      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-18">
-        {sections.length > 0 ? (
-          <div className="flex max-w-lg flex-wrap justify-between gap-x-14 gap-y-8 text-sm">
-            {sections.map((placement) => (
-              <SitePlacementRenderer key={placement.id} placement={placement} />
-            ))}
-          </div>
-        ) : null}
-        {notes.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            {notes.map((placement) => (
-              <FooterNote key={placement.id} placement={placement} />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </footer>
-  );
-}
-
-function FooterNote({ placement }: { placement: SitePlacementNode }) {
-  const block = placement.block;
-
-  if (block.type === "group" && block.placements.length === 0) {
-    const text = block.body ?? displayLabel(block, placement);
-
-    return text ? (
-      <PlainText text={text} className="text-sm text-zinc-700 dark:text-zinc-300" />
-    ) : null;
-  }
-
-  return <SitePlacementRenderer placement={placement} />;
-}
-
-function partitionFooterPlacements(placements: SitePlacementNode[]): {
-  notes: SitePlacementNode[];
-  sections: SitePlacementNode[];
-} {
-  const sections: SitePlacementNode[] = [];
-  const notes: SitePlacementNode[] = [];
-
-  for (const placement of placements) {
-    if (isFooterSectionPlacement(placement)) {
-      sections.push(placement);
-    } else {
-      notes.push(placement);
-    }
-  }
-
-  return { notes, sections };
-}
-
-function isFooterSectionPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.type === "footerSection" || placement.block.type === "footerSocial";
-}
-
-function FooterSection({ block }: { block: SiteBlockNode }) {
-  return (
-    <section className="w-full max-w-48 space-y-3 sm:w-48">
-      <nav aria-label={block.label} className="flex flex-col items-start gap-2">
-        <FooterNavigationContext.Provider value={true}>
-          <SitePlacementList placements={block.placements} />
-        </FooterNavigationContext.Provider>
-      </nav>
-    </section>
-  );
-}
-
-function FooterSocialSection({ block }: { block: SiteBlockNode }) {
-  return (
-    <section className="w-full max-w-48 space-y-3 sm:w-48">
-      <nav aria-label={block.label} className="flex flex-wrap items-center gap-2">
-        {block.placements.map((placement) => (
-          <FooterSocialLink key={placement.id} placement={placement} />
-        ))}
-      </nav>
-    </section>
-  );
-}
-
-function FooterSocialLink({ placement }: { placement: SitePlacementNode }) {
-  const linkMode = useSitePageLinkMode();
-  const block = placement.block;
-  const href = blockHref(block, linkMode);
-
-  if (!href) {
-    return null;
-  }
-
-  const label = displayLabel(block, placement);
-
-  return (
-    <a
-      aria-label={label}
-      className="inline-flex size-8 items-center justify-center text-current transition hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
-      href={href}
-      rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
-      target={isExternalSiteHref(href) ? "_blank" : undefined}
-      title={label}
-    >
-      {block.icon ? (
-        <SvgIcon className="size-6" source={block.icon} />
-      ) : (
-        <span className="text-sm font-medium">{label}</span>
-      )}
-    </a>
   );
 }
 
@@ -705,34 +517,6 @@ function isDefaultPlacement(placement: SitePlacementNode): boolean {
 
 function featureMediaSide(block: SiteBlockNode): "left" | "right" {
   return block.alignment === "right" ? "right" : "left";
-}
-
-function partitionHeaderPlacements(placements: SitePlacementNode[]): {
-  primary: SitePlacementNode[];
-  secondary: SitePlacementNode[];
-} {
-  const primaryGroup = placements.find((placement) => placement.block.type === "headerPrimary");
-  const secondaryGroup = placements.find((placement) => placement.block.type === "headerSecondary");
-
-  if (primaryGroup || secondaryGroup) {
-    const directPlacements = placements.filter(
-      (placement) =>
-        placement.block.type !== "headerPrimary" && placement.block.type !== "headerSecondary",
-    );
-
-    return {
-      primary: primaryGroup?.block.placements ?? directPlacements.slice(0, 1),
-      secondary: [
-        ...(secondaryGroup?.block.placements ?? []),
-        ...(primaryGroup ? directPlacements : directPlacements.slice(1)),
-      ],
-    };
-  }
-
-  return {
-    primary: placements.slice(0, 1),
-    secondary: placements.slice(1),
-  };
 }
 
 function PlainText({ className, text }: { className?: string; text: string }) {
