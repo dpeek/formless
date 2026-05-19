@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { DateInput } from "@dpeek/formless-ui/date";
 import { Button } from "@dpeek/formless-ui/button";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
-import { ColorInput } from "@dpeek/formless-ui/color";
 import {
   Dialog,
   DialogClose,
@@ -14,15 +13,7 @@ import {
 import { Field, FieldSet } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { Label } from "@dpeek/formless-ui/label";
-import { MarkdownEditor } from "@dpeek/formless-ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@dpeek/formless-ui/native-select";
-import { FormattedNumberInput } from "@dpeek/formless-ui/number-input";
-import {
-  SourceEditor,
-  SourcePreviewFieldEditor,
-  sourcePreviewPanelClassName,
-} from "@dpeek/formless-ui/source-preview";
-import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
@@ -45,12 +36,14 @@ import {
   selectCreateFieldsForInputValues,
 } from "../../shared/create-defaults.ts";
 import type { FieldVisibilityValue } from "../../shared/schema.ts";
-import { selectGeneratedFieldControl } from "./field-controls.ts";
 import {
-  decodeNumberEditorInputValue,
-  encodeNumberEditorInputValue,
-  numberInputValueToFieldValue,
-} from "./format.ts";
+  GeneratedColorFieldControl,
+  GeneratedIconSourceFieldControl,
+  GeneratedMarkdownFieldControl,
+  GeneratedNumberFieldControl,
+} from "./field-control-primitives.tsx";
+import { selectGeneratedFieldControl } from "./field-controls.ts";
+import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
 import { useSchemaKey } from "./schema-app-context.tsx";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
@@ -483,33 +476,13 @@ function CreateIconField({
 
   return (
     <div ref={fieldRef}>
-      <SourcePreviewFieldEditor
-        defaultMode="source"
-        kind="icon"
-        preview={<CreateIconPreview label={label} source={value} />}
-        source={
-          <SourceEditor
-            aria-label={label}
-            name={fieldName}
-            onChange={setValue}
-            placeholder={'<svg viewBox="0 0 24 24">...</svg>'}
-            required={required}
-            sourceKind="svg"
-            value={value}
-          />
-        }
+      <GeneratedIconSourceFieldControl
+        label={label}
+        name={fieldName}
+        onChange={setValue}
+        required={required}
+        value={value}
       />
-    </div>
-  );
-}
-
-function CreateIconPreview({ label, source }: { label: string; source: string }) {
-  return (
-    <div
-      className={`${sourcePreviewPanelClassName} flex items-center justify-center`}
-      data-web-svg-preview="icon"
-    >
-      <SvgIcon ariaLabel={`${label} preview`} className="size-12" source={source} />
     </div>
   );
 }
@@ -543,13 +516,7 @@ function CreateMarkdownField({
   return (
     <>
       <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
-      <MarkdownEditor
-        aria-label={label}
-        className="min-h-40 rounded border border-slate-300 bg-white px-3 py-2 text-sm"
-        onChange={setValue}
-        placeholder={label}
-        value={value}
-      />
+      <GeneratedMarkdownFieldControl label={label} onChange={setValue} value={value} />
     </>
   );
 }
@@ -585,9 +552,8 @@ function CreateColorField({
   return (
     <>
       <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
-      <ColorInput
-        ariaLabel={label}
-        onBlur={() => undefined}
+      <GeneratedColorFieldControl
+        label={label}
         onChange={setValue}
         required={required}
         value={value}
@@ -628,10 +594,8 @@ function CreateNumberField({
 
   return (
     <span className="block" ref={fieldRef}>
-      <FormattedNumberInput
+      <GeneratedNumberFieldControl
         aria-label={label}
-        decode={(inputValue) => decodeNumberEditorInputValue(inputValue, "plain")}
-        encode={(inputValue) => encodeNumberEditorInputValue(inputValue, "plain")}
         name={fieldName}
         onValueChange={setValue}
         required={required}

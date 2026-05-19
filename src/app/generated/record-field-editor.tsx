@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
-import { ColorInput } from "@dpeek/formless-ui/color";
 import { DateInput } from "@dpeek/formless-ui/date";
 import {
   Dialog,
@@ -14,14 +13,7 @@ import {
 import { Field, FieldError } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { Label } from "@dpeek/formless-ui/label";
-import { MarkdownEditor } from "@dpeek/formless-ui/markdown";
 import { NativeSelect, NativeSelectOption } from "@dpeek/formless-ui/native-select";
-import { FormattedNumberInput } from "@dpeek/formless-ui/number-input";
-import {
-  SourceEditor,
-  SourcePreviewFieldEditor,
-  sourcePreviewPanelClassName,
-} from "@dpeek/formless-ui/source-preview";
 import { parseSvgIconSource, SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
@@ -38,6 +30,12 @@ import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import type { AppSchema, FieldSchema } from "../../shared/schema.ts";
 import type { SchemaKey } from "../../shared/schema-apps.ts";
+import {
+  GeneratedColorFieldControl,
+  GeneratedIconSourceFieldControl,
+  GeneratedMarkdownFieldControl,
+  GeneratedNumberFieldControl,
+} from "./field-control-primitives.tsx";
 import { selectGeneratedFieldControl } from "./field-controls.ts";
 import {
   decodeNumberEditorInputValue,
@@ -443,14 +441,12 @@ export function RecordFieldEditor({
             uploadEnabled={isSiteImageUploadAvailable(schemaKey)}
           />
         ) : isRichMarkdownEditor ? (
-          <MarkdownEditor
-            aria-invalid={error !== null}
-            aria-label={label}
-            className="min-h-40 rounded border border-slate-300 bg-white px-3 py-2 text-sm"
+          <GeneratedMarkdownFieldControl
+            ariaInvalid={error !== null}
+            label={label}
             onBlur={handleMarkdownBlur}
             onChange={setDraft}
             onKeyDown={handleMarkdownKeyDown}
-            placeholder={label}
             readOnly={!canPatch || isPending}
             value={draft}
           />
@@ -474,8 +470,7 @@ export function RecordFieldEditor({
             value={draft}
           />
         ) : isColorEditor ? (
-          <ColorInput
-            ariaLabel={label}
+          <GeneratedColorFieldControl
             className={
               density === "compact"
                 ? "w-full [&_[data-slot=input-group]]:h-6 [&_input]:h-6 [&_input]:text-xs"
@@ -483,6 +478,7 @@ export function RecordFieldEditor({
             }
             disabled={!canPatch || isPending}
             error={error ?? undefined}
+            label={label}
             onBlur={() => {
               if (commitPolicy === "field-commit") {
                 void commit(inputValueToFieldValue(field, draft));
@@ -597,7 +593,7 @@ export function RecordFieldEditor({
             unitRequired={valueUnitConfig.unitField.required}
           />
         ) : isNumberEditor ? (
-          <FormattedNumberInput
+          <GeneratedNumberFieldControl
             aria-invalid={error !== null ? true : undefined}
             aria-label={label}
             className={
@@ -606,9 +602,8 @@ export function RecordFieldEditor({
                 : "w-full rounded border border-slate-300 px-3 py-2"
             }
             commitOnBlur={commitPolicy === "field-commit"}
-            decode={(value) => decodeNumberEditorInputValue(value, numberFormat)}
             disabled={!canPatch || isPending}
-            encode={(value) => encodeNumberEditorInputValue(value, numberFormat)}
+            format={numberFormat}
             onInvalidCommit={(message) => {
               setError(message);
             }}
@@ -726,21 +721,13 @@ function IconFieldEditor({
           <DialogHeader>
             <DialogTitle>Edit {label}</DialogTitle>
           </DialogHeader>
-          <SourcePreviewFieldEditor
-            defaultMode="source"
-            kind="icon"
-            preview={<IconSourcePreview label={label} source={draft} />}
-            source={
-              <SourceEditor
-                aria-invalid={error !== null ? true : undefined}
-                aria-label={`${label} SVG source`}
-                onChange={onDraftChange}
-                placeholder={'<svg viewBox="0 0 24 24">...</svg>'}
-                readOnly={!canPatch || isPending}
-                sourceKind="svg"
-                value={draft}
-              />
-            }
+          <GeneratedIconSourceFieldControl
+            ariaInvalid={error !== null ? true : undefined}
+            label={label}
+            onChange={onDraftChange}
+            readOnly={!canPatch || isPending}
+            sourceLabel={`${label} SVG source`}
+            value={draft}
           />
           {error ? <FieldError>{error}</FieldError> : null}
           <DialogFooter>
@@ -752,17 +739,6 @@ function IconFieldEditor({
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function IconSourcePreview({ label, source }: { label: string; source: string }) {
-  return (
-    <div
-      className={`${sourcePreviewPanelClassName} flex items-center justify-center`}
-      data-web-svg-preview="icon"
-    >
-      <SvgIcon ariaLabel={`${label} preview`} className="size-12" source={source} />
-    </div>
   );
 }
 
