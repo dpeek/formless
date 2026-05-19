@@ -1,13 +1,8 @@
 import type { ComponentType } from "react";
-import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 
-import { isExternalSiteHref, profileAwareSiteHref, type SitePageLinkMode } from "./links.ts";
-import {
-  FooterNavigationContext,
-  HeaderNavigationContext,
-  useSitePageLinkMode,
-  useSiteTheme,
-} from "./page.tsx";
+import { displayLabel, PlainText } from "./display.tsx";
+import { SiteFooterSocialLink } from "./link-rendering.tsx";
+import { FooterNavigationContext, HeaderNavigationContext, useSiteTheme } from "./page.tsx";
 import type { SiteBlockNode, SitePlacementNode } from "../../shared/protocol.ts";
 
 type SitePlacementRendererComponent = ComponentType<{ placement: SitePlacementNode }>;
@@ -206,39 +201,10 @@ export function SiteFooterSocialSection({ block }: { block: SiteBlockNode }) {
     <section className="w-full max-w-48 space-y-3 sm:w-48">
       <nav aria-label={block.label} className="flex flex-wrap items-center gap-2">
         {block.placements.map((placement) => (
-          <FooterSocialLink key={placement.id} placement={placement} />
+          <SiteFooterSocialLink key={placement.id} placement={placement} />
         ))}
       </nav>
     </section>
-  );
-}
-
-function FooterSocialLink({ placement }: { placement: SitePlacementNode }) {
-  const linkMode = useSitePageLinkMode();
-  const block = placement.block;
-  const href = blockHref(block, linkMode);
-
-  if (!href) {
-    return null;
-  }
-
-  const label = displayLabel(block, placement);
-
-  return (
-    <a
-      aria-label={label}
-      className="inline-flex size-8 items-center justify-center text-current transition hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
-      href={href}
-      rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
-      target={isExternalSiteHref(href) ? "_blank" : undefined}
-      title={label}
-    >
-      {block.icon ? (
-        <SvgIcon className="size-6" source={block.icon} />
-      ) : (
-        <span className="text-sm font-medium">{label}</span>
-      )}
-    </a>
   );
 }
 
@@ -284,28 +250,4 @@ function partitionHeaderPlacements(placements: SitePlacementNode[]): {
     primary: placements.slice(0, 1),
     secondary: placements.slice(1),
   };
-}
-
-function blockHref(block: SiteBlockNode, linkMode: SitePageLinkMode): string | undefined {
-  if (block.href) {
-    return profileAwareSiteHref(block.href, linkMode);
-  }
-
-  return undefined;
-}
-
-function displayLabel(block: SiteBlockNode, placement?: SitePlacementNode): string {
-  return placement?.label ?? block.label;
-}
-
-function PlainText({ className, text }: { className?: string; text: string }) {
-  return (
-    <div className={className}>
-      {text.split(/\n{2,}/).map((paragraph, index) => (
-        <p key={index} className="whitespace-pre-line">
-          {paragraph}
-        </p>
-      ))}
-    </div>
-  );
 }

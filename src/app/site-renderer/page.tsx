@@ -1,16 +1,9 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 
+import { primaryImagePlacement, type PublicSitePrimaryImageVariant } from "./media.tsx";
+import type { PublicSiteThemeController } from "./theme.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
 import type { SitePageLinkMode } from "./links.ts";
-
-export type PublicSiteTheme = "light" | "dark";
-
-export type PublicSiteThemeController = {
-  theme: PublicSiteTheme;
-  toggleTheme: () => void;
-};
-
-export type PublicSitePrimaryImageVariant = "post-detail" | "summary";
 
 type SitePageRendererParts = {
   Footer: ComponentType<{ block: SiteBlockNode }>;
@@ -127,12 +120,6 @@ function PageMain({ children }: { children: ReactNode }) {
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-6 py-10">
       {children}
     </main>
-  );
-}
-
-function primaryImagePlacement(block: SiteBlockNode): SitePlacementNode | undefined {
-  return block.placements.find(
-    (placement) => placement.slot === "primaryImage" && placement.block.type === "image",
   );
 }
 

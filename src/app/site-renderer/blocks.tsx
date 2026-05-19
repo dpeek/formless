@@ -1,13 +1,6 @@
 import { type ReactNode } from "react";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown-renderer";
-import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 
-import {
-  isExternalSiteHref,
-  profileAwareSiteHref,
-  siteHrefMatchesRoute,
-  type SitePageLinkMode,
-} from "./links.ts";
 import {
   SiteFooter,
   SiteFooterSection,
@@ -15,16 +8,18 @@ import {
   SiteHeader,
   SiteHeaderNavGroup,
 } from "./chrome.tsx";
+import { displayLabel, PlainText } from "./display.tsx";
+import { SiteLinkBlock, blockHref, siteLinkRel, siteLinkTarget } from "./link-rendering.tsx";
 import {
-  PagePlacementFlow,
-  useFooterNavigation,
-  useHeaderNavigation,
-  useSitePageLinkMode,
-  useSiteRouteSlug,
-} from "./page.tsx";
+  ImageBlock,
+  PrimaryImage,
+  imagePlacements,
+  primaryImagePlacement,
+  slottedImagePlacements,
+} from "./media.tsx";
+import { PagePlacementFlow, useSitePageLinkMode } from "./page.tsx";
 import type { SiteBlockNode, SitePlacementNode } from "../../shared/protocol.ts";
 
-const PRIMARY_IMAGE_SLOT = "primaryImage";
 const FEATURE_MEDIA_SLOT = "media";
 const FEATURE_ACTIONS_SLOT = "actions";
 
@@ -77,7 +72,7 @@ function SiteBlockRenderer({
     case "markdown":
       return <MarkdownBlock block={block} />;
     case "link":
-      return <LinkBlock block={block} placement={placement} />;
+      return <SiteLinkBlock block={block} placement={placement} />;
     case "image":
       return <ImageBlock block={block} />;
     case "postList":
@@ -113,7 +108,7 @@ function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: Si
 }
 
 function HeroBlock({ block }: { block: SiteBlockNode }) {
-  const media = mediaPlacements(block);
+  const media = imagePlacements(block);
   const claimed = placementIdSet(media);
 
   return (
@@ -139,7 +134,7 @@ function HeroBlock({ block }: { block: SiteBlockNode }) {
 }
 
 function FeatureBlock({ block }: { block: SiteBlockNode }) {
-  const media = slottedPlacements(block, FEATURE_MEDIA_SLOT, "image");
+  const media = slottedImagePlacements(block, FEATURE_MEDIA_SLOT);
   const actions = slottedPlacements(block, FEATURE_ACTIONS_SLOT, "link");
   const defaultPlacements = block.placements.filter(isDefaultPlacement);
   const mediaSide = featureMediaSide(block);
@@ -231,50 +226,6 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
   );
 }
 
-function LinkBlock({ block, placement }: { block: SiteBlockNode; placement?: SitePlacementNode }) {
-  const linkMode = useSitePageLinkMode();
-  const routeSlug = useSiteRouteSlug();
-  const isHeaderNavigation = useHeaderNavigation();
-  const isFooterNavigation = useFooterNavigation();
-  const href = blockHref(block, linkMode);
-
-  if (!href) {
-    return null;
-  }
-
-  const isActive = isHeaderNavigation && siteHrefMatchesRoute(href, routeSlug);
-  const shouldRenderIcon = Boolean(block.icon && !isHeaderNavigation);
-
-  return (
-    <a
-      aria-current={isActive ? "page" : undefined}
-      className={linkClassName(isActive, isFooterNavigation)}
-      data-site-nav-active={isActive ? "true" : undefined}
-      href={href}
-      rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
-      target={isExternalSiteHref(href) ? "_blank" : undefined}
-    >
-      {shouldRenderIcon ? (
-        <>
-          <SvgIcon className="size-4" source={block.icon} />
-          <span className="min-w-0 truncate">{displayLabel(block, placement)}</span>
-        </>
-      ) : (
-        displayLabel(block, placement)
-      )}
-    </a>
-  );
-}
-
-function linkClassName(isActive: boolean, isFooterNavigation: boolean): string {
-  const iconGap = isFooterNavigation ? "gap-2.5" : "gap-1.5";
-  const base = `inline-flex max-w-full items-center ${iconGap} whitespace-nowrap font-medium text-current underline underline-offset-4 transition`;
-
-  return isActive
-    ? `${base} decoration-current decoration-dashed hover:decoration-solid`
-    : `${base} decoration-transparent hover:decoration-current`;
-}
-
 function ContentListBlock({ block }: { block: SiteBlockNode }) {
   const items = block.query?.items ?? [];
 
@@ -315,8 +266,8 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
           className="absolute inset-0 z-10 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-600"
           data-site-summary-link={block.type}
           href={href}
-          rel={isExternalSiteHref(href) ? "noreferrer" : undefined}
-          target={isExternalSiteHref(href) ? "_blank" : undefined}
+          rel={siteLinkRel(href)}
+          target={siteLinkTarget(href)}
         >
           <span className="sr-only">{block.label}</span>
         </a>
@@ -361,52 +312,6 @@ function ContentSummary({ block }: { block: SiteBlockNode }) {
   );
 }
 
-function PrimaryImage({
-  placement,
-  variant,
-}: {
-  placement: SitePlacementNode;
-  variant: "post-detail" | "summary";
-}) {
-  const block = placement.block;
-
-  if (block.type !== "image") {
-    return null;
-  }
-
-  const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "4 / 3";
-  const imageClassName =
-    variant === "summary"
-      ? "block h-auto max-h-64 w-full object-contain sm:max-h-52"
-      : "h-full w-full object-cover";
-  const placeholderClassName =
-    variant === "summary"
-      ? "flex min-h-32 items-center justify-center bg-teal-100 p-4 text-center text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"
-      : "flex min-h-48 items-center justify-center bg-teal-100 p-6 text-center text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100";
-
-  return (
-    <figure
-      className="overflow-hidden rounded-md border border-zinc-200 bg-teal-50 dark:border-zinc-800 dark:bg-teal-950/40"
-      data-site-primary-image={variant}
-    >
-      {block.href ? (
-        <img
-          alt={block.label}
-          className={imageClassName}
-          height={block.height}
-          src={block.href}
-          style={{ aspectRatio }}
-          width={block.width}
-        />
-      ) : (
-        <div aria-label={block.label} className={placeholderClassName} style={{ aspectRatio }}>
-          <span>{block.label}</span>
-        </div>
-      )}
-    </figure>
-  );
-}
-
 function ContentSummaryBody({ block }: { block: SiteBlockNode }) {
   if (!block.body) {
     return null;
@@ -423,36 +328,6 @@ function ContentSummaryBody({ block }: { block: SiteBlockNode }) {
   }
 
   return <PlainText text={block.body} className="text-sm text-zinc-600 dark:text-zinc-300" />;
-}
-
-function ImageBlock({ block }: { block: SiteBlockNode }) {
-  const aspectRatio = block.width && block.height ? `${block.width} / ${block.height}` : "4 / 3";
-
-  return (
-    <figure className="overflow-hidden rounded-md border border-zinc-200 bg-teal-50 dark:border-zinc-800 dark:bg-teal-950/40">
-      {block.href ? (
-        <img
-          alt={block.label}
-          className="h-full w-full object-cover"
-          height={block.height}
-          src={block.href}
-          style={{ aspectRatio }}
-          width={block.width}
-        />
-      ) : (
-        <div
-          aria-label={block.label}
-          className="flex min-h-64 items-center justify-center bg-teal-100 p-6 text-center text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"
-          style={{ aspectRatio }}
-        >
-          <span>{block.label}</span>
-        </div>
-      )}
-      <figcaption className="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">
-        {block.label}
-      </figcaption>
-    </figure>
-  );
 }
 
 function SitePlacementList({ placements }: { placements: SitePlacementNode[] }) {
@@ -474,10 +349,6 @@ function renderUnclaimedPlacements(
     .map((placement) => <SitePlacementRenderer key={placement.id} placement={placement} />);
 }
 
-function mediaPlacements(block: SiteBlockNode): SitePlacementNode[] {
-  return block.placements.filter((placement) => placement.block.type === "image");
-}
-
 function slottedPlacements(block: SiteBlockNode, slot: string, type: string): SitePlacementNode[] {
   return block.placements.filter(
     (placement) => placement.slot === slot && placement.block.type === type,
@@ -488,40 +359,10 @@ function placementIdSet(placements: SitePlacementNode[]): Set<string> {
   return new Set(placements.map((placement) => placement.id));
 }
 
-function primaryImagePlacement(block: SiteBlockNode): SitePlacementNode | undefined {
-  return block.placements.find(
-    (placement) => placement.slot === PRIMARY_IMAGE_SLOT && placement.block.type === "image",
-  );
-}
-
 function isDefaultPlacement(placement: SitePlacementNode): boolean {
   return !placement.slot;
 }
 
 function featureMediaSide(block: SiteBlockNode): "left" | "right" {
   return block.alignment === "right" ? "right" : "left";
-}
-
-function PlainText({ className, text }: { className?: string; text: string }) {
-  return (
-    <div className={className}>
-      {text.split(/\n{2,}/).map((paragraph, index) => (
-        <p key={index} className="whitespace-pre-line">
-          {paragraph}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function blockHref(block: SiteBlockNode, linkMode: SitePageLinkMode): string | undefined {
-  if (block.href) {
-    return profileAwareSiteHref(block.href, linkMode);
-  }
-
-  return undefined;
-}
-
-function displayLabel(block: SiteBlockNode, placement?: SitePlacementNode): string {
-  return placement?.label ?? block.label;
 }
