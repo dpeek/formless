@@ -520,9 +520,7 @@ export function selectScreenModelByPath(
 
 export function selectScreenModels(schema: AppSchema): HomeScreenModel[] {
   if (schema.screens === undefined) {
-    return assignScreenModelPaths(
-      selectPrimaryCollectionModels(schema).map(selectLegacyCollectionScreenModel),
-    );
+    throw new Error('Schema must include "screens".');
   }
 
   const collectionModelsByViewName = new Map(
@@ -614,29 +612,6 @@ function assignScreenModelPaths(models: HomeScreenModel[]): HomeScreenModel[] {
     hasRootPath = true;
     return { ...model, path: "/" };
   });
-}
-
-function selectLegacyCollectionScreenModel(collectionModel: HomeViewModel): HomeScreenModel {
-  return {
-    screenName: collectionModel.viewName,
-    type: "workspace",
-    label: collectionModel.label,
-    navigation: {
-      primary: collectionModel.navigation.primary,
-    },
-    layout: {
-      type: "stack",
-      sections: [
-        {
-          id: collectionModel.viewName,
-          type: "collection",
-          label: collectionModel.label,
-          viewName: collectionModel.viewName,
-          collection: collectionModel.collection,
-        },
-      ],
-    },
-  };
 }
 
 function selectHomeCollection(

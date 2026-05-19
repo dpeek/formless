@@ -1951,33 +1951,18 @@ describe("home view model collections", () => {
     ]);
   });
 
-  it("builds legacy screen models from primary collection models when screens are absent", () => {
+  it("rejects missing screens instead of building legacy collection screen models", () => {
     const schemaWithoutScreens: AppSchema = { ...siteSourceSchema, screens: undefined };
-    const collectionModels = selectPrimaryCollectionModels(schemaWithoutScreens);
-    const screenModels = selectScreenModels(schemaWithoutScreens);
 
-    expect(screenModels.map((model) => model.screenName)).toEqual(
-      collectionModels.map((model) => model.viewName),
+    expect(() => selectScreenModels(schemaWithoutScreens)).toThrow(
+      'Schema must include "screens".',
     );
-    expect(
-      selectPrimaryScreenModels(schemaWithoutScreens).map((model) => model.screenName),
-    ).toEqual(["siteCompositionHome"]);
-    expect(screenModels.map(summarizeScreenModel)).toEqual([
-      {
-        screenName: "siteCompositionHome",
-        label: "Site",
-        primary: true,
-        layoutType: "stack",
-        sections: [
-          {
-            id: "siteCompositionHome",
-            label: "Site",
-            viewName: "siteCompositionHome",
-            entityName: "blockPlacement",
-          },
-        ],
-      },
-    ]);
+    expect(() => selectPrimaryScreenModels(schemaWithoutScreens)).toThrow(
+      'Schema must include "screens".',
+    );
+    expect(() => selectScreenModelByPath(schemaWithoutScreens, "/")).toThrow(
+      'Schema must include "screens".',
+    );
   });
 
   it("selects relationship-backed related collections for an entity", () => {
