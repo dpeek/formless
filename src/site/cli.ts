@@ -1,5 +1,5 @@
-import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { spawn as nodeSpawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -21,7 +21,6 @@ import {
 } from "./project-config.ts";
 import {
   buildSiteProjectRecordsFromSnapshot,
-  buildSiteProjectSourceSnapshot,
   formatSiteProjectRecords,
   packageSiteSourceSchema,
   siteProjectMediaAssetsFromRecords,
@@ -29,7 +28,6 @@ import {
 import {
   fetchSiteProjectMediaFiles,
   initSiteProjectSource,
-  readSiteProjectMediaFiles,
   readSiteProjectSource,
   resolveSiteProjectRoot,
   staleSiteProjectSourcePaths,
@@ -37,12 +35,23 @@ import {
   type SiteProjectSource,
 } from "./project-files.ts";
 import {
+  readSiteProjectDevStateSource,
+  runSiteProjectDev,
+  SITE_PROJECT_DEFAULT_LOCAL_SOURCE,
+  type SiteProjectLocalPublishBroker,
+} from "./project-dev.ts";
+import {
+  ensureSiteProjectStateIgnored,
+  SITE_PROJECT_GITIGNORE_ENTRY,
+  SITE_PROJECT_GITIGNORE_FILE,
+  SITE_PROJECT_STATE_DIRECTORY,
+} from "./project-state.ts";
+import {
   runSitePublish,
   type SitePublishCommand,
   type SitePublishDependencies,
   type SitePublishResult,
 } from "./publish.ts";
-import { SITE_MEDIA_ROUTE_PREFIX } from "./source-media.ts";
 
 export {
   formlessCliUsage,
@@ -55,6 +64,13 @@ export {
   resolveSiteProjectRoot,
   type SiteProjectSource,
 } from "./project-files.ts";
+export {
+  readSiteProjectDevStateSource,
+  siteProjectDevEnv,
+  siteProjectStorageId,
+  siteProjectWranglerPersistPath,
+  type SiteProjectLocalPublishBroker,
+} from "./project-dev.ts";
 
 export type FormlessCliRunCommandOptions = {
   cwd: string;
@@ -111,12 +127,6 @@ export type LocalAdminPublishResult = {
   save: SaveSiteProjectResult;
 };
 
-export type SiteProjectLocalPublishBroker = {
-  close: () => Promise<void>;
-  endpoint: string;
-  token: string;
-};
-
 type PackageCommand = {
   args: string[];
   command: string;
@@ -130,30 +140,13 @@ type CompleteSiteProjectDeployConfig = {
   workerName: string;
 };
 
-type ProjectDevState = {
-  adminUrl: string;
-  projectId: string;
-  publicUrl: string;
-  sourceUrl: string;
-  startedAt: string;
-};
-
-const defaultLocalSource = "http://localhost:5173";
-const projectStateDirectory = ".formless";
-const projectDevStateFile = `${projectStateDirectory}/dev.json`;
-const projectDeployEnvFile = `${projectStateDirectory}/deploy.env`;
-const projectPublishBackupDirectory = `${projectStateDirectory}/backups`;
-const projectWranglerStateDirectory = `${projectStateDirectory}/wrangler`;
-const projectGitignoreFile = ".gitignore";
-const projectStateGitignoreEntry = ".formless/";
+const projectDeployEnvFile = `${SITE_PROJECT_STATE_DIRECTORY}/deploy.env`;
+const projectPublishBackupDirectory = `${SITE_PROJECT_STATE_DIRECTORY}/backups`;
+const projectGitignoreFile = SITE_PROJECT_GITIGNORE_FILE;
+const projectStateGitignoreEntry = SITE_PROJECT_GITIGNORE_ENTRY;
 const adminTokenEnvName = "FORMLESS_ADMIN_TOKEN";
 const deployVersionEnvName = "FORMLESS_DEPLOY_VERSION";
-const wranglerPersistEnvName = "FORMLESS_WRANGLER_PERSIST";
-const localPublishBrokerUrlEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL";
-const localPublishBrokerTokenEnvName = "VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN";
 const formlessPackageVersion = packageJson.version;
-const devServerReadyTimeoutMs = 30_000;
-const devServerPollIntervalMs = 250;
 
 type SiteProjectPublishCodeMode = boolean | "if-stale";
 
@@ -182,7 +175,11 @@ export async function runFormlessCli(
       return;
     }
     case "dev":
-      await runSiteProjectDev(command, dependencies);
+      await runSiteProjectDev(command, dependencies, {
+        devCommand: packageRunScriptCommand("dev", dependencies.env),
+        isPublishConfigured: (project) => isSiteProjectPublishConfigured(project, dependencies),
+        startLocalPublishBroker: (input) => startSiteProjectLocalPublishBroker(input, dependencies),
+      });
       return;
     case "deploySetup": {
       const result = await setupSiteProjectDeploy(command, dependencies);
@@ -241,7 +238,9 @@ export async function saveSiteProject(
 ): Promise<SaveSiteProjectResult> {
   const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
   const source = normalizeSourceUrl(
-    input.source ?? (await readProjectDevStateSource(project.projectRoot)) ?? defaultLocalSource,
+    input.source ??
+      (await readSiteProjectDevStateSource(project.projectRoot)) ??
+      SITE_PROJECT_DEFAULT_LOCAL_SOURCE,
   );
   const snapshot = await fetchJson<StoreSnapshot>(dependencies.fetch, siteSnapshotUrl(source));
   const records = buildSiteProjectRecordsFromSnapshot(snapshot);
@@ -316,7 +315,7 @@ export async function setupSiteProjectDeploy(
 
   await writeFile(configPath, formatSiteProjectConfig(config));
   await writeProjectDeployEnv(envPath, { [adminTokenEnvName]: adminToken });
-  await ensureProjectStateIgnored(gitignorePath);
+  await ensureSiteProjectStateIgnored(project.projectRoot);
 
   const commandEnv = cloudflareCommandEnv(dependencies.env, deploy.accountId);
 
@@ -433,104 +432,6 @@ export async function startSiteProjectLocalPublishBroker(
     endpoint,
     token,
   };
-}
-
-export function siteProjectStorageId(projectRoot: string): string {
-  return createHash("sha256").update(path.resolve(projectRoot)).digest("hex").slice(0, 16);
-}
-
-export function siteProjectWranglerPersistPath(projectRoot: string): string {
-  return path.resolve(projectRoot, projectWranglerStateDirectory);
-}
-
-async function runSiteProjectDev(
-  input: { projectPath?: string },
-  dependencies: FormlessCliDependencies,
-) {
-  const project = await readSiteProjectSource(resolveSiteProjectRoot(dependencies.cwd, input));
-  const projectId = siteProjectStorageId(project.projectRoot);
-  let localSource: string | null = null;
-  await prepareProjectStateDirectory(project.projectRoot);
-  const publishBroker = (await isSiteProjectPublishConfigured(project, dependencies))
-    ? await startSiteProjectLocalPublishBroker(
-        {
-          projectPath: project.projectRoot,
-          source: () => localSource,
-        },
-        dependencies,
-      )
-    : null;
-  const devCommand = packageRunScriptCommand("dev", dependencies.env);
-  const child = dependencies.spawn(devCommand.command, devCommand.args, {
-    cwd: dependencies.packageRoot,
-    env: siteProjectDevEnv(
-      dependencies.env,
-      project.projectRoot,
-      projectId,
-      publishBroker ?? undefined,
-    ),
-    stdio: "pipe",
-  });
-  const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
-
-  forwardDevOutput(child, dependencies.log, candidateOrigins);
-
-  try {
-    const source = await waitForDevServer(child, dependencies.fetch, candidateOrigins);
-    await restoreSiteProjectToLocalAuthority(project, source, dependencies, projectId);
-    localSource = source;
-    dependencies.log(`Public preview: ${source}/`);
-    dependencies.log(`Admin: ${source}/admin`);
-    await waitForChildExit(child);
-  } catch (error) {
-    child.kill();
-    throw error;
-  } finally {
-    await publishBroker?.close();
-  }
-}
-
-async function restoreSiteProjectToLocalAuthority(
-  project: SiteProjectSource,
-  source: string,
-  dependencies: Pick<FormlessCliDependencies, "fetch" | "now">,
-  projectId: string,
-) {
-  const mediaFiles = await readSiteProjectMediaFiles(project);
-  const snapshot = buildSiteProjectSourceSnapshot(project.records, {
-    exportedAt: dependencies.now(),
-  });
-
-  for (const mediaFile of mediaFiles) {
-    await fetchJson(
-      dependencies.fetch,
-      new URL(`${SITE_MEDIA_ROUTE_PREFIX}${mediaFile.key}`, `${source}/`).toString(),
-      {
-        body: mediaFile.bytes,
-        headers: {
-          accept: "application/json",
-          "content-type": mediaFile.contentType,
-        },
-        method: "PUT",
-      },
-    );
-  }
-
-  await fetchJson(dependencies.fetch, siteSnapshotRestoreUrl(source), {
-    body: JSON.stringify(snapshot),
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-    },
-    method: "POST",
-  });
-  await writeProjectDevState(project.projectRoot, {
-    adminUrl: `${source}/admin`,
-    projectId,
-    publicUrl: `${source}/`,
-    sourceUrl: source,
-    startedAt: dependencies.now(),
-  });
 }
 
 async function runLocalAdminPublish(
@@ -958,25 +859,6 @@ async function closeLocalPublishBroker(server: Server): Promise<void> {
   });
 }
 
-async function ensureProjectStateIgnored(gitignorePath: string) {
-  const current = (await readFileIfExists(gitignorePath, "utf8")) ?? "";
-  const lines = current.split(/\r?\n/);
-
-  if (lines.some((line) => isProjectStateIgnoreLine(line))) {
-    return;
-  }
-
-  const prefix = current.length === 0 || current.endsWith("\n") ? current : `${current}\n`;
-
-  await writeFile(gitignorePath, `${prefix}${projectStateGitignoreEntry}\n`);
-}
-
-function isProjectStateIgnoreLine(line: string): boolean {
-  const value = line.trim();
-
-  return value === projectStateDirectory || value === projectStateGitignoreEntry;
-}
-
 function cloudflareCommandEnv(
   env: NodeJS.ProcessEnv,
   accountId: string | undefined,
@@ -1043,182 +925,6 @@ function parseDotEnvValue(value: string): string {
   return value;
 }
 
-function defaultDevSourceCandidates(env: NodeJS.ProcessEnv): string[] {
-  const port = env.PORT && /^\d+$/.test(env.PORT) ? env.PORT : "5173";
-
-  return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
-}
-
-export function siteProjectDevEnv(
-  env: NodeJS.ProcessEnv,
-  projectRoot: string,
-  projectId: string,
-  publishBroker?: Pick<SiteProjectLocalPublishBroker, "endpoint" | "token">,
-): NodeJS.ProcessEnv {
-  const nextEnv: NodeJS.ProcessEnv = {
-    ...env,
-    FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
-    FORMLESS_SITE_PROJECT_ROOT: projectRoot,
-    FORMLESS_SITE_PROJECT_ID: projectId,
-    [wranglerPersistEnvName]: siteProjectWranglerPersistPath(projectRoot),
-    VITE_FORMLESS_RUNTIME_PROFILE: "siteAuthoring",
-    VITE_FORMLESS_SITE_PROJECT_ID: projectId,
-  };
-
-  delete nextEnv.FORMLESS_ADMIN_TOKEN;
-  delete nextEnv[localPublishBrokerUrlEnvName];
-  delete nextEnv[localPublishBrokerTokenEnvName];
-
-  if (publishBroker) {
-    nextEnv[localPublishBrokerUrlEnvName] = publishBroker.endpoint;
-    nextEnv[localPublishBrokerTokenEnvName] = publishBroker.token;
-  }
-
-  return nextEnv;
-}
-
-function forwardDevOutput(
-  child: ChildProcessWithoutNullStreams,
-  log: (message: string) => void,
-  candidateOrigins: Set<string>,
-) {
-  const handleOutput = (chunk: Buffer) => {
-    const text = chunk.toString();
-
-    for (const origin of httpOriginsFromText(text)) {
-      candidateOrigins.add(origin);
-    }
-
-    for (const line of text.split(/\r?\n/)) {
-      if (line.length > 0) {
-        log(line);
-      }
-    }
-  };
-
-  child.stdout.on("data", handleOutput);
-  child.stderr.on("data", handleOutput);
-}
-
-async function waitForDevServer(
-  child: ChildProcessWithoutNullStreams,
-  fetcher: typeof fetch,
-  candidateOrigins: Set<string>,
-): Promise<string> {
-  const startedAt = Date.now();
-  let spawnError: Error | null = null;
-
-  child.once("error", (error) => {
-    spawnError = error;
-  });
-
-  while (Date.now() - startedAt < devServerReadyTimeoutMs) {
-    if (spawnError) {
-      throw spawnError;
-    }
-
-    if (child.exitCode !== null) {
-      throw new Error(`Site project dev server exited with code ${child.exitCode}.`);
-    }
-
-    for (const origin of candidateOrigins) {
-      if (await isDevServerReady(fetcher, origin)) {
-        return origin;
-      }
-    }
-
-    await delay(devServerPollIntervalMs);
-  }
-
-  throw new Error("Timed out waiting for the Site project dev server.");
-}
-
-async function isDevServerReady(fetcher: typeof fetch, origin: string): Promise<boolean> {
-  try {
-    const response = await fetcher(siteBootstrapUrl(origin), {
-      headers: {
-        accept: "application/json",
-      },
-    });
-
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-function httpOriginsFromText(text: string): string[] {
-  const origins = new Set<string>();
-
-  for (const match of text.matchAll(/https?:\/\/[^\s),]+/g)) {
-    try {
-      origins.add(new URL(match[0]).origin);
-    } catch {
-      // Ignore non-URL terminal fragments.
-    }
-  }
-
-  return [...origins];
-}
-
-function waitForChildExit(child: ChildProcessWithoutNullStreams): Promise<void> {
-  return new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(
-        new Error(
-          signal
-            ? `Site project dev server exited with signal ${signal}.`
-            : `Site project dev server exited with code ${code ?? "unknown"}.`,
-        ),
-      );
-    });
-  });
-}
-
-async function writeProjectDevState(projectRoot: string, state: ProjectDevState) {
-  await mkdir(path.join(projectRoot, projectStateDirectory), { recursive: true });
-  await writeFile(
-    path.join(projectRoot, projectDevStateFile),
-    `${JSON.stringify(state, null, 2)}\n`,
-  );
-}
-
-async function prepareProjectStateDirectory(projectRoot: string) {
-  await mkdir(path.join(projectRoot, projectStateDirectory), { recursive: true });
-  await ensureProjectStateIgnored(path.join(projectRoot, projectGitignoreFile));
-}
-
-async function readProjectDevStateSource(projectRoot: string): Promise<string | null> {
-  const contents = await readFileIfExists(path.join(projectRoot, projectDevStateFile), "utf8");
-
-  if (!contents) {
-    return null;
-  }
-
-  try {
-    const value = JSON.parse(contents) as unknown;
-
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      typeof (value as { sourceUrl?: unknown }).sourceUrl === "string"
-    ) {
-      return (value as { sourceUrl: string }).sourceUrl;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 async function fetchJson<T>(fetcher: typeof fetch, url: string, init?: RequestInit): Promise<T> {
   const response = await fetcher(url, init);
   const text = await response.text();
@@ -1234,16 +940,8 @@ async function fetchJson<T>(fetcher: typeof fetch, url: string, init?: RequestIn
   }
 }
 
-function siteBootstrapUrl(source: string): string {
-  return new URL("/api/site/bootstrap", `${source}/`).toString();
-}
-
 function siteSnapshotUrl(source: string): string {
   return new URL("/api/site/snapshot", `${source}/`).toString();
-}
-
-function siteSnapshotRestoreUrl(source: string): string {
-  return new URL("/api/site/snapshot/restore", `${source}/`).toString();
 }
 
 async function readFileIfExists(filePath: string): Promise<Buffer | null>;
@@ -1257,10 +955,6 @@ async function readFileIfExists(
   } catch {
     return null;
   }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function errorMessage(error: unknown): string {
