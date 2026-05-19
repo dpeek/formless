@@ -26,12 +26,27 @@ Last updated: 2026-05-19
 - Sync tests: `src/client/sync.test.ts`.
 - Local DB tests: `src/client/db.test.ts`.
 - Store tests: `src/client/store.test.ts`.
+- Browser replica projection tests: `src/client/projections.test.ts`.
 - Readiness tests: `src/client/readiness.test.ts`.
 - Authority tests: `src/worker/authority.test.ts`.
 - Storage tests: `src/worker/storage.test.ts`.
 - Site tree tests: `src/site/tree.test.ts`.
+- Site media tests: `src/worker/media.test.ts`, `src/client/media.test.ts`.
+- Site source media tests: `src/site/source-media.test.ts`.
 - Generated format tests: `src/app/generated/format.test.ts`.
 - Generated field UI adapter tests: `src/app/generated/field-ui-adapters.test.ts`.
+- Generated authoring tests: `src/client/generated-authoring.test.ts`.
+- Shared SVG icon tests: `lib/ui/src/svg-icon.test.tsx`.
+
+## Test Helpers
+
+- Schema builder helpers: `src/test/schema-builders.ts`.
+- Protocol bootstrap helpers: `src/test/protocol-builders.ts`.
+- Generated table render helpers: `src/test/generated-table.tsx`.
+- Site editor test helpers: `src/test/site-editor.ts`.
+- Authority write test helpers: `src/test/authority-write.ts`.
+- Site record fixtures: `src/test/site-records.ts`.
+- Site tests use Site record fixtures, not exact `schema/apps/site/seed-records.json` content.
 
 ## Browser Smoke
 

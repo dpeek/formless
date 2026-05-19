@@ -19,60 +19,213 @@ Last updated: 2026-05-19
 - Tree response types: `src/shared/protocol.ts`.
 - Public route source: `src/app/routes/site-page.tsx`.
 - Renderer source: `src/app/site-renderer/renderer.tsx`.
+- Initial public tree handoff source: `src/app/site-renderer/initial-tree.ts`.
+- Public link target resolver: `src/site/link-targets.ts`.
 - Published Worker SSR source: `src/worker/site-ssr.tsx`.
+- Published Site cache source: `src/worker/site-cache.ts`.
+- Published document route classifier: `src/worker/routing.ts`.
 
 ## Records And Tree
 
+- Site settings are stored as one `site` record.
+- Site settings fields are `key`, `label`, `description`, and SVG `icon`.
+- Source seed includes one active Site settings record with `key = "primary"`.
+- Site settings create and delete are disabled; patch is enabled.
+- Site settings use a unique constraint over `key`.
+- Page, post, project, block, and placement records do not store a `site` reference.
+- Current Site schema instance is the implicit Site scope.
+- Default Site seed is a neutral no-media starter.
+- Default starter pages are Home, About, Blog, Projects, and Resume.
+- Default starter includes one dated post and one dated project.
+- Default starter header and footer links are data-driven records.
 - `block.type` drives public rendering and generated editor variants.
+- Site block schema does not have `templateKey`; public rendering uses `block.type`.
+- `blockByType` is the Site union over `block.type`.
+- `block.label` is canonical public display text.
+- `blockPlacement.label` is a contextual display override.
 - `blockPlacement.parent` is the parent block.
 - `blockPlacement.block` is the child block.
-- `blockPlacement.slot`, `order`, and `visible` control placement.
-- Public tree excludes drafts, archived blocks, invisible placements, and tombstoned records.
-- Missing children and cycles become tree metadata warnings.
+- `blockPlacement.order` controls sibling order.
+- `blockPlacement.slot` is optional projection metadata.
+- Missing `blockPlacement.slot` means default body composition.
+- Recognized public slot values include `primaryImage`, `media`, and `actions`.
+- Feature blocks use `block.alignment` for desktop media side.
+- Public tree excludes tombstoned `site`, `block`, and `blockPlacement` records.
+- Public post and project blocks require `block.date`.
+- `postList` and `projectList` blocks project live dated post/project items in descending date order.
+- List blocks attach projected items under `SiteBlockNode.query`.
+- Public post/project list items can carry slotted primary image placements.
+- Missing children, cycles, duplicate roots, and max-depth cuts become tree metadata warnings.
 - Header and footer use nested groups and reusable link blocks.
+- Header primary and secondary navigation are separate block variants.
+- Header and footer resolve as Site frame roots from live `header` and `footer` blocks.
+- Missing frame roots warn without blocking page rendering.
+- Duplicate frame roots warn and choose the earliest record.
 - Public Site tree responses can include frame roots, route facts, public metadata, and indexing facts.
+- Public Site tree responses include top-level `site` settings when the singleton exists.
+- Missing Site settings warn without blocking public tree rendering.
 - Site link blocks distinguish internal and external targets.
-- Internal Site links resolve through target block references.
+- Link target fields are `block.linkTargetMode` and `block.linkTargetBlock`.
+- Internal Site links resolve `href` and inherited icon through target block references.
 - External Site links require absolute URLs.
+- Broken explicit link warnings use `missing-link-target`, `non-routable-link-target`, and `invalid-external-link`.
+- Legacy link `href` values still render when explicit link target fields are absent.
 
 ## Site Authoring
 
 - Primary Site admin screens are `siteEditor` and `siteSettings`.
+- `siteEditor` is mounted at `/site`.
+- `siteSettings` is mounted at `/site/settings`.
+- Site editor screen renders Settings before the Site composition section.
+- Generated Settings edits `site.label`, `site.description`, and `site.icon`.
+- Generated Settings hides `site.key`.
+- Generated Settings exposes no create action or delete control for `site`.
+- `siteCompositionHome` renders the main Site editor.
 - `siteCompositionHome` sidebar groups root selection by Pages, Posts, Projects, and Navigation.
-- Site editor root selection uses generated list/detail context presentation.
+- Site editor root selection uses generated collection context sidebar navigation.
+- Site page root selection uses `block.type = page`.
+- Site post root selection uses `block.type = post`.
+- Site project root selection uses `block.type = project`.
+- Site Header and Footer root selection uses `blockNavigationRoots`.
+- `blockNavigationRoots` selects `block.type = header` or `block.type = footer`.
+- Site block create views set `block.type` with hidden literal defaults.
+- Post create views set `block.type = post` with hidden literal defaults.
+- Project create views set `block.type = project` with hidden literal defaults.
+- Page create views set `block.type = page` with hidden literal defaults.
+- Site block edit views do not expose mutable `block.type`.
+- Page edit variants do not render `body`; page content is child blocks.
+- Post and project edit variants render `date`, `body`, and `href`.
+- Feature edit variants render `body` and `alignment`.
 - Raw Blocks and Placements stay non-primary admin/setup views.
-- Site placement table can edit referenced child blocks.
-- Site placement table supports generated ordering controls.
-- Tree placement cards remove placements without deleting child blocks.
+- Source Site schema does not expose unused `profile` or `custom` block type values.
+- Site editor result type is `tree`.
+- Site editor tree follows the `blockPlacements` relationship.
+- Site editor tree child field is `blockPlacement.block`.
+- Selected roots render root fields plus recursive placement child editors.
+- Site tree nodes render variant-scoped block fields from `blockByType`.
+- Header and Footer child nodes render context links to their root editors.
+- Link child nodes render variant-scoped link target fields.
+- Tree branch policy constrains allowed child block variants by parent type.
+- Post roots can add markdown and primary-image children.
+- Page and group roots can add project, post-list, and project-list children.
+- Project roots can add primary-image children.
+- Page and group roots can add feature children.
+- Feature roots can add media image and action link children.
+- Tree child creation uses one `+` menu from allowed child variants.
+- Tree add creates a block plus placement through `addTreeChild`.
+- Tree placement cards can remove placements without deleting child blocks.
+- Tree placement cards do not show child delete controls.
+- Tree placement cards show a slot badge when `blockPlacement.slot` is set.
+- Tree remove uses `removeTreePlacement` and leaves the child block.
+- Tree ordering patches `blockPlacement.order`.
+- Site tree ordering scopes by `blockPlacement.parent` and `blockPlacement.slot`.
 - Generated view fields can declare `visibleWhen` conditions for target-specific editing.
+- Site source enables generic delete for `block`.
+- Site source keeps generic delete disabled for `site` and `blockPlacement`.
+- Site record delete tombstones block records only when active references allow it.
 
 ## Media And Icons
 
 - Site media route code: `src/worker/media.ts`.
 - Site client media helper: `src/client/media.ts`.
 - Source media helpers: `src/site/source-media.ts`.
+- Shared SVG icon primitive: `lib/ui/src/svg-icon.tsx`.
 - Media records are `block` records.
 - Image blocks store the served media URL in `block.href`.
+- Image blocks keep optional flat `width` and `height` fields.
+- Image blocks can be created before `href` exists.
+- Site image authoring uses text field `editor: "image"` for `block.href`.
+- Site image variant authoring hides `width` and `height`.
+- Site image upload accepts one raster image file field named `file`.
+- Site image upload accepts JPEG, PNG, WebP, and GIF.
+- Site image upload rejects files above 5 MB.
+- Site image upload writes immutable R2 keys under `site/images/`.
+- Same-origin media hrefs use `/api/site/media/<key>`.
+- Site media serving supports `GET` and `HEAD` for `/api/site/media/*`.
 - Public image rendering uses the same Site tree and renderer path as authored image URLs.
+- Shared SVG icon rendering falls back to an empty outline for missing, invalid, or unsafe SVG.
+- Shared SVG icon rendering rejects scripts, event handlers, `javascript:` URLs, `foreignObject`, and external asset references.
+- Public footer/social links render `block.icon` SVG before the label.
+- Public header navigation suppresses link icons.
 - Site icon source helpers: `src/site/site-icon-source.ts`.
 - Dynamic Worker icon routes: `src/worker/site-icons.ts`.
 - ICO encoding: `src/site/ico.ts`.
+- `site.icon` is the canonical editable SVG source for public Site icons.
+- Public root icon routes are `/favicon.svg`, `/favicon.ico`, and `/apple-touch-icon.png`.
+- Root icon routes derive SVG, PNG, and ICO responses from `site.icon` or the default Site SVG.
+- PNG and ICO icon bytes are generated artifacts, not stored record fields.
+- Root icon routes are Worker routes and no longer depend on package `public/` icon files.
+- PNG rendering uses `@cf-wasm/resvg/workerd`.
+- Generated icon artifacts use content-hash ETags and Cache API storage when available.
 
 ## Public Output
 
 - Public route resolution: `src/site/route-resolver.ts`.
+- Public page lookup uses live `block.href`, not a separate slug field.
+- Preview and authoring Site page routes start Site push sync and refetch the active tree after Site sync applies.
+- Preview and authoring Site page routes also refetch after same-profile Site record or schema events.
+- Published Site page routes use embedded initial tree data and do not start preview sync.
+- Site page tree fetches stay HTTP reads against `/api/site/tree/:slug`.
+- Public page routes render child placements, not root page `label` or `body`.
+- Public post detail routes resolve under `/blog/*` from dated `post` blocks.
+- `/blog` is a page route; its `postList` block renders the post index.
+- Blog page records are index shells; post records own post detail routes through `block.href`.
+- Post detail pages render `post.label` and default-slot child placements, not `post.body`.
+- Post detail headers render the first slotted primary image when present.
+- `/projects` is a normal page route curated through project block placements.
+- Project summary bodies render markdown through the shared markdown renderer.
+- No project detail route is generated.
+- `/` maps to the home route.
+- Preview route lookup also accepts `/pages/*` hrefs.
+- Public Site header renders frame header placements, not a hard-coded Home or brand link.
+- Public Site header renders primary navigation left and secondary navigation centered on desktop.
+- Public Site header active state is route-aware; Blog stays active on post detail routes.
+- Public Site header has a scoped dark-mode toggle.
+- Public theme preference key: `formless:public-site:theme`.
+- Mobile public header renders primary nav directly and secondary nav in a menu.
+- Footer root label and body are frame metadata, not public copy.
+- Footer child sections and notes render public footer content.
+- `footerSocial` sections render horizontal icon links.
+- Public markdown blocks use the shared read-only markdown renderer.
+- Public post and project summary cards use whole-card links.
+- Public post summary cards display dates; public project summary cards use dates only for visibility and order.
+- Public summary cards render primary images left on desktop and above text on mobile.
+- Public summary card images fit without cropping.
+- Feature blocks render label, markdown body, slotted media images, and slotted action links.
+- Feature block media can render left or right on desktop and stacks on mobile.
 - Public document metadata: `src/site/public-document-metadata.ts`.
+- Public document metadata prefers `tree.site.label` for Site name.
+- Public document metadata prefers `tree.site.description` for description.
+- Metadata falls back to header/page-derived Site name and page body/default description.
+- Successful public SSR documents include title, description, canonical URL, OpenGraph metadata, and Twitter card metadata.
+- Successful public SSR documents do not emit `og:image`.
 - Public indexing: `src/site/public-indexing.ts`, `src/worker/public-indexing.ts`.
+- `/robots.txt` and `/sitemap.xml` are Worker-generated indexing resources.
+- Sitemap entries come from live routable page and dated post blocks.
+- Sitemap excludes settings records, preview routes, generated app routes, static-like paths, tombstones, and non-routable blocks.
+- Published profile redirects `/pages`, `/pages/home`, and `/pages/*` to clean public routes.
+- Published profile blocks generated app/admin shells from the public host.
+- Public document, redirect, indexing, icon, and media `HEAD` responses match `GET` status and headers without a body.
 - Public SSR uses embedded initial `SitePageTree` for hydration.
 - Generated admin routes remain client-rendered.
+- Published SSR HTML cache headers: success `public, max-age=60, stale-while-revalidate=300`.
+- Published SSR missing-page HTML cache headers: `public, max-age=30, stale-while-revalidate=60`.
+- Published SSR error HTML cache headers: `no-store`.
+- Published SSR documents set a `formless-runtime-profile` meta hint for browser hydration.
+- Worker SSR uses `FORMLESS_RUNTIME_PROFILE` for server document routing.
+- `*.workers.dev` hosts infer published Site profile when no explicit runtime profile is configured.
+- Production SSR documents load built client asset tags through the Worker `ASSETS` binding.
+- Public SSR bootstraps theme on the document before CSS and hydration.
 
 ## Key Tests
 
 - Site tree tests: `src/site/tree.test.ts`.
+- Starter seed tests: `src/site/starter-seed.test.ts`.
 - Public Site route tests: `src/app/routes/site-page.test.tsx`.
 - Public renderer tests: `src/app.test.tsx`.
 - Site renderer link tests: `src/app/site-renderer/links.test.ts`.
 - Worker SSR tests: `src/worker/site-ssr.test.ts`.
+- Static asset and dynamic icon tests: `src/worker/static-assets.test.ts`.
 - Site media tests: `src/worker/media.test.ts`, `src/client/media.test.ts`.
 - Source media tests: `src/site/source-media.test.ts`.
 - Site link target tests: `src/site/link-targets.test.ts`.

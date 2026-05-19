@@ -16,6 +16,7 @@ Last updated: 2026-05-19
 - Site seed: `schema/apps/site/seed-records.json`.
 - Source app registry: `src/shared/schema-apps.ts`.
 - Worker source parsing: `src/worker/schema-apps.ts`.
+- Source seed records are stored-record shaped data, not stored change rows.
 - Schema parser: `src/shared/schema.ts`.
 - Schema types: `src/shared/schema-types.ts`.
 - Schema parse helpers: `src/shared/schema-parse-helpers.ts`.
@@ -23,17 +24,46 @@ Last updated: 2026-05-19
 - Relationship parser: `src/shared/schema-relationships.ts`.
 - View parser: `src/shared/schema-views.ts`.
 - Table view parser: `src/shared/schema-table-views.ts`.
+- Union parser: `src/shared/schema-unions.ts`.
 - Screen parser: `src/shared/schema-screens.ts`.
 - Read-model parser: `src/shared/schema-read-models.ts`.
 - Action parser: `src/shared/schema-actions.ts`.
 - Mutation parser: `src/shared/schema-mutations.ts`.
-- Schema parts: entities, relationships, queries, read models, item views, table views, views, screens.
+- Schema parts: entities, relationships, queries, unions, read models, item views, table views, views, screens.
+- Generic mutation policies cover `create`, `patch`, and `delete`.
+- View types: `collection`, `create`, `edit`.
+- Collection result types: `list`, `table`, `tree`.
+- Result ordering parser: `src/shared/schema-ordering.ts`.
+- Collection result ordering works for `list`, `table`, and `tree` results.
+- Result ordering uses a non-integer number field, optional field scopes, and `moveMenu` or `dragHandle` presentations.
+- Table view ordering remains compatibility input.
+- Conflicting result-level and table-level ordering fails schema parsing.
+- Tree results use a relationship, child reference field, child item view, optional branch variant policy, and optional composition actions.
+- Tree branch variant policy can mark child variants as `leaf`.
+- Tree branch variant policy can declare allowed child variants for add controls.
+- Tree branch child options can declare literal placement values for composition actions.
+- Tree branch variant policy requires the child item view to define a union.
+- Collection context presentations: `tabs`, `listDetail`.
+- Missing collection context presentation defaults to `tabs`.
+- Edit view fields use field editors and commit policies.
+- View fields can declare `visibleWhen` conditions keyed to field values.
+- Table views can declare table-local actions and result ordering.
+- Table action type: `editRecord`.
+- Table action targets: row record and reference field target.
+- Table utility column types: `invokeAction`, `orderingHandle`.
+- Table ordering uses a numeric rank field, optional row-field scope, and `moveMenu` or `dragHandle` presentations.
 
 ## Relationships
 
 - App schemas can declare optional top-level `relationships`.
 - Relationship kinds: `toOne`, `toMany`, `manyToMany`.
 - Relationship metadata does not change stored record shape.
+- `toOne` relationships point at stored reference fields.
+- `toMany` relationships are inverse metadata over child reference fields.
+- `manyToMany` relationships use explicit through entities and reference fields.
+- `manyToMany.through.uniqueConstraint`, when present, must cover both through fields.
+- One-to-one cardinality uses `toOne` plus an entity unique constraint.
+- There is no separate one-to-one relationship kind.
 - Collection contexts can name a `toMany` relationship.
 - Relationship-backed context queries validate against relationship fields.
 - Client view models expose relationship context facts.
@@ -48,12 +78,33 @@ Last updated: 2026-05-19
 - Screen layout type: `stack`.
 - Screen sections type: `collection`.
 - Screen sections reference existing collection views.
+- Screen paths are optional static app-relative paths.
+- Screen paths start with `/`.
+- Screen paths cannot use params, wildcards, or relative paths.
+- Screen paths are unique inside one schema.
+- Screen paths cannot be `/schema`.
+- First pathless primary screen gets `/` when no explicit root screen exists.
 - Screens with `navigation.primary` own route workspace selection when `screens` exists.
 - Collection `navigation.primary` remains the fallback when `screens` is absent.
 - Screen model selection: `src/client/views.ts`.
-- Task source schema defines `screens.taskHome`.
-- Estii source schema defines `screens.rateHome` and non-primary `screens.rateSetup`.
-- Site source schema defines `screens.siteEditor` and `screens.siteSettings`.
+- Task source schema defines `screens.taskHome` at `/`.
+- Estii source schema defines `screens.rateHome` at `/` and `screens.rateSetup` at `/setup`.
+- Site source schema defines `screens.siteEditor` at `/` and `screens.siteSettings` at `/settings`.
+
+## Unions
+
+- App schemas can declare optional top-level `unions`.
+- Entity unions are metadata over flat records.
+- First discriminator kind is a required enum field on the union entity.
+- Union variant keys match discriminator enum values.
+- Union fallback covers discriminator enum values not listed as variants.
+- Unions without fallback must define every discriminator enum value.
+- Union variant `fields` and `requiredFields` reference fields on the same entity.
+- Variant presentation lives on item, edit, and create views.
+- Static view fields remain valid beside union variants.
+- Hidden fields are not cleared when the active variant changes.
+- Authority writes, storage, sync, and public Site tree output do not store separate union values.
+- Site source schema defines `blockByType` over `block.type`.
 
 ## Read Models
 
@@ -76,19 +127,42 @@ Last updated: 2026-05-19
 ## Field Behavior
 
 - Field behavior module: `src/shared/field-types.ts`.
+- Create default resolver: `src/shared/create-defaults.ts`.
 - Field behavior owns scalar validation, defaults, conversion, display, and editor metadata.
+- Field behavior exports create input conversion, inline input conversion, input attributes, display helpers, and editor controls.
+- Generated field UI adapters consume field behavior control, default, required, and input-attribute facts in `src/app/generated/field-ui-adapters.ts`.
+- Create views can declare hidden literal defaults for scalar fields.
 - Date fields preserve `YYYY-MM-DD` values.
 - Number fields store numbers.
 - Text fields can use format metadata for generated editors and displays.
 - Icon fields store SVG source as flat text values.
+- Text field `editor: "icon"` selects the generated icon control.
+- Text field `editor: "image"` selects the generated image upload control.
+- Icon and image editor values stay text-backed field values.
+
+## Mutations
+
+- Generic mutation ops: `create`, `patch`, `delete`.
+- Delete mutation type: `DeleteMutation` in `src/shared/protocol.ts`.
+- Delete mutation requests carry `mutationId`, `entity`, `op: "delete"`, and `recordId`.
+- Delete mutation requests do not carry field values.
+- Delete enablement uses `entity.mutations.delete.enabled`.
+- Delete policy parsing and stringify behavior is covered in `src/shared/schema.test.ts`.
 
 ## Actions
 
-- Action parser dispatches by action kind in `src/shared/schema-actions.ts`.
-- Action runtime dispatches by action kind in `src/worker/actions.ts`.
-- Action UI facts dispatch by action kind in `src/client/views.ts`.
-- Action kinds: `clear-completed`, `create-missing-join-records`, `create-selected-join-record`, `remove-selected-join-records`.
+- Schema action kind modules: `entityActionKindModules` in `src/shared/schema-actions.ts`.
+- Worker action kind runtime modules: `entityActionKindRuntimeModules` in `src/worker/actions.ts`.
+- Generated action UI modules: `entityActionUiModules` in `src/client/views.ts`.
+- Generated action renderer consumes `action.ui` in `src/app/generated/actions.tsx`.
+- Action kinds: `clear-completed`, `create-missing-join-records`, `create-selected-join-record`, `remove-selected-join-records`, `create-tree-child`, `remove-tree-placement`.
 - Action kind capabilities expose after-create hook eligibility.
+- `create-missing-join-records` fills matrix-like explicit join records from two queries.
+- `create-selected-join-record` and `remove-selected-join-records` require a `manyToMany` relationship.
+- Selected join creation writes the relationship through fields and uses existing field defaults for other required fields.
+- Selected join removal tombstones explicit join records.
+- `create-tree-child` creates one child record and one placement edge.
+- `remove-tree-placement` tombstones the placement edge and leaves the child record.
 
 ## Key Tests
 
@@ -98,4 +172,5 @@ Last updated: 2026-05-19
 - Read-model tests: `src/shared/read-model.test.ts`.
 - Field behavior tests: `src/shared/field-types.test.ts`.
 - Create defaults tests: `src/shared/create-defaults.test.ts`.
+- Result ordering tests: `src/shared/result-ordering.test.ts`.
 - Table schema tests: `src/shared/schema-table-views.test.ts`.
