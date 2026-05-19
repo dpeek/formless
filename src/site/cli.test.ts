@@ -12,6 +12,7 @@ import {
   type StoredRecord,
 } from "../shared/protocol.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
+import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
 import {
   defaultSiteProjectConfig,
   formatSiteProjectConfig,
@@ -23,10 +24,7 @@ import {
   siteProjectMediaAssetsFromRecords,
 } from "./project-source.ts";
 import {
-  formlessCliUsage,
   initSiteProject,
-  normalizeSourceUrl,
-  parseFormlessCliArgs,
   publishSiteProject,
   runFormlessCli,
   saveSiteProject,
