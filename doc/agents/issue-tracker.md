@@ -16,8 +16,12 @@ Use the `gh` CLI for issue operations from this repo.
 - Unlabel: `gh issue edit <number> --remove-label "..."`
 - Close: `gh issue close <number> --comment "..."`
 
-## Repo PRDs
+## PRDs
 
-- PRD workstreams live in `prd/*.md`.
-- PRD files own chunks, blockers, decisions, evidence, and promote notes.
-- Do not create or move PRDs through GitHub Issues unless the user asks.
+- New PRD workstreams live in GitHub Issues.
+- Use a `PRD` title prefix or a PRD label when one exists.
+- PRD issues own chunks, blockers, decisions, evidence, and promote notes.
+- Existing `prd/*.md` files are legacy workstream records kept until retired.
+- Do not create new local PRD files.
+- If explicitly assigned a legacy PRD file, update only that file until it is retired.
+- Retire legacy PRD files only after their useful shipped facts move into `doc/topics/*.md`.

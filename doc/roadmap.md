@@ -1,15 +1,15 @@
 # Roadmap
 
-Last updated: 2026-05-13
+Last updated: 2026-05-19
 
 Release target: first usable Formless release.
 
-Current workstream: Site media upload.
+Workstreams: GitHub Issues for `dpeek/formless`.
 
 ## Runtime
 
-- Direct app routes stay `/tasks`, `/rates`, and `/site`.
-- Schema editor routes stay `/tasks/schema`, `/rates/schema`, and `/site/schema`.
+- Direct dev app routes stay `/tasks`, `/estii`, and `/site`.
+- Schema editor routes stay `/tasks/schema`, `/estii/schema`, and `/site/schema`.
 - Public site routes stay `/pages` and `/pages/*`.
 - One schema key maps to one source schema.
 - One schema key maps to one authority instance.
@@ -33,8 +33,8 @@ Current workstream: Site media upload.
 - Source app files live under `schema/apps/`.
 - Task source: `schema/apps/tasks/schema.json`.
 - Task seed: `schema/apps/tasks/seed-records.json`.
-- Rate source: `schema/apps/rates/schema.json`.
-- Rate seed: `schema/apps/rates/seed-records.json`.
+- Estii source: `schema/apps/estii/schema.json`.
+- Estii seed: `schema/apps/estii/seed-records.json`.
 - Site source: `schema/apps/site/schema.json`.
 - Site seed: `schema/apps/site/seed-records.json`.
 - Seed records stay close to `StoredRecord` shape.
@@ -48,7 +48,7 @@ Current workstream: Site media upload.
 - First layout primitive is `stack`.
 - Screen navigation owns primary route workspace selection when `screens` exists.
 - Collection navigation remains legacy fallback when `screens` is absent.
-- Task and rate source schemas define screens.
+- Task and Estii source schemas define screens.
 - General layout DSL stays out of first release.
 
 ## Read Models
@@ -59,26 +59,26 @@ Current workstream: Site media upload.
 - Aggregates are read-only display values over query results.
 - Generated tables can render computed columns.
 - Generated collections can render aggregate summary slots.
-- Derived rate display values are covered by read-model computed values and aggregates.
+- Derived Estii rate display values are covered by read-model computed values and aggregates.
 - Full computed graph engine stays out of first release.
 
 ## Task App
 
 - `/tasks` opens the task app.
 - `/tasks/schema` edits the task runtime schema.
-- Task records and schema edits are isolated from `/rates`.
+- Task records and schema edits are isolated from `/estii`.
 - `clearCompletedTasks` still runs as a schema-declared action.
 - Task screen stays one primary workspace.
 
-## Rate-Card App
+## Estii App
 
-- `/rates` opens the rate-card app.
-- `/rates/schema` edits the rate-card runtime schema.
-- Rate-card records and schema edits are isolated from `/tasks`.
+- `/estii` opens the Estii app.
+- `/estii/schema` edits the Estii runtime schema.
+- Estii records and schema edits are isolated from `/tasks`.
 - `rateHome` remains the primary workspace.
 - Records stay flat: resources, cards, rates.
 - Rate matrix integrity stays authority-enforced.
-- Rate-card source schema uses read-model output for margin and totals.
+- Estii source schema uses read-model output for margin and totals.
 - Rate setup can stay non-primary.
 
 ## Site App
@@ -106,7 +106,7 @@ Current workstream: Site media upload.
 
 ## Generated UI
 
-- Route shell shows `Tasks`, `Rates`, `Site`, and the current app's `Schema`.
+- Route shell shows `Tasks`, `Estii`, `Site`, and the current app's `Schema`.
 - Generated create, patch, and action paths submit to the active schema key.
 - Reset controls are route-scoped.
 - Global schema swap UI is removed.
@@ -123,11 +123,13 @@ Current workstream: Site media upload.
 
 ## Docs
 
-- `doc/current.md` is the current-state source for agents.
+- `doc/README.md` is the agent docs map.
+- `doc/current.md` is the shipped-behavior index for agents.
+- `doc/topics/*.md` own topic-focused shipped facts.
 - `doc/roadmap.md` is the first-release target.
-- Each `prd/*.md` owns one workstream.
-- PRD agents update PRDs.
-- Shipped PRD facts get promoted into `doc/current.md`.
+- New PRDs live in GitHub Issues for `dpeek/formless`.
+- Existing `prd/*.md` files are legacy workstream records until retired.
+- Shipped PRD facts get promoted into topic docs.
 - External memory is not required for normal Formless work.
 
 ## Not First Release

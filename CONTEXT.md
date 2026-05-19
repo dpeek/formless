@@ -6,7 +6,7 @@ Formless is a schema-as-data app runtime.
 
 - App schema: runtime data that defines entities, fields, relationships, mutations, queries, read models, views, screens, and actions.
 - Source schema: repo JSON schema under `schema/apps/<key>/schema.json`.
-- Schema key: route and storage key such as `tasks`, `rates`, or `site`.
+- Schema key: route and storage key such as `tasks`, `estii`, or `site`.
 - Entity: flat record type in an app schema.
 - Field: scalar or reference value on a flat record.
 - Record: stored entity instance with flat values.
@@ -31,16 +31,18 @@ Formless is a schema-as-data app runtime.
 ## App Terms
 
 - Task app: tasks with active, completed, and overdue queries.
-- Rate-Card app: resources, cards, and rates; rate is the join record.
+- Estii app: resources, cards, and rates; rate is the join record.
 - Site app: blocks and block placements; public pages render from the tree projection.
 - Block: Site content/media/group/page record.
 - Block placement: flat composition edge from parent block to child block.
 
 ## Project Memory
 
-- Current shipped behavior: `doc/current.md`.
+- Agent docs map: `doc/README.md`.
+- Current shipped behavior index: `doc/current.md`.
+- Current shipped behavior topics: `doc/topics/*.md`.
 - First-release target: `doc/roadmap.md`.
-- Workstream plans and status: `prd/*.md`.
+- New workstream plans and status: GitHub Issues for `dpeek/formless`.
+- Legacy local workstreams: `prd/*.md` until retired.
 - Agent instructions: `AGENTS.md`.
 - Agent skill config: `doc/agents/`.
-- ADR home: `doc/adr/`.
