@@ -1384,6 +1384,7 @@ describe("authority", () => {
           },
         },
       },
+      screens: defaultScreens(),
     } satisfies AppSchema;
 
     await expectError(
@@ -2616,6 +2617,7 @@ describe("authority", () => {
       itemViews: defaultItemViews(),
       tableViews: {},
       views: defaultViews(),
+      screens: defaultScreens(),
     } satisfies AppSchema;
 
     await postJson<SchemaUpdateResponse>("/api/schema", { schema: schemaWithProject });
@@ -2851,6 +2853,17 @@ describe("authority", () => {
           entity: "task",
           fields: {
             title: { editor: "text" },
+          },
+        },
+      },
+      screens: {
+        taskHome: {
+          type: "workspace",
+          label: "Tasks",
+          navigation: { primary: true },
+          layout: {
+            type: "stack",
+            sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
           },
         },
       },
@@ -3460,6 +3473,7 @@ function schemaWithPriorityEnum(
     itemViews: defaultItemViews(),
     tableViews: {},
     views: defaultViews(),
+    screens: defaultScreens(),
   };
 }
 
@@ -3506,6 +3520,7 @@ function schemaWithMutations(mutations: unknown) {
     itemViews: defaultItemViews(),
     tableViews: {},
     views: defaultViews(),
+    screens: defaultScreens(),
   };
 }
 
@@ -3575,6 +3590,7 @@ function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {})
     itemViews: appSchema.itemViews,
     tableViews: appSchema.tableViews,
     views: appSchema.views,
+    screens: appSchema.screens,
   };
 }
 
@@ -3616,6 +3632,7 @@ function schemaWithRequiredScore() {
         },
       },
     },
+    screens: defaultScreens(),
   };
 }
 
@@ -3676,6 +3693,7 @@ function schemaWithRateReferences({
     itemViews: appSchema.itemViews,
     tableViews: appSchema.tableViews,
     views: appSchema.views,
+    screens: appSchema.screens,
   } satisfies AppSchema;
 }
 
@@ -3695,6 +3713,7 @@ function schemaWithTaskConstraints(constraints: EntitySchema["constraints"]) {
     itemViews: defaultItemViews(),
     tableViews: {},
     views: defaultViews(),
+    screens: defaultScreens(),
   } satisfies AppSchema;
 }
 
@@ -3730,6 +3749,7 @@ function schemaWithAssignmentReference() {
     itemViews: appSchema.itemViews,
     tableViews: appSchema.tableViews,
     views: appSchema.views,
+    screens: appSchema.screens,
   } satisfies AppSchema;
 }
 
@@ -3802,6 +3822,7 @@ function schemaWithTaskProjectReference({
         },
       },
     },
+    screens: appSchema.screens,
   } satisfies AppSchema;
 }
 
@@ -3819,6 +3840,7 @@ function schemaWithViews(views: unknown = defaultViews()) {
     itemViews: defaultItemViews(),
     tableViews: {},
     views,
+    screens: defaultScreens(),
   };
 }
 
@@ -3851,6 +3873,7 @@ function schemaWithActions(actions: unknown) {
     itemViews: defaultItemViews(),
     tableViews: {},
     views: defaultViews(),
+    screens: defaultScreens(),
   };
 }
 
@@ -3908,6 +3931,20 @@ function defaultViews(): AppSchema["views"] {
         title: { editor: "text" },
         dueDate: { editor: "date" },
         priority: { editor: "enum" },
+      },
+    },
+  };
+}
+
+function defaultScreens(): NonNullable<AppSchema["screens"]> {
+  return {
+    taskHome: {
+      type: "workspace",
+      label: "Tasks",
+      navigation: { primary: true },
+      layout: {
+        type: "stack",
+        sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
       },
     },
   };

@@ -2429,6 +2429,17 @@ function discriminatedTaskSchema(
         },
       },
     },
+    screens: {
+      taskHome: {
+        type: "workspace",
+        label: "Tasks",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
+        },
+      },
+    },
   });
 }
 

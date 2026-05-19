@@ -68,7 +68,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     itemViews,
     tableViews,
     views,
-    ...(screens === undefined ? {} : { screens }),
+    screens,
   };
 }
 

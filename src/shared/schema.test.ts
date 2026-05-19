@@ -2953,12 +2953,14 @@ describe("schema collection views", () => {
           },
         }),
       ),
-    ).toThrow("Schema must define at least one primary collection view.");
+    ).not.toThrow();
   });
 
-  it("parses screens and preserves legacy schemas without screens", () => {
-    const legacySchema = parseAppSchema(baseSchema());
-    expect(legacySchema.screens).toBeUndefined();
+  it("requires screens and parses screen definitions", () => {
+    const schemaWithoutScreens: Record<string, unknown> = { ...baseSchema() };
+    delete schemaWithoutScreens.screens;
+
+    expect(() => parseAppSchema(schemaWithoutScreens)).toThrow('Schema must include "screens".');
 
     const schema = parseAppSchema(
       baseSchema({
@@ -6261,6 +6263,7 @@ function baseSchema(overrides: Record<string, unknown> = {}) {
     itemViews: defaultItemViews(),
     tableViews: {},
     views: defaultViews(),
+    screens: defaultScreens(),
     ...overrides,
   };
 }
@@ -6433,6 +6436,17 @@ function referenceSchema(overrides: Record<string, unknown> = {}) {
     },
     tableViews: {},
     views: referenceViews(),
+    screens: {
+      rateHome: {
+        type: "workspace",
+        label: "Rates",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "rates", type: "collection", view: "rateHome" }],
+        },
+      },
+    },
     ...overrides,
   };
 }
@@ -6512,6 +6526,17 @@ function scopedRateSchema(overrides: Record<string, unknown> = {}) {
     itemViews: scopedRateItemViews(),
     tableViews: scopedRateTableViews(),
     views: scopedRateViews(),
+    screens: {
+      rateHome: {
+        type: "workspace",
+        label: "Rates",
+        navigation: { primary: true },
+        layout: {
+          type: "stack",
+          sections: [{ id: "rates", type: "collection", view: "rateHome" }],
+        },
+      },
+    },
     ...overrides,
   };
 }

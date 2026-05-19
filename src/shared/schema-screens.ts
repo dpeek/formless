@@ -18,9 +18,9 @@ const SCHEMA_EDITOR_SCREEN_PATH = "/schema";
 export function parseScreens(
   value: unknown,
   views: Record<string, ViewSchema>,
-): Record<string, ScreenSchema> | undefined {
+): Record<string, ScreenSchema> {
   if (value === undefined) {
-    return undefined;
+    throw new Error('Schema must include "screens".');
   }
 
   if (!isRecord(value)) {
