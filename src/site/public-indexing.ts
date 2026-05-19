@@ -8,13 +8,7 @@ export type PublicSiteRouteEntry = {
   recordId: string;
 };
 
-const legacyClientRoutePrefixes = ["/rates"] as const;
-const clientRoutePrefixes = [
-  "/pages",
-  "/schema",
-  ...schemaApps.map((app) => app.route),
-  ...legacyClientRoutePrefixes,
-] as const;
+const clientRoutePrefixes = ["/pages", "/schema", ...schemaApps.map((app) => app.route)] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 
 export function buildPublicSiteRouteEntries(records: StoredRecord[]): PublicSiteRouteEntry[] {

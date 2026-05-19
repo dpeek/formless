@@ -27,6 +27,11 @@ describe("public Site indexing", () => {
         label: "Icon route",
         href: "/favicon.svg",
       }),
+      blockRecord("rec_site_content_former_rates_page", {
+        type: "page",
+        label: "Former rates route",
+        href: "/rates",
+      }),
       blockRecord("rec_site_content_preview_post", {
         type: "post",
         label: "Preview post",
@@ -76,6 +81,7 @@ describe("public Site indexing", () => {
         "/blog/shipping-schema-backed-authoring",
         "/preview-page",
         "/projects",
+        "/rates",
         "/resume",
       ]),
     );

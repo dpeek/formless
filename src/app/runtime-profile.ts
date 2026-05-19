@@ -18,11 +18,6 @@ export type RuntimeWorldMount = {
   schemaRoute?: `/${string}`;
 };
 
-export type RuntimeRedirect = {
-  from: `/${string}`;
-  to: `/${string}`;
-};
-
 export type RuntimePublicSitePreviewLinkMode = "preview" | "authoring";
 
 export type RuntimePublicSitePreview = {
@@ -49,7 +44,6 @@ export type RuntimeProfile = {
   shell: RuntimeShellKind;
   worlds: readonly RuntimeWorldMount[];
   defaultRedirect?: `/${string}`;
-  legacyRedirects: readonly RuntimeRedirect[];
   localPublish?: RuntimeLocalPublishBroker;
   publicSitePreview?: RuntimePublicSitePreview;
   publishedSite?: RuntimePublishedSiteRoutes;
@@ -104,10 +98,6 @@ export function createDevRuntimeProfile(): RuntimeProfile {
       schemaRoute: app.schemaRoute,
     })),
     defaultRedirect: getSchemaAppDefinition(defaultSchemaKey).route,
-    legacyRedirects: [
-      { from: "/rates/schema", to: "/estii/schema" },
-      { from: "/rates", to: "/estii" },
-    ],
     publicSitePreview: {
       rootRoute: "/pages",
       routePattern: "/pages/*",
@@ -132,7 +122,6 @@ export function createAppRuntimeProfile(schemaKey: SchemaKey = defaultSchemaKey)
         schemaRoute: "/schema",
       },
     ],
-    legacyRedirects: [],
   };
 }
 
@@ -150,7 +139,6 @@ export function createSiteAuthoringRuntimeProfile(
         schemaRoute: options.exposeSchemaRoute ? "/admin/schema" : undefined,
       },
     ],
-    legacyRedirects: [],
     localPublish: options.localPublish,
     publicSitePreview: {
       rootRoute: "/",
@@ -172,7 +160,6 @@ export function createPublishedSiteRuntimeProfile(): RuntimeProfile {
         route: "/",
       },
     ],
-    legacyRedirects: [],
     publishedSite: {
       rootRoute: "/",
       routePattern: "/*",

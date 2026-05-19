@@ -5,6 +5,7 @@ import {
   createPublishedSiteRuntimeProfile,
   createSiteAuthoringRuntimeProfile,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
+  findRuntimeWorldMountByRoute,
   readRuntimeProfileDocumentHint,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
@@ -27,6 +28,8 @@ describe("runtime profile resolver", () => {
       "/site/schema",
     ]);
     expect(profile.publicSitePreview?.homeRoute).toBe("/pages/home");
+    expect(findRuntimeWorldMountByRoute(profile, "/rates")).toBeUndefined();
+    expect(findRuntimeWorldMountByRoute(profile, "/rates/schema")).toBeUndefined();
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {

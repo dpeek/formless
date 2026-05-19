@@ -1,12 +1,6 @@
 import { schemaApps } from "../shared/schema-apps.ts";
 
-const legacyClientRoutePrefixes = ["/rates"] as const;
-const clientRoutePrefixes = [
-  "/pages",
-  "/schema",
-  ...schemaApps.map((app) => app.route),
-  ...legacyClientRoutePrefixes,
-] as const;
+const clientRoutePrefixes = ["/pages", "/schema", ...schemaApps.map((app) => app.route)] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 const dynamicSiteIconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;
 const PUBLISHED_SITE_REDIRECT_STATUS = 308;

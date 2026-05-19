@@ -14,8 +14,6 @@
       "!/tasks/*",
       "!/estii",
       "!/estii/*",
-      "!/rates",
-      "!/rates/*",
       "!/site",
       "!/site/*",
       "!/schema",

@@ -157,7 +157,6 @@ describe("Worker document routing", () => {
     const generatedAppRequests = [
       documentRequest("http://example.com/tasks"),
       documentRequest("http://example.com/estii/setup"),
-      documentRequest("http://example.com/rates"),
       documentRequest("http://example.com/site/schema"),
       documentRequest("http://example.com/schema"),
     ];
@@ -173,6 +172,13 @@ describe("Worker document routing", () => {
         shouldDeferToStaticAssets(request, { profile: "publishedSite" }),
       ),
     ).toEqual(generatedAppRequests.map(() => false));
+  });
+
+  it("treats the former rates path as a published Site document path", () => {
+    const request = documentRequest("http://example.com/rates");
+
+    expect(shouldHandlePublishedSiteDocument(request, { profile: "publishedSite" })).toBe(true);
+    expect(shouldDeferToStaticAssets(request, { profile: "publishedSite" })).toBe(false);
   });
 
   it("marks client-shell and static asset requests for asset serving fallback", () => {
@@ -339,6 +345,7 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/tasks")).toBe(true);
     expect(isClientShellRoute("/estii/setup")).toBe(true);
     expect(isClientShellRoute("/site/schema")).toBe(true);
+    expect(isClientShellRoute("/rates")).toBe(false);
     expect(isClientShellRoute("/blog")).toBe(false);
   });
 

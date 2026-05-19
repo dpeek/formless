@@ -593,11 +593,6 @@ function AppRoutes({
           )}
         </Route>
       ) : null}
-      {runtimeProfile.legacyRedirects.map((redirect) => (
-        <Route key={redirect.from} path={redirect.from}>
-          <Redirect replace to={redirect.to} />
-        </Route>
-      ))}
       {generatedWorlds.map((world) =>
         world.schemaRoute ? (
           <Route key={world.schemaRoute} path={world.schemaRoute}>

@@ -348,12 +348,11 @@ describe("published Site Worker SSR", () => {
       getDocument("/site"),
       getDocument("/tasks"),
       getDocument("/estii/setup"),
-      getDocument("/rates"),
       getDocument("/schema"),
     ]);
     const bodies = await Promise.all(responses.map((response) => response.text()));
 
-    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404]);
     expect(bodies.join("\n")).not.toContain("data-site-header");
     expect(bodies.join("\n")).not.toContain("Loading site page...");
   });
