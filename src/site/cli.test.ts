@@ -23,10 +23,12 @@ import {
   siteProjectMediaAssetsFromRecords,
 } from "./project-source.ts";
 import {
+  formlessCliUsage,
   initSiteProject,
   normalizeSourceUrl,
   parseFormlessCliArgs,
   publishSiteProject,
+  runFormlessCli,
   saveSiteProject,
   setupSiteProjectDeploy,
   siteProjectDevEnv,
@@ -45,6 +47,32 @@ afterEach(async () => {
 });
 
 describe("Formless Site CLI", () => {
+  it("keeps top-level help aliases and usage output stable", async () => {
+    const usage = [
+      "Usage: formless <command>",
+      "",
+      "Commands:",
+      "  init <dir>                         Create a Formless Site project",
+      "  dev [--project <path>]             Run local public preview and /admin editor",
+      "  save [--project <path>] [--check]   Save local Site edits back to project files",
+      "       [--source <url>]",
+      "  deploy setup [options]              Store deploy config and local admin token",
+      "  publish [--project <path>]          Deploy code, media, and records",
+      "       [--dry-run] [--yes]",
+    ].join("\n");
+    const logs: string[] = [];
+
+    expect(formlessCliUsage()).toBe(usage);
+    expect(parseFormlessCliArgs([])).toEqual({ kind: "help" });
+    expect(parseFormlessCliArgs(["help"])).toEqual({ kind: "help" });
+    expect(parseFormlessCliArgs(["--help"])).toEqual({ kind: "help" });
+    expect(parseFormlessCliArgs(["-h"])).toEqual({ kind: "help" });
+
+    await runFormlessCli(["help"], cliDeps(process.cwd(), { logs }));
+
+    expect(logs).toEqual([usage]);
+  });
+
   it("parses init, dev, and save commands", () => {
     expect(parseFormlessCliArgs(["init", "my-site"])).toEqual({
       kind: "init",
@@ -71,6 +99,109 @@ describe("Formless Site CLI", () => {
     });
     expect(parseFormlessCliArgs([])).toEqual({ kind: "help" });
     expect(() => parseFormlessCliArgs(["save", "--source"])).toThrow("Missing value for --source.");
+  });
+
+  it("keeps default project, deploy setup, and publish flags stable", () => {
+    expect(parseFormlessCliArgs(["dev"])).toEqual({
+      kind: "dev",
+      projectPath: ".",
+    });
+    expect(parseFormlessCliArgs(["save"])).toEqual({
+      check: false,
+      kind: "save",
+      projectPath: ".",
+      source: null,
+    });
+    expect(
+      parseFormlessCliArgs([
+        "deploy",
+        "setup",
+        "--worker",
+        "brother-site",
+        "--publish-url",
+        "https://live.example/",
+        "--media-bucket",
+        "brother-site-media",
+      ]),
+    ).toEqual({
+      accountId: null,
+      adminToken: null,
+      createBucket: false,
+      kind: "deploySetup",
+      mediaBucket: "brother-site-media",
+      projectPath: ".",
+      publishUrl: "https://live.example",
+      uploadSecret: true,
+      workerName: "brother-site",
+    });
+    expect(parseFormlessCliArgs(["publish"])).toEqual({
+      dryRun: false,
+      kind: "publish",
+      projectPath: ".",
+      yes: false,
+    });
+    expect(parseFormlessCliArgs(["publish", "-y"])).toEqual({
+      dryRun: false,
+      kind: "publish",
+      projectPath: ".",
+      yes: true,
+    });
+  });
+
+  it("keeps CLI parse error messages stable", () => {
+    expect(() => parseFormlessCliArgs(["unknown"])).toThrow("Unknown command: unknown");
+    expect(() => parseFormlessCliArgs(["init"])).toThrow("Usage: formless init <dir>");
+    expect(() => parseFormlessCliArgs(["dev", "--help"])).toThrow(
+      "Usage: formless dev [--project <path>]",
+    );
+    expect(() => parseFormlessCliArgs(["dev", "--verbose"])).toThrow(
+      "Unknown option for formless dev: --verbose",
+    );
+    expect(() => parseFormlessCliArgs(["save", "--project"])).toThrow(
+      "Missing value for --project.",
+    );
+    expect(() => parseFormlessCliArgs(["save", "--force"])).toThrow(
+      "Unknown option for formless save: --force",
+    );
+    expect(() => parseFormlessCliArgs(["deploy"])).toThrow(
+      "Usage: formless deploy setup [--project <path>] --worker <name> --publish-url <url> --media-bucket <bucket>",
+    );
+    expect(() =>
+      parseFormlessCliArgs([
+        "deploy",
+        "setup",
+        "--publish-url",
+        "https://live.example",
+        "--media-bucket",
+        "brother-site-media",
+      ]),
+    ).toThrow("Missing required option for formless deploy setup: --worker.");
+    expect(() =>
+      parseFormlessCliArgs([
+        "deploy",
+        "setup",
+        "--worker",
+        "brother-site",
+        "--media-bucket",
+        "brother-site-media",
+      ]),
+    ).toThrow("Missing required option for formless deploy setup: --publish-url.");
+    expect(() =>
+      parseFormlessCliArgs([
+        "deploy",
+        "setup",
+        "--worker",
+        "brother-site",
+        "--publish-url",
+        "https://live.example",
+      ]),
+    ).toThrow("Missing required option for formless deploy setup: --media-bucket.");
+    expect(() => parseFormlessCliArgs(["deploy", "setup", "--bogus"])).toThrow(
+      "Unknown option for formless deploy setup: --bogus",
+    );
+    expect(() => parseFormlessCliArgs(["publish", "--force"])).toThrow(
+      "Unknown option for formless publish: --force",
+    );
   });
 
   it("parses deploy setup and publish commands", () => {
@@ -530,6 +661,7 @@ function cliDeps(
   options: {
     commands?: CapturedCommand[];
     fetch?: typeof fetch;
+    logs?: string[];
     packageRoot?: string;
   } = {},
 ): FormlessCliDependencies {
@@ -537,7 +669,9 @@ function cliDeps(
     cwd,
     env: {},
     fetch: options.fetch ?? fetch,
-    log: () => {},
+    log: (message) => {
+      options.logs?.push(message);
+    },
     now: () => "2026-05-12T02:00:00.000Z",
     packageRoot: options.packageRoot ?? process.cwd(),
     randomToken: () => "generated-token",
