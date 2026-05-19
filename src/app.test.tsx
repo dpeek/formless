@@ -4776,6 +4776,66 @@ describe("generated forms and records", () => {
     expect(emptyHtml).not.toContain("No image");
   });
 
+  it("keeps image create controls as URL inputs and upload affordances edit-only", () => {
+    const entity: EntitySchema = {
+      label: "Media",
+      fields: {
+        href: { type: "text", required: false, label: "Image", format: "href" },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    };
+    const action: Extract<HomeActionConfig, { type: "create" }> = {
+      type: "create",
+      label: "Create Media",
+      entityName: "media",
+      entity,
+      fields: [createFieldConfig(entity, "href", "image")],
+      defaults: [],
+      enabled: entity.mutations.create.enabled,
+    };
+    const record: StoredRecord = {
+      id: "media-1",
+      entity: "media",
+      values: { href: "https://example.com/cover.webp" },
+      createdAt: "2026-05-05T00:00:51.000Z",
+    };
+    const formData = new FormData();
+    formData.set("href", "https://example.com/create.webp");
+
+    applyBootstrapResponse(bootstrap([record]));
+    const createHtml = renderToStaticMarkup(
+      <GeneratedCreateDialogForm action={action} renderDialogCancel={false} />,
+    );
+    const editHtml = renderToStaticMarkup(
+      <SchemaAppProvider schemaKey="tasks">
+        <RecordFieldEditor
+          canPatch
+          entityName="media"
+          fieldConfig={recordFieldConfig(entity, "href", "image", "field-commit")}
+          recordId="media-1"
+          showLabel
+        />
+      </SchemaAppProvider>,
+    );
+
+    expect(createHtml).toMatch(inputWithNameAndType("href", "text"));
+    expect(createHtml).not.toContain('type="file"');
+    expect(createHtml).not.toContain('data-web-image-field-upload="trigger"');
+    expect(resolveCreateValues(formData, action)).toEqual({
+      href: "https://example.com/create.webp",
+    });
+    expect(editHtml).toContain('data-web-field-kind="image"');
+    expect(editHtml).toContain('data-web-image-field-preview="image"');
+    expect(editHtml).toContain('src="https://example.com/cover.webp"');
+    expect(editHtml).toContain('aria-label="Upload Image"');
+    expect(editHtml).toMatch(/<input(?=[^>]*type="file")(?=[^>]*disabled="")[^>]*>/);
+    expect(editHtml).toMatch(inputWithAriaLabelAndType("Image URL", "text"));
+  });
+
   it("still resolves scoped create defaults for views that use them", () => {
     const action = scopedRateCreateAction();
     const formData = new FormData();
