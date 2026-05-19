@@ -2956,6 +2956,21 @@ describe("schema collection views", () => {
     ).not.toThrow();
   });
 
+  it("does not use collection primary navigation as a missing-Screens fallback", () => {
+    const schemaWithoutScreens: Record<string, unknown> = baseSchema({
+      views: {
+        ...defaultViews(),
+        taskHome: {
+          ...defaultCollectionView(),
+          navigation: { primary: false },
+        },
+      },
+    });
+    delete schemaWithoutScreens.screens;
+
+    expect(() => parseAppSchema(schemaWithoutScreens)).toThrow('Schema must include "screens".');
+  });
+
   it("requires screens and parses screen definitions", () => {
     const schemaWithoutScreens: Record<string, unknown> = { ...baseSchema() };
     delete schemaWithoutScreens.screens;

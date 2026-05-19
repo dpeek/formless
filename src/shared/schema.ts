@@ -54,7 +54,6 @@ export function parseAppSchema(value: unknown): AppSchema {
     relationships,
     readModels,
     unions,
-    { requirePrimaryCollection: value.screens === undefined },
   );
   const screens = parseScreens(value.screens, views);
 
