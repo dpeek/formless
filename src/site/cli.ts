@@ -1,13 +1,12 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { constants as fsConstants, existsSync } from "node:fs";
-import { access, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import packageJson from "../../package.json";
-import rawSiteSeedRecords from "../../schema/apps/site/seed-records.json";
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
@@ -15,11 +14,8 @@ import {
 import type { StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
 import {
-  defaultSiteProjectConfig,
   formatSiteProjectConfig,
-  parseSiteProjectConfigJson,
   SITE_PROJECT_CONFIG_FILE,
-  SITE_PROJECT_MEDIA_ROOT,
   SITE_PROJECT_RECORDS_FILE,
   type SiteProjectConfig,
 } from "./project-config.ts";
@@ -28,18 +24,25 @@ import {
   buildSiteProjectSourceSnapshot,
   formatSiteProjectRecords,
   packageSiteSourceSchema,
-  parseSiteProjectRecords,
-  parseSiteProjectRecordsJson,
   siteProjectMediaAssetsFromRecords,
-  type SiteProjectMediaAsset,
 } from "./project-source.ts";
+import {
+  fetchSiteProjectMediaFiles,
+  initSiteProjectSource,
+  readSiteProjectMediaFiles,
+  readSiteProjectSource,
+  resolveSiteProjectRoot,
+  staleSiteProjectSourcePaths,
+  writeSiteProjectSourceFiles,
+  type SiteProjectSource,
+} from "./project-files.ts";
 import {
   runSitePublish,
   type SitePublishCommand,
   type SitePublishDependencies,
   type SitePublishResult,
 } from "./publish.ts";
-import { SITE_MEDIA_ROUTE_PREFIX, SITE_SOURCE_MEDIA_ROOT } from "./source-media.ts";
+import { SITE_MEDIA_ROUTE_PREFIX } from "./source-media.ts";
 
 export {
   formlessCliUsage,
@@ -47,6 +50,11 @@ export {
   parseFormlessCliArgs,
   type FormlessCliCommand,
 } from "./cli-command.ts";
+export {
+  readSiteProjectSource,
+  resolveSiteProjectRoot,
+  type SiteProjectSource,
+} from "./project-files.ts";
 
 export type FormlessCliRunCommandOptions = {
   cwd: string;
@@ -107,16 +115,6 @@ export type SiteProjectLocalPublishBroker = {
   close: () => Promise<void>;
   endpoint: string;
   token: string;
-};
-
-export type SiteProjectSource = {
-  config: SiteProjectConfig;
-  projectRoot: string;
-  records: StoredRecord[];
-};
-
-type ProjectMediaFile = SiteProjectMediaAsset & {
-  bytes: Uint8Array<ArrayBuffer>;
 };
 
 type PackageCommand = {
@@ -233,26 +231,8 @@ export async function initSiteProject(
   > = nodeFormlessCliDependencies(),
 ): Promise<InitSiteProjectResult> {
   const projectRoot = path.resolve(dependencies.cwd, input.targetDir);
-  await assertInitTarget(projectRoot);
 
-  const config = defaultSiteProjectConfig();
-  const records = parseSiteProjectRecords(rawSiteSeedRecords);
-  const configPath = path.join(projectRoot, SITE_PROJECT_CONFIG_FILE);
-  const recordsPath = path.join(projectRoot, SITE_PROJECT_RECORDS_FILE);
-  const mediaAssets = siteProjectMediaAssetsFromRecords(records, { mediaRoot: config.mediaRoot });
-
-  await mkdir(projectRoot, { recursive: true });
-  await writeFile(configPath, formatSiteProjectConfig(config));
-  await writeFile(recordsPath, formatSiteProjectRecords(records));
-  await copyStarterMediaFiles(projectRoot, dependencies.packageRoot, mediaAssets);
-
-  return {
-    configPath,
-    mediaCount: mediaAssets.length,
-    projectRoot,
-    recordCount: records.length,
-    recordsPath,
-  };
+  return initSiteProjectSource({ packageRoot: dependencies.packageRoot, projectRoot });
 }
 
 export async function saveSiteProject(
@@ -266,10 +246,15 @@ export async function saveSiteProject(
   const snapshot = await fetchJson<StoreSnapshot>(dependencies.fetch, siteSnapshotUrl(source));
   const records = buildSiteProjectRecordsFromSnapshot(snapshot);
   const nextRecords = formatSiteProjectRecords(records);
-  const mediaFiles = await fetchProjectMediaFiles(source, records, project.config, dependencies);
+  const mediaFiles = await fetchSiteProjectMediaFiles(
+    source,
+    records,
+    project.config,
+    dependencies.fetch,
+  );
 
   if (input.check) {
-    const stalePaths = await staleProjectSourcePaths(project, nextRecords, mediaFiles);
+    const stalePaths = await staleSiteProjectSourcePaths(project, nextRecords, mediaFiles);
 
     if (stalePaths.length > 0) {
       throw new Error(
@@ -286,8 +271,7 @@ export async function saveSiteProject(
     };
   }
 
-  await writeFile(path.join(project.projectRoot, project.config.recordsPath), nextRecords);
-  await writeProjectMediaFiles(project.projectRoot, mediaFiles);
+  await writeSiteProjectSourceFiles(project, nextRecords, mediaFiles);
 
   return {
     mediaCount: mediaFiles.length,
@@ -451,26 +435,6 @@ export async function startSiteProjectLocalPublishBroker(
   };
 }
 
-export async function readSiteProjectSource(projectRoot: string): Promise<SiteProjectSource> {
-  const configPath = path.join(projectRoot, SITE_PROJECT_CONFIG_FILE);
-  const config = parseSiteProjectConfigJson(await readFile(configPath, "utf8"));
-  const recordsPath = path.join(projectRoot, config.recordsPath);
-  const records = parseSiteProjectRecordsJson(await readFile(recordsPath, "utf8"));
-
-  return {
-    config,
-    projectRoot,
-    records,
-  };
-}
-
-export function resolveSiteProjectRoot(
-  cwd: string,
-  options: { projectPath?: string } = {},
-): string {
-  return path.resolve(cwd, options.projectPath ?? ".");
-}
-
 export function siteProjectStorageId(projectRoot: string): string {
   return createHash("sha256").update(path.resolve(projectRoot)).digest("hex").slice(0, 16);
 }
@@ -532,7 +496,7 @@ async function restoreSiteProjectToLocalAuthority(
   dependencies: Pick<FormlessCliDependencies, "fetch" | "now">,
   projectId: string,
 ) {
-  const mediaFiles = await readProjectMediaFiles(project);
+  const mediaFiles = await readSiteProjectMediaFiles(project);
   const snapshot = buildSiteProjectSourceSnapshot(project.records, {
     exportedAt: dependencies.now(),
   });
@@ -1079,131 +1043,6 @@ function parseDotEnvValue(value: string): string {
   return value;
 }
 
-async function assertInitTarget(projectRoot: string) {
-  const targetStat = await statIfExists(projectRoot);
-
-  if (targetStat && !targetStat.isDirectory()) {
-    throw new Error(`Cannot initialize Site project because ${projectRoot} is not a directory.`);
-  }
-
-  const conflicts = (
-    await Promise.all(
-      [SITE_PROJECT_CONFIG_FILE, SITE_PROJECT_RECORDS_FILE, SITE_PROJECT_MEDIA_ROOT].map(
-        async (relativePath) =>
-          (await pathExists(path.join(projectRoot, relativePath))) ? relativePath : null,
-      ),
-    )
-  ).filter((value): value is string => value !== null);
-
-  if (conflicts.length > 0) {
-    throw new Error(
-      `Cannot initialize Site project because the target already contains ${conflicts.join(", ")}.`,
-    );
-  }
-}
-
-async function copyStarterMediaFiles(
-  projectRoot: string,
-  packageRoot: string,
-  mediaAssets: SiteProjectMediaAsset[],
-) {
-  for (const asset of mediaAssets) {
-    const sourcePath = path.join(packageRoot, SITE_SOURCE_MEDIA_ROOT, asset.key);
-    const targetPath = path.join(projectRoot, asset.sourcePath);
-
-    await mkdir(path.dirname(targetPath), { recursive: true });
-    await copyFile(sourcePath, targetPath);
-  }
-}
-
-async function fetchProjectMediaFiles(
-  source: string,
-  records: StoredRecord[],
-  config: SiteProjectConfig,
-  dependencies: Pick<FormlessCliDependencies, "fetch">,
-): Promise<ProjectMediaFile[]> {
-  const mediaAssets = siteProjectMediaAssetsFromRecords(records, { mediaRoot: config.mediaRoot });
-
-  return Promise.all(
-    mediaAssets.map(async (asset) => {
-      const response = await dependencies.fetch(new URL(asset.href, `${source}/`).toString(), {
-        headers: {
-          accept: asset.contentType,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch ${asset.href}: HTTP ${response.status} ${await response.text()}`,
-        );
-      }
-
-      const contentType = normalizeContentType(response.headers.get("Content-Type"));
-
-      if (contentType && contentType !== asset.contentType) {
-        throw new Error(
-          `Failed to fetch ${asset.href}: expected ${asset.contentType}, received ${contentType}.`,
-        );
-      }
-
-      return {
-        ...asset,
-        bytes: copyBytes(new Uint8Array(await response.arrayBuffer())),
-      };
-    }),
-  );
-}
-
-async function readProjectMediaFiles(project: SiteProjectSource): Promise<ProjectMediaFile[]> {
-  const mediaAssets = siteProjectMediaAssetsFromRecords(project.records, {
-    mediaRoot: project.config.mediaRoot,
-  });
-  const files: ProjectMediaFile[] = [];
-
-  for (const asset of mediaAssets) {
-    const mediaPath = path.join(project.projectRoot, asset.sourcePath);
-
-    files.push({
-      ...asset,
-      bytes: copyBytes(await readFile(mediaPath)),
-    });
-  }
-
-  return files;
-}
-
-async function writeProjectMediaFiles(projectRoot: string, mediaFiles: ProjectMediaFile[]) {
-  for (const mediaFile of mediaFiles) {
-    const targetPath = path.join(projectRoot, mediaFile.sourcePath);
-
-    await mkdir(path.dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, mediaFile.bytes);
-  }
-}
-
-async function staleProjectSourcePaths(
-  project: SiteProjectSource,
-  nextRecords: string,
-  mediaFiles: ProjectMediaFile[],
-): Promise<string[]> {
-  const stalePaths: string[] = [];
-  const recordsPath = path.join(project.projectRoot, project.config.recordsPath);
-
-  if ((await readFileIfExists(recordsPath, "utf8")) !== nextRecords) {
-    stalePaths.push(project.config.recordsPath);
-  }
-
-  for (const mediaFile of mediaFiles) {
-    const current = await readFileIfExists(path.join(project.projectRoot, mediaFile.sourcePath));
-
-    if (!current || !bytesEqual(current, mediaFile.bytes)) {
-      stalePaths.push(mediaFile.sourcePath);
-    }
-  }
-
-  return stalePaths;
-}
-
 function defaultDevSourceCandidates(env: NodeJS.ProcessEnv): string[] {
   const port = env.PORT && /^\d+$/.test(env.PORT) ? env.PORT : "5173";
 
@@ -1405,48 +1244,6 @@ function siteSnapshotUrl(source: string): string {
 
 function siteSnapshotRestoreUrl(source: string): string {
   return new URL("/api/site/snapshot/restore", `${source}/`).toString();
-}
-
-function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  const copy = new Uint8Array(bytes.byteLength);
-
-  copy.set(bytes);
-  return copy;
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) {
-    return false;
-  }
-
-  for (let index = 0; index < left.byteLength; index += 1) {
-    if (left[index] !== right[index]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function normalizeContentType(value: string | null): string {
-  return value?.split(";")[0]?.trim().toLowerCase() ?? "";
-}
-
-async function statIfExists(filePath: string) {
-  try {
-    return await stat(filePath);
-  } catch {
-    return null;
-  }
-}
-
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath, fsConstants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function readFileIfExists(filePath: string): Promise<Buffer | null>;
