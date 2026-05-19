@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown-renderer";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import {
@@ -7,23 +7,20 @@ import {
   siteHrefMatchesRoute,
   type SitePageLinkMode,
 } from "./links.ts";
+import {
+  FooterNavigationContext,
+  HeaderNavigationContext,
+  PagePlacementFlow,
+  SitePageShell,
+  useFooterNavigation,
+  useHeaderNavigation,
+  useSitePageLinkMode,
+  useSiteRouteSlug,
+  useSiteTheme,
+  type PublicSiteTheme,
+  type PublicSiteThemeController,
+} from "./page.tsx";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
-
-const SitePageLinkModeContext = createContext<SitePageLinkMode>("preview");
-const SiteRouteSlugContext = createContext<string | undefined>(undefined);
-const HeaderNavigationContext = createContext(false);
-const FooterNavigationContext = createContext(false);
-const SiteThemeContext = createContext<PublicSiteThemeController>({
-  theme: "light",
-  toggleTheme: () => {},
-});
-
-type PublicSiteTheme = "light" | "dark";
-
-type PublicSiteThemeController = {
-  theme: PublicSiteTheme;
-  toggleTheme: () => void;
-};
 
 export const PUBLIC_SITE_THEME_STORAGE_KEY = "formless:public-site:theme";
 const PRIMARY_IMAGE_SLOT = "primaryImage";
@@ -37,41 +34,19 @@ export function SitePageRenderer({
   linkMode?: SitePageLinkMode;
   tree: SitePageTree;
 }) {
-  const frame = tree.frame;
   const theme = usePublicSiteTheme();
 
   return (
-    <SitePageLinkModeContext.Provider value={linkMode}>
-      <SiteRouteSlugContext.Provider value={tree.route?.slug}>
-        <SiteThemeContext.Provider value={theme}>
-          <article
-            className={
-              theme.theme === "dark"
-                ? "dark flex min-h-dvh flex-col bg-zinc-950 text-zinc-100"
-                : "flex min-h-dvh flex-col bg-white text-zinc-950"
-            }
-            data-site-theme={theme.theme}
-          >
-            {frame.header ? <HeaderGroup block={frame.header} /> : null}
-            <SiteRoutePage tree={tree} />
-            {frame.footer ? <FooterGroup block={frame.footer} /> : null}
-          </article>
-        </SiteThemeContext.Provider>
-      </SiteRouteSlugContext.Provider>
-    </SitePageLinkModeContext.Provider>
+    <SitePageShell linkMode={linkMode} parts={sitePageRendererParts} theme={theme} tree={tree} />
   );
 }
 
-function SiteRoutePage({ tree }: { tree: SitePageTree }) {
-  switch (tree.route?.kind) {
-    case "post":
-      return <ContentDetailPage block={tree.page} />;
-    case "post-index":
-    case "page":
-    default:
-      return <PagePlacementFlow page={tree.page} />;
-  }
-}
+const sitePageRendererParts = {
+  Footer: FooterGroup,
+  Header: HeaderGroup,
+  Placement: SitePlacementRenderer,
+  PrimaryImage,
+};
 
 function SitePlacementRenderer({ placement }: { placement: SitePlacementNode }) {
   return <SiteBlockRenderer block={placement.block} placement={placement} />;
@@ -123,26 +98,7 @@ function SiteBlockRenderer({
 }
 
 function PageBlock({ block }: { block: SiteBlockNode }) {
-  return <PagePlacementFlow page={block} />;
-}
-
-function ContentDetailPage({ block }: { block: SiteBlockNode }) {
-  const primaryImage = primaryImagePlacement(block);
-  const bodyPlacements = block.placements.filter(isDefaultPlacement);
-
-  return (
-    <PageMain>
-      <header className="max-w-3xl space-y-4">
-        <h1 className="text-4xl font-semibold tracking-normal text-zinc-950 dark:text-zinc-50">
-          {block.label}
-        </h1>
-        {primaryImage ? <PrimaryImage placement={primaryImage} variant="post-detail" /> : null}
-      </header>
-      {bodyPlacements.map((placement) => (
-        <SitePlacementRenderer key={placement.id} placement={placement} />
-      ))}
-    </PageMain>
-  );
+  return <PagePlacementFlow page={block} Placement={SitePlacementRenderer} />;
 }
 
 function GroupBlock({ block, placement }: { block: SiteBlockNode; placement?: SitePlacementNode }) {
@@ -704,26 +660,6 @@ function ImageBlock({ block }: { block: SiteBlockNode }) {
   );
 }
 
-function PagePlacementFlow({ page }: { page: SiteBlockNode }) {
-  const bodyPlacements = page.placements.filter((placement) => !isPageChromePlacement(placement));
-
-  return (
-    <PageMain>
-      {bodyPlacements.map((placement) => (
-        <SitePlacementRenderer key={placement.id} placement={placement} />
-      ))}
-    </PageMain>
-  );
-}
-
-function PageMain({ children }: { children: ReactNode }) {
-  return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-6 py-10">
-      {children}
-    </main>
-  );
-}
-
 function SitePlacementList({ placements }: { placements: SitePlacementNode[] }) {
   return (
     <>
@@ -799,18 +735,6 @@ function partitionHeaderPlacements(placements: SitePlacementNode[]): {
   };
 }
 
-function isPageChromePlacement(placement: SitePlacementNode): boolean {
-  return isPageHeaderPlacement(placement) || isPageFooterPlacement(placement);
-}
-
-function isPageHeaderPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.type === "header";
-}
-
-function isPageFooterPlacement(placement: SitePlacementNode): boolean {
-  return placement.block.type === "footer";
-}
-
 function PlainText({ className, text }: { className?: string; text: string }) {
   return (
     <div className={className}>
@@ -821,26 +745,6 @@ function PlainText({ className, text }: { className?: string; text: string }) {
       ))}
     </div>
   );
-}
-
-function useSitePageLinkMode(): SitePageLinkMode {
-  return useContext(SitePageLinkModeContext);
-}
-
-function useSiteRouteSlug(): string | undefined {
-  return useContext(SiteRouteSlugContext);
-}
-
-function useHeaderNavigation(): boolean {
-  return useContext(HeaderNavigationContext);
-}
-
-function useFooterNavigation(): boolean {
-  return useContext(FooterNavigationContext);
-}
-
-function useSiteTheme(): PublicSiteThemeController {
-  return useContext(SiteThemeContext);
 }
 
 function usePublicSiteTheme(): PublicSiteThemeController {
