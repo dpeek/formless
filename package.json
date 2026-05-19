@@ -9,9 +9,7 @@
   ],
   "files": [
     "bin",
-    "icons",
     "index.html",
-    "public",
     "README.md",
     "schema",
     "scripts",
@@ -37,7 +35,6 @@
     "formless": "bun run scripts/formless.ts",
     "site:pull-seed": "bun run scripts/site-pull-seed.ts",
     "site:publish": "bun run scripts/site-publish.ts",
-    "site:icon-spike": "bun run scripts/site-icon-renderer-spike.ts",
     "deploy": "vp build && wrangler deploy"
   },
   "dependencies": {

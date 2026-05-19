@@ -54,10 +54,19 @@ describe("public Site SSR characterization", () => {
     expect(wrangler).not.toContain('"!/apple-touch-icon.png"');
   });
 
-  it("does not package launch icon assets in the package-owned public directory", () => {
-    const packageJson = JSON.parse(readRepoFile("../../package.json")) as { files?: string[] };
+  it("does not package absent launch icon asset directories", () => {
+    const packageJson = JSON.parse(readRepoFile("../../package.json")) as {
+      files?: string[];
+      scripts?: Record<string, string>;
+    };
 
-    expect(packageJson.files).toContain("public");
+    expect(packageJson.files).not.toContain("icons");
+    expect(packageJson.files).not.toContain("public");
+    expect(
+      Object.keys(packageJson.scripts ?? {}).filter((script) => script.includes("spike")),
+    ).toEqual([]);
+    expect(repoFileExists("../../icons")).toBe(false);
+    expect(repoFileExists("../../public")).toBe(false);
     expect(repoFileExists("../../public/favicon.svg")).toBe(false);
     expect(repoFileExists("../../public/favicon.ico")).toBe(false);
     expect(repoFileExists("../../public/apple-touch-icon.png")).toBe(false);
