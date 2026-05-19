@@ -38,7 +38,7 @@ import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import type { AppSchema, FieldSchema } from "../../shared/schema.ts";
 import type { SchemaKey } from "../../shared/schema-apps.ts";
-import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
+import { selectGeneratedFieldControl } from "./field-controls.ts";
 import {
   decodeNumberEditorInputValue,
   encodeNumberEditorInputValue,
@@ -66,10 +66,10 @@ export function RecordFieldEditor({
 }) {
   const schemaKey = useSchemaKey();
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
-  const adapter = selectGeneratedFieldEditorAdapter(field, editor);
   const schema = useSchema();
   const numberFormat = fieldConfig.format ?? "plain";
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
+  const fieldControl = selectGeneratedFieldControl({ editor, field, label });
   const labelClass =
     showLabel && presentation !== "heading" ? "text-xs font-medium text-slate-600" : "sr-only";
   const record = useRecord(recordId);
@@ -173,7 +173,7 @@ export function RecordFieldEditor({
     return commitPatch({ [fieldName]: value });
   }
 
-  if (adapter.kind === "boolean") {
+  if (fieldControl.controlKind === "checkbox") {
     if (showLabel) {
       return (
         <div className="min-w-28 flex-none space-y-1">
@@ -216,8 +216,9 @@ export function RecordFieldEditor({
     );
   }
 
-  if (adapter.kind === "enum") {
-    const unknownValue = draft !== "" && !Object.hasOwn(adapter.field.values, draft) ? draft : null;
+  if (fieldControl.kind === "enum") {
+    const unknownValue =
+      draft !== "" && !Object.hasOwn(fieldControl.field.values, draft) ? draft : null;
 
     return (
       <div
@@ -238,14 +239,14 @@ export function RecordFieldEditor({
               setDraft(value);
               void commit(inputValueToFieldValue(field, value));
             }}
-            required={adapter.required}
+            required={fieldControl.required}
             value={draft}
           >
-            {!adapter.required || draft === "" ? <NativeSelectOption value="" /> : null}
+            {!fieldControl.required || draft === "" ? <NativeSelectOption value="" /> : null}
             {unknownValue ? (
               <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
             ) : null}
-            {Object.entries(adapter.field.values).map(([value, option]) => (
+            {Object.entries(fieldControl.field.values).map(([value, option]) => (
               <NativeSelectOption key={value} value={value}>
                 {option.label}
               </NativeSelectOption>
@@ -257,14 +258,14 @@ export function RecordFieldEditor({
     );
   }
 
-  if (adapter.kind === "reference") {
+  if (fieldControl.kind === "reference") {
     return (
       <RecordReferenceEditor
         canPatch={canPatch}
         density={density}
         draft={draft}
         error={error}
-        field={adapter.field}
+        field={fieldControl.field}
         isPending={isPending}
         label={label}
         labelClass={labelClass}
@@ -274,30 +275,26 @@ export function RecordFieldEditor({
     );
   }
 
-  const control = adapter.control;
-  const isIconEditor =
-    adapter.kind === "text" &&
-    (adapter.editor === "icon" || adapter.field.format === "icon" || control.kind === "icon");
-  const isMarkdownEditor = adapter.kind === "text" && adapter.editor === "markdown";
+  const control = fieldControl.control;
+  const isIconEditor = fieldControl.controlKind === "icon";
+  const isMarkdownEditor = fieldControl.controlKind === "markdown";
   const isRichMarkdownEditor = isMarkdownEditor && density !== "compact";
   const isMultilineTextEditor = control.kind === "textarea" && !isRichMarkdownEditor;
-  const isColorEditor = adapter.kind === "text" && adapter.editor === "color";
-  const isImageEditor = adapter.kind === "text" && adapter.editor === "image";
-  const isDateEditor = control.kind === "input" && control.inputType === "date";
-  const isNumberEditor = adapter.kind === "number";
+  const isColorEditor = fieldControl.controlKind === "color";
+  const isImageEditor = fieldControl.controlKind === "image";
+  const isDateEditor = fieldControl.controlKind === "date";
+  const isNumberEditor = fieldControl.controlKind === "number";
   const isValueUnitEditor = isNumberEditor && valueUnitConfig !== undefined;
   const isHeadingTextEditor =
     presentation === "heading" &&
-    adapter.kind === "text" &&
-    adapter.editor === "text" &&
-    control.kind === "input" &&
-    control.inputType === "text";
+    fieldControl.kind === "text" &&
+    fieldControl.editor === "text" &&
+    fieldControl.controlKind === "text";
   const isAutosizeTextEditor =
     isHeadingTextEditor ||
-    (adapter.kind === "text" &&
-      adapter.editor === "text" &&
-      control.kind === "input" &&
-      control.inputType === "text" &&
+    (fieldControl.kind === "text" &&
+      fieldControl.editor === "text" &&
+      fieldControl.controlKind === "text" &&
       (density === "compact" || (!showLabel && isTitleLikeTextField(fieldName, field))));
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -442,7 +439,7 @@ export function RecordFieldEditor({
             onUrlRevert={() => {
               setDraft(fieldValueToInputValue(field, recordValue));
             }}
-            required={adapter.required}
+            required={fieldControl.required}
             uploadEnabled={isSiteImageUploadAvailable(schemaKey)}
           />
         ) : isRichMarkdownEditor ? (
@@ -473,7 +470,7 @@ export function RecordFieldEditor({
             }}
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={handleTextareaKeyDown}
-            required={adapter.required}
+            required={fieldControl.required}
             value={draft}
           />
         ) : isColorEditor ? (
@@ -492,7 +489,7 @@ export function RecordFieldEditor({
               }
             }}
             onChange={setDraft}
-            required={adapter.required}
+            required={fieldControl.required}
             value={draft}
           />
         ) : isAutosizeTextEditor ? (
@@ -524,10 +521,10 @@ export function RecordFieldEditor({
               setDraft(fieldValueToInputValue(field, recordValue));
             }}
             placeholder={label}
-            required={adapter.required}
+            required={fieldControl.required}
             type="text"
             value={draft}
-            {...adapter.inputAttributes}
+            {...fieldControl.inputAttributes}
           />
         ) : isDateEditor ? (
           <DateInput
@@ -550,7 +547,7 @@ export function RecordFieldEditor({
               }
             }}
             onValueChange={setDraft}
-            required={adapter.required}
+            required={fieldControl.required}
             value={draft}
           />
         ) : isValueUnitEditor ? (
@@ -565,7 +562,7 @@ export function RecordFieldEditor({
                 ? "h-6 rounded border border-slate-300 px-2 py-0.5 text-xs"
                 : "rounded border border-slate-300 px-3 py-2"
             }
-            inputRequired={adapter.required}
+            inputRequired={fieldControl.required}
             inputValue={draft}
             label={label}
             onInputValueChange={setDraft}
@@ -623,9 +620,9 @@ export function RecordFieldEditor({
             onValueRevert={() => {
               setDraft(fieldValueToEditorInputValue(field, recordValue, numberFormat));
             }}
-            required={adapter.required}
+            required={fieldControl.required}
             value={draft}
-            {...adapter.inputAttributes}
+            {...fieldControl.inputAttributes}
           />
         ) : (
           <Input
@@ -643,8 +640,8 @@ export function RecordFieldEditor({
             }}
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={handleInputKeyDown}
-            required={adapter.required}
-            {...adapter.inputAttributes}
+            required={fieldControl.required}
+            {...fieldControl.inputAttributes}
             type={control.kind === "input" ? control.inputType : "text"}
             value={draft}
           />

@@ -45,7 +45,7 @@ import {
   selectCreateFieldsForInputValues,
 } from "../../shared/create-defaults.ts";
 import type { FieldVisibilityValue } from "../../shared/schema.ts";
-import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
+import { selectGeneratedFieldControl } from "./field-controls.ts";
 import {
   decodeNumberEditorInputValue,
   encodeNumberEditorInputValue,
@@ -305,109 +305,104 @@ function CreateFieldInput({
   onValueChange?: (value: FieldVisibilityValue) => void;
 }) {
   const { field, fieldName, editor } = fieldConfig;
-  const adapter = selectGeneratedFieldEditorAdapter(field, editor);
   const label = fieldLabel(fieldName, field);
+  const fieldControl = selectGeneratedFieldControl({ editor, field, label });
 
-  if (adapter.kind === "boolean") {
+  if (fieldControl.controlKind === "checkbox") {
     return (
       <Field orientation="horizontal">
         <Checkbox
-          defaultChecked={adapter.createDefaultChecked}
+          defaultChecked={fieldControl.createDefaultChecked}
           name={fieldName}
           onCheckedChange={(checked) => onValueChange?.(checked)}
         />
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
       </Field>
     );
   }
 
-  if (adapter.control.kind === "input" && adapter.control.inputType === "date") {
+  if (fieldControl.controlKind === "date") {
     return (
       <Field>
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
         <DateInput
-          defaultValue={adapter.createDefaultValue}
+          defaultValue={fieldControl.createDefaultValue}
           name={fieldName}
-          required={adapter.required}
+          required={fieldControl.required}
         />
       </Field>
     );
   }
 
-  if (adapter.kind === "text" && adapter.editor === "color") {
+  if (fieldControl.controlKind === "color") {
     return (
       <Field>
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
         <CreateColorField
-          defaultValue={adapter.createDefaultValue}
+          defaultValue={fieldControl.createDefaultValue}
           fieldName={fieldName}
-          label={label}
-          required={adapter.required}
+          label={fieldControl.label}
+          required={fieldControl.required}
         />
       </Field>
     );
   }
 
-  if (adapter.kind === "text" && adapter.editor === "markdown") {
+  if (fieldControl.controlKind === "markdown") {
     return (
       <Field>
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
         <CreateMarkdownField
-          defaultValue={adapter.createDefaultValue}
+          defaultValue={fieldControl.createDefaultValue}
           fieldName={fieldName}
-          label={label}
+          label={fieldControl.label}
         />
       </Field>
     );
   }
 
-  if (
-    adapter.kind === "text" &&
-    (adapter.editor === "icon" ||
-      adapter.field.format === "icon" ||
-      adapter.control.kind === "icon")
-  ) {
+  if (fieldControl.controlKind === "icon") {
     return (
       <Field>
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
         <CreateIconField
-          defaultValue={adapter.createDefaultValue}
+          defaultValue={fieldControl.createDefaultValue}
           fieldName={fieldName}
-          label={label}
-          required={adapter.required}
+          label={fieldControl.label}
+          required={fieldControl.required}
         />
       </Field>
     );
   }
 
-  if (adapter.kind === "number") {
+  if (fieldControl.controlKind === "number") {
     return (
       <Field>
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
         <CreateNumberField
-          defaultValue={adapter.createDefaultValue}
+          defaultValue={fieldControl.createDefaultValue}
           fieldName={fieldName}
-          inputAttributes={adapter.inputAttributes}
-          label={label}
-          required={adapter.required}
+          inputAttributes={fieldControl.inputAttributes}
+          label={fieldControl.label}
+          required={fieldControl.required}
         />
       </Field>
     );
   }
 
-  if (adapter.kind === "enum") {
+  if (fieldControl.kind === "enum") {
     return (
       <Field>
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
         <NativeSelect
           className="w-full"
-          defaultValue={adapter.createDefaultValue}
+          defaultValue={fieldControl.createDefaultValue}
           name={fieldName}
           onChange={(event) => onValueChange?.(event.currentTarget.value)}
-          required={adapter.required}
+          required={fieldControl.required}
         >
-          {adapter.required ? null : <NativeSelectOption value="" />}
-          {Object.entries(adapter.field.values).map(([value, option]) => (
+          {fieldControl.required ? null : <NativeSelectOption value="" />}
+          {Object.entries(fieldControl.field.values).map(([value, option]) => (
             <NativeSelectOption key={value} value={value}>
               {option.label}
             </NativeSelectOption>
@@ -417,28 +412,28 @@ function CreateFieldInput({
     );
   }
 
-  if (adapter.kind === "reference") {
+  if (fieldControl.kind === "reference") {
     return (
       <ReferenceCreateField
-        defaultValue={adapter.createDefaultValue}
-        field={adapter.field}
+        defaultValue={fieldControl.createDefaultValue}
+        field={fieldControl.field}
         fieldName={fieldName}
-        label={label}
+        label={fieldControl.label}
         onValueChange={onValueChange}
-        required={adapter.required}
+        required={fieldControl.required}
       />
     );
   }
 
-  if (adapter.control.kind === "textarea") {
+  if (fieldControl.controlKind === "textarea") {
     return (
       <Field>
-        <Label>{label}</Label>
+        <Label>{fieldControl.label}</Label>
         <Textarea
-          defaultValue={adapter.createDefaultValue}
+          defaultValue={fieldControl.createDefaultValue}
           name={fieldName}
           onChange={(event) => onValueChange?.(event.currentTarget.value)}
-          required={adapter.required}
+          required={fieldControl.required}
         />
       </Field>
     );
@@ -446,13 +441,13 @@ function CreateFieldInput({
 
   return (
     <Field>
-      <Label>{label}</Label>
+      <Label>{fieldControl.label}</Label>
       <Input
-        defaultValue={adapter.createDefaultValue}
+        defaultValue={fieldControl.createDefaultValue}
         name={fieldName}
         onChange={(event) => onValueChange?.(event.currentTarget.value)}
-        required={adapter.required}
-        type={adapter.control.kind === "input" ? adapter.control.inputType : "text"}
+        required={fieldControl.required}
+        type={fieldControl.control.kind === "input" ? fieldControl.control.inputType : "text"}
       />
     </Field>
   );

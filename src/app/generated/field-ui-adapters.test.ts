@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { FieldSchema } from "../../shared/schema.ts";
-import { selectGeneratedFieldEditorAdapter } from "./field-ui-adapters.ts";
+import { selectGeneratedFieldControl } from "./field-controls.ts";
 
-describe("generated field UI adapters", () => {
+describe("generated field controls", () => {
   it("exposes field behavior facts for generated create and inline editors", () => {
     expect(
       Object.fromEntries(
         textEditors.map((editor) => [
           editor,
-          selectGeneratedFieldEditorAdapter(fields.title, editor).control,
+          selectGeneratedFieldControl({
+            editor,
+            field: fields.title,
+            label: labels.title,
+          }).control,
         ]),
       ),
     ).toEqual({
@@ -21,66 +25,154 @@ describe("generated field UI adapters", () => {
       icon: { kind: "icon" },
       image: { kind: "imageUpload" },
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.title, "text")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "text",
+        field: fields.title,
+        label: labels.title,
+      }),
+    ).toMatchObject({
       kind: "text",
       control: { kind: "input", inputType: "text" },
+      controlKind: "text",
       createDefaultChecked: false,
       createDefaultValue: undefined,
       inputAttributes: {},
+      label: "Title",
       required: true,
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.title, "markdown")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "markdown",
+        field: fields.title,
+        label: labels.title,
+      }),
+    ).toMatchObject({
       kind: "text",
       control: { kind: "textarea" },
+      controlKind: "markdown",
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.icon, "icon")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "icon",
+        field: fields.icon,
+        label: labels.icon,
+      }),
+    ).toMatchObject({
       kind: "text",
       editor: "icon",
       control: { kind: "icon" },
+      controlKind: "icon",
       createDefaultValue: undefined,
+      label: "Icon",
       required: false,
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.image, "image")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "image",
+        field: fields.image,
+        label: labels.image,
+      }),
+    ).toMatchObject({
       kind: "text",
       editor: "image",
       control: { kind: "imageUpload" },
+      controlKind: "image",
       createDefaultValue: undefined,
+      label: "Image",
       required: false,
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.dueDate, "date")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "date",
+        field: fields.dueDate,
+        label: labels.dueDate,
+      }),
+    ).toMatchObject({
       kind: "date",
       control: { kind: "input", inputType: "date" },
+      controlKind: "date",
       createDefaultValue: undefined,
       required: false,
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.done, "boolean")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "boolean",
+        field: fields.done,
+        label: labels.done,
+      }),
+    ).toMatchObject({
       kind: "boolean",
       control: { kind: "checkbox" },
+      controlKind: "checkbox",
       createDefaultChecked: true,
       required: true,
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.estimate, "number")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "number",
+        field: fields.estimate,
+        label: labels.estimate,
+      }),
+    ).toMatchObject({
       kind: "number",
       control: { kind: "formattedNumber" },
+      controlKind: "number",
       createDefaultValue: "2",
       inputAttributes: { max: 10, min: 0, step: "1" },
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.priority, "enum")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "enum",
+        field: fields.priority,
+        label: labels.priority,
+      }),
+    ).toMatchObject({
       kind: "enum",
       control: { kind: "select" },
+      controlKind: "select",
       createDefaultValue: "normal",
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.optionalPriority, "enum")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "enum",
+        field: fields.optionalPriority,
+        label: labels.optionalPriority,
+      }),
+    ).toMatchObject({
       kind: "enum",
       control: { kind: "select" },
+      controlKind: "select",
       createDefaultValue: "",
       required: false,
     });
-    expect(selectGeneratedFieldEditorAdapter(fields.resource, "reference")).toMatchObject({
+    expect(
+      selectGeneratedFieldControl({
+        editor: "reference",
+        field: fields.resource,
+        label: labels.resource,
+      }),
+    ).toMatchObject({
       kind: "reference",
       control: { kind: "reference" },
+      controlKind: "reference",
       createDefaultValue: undefined,
       required: true,
+    });
+  });
+
+  it("selects icon controls from text fields with icon format", () => {
+    expect(
+      selectGeneratedFieldControl({
+        editor: "text",
+        field: fields.icon,
+        label: labels.icon,
+      }),
+    ).toMatchObject({
+      kind: "text",
+      editor: "text",
+      control: { kind: "input", inputType: "text" },
+      controlKind: "icon",
     });
   });
 });
@@ -122,3 +214,15 @@ const textEditors = [
   "icon",
   "image",
 ] as const;
+
+const labels = {
+  title: "Title",
+  icon: "Icon",
+  image: "Image",
+  done: "Done",
+  dueDate: "Due date",
+  estimate: "Estimate",
+  priority: "Priority",
+  optionalPriority: "Optional priority",
+  resource: "Resource",
+} satisfies Record<keyof typeof fields, string>;
