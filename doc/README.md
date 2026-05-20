@@ -1,6 +1,6 @@
 # Agent Docs Map
 
-Last updated: 2026-05-19
+Last updated: 2026-05-20
 
 Repo docs are project memory. Keep claims source-faithful: point to code, schema, tests, shipped behavior, or the owning GitHub issue.
 
@@ -9,7 +9,7 @@ Repo docs are project memory. Keep claims source-faithful: point to code, schema
 - `AGENTS.md`: agent workflow and repo rules.
 - `CONTEXT.md`: project vocabulary.
 - `doc/current.md`: shipped behavior index.
-- `doc/roadmap.md`: first-release target.
+- `doc/roadmap.md`: possible directions for next work.
 - `doc/agents/`: skill and tracker configuration.
 
 ## Topic Map

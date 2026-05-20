@@ -480,20 +480,25 @@ describe("authority", () => {
     ]);
   });
 
-  it("rejects source schema resets when existing records violate source constraints", async () => {
+  it("removes retired estimate values when resetting source schema", async () => {
     await postJson<SchemaUpdateResponse>("/api/schema", {
       schema: schemaWithEstimateNumber({ min: -10 }),
     });
-    await postMutation("mutation-negative-estimate", {
+    const created = await postMutation("mutation-negative-estimate", {
       title: "Negative",
       estimate: -1,
     });
 
-    await expectError(
-      "/api/reset/schema",
-      {},
-      'Cannot change number constraints for "task.estimate"',
-    );
+    const reset = await postJson<BootstrapResponse>("/api/reset/schema", {});
+    const resetRecord = reset.records.find((record) => record.id === created.record.id);
+
+    expect(reset.schema).toEqual(appSchema);
+    expect(reset.schema.entities.task.fields).not.toHaveProperty("estimate");
+    expect(resetRecord?.values).toEqual({
+      title: "Negative",
+      done: false,
+      priority: "normal",
+    });
   });
 
   it("resets seed data to source schema, records, and seeded changes", async () => {
@@ -2061,6 +2066,10 @@ describe("authority", () => {
   });
 
   it("accepts finite number values and rejects invalid numeric input", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithEstimateNumber(),
+    });
+
     const zero = await postMutation("mutation-1", { title: "Zero", estimate: 0 });
     const estimated = await postMutation("mutation-2", { title: "Estimated", estimate: 3 });
 
@@ -2100,6 +2109,10 @@ describe("authority", () => {
   });
 
   it("clears optional number fields when patched to an empty value", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithEstimateNumber(),
+    });
+
     const created = await postMutation("mutation-1", { title: "First", estimate: 4 });
     const cleared = await postJson<MutationResponse>("/api/mutations", {
       mutationId: "mutation-2",
@@ -2121,6 +2134,10 @@ describe("authority", () => {
   });
 
   it("checks number constraints when applying schema updates", async () => {
+    await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithEstimateNumber(),
+    });
+
     const created = await postMutation("mutation-1", { title: "Estimated", estimate: 3 });
 
     const relaxed = await postJson<SchemaUpdateResponse>("/api/schema", {
@@ -3564,12 +3581,6 @@ function schemaWithTaskProjectReferenceDeleteEnabled(): AppSchema {
 }
 
 function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {}) {
-  const currentEstimateField = appSchema.entities.task.fields.estimate;
-
-  if (currentEstimateField?.type !== "number") {
-    throw new Error("Seed task estimate field must be a number.");
-  }
-
   return {
     version: 1,
     entities: {
@@ -3578,7 +3589,11 @@ function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {})
         fields: {
           ...appSchema.entities.task.fields,
           estimate: {
-            ...currentEstimateField,
+            type: "number",
+            required: false,
+            label: "Estimate",
+            min: 0,
+            integer: true,
             ...numberOverrides,
           },
         },
@@ -3595,6 +3610,7 @@ function schemaWithEstimateNumber(numberOverrides: Record<string, unknown> = {})
 }
 
 function schemaWithRequiredScore() {
+  const schema = schemaWithEstimateNumber();
   const views = defaultViews();
   const taskCreate = views.taskCreate;
 
@@ -3608,7 +3624,7 @@ function schemaWithRequiredScore() {
       task: {
         label: "Task",
         fields: {
-          ...appSchema.entities.task.fields,
+          ...schema.entities.task.fields,
           score: {
             type: "number",
             required: true,

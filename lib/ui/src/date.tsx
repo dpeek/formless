@@ -124,7 +124,9 @@ export function DateInput({
         placeholder="2026-05-06"
         {...inputProps}
         className={inputClassName}
-        type="date"
+        inputMode="numeric"
+        pattern="\d{4}-\d{2}-\d{2}"
+        type="text"
         value={resolvedValue}
         onChange={(e) => {
           updateValue(e.target.value);

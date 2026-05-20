@@ -17,13 +17,15 @@ describe("DateInput", () => {
     expect(parseDateInputValue("2026-02-31")).toBeUndefined();
   });
 
-  it("renders a date input that submits YYYY-MM-DD values", () => {
+  it("renders a text-backed date input that submits YYYY-MM-DD values", () => {
     const markup = renderToStaticMarkup(
       <DateInput defaultValue="2026-05-06" name="dueDate" required />,
     );
 
     expect(markup).toContain('name="dueDate"');
-    expect(markup).toContain('type="date"');
+    expect(markup).toContain('type="text"');
+    expect(markup).toContain('inputMode="numeric"');
+    expect(markup).toContain('pattern="\\d{4}-\\d{2}-\\d{2}"');
     expect(markup).toContain('value="2026-05-06"');
     expect(markup).toContain('placeholder="2026-05-06"');
     expect(markup).toContain('aria-label="Select date"');

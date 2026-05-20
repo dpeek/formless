@@ -41,7 +41,7 @@ Formless is a schema-as-data app runtime.
 - Agent docs map: `doc/README.md`.
 - Current shipped behavior index: `doc/current.md`.
 - Current shipped behavior topics: `doc/topics/*.md`.
-- First-release target: `doc/roadmap.md`.
+- Possible next-work directions: `doc/roadmap.md`.
 - New workstream plans and status: GitHub Issues for `dpeek/formless`.
 - Legacy local workstreams: `prd/*.md` until retired.
 - Agent instructions: `AGENTS.md`.

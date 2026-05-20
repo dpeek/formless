@@ -2303,11 +2303,9 @@ describe("generated collection home", () => {
     expect(html).toContain('type="text"');
     expect(html).toContain('type="checkbox"');
     expect(html).toContain("checked");
-    expect(html).toContain('type="date"');
     expect(html).toContain("2026-05-01");
     expect(html).toContain('aria-label="Due date"');
-    expect(html).toContain('data-web-formatted-number-input="true"');
-    expect(html).toContain('aria-label="Estimate"');
+    expect(html).not.toContain('aria-label="Estimate"');
     expect(html).not.toContain(record.createdAt);
   });
 
@@ -4230,7 +4228,7 @@ describe("generated forms and records", () => {
     expect(html).toMatch(textareaWithName("icon"));
     expect(html).toContain('data-web-field-kind="icon"');
     expect(html).toContain("data-web-svg-source");
-    expect(html).toMatch(inputWithNameAndType("publishedAt", "date"));
+    expect(html).toMatch(inputWithNameAndType("publishedAt", "text"));
     expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "2026-05-06"));
     expect(html).toMatch(inputWithNameAndType("count", "hidden"));
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
@@ -4290,7 +4288,7 @@ describe("generated forms and records", () => {
     expect(html).toContain('aria-label="Edit Icon"');
     expect(html).toMatch(/data-web-icon-field-edit="trigger"[\s\S]*data-web-svg-icon="empty"/);
     expect(html).not.toContain('value="sparkles"');
-    expect(html).toMatch(inputWithAriaLabelAndType("Published at", "date"));
+    expect(html).toMatch(inputWithAriaLabelAndType("Published at", "text"));
     expect(html).toContain('value="2026-05-06"');
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
     expect(html).toContain('data-web-formatted-number-input="true"');
@@ -4519,24 +4517,18 @@ describe("generated forms and records", () => {
     const formData = new FormData();
     formData.set("title", "Ship field behavior");
     formData.set("dueDate", "2026-05-06");
-    formData.set("estimate", "2");
     formData.set("priority", "high");
 
     expect(createHtml).toContain('name="title"');
     expect(createHtml).toContain('name="dueDate"');
     expect(createHtml).toContain('aria-label="Select date"');
-    expect(createHtml).toMatch(inputWithNameAndType("estimate", "hidden"));
-    expect(createHtml).toMatch(inputWithAriaLabelAndType("Estimate", "text"));
-    expect(createHtml).toContain('data-web-formatted-number-input="true"');
-    expect(createHtml).toContain('min="0"');
-    expect(createHtml).toContain('step="1"');
+    expect(createHtml).not.toContain('name="estimate"');
     expect(createHtml).toContain('name="priority"');
     expect(createHtml).toContain("High");
     expect(createHtml).not.toContain('name="done"');
     expect(resolveCreateValues(formData, action)).toEqual({
       title: "Ship field behavior",
       dueDate: "2026-05-06",
-      estimate: 2,
       priority: "high",
     });
 
@@ -4548,7 +4540,6 @@ describe("generated forms and records", () => {
             title: "Ship field behavior",
             done: true,
             dueDate: "2026-05-06",
-            estimate: 2,
             priority: "high",
           },
         },
@@ -4566,10 +4557,8 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('value="Ship field behavior"');
     expect(editHtml).toContain('type="checkbox"');
     expect(editHtml).toContain("checked");
-    expect(editHtml).toContain('type="date"');
     expect(editHtml).toContain('value="2026-05-06"');
-    expect(editHtml).toContain('data-web-formatted-number-input="true"');
-    expect(editHtml).toContain('value="2"');
+    expect(editHtml).not.toContain('aria-label="Estimate"');
     expect(editHtml).toContain("High");
   });
 
@@ -4704,7 +4693,7 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain("<textarea");
     expect(editHtml).not.toContain('aria-label="Featured"');
     expect(editHtml).not.toContain('aria-label="Published at"');
-    expect(editHtml).toContain('type="date"');
+    expect(editHtml).toMatch(inputWithAriaLabelAndType("Date", "text"));
     expect(editHtml).not.toContain('aria-label="Order"');
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
   });

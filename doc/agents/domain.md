@@ -15,6 +15,6 @@ Read these before domain-sensitive engineering work:
 - Use terms from `CONTEXT.md`.
 - Treat `doc/current.md` as shipped behavior.
 - Treat `doc/topics/*.md` as topic-owned shipped facts.
-- Treat `doc/roadmap.md` as first-release target.
+- Treat `doc/roadmap.md` as possible directions for next work.
 - Treat GitHub PRD issues as workstream owners.
 - Treat legacy `prd/*.md` files as transition records until retired.

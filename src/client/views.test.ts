@@ -54,7 +54,7 @@ describe("home view model collections", () => {
       model?.result.type === "list"
         ? model.result.recordFields.map((field) => field.fieldName)
         : [],
-    ).toEqual(["title", "done", "dueDate", "estimate", "priority"]);
+    ).toEqual(["title", "dueDate", "priority", "done"]);
   });
 
   it("exposes render-ready union variant facts for item, create, and edit views", () => {
@@ -204,7 +204,6 @@ describe("home view model collections", () => {
     expect(create?.type === "create" ? create.fields.map((field) => field.fieldName) : []).toEqual([
       "title",
       "dueDate",
-      "estimate",
       "priority",
     ]);
     expect(create?.type === "create" ? create.defaults : []).toEqual([]);
@@ -250,14 +249,14 @@ describe("home view model collections", () => {
       result: {
         type: "list",
         itemViewName: "taskListItem",
-        fields: ["title", "done", "dueDate", "estimate", "priority"],
+        fields: ["title", "dueDate", "priority", "done"],
       },
       actions: [
         {
           type: "create",
           label: "Create Task",
           entityName: "task",
-          fields: ["title", "dueDate", "estimate", "priority"],
+          fields: ["title", "dueDate", "priority"],
           defaults: [],
           enabled: true,
         },
@@ -1225,6 +1224,16 @@ describe("home view model collections", () => {
     >;
     const schema: AppSchema = {
       ...appSchema,
+      entities: {
+        ...appSchema.entities,
+        task: {
+          ...appSchema.entities.task,
+          fields: {
+            ...appSchema.entities.task.fields,
+            estimate: { type: "number", required: false, label: "Estimate" },
+          },
+        },
+      },
       tableViews: {
         taskTable: {
           entity: "task",

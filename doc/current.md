@@ -1,6 +1,6 @@
 # Current
 
-Last updated: 2026-05-19
+Last updated: 2026-05-20
 
 Current shipped behavior lives in topic docs.
 
@@ -19,6 +19,6 @@ Current shipped behavior lives in topic docs.
 - Agent instructions: `AGENTS.md`.
 - Domain context: `CONTEXT.md`.
 - Agent skill config: `doc/agents/`.
-- First-release target: `doc/roadmap.md`.
+- Possible next-work directions: `doc/roadmap.md`.
 - New PRDs: GitHub Issues for `dpeek/formless`.
 - Legacy local PRDs: `prd/*.md` until retired.

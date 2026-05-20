@@ -20,13 +20,6 @@
           "required": false,
           "label": "Due date"
         },
-        "estimate": {
-          "type": "number",
-          "required": false,
-          "label": "Estimate",
-          "min": 0,
-          "integer": true
-        },
         "priority": {
           "type": "enum",
           "required": true,
@@ -139,20 +132,16 @@
           "editor": "text",
           "commit": "field-commit"
         },
-        "done": {
-          "editor": "boolean",
-          "commit": "immediate"
-        },
         "dueDate": {
           "editor": "date",
           "commit": "field-commit"
         },
-        "estimate": {
-          "editor": "number",
-          "commit": "field-commit"
-        },
         "priority": {
           "editor": "enum",
+          "commit": "immediate"
+        },
+        "done": {
+          "editor": "boolean",
           "commit": "immediate"
         }
       }
@@ -218,9 +207,6 @@
         },
         "dueDate": {
           "editor": "date"
-        },
-        "estimate": {
-          "editor": "number"
         },
         "priority": {
           "editor": "enum"

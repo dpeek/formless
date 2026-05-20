@@ -33,8 +33,8 @@ Single-context repo: read root `CONTEXT.md` and relevant topic docs when a skill
 - Topic docs are caveman style: short, concrete, no strategy prose.
 - `doc/README.md` owns the agent read map.
 - `doc/topics/*.md` own topic-focused shipped facts.
-- `doc/roadmap.md` describes the first-release target.
-- `doc/roadmap.md` is release scope, not backlog.
+- `doc/roadmap.md` describes possible directions for next work.
+- `doc/roadmap.md` is direction map, not shipped behavior or backlog.
 - New PRDs live in GitHub Issues.
 - Existing `prd/*.md` files are legacy workstream records until retired.
 - Do not create new local PRD files.
