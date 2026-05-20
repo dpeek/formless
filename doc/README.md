@@ -10,6 +10,7 @@ Repo docs are project memory. Keep claims source-faithful: point to code, schema
 - `CONTEXT.md`: project vocabulary.
 - `doc/current.md`: shipped behavior index.
 - `doc/roadmap.md`: possible directions for next work.
+- `doc/directions/`: larger product direction docs before PRD issues.
 - `doc/agents/`: skill and tracker configuration.
 
 ## Topic Map
@@ -31,6 +32,7 @@ Read only the topics needed for the work.
 - Existing `prd/*.md` files are legacy workstream records kept until their facts are promoted into topic docs and the files are retired.
 - Do not create new local PRD files.
 - Do not read every legacy PRD by default; read one only when assigned, retiring it, or chasing a specific historical decision.
+- Direction docs can shape PRDs but do not own implementation status.
 
 ## Removed Homes
 

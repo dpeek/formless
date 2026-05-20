@@ -84,19 +84,23 @@ Why:
 
 - Current runtime pieces work locally and in Workers.
 - Productization decides whether Formless can support real users and deployments.
+- The Formless instance direction names the deployment model before onboarding PRDs. See `doc/directions/formless-instance.md`.
 
 Good next chunks:
 
+- First-run onboarding for one Cloudflare `workers.dev` Formless instance.
 - Users and permissions.
 - Multi-tenant account routing.
 - Admin token and publish hardening.
 - Snapshot, backup, and restore UX.
 - Observability for Authority writes, sync, and publish.
 - Cross-app references or queries when a real workflow needs them.
+- Local/offline instance and instance sync after one deployment story works.
 
 Avoid:
 
 - Account or marketplace work before one deployment story is clear.
+- Bidirectional sync before local and remote instance identity exists.
 
 ## Direction: Extensibility
 

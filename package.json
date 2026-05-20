@@ -44,6 +44,7 @@
     "@dpeek/formless-ui": "^0.1.2",
     "@tailwindcss/vite": "^4.2.4",
     "@vitejs/plugin-react": "^6.0.1",
+    "alchemy": "^0.93.9",
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
