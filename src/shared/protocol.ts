@@ -133,6 +133,36 @@ export type SyncSocketAttachment = {
   schemaUpdatedAt: string | null;
 };
 
+export const OWNER_SETUP_TOKEN_MIN_LENGTH = 32;
+export const OWNER_SETUP_TOKEN_MAX_LENGTH = 512;
+
+export type OwnerIdentityInput = {
+  name: string;
+  email?: string;
+};
+
+export type OwnerIdentity = {
+  id: string;
+  name: string;
+  email?: string;
+  createdAt: string;
+};
+
+export type OwnerSetupStatusResponse = {
+  setupComplete: boolean;
+  owner?: OwnerIdentity;
+};
+
+export type OwnerSetupCompleteRequest = {
+  setupToken: string;
+  owner: OwnerIdentityInput;
+};
+
+export type OwnerSetupCompleteResponse = {
+  setupComplete: true;
+  owner: OwnerIdentity;
+};
+
 export type MutationResponse = {
   record: StoredRecord;
   changes: ChangeRow[];
@@ -260,6 +290,45 @@ export function isSyncSocketServerMessage(value: unknown): value is SyncSocketSe
 
 export function isSyncSocketAttachment(value: unknown): value is SyncSocketAttachment {
   return isRecord(value) && isCursor(value.cursor) && isNullableString(value.schemaUpdatedAt);
+}
+
+export function parseOwnerSetupToken(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("Owner setup token must be a string.");
+  }
+
+  const token = value.trim();
+
+  if (token.length < OWNER_SETUP_TOKEN_MIN_LENGTH) {
+    throw new Error(
+      `Owner setup token must be at least ${OWNER_SETUP_TOKEN_MIN_LENGTH} characters.`,
+    );
+  }
+
+  if (token.length > OWNER_SETUP_TOKEN_MAX_LENGTH) {
+    throw new Error(
+      `Owner setup token must be at most ${OWNER_SETUP_TOKEN_MAX_LENGTH} characters.`,
+    );
+  }
+
+  if (!/^[A-Za-z0-9_-]+$/.test(token)) {
+    throw new Error("Owner setup token must be URL-safe.");
+  }
+
+  return token;
+}
+
+export function parseOwnerSetupCompleteRequest(value: unknown): OwnerSetupCompleteRequest {
+  if (!isRecord(value)) {
+    throw new Error("Owner setup request must be an object.");
+  }
+
+  assertOwnerSetupRequestKeys(value);
+
+  return {
+    setupToken: parseOwnerSetupToken(value.setupToken),
+    owner: parseOwnerIdentityInput(value.owner),
+  };
 }
 
 export function parseStoreSnapshot(value: unknown, expectedSchemaKey?: string): StoreSnapshot {
@@ -393,6 +462,48 @@ function assertStoreSnapshotKeys(value: Record<string, unknown>) {
   }
 }
 
+function assertOwnerSetupRequestKeys(value: Record<string, unknown>) {
+  const requiredKeys = ["setupToken", "owner"];
+  const allowedKeys = new Set(requiredKeys);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Owner setup request has unsupported key "${key}".`);
+    }
+  }
+
+  for (const key of requiredKeys) {
+    if (!(key in value)) {
+      throw new Error(`Owner setup request must include "${key}".`);
+    }
+  }
+}
+
+function parseOwnerIdentityInput(value: unknown): OwnerIdentityInput {
+  if (!isRecord(value)) {
+    throw new Error("Owner setup owner must be an object.");
+  }
+
+  const allowedKeys = new Set(["name", "email"]);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Owner setup owner has unsupported key "${key}".`);
+    }
+  }
+
+  const name = parseTrimmedNonEmptyString("Owner setup owner name", value.name);
+  const email =
+    value.email === undefined
+      ? undefined
+      : parseTrimmedNonEmptyString("Owner setup owner email", value.email);
+
+  return {
+    name,
+    ...(email === undefined ? {} : { email }),
+  };
+}
+
 function parseStoreSnapshotRecords(value: unknown): StoredRecord[] {
   if (!Array.isArray(value)) {
     throw new Error("Store snapshot records must be an array.");
@@ -419,6 +530,10 @@ function parseNonEmptyString(context: string, value: unknown): string {
   }
 
   return value;
+}
+
+function parseTrimmedNonEmptyString(context: string, value: unknown): string {
+  return parseNonEmptyString(context, value).trim();
 }
 
 function parseCursor(context: string, value: unknown): number {
