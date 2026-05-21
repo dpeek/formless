@@ -49,6 +49,17 @@ export {
   type SetupSiteProjectDeployResult,
 } from "./project-publish.ts";
 export { type SaveSiteProjectResult } from "./project-save.ts";
+export {
+  createFormlessInstanceState,
+  DEFAULT_FORMLESS_INSTANCE_NAME,
+  formatFormlessInstanceState,
+  normalizeFormlessInstanceName,
+  parseFormlessInstanceState,
+  parseFormlessInstanceStateJson,
+  planFormlessInstanceDeployment,
+  type FormlessInstanceDeploymentPlan,
+  type FormlessInstanceState,
+} from "./instance-onboarding.ts";
 
 export type FormlessCliRunCommandOptions = {
   cwd: string;
