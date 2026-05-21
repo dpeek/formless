@@ -4,6 +4,7 @@ import type { StoredRecord } from "../shared/protocol.ts";
 import {
   siteImageExtensionForContentType,
   siteMediaContentTypeForKey,
+  siteMediaDeliveryFactsForAssetId,
   siteMediaHrefForKey,
   siteSourceMediaAssetsFromRecords,
   siteSourceMediaPathForKey,
@@ -52,6 +53,12 @@ describe("Site source media", () => {
     expect(siteMediaHrefForKey("site/images/photo.webp")).toBe(
       "/api/site/media/site/images/photo.webp",
     );
+    expect(siteMediaDeliveryFactsForAssetId("photo.webp")).toEqual({
+      assetId: "photo.webp",
+      href: "/api/site/media/site/images/photo.webp",
+      kind: "image",
+    });
+    expect(siteMediaDeliveryFactsForAssetId("site/images/photo.webp")).toBeUndefined();
   });
 });
 

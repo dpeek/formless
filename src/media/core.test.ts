@@ -4,6 +4,7 @@ import {
   MEDIA_OBJECT_CACHE_CONTROL,
   deliveryFactsForMediaObject,
   imageMediaContentTypeForKey,
+  imageMediaDeliveryFactsForAssetId,
   imageMediaExtensionForContentType,
   isRestorableImageMediaKey,
   mediaAssetFromObjectMetadata,
@@ -146,6 +147,40 @@ describe("core media", () => {
     expect(
       isRestorableImageMediaKey("site/images/../photo.webp", { keyPrefix: "site/images/" }),
     ).toBe(false);
+  });
+
+  it("resolves render-ready delivery facts from image media asset ids", () => {
+    const hrefForKey = (key: string) => `/api/site/media/${key}`;
+
+    expect(
+      imageMediaDeliveryFactsForAssetId("asset-1.webp", {
+        hrefForKey,
+        keyPrefix: "site/images/",
+      }),
+    ).toEqual({
+      assetId: "asset-1.webp",
+      href: "/api/site/media/site/images/asset-1.webp",
+      kind: "image",
+      storageKey: "site/images/asset-1.webp",
+    });
+    expect(
+      imageMediaDeliveryFactsForAssetId("site/images/asset-1.webp", {
+        hrefForKey,
+        keyPrefix: "site/images/",
+      }),
+    ).toBeUndefined();
+    expect(
+      imageMediaDeliveryFactsForAssetId("../asset-1.webp", {
+        hrefForKey,
+        keyPrefix: "site/images/",
+      }),
+    ).toBeUndefined();
+    expect(
+      imageMediaDeliveryFactsForAssetId("asset-1.txt", {
+        hrefForKey,
+        keyPrefix: "site/images/",
+      }),
+    ).toBeUndefined();
   });
 
   it("normalizes uploaded filenames into media asset labels", async () => {

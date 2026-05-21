@@ -1,6 +1,7 @@
 import type {
   FieldValue,
   SiteBlockNode,
+  SiteMediaNode,
   SitePageFrame,
   SiteSettingsNode,
   SitePageTreeProjection,
@@ -15,6 +16,7 @@ import {
   type SiteRouteResolution,
 } from "./route-resolver.ts";
 import { resolveSiteLinkHref } from "./link-targets.ts";
+import { siteMediaDeliveryFactsForAssetId } from "./source-media.ts";
 
 export type {
   SiteBlockNode,
@@ -334,6 +336,7 @@ function buildPlacementNodes(
 function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): SiteBlockNode {
   const type = stringValue(record.values.type) ?? "";
   const linkProjection = projectedLinkFields(record, type, context);
+  const mediaProjection = projectedMediaFields(record, type, context);
 
   return {
     id: record.id,
@@ -351,10 +354,41 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
     ),
     ...optionalStringField("color", record.values.color),
     ...optionalStringField("alignment", record.values.alignment),
+    ...(mediaProjection ? { media: mediaProjection } : {}),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
     placements: [],
   };
+}
+
+function projectedMediaFields(
+  record: StoredRecord,
+  type: string,
+  context: SiteTreeBuildContext,
+): SiteMediaNode | undefined {
+  if (type !== "image") {
+    return undefined;
+  }
+
+  const assetId = stringValue(record.values.mediaAssetId);
+
+  if (!assetId) {
+    return undefined;
+  }
+
+  const media = siteMediaDeliveryFactsForAssetId(assetId);
+
+  if (media) {
+    return media;
+  }
+
+  context.warnings.push({
+    code: "invalid-media-asset-id",
+    recordId: record.id,
+    message: `Skipped invalid media asset id "${assetId}" on image block "${record.id}".`,
+  });
+
+  return undefined;
 }
 
 function projectedLinkFields(

@@ -213,6 +213,12 @@ export type SitePageFrame = {
   footer?: SiteBlockNode;
 };
 
+export type SiteMediaNode = {
+  assetId: string;
+  href: string;
+  kind: "image";
+};
+
 export type SiteTreeRoute =
   | {
       kind: "page";
@@ -244,6 +250,7 @@ export type SiteBlockNode = {
   icon?: string;
   color?: string;
   alignment?: string;
+  media?: SiteMediaNode;
   width?: number;
   height?: number;
   placements: SitePlacementNode[];

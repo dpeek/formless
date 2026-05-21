@@ -53,6 +53,13 @@ export type MediaDeliveryFacts = {
   headers: Headers;
 };
 
+export type MediaAssetDeliveryFacts = {
+  assetId: string;
+  href: string;
+  kind: "image";
+  storageKey: string;
+};
+
 export type MediaAsset = {
   byteSize: number;
   contentType: string;
@@ -169,6 +176,28 @@ export function mediaAssetFromObjectMetadata(
     status,
     storageKey,
     ...(width === undefined ? {} : { width }),
+  };
+}
+
+export function imageMediaDeliveryFactsForAssetId(
+  assetId: string,
+  options: { hrefForKey: (key: string) => string; keyPrefix: string },
+): MediaAssetDeliveryFacts | undefined {
+  if (!isValidImageMediaAssetId(assetId)) {
+    return undefined;
+  }
+
+  const storageKey = `${options.keyPrefix}${assetId}`;
+
+  if (!isRestorableImageMediaKey(storageKey, { keyPrefix: options.keyPrefix })) {
+    return undefined;
+  }
+
+  return {
+    assetId,
+    href: options.hrefForKey(storageKey),
+    kind: "image",
+    storageKey,
   };
 }
 
@@ -377,6 +406,10 @@ function isMediaFilenameCharacter(value: string): boolean {
   const code = value.charCodeAt(0);
 
   return (code >= 0x20 && code !== 0x7f) || code > 0x7f;
+}
+
+function isValidImageMediaAssetId(assetId: string): boolean {
+  return !assetId.includes("/") && isValidMediaStorageKey(assetId);
 }
 
 function parseOptionalMediaInteger(value: string | undefined): number | undefined {

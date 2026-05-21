@@ -1,5 +1,6 @@
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
+  imageMediaDeliveryFactsForAssetId,
   imageMediaContentTypeForKey,
   imageMediaExtensionForContentType,
   isRestorableImageMediaKey,
@@ -17,6 +18,12 @@ export type SiteSourceMediaAsset = {
   sourcePath: string;
 };
 
+export type SiteMediaDeliveryFacts = {
+  assetId: string;
+  href: string;
+  kind: "image";
+};
+
 export function siteImageExtensionForContentType(contentType: string): string | undefined {
   return imageMediaExtensionForContentType(contentType);
 }
@@ -27,6 +34,23 @@ export function siteMediaContentTypeForKey(key: string): string | undefined {
 
 export function siteMediaHrefForKey(key: string): string {
   return `${SITE_MEDIA_ROUTE_PREFIX}${key}`;
+}
+
+export function siteMediaDeliveryFactsForAssetId(
+  assetId: string,
+): SiteMediaDeliveryFacts | undefined {
+  const facts = imageMediaDeliveryFactsForAssetId(assetId, {
+    hrefForKey: siteMediaHrefForKey,
+    keyPrefix: SITE_IMAGE_KEY_PREFIX,
+  });
+
+  return facts
+    ? {
+        assetId: facts.assetId,
+        href: facts.href,
+        kind: facts.kind,
+      }
+    : undefined;
 }
 
 export function siteMediaKeyFromHref(href: string): string | undefined {

@@ -168,6 +168,41 @@ describe("site page tree projection", () => {
     });
   });
 
+  it("projects media asset ids into image delivery facts without requiring legacy hrefs", () => {
+    const records = baseTreeRecords().map((record) => {
+      if (record.id !== "rec_site_media_avatar") {
+        return record;
+      }
+
+      const recordWithoutHref = withoutRecordValue(record, "href");
+
+      return {
+        ...recordWithoutHref,
+        values: {
+          ...recordWithoutHref.values,
+          mediaAssetId: "avatar.webp",
+        },
+      };
+    });
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
+    const heroImage = childForPlacement(hero, "rec_site_place_home_hero_image");
+
+    expect(heroImage).toEqual({
+      id: "rec_site_media_avatar",
+      type: "image",
+      label: "Site owner portrait",
+      media: {
+        assetId: "avatar.webp",
+        href: "/api/site/media/site/images/avatar.webp",
+        kind: "image",
+      },
+      width: 1200,
+      height: 1200,
+      placements: [],
+    });
+  });
+
   it("projects placement slots and feature alignment without changing default placements", () => {
     const records = [
       ...baseTreeRecords(),

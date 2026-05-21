@@ -1511,6 +1511,21 @@ describe("public site renderer", () => {
                   placements: [],
                 },
               },
+              {
+                id: "test-media-asset-image-placement",
+                order: 3,
+                block: {
+                  id: "rec_site_media_asset",
+                  type: "image",
+                  label: "Media asset reference",
+                  media: {
+                    assetId: "asset-backed.webp",
+                    href: "/api/site/media/site/images/asset-backed.webp",
+                    kind: "image",
+                  },
+                  placements: [],
+                },
+              },
             ],
           },
         }}
@@ -1522,6 +1537,8 @@ describe("public site renderer", () => {
     expect(html).toContain('src="/api/site/media/site/images/cover.webp"');
     expect(html).toContain('alt="External reference"');
     expect(html).toContain('src="https://example.com/manual.png"');
+    expect(html).toContain('alt="Media asset reference"');
+    expect(html).toContain('src="/api/site/media/site/images/asset-backed.webp"');
     expect(html).not.toContain("data-asset-key");
   });
 

@@ -4,15 +4,16 @@ export type PublicSitePrimaryImageVariant = "post-detail" | "summary";
 
 export function ImageBlock({ block }: { block: SiteBlockNode }) {
   const aspectRatio = imageAspectRatio(block);
+  const href = imageHref(block);
 
   return (
     <figure className="overflow-hidden rounded-md border border-zinc-200 bg-teal-50 dark:border-zinc-800 dark:bg-teal-950/40">
-      {block.href ? (
+      {href ? (
         <img
           alt={block.label}
           className="h-full w-full object-cover"
           height={block.height}
-          src={block.href}
+          src={href}
           style={{ aspectRatio }}
           width={block.width}
         />
@@ -46,6 +47,7 @@ export function PrimaryImage({
   }
 
   const aspectRatio = imageAspectRatio(block);
+  const href = imageHref(block);
   const imageClassName =
     variant === "summary"
       ? "block h-auto max-h-64 w-full object-contain sm:max-h-52"
@@ -60,12 +62,12 @@ export function PrimaryImage({
       className="overflow-hidden rounded-md border border-zinc-200 bg-teal-50 dark:border-zinc-800 dark:bg-teal-950/40"
       data-site-primary-image={variant}
     >
-      {block.href ? (
+      {href ? (
         <img
           alt={block.label}
           className={imageClassName}
           height={block.height}
-          src={block.href}
+          src={href}
           style={{ aspectRatio }}
           width={block.width}
         />
@@ -96,4 +98,8 @@ export function slottedImagePlacements(block: SiteBlockNode, slot: string): Site
 
 function imageAspectRatio(block: SiteBlockNode): string {
   return block.width && block.height ? `${block.width} / ${block.height}` : "4 / 3";
+}
+
+function imageHref(block: SiteBlockNode): string | undefined {
+  return block.media?.href ?? block.href;
 }

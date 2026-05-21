@@ -50,7 +50,13 @@ describe("public Site renderer characterization", () => {
       placements: [
         placement(
           "feature-media",
-          imageNode("feature-image", "Feature media", "/api/site/media/site/images/feature.webp"),
+          imageNode("feature-image", "Feature media", undefined, {
+            media: {
+              assetId: "feature.webp",
+              href: "/api/site/media/site/images/feature.webp",
+              kind: "image",
+            },
+          }),
           { slot: "media" },
         ),
         placement(
@@ -311,9 +317,15 @@ function markdownNode(id: string, label: string, body: string): SiteBlockNode {
   return blockNode(id, "markdown", label, { body });
 }
 
-function imageNode(id: string, label: string, href?: string): SiteBlockNode {
+function imageNode(
+  id: string,
+  label: string,
+  href?: string,
+  options: { media?: SiteBlockNode["media"] } = {},
+): SiteBlockNode {
   return blockNode(id, "image", label, {
     ...(href ? { href } : {}),
+    ...options,
     width: 1200,
     height: 800,
   });
