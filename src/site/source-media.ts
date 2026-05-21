@@ -1,4 +1,10 @@
 import type { StoredRecord } from "../shared/protocol.ts";
+import {
+  imageMediaContentTypeForKey,
+  imageMediaExtensionForContentType,
+  isRestorableImageMediaKey,
+  isValidMediaStorageKey,
+} from "../media/core.ts";
 
 export const SITE_MEDIA_ROUTE_PREFIX = "/api/site/media/";
 export const SITE_IMAGE_KEY_PREFIX = "site/images/";
@@ -11,29 +17,12 @@ export type SiteSourceMediaAsset = {
   sourcePath: string;
 };
 
-const siteImageExtensionsByContentType = new Map([
-  ["image/jpeg", "jpg"],
-  ["image/png", "png"],
-  ["image/webp", "webp"],
-  ["image/gif", "gif"],
-]);
-
-const siteImageContentTypesByExtension = new Map([
-  ["jpg", "image/jpeg"],
-  ["jpeg", "image/jpeg"],
-  ["png", "image/png"],
-  ["webp", "image/webp"],
-  ["gif", "image/gif"],
-]);
-
 export function siteImageExtensionForContentType(contentType: string): string | undefined {
-  return siteImageExtensionsByContentType.get(normalizeContentType(contentType));
+  return imageMediaExtensionForContentType(contentType);
 }
 
 export function siteMediaContentTypeForKey(key: string): string | undefined {
-  const extension = key.split(".").pop()?.toLowerCase();
-
-  return extension ? siteImageContentTypesByExtension.get(extension) : undefined;
+  return imageMediaContentTypeForKey(key);
 }
 
 export function siteMediaHrefForKey(key: string): string {
@@ -48,7 +37,7 @@ export function siteMediaKeyFromHref(href: string): string | undefined {
   const url = new URL(href, "https://formless.local");
   const key = siteMediaKeyFromPathname(url.pathname);
 
-  return key && isValidSiteMediaKey(key) ? key : undefined;
+  return key && isValidMediaStorageKey(key) ? key : undefined;
 }
 
 export function siteMediaKeyFromPathname(pathname: string): string | undefined {
@@ -56,15 +45,11 @@ export function siteMediaKeyFromPathname(pathname: string): string | undefined {
     ? pathname.slice(SITE_MEDIA_ROUTE_PREFIX.length)
     : "";
 
-  return isValidSiteMediaKey(key) ? key : undefined;
+  return isValidMediaStorageKey(key) ? key : undefined;
 }
 
 export function isRestorableSiteMediaKey(key: string): boolean {
-  return (
-    isValidSiteMediaKey(key) &&
-    key.startsWith(SITE_IMAGE_KEY_PREFIX) &&
-    siteMediaContentTypeForKey(key) !== undefined
-  );
+  return isRestorableImageMediaKey(key, { keyPrefix: SITE_IMAGE_KEY_PREFIX });
 }
 
 export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteSourceMediaAsset[] {
@@ -110,24 +95,4 @@ export function siteSourceMediaPathForKey(key: string): string {
   }
 
   return `${SITE_SOURCE_MEDIA_ROOT}/${key}`;
-}
-
-function isValidSiteMediaKey(key: string): boolean {
-  if (key === "" || key.startsWith("/") || key.includes("\\") || key.includes("%")) {
-    return false;
-  }
-
-  const segments = key.split("/");
-
-  return segments.every(
-    (segment) =>
-      segment !== "" &&
-      segment !== "." &&
-      segment !== ".." &&
-      /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(segment),
-  );
-}
-
-function normalizeContentType(value: string): string {
-  return value.split(";")[0]?.trim().toLowerCase() ?? "";
 }

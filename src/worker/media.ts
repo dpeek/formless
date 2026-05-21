@@ -1,17 +1,22 @@
 import {
   SITE_IMAGE_KEY_PREFIX,
   SITE_MEDIA_ROUTE_PREFIX,
-  isRestorableSiteMediaKey,
-  siteImageExtensionForContentType,
-  siteMediaContentTypeForKey,
   siteMediaHrefForKey,
   siteMediaKeyFromPathname,
 } from "../site/source-media.ts";
+import {
+  MEDIA_IMAGE_UPLOAD_MAX_BYTES,
+  MEDIA_OBJECT_CACHE_CONTROL,
+  deliveryFactsForMediaObject,
+  restoreImageMedia,
+  uploadImageMedia,
+} from "../media/core.ts";
+import { mediaObjectStoreFromR2Bucket } from "../media/r2.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { responseWithoutBodyForHead } from "./head-response.ts";
 
-export const SITE_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
-export const SITE_MEDIA_CACHE_CONTROL = "public, max-age=31536000, immutable";
+export const SITE_IMAGE_UPLOAD_MAX_BYTES = MEDIA_IMAGE_UPLOAD_MAX_BYTES;
+export const SITE_MEDIA_CACHE_CONTROL = MEDIA_OBJECT_CACHE_CONTROL;
 
 const siteImageUploadPath = "/api/site/media/images";
 
@@ -19,17 +24,10 @@ type SiteMediaEnv = AuthorityAdminGuardEnv & {
   FORMLESS_MEDIA: R2Bucket;
 };
 
-type UploadResponse = {
-  contentType: string;
-  href: string;
-  key: string;
-  size: number;
-};
-
 type UploadedImageFile = {
   bytes: Uint8Array;
+  contentType: string;
   size: number;
-  type: string;
 };
 
 type MultipartPart = {
@@ -82,28 +80,18 @@ async function uploadSiteImage(request: Request, env: SiteMediaEnv) {
     return jsonResponse({ error: fileResult.error }, 400);
   }
 
-  const file = fileResult.file;
-  const contentType = normalizeContentType(file.type);
-  const extension = siteImageExtensionForContentType(contentType);
+  const upload = await uploadImageMedia({
+    file: fileResult.file,
+    hrefForKey: siteMediaHrefForKey,
+    keyPrefix: SITE_IMAGE_KEY_PREFIX,
+    store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
+  });
 
-  if (!extension) {
-    return jsonResponse({ error: "Unsupported image type." }, 415);
+  if (!upload.ok) {
+    return jsonResponse({ error: upload.error }, upload.status);
   }
 
-  if (file.size > SITE_IMAGE_UPLOAD_MAX_BYTES) {
-    return jsonResponse({ error: "Image file is larger than the 5 MB limit." }, 413);
-  }
-
-  const key = `${SITE_IMAGE_KEY_PREFIX}${crypto.randomUUID()}.${extension}`;
-
-  await writeSiteMediaObject(env, key, file.bytes, contentType);
-
-  return jsonResponse({
-    contentType,
-    href: siteMediaHrefForKey(key),
-    key,
-    size: file.size,
-  } satisfies UploadResponse);
+  return jsonResponse(upload.upload);
 }
 
 async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: string) {
@@ -119,40 +107,25 @@ async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: s
 
   const key = siteMediaKeyFromPathname(pathname);
 
-  if (!key || !isRestorableSiteMediaKey(key)) {
+  if (!key) {
     return jsonResponse({ error: "Unsupported media restore key." }, 400);
-  }
-
-  const contentType = siteMediaContentTypeForKey(key);
-
-  if (!contentType) {
-    return jsonResponse({ error: "Unsupported media restore key." }, 400);
-  }
-
-  const requestContentType = normalizeContentType(request.headers.get("Content-Type") ?? "");
-
-  if (requestContentType && requestContentType !== contentType) {
-    return jsonResponse({ error: "Media restore content type must match the media key." }, 415);
   }
 
   const bytes = new Uint8Array(await request.arrayBuffer());
-
-  if (bytes.byteLength === 0) {
-    return jsonResponse({ error: "Media restore body must not be empty." }, 400);
-  }
-
-  if (bytes.byteLength > SITE_IMAGE_UPLOAD_MAX_BYTES) {
-    return jsonResponse({ error: "Image file is larger than the 5 MB limit." }, 413);
-  }
-
-  await writeSiteMediaObject(env, key, bytes, contentType);
-
-  return jsonResponse({
-    contentType,
-    href: siteMediaHrefForKey(key),
+  const restore = await restoreImageMedia({
+    bytes,
+    contentType: request.headers.get("Content-Type") ?? "",
+    hrefForKey: siteMediaHrefForKey,
     key,
-    size: bytes.byteLength,
-  } satisfies UploadResponse);
+    keyPrefix: SITE_IMAGE_KEY_PREFIX,
+    store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
+  });
+
+  if (!restore.ok) {
+    return jsonResponse({ error: restore.error }, restore.status);
+  }
+
+  return jsonResponse(restore.upload);
 }
 
 async function serveSiteMedia(
@@ -166,37 +139,17 @@ async function serveSiteMedia(
     return jsonResponse({ error: "Not found." }, 404);
   }
 
-  const object = await env.FORMLESS_MEDIA.get(key);
+  const delivery = await deliveryFactsForMediaObject({
+    includeBody: options.includeBody ?? true,
+    key,
+    store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
+  });
 
-  if (!object) {
+  if (!delivery) {
     return jsonResponse({ error: "Media object not found." }, 404);
   }
 
-  const headers = new Headers({
-    "Cache-Control": SITE_MEDIA_CACHE_CONTROL,
-  });
-
-  object.writeHttpMetadata(headers);
-  headers.set("Cache-Control", SITE_MEDIA_CACHE_CONTROL);
-  headers.set("ETag", object.httpEtag);
-
-  const body = (options.includeBody ?? true) ? object.body : null;
-
-  return new Response(body, { headers });
-}
-
-async function writeSiteMediaObject(
-  env: SiteMediaEnv,
-  key: string,
-  bytes: Uint8Array,
-  contentType: string,
-) {
-  await env.FORMLESS_MEDIA.put(key, bytes, {
-    httpMetadata: {
-      cacheControl: SITE_MEDIA_CACHE_CONTROL,
-      contentType,
-    },
-  });
+  return new Response(delivery.body, { headers: delivery.headers });
 }
 
 async function readMultipartFile(
@@ -224,15 +177,11 @@ async function readMultipartFile(
   return {
     file: {
       bytes: file.body,
+      contentType: file.contentType,
       size: file.body.byteLength,
-      type: file.contentType,
     },
     ok: true,
   };
-}
-
-function normalizeContentType(value: string) {
-  return value.split(";")[0]?.trim().toLowerCase() ?? "";
 }
 
 function jsonResponse(body: unknown, status = 200, headers?: HeadersInit) {
