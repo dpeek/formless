@@ -5,15 +5,10 @@ import { lexer, type Token, type Tokens } from "marked";
 import { createElement, useEffect, useState, type ReactNode } from "react";
 
 import { parseMarkdownCodeInfo } from "./markdown-code-info.js";
+import { highlightMarkdownCodeHtml } from "./markdown-highlighting.js";
 import type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
 
 export type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
-
-const HIGHLIGHT_LANGUAGE_ALIASES: Record<string, string> = {
-  html: "xml",
-  jsx: "javascript",
-  tsx: "typescript",
-};
 
 export function MarkdownRenderer({
   className,
@@ -246,7 +241,7 @@ function renderInlineToken(
 function MarkdownCodeBlock({ code }: { code: Tokens.Code }) {
   const codeInfo = parseMarkdownCodeInfo(splitCodeInfo(code.lang));
   const highlightedHtml = codeInfo.highlightLanguage
-    ? highlightCodeHtml(code.text, codeInfo.highlightLanguage)
+    ? highlightMarkdownCodeHtml(code.text, codeInfo.highlightLanguage)
     : null;
 
   return (
@@ -339,114 +334,6 @@ function splitCodeInfo(info: string | undefined): {
     language,
     meta: metaParts.length > 0 ? metaParts.join(" ") : null,
   };
-}
-
-function highlightCodeHtml(code: string, language: string): string | null {
-  const highlightLanguage = HIGHLIGHT_LANGUAGE_ALIASES[language] ?? language;
-  const escaped = escapeHtml(code);
-
-  if (highlightLanguage === "javascript" || highlightLanguage === "typescript") {
-    return escaped.replace(
-      /\b(async|await|catch|class|const|else|export|extends|finally|for|from|function|if|import|interface|let|new|return|throw|try|type|var)\b/g,
-      '<span class="hljs-keyword">$1</span>',
-    );
-  }
-
-  if (highlightLanguage === "json") {
-    return highlightJsonCodeHtml(code);
-  }
-
-  return escaped;
-}
-
-function highlightJsonCodeHtml(code: string): string {
-  let html = "";
-  let index = 0;
-
-  while (index < code.length) {
-    const char = code[index];
-
-    if (char === '"') {
-      const end = findJsonStringEnd(code, index);
-      const stringValue = code.slice(index, end);
-      const nextToken = findNextJsonToken(code, end);
-      const className = nextToken === ":" ? "hljs-attr" : "hljs-string";
-      html += `<span class="${className}">${escapeHtml(stringValue)}</span>`;
-      index = end;
-      continue;
-    }
-
-    const literal = jsonLiteralAt(code, index);
-
-    if (literal) {
-      html += `<span class="hljs-literal">${literal}</span>`;
-      index += literal.length;
-      continue;
-    }
-
-    html += escapeHtml(char);
-    index += 1;
-  }
-
-  return html;
-}
-
-function findJsonStringEnd(code: string, start: number): number {
-  let escaped = false;
-
-  for (let index = start + 1; index < code.length; index += 1) {
-    const char = code[index];
-
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-
-    if (char === '"') {
-      return index + 1;
-    }
-  }
-
-  return code.length;
-}
-
-function findNextJsonToken(code: string, start: number): string | null {
-  for (let index = start; index < code.length; index += 1) {
-    const char = code[index];
-
-    if (/\S/.test(char)) {
-      return char;
-    }
-  }
-
-  return null;
-}
-
-function jsonLiteralAt(code: string, index: number): "false" | "null" | "true" | null {
-  for (const literal of ["false", "null", "true"] as const) {
-    if (
-      code.startsWith(literal, index) &&
-      !/[A-Za-z0-9_$]/.test(code[index - 1] ?? "") &&
-      !/[A-Za-z0-9_$]/.test(code[index + literal.length] ?? "")
-    ) {
-      return literal;
-    }
-  }
-
-  return null;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 function renderInlineTextToken(token: Tokens.Text, keyPrefix: string): ReactNode {

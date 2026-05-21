@@ -1,3 +1,8 @@
+import {
+  MARKDOWN_HIGHLIGHT_LANGUAGES,
+  MARKDOWN_PLAIN_LANGUAGES,
+} from "./markdown-highlight-contract.js";
+
 const LANGUAGE_ALIASES = {
   bash: "bash",
   cjs: "javascript",
@@ -54,24 +59,9 @@ const LANGUAGE_LABELS: Record<string, string> = {
   yaml: "YAML",
 };
 
-const HIGHLIGHT_LANGUAGES = new Set([
-  "bash",
-  "css",
-  "diff",
-  "html",
-  "javascript",
-  "json",
-  "jsx",
-  "markdown",
-  "scss",
-  "sql",
-  "tsx",
-  "typescript",
-  "xml",
-  "yaml",
-]);
+const HIGHLIGHT_LANGUAGES = new Set<string>(MARKDOWN_HIGHLIGHT_LANGUAGES);
 
-const PLAIN_LANGUAGES = new Set(["plaintext"]);
+const PLAIN_LANGUAGES = new Set<string>(MARKDOWN_PLAIN_LANGUAGES);
 
 const FILENAME_ATTRIBUTE_NAMES = ["filename", "file", "name", "title"];
 

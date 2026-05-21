@@ -4,6 +4,11 @@ import type * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { parseMarkdownCodeInfo } from "./markdown-code-info.js";
+import { MARKDOWN_HIGHLIGHT_LANGUAGES } from "./markdown-highlight-contract.js";
+import {
+  highlightMarkdownCodeHtml,
+  isMarkdownHighlightLanguageRegistered,
+} from "./markdown-highlighting.js";
 import {
   decorateMarkdownPlateValue,
   deserializeMarkdownToPlateValue,
@@ -154,6 +159,7 @@ describe("MarkdownRenderer", () => {
     expect(markup).toContain("lib/graphle-web-ui/src/markdown.tsx");
     expect(markup).toContain('aria-label="Copy code"');
     expect(markup).toContain("hljs-keyword");
+    expect(markup).toContain("hljs-number");
     expect(markup).toContain("const");
     expect(markup).toContain("value");
   });
@@ -264,6 +270,42 @@ describe("MarkdownEditor", () => {
     expect(markup).not.toContain("<h1");
     expect(markup).toContain("<h2");
     expect(markup).toContain("Probe notes");
+  });
+
+  it("renders editable code blocks with Lowlight syntax leaves", () => {
+    const markup = renderToStaticMarkup(
+      <MarkdownEditor
+        onChange={() => undefined}
+        placeholder="Write notes"
+        value={['```tsx filename="schema.tsx"', "const value = 1;", "```"].join("\n")}
+      />,
+    );
+
+    expect(markup).toContain("graph-markdown-code-block");
+    expect(markup).toContain('data-highlight-language="tsx"');
+    expect(markup).toContain('data-language="tsx"');
+    expect(markup).toContain("schema.tsx");
+    expect(markup).toContain("graph-markdown-code-syntax");
+    expect(markup).toContain("hljs-keyword");
+    expect(markup).toContain("hljs-number");
+  });
+});
+
+describe("markdown highlighting dependency decision", () => {
+  it("keeps declared highlighted languages registered with Lowlight", () => {
+    for (const language of MARKDOWN_HIGHLIGHT_LANGUAGES) {
+      expect(isMarkdownHighlightLanguageRegistered(language)).toBe(true);
+    }
+
+    expect(isMarkdownHighlightLanguageRegistered("mermaid")).toBe(false);
+  });
+
+  it("escapes highlighted code while preserving syntax classes", () => {
+    const html = highlightMarkdownCodeHtml('const tag = "<script>";', "typescript");
+
+    expect(html).toContain("hljs-keyword");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("<script>");
   });
 });
 

@@ -1,7 +1,7 @@
 ---
 name: Formless UI Primitives
 description: "Browser primitive ownership, exports, and package boundary for @dpeek/formless-ui."
-last_updated: 2026-04-20
+last_updated: 2026-05-21
 ---
 
 # Formless UI Primitives
@@ -28,17 +28,21 @@ layout constraints, but product apps should not redefine markdown typography
 locally. Graphle-specific markdown CSS should be limited to design-token
 bridging around the upstream typography rules.
 
-Markdown rendering and editing use Plate's markdown deserialization with GFM
-support. `MarkdownRenderer` uses Plate's static read-only render path and
-`MarkdownEditor` uses the same Plate document model as an uncontrolled rich
-editor that serializes changes back to markdown strings. Both primitives share
-the `.graph-markdown` document skin. `MarkdownRenderer` decorates headings with
-deterministic IDs for display only. Callers that already own the page-level
-heading can pass `minHeadingLevel` so imported or pasted markdown headings below
-that level are demoted during render, edit initialization, and serialization.
-Fenced code blocks use Plate code-block nodes with Lowlight-backed syntax
-leaves, copy controls in read-only mode, and filename/language labels. The
-markdown code-block path is owned entirely by Plate and Lowlight.
+Markdown rendering and editing use shared GFM parsing and the same
+`.graph-markdown` document skin. `MarkdownRenderer` owns the read-only render
+path. `MarkdownEditor` uses Plate's markdown deserialization as an uncontrolled
+rich editor that serializes changes back to markdown strings. `MarkdownRenderer`
+decorates headings with deterministic IDs for display only. Callers that already
+own the page-level heading can pass `minHeadingLevel` so imported or pasted
+markdown headings below that level are demoted during render, edit
+initialization, and serialization.
+
+Fenced code blocks preserve language labels, filename metadata, copy controls in
+read-only mode, plain-code fallbacks, and syntax highlighting. The markdown
+highlighting stack intentionally keeps both `lowlight` and direct
+`highlight.js/lib/languages/*` imports: Plate consumes a Lowlight instance for
+editor syntax leaves, while Lowlight core needs explicit Highlight.js grammar
+registration for the supported language set.
 
 Non-markdown source editing is intentionally plain. `SourcePreviewFieldEditor`
 owns the source/preview shell, and `SourceEditor` provides the shared
