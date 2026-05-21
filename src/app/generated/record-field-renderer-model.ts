@@ -14,6 +14,7 @@ export type GeneratedRecordFieldRendererKind =
   | "icon"
   | "image"
   | "markdown"
+  | "media"
   | "number"
   | "reference"
   | "text"
@@ -51,6 +52,10 @@ export function selectGeneratedRecordFieldRendererKind({
 
   if (fieldControl.controlKind === "image") {
     return "image";
+  }
+
+  if (fieldControl.controlKind === "media") {
+    return "media";
   }
 
   if (fieldControl.controlKind === "markdown" && density !== "compact") {

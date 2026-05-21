@@ -11,6 +11,7 @@ export type FieldEditorControl =
   | { kind: "icon" }
   | { kind: "imageUpload" }
   | { kind: "input"; inputType: "date" | "number" | "text" }
+  | { kind: "mediaUpload" }
   | { kind: "reference" }
   | { kind: "select" }
   | { kind: "textarea" };
@@ -52,7 +53,7 @@ export const fieldTypeBehaviors = {
   text: {
     type: "text",
     filterOps: ["eq"],
-    editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon", "image"],
+    editors: ["text", "textarea", "markdown", "href", "slug", "color", "icon", "image", "media"],
     defaultEditor: "text",
     defaultCommit: "field-commit",
     validatesExistingStoredValues: false,
@@ -174,6 +175,7 @@ export const fieldEditors = [
   "color",
   "icon",
   "image",
+  "media",
   "boolean",
   "date",
   "number",
@@ -300,6 +302,10 @@ function textEditorControl(
 
   if (editor === "image") {
     return { kind: "imageUpload" };
+  }
+
+  if (editor === "media") {
+    return { kind: "mediaUpload" };
   }
 
   if (editor === "textarea" || editor === "markdown") {

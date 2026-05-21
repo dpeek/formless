@@ -63,14 +63,16 @@ export function siteImageUploadPatchValues({
   widthFieldName,
 }: {
   heightFieldName?: string;
-  hrefFieldName: string;
+  hrefFieldName?: string;
   mediaAssetFieldName?: string;
   upload: UploadedSiteImage;
   widthFieldName?: string;
 }): Partial<RecordValues> {
-  const values: Partial<RecordValues> = {
-    [hrefFieldName]: upload.href,
-  };
+  const values: Partial<RecordValues> = {};
+
+  if (hrefFieldName) {
+    values[hrefFieldName] = upload.href;
+  }
 
   if (upload.dimensions && widthFieldName && heightFieldName) {
     values[widthFieldName] = upload.dimensions.width;

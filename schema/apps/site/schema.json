@@ -123,6 +123,11 @@
           "label": "Link",
           "format": "href"
         },
+        "mediaAssetId": {
+          "type": "text",
+          "required": false,
+          "label": "Media asset"
+        },
         "date": {
           "type": "date",
           "required": false,
@@ -387,7 +392,7 @@
         },
         "image": {
           "label": "Image",
-          "fields": ["label", "href"],
+          "fields": ["label", "mediaAssetId", "href"],
           "requiredFields": ["label"]
         }
       },
@@ -734,7 +739,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "image",
+              "editor": "media",
               "commit": "field-commit"
             }
           }
@@ -859,7 +864,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "image",
+              "editor": "media",
               "commit": "field-commit"
             }
           }
@@ -940,6 +945,13 @@
           "type": "field",
           "field": "href",
           "editor": "href",
+          "commit": "field-commit",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "mediaAssetId",
+          "editor": "text",
           "commit": "field-commit",
           "width": "md"
         },
@@ -1486,7 +1498,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "image"
+              "editor": "media"
             }
           }
         }
@@ -1691,7 +1703,7 @@
           "presentation": "fields",
           "fields": {
             "href": {
-              "editor": "image",
+              "editor": "media",
               "commit": "field-commit"
             }
           }

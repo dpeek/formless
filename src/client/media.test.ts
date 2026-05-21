@@ -117,6 +117,20 @@ describe("Site media client helper", () => {
     });
     expect(
       siteImageUploadPatchValues({
+        mediaAssetFieldName: "mediaAssetId",
+        upload: {
+          assetId: "asset-only.webp",
+          contentType: "image/webp",
+          href: "/api/site/media/site/images/asset-only.webp",
+          key: "site/images/asset-only.webp",
+          size: 10,
+        },
+      }),
+    ).toEqual({
+      mediaAssetId: "asset-only.webp",
+    });
+    expect(
+      siteImageUploadPatchValues({
         hrefFieldName: "href",
         upload: {
           contentType: "image/webp",

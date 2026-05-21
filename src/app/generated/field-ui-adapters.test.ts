@@ -24,6 +24,7 @@ describe("generated field controls", () => {
       color: { kind: "input", inputType: "text" },
       icon: { kind: "icon" },
       image: { kind: "imageUpload" },
+      media: { kind: "mediaUpload" },
     });
     expect(
       selectGeneratedFieldControl({
@@ -78,6 +79,21 @@ describe("generated field controls", () => {
       editor: "image",
       control: { kind: "imageUpload" },
       controlKind: "image",
+      createDefaultValue: undefined,
+      label: "Image",
+      required: false,
+    });
+    expect(
+      selectGeneratedFieldControl({
+        editor: "media",
+        field: fields.image,
+        label: labels.image,
+      }),
+    ).toMatchObject({
+      kind: "text",
+      editor: "media",
+      control: { kind: "mediaUpload" },
+      controlKind: "media",
       createDefaultValue: undefined,
       label: "Image",
       required: false,
@@ -213,6 +229,7 @@ const textEditors = [
   "color",
   "icon",
   "image",
+  "media",
 ] as const;
 
 const labels = {

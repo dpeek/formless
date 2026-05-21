@@ -190,12 +190,11 @@ export function RecordFieldEditor({
 
     try {
       const upload = await uploadSiteImageFile(file);
-      const dimensionFields = selectImageDimensionFields(schema, entityName);
+      const uploadFields = selectImageUploadPatchFields(schema, entityName, fieldName);
       const saved = await commitPatch(
         siteImageUploadPatchValues({
-          hrefFieldName: fieldName,
+          ...uploadFields,
           upload,
-          ...dimensionFields,
         }),
         { allowWhilePending: true, managePending: false },
       );
@@ -249,17 +248,40 @@ export function RecordFieldEditor({
   );
 }
 
-function selectImageDimensionFields(
+function selectImageUploadPatchFields(
   schema: AppSchema | null,
   entityName: string,
-): { heightFieldName?: string; widthFieldName?: string } {
+  fieldName: string,
+): {
+  heightFieldName?: string;
+  hrefFieldName?: string;
+  mediaAssetFieldName?: string;
+  widthFieldName?: string;
+} {
   const fields = schema?.entities[entityName]?.fields;
+  const mediaAssetFieldName =
+    fields?.mediaAssetId?.type === "text"
+      ? "mediaAssetId"
+      : fields?.mediaAsset?.type === "text"
+        ? "mediaAsset"
+        : undefined;
+  const hrefFieldName =
+    fields?.href?.type === "text"
+      ? "href"
+      : mediaAssetFieldName === fieldName
+        ? undefined
+        : fieldName;
 
   if (fields?.width?.type === "number" && fields.height?.type === "number") {
-    return { heightFieldName: "height", widthFieldName: "width" };
+    return {
+      heightFieldName: "height",
+      hrefFieldName,
+      mediaAssetFieldName,
+      widthFieldName: "width",
+    };
   }
 
-  return {};
+  return { hrefFieldName, mediaAssetFieldName };
 }
 
 function isSiteImageUploadAvailable(schemaKey: SchemaKey) {

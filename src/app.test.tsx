@@ -4741,7 +4741,7 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
   });
 
-  it("renders the generated Site image upload editor as a clickable image well", () => {
+  it("renders the generated Site media upload editor as a clickable image well", () => {
     const hrefField = siteSourceSchema.entities.block.fields.href;
 
     if (!hrefField || hrefField.type !== "text") {
@@ -4751,7 +4751,7 @@ describe("generated forms and records", () => {
     const fieldConfig: RecordFieldConfig = {
       fieldName: "href",
       field: hrefField,
-      editor: "image",
+      editor: "media",
       commit: "field-commit",
     };
 
@@ -4792,7 +4792,9 @@ describe("generated forms and records", () => {
       </SchemaAppProvider>,
     );
 
-    expect(imageHtml).toContain('data-web-field-kind="image"');
+    expect(imageHtml).toContain('data-web-field-kind="media"');
+    expect(imageHtml).toContain('data-web-media-field-preview="image"');
+    expect(imageHtml).toContain('data-web-media-field-upload="trigger"');
     expect(imageHtml).toContain('data-web-image-field-preview="image"');
     expect(imageHtml).toContain('data-web-image-field-upload="trigger"');
     expect(imageHtml).toContain('src="/api/site/media/site/images/cover.webp"');
@@ -4804,11 +4806,13 @@ describe("generated forms and records", () => {
     expect(imageHtml).toContain('aria-label="Link URL"');
     expect(imageHtml).toContain('value="/api/site/media/site/images/cover.webp"');
     expect(emptyHtml).toContain('data-web-image-field-preview="empty"');
+    expect(emptyHtml).toContain('data-web-media-field-preview="empty"');
     expect(emptyHtml).toContain('data-web-image-field-upload="trigger"');
+    expect(emptyHtml).toContain('data-web-media-field-upload="trigger"');
     expect(emptyHtml).not.toContain("No image");
   });
 
-  it("keeps image create controls as URL inputs and upload affordances edit-only", () => {
+  it("keeps media create controls as URL inputs and upload affordances edit-only", () => {
     const entity: EntitySchema = {
       label: "Media",
       fields: {
@@ -4825,7 +4829,7 @@ describe("generated forms and records", () => {
       label: "Create Media",
       entityName: "media",
       entity,
-      fields: [createFieldConfig(entity, "href", "image")],
+      fields: [createFieldConfig(entity, "href", "media")],
       defaults: [],
       enabled: entity.mutations.create.enabled,
     };
@@ -4847,7 +4851,7 @@ describe("generated forms and records", () => {
         <RecordFieldEditor
           canPatch
           entityName="media"
-          fieldConfig={recordFieldConfig(entity, "href", "image", "field-commit")}
+          fieldConfig={recordFieldConfig(entity, "href", "media", "field-commit")}
           recordId="media-1"
           showLabel
         />
@@ -4860,7 +4864,8 @@ describe("generated forms and records", () => {
     expect(resolveCreateValues(formData, action)).toEqual({
       href: "https://example.com/create.webp",
     });
-    expect(editHtml).toContain('data-web-field-kind="image"');
+    expect(editHtml).toContain('data-web-field-kind="media"');
+    expect(editHtml).toContain('data-web-media-field-preview="image"');
     expect(editHtml).toContain('data-web-image-field-preview="image"');
     expect(editHtml).toContain('src="https://example.com/cover.webp"');
     expect(editHtml).toContain('aria-label="Upload Image"');

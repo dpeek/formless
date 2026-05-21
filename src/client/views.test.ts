@@ -1690,6 +1690,7 @@ describe("home view model collections", () => {
       "field:label",
       "field:body",
       "field:href",
+      "field:mediaAssetId",
       "field:date",
       "field:icon",
       "field:color",
@@ -1704,6 +1705,7 @@ describe("home view model collections", () => {
       "text",
       "markdown",
       "href",
+      "text",
       "date",
       "icon",
       "color",
@@ -1759,6 +1761,7 @@ describe("home view model collections", () => {
     expect(block.fields.color).toMatchObject({ type: "text", format: "color" });
     expect(block.fields.href).toMatchObject({ type: "text", format: "href" });
     expect(block.fields.icon).toMatchObject({ type: "text", format: "icon" });
+    expect(block.fields.mediaAssetId).toMatchObject({ type: "text" });
     expect(block.fields.date).toMatchObject({ type: "date" });
     expect(createEditors).toMatchObject({
       label: "text",

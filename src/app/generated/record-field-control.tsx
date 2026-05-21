@@ -326,15 +326,16 @@ export function GeneratedRecordFieldControl({
     );
   }
 
-  if (rendererKind === "image") {
+  if (rendererKind === "image" || rendererKind === "media") {
     return (
-      <RecordImageFieldRenderer
+      <RecordMediaFieldRenderer
         canPatch={canPatch}
         density={density}
         draft={draft}
         error={error}
         field={field}
         fieldControl={fieldControl}
+        fieldKind={rendererKind}
         isPending={isPending}
         labelClass={labelClass}
         onDraftChange={onDraftChange}
@@ -1106,13 +1107,14 @@ function RecordIconFieldRenderer({
   );
 }
 
-function RecordImageFieldRenderer({
+function RecordMediaFieldRenderer({
   canPatch,
   density,
   draft,
   error,
   field,
   fieldControl,
+  fieldKind,
   isPending,
   labelClass,
   onDraftChange,
@@ -1127,6 +1129,7 @@ function RecordImageFieldRenderer({
   error: string | null;
   field: FieldSchema;
   fieldControl: GeneratedFieldControl;
+  fieldKind: "image" | "media";
   isPending: boolean;
   labelClass: string;
   onDraftChange: (value: string) => void;
@@ -1136,13 +1139,14 @@ function RecordImageFieldRenderer({
   uploadEnabled: boolean;
 }) {
   return (
-    <div className={recordSpecializedFieldContainerClassName(density, "image")}>
+    <div className={recordSpecializedFieldContainerClassName(density, fieldKind)}>
       <Label className={labelClass}>{fieldControl.label}</Label>
-      <ImageFieldControl
+      <MediaFieldControl
         canPatch={canPatch}
         density={density}
         draft={draft}
         error={error}
+        fieldKind={fieldKind}
         isPending={isPending}
         label={fieldControl.label}
         onDraftChange={onDraftChange}
@@ -1355,11 +1359,12 @@ function IconFieldControl({
   );
 }
 
-function ImageFieldControl({
+function MediaFieldControl({
   canPatch,
   density,
   draft,
   error,
+  fieldKind,
   isPending,
   label,
   onDraftChange,
@@ -1373,6 +1378,7 @@ function ImageFieldControl({
   density: GeneratedRecordFieldControlDensity;
   draft: string;
   error: string | null;
+  fieldKind: "image" | "media";
   isPending: boolean;
   label: string;
   onDraftChange: (value: string) => void;
@@ -1412,12 +1418,16 @@ function ImageFieldControl({
   return (
     <div
       className={density === "compact" ? "w-full min-w-0 space-y-2" : "w-full min-w-0 space-y-3"}
-      data-web-field-kind="image"
+      data-web-field-kind={fieldKind}
     >
       <label
         className={previewClassName}
         data-web-image-field-preview={draft === "" ? "empty" : "image"}
         data-web-image-field-upload="trigger"
+        data-web-media-field-preview={
+          fieldKind === "media" ? (draft === "" ? "empty" : "image") : undefined
+        }
+        data-web-media-field-upload={fieldKind === "media" ? "trigger" : undefined}
         title={`Upload ${label}`}
       >
         {draft === "" ? (

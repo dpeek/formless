@@ -47,7 +47,7 @@ describe("schema text fields", () => {
             fields: {
               title: { editor: "text", commit: "field-commit" },
               body: { editor: "markdown", commit: "field-commit" },
-              imageUrl: { editor: "image", commit: "field-commit" },
+              imageUrl: { editor: "media", commit: "field-commit" },
             },
           },
         },
@@ -59,7 +59,7 @@ describe("schema text fields", () => {
             fields: {
               title: { editor: "text" },
               body: { editor: "markdown" },
-              imageUrl: { editor: "image" },
+              imageUrl: { editor: "media" },
             },
           },
         },
@@ -77,14 +77,14 @@ describe("schema text fields", () => {
       commit: "field-commit",
     });
     expect(schema.itemViews.taskListItem?.fields.imageUrl).toEqual({
-      editor: "image",
+      editor: "media",
       commit: "field-commit",
     });
     expect(schema.views.taskCreate).toMatchObject({
       type: "create",
       fields: {
         body: { editor: "markdown" },
-        imageUrl: { editor: "image" },
+        imageUrl: { editor: "media" },
       },
     });
   });
@@ -4319,6 +4319,11 @@ describe("personal site sample schema", () => {
       type: "text",
       format: "href",
     });
+    expect(schema.entities.block?.fields.mediaAssetId).toEqual({
+      type: "text",
+      required: false,
+      label: "Media asset",
+    });
     expect(schema.entities.block?.fields.date).toEqual({
       type: "date",
       required: false,
@@ -4338,6 +4343,7 @@ describe("personal site sample schema", () => {
       "label",
       "body",
       "href",
+      "mediaAssetId",
       "date",
       "linkTargetMode",
       "linkTargetBlock",
@@ -4413,7 +4419,7 @@ describe("personal site sample schema", () => {
         feature: { label: "Feature", fields: ["label", "body", "alignment"] },
         image: {
           label: "Image",
-          fields: ["label", "href"],
+          fields: ["label", "mediaAssetId", "href"],
           requiredFields: ["label"],
         },
       },
@@ -4599,7 +4605,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "image" },
+            href: { editor: "media" },
           },
         },
       },
@@ -4645,7 +4651,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "image", commit: "field-commit" },
+            href: { editor: "media", commit: "field-commit" },
           },
         },
       },
@@ -5049,7 +5055,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "image", commit: "field-commit" },
+            href: { editor: "media", commit: "field-commit" },
           },
         },
       },
@@ -5075,7 +5081,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "image", commit: "field-commit" },
+            href: { editor: "media", commit: "field-commit" },
           },
         },
       },
@@ -5103,7 +5109,7 @@ describe("personal site sample schema", () => {
     expect(blockCreate.variants?.image).toMatchObject({
       presentation: "fields",
       fields: {
-        href: { editor: "image" },
+        href: { editor: "media" },
       },
     });
     expect(blockCreate.variants?.feature).toMatchObject({
@@ -5134,7 +5140,7 @@ describe("personal site sample schema", () => {
     expect(blockEdit.variants?.image).toMatchObject({
       presentation: "fields",
       fields: {
-        href: { editor: "image", commit: "field-commit" },
+        href: { editor: "media", commit: "field-commit" },
       },
     });
     expect(blockEdit.variants?.feature).toMatchObject({

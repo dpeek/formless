@@ -12,7 +12,7 @@ import type { FieldEditor, FieldSchema } from "../../shared/schema.ts";
 
 export type TextFieldEditor = Extract<
   FieldEditor,
-  "text" | "textarea" | "markdown" | "href" | "slug" | "color" | "icon" | "image"
+  "text" | "textarea" | "markdown" | "href" | "slug" | "color" | "icon" | "image" | "media"
 >;
 
 export type GeneratedFieldControlKind =
@@ -22,6 +22,7 @@ export type GeneratedFieldControlKind =
   | "icon"
   | "image"
   | "markdown"
+  | "media"
   | "number"
   | "reference"
   | "select"
@@ -161,6 +162,10 @@ function selectGeneratedFieldControlKind(
     return "image";
   }
 
+  if (editor === "media" || control.kind === "mediaUpload") {
+    return "media";
+  }
+
   if (editor === "icon" || field.format === "icon" || control.kind === "icon") {
     return "icon";
   }
@@ -189,6 +194,7 @@ function isTextFieldEditor(editor: FieldEditor): editor is TextFieldEditor {
     editor === "slug" ||
     editor === "color" ||
     editor === "icon" ||
-    editor === "image"
+    editor === "image" ||
+    editor === "media"
   );
 }
