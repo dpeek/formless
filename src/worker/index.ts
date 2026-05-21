@@ -2,6 +2,7 @@ import { FormlessAuthority } from "./authority.ts";
 import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleSiteMediaRequest } from "./media.ts";
+import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
   publishedSiteRedirectForRequest,
@@ -55,6 +56,12 @@ export default {
 
     if (deployMetadataResponse) {
       return deployMetadataResponse;
+    }
+
+    const ownerSetupResponse = await handleOwnerSetupApiRequest(request, env);
+
+    if (ownerSetupResponse) {
+      return ownerSetupResponse;
     }
 
     const url = new URL(request.url);

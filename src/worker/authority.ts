@@ -18,6 +18,7 @@ import type { Env } from "./index.ts";
 import { authorizeAuthorityOperation } from "./authority-admin-guard.ts";
 import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { executeAuthorityOperation, selectAuthorityOperation } from "./authority-operations.ts";
+import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
   private readonly bindings: Env;
@@ -29,6 +30,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
   async fetch(request: Request) {
     const url = new URL(request.url);
+    const ownerSetupResponse = await handleOwnerSetupDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (ownerSetupResponse) {
+      return ownerSetupResponse;
+    }
+
     const route = parseAuthorityRoute(url.pathname);
 
     if (!route) {
