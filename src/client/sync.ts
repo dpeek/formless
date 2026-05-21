@@ -482,6 +482,7 @@ function parseSyncSocketServerMessage(data: unknown): SyncSocketServerMessage | 
 
 async function fetchJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
   const response = await fetcher(url, {
+    credentials: "same-origin",
     headers: {
       Accept: "application/json",
     },
@@ -492,12 +493,13 @@ async function fetchJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
 
 async function postJson<T>(fetcher: typeof fetch, url: string, body: unknown): Promise<T> {
   const response = await fetcher(url, {
-    method: "POST",
+    credentials: "same-origin",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    method: "POST",
   });
 
   return parseJsonResponse<T>(response);
