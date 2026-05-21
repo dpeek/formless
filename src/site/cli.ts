@@ -75,6 +75,13 @@ const projectStateGitignoreEntry = SITE_PROJECT_GITIGNORE_ENTRY;
 
 export type InitSiteProjectResult = InitSiteProjectSourceResult;
 
+export type OnboardFormlessInstanceResult = {
+  credentialProfile: string | null;
+  instanceName: string | null;
+  mode: "noop";
+  open: boolean;
+};
+
 export async function runFormlessCli(
   args: string[],
   dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
@@ -95,6 +102,20 @@ export async function runFormlessCli(
           "Next:",
           `  cd ${path.relative(dependencies.cwd, result.projectRoot) || "."}`,
           "  npx formless dev",
+        ].join("\n"),
+      );
+      return;
+    }
+    case "onboard": {
+      const result = await onboardFormlessInstance(command);
+      dependencies.log(
+        [
+          "Formless instance onboarding is wired but not deployed yet.",
+          "No remote resources were changed.",
+          `Requested instance: ${result.instanceName ?? "<default>"}.`,
+          `Credential profile: ${result.credentialProfile ?? "<default>"}.`,
+          `Browser open: ${result.open ? "yes" : "no"}.`,
+          "Owner setup and browser writes remain follow-up work.",
         ].join("\n"),
       );
       return;
@@ -155,6 +176,19 @@ export async function initSiteProject(
   const projectRoot = path.resolve(dependencies.cwd, input.targetDir);
 
   return initSiteProjectSource({ packageRoot: dependencies.packageRoot, projectRoot });
+}
+
+export async function onboardFormlessInstance(input: {
+  credentialProfile?: string | null;
+  instanceName?: string | null;
+  open?: boolean;
+}): Promise<OnboardFormlessInstanceResult> {
+  return {
+    credentialProfile: input.credentialProfile ?? null,
+    instanceName: input.instanceName ?? null,
+    mode: "noop",
+    open: input.open ?? false,
+  };
 }
 
 export async function saveSiteProject(

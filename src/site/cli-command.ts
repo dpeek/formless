@@ -13,6 +13,12 @@ export type FormlessCliCommand =
   | { kind: "dev"; projectPath: string }
   | { kind: "help" }
   | { kind: "init"; targetDir: string }
+  | {
+      credentialProfile: string | null;
+      instanceName: string | null;
+      kind: "onboard";
+      open: boolean;
+    }
   | { dryRun: boolean; kind: "publish"; projectPath: string; yes: boolean }
   | { check: boolean; kind: "save"; projectPath: string; source: string | null };
 
@@ -22,6 +28,8 @@ export function formlessCliUsage(): string {
     "",
     "Commands:",
     "  init <dir>                         Create a Formless Site project",
+    "  onboard [options]                  Create a remote Formless instance",
+    "       [--name <name>] [--credential-profile <name>] [--open | --no-open]",
     "  dev [--project <path>]             Run local public preview and /admin editor",
     "  save [--project <path>] [--check]   Save local Site edits back to project files",
     "       [--source <url>]",
@@ -41,6 +49,8 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
   switch (command) {
     case "init":
       return parseInitArgs(rest);
+    case "onboard":
+      return parseOnboardArgs(rest);
     case "dev":
       return parseDevArgs(rest);
     case "save":
@@ -72,6 +82,48 @@ function parseInitArgs(args: string[]): FormlessCliCommand {
   }
 
   return { kind: "init", targetDir: args[0] };
+}
+
+function parseOnboardArgs(args: string[]): FormlessCliCommand {
+  let credentialProfile: string | null = null;
+  let instanceName: string | null = null;
+  let open = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "-h" || arg === "--help") {
+      throw new Error(
+        "Usage: formless onboard [--name <name>] [--credential-profile <name>] [--open | --no-open]",
+      );
+    }
+
+    if (arg === "--name") {
+      instanceName = readOptionValue(args, index, "--name");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--credential-profile") {
+      credentialProfile = readOptionValue(args, index, "--credential-profile");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--open") {
+      open = true;
+      continue;
+    }
+
+    if (arg === "--no-open") {
+      open = false;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless onboard: ${arg}`);
+  }
+
+  return { credentialProfile, instanceName, kind: "onboard", open };
 }
 
 function parseDevArgs(args: string[]): FormlessCliCommand {

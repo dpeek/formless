@@ -25,6 +25,7 @@ import {
 } from "./project-source.ts";
 import {
   initSiteProject,
+  onboardFormlessInstance,
   publishSiteProject,
   runFormlessCli,
   saveSiteProject,
@@ -51,6 +52,8 @@ describe("Formless Site CLI", () => {
       "",
       "Commands:",
       "  init <dir>                         Create a Formless Site project",
+      "  onboard [options]                  Create a remote Formless instance",
+      "       [--name <name>] [--credential-profile <name>] [--open | --no-open]",
       "  dev [--project <path>]             Run local public preview and /admin editor",
       "  save [--project <path>] [--check]   Save local Site edits back to project files",
       "       [--source <url>]",
@@ -97,6 +100,36 @@ describe("Formless Site CLI", () => {
     });
     expect(parseFormlessCliArgs([])).toEqual({ kind: "help" });
     expect(() => parseFormlessCliArgs(["save", "--source"])).toThrow("Missing value for --source.");
+  });
+
+  it("parses onboard command defaults, options, and browser-open flags", () => {
+    expect(parseFormlessCliArgs(["onboard"])).toEqual({
+      credentialProfile: null,
+      instanceName: null,
+      kind: "onboard",
+      open: false,
+    });
+    expect(
+      parseFormlessCliArgs([
+        "onboard",
+        "--name",
+        "brother-instance",
+        "--credential-profile",
+        "personal",
+        "--open",
+      ]),
+    ).toEqual({
+      credentialProfile: "personal",
+      instanceName: "brother-instance",
+      kind: "onboard",
+      open: true,
+    });
+    expect(parseFormlessCliArgs(["onboard", "--open", "--no-open"])).toEqual({
+      credentialProfile: null,
+      instanceName: null,
+      kind: "onboard",
+      open: false,
+    });
   });
 
   it("keeps default project, deploy setup, and publish flags stable", () => {
@@ -160,6 +193,16 @@ describe("Formless Site CLI", () => {
     );
     expect(() => parseFormlessCliArgs(["save", "--force"])).toThrow(
       "Unknown option for formless save: --force",
+    );
+    expect(() => parseFormlessCliArgs(["onboard", "--help"])).toThrow(
+      "Usage: formless onboard [--name <name>] [--credential-profile <name>] [--open | --no-open]",
+    );
+    expect(() => parseFormlessCliArgs(["onboard", "--name"])).toThrow("Missing value for --name.");
+    expect(() => parseFormlessCliArgs(["onboard", "--credential-profile"])).toThrow(
+      "Missing value for --credential-profile.",
+    );
+    expect(() => parseFormlessCliArgs(["onboard", "--bogus"])).toThrow(
+      "Unknown option for formless onboard: --bogus",
     );
     expect(() => parseFormlessCliArgs(["deploy"])).toThrow(
       "Usage: formless deploy setup [--project <path>] --worker <name> --publish-url <url> --media-bucket <bucket>",
@@ -265,6 +308,41 @@ describe("Formless Site CLI", () => {
     await expect(
       initSiteProject({ targetDir: "my-site" }, { cwd: tempDir, packageRoot: process.cwd() }),
     ).rejects.toThrow("target already contains");
+  });
+
+  it("wires onboard CLI to a no-op runner without mutating remote resources", async () => {
+    const logs: string[] = [];
+    const commands: CapturedCommand[] = [];
+
+    await expect(
+      onboardFormlessInstance({
+        credentialProfile: "personal",
+        instanceName: "brother-instance",
+        open: true,
+      }),
+    ).resolves.toEqual({
+      credentialProfile: "personal",
+      instanceName: "brother-instance",
+      mode: "noop",
+      open: true,
+    });
+
+    await runFormlessCli(
+      ["onboard", "--name", "brother-instance", "--credential-profile", "personal", "--open"],
+      cliDeps(process.cwd(), { commands, logs }),
+    );
+
+    expect(commands).toEqual([]);
+    expect(logs).toEqual([
+      [
+        "Formless instance onboarding is wired but not deployed yet.",
+        "No remote resources were changed.",
+        "Requested instance: brother-instance.",
+        "Credential profile: personal.",
+        "Browser open: yes.",
+        "Owner setup and browser writes remain follow-up work.",
+      ].join("\n"),
+    ]);
   });
 
   it("saves local authority snapshots into project records and media", async () => {
