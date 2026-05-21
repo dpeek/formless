@@ -3,7 +3,6 @@
 @plugin "tailwindcss-react-aria-components";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "./color.css";
 @import "./markdown.css";
 @import "@fontsource-variable/inter";
 @source "./";

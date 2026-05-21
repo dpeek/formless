@@ -15,7 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formles
 import { cn } from "@dpeek/formless-ui/utils";
 import { ControlColorPickIcon, ControlLoadingIcon } from "@dpeek/formless-ui/icons";
 import { useEffect, useState } from "react";
-import { HexAlphaColorPicker, HexColorPicker } from "react-colorful";
+import {
+  ColorArea,
+  ColorThumb,
+  parseColor as parseReactAriaColor,
+  type Color as ReactAriaColor,
+} from "react-aria-components/ColorArea";
+import { ColorPicker } from "react-aria-components/ColorPicker";
+import { ColorSlider, SliderTrack } from "react-aria-components/ColorSlider";
 
 import {
   hexToRgb,
@@ -75,6 +82,30 @@ interface ColorValues {
 
 type ColorFormat = "HEX" | "HEXA" | "RGB" | "RGBA" | "HSL" | "HSLA";
 
+const colorAreaClassName =
+  "relative h-[244.79px] w-[244.79px] touch-none overflow-hidden rounded-md";
+const colorSliderClassName = "h-5";
+const colorSliderTrackClassName = "relative h-4 rounded overflow-hidden";
+const colorAreaThumbClassName =
+  "size-5 rounded-sm border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] outline-none data-[focus-visible]:ring-2 data-[focus-visible]:ring-ring";
+const colorSliderThumbClassName =
+  "h-5 w-4 rounded-sm border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] outline-none data-[focus-visible]:ring-2 data-[focus-visible]:ring-ring";
+
+function toReactAriaPickerColor(value: string, alpha: boolean, fallback: string): ReactAriaColor {
+  const fallbackValue = alpha ? `${toPickerHexColor(fallback, "#000000")}FF` : fallback;
+  const colorValue = isValidColor(value) ? value : fallbackValue;
+
+  try {
+    return parseReactAriaColor(colorValue).toFormat(alpha ? "hexa" : "hex");
+  } catch {
+    return parseReactAriaColor(fallbackValue).toFormat(alpha ? "hexa" : "hex");
+  }
+}
+
+function colorToHexValue(color: ReactAriaColor, alpha: boolean): string {
+  return color.toString(alpha ? "hexa" : "hex").toUpperCase();
+}
+
 export function ColorInput({
   value,
   onChange,
@@ -94,6 +125,11 @@ export function ColorInput({
 }: ColorPickerProps) {
   const resolvedLabel = label ?? ariaLabel ?? "Color";
   const resolvedPickerValue = toPickerHexColor(pickerValue ?? value, "#000000");
+  const reactAriaPickerValue = toReactAriaPickerColor(
+    pickerValue ?? value,
+    alpha,
+    resolvedPickerValue,
+  );
   const [colorFormat, setColorFormat] = useState<ColorFormat>(alpha ? "HEXA" : "HEX");
   const [colorValues, setColorValues] = useState<ColorValues>(() => {
     if (alpha) {
@@ -311,6 +347,10 @@ export function ColorInput({
 
   const inputError = error ?? (!hideInputValidation ? (hexInputError ?? undefined) : undefined);
   const inputPlaceholder = placeholder ?? (alpha ? "#FF0000FF" : "#FF0000");
+  const swatchColor =
+    alpha && colorValues.rgba
+      ? rgbaToHex(colorValues.rgba.r, colorValues.rgba.g, colorValues.rgba.b, colorValues.rgba.a)
+      : resolvedPickerValue;
   const swatch = (
     <span className="border-border relative size-3.5 overflow-hidden rounded-[calc(var(--radius-sm)-2px)] border">
       {alpha && colorValues.rgba && colorValues.rgba.a < 1 ? (
@@ -330,7 +370,7 @@ export function ColorInput({
       <span
         aria-hidden="true"
         className="absolute inset-0"
-        style={{ backgroundColor: resolvedPickerValue }}
+        style={{ backgroundColor: swatchColor }}
       />
     </span>
   );
@@ -362,19 +402,46 @@ export function ColorInput({
                     >
                       <ControlColorPickIcon className="h-3 w-3" />
                     </Button>
-                    {alpha ? (
-                      <HexAlphaColorPicker
-                        className="aspect-square! h-[244.79px]! w-[244.79px]!"
-                        color={resolvedPickerValue}
-                        onChange={handleColorChange}
-                      />
-                    ) : (
-                      <HexColorPicker
-                        className="aspect-square! h-[244.79px]! w-[244.79px]!"
-                        color={resolvedPickerValue}
-                        onChange={handleColorChange}
-                      />
-                    )}
+                    <ColorPicker
+                      value={reactAriaPickerValue}
+                      onChange={(nextColor) => handleColorChange(colorToHexValue(nextColor, alpha))}
+                    >
+                      <div className="flex w-[244.79px] flex-col gap-3">
+                        <ColorSlider
+                          aria-label={`${resolvedLabel} hue`}
+                          channel="hue"
+                          colorSpace="hsb"
+                          className={cn(colorSliderClassName, "ml-8 w-[210px]")}
+                          isDisabled={disabled}
+                        >
+                          <SliderTrack className={colorSliderTrackClassName}>
+                            <ColorThumb className={colorSliderThumbClassName} />
+                          </SliderTrack>
+                        </ColorSlider>
+                        <ColorArea
+                          aria-label={`${resolvedLabel} saturation and brightness`}
+                          colorSpace="hsb"
+                          xChannel="saturation"
+                          yChannel="brightness"
+                          className={colorAreaClassName}
+                          isDisabled={disabled}
+                        >
+                          <ColorThumb className={colorAreaThumbClassName} />
+                        </ColorArea>
+                        {alpha ? (
+                          <ColorSlider
+                            aria-label={`${resolvedLabel} alpha`}
+                            channel="alpha"
+                            className={cn(colorSliderClassName, "w-[244.79px]")}
+                            isDisabled={disabled}
+                          >
+                            <SliderTrack className={colorSliderTrackClassName}>
+                              <ColorThumb className={colorSliderThumbClassName} />
+                            </SliderTrack>
+                          </ColorSlider>
+                        ) : null}
+                      </div>
+                    </ColorPicker>
                   </div>
                   <div className="flex gap-2">
                     <Select
