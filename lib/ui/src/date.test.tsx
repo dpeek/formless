@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { Calendar } from "./calendar.js";
 import { DateInput, formatDateInputValue, parseDateInputValue } from "./date.js";
 
 describe("DateInput", () => {
@@ -30,5 +31,17 @@ describe("DateInput", () => {
     expect(markup).toContain('placeholder="2026-05-06"');
     expect(markup).toContain('aria-label="Select date"');
     expect(markup).not.toContain("June 01, 2025");
+  });
+
+  it("renders a React Aria calendar with the selected local date", () => {
+    const markup = renderToStaticMarkup(
+      <Calendar aria-label="Due date" selected={new Date(2026, 4, 6)} />,
+    );
+
+    expect(markup).toContain('data-slot="calendar"');
+    expect(markup).toContain('aria-label="Due date, May 2026"');
+    expect(markup).toContain("May 2026");
+    expect(markup).toContain('data-selected="true"');
+    expect(markup).not.toContain("rdp-");
   });
 });

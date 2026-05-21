@@ -159,7 +159,7 @@ export function DateInput({
           >
             <Dialog aria-label="Select date">
               <Calendar
-                mode="single"
+                aria-label="Select date"
                 selected={selectedDate}
                 month={month}
                 onMonthChange={setMonth}
