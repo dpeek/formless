@@ -37,6 +37,7 @@ import {
   type DeployFormlessInstanceInput,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
+  type WriteFormlessInstanceStateInput,
 } from "./cli.ts";
 
 const tempDirs: string[] = [];
@@ -318,11 +319,13 @@ describe("Formless Site CLI", () => {
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
     const openedUrls: string[] = [];
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
     const dependencies = cliDeps(process.cwd(), {
       commands,
       healthInputs,
       logs,
       openedUrls,
+      stateWrites,
       deploy: async (input) => {
         deployInputs.push(input);
         return { url: input.plan.expectedUrl.url };
@@ -377,6 +380,16 @@ describe("Formless Site CLI", () => {
       "https://brother-instance.dpeek.workers.dev",
       "https://brother-instance.dpeek.workers.dev",
     ]);
+    expect(stateWrites).toHaveLength(2);
+    expect(stateWrites.map((write) => write.root)).toEqual([process.cwd(), process.cwd()]);
+    expect(stateWrites[0]?.state).toMatchObject({
+      accountId: "account-123",
+      credentialProfile: "personal",
+      deploymentTarget: "workers.dev",
+      instanceName: "brother-instance",
+      workersDevUrl: "https://brother-instance.dpeek.workers.dev",
+    });
+    expect(JSON.stringify(stateWrites)).not.toContain("generated-token");
     expect(logs).toEqual([
       [
         "Formless instance deployed.",
@@ -388,6 +401,7 @@ describe("Formless Site CLI", () => {
         "Media bucket: brother-instance-media.",
         "Authority storage: brother-instance-authority.",
         `Deploy metadata: version ${packageJson.version} verified.`,
+        "State: .formless/formless.instance.json.",
         "Browser opened: yes.",
         "Writes are protected by the configured FORMLESS_ADMIN_TOKEN secret.",
         "Owner setup and browser writes remain follow-up work.",
@@ -792,6 +806,7 @@ function cliDeps(
     logs?: string[];
     openedUrls?: string[];
     packageRoot?: string;
+    stateWrites?: WriteFormlessInstanceStateInput[];
   } = {},
 ): FormlessCliDependencies {
   return {
@@ -848,6 +863,16 @@ function cliDeps(
       });
     },
     spawn,
+    stateWriter: {
+      write: async (input) => {
+        options.stateWrites?.push(input);
+
+        return {
+          path: path.join(input.root, ".formless/formless.instance.json"),
+          state: input.state,
+        };
+      },
+    },
   };
 }
 

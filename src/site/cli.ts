@@ -29,9 +29,11 @@ import {
   alchemyFormlessInstanceDeploymentAdapter,
   fetchFormlessInstanceDeploymentHealthCheckAdapter,
   runFormlessInstanceOnboarding,
+  writeFormlessInstanceState,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
   type FormlessInstanceDeploymentHealthCheckAdapter,
+  type FormlessInstanceStateWriter,
   type RunFormlessInstanceOnboardingResult,
 } from "./instance-onboarding.ts";
 
@@ -78,6 +80,7 @@ export {
   planFormlessInstanceDeployment,
   runFormlessInstanceOnboarding,
   selectOnlyFormlessInstanceAccount,
+  writeFormlessInstanceState,
   type AlchemyFormlessInstanceAccountDiscoveryDependencies,
   type AlchemyFormlessInstanceDeploymentAppOptions,
   type AlchemyFormlessInstanceDeploymentDependencies,
@@ -93,11 +96,15 @@ export {
   type FormlessInstanceDeploymentPlan,
   type FormlessInstanceDeploymentSecrets,
   type FormlessInstanceState,
+  type FormlessInstanceStateWriter,
   type ListFormlessInstanceAccountsInput,
   type RunFormlessInstanceOnboardingDependencies,
   type RunFormlessInstanceOnboardingInput,
   type RunFormlessInstanceOnboardingResult,
   type SelectFormlessInstanceAccountInput,
+  type WriteFormlessInstanceStateDependencies,
+  type WriteFormlessInstanceStateInput,
+  type WriteFormlessInstanceStateResult,
 } from "./instance-onboarding.ts";
 
 export type FormlessCliRunCommandOptions = {
@@ -123,6 +130,7 @@ export type FormlessCliDependencies = {
     options: FormlessCliRunCommandOptions,
   ) => Promise<void>;
   spawn: typeof nodeSpawn;
+  stateWriter: FormlessInstanceStateWriter;
 };
 
 const projectStateGitignoreEntry = SITE_PROJECT_GITIGNORE_ENTRY;
@@ -168,6 +176,7 @@ export async function runFormlessCli(
           `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
           `Authority storage: ${result.plan.resources.authority.namespaceName}.`,
           `Deploy metadata: version ${result.healthCheck.version} verified.`,
+          `State: ${formatCliPath(dependencies.cwd, result.stateWrite.path)}.`,
           `Browser opened: ${result.browserOpened ? "yes" : "no"}.`,
           "Writes are protected by the configured FORMLESS_ADMIN_TOKEN secret.",
           "Owner setup and browser writes remain follow-up work.",
@@ -244,9 +253,11 @@ export async function onboardFormlessInstance(
     | "accountDiscovery"
     | "deploymentAdapter"
     | "healthCheck"
+    | "cwd"
     | "openBrowser"
     | "packageRoot"
     | "randomToken"
+    | "stateWriter"
   > = nodeFormlessCliDependencies(),
 ): Promise<OnboardFormlessInstanceResult> {
   return runFormlessInstanceOnboarding(input, {
@@ -257,6 +268,8 @@ export async function onboardFormlessInstance(
     packageRoot: dependencies.packageRoot,
     packageVersion: packageJson.version,
     randomToken: dependencies.randomToken,
+    stateRoot: dependencies.cwd,
+    stateWriter: dependencies.stateWriter,
   });
 }
 
@@ -340,6 +353,12 @@ function formatAccountLabel(account: { id: string; name?: string }): string {
   return account.name ? `${account.name} (${account.id})` : account.id;
 }
 
+function formatCliPath(cwd: string, filePath: string): string {
+  const relativePath = path.relative(cwd, filePath);
+
+  return relativePath === "" ? "." : relativePath;
+}
+
 function openUrlWithSpawn(spawn: typeof nodeSpawn, url: string): Promise<void> {
   const command = browserOpenCommand(process.platform, url);
 
@@ -398,6 +417,9 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     randomToken: () => randomBytes(32).toString("base64url"),
     runCommand: (command, args, options) => runCommandWithSpawn(spawn, command, args, options),
     spawn,
+    stateWriter: {
+      write: writeFormlessInstanceState,
+    },
   };
 }
 

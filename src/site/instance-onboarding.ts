@@ -1,7 +1,10 @@
+import { writeFile } from "node:fs/promises";
+
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
+import { prepareSiteProjectStateDirectory, siteProjectStatePath } from "./project-state.ts";
 
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
 export const FORMLESS_ALCHEMY_APP_NAME = "formless-instance";
@@ -131,6 +134,26 @@ export type FormlessInstanceDeploymentHealthCheckAdapter = {
   ) => Promise<CheckFormlessInstanceDeployMetadataResult>;
 };
 
+export type WriteFormlessInstanceStateInput = {
+  root: string;
+  state: FormlessInstanceState;
+};
+
+export type WriteFormlessInstanceStateResult = {
+  path: string;
+  state: FormlessInstanceState;
+};
+
+export type FormlessInstanceStateWriter = {
+  write: (input: WriteFormlessInstanceStateInput) => Promise<WriteFormlessInstanceStateResult>;
+};
+
+export type WriteFormlessInstanceStateDependencies = {
+  prepareStateDirectory: (root: string) => Promise<void>;
+  statePath: (root: string, fileName: typeof FORMLESS_INSTANCE_STATE_FILE) => string;
+  writeFile: (filePath: string, contents: string) => Promise<void>;
+};
+
 export type AlchemyFormlessInstanceDeploymentAppOptions = {
   phase: "up";
   profile?: string;
@@ -207,6 +230,8 @@ export type RunFormlessInstanceOnboardingDependencies = {
   selectAccount?: (
     input: SelectFormlessInstanceAccountInput,
   ) => Promise<FormlessInstanceDeploymentAccount> | FormlessInstanceDeploymentAccount;
+  stateRoot: string;
+  stateWriter: FormlessInstanceStateWriter;
 };
 
 export type RunFormlessInstanceOnboardingResult = {
@@ -220,6 +245,7 @@ export type RunFormlessInstanceOnboardingResult = {
   open: boolean;
   plan: FormlessInstanceDeploymentPlan;
   state: FormlessInstanceState;
+  stateWrite: WriteFormlessInstanceStateResult;
 };
 
 export type FormlessInstanceState = {
@@ -367,14 +393,18 @@ export async function runFormlessInstanceOnboarding(
     url: deployment.url,
   });
 
-  if (input.open ?? false) {
-    await dependencies.openBrowser(deployment.url);
-  }
-
   const state = createFormlessInstanceState({
     credentialProfile,
     plan,
   });
+  const stateWrite = await dependencies.stateWriter.write({
+    root: parseRequiredString("Formless instance state root", dependencies.stateRoot),
+    state,
+  });
+
+  if (input.open ?? false) {
+    await dependencies.openBrowser(deployment.url);
+  }
 
   return {
     account: plan.account,
@@ -387,6 +417,7 @@ export async function runFormlessInstanceOnboarding(
     open: input.open ?? false,
     plan,
     state,
+    stateWrite,
   };
 }
 
@@ -631,6 +662,26 @@ export function createFormlessInstanceState(
   return parseFormlessInstanceState(state);
 }
 
+export async function writeFormlessInstanceState(
+  input: WriteFormlessInstanceStateInput,
+  dependencies: WriteFormlessInstanceStateDependencies = nodeFormlessInstanceStateWriteDependencies(),
+): Promise<WriteFormlessInstanceStateResult> {
+  const root = parseRequiredString("Formless instance state root", input.root);
+  const state = parseFormlessInstanceState(input.state);
+  const contents = formatFormlessInstanceState(state);
+
+  await dependencies.prepareStateDirectory(root);
+
+  const statePath = dependencies.statePath(root, FORMLESS_INSTANCE_STATE_FILE);
+
+  await dependencies.writeFile(statePath, contents);
+
+  return {
+    path: statePath,
+    state,
+  };
+}
+
 export function parseFormlessInstanceStateJson(contents: string): FormlessInstanceState {
   try {
     return parseFormlessInstanceState(JSON.parse(contents) as unknown);
@@ -776,6 +827,14 @@ function parseDeployFormlessInstanceResult(result: unknown): DeployFormlessInsta
 
 function normalizeCredentialProfile(value: string | null | undefined): string | null {
   return parseOptionalString("Cloudflare credential profile", value ?? undefined) ?? null;
+}
+
+function nodeFormlessInstanceStateWriteDependencies(): WriteFormlessInstanceStateDependencies {
+  return {
+    prepareStateDirectory: prepareSiteProjectStateDirectory,
+    statePath: siteProjectStatePath,
+    writeFile,
+  };
 }
 
 type CloudflareAccountApiResult = {

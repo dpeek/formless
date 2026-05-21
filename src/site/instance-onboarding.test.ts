@@ -15,12 +15,14 @@ import {
   planFormlessInstanceDeployment,
   runFormlessInstanceOnboarding,
   selectOnlyFormlessInstanceAccount,
+  writeFormlessInstanceState,
   type AlchemyFormlessInstanceDeploymentAppOptions,
   type AlchemyFormlessInstanceDeploymentDependencies,
   type AlchemyFormlessInstanceDeploymentWorkerProps,
   type CheckFormlessInstanceDeployMetadataInput,
   type DeployFormlessInstanceInput,
   type SelectFormlessInstanceAccountInput,
+  type WriteFormlessInstanceStateInput,
 } from "./instance-onboarding.ts";
 
 describe("Formless instance onboarding planner", () => {
@@ -191,6 +193,7 @@ describe("Formless instance onboarding adapters", () => {
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
     const openedUrls: string[] = [];
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
 
     const result = await runFormlessInstanceOnboarding(
       {
@@ -229,6 +232,8 @@ describe("Formless instance onboarding adapters", () => {
         packageRoot: "/package",
         packageVersion: "0.1.8",
         randomToken: () => "generated-admin-token",
+        stateRoot: "/workspace",
+        stateWriter: fakeStateWriter(stateWrites),
       },
     );
 
@@ -250,6 +255,12 @@ describe("Formless instance onboarding adapters", () => {
       },
     ]);
     expect(openedUrls).toEqual(["https://brothers-remote-instance.dpeek.workers.dev"]);
+    expect(stateWrites).toEqual([
+      {
+        root: "/workspace",
+        state: result.state,
+      },
+    ]);
     expect(result).toMatchObject({
       account: {
         id: "account-123",
@@ -266,6 +277,9 @@ describe("Formless instance onboarding adapters", () => {
       instanceName: "brothers-remote-instance",
       mode: "deployed",
       open: true,
+      stateWrite: {
+        path: "/workspace/.formless/formless.instance.json",
+      },
     });
     expect(result.state).toEqual({
       version: 1,
@@ -285,6 +299,7 @@ describe("Formless instance onboarding adapters", () => {
 
   it("requires account selection before deployment mutation", async () => {
     const deployInputs: DeployFormlessInstanceInput[] = [];
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
     const deploy = async (input: DeployFormlessInstanceInput) => {
       deployInputs.push(input);
       return { url: input.plan.expectedUrl.url };
@@ -305,6 +320,8 @@ describe("Formless instance onboarding adapters", () => {
           packageRoot: "/package",
           packageVersion: "0.1.8",
           randomToken: () => "generated-admin-token",
+          stateRoot: "/workspace",
+          stateWriter: fakeStateWriter(stateWrites),
         },
       ),
     ).rejects.toThrow("No Cloudflare accounts were found for the selected credentials.");
@@ -334,12 +351,58 @@ describe("Formless instance onboarding adapters", () => {
           packageRoot: "/package",
           packageVersion: "0.1.8",
           randomToken: () => "generated-admin-token",
+          stateRoot: "/workspace",
+          stateWriter: fakeStateWriter(stateWrites),
         },
       ),
     ).rejects.toThrow(
       "Multiple Cloudflare accounts were found; account selection is required before deployment.",
     );
     expect(deployInputs).toEqual([]);
+    expect(stateWrites).toEqual([]);
+  });
+
+  it("writes state only after deploy metadata health check succeeds", async () => {
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
+    const openedUrls: string[] = [];
+
+    await expect(
+      runFormlessInstanceOnboarding(
+        {
+          instanceName: "remote",
+          open: true,
+        },
+        {
+          accountDiscovery: {
+            listAccounts: async () => [
+              {
+                id: "account-123",
+                workersDevSubdomain: "dpeek",
+              },
+            ],
+          },
+          deploymentAdapter: {
+            deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+          },
+          healthCheck: {
+            check: async () => {
+              throw new Error("deploy metadata stale");
+            },
+          },
+          openBrowser: async (url) => {
+            openedUrls.push(url);
+          },
+          packageRoot: "/package",
+          packageVersion: "0.1.8",
+          randomToken: () => "generated-admin-token",
+          stateRoot: "/workspace",
+          stateWriter: fakeStateWriter(stateWrites),
+        },
+      ),
+    ).rejects.toThrow("deploy metadata stale");
+
+    expect(stateWrites).toEqual([]);
+    expect(openedUrls).toEqual([]);
   });
 
   it("allows a fake account selector to choose among discovered accounts", async () => {
@@ -375,6 +438,8 @@ describe("Formless instance onboarding adapters", () => {
           selectionInputs.push(input);
           return input.accounts[1] as (typeof input.accounts)[number];
         },
+        stateRoot: "/workspace",
+        stateWriter: fakeStateWriter(),
       },
     );
 
@@ -765,6 +830,80 @@ describe("Formless instance state", () => {
     expect(parseFormlessInstanceStateJson(formatFormlessInstanceState(state))).toEqual(state);
   });
 
+  it("writes only validated non-secret deployment state to the ignored state directory", async () => {
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        name: "Personal",
+        workersDevSubdomain: "dpeek",
+      },
+      instanceName: "brother-instance",
+      packageVersion: "0.1.8",
+    });
+    const state = createFormlessInstanceState({
+      credentialProfile: "personal",
+      plan,
+    });
+    const preparedRoots: string[] = [];
+    const writes: Array<{ contents: string; path: string }> = [];
+
+    const result = await writeFormlessInstanceState(
+      {
+        root: "/workspace",
+        state,
+      },
+      {
+        prepareStateDirectory: async (root) => {
+          preparedRoots.push(root);
+        },
+        statePath: (root, fileName) => `${root}/.formless/${fileName}`,
+        writeFile: async (filePath, contents) => {
+          writes.push({ contents, path: filePath });
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      path: "/workspace/.formless/formless.instance.json",
+      state,
+    });
+    expect(preparedRoots).toEqual(["/workspace"]);
+    expect(writes).toEqual([
+      {
+        path: "/workspace/.formless/formless.instance.json",
+        contents: formatFormlessInstanceState(state),
+      },
+    ]);
+    expect(JSON.parse(writes[0]?.contents ?? "{}")).toEqual(state);
+    expect(writes[0]?.contents).not.toContain("generated-admin-token");
+    expect(writes[0]?.contents).not.toContain("FORMLESS_ADMIN_TOKEN");
+
+    await expect(
+      writeFormlessInstanceState(
+        {
+          root: "/workspace",
+          state: {
+            ...state,
+            adminToken: "generated-admin-token",
+          } as never,
+        },
+        {
+          prepareStateDirectory: async (root) => {
+            preparedRoots.push(root);
+          },
+          statePath: (root, fileName) => `${root}/.formless/${fileName}`,
+          writeFile: async (filePath, contents) => {
+            writes.push({ contents, path: filePath });
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      'formless.instance.json must not store secret field "formless.instance.json.adminToken".',
+    );
+    expect(preparedRoots).toEqual(["/workspace"]);
+    expect(writes).toHaveLength(1);
+  });
+
   it("rejects secret fields and non-workers.dev state", () => {
     expect(() =>
       parseFormlessInstanceState({
@@ -810,4 +949,17 @@ function fakeHealthyDeployment(input: CheckFormlessInstanceDeployMetadataInput):
     url: input.url,
     version: input.expectedVersion,
   });
+}
+
+function fakeStateWriter(writes: WriteFormlessInstanceStateInput[] = []) {
+  return {
+    write: async (input: WriteFormlessInstanceStateInput) => {
+      writes.push(input);
+
+      return {
+        path: `${input.root}/.formless/formless.instance.json`,
+        state: input.state,
+      };
+    },
+  };
 }
