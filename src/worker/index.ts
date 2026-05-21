@@ -20,6 +20,7 @@ export type Env = {
   FORMLESS_AUTHORITY: DurableObjectNamespace<FormlessAuthority>;
   FORMLESS_DEPLOY_VERSION?: string;
   FORMLESS_MEDIA: R2Bucket;
+  FORMLESS_OWNER_SESSION_SECRET?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
 };
 

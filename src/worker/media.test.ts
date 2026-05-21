@@ -1,15 +1,24 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import type { OwnerIdentity } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { SITE_IMAGE_UPLOAD_MAX_BYTES, SITE_MEDIA_CACHE_CONTROL } from "./media.ts";
+import { createOwnerSessionCookie } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type HarnessResponse = Awaited<ReturnType<Harness["fetch"]>>;
 
 const adminToken = "test-admin-token";
+const sessionSecret = "test-session-secret";
 const mediaBinding = "FORMLESS_MEDIA";
 const mediaBuckets = [mediaBinding];
 const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+const owner: OwnerIdentity = {
+  id: "owner-1",
+  name: "Ada Owner",
+  email: "ada@example.com",
+  createdAt: "2026-05-21T00:00:00.000Z",
+};
 
 type TestFile = {
   content: Uint8Array;
@@ -36,7 +45,10 @@ beforeAll(async () => {
       FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
     },
     {
-      bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_OWNER_SESSION_SECRET: sessionSecret,
+      },
       r2Buckets: mediaBuckets,
     },
   );
@@ -118,10 +130,33 @@ describe("site media worker routes", () => {
     expect(rejected.status).toBe(401);
     expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
     expect((await rejected.json()) as { error: string }).toEqual({
-      error: "Admin authorization is required for this write endpoint.",
+      error: "Owner session or admin authorization is required for this write endpoint.",
     });
     expect(accepted.status).toBe(200);
     await expectMediaBucketKeys(guardedHarness, [expect.stringMatching(/^site\/images\/.+\.png$/)]);
+  });
+
+  it("accepts owner session cookies for media writes when configured", async () => {
+    const headers = await ownerSessionHeaders();
+    const upload = await uploadImage(
+      guardedHarness,
+      imageFile("hero.png", "image/png", pngBytes),
+      headers,
+    );
+    const restore = await restoreMedia(
+      guardedHarness,
+      "site/images/restored-by-owner.png",
+      "image/png",
+      pngBytes,
+      headers,
+    );
+
+    expect(upload.status).toBe(200);
+    expect(restore.status).toBe(200);
+    await expectMediaBucketKeysUnordered(guardedHarness, [
+      expect.stringMatching(/^site\/images\/.+\.png$/),
+      "site/images/restored-by-owner.png",
+    ]);
   });
 
   it("restores source media to an exact guarded R2 key", async () => {
@@ -325,6 +360,15 @@ async function expectMediaBucketKeys(harness: Harness, expected: unknown[]) {
   expect(objects.objects.map((object) => object.key)).toEqual(expected);
 }
 
+async function expectMediaBucketKeysUnordered(harness: Harness, expected: unknown[]) {
+  const bucket = await harness.mf.getR2Bucket(mediaBinding);
+  const objects = await bucket.list();
+  const keys = objects.objects.map((object) => object.key);
+
+  expect(keys).toHaveLength(expected.length);
+  expect(keys).toEqual(expect.arrayContaining(expected));
+}
+
 async function expectResponseStatus(response: HarnessResponse, status: number) {
   expect({
     body: await response.clone().text(),
@@ -333,4 +377,22 @@ async function expectResponseStatus(response: HarnessResponse, status: number) {
     body: expect.any(String),
     status,
   });
+}
+
+async function ownerSessionHeaders() {
+  const created = await createOwnerSessionCookie({
+    env: { FORMLESS_OWNER_SESSION_SECRET: sessionSecret },
+    maxAgeSeconds: 60,
+    now: "2999-01-01T00:00:00.000Z",
+    owner,
+    request: new Request("http://example.com/admin"),
+  });
+
+  return {
+    Cookie: cookiePair(created.cookie),
+  };
+}
+
+function cookiePair(cookie: string) {
+  return cookie.split(";")[0] ?? cookie;
 }

@@ -31,12 +31,12 @@ export function authorizeAuthorityOperation(
   request: Request,
   operation: AuthorityOperation,
   env: AuthorityAdminGuardEnv,
-): AuthorityAdminGuardResult {
+): Promise<AuthorityAdminGuardResult> {
   if (operation.metadata.mode === "read") {
-    return { authorized: true };
+    return Promise.resolve({ authorized: true });
   }
 
-  return authorizeAdminWrite(request, env);
+  return authorizeInstanceWrite(request, env);
 }
 
 export function authorizeAdminWrite(

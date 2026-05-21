@@ -58,7 +58,7 @@ export class FormlessAuthority extends DurableObject<Env> {
       });
 
       if (operation) {
-        const authorization = authorizeAuthorityOperation(request, operation, this.bindings);
+        const authorization = await authorizeAuthorityOperation(request, operation, this.bindings);
 
         if (!authorization.authorized) {
           return jsonResponse(

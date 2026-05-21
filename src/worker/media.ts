@@ -7,7 +7,7 @@ import {
   siteMediaHrefForKey,
   siteMediaKeyFromPathname,
 } from "../site/source-media.ts";
-import { authorizeAdminWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
+import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { responseWithoutBodyForHead } from "./head-response.ts";
 
 export const SITE_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
@@ -66,7 +66,7 @@ export async function handleSiteMediaRequest(request: Request, env: SiteMediaEnv
 }
 
 async function uploadSiteImage(request: Request, env: SiteMediaEnv) {
-  const authorization = authorizeAdminWrite(request, env);
+  const authorization = await authorizeInstanceWrite(request, env);
 
   if (!authorization.authorized) {
     return jsonResponse(
@@ -107,7 +107,7 @@ async function uploadSiteImage(request: Request, env: SiteMediaEnv) {
 }
 
 async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: string) {
-  const authorization = authorizeAdminWrite(request, env);
+  const authorization = await authorizeInstanceWrite(request, env);
 
   if (!authorization.authorized) {
     return jsonResponse(
