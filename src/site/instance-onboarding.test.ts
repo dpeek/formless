@@ -6,7 +6,9 @@ import {
   deployFormlessInstanceWithAlchemy,
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
+  ensureFormlessInstanceLocalSecretEnv,
   FORMLESS_ALCHEMY_APP_NAME,
+  FORMLESS_INSTANCE_LOCAL_ENV_FILE,
   FORMLESS_OWNER_SETUP_ROUTE_PATH,
   FORMLESS_WORKER_COMPATIBILITY_DATE,
   formatFormlessInstanceState,
@@ -25,6 +27,7 @@ import {
   type CheckFormlessInstanceDeployMetadataInput,
   type CreateFormlessInstanceOwnerSetupCapabilityInput,
   type DeployFormlessInstanceInput,
+  type EnsureFormlessInstanceLocalSecretEnvDependencies,
   type FormlessInstanceOwnerSetupCapabilityAdapter,
   type SelectFormlessInstanceAccountInput,
   type WriteFormlessInstanceStateInput,
@@ -238,6 +241,7 @@ describe("Formless instance onboarding adapters", () => {
             return fakeHealthyDeployment(input);
           },
         },
+        localSecretEnv: fakeLocalSecretEnv(),
         openBrowser: async (url) => {
           openedUrls.push(url);
         },
@@ -257,8 +261,10 @@ describe("Formless instance onboarding adapters", () => {
         packageRoot: "/package",
         plan: result.plan,
         secrets: {
+          ALCHEMY_PASSWORD: "alchemy-password",
           FORMLESS_ADMIN_TOKEN: "generated-admin-token",
         },
+        stateRoot: "/workspace/instances/brothers-remote-instance",
       },
     ]);
     expect(healthInputs).toEqual([
@@ -277,7 +283,7 @@ describe("Formless instance onboarding adapters", () => {
     expect(openedUrls).toEqual([setupUrl]);
     expect(stateWrites).toEqual([
       {
-        root: "/workspace",
+        root: "/workspace/instances/brothers-remote-instance",
         state: result.state,
       },
     ]);
@@ -301,7 +307,7 @@ describe("Formless instance onboarding adapters", () => {
         url: setupUrl,
       },
       stateWrite: {
-        path: "/workspace/.formless/formless.instance.json",
+        path: "/workspace/instances/brothers-remote-instance/formless.instance.json",
       },
     });
     expect(result.ownerSetup.capability).toEqual({
@@ -347,6 +353,7 @@ describe("Formless instance onboarding adapters", () => {
           healthCheck: {
             check: fakeHealthyDeployment,
           },
+          localSecretEnv: fakeLocalSecretEnv(),
           openBrowser: async () => {},
           packageRoot: "/package",
           packageVersion: "0.1.8",
@@ -379,6 +386,7 @@ describe("Formless instance onboarding adapters", () => {
           healthCheck: {
             check: fakeHealthyDeployment,
           },
+          localSecretEnv: fakeLocalSecretEnv(),
           openBrowser: async () => {},
           packageRoot: "/package",
           packageVersion: "0.1.8",
@@ -423,6 +431,7 @@ describe("Formless instance onboarding adapters", () => {
               throw new Error("deploy metadata stale");
             },
           },
+          localSecretEnv: fakeLocalSecretEnv(),
           openBrowser: async (url) => {
             openedUrls.push(url);
           },
@@ -466,6 +475,7 @@ describe("Formless instance onboarding adapters", () => {
           healthCheck: {
             check: fakeHealthyDeployment,
           },
+          localSecretEnv: fakeLocalSecretEnv(),
           openBrowser: async (url) => {
             openedUrls.push(url);
           },
@@ -512,6 +522,7 @@ describe("Formless instance onboarding adapters", () => {
         healthCheck: {
           check: fakeHealthyDeployment,
         },
+        localSecretEnv: fakeLocalSecretEnv(),
         openBrowser: async () => {},
         packageRoot: "/package",
         packageVersion: "0.1.8",
@@ -571,8 +582,10 @@ describe("Formless instance owner setup capability", () => {
       },
       {
         fetch: async (url, init) => {
+          const body = typeof init?.body === "string" ? init.body : "";
+
           requests.push({
-            body: String(init?.body ?? ""),
+            body,
             headers: normalizeHeaders(init?.headers),
             method: init?.method ?? "GET",
             url: typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url,
@@ -793,8 +806,10 @@ describe("Alchemy Formless instance deployment", () => {
         packageRoot: "/package",
         plan,
         secrets: {
+          ALCHEMY_PASSWORD: "alchemy-password",
           FORMLESS_ADMIN_TOKEN: "admin-secret",
         },
+        stateRoot: "/state",
       },
       dependencies,
     );
@@ -805,8 +820,9 @@ describe("Alchemy Formless instance deployment", () => {
         name: "formless-instance",
         options: {
           phase: "up",
+          password: "alchemy-password",
           profile: "personal",
-          rootDir: "/package",
+          rootDir: "/state",
           stage: "brother-instance",
         },
       },
@@ -884,7 +900,7 @@ describe("Alchemy Formless instance deployment", () => {
     expect(finalized).toBe(1);
   });
 
-  it("rejects missing package roots or admin tokens before Alchemy mutation", async () => {
+  it("rejects missing package roots, admin tokens, or Alchemy passwords before mutation", async () => {
     const calls: string[] = [];
     const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
       createApp: async () => {
@@ -927,8 +943,10 @@ describe("Alchemy Formless instance deployment", () => {
           packageRoot: " ",
           plan,
           secrets: {
+            ALCHEMY_PASSWORD: "alchemy-password",
             FORMLESS_ADMIN_TOKEN: "admin-secret",
           },
+          stateRoot: "/state",
         },
         dependencies,
       ),
@@ -940,13 +958,98 @@ describe("Alchemy Formless instance deployment", () => {
           packageRoot: "/package",
           plan,
           secrets: {
+            ALCHEMY_PASSWORD: "alchemy-password",
             FORMLESS_ADMIN_TOKEN: " ",
           },
+          stateRoot: "/state",
         },
         dependencies,
       ),
     ).rejects.toThrow("Formless admin token must be a non-empty string.");
+    await expect(
+      deployFormlessInstanceWithAlchemy(
+        {
+          credentialProfile: null,
+          packageRoot: "/package",
+          plan,
+          secrets: {
+            ALCHEMY_PASSWORD: " ",
+            FORMLESS_ADMIN_TOKEN: "admin-secret",
+          },
+          stateRoot: "/state",
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow("Alchemy encryption password must be a non-empty string.");
     expect(calls).toEqual([]);
+  });
+});
+
+describe("Formless instance local secret env", () => {
+  it("creates and reuses a local Alchemy encryption password", async () => {
+    const preparedRoots: string[] = [];
+    const writes: Array<{ contents: string; path: string }> = [];
+    let contents: string | null = "# local deploy secrets\nFORMLESS_ADMIN_TOKEN=admin-secret\n";
+    const dependencies: EnsureFormlessInstanceLocalSecretEnvDependencies = {
+      prepareStateDirectory: async (root) => {
+        preparedRoots.push(root);
+      },
+      readFile: async () => {
+        if (contents === null) {
+          const error = new Error("missing") as NodeJS.ErrnoException;
+          error.code = "ENOENT";
+          throw error;
+        }
+
+        return contents;
+      },
+      statePath: (root, fileName) => `${root}/${fileName}`,
+      writeFile: async (filePath, nextContents) => {
+        writes.push({ contents: nextContents, path: filePath });
+        contents = nextContents;
+      },
+    };
+
+    const first = await ensureFormlessInstanceLocalSecretEnv(
+      {
+        createSecret: () => "generated-alchemy-password",
+        root: "/workspace",
+      },
+      dependencies,
+    );
+    const second = await ensureFormlessInstanceLocalSecretEnv(
+      {
+        createSecret: () => {
+          throw new Error("should not generate a second password");
+        },
+        root: "/workspace",
+      },
+      dependencies,
+    );
+
+    expect(first).toEqual({
+      created: true,
+      path: "/workspace/deploy.env",
+      secrets: {
+        ALCHEMY_PASSWORD: "generated-alchemy-password",
+      },
+    });
+    expect(second).toEqual({
+      created: false,
+      path: "/workspace/deploy.env",
+      secrets: {
+        ALCHEMY_PASSWORD: "generated-alchemy-password",
+      },
+    });
+    expect(preparedRoots).toEqual(["/workspace", "/workspace"]);
+    expect(writes).toEqual([
+      {
+        path: "/workspace/deploy.env",
+        contents:
+          "# local deploy secrets\nFORMLESS_ADMIN_TOKEN=admin-secret\nALCHEMY_PASSWORD=generated-alchemy-password\n",
+      },
+    ]);
+    expect(FORMLESS_INSTANCE_LOCAL_ENV_FILE).toBe("deploy.env");
   });
 });
 
@@ -1002,7 +1105,7 @@ describe("Formless instance state", () => {
     expect(parseFormlessInstanceStateJson(formatFormlessInstanceState(state))).toEqual(state);
   });
 
-  it("writes only validated non-secret deployment state to the ignored state directory", async () => {
+  it("writes only validated non-secret deployment state to the instance state directory", async () => {
     const plan = planFormlessInstanceDeployment({
       account: {
         id: "account-123",
@@ -1028,7 +1131,7 @@ describe("Formless instance state", () => {
         prepareStateDirectory: async (root) => {
           preparedRoots.push(root);
         },
-        statePath: (root, fileName) => `${root}/.formless/${fileName}`,
+        statePath: (root, fileName) => `${root}/${fileName}`,
         writeFile: async (filePath, contents) => {
           writes.push({ contents, path: filePath });
         },
@@ -1036,13 +1139,13 @@ describe("Formless instance state", () => {
     );
 
     expect(result).toEqual({
-      path: "/workspace/.formless/formless.instance.json",
+      path: "/workspace/formless.instance.json",
       state,
     });
     expect(preparedRoots).toEqual(["/workspace"]);
     expect(writes).toEqual([
       {
-        path: "/workspace/.formless/formless.instance.json",
+        path: "/workspace/formless.instance.json",
         contents: formatFormlessInstanceState(state),
       },
     ]);
@@ -1063,7 +1166,7 @@ describe("Formless instance state", () => {
           prepareStateDirectory: async (root) => {
             preparedRoots.push(root);
           },
-          statePath: (root, fileName) => `${root}/.formless/${fileName}`,
+          statePath: (root, fileName) => `${root}/${fileName}`,
           writeFile: async (filePath, contents) => {
             writes.push({ contents, path: filePath });
           },
@@ -1164,9 +1267,21 @@ function fakeStateWriter(writes: WriteFormlessInstanceStateInput[] = []) {
       writes.push(input);
 
       return {
-        path: `${input.root}/.formless/formless.instance.json`,
+        path: `${input.root}/formless.instance.json`,
         state: input.state,
       };
     },
+  };
+}
+
+function fakeLocalSecretEnv(password = "alchemy-password") {
+  return {
+    ensure: async (input: { root: string }) => ({
+      created: false,
+      path: `${input.root}/deploy.env`,
+      secrets: {
+        ALCHEMY_PASSWORD: password,
+      },
+    }),
   };
 }

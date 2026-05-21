@@ -10,6 +10,7 @@ await mkdir(path.dirname(outfile), { recursive: true });
 await build({
   bundle: true,
   entryPoints: ["scripts/formless-bin.ts"],
+  external: ["alchemy", "alchemy/*"],
   format: "esm",
   outfile,
   platform: "node",

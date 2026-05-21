@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,11 +30,14 @@ import {
   alchemyFormlessInstanceDeploymentAdapter,
   fetchFormlessInstanceDeploymentHealthCheckAdapter,
   fetchFormlessInstanceOwnerSetupCapabilityAdapter,
+  ensureFormlessInstanceLocalSecretEnv,
+  FORMLESS_HOME_DIRECTORY,
   runFormlessInstanceOnboarding,
   writeFormlessInstanceState,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
   type FormlessInstanceDeploymentHealthCheckAdapter,
+  type FormlessInstanceLocalSecretEnvStore,
   type FormlessInstanceOwnerSetupCapabilityAdapter,
   type FormlessInstanceStateWriter,
   type RunFormlessInstanceOnboardingResult,
@@ -65,6 +69,7 @@ export {
 } from "./project-publish.ts";
 export { type SaveSiteProjectResult } from "./project-save.ts";
 export {
+  ALCHEMY_PASSWORD_ENV_NAME,
   alchemyFormlessInstanceAccountDiscoveryAdapter,
   alchemyFormlessInstanceDeploymentAdapter,
   checkFormlessInstanceDeployMetadata,
@@ -72,11 +77,16 @@ export {
   DEFAULT_FORMLESS_INSTANCE_NAME,
   deployFormlessInstanceWithAlchemy,
   createFormlessInstanceOwnerSetupCapability,
+  ensureFormlessInstanceLocalSecretEnv,
   fetchFormlessInstanceDeploymentHealthCheckAdapter,
   fetchFormlessInstanceOwnerSetupCapabilityAdapter,
   FORMLESS_ALCHEMY_APP_NAME,
+  FORMLESS_HOME_DIRECTORY,
+  FORMLESS_INSTANCE_DIRECTORY,
+  FORMLESS_INSTANCE_LOCAL_ENV_FILE,
   FORMLESS_OWNER_SETUP_ROUTE_PATH,
   formatFormlessInstanceState,
+  formlessInstanceStateRoot,
   formatFormlessOwnerSetupUrl,
   FORMLESS_WORKER_COMPATIBILITY_DATE,
   listFormlessInstanceAccountsWithAlchemy,
@@ -99,11 +109,16 @@ export {
   type CreateFormlessInstanceOwnerSetupCapabilityResult,
   type DeployFormlessInstanceInput,
   type DeployFormlessInstanceResult,
+  type EnsureFormlessInstanceLocalSecretEnvDependencies,
+  type EnsureFormlessInstanceLocalSecretEnvInput,
+  type EnsureFormlessInstanceLocalSecretEnvResult,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
   type FormlessInstanceDeploymentHealthCheckAdapter,
   type FormlessInstanceDeploymentPlan,
   type FormlessInstanceDeploymentSecrets,
+  type FormlessInstanceLocalSecretEnv,
+  type FormlessInstanceLocalSecretEnvStore,
   type FormlessInstanceOwnerSetupCapabilityAdapter,
   type FormlessInstanceState,
   type FormlessInstanceStateWriter,
@@ -129,6 +144,7 @@ export type FormlessCliDependencies = {
   env: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
+  localSecretEnv: FormlessInstanceLocalSecretEnvStore;
   log: (message: string) => void;
   now: () => string;
   openBrowser: (url: string) => Promise<void>;
@@ -140,6 +156,7 @@ export type FormlessCliDependencies = {
     options: FormlessCliRunCommandOptions,
   ) => Promise<void>;
   spawn: typeof nodeSpawn;
+  stateRoot: string;
   stateWriter: FormlessInstanceStateWriter;
   setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
@@ -188,6 +205,7 @@ export async function runFormlessCli(
           `Authority storage: ${result.plan.resources.authority.namespaceName}.`,
           `Deploy metadata: version ${result.healthCheck.version} verified.`,
           `State: ${formatCliPath(dependencies.cwd, result.stateWrite.path)}.`,
+          `Local secrets: ${formatCliPath(dependencies.cwd, result.localSecretEnv.path)}.`,
           `Browser opened: ${result.browserOpened ? "yes" : "no"}.`,
           result.browserOpened
             ? "Owner setup: opened in browser."
@@ -266,10 +284,12 @@ export async function onboardFormlessInstance(
     | "accountDiscovery"
     | "deploymentAdapter"
     | "healthCheck"
+    | "localSecretEnv"
     | "cwd"
     | "openBrowser"
     | "packageRoot"
     | "randomToken"
+    | "stateRoot"
     | "stateWriter"
     | "setupCapability"
   > = nodeFormlessCliDependencies(),
@@ -278,11 +298,12 @@ export async function onboardFormlessInstance(
     accountDiscovery: dependencies.accountDiscovery,
     deploymentAdapter: dependencies.deploymentAdapter,
     healthCheck: dependencies.healthCheck,
+    localSecretEnv: dependencies.localSecretEnv,
     openBrowser: dependencies.openBrowser,
     packageRoot: dependencies.packageRoot,
     packageVersion: packageJson.version,
     randomToken: dependencies.randomToken,
-    stateRoot: dependencies.cwd,
+    stateRoot: dependencies.stateRoot,
     stateWriter: dependencies.stateWriter,
     setupCapability: dependencies.setupCapability,
   });
@@ -371,7 +392,19 @@ function formatAccountLabel(account: { id: string; name?: string }): string {
 function formatCliPath(cwd: string, filePath: string): string {
   const relativePath = path.relative(cwd, filePath);
 
-  return relativePath === "" ? "." : relativePath;
+  if (relativePath === "") {
+    return ".";
+  }
+
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
+    return filePath;
+  }
+
+  return relativePath;
 }
 
 function openUrlWithSpawn(spawn: typeof nodeSpawn, url: string): Promise<void> {
@@ -425,6 +458,9 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     env: process.env,
     fetch,
     healthCheck: fetchFormlessInstanceDeploymentHealthCheckAdapter,
+    localSecretEnv: {
+      ensure: ensureFormlessInstanceLocalSecretEnv,
+    },
     log: (message) => console.log(message),
     now: () => new Date().toISOString(),
     openBrowser: (url) => openUrlWithSpawn(spawn, url),
@@ -432,6 +468,7 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     randomToken: () => randomBytes(32).toString("base64url"),
     runCommand: (command, args, options) => runCommandWithSpawn(spawn, command, args, options),
     spawn,
+    stateRoot: path.join(homedir(), FORMLESS_HOME_DIRECTORY),
     stateWriter: {
       write: writeFormlessInstanceState,
     },

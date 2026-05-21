@@ -371,6 +371,7 @@ describe("Formless Site CLI", () => {
       credentialProfile: "personal",
       packageRoot: process.cwd(),
       secrets: {
+        ALCHEMY_PASSWORD: "alchemy-password",
         FORMLESS_ADMIN_TOKEN: "generated-token",
       },
     });
@@ -398,7 +399,10 @@ describe("Formless Site CLI", () => {
     ]);
     expect(openedUrls).toEqual([setupUrl, setupUrl]);
     expect(stateWrites).toHaveLength(2);
-    expect(stateWrites.map((write) => write.root)).toEqual([process.cwd(), process.cwd()]);
+    expect(stateWrites.map((write) => write.root)).toEqual([
+      path.join(process.cwd(), ".formless/instances/brother-instance"),
+      path.join(process.cwd(), ".formless/instances/brother-instance"),
+    ]);
     expect(stateWrites[0]?.state).toMatchObject({
       accountId: "account-123",
       credentialProfile: "personal",
@@ -419,7 +423,8 @@ describe("Formless Site CLI", () => {
         "Media bucket: brother-instance-media.",
         "Authority storage: brother-instance-authority.",
         `Deploy metadata: version ${packageJson.version} verified.`,
-        "State: .formless/formless.instance.json.",
+        "State: .formless/instances/brother-instance/formless.instance.json.",
+        "Local secrets: .formless/instances/brother-instance/deploy.env.",
         "Browser opened: yes.",
         "Owner setup: opened in browser.",
         "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
@@ -453,12 +458,37 @@ describe("Formless Site CLI", () => {
         "Media bucket: brother-instance-media.",
         "Authority storage: brother-instance-authority.",
         `Deploy metadata: version ${packageJson.version} verified.`,
-        "State: .formless/formless.instance.json.",
+        "State: .formless/instances/brother-instance/formless.instance.json.",
+        "Local secrets: .formless/instances/brother-instance/deploy.env.",
         "Browser opened: no.",
         `Owner setup URL: ${setupUrl}.`,
         "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
       ].join("\n"),
     ]);
+  });
+
+  it("stores global instance onboarding state outside the current directory", async () => {
+    const cwd = "/tmp/empty-formless-project";
+    const logs: string[] = [];
+    const stateRoot = "/home/user/.formless";
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
+    const dependencies = cliDeps(cwd, {
+      logs,
+      stateRoot,
+      stateWrites,
+    });
+
+    await runFormlessCli(["onboard", "--name", "brother-instance", "--no-open"], dependencies);
+
+    expect(stateWrites.map((write) => write.root)).toEqual([
+      "/home/user/.formless/instances/brother-instance",
+    ]);
+    expect(logs[0]).toContain(
+      "State: /home/user/.formless/instances/brother-instance/formless.instance.json.",
+    );
+    expect(logs[0]).toContain(
+      "Local secrets: /home/user/.formless/instances/brother-instance/deploy.env.",
+    );
   });
 
   it("saves local authority snapshots into project records and media", async () => {
@@ -859,6 +889,7 @@ function cliDeps(
     openedUrls?: string[];
     packageRoot?: string;
     setupInputs?: CreateFormlessInstanceOwnerSetupCapabilityInput[];
+    stateRoot?: string;
     stateWrites?: WriteFormlessInstanceStateInput[];
   } = {},
 ): FormlessCliDependencies {
@@ -896,6 +927,15 @@ function cliDeps(
         };
       },
     },
+    localSecretEnv: {
+      ensure: async (input) => ({
+        created: false,
+        path: path.join(input.root, "deploy.env"),
+        secrets: {
+          ALCHEMY_PASSWORD: "alchemy-password",
+        },
+      }),
+    },
     log: (message) => {
       options.logs?.push(message);
     },
@@ -918,12 +958,13 @@ function cliDeps(
       });
     },
     spawn,
+    stateRoot: options.stateRoot ?? path.join(cwd, ".formless"),
     stateWriter: {
       write: async (input) => {
         options.stateWrites?.push(input);
 
         return {
-          path: path.join(input.root, ".formless/formless.instance.json"),
+          path: path.join(input.root, "formless.instance.json"),
           state: input.state,
         };
       },

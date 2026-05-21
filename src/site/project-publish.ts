@@ -8,6 +8,7 @@ import {
 } from "../shared/deploy-metadata.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import { normalizeSourceUrl } from "./cli-command.ts";
+import { formatDotEnv, parseDotEnv } from "./dotenv.ts";
 import {
   formatSiteProjectConfig,
   SITE_PROJECT_CONFIG_FILE,
@@ -416,13 +417,7 @@ function siteProjectPublishSmokePaths(records: StoredRecord[]): string[] {
 
 async function writeProjectDeployEnv(envPath: string, values: Record<string, string>) {
   await mkdir(path.dirname(envPath), { recursive: true });
-  await writeFile(
-    envPath,
-    Object.entries(values)
-      .map(([key, value]) => `${key}=${formatDotEnvValue(value)}`)
-      .join("\n")
-      .concat("\n"),
-  );
+  await writeFile(envPath, formatDotEnv(values));
 }
 
 async function readProjectDeployAdminToken(projectRoot: string): Promise<string | undefined> {
@@ -455,50 +450,6 @@ function publishedSiteDeployEnv(
     FORMLESS_RUNTIME_PROFILE: "publishedSite",
     VITE_FORMLESS_RUNTIME_PROFILE: "publishedSite",
   };
-}
-
-function formatDotEnvValue(value: string): string {
-  return /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : JSON.stringify(value);
-}
-
-function parseDotEnv(contents: string): Record<string, string> {
-  const values: Record<string, string> = {};
-
-  for (const line of contents.split(/\r?\n/)) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const equalsIndex = trimmed.indexOf("=");
-
-    if (equalsIndex <= 0) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, equalsIndex);
-    const value = trimmed.slice(equalsIndex + 1);
-
-    values[key] = parseDotEnvValue(value);
-  }
-
-  return values;
-}
-
-function parseDotEnvValue(value: string): string {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return value.slice(1, -1);
-    }
-  }
-
-  return value;
 }
 
 async function fetchJson<T>(fetcher: typeof fetch, url: string, init?: RequestInit): Promise<T> {

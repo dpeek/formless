@@ -1,14 +1,19 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
 import { parseOwnerSetupToken } from "../shared/protocol.ts";
-import { prepareSiteProjectStateDirectory, siteProjectStatePath } from "./project-state.ts";
+import { appendDotEnvValue, parseDotEnv } from "./dotenv.ts";
 
+export const ALCHEMY_PASSWORD_ENV_NAME = "ALCHEMY_PASSWORD";
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
 export const FORMLESS_ALCHEMY_APP_NAME = "formless-instance";
+export const FORMLESS_HOME_DIRECTORY = ".formless";
+export const FORMLESS_INSTANCE_DIRECTORY = "instances";
+export const FORMLESS_INSTANCE_LOCAL_ENV_FILE = "deploy.env";
 export const FORMLESS_INSTANCE_STATE_FILE = "formless.instance.json";
 export const FORMLESS_INSTANCE_STATE_VERSION = 1;
 export const FORMLESS_INSTANCE_STATE_KIND = "formless-instance";
@@ -98,6 +103,7 @@ export type FormlessInstanceDeploymentPlan = {
 };
 
 export type FormlessInstanceDeploymentSecrets = {
+  ALCHEMY_PASSWORD: string;
   FORMLESS_ADMIN_TOKEN: string;
 };
 
@@ -106,6 +112,7 @@ export type DeployFormlessInstanceInput = {
   packageRoot: string;
   plan: FormlessInstanceDeploymentPlan;
   secrets: FormlessInstanceDeploymentSecrets;
+  stateRoot: string;
 };
 
 export type DeployFormlessInstanceResult = {
@@ -183,6 +190,7 @@ export type WriteFormlessInstanceStateDependencies = {
 
 export type AlchemyFormlessInstanceDeploymentAppOptions = {
   phase: "up";
+  password: string;
   profile?: string;
   rootDir: string;
   stage: string;
@@ -250,6 +258,7 @@ export type RunFormlessInstanceOnboardingDependencies = {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
   deploymentAdapter: FormlessInstanceDeploymentAdapter;
   healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
+  localSecretEnv: FormlessInstanceLocalSecretEnvStore;
   openBrowser: (url: string) => Promise<void>;
   packageRoot: string;
   packageVersion: string;
@@ -269,6 +278,7 @@ export type RunFormlessInstanceOnboardingResult = {
   deployment: DeployFormlessInstanceResult;
   healthCheck: CheckFormlessInstanceDeployMetadataResult;
   instanceName: string;
+  localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
   mode: "deployed";
   open: boolean;
   ownerSetup: {
@@ -298,6 +308,34 @@ export type FormlessInstanceState = {
 export type CreateFormlessInstanceStateInput = {
   credentialProfile?: string | null;
   plan: FormlessInstanceDeploymentPlan;
+};
+
+export type FormlessInstanceLocalSecretEnv = {
+  ALCHEMY_PASSWORD: string;
+};
+
+export type EnsureFormlessInstanceLocalSecretEnvInput = {
+  createSecret: () => string;
+  root: string;
+};
+
+export type EnsureFormlessInstanceLocalSecretEnvResult = {
+  created: boolean;
+  path: string;
+  secrets: FormlessInstanceLocalSecretEnv;
+};
+
+export type FormlessInstanceLocalSecretEnvStore = {
+  ensure: (
+    input: EnsureFormlessInstanceLocalSecretEnvInput,
+  ) => Promise<EnsureFormlessInstanceLocalSecretEnvResult>;
+};
+
+export type EnsureFormlessInstanceLocalSecretEnvDependencies = {
+  prepareStateDirectory: (root: string) => Promise<void>;
+  readFile: (filePath: string, encoding: BufferEncoding) => Promise<string>;
+  statePath: (root: string, fileName: typeof FORMLESS_INSTANCE_LOCAL_ENV_FILE) => string;
+  writeFile: (filePath: string, contents: string) => Promise<void>;
 };
 
 const maxInstanceNameLength = 53;
@@ -391,6 +429,7 @@ export async function runFormlessInstanceOnboarding(
   dependencies: RunFormlessInstanceOnboardingDependencies,
 ): Promise<RunFormlessInstanceOnboardingResult> {
   const credentialProfile = normalizeCredentialProfile(input.credentialProfile);
+  const stateRoot = parseRequiredString("Formless instance home", dependencies.stateRoot);
   const accounts = await dependencies.accountDiscovery.listAccounts({ credentialProfile });
 
   if (!Array.isArray(accounts)) {
@@ -406,19 +445,26 @@ export async function runFormlessInstanceOnboarding(
     instanceName: input.instanceName,
     packageVersion: dependencies.packageVersion,
   });
+  const instanceStateRoot = formlessInstanceStateRoot(stateRoot, plan.instanceName);
   const adminToken = parseRequiredString(
     "Generated Formless admin token",
     dependencies.randomToken(),
   );
   const setupToken = parseOwnerSetupToken(dependencies.randomToken());
+  const localSecretEnv = await dependencies.localSecretEnv.ensure({
+    createSecret: dependencies.randomToken,
+    root: instanceStateRoot,
+  });
   const deployment = parseDeployFormlessInstanceResult(
     await dependencies.deploymentAdapter.deploy({
       credentialProfile,
       packageRoot: parseRequiredString("Formless package root", dependencies.packageRoot),
       plan,
       secrets: {
+        ALCHEMY_PASSWORD: localSecretEnv.secrets.ALCHEMY_PASSWORD,
         FORMLESS_ADMIN_TOKEN: adminToken,
       },
+      stateRoot: instanceStateRoot,
     }),
   );
   const healthCheck = await dependencies.healthCheck.check({
@@ -440,7 +486,7 @@ export async function runFormlessInstanceOnboarding(
     plan,
   });
   const stateWrite = await dependencies.stateWriter.write({
-    root: parseRequiredString("Formless instance state root", dependencies.stateRoot),
+    root: instanceStateRoot,
     state,
   });
 
@@ -455,6 +501,7 @@ export async function runFormlessInstanceOnboarding(
     deployment,
     healthCheck,
     instanceName: plan.instanceName,
+    localSecretEnv,
     mode: "deployed",
     open: input.open ?? false,
     ownerSetup: {
@@ -562,15 +609,21 @@ export async function deployFormlessInstanceWithAlchemy(
   const plan = input.plan;
   const credentialProfile = normalizeCredentialProfile(input.credentialProfile);
   const packageRoot = parseRequiredString("Formless package root", input.packageRoot);
+  const stateRoot = parseRequiredString("Formless instance Alchemy state root", input.stateRoot);
   const adminToken = parseRequiredString(
     "Formless admin token",
     input.secrets.FORMLESS_ADMIN_TOKEN,
   );
+  const alchemyPassword = parseRequiredString(
+    "Alchemy encryption password",
+    input.secrets.ALCHEMY_PASSWORD,
+  );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
     phase: "up",
+    password: alchemyPassword,
     ...profileOptions,
-    rootDir: packageRoot,
+    rootDir: stateRoot,
     stage: plan.instanceName,
   });
   const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
@@ -783,6 +836,48 @@ export async function writeFormlessInstanceState(
   };
 }
 
+export async function ensureFormlessInstanceLocalSecretEnv(
+  input: EnsureFormlessInstanceLocalSecretEnvInput,
+  dependencies: EnsureFormlessInstanceLocalSecretEnvDependencies = nodeFormlessInstanceLocalSecretEnvDependencies(),
+): Promise<EnsureFormlessInstanceLocalSecretEnvResult> {
+  const root = parseRequiredString("Formless instance local secret root", input.root);
+
+  await dependencies.prepareStateDirectory(root);
+
+  const envPath = dependencies.statePath(root, FORMLESS_INSTANCE_LOCAL_ENV_FILE);
+  const contents = await readTextFileIfExists(envPath, dependencies);
+  const values = parseDotEnv(contents ?? "");
+  const existingPassword = nonEmptyEnvValue(values[ALCHEMY_PASSWORD_ENV_NAME]);
+
+  if (existingPassword) {
+    return {
+      created: false,
+      path: envPath,
+      secrets: {
+        ALCHEMY_PASSWORD: existingPassword,
+      },
+    };
+  }
+
+  const generatedPassword = parseRequiredString(
+    "Generated Alchemy encryption password",
+    input.createSecret(),
+  );
+
+  await dependencies.writeFile(
+    envPath,
+    appendDotEnvValue(contents ?? "", ALCHEMY_PASSWORD_ENV_NAME, generatedPassword),
+  );
+
+  return {
+    created: true,
+    path: envPath,
+    secrets: {
+      ALCHEMY_PASSWORD: generatedPassword,
+    },
+  };
+}
+
 export function parseFormlessInstanceStateJson(contents: string): FormlessInstanceState {
   try {
     return parseFormlessInstanceState(JSON.parse(contents) as unknown);
@@ -904,6 +999,14 @@ export function normalizeFormlessInstanceName(value: string | null | undefined):
   return normalized;
 }
 
+export function formlessInstanceStateRoot(root: string, instanceName: string): string {
+  return path.join(
+    parseRequiredString("Formless instance home", root),
+    FORMLESS_INSTANCE_DIRECTORY,
+    parseCanonicalSlug("Formless instance state name", instanceName, maxInstanceNameLength),
+  );
+}
+
 function parseDeploymentAccount(
   account: FormlessInstanceDeploymentAccount,
 ): FormlessInstanceDeploymentAccount {
@@ -932,10 +1035,52 @@ function normalizeCredentialProfile(value: string | null | undefined): string | 
 
 function nodeFormlessInstanceStateWriteDependencies(): WriteFormlessInstanceStateDependencies {
   return {
-    prepareStateDirectory: prepareSiteProjectStateDirectory,
-    statePath: siteProjectStatePath,
+    prepareStateDirectory: prepareFormlessInstanceStateDirectory,
+    statePath: formlessInstanceStatePath,
     writeFile,
   };
+}
+
+function nodeFormlessInstanceLocalSecretEnvDependencies(): EnsureFormlessInstanceLocalSecretEnvDependencies {
+  return {
+    prepareStateDirectory: prepareFormlessInstanceStateDirectory,
+    readFile,
+    statePath: formlessInstanceStatePath,
+    writeFile,
+  };
+}
+
+async function prepareFormlessInstanceStateDirectory(root: string) {
+  await mkdir(root, { recursive: true });
+}
+
+function formlessInstanceStatePath(root: string, fileName: string): string {
+  return path.join(root, fileName);
+}
+
+async function readTextFileIfExists(
+  filePath: string,
+  dependencies: Pick<EnsureFormlessInstanceLocalSecretEnvDependencies, "readFile">,
+): Promise<string | null> {
+  try {
+    return await dependencies.readFile(filePath, "utf8");
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function nonEmptyEnvValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+
+  return trimmed ? trimmed : undefined;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 type CloudflareAccountApiResult = {
