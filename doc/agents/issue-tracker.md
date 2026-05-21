@@ -20,6 +20,10 @@ Use the `gh` CLI for issue operations from this repo.
 
 - New PRD workstreams live in GitHub Issues.
 - Use a `PRD` title prefix or a PRD label when one exists.
+- Put `Branch name: <short-name>` near the top of each PRD issue body.
+- Keep branch names short, lower-case, and issue-independent, for example `site-publish`.
+- Ralph uses `codex/<short-name>` when the value has no slash.
+- `bun ralph --branch <name>` is a one-run override, not the PRD-owned default.
 - PRD issues own chunks, blockers, decisions, evidence, and promote notes.
 - Existing `prd/*.md` files are legacy workstream records kept until retired.
 - Do not create new local PRD files.

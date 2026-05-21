@@ -107,8 +107,8 @@ function usage(): string {
     "  --list                List open PRD issues without starting Codex.",
     "  --max <n>              Maximum Codex iterations. Defaults to open chunks + 1.",
     "  --worktree            Create or reuse a sibling git worktree for the PRD loop.",
-    "  --worktree-dir <dir>  Worktree directory. Default: ../formless-<prd-or-issue-slug>.",
-    "  --branch <name>       Worktree branch. Default: codex/<prd-or-issue-slug>.",
+    "  --worktree-dir <dir>  Worktree directory. Default: ../formless-<branch-or-prd-slug>.",
+    "  --branch <name>       Worktree branch. Default: PRD Branch name or codex/<prd-or-issue-slug>.",
     "  --base <ref>          New worktree base ref. Default: main.",
     "  --dangerous            Use Codex's no-approval, no-sandbox mode.",
     "  --allow-dirty-start    Skip clean-worktree guards.",
@@ -309,37 +309,84 @@ function defaultWorktreeDir(slug: string): string {
   return path.join(path.dirname(rootDir), `${repoName}-${slug}`);
 }
 
+function slugFromBranchName(branchName: string): string {
+  return slugify(branchName.split("/").at(-1) ?? branchName) || "prd";
+}
+
+function normalizeBranchName(value: string): string {
+  const raw = value
+    .trim()
+    .replace(/^`([^`]+)`$/, "$1")
+    .replace(/^["']([^"']+)["']$/, "$1")
+    .trim();
+  const lowerRaw = raw.toLowerCase();
+
+  if (
+    raw.length === 0 ||
+    raw.includes("<") ||
+    raw.includes(">") ||
+    ["tbd", "todo", "none", "n/a", "na"].includes(lowerRaw)
+  ) {
+    throw new Error("PRD Branch name is empty or still a placeholder.");
+  }
+
+  const branchName = raw.includes("/") ? raw : defaultBranchName(slugify(raw));
+  if (!/^[a-z0-9][a-z0-9/-]*[a-z0-9]$/.test(branchName) || branchName.includes("//")) {
+    throw new Error(
+      `Invalid PRD Branch name "${raw}". Use a short lower-case slug, for example "site-publish" or "codex/site-publish".`,
+    );
+  }
+
+  return branchName;
+}
+
+function branchNameFromPrdText(text: string): string | null {
+  for (const line of text.split(/\r?\n/)) {
+    const normalizedLine = line.trim().replaceAll("**", "");
+    const match = normalizedLine.match(/^(?:[-*]\s*)?(?:ralph\s+)?branch(?:\s+name)?\s*:\s*(.+)$/i);
+    if (match) {
+      return normalizeBranchName(match[1] ?? "");
+    }
+  }
+
+  return null;
+}
+
 function makeFilePrdSource(prdPath: string): FilePrdSource {
   const sourcePrdPath = resolvePrdPath(rootDir, prdPath);
   const relativePrdPath = path.relative(rootDir, sourcePrdPath);
   const slug = slugFromPrdPath(sourcePrdPath);
+  const textForCounting = readFileSync(sourcePrdPath, "utf8");
+  const defaultBranch = branchNameFromPrdText(textForCounting) ?? defaultBranchName(slug);
 
   return {
-    defaultBranch: defaultBranchName(slug),
-    defaultWorktreeDir: defaultWorktreeDir(slug),
+    defaultBranch,
+    defaultWorktreeDir: defaultWorktreeDir(slugFromBranchName(defaultBranch)),
     displayName: displayPath(sourcePrdPath),
     identity: displayPath(sourcePrdPath),
     kind: "file",
     relativePrdPath,
     slug,
     sourcePrdPath,
-    textForCounting: readFileSync(sourcePrdPath, "utf8"),
+    textForCounting,
     updateTarget: "the assigned PRD file",
   };
 }
 
 function makeIssuePrdSource(issue: GithubIssue): IssuePrdSource {
   const slug = slugFromIssue(issue);
+  const textForCounting = issue.body ?? "";
+  const defaultBranch = branchNameFromPrdText(textForCounting) ?? defaultBranchName(slug);
 
   return {
-    defaultBranch: defaultBranchName(slug),
-    defaultWorktreeDir: defaultWorktreeDir(slug),
+    defaultBranch,
+    defaultWorktreeDir: defaultWorktreeDir(slugFromBranchName(defaultBranch)),
     displayName: `GitHub issue #${issue.number}: ${issue.title}`,
     identity: `GitHub issue #${issue.number}`,
     issue,
     kind: "issue",
     slug,
-    textForCounting: issue.body ?? "",
+    textForCounting,
     updateTarget: `GitHub issue #${issue.number} comments`,
   };
 }

@@ -21,6 +21,8 @@ Check with the user that these modules match their expectations. Check with the 
 
 <prd-template>
 
+Branch name: `<short-name>`
+
 ## Problem Statement
 
 The problem that the user is facing, from the user's perspective.
