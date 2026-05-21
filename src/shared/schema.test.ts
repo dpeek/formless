@@ -4046,6 +4046,7 @@ describe("source schemas", () => {
         "field",
         "field",
         "field",
+        "field",
         "orderingHandle",
         "field",
         "field",
