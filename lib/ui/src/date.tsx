@@ -54,7 +54,10 @@ export function DateInput({
   onValueChange,
   value,
   ...inputProps
-}: Omit<React.ComponentProps<"input">, "defaultValue" | "onChange" | "type" | "value"> & {
+}: Omit<
+  React.ComponentProps<typeof InputGroupInput>,
+  "defaultValue" | "onChange" | "type" | "value"
+> & {
   className?: string;
   date?: Date;
   defaultValue?: string;

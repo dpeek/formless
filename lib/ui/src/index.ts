@@ -10,7 +10,7 @@ export * from "./dialog.js";
 export * from "./dropdown-menu.js";
 export * from "./field.js";
 export * from "./input-group.js";
-export * from "./input.js";
+export { Input } from "./input.js";
 export * from "./label.js";
 export * from "./markdown.js";
 export * from "./markdown-renderer.js";

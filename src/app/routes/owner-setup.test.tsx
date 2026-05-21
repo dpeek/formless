@@ -157,9 +157,11 @@ describe("owner setup route data flow", () => {
       method: string | undefined;
     }> = [];
     const fetcher: typeof fetch = async (input, init) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+
       calls.push({
         authorization: new Headers(init?.headers).get("Authorization"),
-        body: JSON.parse(String(init?.body)) as unknown,
+        body: body as unknown,
         credentials: init?.credentials,
         input,
         method: init?.method,
