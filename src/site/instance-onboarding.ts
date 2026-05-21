@@ -13,6 +13,21 @@ export type FormlessInstanceDeploymentDefaults = {
   instanceName?: string | null;
 };
 
+export type ListFormlessInstanceAccountsInput = {
+  credentialProfile: string | null;
+};
+
+export type SelectFormlessInstanceAccountInput = {
+  accounts: FormlessInstanceDeploymentAccount[];
+  credentialProfile: string | null;
+};
+
+export type FormlessInstanceAccountDiscoveryAdapter = {
+  listAccounts: (
+    input: ListFormlessInstanceAccountsInput,
+  ) => Promise<FormlessInstanceDeploymentAccount[]>;
+};
+
 export type PlanFormlessInstanceDeploymentInput = {
   account: FormlessInstanceDeploymentAccount;
   defaults?: FormlessInstanceDeploymentDefaults;
@@ -58,6 +73,53 @@ export type FormlessInstanceDeploymentPlan = {
     purpose: "protect-authority-and-media-writes";
     storage: "cloudflare-worker-secret";
   }>;
+};
+
+export type FormlessInstanceDeploymentSecrets = {
+  FORMLESS_ADMIN_TOKEN: string;
+};
+
+export type DeployFormlessInstanceInput = {
+  credentialProfile: string | null;
+  packageRoot: string;
+  plan: FormlessInstanceDeploymentPlan;
+  secrets: FormlessInstanceDeploymentSecrets;
+};
+
+export type DeployFormlessInstanceResult = {
+  url: string;
+};
+
+export type FormlessInstanceDeploymentAdapter = {
+  deploy: (input: DeployFormlessInstanceInput) => Promise<DeployFormlessInstanceResult>;
+};
+
+export type RunFormlessInstanceOnboardingInput = {
+  credentialProfile?: string | null;
+  instanceName?: string | null;
+  open?: boolean;
+};
+
+export type RunFormlessInstanceOnboardingDependencies = {
+  accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
+  deploymentAdapter: FormlessInstanceDeploymentAdapter;
+  packageRoot: string;
+  packageVersion: string;
+  randomToken: () => string;
+  selectAccount?: (
+    input: SelectFormlessInstanceAccountInput,
+  ) => Promise<FormlessInstanceDeploymentAccount> | FormlessInstanceDeploymentAccount;
+};
+
+export type RunFormlessInstanceOnboardingResult = {
+  account: FormlessInstanceDeploymentAccount;
+  credentialProfile: string | null;
+  deployment: DeployFormlessInstanceResult;
+  instanceName: string;
+  mode: "deployed";
+  open: boolean;
+  plan: FormlessInstanceDeploymentPlan;
+  state: FormlessInstanceState;
 };
 
 export type FormlessInstanceState = {
@@ -164,6 +226,73 @@ export function planFormlessInstanceDeployment(
       },
     ],
   };
+}
+
+export async function runFormlessInstanceOnboarding(
+  input: RunFormlessInstanceOnboardingInput,
+  dependencies: RunFormlessInstanceOnboardingDependencies,
+): Promise<RunFormlessInstanceOnboardingResult> {
+  const credentialProfile = normalizeCredentialProfile(input.credentialProfile);
+  const accounts = await dependencies.accountDiscovery.listAccounts({ credentialProfile });
+
+  if (!Array.isArray(accounts)) {
+    throw new Error("Cloudflare account discovery adapter must return an account array.");
+  }
+
+  const account = await (dependencies.selectAccount ?? selectOnlyFormlessInstanceAccount)({
+    accounts,
+    credentialProfile,
+  });
+  const plan = planFormlessInstanceDeployment({
+    account,
+    instanceName: input.instanceName,
+    packageVersion: dependencies.packageVersion,
+  });
+  const adminToken = parseRequiredString(
+    "Generated Formless admin token",
+    dependencies.randomToken(),
+  );
+  const deployment = parseDeployFormlessInstanceResult(
+    await dependencies.deploymentAdapter.deploy({
+      credentialProfile,
+      packageRoot: parseRequiredString("Formless package root", dependencies.packageRoot),
+      plan,
+      secrets: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+      },
+    }),
+  );
+  const state = createFormlessInstanceState({
+    credentialProfile,
+    plan,
+  });
+
+  return {
+    account: plan.account,
+    credentialProfile,
+    deployment,
+    instanceName: plan.instanceName,
+    mode: "deployed",
+    open: input.open ?? false,
+    plan,
+    state,
+  };
+}
+
+export function selectOnlyFormlessInstanceAccount(
+  input: SelectFormlessInstanceAccountInput,
+): FormlessInstanceDeploymentAccount {
+  if (input.accounts.length === 0) {
+    throw new Error("No Cloudflare accounts were found for the selected credentials.");
+  }
+
+  if (input.accounts.length > 1) {
+    throw new Error(
+      "Multiple Cloudflare accounts were found; account selection is required before deployment.",
+    );
+  }
+
+  return input.accounts[0] as FormlessInstanceDeploymentAccount;
 }
 
 export function createFormlessInstanceState(
@@ -322,6 +451,20 @@ function parseDeploymentAccount(
     ...(name === undefined ? {} : { name }),
     workersDevSubdomain: normalizeWorkersDevSubdomain(account.workersDevSubdomain),
   };
+}
+
+function parseDeployFormlessInstanceResult(result: unknown): DeployFormlessInstanceResult {
+  if (!isRecord(result)) {
+    throw new Error("Formless deployment adapter result must be an object.");
+  }
+
+  return {
+    url: parseWorkersDevUrl("Formless deployment adapter URL", result.url),
+  };
+}
+
+function normalizeCredentialProfile(value: string | null | undefined): string | null {
+  return parseOptionalString("Cloudflare credential profile", value ?? undefined) ?? null;
 }
 
 function normalizeWorkersDevSubdomain(value: unknown): string {

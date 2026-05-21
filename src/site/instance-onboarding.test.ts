@@ -8,6 +8,10 @@ import {
   parseFormlessInstanceState,
   parseFormlessInstanceStateJson,
   planFormlessInstanceDeployment,
+  runFormlessInstanceOnboarding,
+  selectOnlyFormlessInstanceAccount,
+  type DeployFormlessInstanceInput,
+  type SelectFormlessInstanceAccountInput,
 } from "./instance-onboarding.ts";
 
 describe("Formless instance onboarding planner", () => {
@@ -119,6 +123,195 @@ describe("Formless instance onboarding planner", () => {
         packageVersion: " ",
       }),
     ).toThrow("Package version must be a non-empty string.");
+  });
+});
+
+describe("Formless instance onboarding adapters", () => {
+  it("discovers an account, plans deployment, and calls the deployment adapter with secrets", async () => {
+    const discoveryInputs: Array<{ credentialProfile: string | null }> = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+
+    const result = await runFormlessInstanceOnboarding(
+      {
+        credentialProfile: "personal",
+        instanceName: "Brother's Remote Instance",
+        open: true,
+      },
+      {
+        accountDiscovery: {
+          listAccounts: async (input) => {
+            discoveryInputs.push(input);
+            return [
+              {
+                id: "account-123",
+                name: "Personal",
+                workersDevSubdomain: "dpeek",
+              },
+            ];
+          },
+        },
+        deploymentAdapter: {
+          deploy: async (input) => {
+            deployInputs.push(input);
+            return { url: input.plan.expectedUrl.url };
+          },
+        },
+        packageRoot: "/package",
+        packageVersion: "0.1.8",
+        randomToken: () => "generated-admin-token",
+      },
+    );
+
+    expect(discoveryInputs).toEqual([{ credentialProfile: "personal" }]);
+    expect(deployInputs).toEqual([
+      {
+        credentialProfile: "personal",
+        packageRoot: "/package",
+        plan: result.plan,
+        secrets: {
+          FORMLESS_ADMIN_TOKEN: "generated-admin-token",
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      account: {
+        id: "account-123",
+        name: "Personal",
+        workersDevSubdomain: "dpeek",
+      },
+      credentialProfile: "personal",
+      deployment: {
+        url: "https://brothers-remote-instance.dpeek.workers.dev",
+      },
+      instanceName: "brothers-remote-instance",
+      mode: "deployed",
+      open: true,
+    });
+    expect(result.state).toEqual({
+      version: 1,
+      kind: "formless-instance",
+      instanceName: "brothers-remote-instance",
+      accountId: "account-123",
+      accountName: "Personal",
+      credentialProfile: "personal",
+      workerName: "brothers-remote-instance",
+      workersDevUrl: "https://brothers-remote-instance.dpeek.workers.dev",
+      mediaBucketName: "brothers-remote-instance-media",
+      authorityNamespaceName: "brothers-remote-instance-authority",
+      deploymentTarget: "workers.dev",
+      deployedPackageVersion: "0.1.8",
+    });
+  });
+
+  it("requires account selection before deployment mutation", async () => {
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const deploy = async (input: DeployFormlessInstanceInput) => {
+      deployInputs.push(input);
+      return { url: input.plan.expectedUrl.url };
+    };
+
+    await expect(
+      runFormlessInstanceOnboarding(
+        {},
+        {
+          accountDiscovery: {
+            listAccounts: async () => [],
+          },
+          deploymentAdapter: { deploy },
+          packageRoot: "/package",
+          packageVersion: "0.1.8",
+          randomToken: () => "generated-admin-token",
+        },
+      ),
+    ).rejects.toThrow("No Cloudflare accounts were found for the selected credentials.");
+    expect(deployInputs).toEqual([]);
+
+    await expect(
+      runFormlessInstanceOnboarding(
+        {},
+        {
+          accountDiscovery: {
+            listAccounts: async () => [
+              {
+                id: "account-a",
+                workersDevSubdomain: "alpha",
+              },
+              {
+                id: "account-b",
+                workersDevSubdomain: "beta",
+              },
+            ],
+          },
+          deploymentAdapter: { deploy },
+          packageRoot: "/package",
+          packageVersion: "0.1.8",
+          randomToken: () => "generated-admin-token",
+        },
+      ),
+    ).rejects.toThrow(
+      "Multiple Cloudflare accounts were found; account selection is required before deployment.",
+    );
+    expect(deployInputs).toEqual([]);
+  });
+
+  it("allows a fake account selector to choose among discovered accounts", async () => {
+    const selectionInputs: SelectFormlessInstanceAccountInput[] = [];
+    const result = await runFormlessInstanceOnboarding(
+      { instanceName: "remote" },
+      {
+        accountDiscovery: {
+          listAccounts: async () => [
+            {
+              id: "account-a",
+              name: "Alpha",
+              workersDevSubdomain: "alpha",
+            },
+            {
+              id: "account-b",
+              name: "Beta",
+              workersDevSubdomain: "beta",
+            },
+          ],
+        },
+        deploymentAdapter: {
+          deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+        },
+        packageRoot: "/package",
+        packageVersion: "0.1.8",
+        randomToken: () => "generated-admin-token",
+        selectAccount: (input) => {
+          selectionInputs.push(input);
+          return input.accounts[1] as (typeof input.accounts)[number];
+        },
+      },
+    );
+
+    expect(selectionInputs).toEqual([
+      {
+        accounts: [
+          {
+            id: "account-a",
+            name: "Alpha",
+            workersDevSubdomain: "alpha",
+          },
+          {
+            id: "account-b",
+            name: "Beta",
+            workersDevSubdomain: "beta",
+          },
+        ],
+        credentialProfile: null,
+      },
+    ]);
+    expect(result.account).toEqual({
+      id: "account-b",
+      name: "Beta",
+      workersDevSubdomain: "beta",
+    });
+    expect(result.deployment.url).toBe("https://remote.beta.workers.dev");
+    expect(
+      selectOnlyFormlessInstanceAccount({ accounts: [result.account], credentialProfile: null }),
+    ).toEqual(result.account);
   });
 });
 

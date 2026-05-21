@@ -57,8 +57,20 @@ export {
   parseFormlessInstanceState,
   parseFormlessInstanceStateJson,
   planFormlessInstanceDeployment,
+  runFormlessInstanceOnboarding,
+  selectOnlyFormlessInstanceAccount,
+  type DeployFormlessInstanceInput,
+  type DeployFormlessInstanceResult,
+  type FormlessInstanceAccountDiscoveryAdapter,
+  type FormlessInstanceDeploymentAdapter,
   type FormlessInstanceDeploymentPlan,
+  type FormlessInstanceDeploymentSecrets,
   type FormlessInstanceState,
+  type ListFormlessInstanceAccountsInput,
+  type RunFormlessInstanceOnboardingDependencies,
+  type RunFormlessInstanceOnboardingInput,
+  type RunFormlessInstanceOnboardingResult,
+  type SelectFormlessInstanceAccountInput,
 } from "./instance-onboarding.ts";
 
 export type FormlessCliRunCommandOptions = {
