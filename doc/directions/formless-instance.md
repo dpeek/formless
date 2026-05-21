@@ -1,6 +1,6 @@
 # Formless Instance Direction
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 Purpose: product direction before the first onboarding PRD.
 
@@ -18,6 +18,7 @@ This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
 - Current Site project CLI supports init, dev, save, deploy setup, and publish. See `doc/topics/site-cli-publish.md`.
 - Current Site publish can deploy code/assets and restore source Site data to a remote target. See `doc/topics/site-cli-publish.md`.
 - Current generated app shell can mount different runtime profiles. See `doc/topics/generated-ui.md`.
+- Core instance media direction lives in `doc/directions/instance-media.md`.
 
 ## Direction
 
@@ -203,6 +204,7 @@ Defer:
 - app marketplace;
 - third-party app packages;
 - cross-app references;
+- broad media library and video platform work beyond the first media spine;
 - bidirectional instance sync;
 - local/offline instance UX;
 - billing.
@@ -215,6 +217,7 @@ Defer:
 - What is the exact Alchemy state-store API to use for the pinned package version?
 - Does the first deploy use Alchemy only, Wrangler only, or Alchemy plus selected Cloudflare API calls?
 - How does the instance shell name and expose apps without turning app install into a marketplace?
+- How does core instance media install and expose the Media app without requiring general cross-app references?
 - What minimum route/domain preflight is required before custom domain work starts?
 - What existing local Site workflow should stay untouched during the first instance PRD?
 
