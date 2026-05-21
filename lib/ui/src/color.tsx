@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@dpeek/formless-ui/button";
+import { Dialog } from "@dpeek/formless-ui/dialog";
 import { Input } from "@dpeek/formless-ui/input";
 import {
   InputGroup,
@@ -9,7 +10,7 @@ import {
   InputGroupInput,
 } from "@dpeek/formless-ui/input-group";
 import { Label } from "@dpeek/formless-ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@dpeek/formless-ui/popover";
+import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import {
   Select,
   SelectContent,
@@ -341,226 +342,224 @@ export function ColorInput({
   return (
     <div className={cn("space-y-2", className)}>
       {label ? <Label>{label}</Label> : null}
-      <Popover onOpenChange={handlePopoverChange}>
-        <InputGroup className="w-full" data-disabled={disabled ? true : undefined}>
-          <InputGroupAddon align="inline-start">
-            <PopoverTrigger
-              render={
-                <InputGroupButton
-                  aria-label={`Choose ${resolvedLabel}`}
-                  isDisabled={disabled}
-                  size="sq-xs"
-                  intent="plain"
-                >
-                  {swatch}
-                </InputGroupButton>
-              }
-            />
+      <InputGroup className="w-full" data-disabled={disabled ? true : undefined}>
+        <InputGroupAddon align="inline-start">
+          <Popover onOpenChange={handlePopoverChange}>
+            <InputGroupButton
+              aria-label={`Choose ${resolvedLabel}`}
+              isDisabled={disabled}
+              size="sq-xs"
+              intent="plain"
+            >
+              {swatch}
+            </InputGroupButton>
+            <PopoverContent className="w-auto p-3" placement="bottom start">
+              <Dialog aria-label={`Choose ${resolvedLabel}`}>
+                <div className="color-picker space-y-3">
+                  <div className="relative">
+                    <Button
+                      intent="plain"
+                      size="sq-xs"
+                      className="absolute -top-1.5 -left-1 z-10 flex h-7 w-7 items-center gap-1 bg-transparent hover:bg-transparent"
+                      onPress={() => void handleEyeDropper()}
+                      isDisabled={disabled || !isEyeDropperAvailable()}
+                    >
+                      <PipetteIcon className="h-3 w-3" />
+                    </Button>
+                    {alpha ? (
+                      <HexAlphaColorPicker
+                        className="aspect-square! h-[244.79px]! w-[244.79px]!"
+                        color={resolvedPickerValue}
+                        onChange={handleColorChange}
+                      />
+                    ) : (
+                      <HexColorPicker
+                        className="aspect-square! h-[244.79px]! w-[244.79px]!"
+                        color={resolvedPickerValue}
+                        onChange={handleColorChange}
+                      />
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Select value={colorFormat} onValueChange={(format) => setColorFormat(format!)}>
+                      <SelectTrigger
+                        className="h-7! w-[4.8rem]! rounded-sm px-2 py-1 text-sm!"
+                        disabled={disabled}
+                      >
+                        <SelectValue placeholder="Color" />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-20">
+                        {alpha ? (
+                          <>
+                            <SelectItem value="HEXA" className="h-7 text-sm">
+                              HEXA
+                            </SelectItem>
+                            <SelectItem value="RGBA" className="h-7 text-sm">
+                              RGBA
+                            </SelectItem>
+                            <SelectItem value="HSLA" className="h-7 text-sm">
+                              HSLA
+                            </SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="HEX" className="h-7 text-sm">
+                              HEX
+                            </SelectItem>
+                            <SelectItem value="RGB" className="h-7 text-sm">
+                              RGB
+                            </SelectItem>
+                            <SelectItem value="HSL" className="h-7 text-sm">
+                              HSL
+                            </SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {colorFormat === "HEX" || colorFormat === "HEXA" ? (
+                      <Input
+                        className="h-7 w-[160px] rounded-sm text-sm"
+                        value={getCurrentHexValue()}
+                        onChange={(e) => handleHexChange(e.target.value)}
+                        placeholder={inputPlaceholder}
+                        maxLength={9}
+                      />
+                    ) : colorFormat === "RGB" ? (
+                      <div className="flex items-center">
+                        <Input
+                          className="h-7 w-13 rounded-l-sm rounded-r-none text-center text-sm"
+                          value={colorValues.rgb.r}
+                          onChange={(e) => handleRgbChange("r", e.target.value)}
+                          placeholder="255"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-13 rounded-none border-x-0 text-center text-sm"
+                          value={colorValues.rgb.g}
+                          onChange={(e) => handleRgbChange("g", e.target.value)}
+                          placeholder="255"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-13 rounded-l-none rounded-r-sm text-center text-sm"
+                          value={colorValues.rgb.b}
+                          onChange={(e) => handleRgbChange("b", e.target.value)}
+                          placeholder="255"
+                          maxLength={3}
+                        />
+                      </div>
+                    ) : colorFormat === "RGBA" && alpha && colorValues.rgba ? (
+                      <div className="flex items-center">
+                        <Input
+                          className="h-7 w-10 rounded-l-sm rounded-r-none px-1 text-center text-sm"
+                          value={colorValues.rgba.r}
+                          onChange={(e) => handleRgbaChange("r", e.target.value)}
+                          placeholder="255"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
+                          value={colorValues.rgba.g}
+                          onChange={(e) => handleRgbaChange("g", e.target.value)}
+                          placeholder="255"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
+                          value={colorValues.rgba.b}
+                          onChange={(e) => handleRgbaChange("b", e.target.value)}
+                          placeholder="255"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-10 rounded-l-none rounded-r-sm px-1 text-center text-sm"
+                          value={colorValues.rgba.a.toFixed(2)}
+                          onChange={(e) => handleRgbaChange("a", e.target.value)}
+                          placeholder="1.00"
+                          maxLength={4}
+                        />
+                      </div>
+                    ) : colorFormat === "HSL" ? (
+                      <div className="flex items-center">
+                        <Input
+                          className="h-7 w-13 rounded-l-sm rounded-r-none text-center text-sm"
+                          value={colorValues.hsl.h}
+                          onChange={(e) => handleHslChange("h", e.target.value)}
+                          placeholder="360"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-13 rounded-none border-x-0 text-center text-sm"
+                          value={colorValues.hsl.s}
+                          onChange={(e) => handleHslChange("s", e.target.value)}
+                          placeholder="100"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-13 rounded-l-none rounded-r-sm text-center text-sm"
+                          value={colorValues.hsl.l}
+                          onChange={(e) => handleHslChange("l", e.target.value)}
+                          placeholder="100"
+                          maxLength={3}
+                        />
+                      </div>
+                    ) : colorFormat === "HSLA" && alpha && colorValues.hsla ? (
+                      <div className="flex items-center">
+                        <Input
+                          className="h-7 w-10 rounded-l-sm rounded-r-none px-1 text-center text-sm"
+                          value={colorValues.hsla.h}
+                          onChange={(e) => handleHslaChange("h", e.target.value)}
+                          placeholder="360"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
+                          value={colorValues.hsla.s}
+                          onChange={(e) => handleHslaChange("s", e.target.value)}
+                          placeholder="100"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
+                          value={colorValues.hsla.l}
+                          onChange={(e) => handleHslaChange("l", e.target.value)}
+                          placeholder="100"
+                          maxLength={3}
+                        />
+                        <Input
+                          className="h-7 w-10 rounded-l-none rounded-r-sm px-1 text-center text-sm"
+                          value={colorValues.hsla.a.toFixed(2)}
+                          onChange={(e) => handleHslaChange("a", e.target.value)}
+                          placeholder="1.00"
+                          maxLength={4}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </Dialog>
+            </PopoverContent>
+          </Popover>
+        </InputGroupAddon>
+        <InputGroupInput
+          aria-invalid={inputError ? true : undefined}
+          aria-label={resolvedLabel}
+          className="uppercase"
+          disabled={disabled}
+          name={name}
+          onBlur={onBlur}
+          onChange={(e) => handleHexChange(e.target.value)}
+          placeholder={inputPlaceholder}
+          required={required}
+          type="text"
+          value={getCurrentHexValue()}
+        />
+        {isLoading ? (
+          <InputGroupAddon align="inline-end">
+            <Loader2 className="size-3.5 animate-spin" />
           </InputGroupAddon>
-          <InputGroupInput
-            aria-invalid={inputError ? true : undefined}
-            aria-label={resolvedLabel}
-            className="uppercase"
-            disabled={disabled}
-            name={name}
-            onBlur={onBlur}
-            onChange={(e) => handleHexChange(e.target.value)}
-            placeholder={inputPlaceholder}
-            required={required}
-            type="text"
-            value={getCurrentHexValue()}
-          />
-          {isLoading ? (
-            <InputGroupAddon align="inline-end">
-              <Loader2 className="size-3.5 animate-spin" />
-            </InputGroupAddon>
-          ) : null}
-        </InputGroup>
-        <PopoverContent className="w-auto p-3" align="start">
-          <div className="color-picker space-y-3">
-            <div className="relative">
-              <Button
-                intent="plain"
-                size="sq-xs"
-                className="absolute -top-1.5 -left-1 z-10 flex h-7 w-7 items-center gap-1 bg-transparent hover:bg-transparent"
-                onPress={() => void handleEyeDropper()}
-                isDisabled={disabled || !isEyeDropperAvailable()}
-              >
-                <PipetteIcon className="h-3 w-3" />
-              </Button>
-              {alpha ? (
-                <HexAlphaColorPicker
-                  className="aspect-square! h-[244.79px]! w-[244.79px]!"
-                  color={resolvedPickerValue}
-                  onChange={handleColorChange}
-                />
-              ) : (
-                <HexColorPicker
-                  className="aspect-square! h-[244.79px]! w-[244.79px]!"
-                  color={resolvedPickerValue}
-                  onChange={handleColorChange}
-                />
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Select value={colorFormat} onValueChange={(format) => setColorFormat(format!)}>
-                <SelectTrigger
-                  className="h-7! w-[4.8rem]! rounded-sm px-2 py-1 text-sm!"
-                  disabled={disabled}
-                >
-                  <SelectValue placeholder="Color" />
-                </SelectTrigger>
-                <SelectContent className="min-w-20">
-                  {alpha ? (
-                    <>
-                      <SelectItem value="HEXA" className="h-7 text-sm">
-                        HEXA
-                      </SelectItem>
-                      <SelectItem value="RGBA" className="h-7 text-sm">
-                        RGBA
-                      </SelectItem>
-                      <SelectItem value="HSLA" className="h-7 text-sm">
-                        HSLA
-                      </SelectItem>
-                    </>
-                  ) : (
-                    <>
-                      <SelectItem value="HEX" className="h-7 text-sm">
-                        HEX
-                      </SelectItem>
-                      <SelectItem value="RGB" className="h-7 text-sm">
-                        RGB
-                      </SelectItem>
-                      <SelectItem value="HSL" className="h-7 text-sm">
-                        HSL
-                      </SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-              {colorFormat === "HEX" || colorFormat === "HEXA" ? (
-                <Input
-                  className="h-7 w-[160px] rounded-sm text-sm"
-                  value={getCurrentHexValue()}
-                  onChange={(e) => handleHexChange(e.target.value)}
-                  placeholder={inputPlaceholder}
-                  maxLength={9}
-                />
-              ) : colorFormat === "RGB" ? (
-                <div className="flex items-center">
-                  <Input
-                    className="h-7 w-13 rounded-l-sm rounded-r-none text-center text-sm"
-                    value={colorValues.rgb.r}
-                    onChange={(e) => handleRgbChange("r", e.target.value)}
-                    placeholder="255"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-13 rounded-none border-x-0 text-center text-sm"
-                    value={colorValues.rgb.g}
-                    onChange={(e) => handleRgbChange("g", e.target.value)}
-                    placeholder="255"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-13 rounded-l-none rounded-r-sm text-center text-sm"
-                    value={colorValues.rgb.b}
-                    onChange={(e) => handleRgbChange("b", e.target.value)}
-                    placeholder="255"
-                    maxLength={3}
-                  />
-                </div>
-              ) : colorFormat === "RGBA" && alpha && colorValues.rgba ? (
-                <div className="flex items-center">
-                  <Input
-                    className="h-7 w-10 rounded-l-sm rounded-r-none px-1 text-center text-sm"
-                    value={colorValues.rgba.r}
-                    onChange={(e) => handleRgbaChange("r", e.target.value)}
-                    placeholder="255"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
-                    value={colorValues.rgba.g}
-                    onChange={(e) => handleRgbaChange("g", e.target.value)}
-                    placeholder="255"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
-                    value={colorValues.rgba.b}
-                    onChange={(e) => handleRgbaChange("b", e.target.value)}
-                    placeholder="255"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-10 rounded-l-none rounded-r-sm px-1 text-center text-sm"
-                    value={colorValues.rgba.a.toFixed(2)}
-                    onChange={(e) => handleRgbaChange("a", e.target.value)}
-                    placeholder="1.00"
-                    maxLength={4}
-                  />
-                </div>
-              ) : colorFormat === "HSL" ? (
-                <div className="flex items-center">
-                  <Input
-                    className="h-7 w-13 rounded-l-sm rounded-r-none text-center text-sm"
-                    value={colorValues.hsl.h}
-                    onChange={(e) => handleHslChange("h", e.target.value)}
-                    placeholder="360"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-13 rounded-none border-x-0 text-center text-sm"
-                    value={colorValues.hsl.s}
-                    onChange={(e) => handleHslChange("s", e.target.value)}
-                    placeholder="100"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-13 rounded-l-none rounded-r-sm text-center text-sm"
-                    value={colorValues.hsl.l}
-                    onChange={(e) => handleHslChange("l", e.target.value)}
-                    placeholder="100"
-                    maxLength={3}
-                  />
-                </div>
-              ) : colorFormat === "HSLA" && alpha && colorValues.hsla ? (
-                <div className="flex items-center">
-                  <Input
-                    className="h-7 w-10 rounded-l-sm rounded-r-none px-1 text-center text-sm"
-                    value={colorValues.hsla.h}
-                    onChange={(e) => handleHslaChange("h", e.target.value)}
-                    placeholder="360"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
-                    value={colorValues.hsla.s}
-                    onChange={(e) => handleHslaChange("s", e.target.value)}
-                    placeholder="100"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-10 rounded-none border-x-0 px-1 text-center text-sm"
-                    value={colorValues.hsla.l}
-                    onChange={(e) => handleHslaChange("l", e.target.value)}
-                    placeholder="100"
-                    maxLength={3}
-                  />
-                  <Input
-                    className="h-7 w-10 rounded-l-none rounded-r-sm px-1 text-center text-sm"
-                    value={colorValues.hsla.a.toFixed(2)}
-                    onChange={(e) => handleHslaChange("a", e.target.value)}
-                    placeholder="1.00"
-                    maxLength={4}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
+        ) : null}
+      </InputGroup>
       {inputError ? <p className="text-destructive mt-1.5 text-sm">{inputError}</p> : null}
     </div>
   );

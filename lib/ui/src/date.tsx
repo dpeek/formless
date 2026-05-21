@@ -4,13 +4,14 @@ import * as React from "react";
 import { CalendarIcon } from "lucide-react";
 
 import { Calendar } from "@dpeek/formless-ui/calendar";
+import { Dialog } from "@dpeek/formless-ui/dialog";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
 } from "@dpeek/formless-ui/input-group";
-import { Popover, PopoverContent, PopoverTrigger } from "@dpeek/formless-ui/popover";
+import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 
 export function formatDateInputValue(date: Date | undefined) {
   if (!date) {
@@ -145,36 +146,29 @@ export function DateInput({
         }}
       />
       <InputGroupAddon align="inline-end">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger
-            render={
-              <InputGroupButton
-                id="date-picker"
-                intent="plain"
-                size="sq-xs"
-                aria-label="Select date"
-              >
-                <CalendarIcon />
-                <span className="sr-only">Select date</span>
-              </InputGroupButton>
-            }
-          />
+        <Popover isOpen={open} onOpenChange={setOpen}>
+          <InputGroupButton id="date-picker" intent="plain" size="sq-xs" aria-label="Select date">
+            <CalendarIcon />
+            <span className="sr-only">Select date</span>
+          </InputGroupButton>
           <PopoverContent
             className="w-auto overflow-hidden p-0"
-            align="end"
-            alignOffset={-8}
-            sideOffset={10}
+            placement="bottom end"
+            offset={10}
+            crossOffset={-8}
           >
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              month={month}
-              onMonthChange={setMonth}
-              onSelect={(date) => {
-                updateValue(formatDateInputValue(date), { commit: true });
-                setOpen(false);
-              }}
-            />
+            <Dialog aria-label="Select date">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                month={month}
+                onMonthChange={setMonth}
+                onSelect={(date) => {
+                  updateValue(formatDateInputValue(date), { commit: true });
+                  setOpen(false);
+                }}
+              />
+            </Dialog>
           </PopoverContent>
         </Popover>
       </InputGroupAddon>
