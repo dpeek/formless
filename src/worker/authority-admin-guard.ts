@@ -1,11 +1,25 @@
 import type { AuthorityOperation } from "./authority-operations.ts";
+import {
+  validateOwnerSessionCookie,
+  type OwnerSession,
+  type OwnerSessionEnv,
+} from "./owner-session.ts";
 
-export type AuthorityAdminGuardEnv = {
+export type AuthorityAdminGuardEnv = OwnerSessionEnv & {
   FORMLESS_ADMIN_TOKEN?: string;
 };
 
 export type AuthorityAdminGuardResult =
   | { authorized: true }
+  | {
+      authorized: false;
+      error: string;
+      headers: HeadersInit;
+      status: number;
+    };
+
+export type InstanceWriteAuthorizationResult =
+  | { authorized: true; session?: OwnerSession; via: "admin-bearer" | "owner-session" | "open" }
   | {
       authorized: false;
       error: string;
@@ -42,6 +56,38 @@ export function authorizeAdminWrite(
   return {
     authorized: false,
     error: "Admin authorization is required for this write endpoint.",
+    headers: {
+      "WWW-Authenticate": 'Bearer realm="formless-admin"',
+    },
+    status: 401,
+  };
+}
+
+export async function authorizeInstanceWrite(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+): Promise<InstanceWriteAuthorizationResult> {
+  const adminToken = normalizedAdminToken(env.FORMLESS_ADMIN_TOKEN);
+  const sessionProtectionConfigured =
+    normalizedAdminToken(env.FORMLESS_OWNER_SESSION_SECRET) !== undefined;
+
+  if (!adminToken && !sessionProtectionConfigured) {
+    return { authorized: true, via: "open" };
+  }
+
+  if (adminToken && requestAdminToken(request) === adminToken) {
+    return { authorized: true, via: "admin-bearer" };
+  }
+
+  const ownerSession = await validateOwnerSessionCookie(request, env);
+
+  if (ownerSession.ok) {
+    return { authorized: true, session: ownerSession.session, via: "owner-session" };
+  }
+
+  return {
+    authorized: false,
+    error: "Owner session or admin authorization is required for this write endpoint.",
     headers: {
       "WWW-Authenticate": 'Bearer realm="formless-admin"',
     },
