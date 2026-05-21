@@ -1,3 +1,8 @@
+import {
+  FORMLESS_DEPLOY_METADATA_PATH,
+  type FormlessDeployMetadata,
+} from "../shared/deploy-metadata.ts";
+
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
 export const FORMLESS_ALCHEMY_APP_NAME = "formless-instance";
 export const FORMLESS_INSTANCE_STATE_FILE = "formless.instance.json";
@@ -28,6 +33,14 @@ export type FormlessInstanceAccountDiscoveryAdapter = {
   listAccounts: (
     input: ListFormlessInstanceAccountsInput,
   ) => Promise<FormlessInstanceDeploymentAccount[]>;
+};
+
+type AlchemyCloudflareApiClient = {
+  get: (path: string, init?: RequestInit) => Promise<Response>;
+};
+
+export type AlchemyFormlessInstanceAccountDiscoveryDependencies = {
+  createCloudflareApi: (options: { profile?: string }) => Promise<AlchemyCloudflareApiClient>;
 };
 
 export type PlanFormlessInstanceDeploymentInput = {
@@ -94,6 +107,28 @@ export type DeployFormlessInstanceResult = {
 
 export type FormlessInstanceDeploymentAdapter = {
   deploy: (input: DeployFormlessInstanceInput) => Promise<DeployFormlessInstanceResult>;
+};
+
+export type CheckFormlessInstanceDeployMetadataInput = {
+  expectedVersion: string;
+  url: string;
+};
+
+export type CheckFormlessInstanceDeployMetadataResult = {
+  cacheControl: string;
+  metadataUrl: string;
+  url: string;
+  version: string;
+};
+
+export type CheckFormlessInstanceDeployMetadataDependencies = {
+  fetch: typeof fetch;
+};
+
+export type FormlessInstanceDeploymentHealthCheckAdapter = {
+  check: (
+    input: CheckFormlessInstanceDeployMetadataInput,
+  ) => Promise<CheckFormlessInstanceDeployMetadataResult>;
 };
 
 export type AlchemyFormlessInstanceDeploymentAppOptions = {
@@ -164,6 +199,8 @@ export type RunFormlessInstanceOnboardingInput = {
 export type RunFormlessInstanceOnboardingDependencies = {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
   deploymentAdapter: FormlessInstanceDeploymentAdapter;
+  healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
+  openBrowser: (url: string) => Promise<void>;
   packageRoot: string;
   packageVersion: string;
   randomToken: () => string;
@@ -174,8 +211,10 @@ export type RunFormlessInstanceOnboardingDependencies = {
 
 export type RunFormlessInstanceOnboardingResult = {
   account: FormlessInstanceDeploymentAccount;
+  browserOpened: boolean;
   credentialProfile: string | null;
   deployment: DeployFormlessInstanceResult;
+  healthCheck: CheckFormlessInstanceDeployMetadataResult;
   instanceName: string;
   mode: "deployed";
   open: boolean;
@@ -323,6 +362,15 @@ export async function runFormlessInstanceOnboarding(
       },
     }),
   );
+  const healthCheck = await dependencies.healthCheck.check({
+    expectedVersion: plan.packageVersion,
+    url: deployment.url,
+  });
+
+  if (input.open ?? false) {
+    await dependencies.openBrowser(deployment.url);
+  }
+
   const state = createFormlessInstanceState({
     credentialProfile,
     plan,
@@ -330,13 +378,102 @@ export async function runFormlessInstanceOnboarding(
 
   return {
     account: plan.account,
+    browserOpened: input.open ?? false,
     credentialProfile,
     deployment,
+    healthCheck,
     instanceName: plan.instanceName,
     mode: "deployed",
     open: input.open ?? false,
     plan,
     state,
+  };
+}
+
+export async function listFormlessInstanceAccountsWithAlchemy(
+  input: ListFormlessInstanceAccountsInput,
+  dependencies?: AlchemyFormlessInstanceAccountDiscoveryDependencies,
+): Promise<FormlessInstanceDeploymentAccount[]> {
+  const resolvedDependencies =
+    dependencies ?? (await nodeAlchemyFormlessInstanceAccountDiscoveryDependencies());
+  const credentialProfile = normalizeCredentialProfile(input.credentialProfile);
+  const api = await resolvedDependencies.createCloudflareApi(
+    credentialProfile ? { profile: credentialProfile } : {},
+  );
+  const accounts = await readCloudflareResult<CloudflareAccountApiResult[]>(
+    "list Cloudflare accounts",
+    api.get("/accounts", {
+      headers: { accept: "application/json" },
+    }),
+  );
+
+  return Promise.all(
+    accounts.map(async (account) => {
+      const accountId = parseRequiredString("Cloudflare account id", account.id);
+      const accountName = parseOptionalString("Cloudflare account name", account.name);
+      const subdomain = await readCloudflareResult<{ subdomain: string }>(
+        `read workers.dev subdomain for Cloudflare account ${accountId}`,
+        api.get(`/accounts/${accountId}/workers/subdomain`, {
+          headers: { accept: "application/json" },
+        }),
+      );
+
+      return parseDeploymentAccount({
+        id: accountId,
+        ...(accountName === undefined ? {} : { name: accountName }),
+        workersDevSubdomain: subdomain.subdomain,
+      });
+    }),
+  );
+}
+
+export const alchemyFormlessInstanceAccountDiscoveryAdapter: FormlessInstanceAccountDiscoveryAdapter =
+  {
+    listAccounts: listFormlessInstanceAccountsWithAlchemy,
+  };
+
+export async function checkFormlessInstanceDeployMetadata(
+  input: CheckFormlessInstanceDeployMetadataInput,
+  dependencies: CheckFormlessInstanceDeployMetadataDependencies,
+): Promise<CheckFormlessInstanceDeployMetadataResult> {
+  const url = parseWorkersDevUrl("Formless instance health check URL", input.url);
+  const expectedVersion = parseRequiredString(
+    "Expected Formless deploy metadata version",
+    input.expectedVersion,
+  );
+  const metadataUrl = new URL(FORMLESS_DEPLOY_METADATA_PATH, `${url}/`).toString();
+  const response = await dependencies.fetch(metadataUrl, {
+    headers: { accept: "application/json" },
+  });
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `Formless instance health check failed for ${url}: HTTP ${response.status} ${text}`,
+    );
+  }
+
+  const cacheControl = response.headers.get("Cache-Control") ?? "";
+
+  if (!cacheControlIncludesNoStore(cacheControl)) {
+    throw new Error(
+      `Formless instance health check failed for ${url}: deploy metadata must send Cache-Control: no-store.`,
+    );
+  }
+
+  const metadata = parseFormlessDeployMetadata(text, url);
+
+  if (metadata.version !== expectedVersion) {
+    throw new Error(
+      `Formless instance health check failed for ${url}: expected deploy version ${expectedVersion}, got ${metadata.version ?? "<missing>"}.`,
+    );
+  }
+
+  return {
+    cacheControl,
+    metadataUrl,
+    url,
+    version: metadata.version,
   };
 }
 
@@ -402,6 +539,11 @@ export const alchemyFormlessInstanceDeploymentAdapter: FormlessInstanceDeploymen
   deploy: deployFormlessInstanceWithAlchemy,
 };
 
+export const fetchFormlessInstanceDeploymentHealthCheckAdapter: FormlessInstanceDeploymentHealthCheckAdapter =
+  {
+    check: (input) => checkFormlessInstanceDeployMetadata(input, { fetch }),
+  };
+
 function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorkerProps["assets"] {
   return {
     directory: "dist/client",
@@ -437,6 +579,14 @@ async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormles
     createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props),
     createSecret: (value) => alchemy.secret(value),
     deployViteWorker: (id, props) => cloudflare.Vite(id, props as never),
+  };
+}
+
+async function nodeAlchemyFormlessInstanceAccountDiscoveryDependencies(): Promise<AlchemyFormlessInstanceAccountDiscoveryDependencies> {
+  const cloudflare = await import("alchemy/cloudflare");
+
+  return {
+    createCloudflareApi: (options) => cloudflare.createCloudflareApi(options),
   };
 }
 
@@ -626,6 +776,87 @@ function parseDeployFormlessInstanceResult(result: unknown): DeployFormlessInsta
 
 function normalizeCredentialProfile(value: string | null | undefined): string | null {
   return parseOptionalString("Cloudflare credential profile", value ?? undefined) ?? null;
+}
+
+type CloudflareAccountApiResult = {
+  id?: unknown;
+  name?: unknown;
+};
+
+type CloudflareApiResponse<T> = {
+  errors?: Array<{ message?: string }>;
+  result?: T;
+  success?: boolean;
+};
+
+async function readCloudflareResult<T>(
+  context: string,
+  responsePromise: Promise<Response>,
+): Promise<T> {
+  const response = await responsePromise;
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`${context} failed: HTTP ${response.status} ${text}`);
+  }
+
+  let parsed: CloudflareApiResponse<T>;
+
+  try {
+    parsed = JSON.parse(text) as CloudflareApiResponse<T>;
+  } catch {
+    throw new Error(`${context} failed: response was not JSON.`);
+  }
+
+  if (parsed.success === false) {
+    const message = parsed.errors
+      ?.map((error) => error.message)
+      .filter(Boolean)
+      .join("; ");
+
+    throw new Error(`${context} failed${message ? `: ${message}` : "."}`);
+  }
+
+  if (parsed.result === undefined) {
+    throw new Error(`${context} failed: response did not include a result.`);
+  }
+
+  return parsed.result;
+}
+
+function parseFormlessDeployMetadata(text: string, url: string): FormlessDeployMetadata {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(
+      `Formless instance health check failed for ${url}: deploy metadata was not JSON.`,
+    );
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error(
+      `Formless instance health check failed for ${url}: deploy metadata must be an object.`,
+    );
+  }
+
+  if (parsed.version !== null && typeof parsed.version !== "string") {
+    throw new Error(
+      `Formless instance health check failed for ${url}: deploy metadata version must be a string or null.`,
+    );
+  }
+
+  return {
+    version: parsed.version,
+  };
+}
+
+function cacheControlIncludesNoStore(cacheControl: string): boolean {
+  return cacheControl
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .includes("no-store");
 }
 
 function normalizeWorkersDevSubdomain(value: unknown): string {

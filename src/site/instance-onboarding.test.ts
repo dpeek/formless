@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  checkFormlessInstanceDeployMetadata,
   deployFormlessInstanceWithAlchemy,
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
   FORMLESS_ALCHEMY_APP_NAME,
   FORMLESS_WORKER_COMPATIBILITY_DATE,
   formatFormlessInstanceState,
+  listFormlessInstanceAccountsWithAlchemy,
   normalizeFormlessInstanceName,
   parseFormlessInstanceState,
   parseFormlessInstanceStateJson,
@@ -16,6 +18,7 @@ import {
   type AlchemyFormlessInstanceDeploymentAppOptions,
   type AlchemyFormlessInstanceDeploymentDependencies,
   type AlchemyFormlessInstanceDeploymentWorkerProps,
+  type CheckFormlessInstanceDeployMetadataInput,
   type DeployFormlessInstanceInput,
   type SelectFormlessInstanceAccountInput,
 } from "./instance-onboarding.ts";
@@ -133,9 +136,61 @@ describe("Formless instance onboarding planner", () => {
 });
 
 describe("Formless instance onboarding adapters", () => {
+  it("discovers Cloudflare accounts and workers.dev subdomains through the Alchemy API client", async () => {
+    const requests: string[] = [];
+    const accounts = await listFormlessInstanceAccountsWithAlchemy(
+      { credentialProfile: "personal" },
+      {
+        createCloudflareApi: async (options) => {
+          expect(options).toEqual({ profile: "personal" });
+
+          return {
+            get: async (requestPath) => {
+              requests.push(requestPath);
+
+              if (requestPath === "/accounts") {
+                return Response.json({
+                  success: true,
+                  result: [
+                    {
+                      id: "account-123",
+                      name: "Personal",
+                    },
+                  ],
+                });
+              }
+
+              if (requestPath === "/accounts/account-123/workers/subdomain") {
+                return Response.json({
+                  success: true,
+                  result: {
+                    subdomain: "dpeek",
+                  },
+                });
+              }
+
+              return Response.json({ success: false }, { status: 404 });
+            },
+          };
+        },
+      },
+    );
+
+    expect(requests).toEqual(["/accounts", "/accounts/account-123/workers/subdomain"]);
+    expect(accounts).toEqual([
+      {
+        id: "account-123",
+        name: "Personal",
+        workersDevSubdomain: "dpeek",
+      },
+    ]);
+  });
+
   it("discovers an account, plans deployment, and calls the deployment adapter with secrets", async () => {
     const discoveryInputs: Array<{ credentialProfile: string | null }> = [];
     const deployInputs: DeployFormlessInstanceInput[] = [];
+    const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
+    const openedUrls: string[] = [];
 
     const result = await runFormlessInstanceOnboarding(
       {
@@ -162,6 +217,15 @@ describe("Formless instance onboarding adapters", () => {
             return { url: input.plan.expectedUrl.url };
           },
         },
+        healthCheck: {
+          check: async (input) => {
+            healthInputs.push(input);
+            return fakeHealthyDeployment(input);
+          },
+        },
+        openBrowser: async (url) => {
+          openedUrls.push(url);
+        },
         packageRoot: "/package",
         packageVersion: "0.1.8",
         randomToken: () => "generated-admin-token",
@@ -179,6 +243,13 @@ describe("Formless instance onboarding adapters", () => {
         },
       },
     ]);
+    expect(healthInputs).toEqual([
+      {
+        expectedVersion: "0.1.8",
+        url: "https://brothers-remote-instance.dpeek.workers.dev",
+      },
+    ]);
+    expect(openedUrls).toEqual(["https://brothers-remote-instance.dpeek.workers.dev"]);
     expect(result).toMatchObject({
       account: {
         id: "account-123",
@@ -188,6 +259,9 @@ describe("Formless instance onboarding adapters", () => {
       credentialProfile: "personal",
       deployment: {
         url: "https://brothers-remote-instance.dpeek.workers.dev",
+      },
+      healthCheck: {
+        version: "0.1.8",
       },
       instanceName: "brothers-remote-instance",
       mode: "deployed",
@@ -224,6 +298,10 @@ describe("Formless instance onboarding adapters", () => {
             listAccounts: async () => [],
           },
           deploymentAdapter: { deploy },
+          healthCheck: {
+            check: fakeHealthyDeployment,
+          },
+          openBrowser: async () => {},
           packageRoot: "/package",
           packageVersion: "0.1.8",
           randomToken: () => "generated-admin-token",
@@ -249,6 +327,10 @@ describe("Formless instance onboarding adapters", () => {
             ],
           },
           deploymentAdapter: { deploy },
+          healthCheck: {
+            check: fakeHealthyDeployment,
+          },
+          openBrowser: async () => {},
           packageRoot: "/package",
           packageVersion: "0.1.8",
           randomToken: () => "generated-admin-token",
@@ -282,6 +364,10 @@ describe("Formless instance onboarding adapters", () => {
         deploymentAdapter: {
           deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
         },
+        healthCheck: {
+          check: fakeHealthyDeployment,
+        },
+        openBrowser: async () => {},
         packageRoot: "/package",
         packageVersion: "0.1.8",
         randomToken: () => "generated-admin-token",
@@ -318,6 +404,90 @@ describe("Formless instance onboarding adapters", () => {
     expect(
       selectOnlyFormlessInstanceAccount({ accounts: [result.account], credentialProfile: null }),
     ).toEqual(result.account);
+  });
+});
+
+describe("Formless instance deploy metadata health check", () => {
+  it("verifies no-store deploy metadata for the deployed package version", async () => {
+    const requests: string[] = [];
+    const result = await checkFormlessInstanceDeployMetadata(
+      {
+        expectedVersion: "0.1.8",
+        url: "https://brother-instance.dpeek.workers.dev",
+      },
+      {
+        fetch: async (url, init) => {
+          const requestUrl =
+            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+
+          requests.push(`${init?.method ?? "GET"} ${requestUrl}`);
+          return Response.json(
+            { version: "0.1.8" },
+            {
+              headers: {
+                "Cache-Control": "no-store",
+              },
+            },
+          );
+        },
+      },
+    );
+
+    expect(requests).toEqual([
+      "GET https://brother-instance.dpeek.workers.dev/api/formless/deploy",
+    ]);
+    expect(result).toEqual({
+      cacheControl: "no-store",
+      metadataUrl: "https://brother-instance.dpeek.workers.dev/api/formless/deploy",
+      url: "https://brother-instance.dpeek.workers.dev",
+      version: "0.1.8",
+    });
+  });
+
+  it("rejects unreachable, stale, and cacheable deploy metadata", async () => {
+    await expect(
+      checkFormlessInstanceDeployMetadata(
+        {
+          expectedVersion: "0.1.8",
+          url: "https://brother-instance.dpeek.workers.dev",
+        },
+        {
+          fetch: async () => new Response("missing", { status: 404 }),
+        },
+      ),
+    ).rejects.toThrow("HTTP 404 missing");
+
+    await expect(
+      checkFormlessInstanceDeployMetadata(
+        {
+          expectedVersion: "0.1.8",
+          url: "https://brother-instance.dpeek.workers.dev",
+        },
+        {
+          fetch: async () =>
+            Response.json(
+              { version: "0.1.7" },
+              {
+                headers: {
+                  "Cache-Control": "no-store",
+                },
+              },
+            ),
+        },
+      ),
+    ).rejects.toThrow("expected deploy version 0.1.8, got 0.1.7");
+
+    await expect(
+      checkFormlessInstanceDeployMetadata(
+        {
+          expectedVersion: "0.1.8",
+          url: "https://brother-instance.dpeek.workers.dev",
+        },
+        {
+          fetch: async () => Response.json({ version: "0.1.8" }),
+        },
+      ),
+    ).rejects.toThrow("deploy metadata must send Cache-Control: no-store");
   });
 });
 
@@ -627,3 +797,17 @@ describe("Formless instance state", () => {
     ).toThrow("formless.instance.json workersDevUrl must be a workers.dev origin URL.");
   });
 });
+
+function fakeHealthyDeployment(input: CheckFormlessInstanceDeployMetadataInput): Promise<{
+  cacheControl: string;
+  metadataUrl: string;
+  url: string;
+  version: string;
+}> {
+  return Promise.resolve({
+    cacheControl: "no-store",
+    metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),
+    url: input.url,
+    version: input.expectedVersion,
+  });
+}

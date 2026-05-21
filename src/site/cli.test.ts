@@ -33,6 +33,8 @@ import {
   siteProjectDevEnv,
   siteProjectWranglerPersistPath,
   startSiteProjectLocalPublishBroker,
+  type CheckFormlessInstanceDeployMetadataInput,
+  type DeployFormlessInstanceInput,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
 } from "./cli.ts";
@@ -310,36 +312,84 @@ describe("Formless Site CLI", () => {
     ).rejects.toThrow("target already contains");
   });
 
-  it("wires onboard CLI to a no-op runner without mutating remote resources", async () => {
+  it("runs onboard through deploy, health check, and optional browser open", async () => {
     const logs: string[] = [];
     const commands: CapturedCommand[] = [];
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
+    const openedUrls: string[] = [];
+    const dependencies = cliDeps(process.cwd(), {
+      commands,
+      healthInputs,
+      logs,
+      openedUrls,
+      deploy: async (input) => {
+        deployInputs.push(input);
+        return { url: input.plan.expectedUrl.url };
+      },
+    });
 
     await expect(
-      onboardFormlessInstance({
-        credentialProfile: "personal",
-        instanceName: "brother-instance",
-        open: true,
-      }),
-    ).resolves.toEqual({
+      onboardFormlessInstance(
+        {
+          credentialProfile: "personal",
+          instanceName: "brother-instance",
+          open: true,
+        },
+        dependencies,
+      ),
+    ).resolves.toMatchObject({
+      browserOpened: true,
       credentialProfile: "personal",
+      deployment: {
+        url: "https://brother-instance.dpeek.workers.dev",
+      },
       instanceName: "brother-instance",
-      mode: "noop",
+      mode: "deployed",
       open: true,
     });
 
     await runFormlessCli(
       ["onboard", "--name", "brother-instance", "--credential-profile", "personal", "--open"],
-      cliDeps(process.cwd(), { commands, logs }),
+      dependencies,
     );
 
     expect(commands).toEqual([]);
+    expect(deployInputs).toHaveLength(2);
+    expect(deployInputs[0]).toMatchObject({
+      credentialProfile: "personal",
+      packageRoot: process.cwd(),
+      secrets: {
+        FORMLESS_ADMIN_TOKEN: "generated-token",
+      },
+    });
+    expect(healthInputs).toEqual([
+      {
+        expectedVersion: packageJson.version,
+        url: "https://brother-instance.dpeek.workers.dev",
+      },
+      {
+        expectedVersion: packageJson.version,
+        url: "https://brother-instance.dpeek.workers.dev",
+      },
+    ]);
+    expect(openedUrls).toEqual([
+      "https://brother-instance.dpeek.workers.dev",
+      "https://brother-instance.dpeek.workers.dev",
+    ]);
     expect(logs).toEqual([
       [
-        "Formless instance onboarding is wired but not deployed yet.",
-        "No remote resources were changed.",
-        "Requested instance: brother-instance.",
+        "Formless instance deployed.",
+        "Instance: brother-instance.",
+        "Account: Personal (account-123).",
         "Credential profile: personal.",
-        "Browser open: yes.",
+        "URL: https://brother-instance.dpeek.workers.dev.",
+        "Worker: brother-instance.",
+        "Media bucket: brother-instance-media.",
+        "Authority storage: brother-instance-authority.",
+        `Deploy metadata: version ${packageJson.version} verified.`,
+        "Browser opened: yes.",
+        "Writes are protected by the configured FORMLESS_ADMIN_TOKEN secret.",
         "Owner setup and browser writes remain follow-up work.",
       ].join("\n"),
     ]);
@@ -736,19 +786,53 @@ function cliDeps(
   cwd: string,
   options: {
     commands?: CapturedCommand[];
+    deploy?: (input: DeployFormlessInstanceInput) => Promise<{ url: string }>;
     fetch?: typeof fetch;
+    healthInputs?: CheckFormlessInstanceDeployMetadataInput[];
     logs?: string[];
+    openedUrls?: string[];
     packageRoot?: string;
   } = {},
 ): FormlessCliDependencies {
   return {
+    accountDiscovery: {
+      listAccounts: async () => [
+        {
+          id: "account-123",
+          name: "Personal",
+          workersDevSubdomain: "dpeek",
+        },
+      ],
+    },
     cwd,
+    deploymentAdapter: {
+      deploy:
+        options.deploy ??
+        (async (input) => ({
+          url: input.plan.expectedUrl.url,
+        })),
+    },
     env: {},
     fetch: options.fetch ?? fetch,
+    healthCheck: {
+      check: async (input) => {
+        options.healthInputs?.push(input);
+
+        return {
+          cacheControl: "no-store",
+          metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),
+          url: input.url,
+          version: input.expectedVersion,
+        };
+      },
+    },
     log: (message) => {
       options.logs?.push(message);
     },
     now: () => "2026-05-12T02:00:00.000Z",
+    openBrowser: async (url) => {
+      options.openedUrls?.push(url);
+    },
     packageRoot: options.packageRoot ?? process.cwd(),
     randomToken: () => "generated-token",
     runCommand: async (

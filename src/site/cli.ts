@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import packageJson from "../../package.json";
 import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
 import { SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
@@ -23,6 +24,16 @@ import {
 } from "./project-save.ts";
 import { type SiteProjectLocalPublishBroker } from "./local-publish-broker.ts";
 import { SITE_PROJECT_GITIGNORE_ENTRY } from "./project-state.ts";
+import {
+  alchemyFormlessInstanceAccountDiscoveryAdapter,
+  alchemyFormlessInstanceDeploymentAdapter,
+  fetchFormlessInstanceDeploymentHealthCheckAdapter,
+  runFormlessInstanceOnboarding,
+  type FormlessInstanceAccountDiscoveryAdapter,
+  type FormlessInstanceDeploymentAdapter,
+  type FormlessInstanceDeploymentHealthCheckAdapter,
+  type RunFormlessInstanceOnboardingResult,
+} from "./instance-onboarding.ts";
 
 export {
   formlessCliUsage,
@@ -50,26 +61,35 @@ export {
 } from "./project-publish.ts";
 export { type SaveSiteProjectResult } from "./project-save.ts";
 export {
+  alchemyFormlessInstanceAccountDiscoveryAdapter,
   alchemyFormlessInstanceDeploymentAdapter,
+  checkFormlessInstanceDeployMetadata,
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
   deployFormlessInstanceWithAlchemy,
+  fetchFormlessInstanceDeploymentHealthCheckAdapter,
   FORMLESS_ALCHEMY_APP_NAME,
   formatFormlessInstanceState,
   FORMLESS_WORKER_COMPATIBILITY_DATE,
+  listFormlessInstanceAccountsWithAlchemy,
   normalizeFormlessInstanceName,
   parseFormlessInstanceState,
   parseFormlessInstanceStateJson,
   planFormlessInstanceDeployment,
   runFormlessInstanceOnboarding,
   selectOnlyFormlessInstanceAccount,
+  type AlchemyFormlessInstanceAccountDiscoveryDependencies,
   type AlchemyFormlessInstanceDeploymentAppOptions,
   type AlchemyFormlessInstanceDeploymentDependencies,
   type AlchemyFormlessInstanceDeploymentWorkerProps,
+  type CheckFormlessInstanceDeployMetadataDependencies,
+  type CheckFormlessInstanceDeployMetadataInput,
+  type CheckFormlessInstanceDeployMetadataResult,
   type DeployFormlessInstanceInput,
   type DeployFormlessInstanceResult,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
+  type FormlessInstanceDeploymentHealthCheckAdapter,
   type FormlessInstanceDeploymentPlan,
   type FormlessInstanceDeploymentSecrets,
   type FormlessInstanceState,
@@ -86,11 +106,15 @@ export type FormlessCliRunCommandOptions = {
 };
 
 export type FormlessCliDependencies = {
+  accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
   cwd: string;
+  deploymentAdapter: FormlessInstanceDeploymentAdapter;
   env: NodeJS.ProcessEnv;
   fetch: typeof fetch;
+  healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
   log: (message: string) => void;
   now: () => string;
+  openBrowser: (url: string) => Promise<void>;
   packageRoot: string;
   randomToken: () => string;
   runCommand: (
@@ -105,12 +129,7 @@ const projectStateGitignoreEntry = SITE_PROJECT_GITIGNORE_ENTRY;
 
 export type InitSiteProjectResult = InitSiteProjectSourceResult;
 
-export type OnboardFormlessInstanceResult = {
-  credentialProfile: string | null;
-  instanceName: string | null;
-  mode: "noop";
-  open: boolean;
-};
+export type OnboardFormlessInstanceResult = RunFormlessInstanceOnboardingResult;
 
 export async function runFormlessCli(
   args: string[],
@@ -137,14 +156,20 @@ export async function runFormlessCli(
       return;
     }
     case "onboard": {
-      const result = await onboardFormlessInstance(command);
+      const result = await onboardFormlessInstance(command, dependencies);
       dependencies.log(
         [
-          "Formless instance onboarding is wired but not deployed yet.",
-          "No remote resources were changed.",
-          `Requested instance: ${result.instanceName ?? "<default>"}.`,
+          "Formless instance deployed.",
+          `Instance: ${result.instanceName}.`,
+          `Account: ${formatAccountLabel(result.account)}.`,
           `Credential profile: ${result.credentialProfile ?? "<default>"}.`,
-          `Browser open: ${result.open ? "yes" : "no"}.`,
+          `URL: ${result.deployment.url}.`,
+          `Worker: ${result.plan.resources.worker.name}.`,
+          `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
+          `Authority storage: ${result.plan.resources.authority.namespaceName}.`,
+          `Deploy metadata: version ${result.healthCheck.version} verified.`,
+          `Browser opened: ${result.browserOpened ? "yes" : "no"}.`,
+          "Writes are protected by the configured FORMLESS_ADMIN_TOKEN secret.",
           "Owner setup and browser writes remain follow-up work.",
         ].join("\n"),
       );
@@ -208,17 +233,31 @@ export async function initSiteProject(
   return initSiteProjectSource({ packageRoot: dependencies.packageRoot, projectRoot });
 }
 
-export async function onboardFormlessInstance(input: {
-  credentialProfile?: string | null;
-  instanceName?: string | null;
-  open?: boolean;
-}): Promise<OnboardFormlessInstanceResult> {
-  return {
-    credentialProfile: input.credentialProfile ?? null,
-    instanceName: input.instanceName ?? null,
-    mode: "noop",
-    open: input.open ?? false,
-  };
+export async function onboardFormlessInstance(
+  input: {
+    credentialProfile?: string | null;
+    instanceName?: string | null;
+    open?: boolean;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    | "accountDiscovery"
+    | "deploymentAdapter"
+    | "healthCheck"
+    | "openBrowser"
+    | "packageRoot"
+    | "randomToken"
+  > = nodeFormlessCliDependencies(),
+): Promise<OnboardFormlessInstanceResult> {
+  return runFormlessInstanceOnboarding(input, {
+    accountDiscovery: dependencies.accountDiscovery,
+    deploymentAdapter: dependencies.deploymentAdapter,
+    healthCheck: dependencies.healthCheck,
+    openBrowser: dependencies.openBrowser,
+    packageRoot: dependencies.packageRoot,
+    packageVersion: packageJson.version,
+    randomToken: dependencies.randomToken,
+  });
 }
 
 export async function saveSiteProject(
@@ -297,15 +336,64 @@ function runCommandWithSpawn(
   });
 }
 
+function formatAccountLabel(account: { id: string; name?: string }): string {
+  return account.name ? `${account.name} (${account.id})` : account.id;
+}
+
+function openUrlWithSpawn(spawn: typeof nodeSpawn, url: string): Promise<void> {
+  const command = browserOpenCommand(process.platform, url);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(command.command, command.args, {
+      stdio: "ignore",
+    });
+
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          signal
+            ? `${command.command} ${command.args.join(" ")} exited with signal ${signal}.`
+            : `${command.command} ${command.args.join(" ")} exited with code ${code ?? "unknown"}.`,
+        ),
+      );
+    });
+  });
+}
+
+function browserOpenCommand(
+  platform: NodeJS.Platform,
+  url: string,
+): { args: string[]; command: string } {
+  if (platform === "darwin") {
+    return { args: [url], command: "open" };
+  }
+
+  if (platform === "win32") {
+    return { args: ["/c", "start", "", url], command: "cmd" };
+  }
+
+  return { args: [url], command: "xdg-open" };
+}
+
 function nodeFormlessCliDependencies(): FormlessCliDependencies {
   const spawn = nodeSpawn;
 
   return {
+    accountDiscovery: alchemyFormlessInstanceAccountDiscoveryAdapter,
     cwd: process.cwd(),
+    deploymentAdapter: alchemyFormlessInstanceDeploymentAdapter,
     env: process.env,
     fetch,
+    healthCheck: fetchFormlessInstanceDeploymentHealthCheckAdapter,
     log: (message) => console.log(message),
     now: () => new Date().toISOString(),
+    openBrowser: (url) => openUrlWithSpawn(spawn, url),
     packageRoot: resolvePackageRoot(path.dirname(fileURLToPath(import.meta.url))),
     randomToken: () => randomBytes(32).toString("base64url"),
     runCommand: (command, args, options) => runCommandWithSpawn(spawn, command, args, options),
