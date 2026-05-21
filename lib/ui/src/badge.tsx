@@ -1,50 +1,44 @@
-import { mergeProps } from "@base-ui/react/merge-props";
-import { useRender } from "@base-ui/react/use-render";
-import { cva, type VariantProps } from "class-variance-authority";
+import { tv } from "tailwind-variants";
 
-import { cn } from "@dpeek/formless-ui/utils";
-
-const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-[0.625rem] font-medium whitespace-nowrap transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pe-1.5 has-data-[icon=inline-start]:ps-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-2.5!",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        secondary: "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
-        destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
-        outline:
-          "border-border bg-input/20 text-foreground dark:bg-input/30 [a]:hover:bg-muted [a]:hover:text-muted-foreground",
-        ghost: "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
+export const badgeStyles = tv({
+  base: [
+    "inline-flex items-center gap-x-1.5 py-px font-medium text-xs/5 forced-colors:outline select-none",
+    "border border-(--badge-border,transparent) bg-(--badge-bg) text-(--badge-fg)",
+    "group-hover:bg-(--badge-overlay) group-focus:bg-(--badge-overlay)",
+    "*:data-[slot=icon]:size-3 *:data-[slot=icon]:shrink-0",
+    "duration-200",
+  ],
+  variants: {
+    intent: {
+      primary:
+        "[--badge-bg:var(--color-primary-subtle)] [--badge-fg:var(--color-primary-subtle-fg)] [--badge-overlay:var(--color-primary)]/20",
+      secondary:
+        "[--badge-bg:var(--color-secondary)] [--badge-fg:var(--color-secondary-fg)] [--badge-overlay:var(--color-muted-fg)]/25",
+      success:
+        "[--badge-bg:var(--color-success-subtle)] [--badge-fg:var(--color-success-subtle-fg)] [--badge-overlay:var(--color-success)]/20",
+      info: "[--badge-bg:var(--color-info-subtle)] [--badge-fg:var(--color-info-subtle-fg)] [--badge-overlay:var(--color-sky-500)]/20",
+      warning:
+        "[--badge-bg:var(--color-warning-subtle)] [--badge-fg:var(--color-warning-subtle-fg)] [--badge-overlay:var(--color-warning)]/20",
+      danger:
+        "[--badge-bg:var(--color-danger-subtle)] [--badge-fg:var(--color-danger-subtle-fg)] [--badge-overlay:var(--color-danger)]/20",
+      outline: "[--badge-border:var(--color-border)] [--badge-overlay:var(--color-secondary)]/20",
     },
-    defaultVariants: {
-      variant: "default",
+    isCircle: {
+      true: "rounded-full px-[calc(--spacing(2)-1px)]",
+      false: "rounded-sm px-[calc(--spacing(1.5)-1px)]",
     },
   },
-);
+  defaultVariants: {
+    intent: "primary",
+    isCircle: true,
+  },
+});
 
-function Badge({
-  className,
-  variant = "default",
-  render,
-  ...props
-}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
-  return useRender({
-    defaultTagName: "span",
-    props: mergeProps<"span">(
-      {
-        className: cn(badgeVariants({ variant }), className),
-      },
-      props,
-    ),
-    render,
-    state: {
-      slot: "badge",
-      variant,
-    },
-  });
+export interface BadgeProps extends React.ComponentProps<"span"> {
+  intent?: "primary" | "secondary" | "success" | "info" | "warning" | "danger" | "outline";
+  isCircle?: boolean;
 }
 
-export { Badge, badgeVariants };
+export function Badge({ intent, isCircle, className, ...props }: BadgeProps) {
+  return <span {...props} className={badgeStyles({ intent, isCircle, className })} />;
+}

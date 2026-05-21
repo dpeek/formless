@@ -164,7 +164,7 @@ function CountedHomeEntityActionButton({
   return (
     <Button isDisabled={disabled} onPress={() => void onRun(action)} type="button" intent="outline">
       <span>{pending ? `${action.label}...` : action.label}</span>
-      <Badge aria-label={targetCount.ariaLabel} className="ml-2 h-4 px-1.5" variant="outline">
+      <Badge aria-label={targetCount.ariaLabel} className="ml-2 h-4 px-1.5" intent="outline">
         {count}
       </Badge>
     </Button>

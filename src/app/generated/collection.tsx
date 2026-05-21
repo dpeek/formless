@@ -597,7 +597,7 @@ function RelatedCollectionCountBadge({
     <Badge
       aria-label={`${option.label} ${relatedCollection.label} count`}
       className="h-4 px-1.5"
-      variant="outline"
+      intent="outline"
     >
       {count}
     </Badge>
@@ -712,7 +712,7 @@ function QueryCountBadge({
   const count = useEntityRecordCountMatchingQuery(entityName, queryTab.query, queryContext);
 
   return (
-    <Badge aria-label={`${queryTab.label} count`} className="h-4 px-1.5" variant="outline">
+    <Badge aria-label={`${queryTab.label} count`} className="h-4 px-1.5" intent="outline">
       {count}
     </Badge>
   );
