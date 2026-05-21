@@ -2557,8 +2557,8 @@ describe("generated collection home", () => {
     });
 
     expect(html).toContain('aria-label="Block records"');
-    expect(html).toContain('data-slot="tabs-list"');
-    expect(html).toContain('data-slot="tabs-trigger"');
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('role="tab"');
     expect(html).toContain("Home");
     expect(html).toMatch(/aria-label="Home Placements count"[^>]*>3</);
     expect(html).toContain("Add placement");
@@ -2748,7 +2748,7 @@ describe("generated collection home", () => {
 
     expect(html).toContain('aria-label="Rate card list detail"');
     expect(html).toContain('aria-label="Rate card records"');
-    expect(html).not.toContain('data-slot="tabs-list"');
+    expect(html).not.toContain('role="tablist"');
     expect(html).toContain('aria-current="true"');
     expect(html).toContain('aria-label="Backup detail"');
     expect(html).toMatch(/aria-label="Default Rates count"[^>]*>1</);
@@ -2817,7 +2817,7 @@ describe("generated collection home", () => {
       today: "2026-05-01",
     });
 
-    expect(selectedHtml).toContain('data-slot="tabs-list"');
+    expect(selectedHtml).toContain('role="tablist"');
     expect(selectedHtml).toMatch(/aria-label="Selected card count"[^>]*>1</);
     expect(selectedHtml).toMatch(/aria-label="Selected card again count"[^>]*>1</);
     expect(selectedHtml).toMatch(/<button[^>]*>Create Rate<\/button>/);

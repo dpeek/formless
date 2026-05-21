@@ -3,7 +3,7 @@ import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Badge } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@dpeek/formless-ui/tabs";
+import { Tab, TabList, Tabs } from "@dpeek/formless-ui/tabs";
 import {
   useAggregateValueMatchingQuery,
   useEntityRecordCountMatchingQuery,
@@ -92,14 +92,14 @@ export function HomeCollection({
     <div className="space-y-6">
       {queryTabs.length <= 1 ? null : (
         <Tabs
-          onValueChange={(value) => {
-            if (typeof value === "string") {
-              onSelectQuery(value);
+          onSelectionChange={(key) => {
+            if (typeof key === "string") {
+              onSelectQuery(key);
             }
           }}
-          value={selectedQuery.queryName}
+          selectedKey={selectedQuery.queryName}
         >
-          <TabsList aria-label={`${entity.label} queries`} variant="line">
+          <TabList aria-label={`${entity.label} queries`}>
             {queryTabs.map((queryTab) => (
               <HomeQueryTabTrigger
                 entityName={entityName}
@@ -108,7 +108,7 @@ export function HomeCollection({
                 queryTab={queryTab}
               />
             ))}
-          </TabsList>
+          </TabList>
         </Tabs>
       )}
 
@@ -208,14 +208,14 @@ function ScopedHomeCollection({
 
       {queryTabs.length <= 1 ? null : (
         <Tabs
-          onValueChange={(value) => {
-            if (typeof value === "string") {
-              onSelectQuery(value);
+          onSelectionChange={(key) => {
+            if (typeof key === "string") {
+              onSelectQuery(key);
             }
           }}
-          value={selectedQuery.queryName}
+          selectedKey={selectedQuery.queryName}
         >
-          <TabsList aria-label={`${entity.label} queries`} variant="line">
+          <TabList aria-label={`${entity.label} queries`}>
             {queryTabs.map((queryTab) => (
               <HomeQueryTabTrigger
                 entityName={entityName}
@@ -224,7 +224,7 @@ function ScopedHomeCollection({
                 queryTab={queryTab}
               />
             ))}
-          </TabsList>
+          </TabList>
         </Tabs>
       )}
 
@@ -339,14 +339,14 @@ function ListDetailScopedHomeCollection({
 
             {queryTabs.length <= 1 ? null : (
               <Tabs
-                onValueChange={(value) => {
-                  if (typeof value === "string") {
-                    onSelectQuery(value);
+                onSelectionChange={(key) => {
+                  if (typeof key === "string") {
+                    onSelectQuery(key);
                   }
                 }}
-                value={selectedQuery.queryName}
+                selectedKey={selectedQuery.queryName}
               >
-                <TabsList aria-label={`${entity.label} queries`} variant="line">
+                <TabList aria-label={`${entity.label} queries`}>
                   {queryTabs.map((queryTab) => (
                     <HomeQueryTabTrigger
                       entityName={entityName}
@@ -355,7 +355,7 @@ function ListDetailScopedHomeCollection({
                       queryTab={queryTab}
                     />
                   ))}
-                </TabsList>
+                </TabList>
               </Tabs>
             )}
 
@@ -507,18 +507,18 @@ function ContextSelector({
     <section className="space-y-3 border-b border-slate-200 pb-4">
       <div className="flex flex-wrap items-center gap-2">
         <Tabs
-          onValueChange={(value) => {
-            if (typeof value === "string") {
-              onSelectContext?.(value || null);
+          onSelectionChange={(key) => {
+            if (typeof key === "string") {
+              onSelectContext?.(key || null);
             }
           }}
-          value={selectedContextRecordId ?? ""}
+          selectedKey={selectedContextRecordId ?? ""}
         >
-          <TabsList aria-label={`${context.label} records`} variant="line">
+          <TabList aria-label={`${context.label} records`}>
             {options.map((option) => (
               <ContextSelectorTabTrigger context={context} key={option.id} option={option} />
             ))}
-          </TabsList>
+          </TabList>
         </Tabs>
 
         {context.createAction ? (
@@ -568,7 +568,7 @@ function ContextSelectorTabTrigger({
   option: { id: string; label: string };
 }) {
   return (
-    <TabsTrigger value={option.id}>
+    <Tab id={option.id}>
       <span>{option.label}</span>
       {context.relatedCollection ? (
         <RelatedCollectionCountBadge
@@ -576,7 +576,7 @@ function ContextSelectorTabTrigger({
           relatedCollection={context.relatedCollection}
         />
       ) : null}
-    </TabsTrigger>
+    </Tab>
   );
 }
 
@@ -691,12 +691,12 @@ function HomeQueryTabTrigger({
   queryTab: HomeQueryTabConfig;
 }) {
   return (
-    <TabsTrigger value={queryTab.queryName}>
+    <Tab id={queryTab.queryName}>
       <span>{queryTab.label}</span>
       {queryTab.count?.type === "count" && queryContext ? (
         <QueryCountBadge entityName={entityName} queryContext={queryContext} queryTab={queryTab} />
       ) : null}
-    </TabsTrigger>
+    </Tab>
   );
 }
 
