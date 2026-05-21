@@ -64,6 +64,7 @@ describe("storage", () => {
       itemViews: defaultItemViews(),
       tableViews: {},
       views: defaultViews(),
+      screens: defaultScreens(),
     } satisfies AppSchema;
 
     await postJson("/schema", nextSchema);
@@ -92,6 +93,7 @@ describe("storage", () => {
       itemViews: defaultItemViews(),
       tableViews: {},
       views: defaultViews(),
+      screens: defaultScreens(),
     } satisfies AppSchema;
 
     await postJson("/schema", nextSchema);
@@ -543,6 +545,7 @@ function taskSchema(): AppSchema {
     itemViews: defaultItemViews(),
     tableViews: {},
     views: defaultViews(),
+    screens: defaultScreens(),
   };
 }
 
@@ -613,6 +616,21 @@ function defaultViews(): AppSchema["views"] {
       fields: {
         title: { editor: "text" },
         dueDate: { editor: "date" },
+      },
+    },
+  };
+}
+
+function defaultScreens(): NonNullable<AppSchema["screens"]> {
+  return {
+    taskHome: {
+      type: "workspace",
+      label: "Tasks",
+      path: "/",
+      navigation: { primary: true },
+      layout: {
+        type: "stack",
+        sections: [{ id: "tasks", type: "collection", view: "taskHome" }],
       },
     },
   };
