@@ -1,16 +1,13 @@
 import { useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@dpeek/formless-ui/alert-dialog";
 import { Button } from "@dpeek/formless-ui/button";
+import {
+  ModalClose,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import { useRecord } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitDeleteMutation } from "../../client/sync.ts";
@@ -76,49 +73,48 @@ export function DeleteRecordButton({
   }
 
   return (
-    <AlertDialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!isDeleting) {
-          setOpen(nextOpen);
-        }
-      }}
-    >
-      <AlertDialogTrigger
-        render={
-          <Button
-            aria-label={ariaLabel ?? `Delete ${recordLabel}`}
-            className={className}
-            isDisabled={isDeleting}
-            size={size}
-            type="button"
-            intent="danger"
-            {...triggerData}
-          />
-        }
+    <>
+      <Button
+        aria-label={ariaLabel ?? `Delete ${recordLabel}`}
+        className={className}
+        isDisabled={isDeleting}
+        onPress={() => setOpen(true)}
+        size={size}
+        type="button"
+        intent="danger"
+        {...triggerData}
       >
         {isDeleting ? "Deleting..." : buttonLabel}
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete {recordLabel}?</AlertDialogTitle>
-          <AlertDialogDescription>
+      </Button>
+      <ModalContent
+        closeButton={false}
+        isOpen={open}
+        onOpenChange={(nextOpen) => {
+          if (!isDeleting) {
+            setOpen(nextOpen);
+          }
+        }}
+        role="alertdialog"
+      >
+        <ModalHeader>
+          <ModalTitle>Delete {recordLabel}?</ModalTitle>
+          <ModalDescription>
             The record will be hidden from active views. Active references can block deletion.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
+          </ModalDescription>
+        </ModalHeader>
+        <ModalFooter>
+          <ModalClose intent="outline">Cancel</ModalClose>
+          <Button
             isDisabled={isDeleting}
             onPress={() => void deleteRecord()}
             type="button"
             intent="danger"
           >
             {isDeleting ? "Deleting..." : "Delete"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </>
   );
 }
 

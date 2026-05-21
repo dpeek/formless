@@ -1,4 +1,3 @@
-export * from "./alert-dialog.js";
 export * from "./badge.js";
 export * from "./button.js";
 export * from "./calendar.js";

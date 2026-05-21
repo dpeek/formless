@@ -1,16 +1,13 @@
 import { useId, useRef, useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@dpeek/formless-ui/alert-dialog";
 import { Button } from "@dpeek/formless-ui/button";
+import {
+  ModalClose,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import { exportStoreSnapshot, resetSeedData, restoreStoreSnapshot } from "../client/sync.ts";
 import { setSyncStatus } from "../client/sync-status.ts";
 import type { BootstrapResponse, StoreSnapshot } from "../shared/protocol.ts";
@@ -82,28 +79,34 @@ export function SourceResetControl({
 
   return (
     <div className={className}>
-      <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-        <AlertDialogTrigger
-          render={<Button isDisabled={resetStatus.pending} type="button" intent="danger" />}
-        >
-          {resetStatus.pending ? "Resetting..." : buttonLabel}
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset {app.label}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This restores the source schema and source seed data for <code>{app.key}</code>.
-              Existing records for this world are replaced by the source seed records.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onPress={() => void resetSourceData()} type="button" intent="danger">
-              Reset
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Button
+        isDisabled={resetStatus.pending}
+        onPress={() => setResetDialogOpen(true)}
+        type="button"
+        intent="danger"
+      >
+        {resetStatus.pending ? "Resetting..." : buttonLabel}
+      </Button>
+      <ModalContent
+        closeButton={false}
+        isOpen={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        role="alertdialog"
+      >
+        <ModalHeader>
+          <ModalTitle>Reset {app.label}?</ModalTitle>
+          <ModalDescription>
+            This restores the source schema and source seed data for <code>{app.key}</code>.
+            Existing records for this world are replaced by the source seed records.
+          </ModalDescription>
+        </ModalHeader>
+        <ModalFooter>
+          <ModalClose intent="outline">Cancel</ModalClose>
+          <Button onPress={() => void resetSourceData()} type="button" intent="danger">
+            Reset
+          </Button>
+        </ModalFooter>
+      </ModalContent>
       <DevActionMessage status={resetStatus} />
     </div>
   );

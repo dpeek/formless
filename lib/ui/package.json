@@ -9,7 +9,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./global.css": "./src/global.css",
-    "./alert-dialog": "./src/alert-dialog.tsx",
     "./badge": "./src/badge.tsx",
     "./button": "./src/button.tsx",
     "./calendar": "./src/calendar.tsx",

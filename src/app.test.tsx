@@ -2155,7 +2155,6 @@ describe("generated collection home", () => {
 
     expect(disabledHtml).not.toContain('data-formless-delete-record="page-1"');
     expect(enabledHtml).toContain('data-formless-delete-record="page-1"');
-    expect(enabledHtml).toContain('data-slot="alert-dialog-trigger"');
     expect(enabledHtml).toContain('aria-label="Delete Disposable page"');
   });
 
@@ -5030,7 +5029,6 @@ describe("generated forms and records", () => {
 
     expect(disabledHtml).not.toContain('data-formless-delete-record="record-1"');
     expect(enabledHtml).toContain('data-formless-delete-record="record-1"');
-    expect(enabledHtml).toContain('data-slot="alert-dialog-trigger"');
     expect(enabledHtml).toContain('aria-label="Delete Disposable task"');
   });
 
@@ -5066,7 +5064,6 @@ describe("generated forms and records", () => {
 
     expect(disabledHtml).not.toContain('data-formless-delete-record="record-1"');
     expect(enabledHtml).toContain('data-formless-delete-record="record-1"');
-    expect(enabledHtml).toContain('data-slot="alert-dialog-trigger"');
     expect(enabledHtml).toContain('aria-label="Delete Disposable task"');
   });
 
