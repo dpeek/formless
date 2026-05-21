@@ -853,6 +853,10 @@ function assignedPrdDisplay(source: PrdSource, workspace: Workspace): string {
 
 function buildPrompt(source: PrdSource, workspace: Workspace): string {
   const assignedDisplay = assignedPrdDisplay(source, workspace);
+  const finalCommitInstruction =
+    source.kind === "issue"
+      ? ` If this commit completes the assigned PRD and your final response will use \`<plan-done/>\`, include \`Fixes #${source.issue.number}\` in the commit message.`
+      : "";
   const assignment =
     source.kind === "issue"
       ? [
@@ -886,7 +890,7 @@ function buildPrompt(source: PrdSource, workspace: Workspace): string {
     "6. Run `devstate check`, read `./.devstate/status.md`, and fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually; devstate owns those outputs.",
     "7. If app behavior changed, smoke it with `bun browser ...` (`agent-browser`). Do not block on Codex IAB Browser Use in CLI loops.",
     "8. Rebase the current branch on local `main` before the final commit. Preserve your iteration changes with non-interactive git commands, and stop with `<blocked/>` on conflicts.",
-    "9. Commit the chunk with a concise message. Do not amend existing commits.",
+    `9. Commit the chunk with a concise message. Do not amend existing commits.${finalCommitInstruction}`,
     "10. Final response must include changed files, checks, PRD status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.",
     "",
     "Loop contract:",
