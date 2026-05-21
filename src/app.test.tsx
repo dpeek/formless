@@ -3887,7 +3887,6 @@ describe("generated forms and records", () => {
     expect(html).toContain('aria-label="Inspect rate"');
     expect(html).toContain("Rate actions");
     expect(html).toContain('aria-label="Rate actions"');
-    expect(html).toContain('data-slot="dropdown-menu-trigger"');
   });
 
   it("renders Site placement row action dropdowns", () => {
@@ -3903,7 +3902,6 @@ describe("generated forms and records", () => {
     });
 
     expect(html).toContain('aria-label="Actions"');
-    expect(html).toContain('data-slot="dropdown-menu-trigger"');
     expect(html).toContain('aria-label="Reorder"');
     expect(html).toContain('data-formless-ordering-handle="true"');
     expect(html).toContain("data-formless-sortable-row=");

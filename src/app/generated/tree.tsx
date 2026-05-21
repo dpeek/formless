@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
-import { Button } from "@dpeek/formless-ui/button";
+import { Button, buttonStyles } from "@dpeek/formless-ui/button";
 import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formless-ui/modal";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuTrigger,
 } from "@dpeek/formless-ui/dropdown-menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
@@ -484,40 +485,35 @@ function TreeChildAddControls({
         .map((variant) => variant.variantValue)
         .join(" ")}
     >
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label="Add child"
-              data-formless-tree-add-trigger={parentRecord.id}
-              isDisabled={!result.composition?.create}
-              size="sq-xs"
-              type="button"
-              intent="outline"
-            >
-              <PlusIcon aria-hidden="true" />
-            </Button>
-          }
-        />
-        <DropdownMenuContent className="w-auto min-w-36">
+      <Menu>
+        <MenuTrigger
+          aria-label="Add child"
+          className={buttonStyles({ intent: "outline", size: "sq-xs" })}
+          data-formless-tree-add-trigger={parentRecord.id}
+          isDisabled={!result.composition?.create}
+          type="button"
+        >
+          <PlusIcon aria-hidden="true" />
+        </MenuTrigger>
+        <MenuContent className="w-auto min-w-36">
           {allowedChildVariants.map((variant) => (
-            <DropdownMenuItem
+            <MenuItem
               aria-label={`Add ${variant.label} child`}
               data-formless-tree-add-variant={variant.variantValue}
               data-formless-tree-add-slot={stringValue(variant.placementValues?.slot) ?? undefined}
-              disabled={!result.composition?.create}
+              isDisabled={!result.composition?.create}
               key={variant.variantValue}
-              onClick={() => {
+              onAction={() => {
                 if (result.composition?.create) {
                   setActiveVariant(variant);
                 }
               }}
             >
-              {variant.label}
-            </DropdownMenuItem>
+              <MenuLabel>{variant.label}</MenuLabel>
+            </MenuItem>
           ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </MenuContent>
+      </Menu>
       {activeVariant && createAction ? (
         <ModalContent
           isOpen={true}

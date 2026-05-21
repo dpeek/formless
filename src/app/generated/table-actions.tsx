@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@dpeek/formless-ui/button";
+import { Button, buttonStyles } from "@dpeek/formless-ui/button";
 import {
   ModalBody,
   ModalClose,
@@ -10,11 +10,12 @@ import {
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  MenuTrigger,
 } from "@dpeek/formless-ui/dropdown-menu";
 import { useRecord, useRecordField } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
@@ -128,41 +129,43 @@ export function InvokeActionTableCell({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button aria-label={column.headerLabel} size="sq-xs" type="button" intent="outline">
-              <span aria-hidden="true">...</span>
-            </Button>
-          }
-        />
-        <DropdownMenuContent align={column.align === "end" ? "end" : "start"}>
+      <Menu>
+        <MenuTrigger
+          aria-label={column.headerLabel}
+          className={buttonStyles({ intent: "outline", size: "sq-xs" })}
+          type="button"
+        >
+          <span aria-hidden="true">...</span>
+        </MenuTrigger>
+        <MenuContent
+          popover={{ placement: column.align === "end" ? "bottom end" : "bottom start" }}
+        >
           {column.actions.map((action) => (
-            <DropdownMenuItem
+            <MenuItem
               aria-label={actionAriaLabel(action)}
-              disabled={action.disabled}
+              isDisabled={action.disabled}
+              intent={action.variant === "destructive" ? "danger" : undefined}
               key={action.actionName}
-              onClick={() => openActionDialog(action)}
-              variant={action.variant === "destructive" ? "destructive" : "default"}
+              onAction={() => openActionDialog(action)}
             >
-              {action.label}
-            </DropdownMenuItem>
+              <MenuLabel>{action.label}</MenuLabel>
+            </MenuItem>
           ))}
-          {column.actions.length > 0 && orderingItems.length > 0 ? <DropdownMenuSeparator /> : null}
+          {column.actions.length > 0 && orderingItems.length > 0 ? <MenuSeparator /> : null}
           {orderingItems.map((item) => (
-            <DropdownMenuItem
+            <MenuItem
               aria-label={orderingMoveAriaLabel(item)}
-              disabled={item.disabled || pendingOrderingDirection !== null}
+              isDisabled={item.disabled || pendingOrderingDirection !== null}
               key={item.direction}
-              onClick={() => {
+              onAction={() => {
                 void invokeOrderingMove(item);
               }}
             >
-              {item.label}
-            </DropdownMenuItem>
+              <MenuLabel>{item.label}</MenuLabel>
+            </MenuItem>
           ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </MenuContent>
+      </Menu>
       {openAction ? (
         <EditRecordTableActionDialog
           action={openAction}
