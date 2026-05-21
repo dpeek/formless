@@ -125,7 +125,7 @@ export function GeneratedCreateForm({
         ))}
       </FieldSet>
 
-      <Button disabled={!canCreate || isSubmitting} type="submit">
+      <Button isDisabled={!canCreate || isSubmitting} type="submit">
         {isSubmitting ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
       </Button>
     </form>
@@ -261,13 +261,13 @@ export function GeneratedCreateDialogForm({
 
       <DialogFooter>
         {renderDialogCancel ? (
-          <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
+          <DialogClose render={<Button intent="outline" type="button" />}>Cancel</DialogClose>
         ) : (
-          <Button type="button" variant="outline">
+          <Button type="button" intent="outline">
             Cancel
           </Button>
         )}
-        <Button disabled={!canSubmit || isSubmitting} type="submit">
+        <Button isDisabled={!canSubmit || isSubmitting} type="submit">
           {isSubmitting ? "Saving..." : action.enabled ? action.label : "Create disabled"}
         </Button>
       </DialogFooter>

@@ -624,11 +624,11 @@ function OrderingHandleTableCell({
     <Button
       aria-label={column.headerLabel}
       data-formless-ordering-handle="true"
-      disabled={disabled}
+      isDisabled={disabled}
       ref={handleRef}
-      size="icon-xs"
+      size="sq-xs"
       type="button"
-      variant="ghost"
+      intent="plain"
     >
       <span aria-hidden="true">::</span>
     </Button>
@@ -686,10 +686,10 @@ function ReferencedRecordEditButton({
       <Button
         aria-label={`Edit shared ${column.referenceItem.entity.label.toLowerCase()}`}
         className="ml-1"
-        onClick={() => setOpen(true)}
+        onPress={() => setOpen(true)}
         size="xs"
         type="button"
-        variant="outline"
+        intent="outline"
       >
         Edit shared
       </Button>
@@ -821,7 +821,7 @@ export function ReferencedRecordEditorDialog({
           </p>
         ) : null}
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" type="button" />}>Done</DialogClose>
+          <DialogClose render={<Button intent="outline" type="button" />}>Done</DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

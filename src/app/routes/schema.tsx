@@ -102,7 +102,7 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
           value={routeEditorText}
         />
 
-        <Button disabled={isSaving} type="submit">
+        <Button isDisabled={isSaving} type="submit">
           {isSaving ? "Saving..." : "Save schema"}
         </Button>
       </form>

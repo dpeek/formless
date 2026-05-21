@@ -153,7 +153,6 @@ describe("MarkdownRenderer", () => {
     expect(markup).toContain('data-language="tsx"');
     expect(markup).toContain("lib/graphle-web-ui/src/markdown.tsx");
     expect(markup).toContain('aria-label="Copy code"');
-    expect(markup).toContain('title="Copy code"');
     expect(markup).toContain("hljs-keyword");
     expect(markup).toContain("const");
     expect(markup).toContain("value");

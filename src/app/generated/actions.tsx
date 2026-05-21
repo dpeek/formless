@@ -61,9 +61,9 @@ export function HomeActionRow({
 
           return (
             <Button
-              disabled={!canOpen}
+              isDisabled={!canOpen}
               key={`${action.type}:${action.entityName}`}
-              onClick={() => {
+              onPress={() => {
                 if (canOpen) {
                   setCreateDialogAction(action);
                 }
@@ -118,10 +118,10 @@ function HomeEntityActionButton({
   if (!action.ui.targetCount) {
     return (
       <Button
-        disabled={disabled}
-        onClick={() => void onRun(action)}
+        isDisabled={disabled}
+        onPress={() => void onRun(action)}
         type="button"
-        variant="outline"
+        intent="outline"
       >
         {pending ? `${action.label}...` : action.label}
       </Button>
@@ -162,7 +162,7 @@ function CountedHomeEntityActionButton({
   );
 
   return (
-    <Button disabled={disabled} onClick={() => void onRun(action)} type="button" variant="outline">
+    <Button isDisabled={disabled} onPress={() => void onRun(action)} type="button" intent="outline">
       <span>{pending ? `${action.label}...` : action.label}</span>
       <Badge aria-label={targetCount.ariaLabel} className="ml-2 h-4 px-1.5" variant="outline">
         {count}

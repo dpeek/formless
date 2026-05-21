@@ -43,7 +43,7 @@ export function DeleteRecordButton({
   labelFields?: RecordLabelFieldConfig[];
   onDeleted?: () => void;
   recordId: string;
-  size?: "xs" | "icon-xs";
+  size?: "xs" | "sq-xs";
   triggerData?: Record<string, string>;
 }) {
   const schemaKey = useSchemaKey();
@@ -89,10 +89,10 @@ export function DeleteRecordButton({
           <Button
             aria-label={ariaLabel ?? `Delete ${recordLabel}`}
             className={className}
-            disabled={isDeleting}
+            isDisabled={isDeleting}
             size={size}
             type="button"
-            variant="destructive"
+            intent="danger"
             {...triggerData}
           />
         }
@@ -109,10 +109,10 @@ export function DeleteRecordButton({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            disabled={isDeleting}
-            onClick={() => void deleteRecord()}
+            isDisabled={isDeleting}
+            onPress={() => void deleteRecord()}
             type="button"
-            variant="destructive"
+            intent="danger"
           >
             {isDeleting ? "Deleting..." : "Delete"}
           </AlertDialogAction>

@@ -348,9 +348,9 @@ export function ColorInput({
               render={
                 <InputGroupButton
                   aria-label={`Choose ${resolvedLabel}`}
-                  disabled={disabled}
-                  size="icon-xs"
-                  variant="ghost"
+                  isDisabled={disabled}
+                  size="sq-xs"
+                  intent="plain"
                 >
                   {swatch}
                 </InputGroupButton>
@@ -380,11 +380,11 @@ export function ColorInput({
           <div className="color-picker space-y-3">
             <div className="relative">
               <Button
-                variant="ghost"
-                size="icon"
+                intent="plain"
+                size="sq-xs"
                 className="absolute -top-1.5 -left-1 z-10 flex h-7 w-7 items-center gap-1 bg-transparent hover:bg-transparent"
-                onClick={handleEyeDropper}
-                disabled={disabled || !isEyeDropperAvailable()}
+                onPress={() => void handleEyeDropper()}
+                isDisabled={disabled || !isEyeDropperAvailable()}
               >
                 <PipetteIcon className="h-3 w-3" />
               </Button>

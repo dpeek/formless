@@ -40,10 +40,10 @@ export function LocalSitePublishControl({ broker }: { broker: LocalSitePublishBr
   return (
     <Button
       aria-label="Publish Site through local CLI"
-      disabled={isPublishing}
-      onClick={() => void publish()}
+      isDisabled={isPublishing}
+      onPress={() => void publish()}
       type="button"
-      variant="outline"
+      intent="outline"
     >
       {isPublishing ? (
         <Loader2Icon aria-hidden="true" className="animate-spin" data-icon="inline-start" />

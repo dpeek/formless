@@ -244,18 +244,18 @@ function Sidebar({
   );
 }
 
-function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
+function SidebarTrigger({ className, onPress, ...props }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar } = useSidebar();
 
   return (
     <Button
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
-      variant="ghost"
-      size="icon-sm"
+      intent="plain"
+      size="sq-xs"
       className={cn(className)}
-      onClick={(event) => {
-        onClick?.(event);
+      onPress={(event) => {
+        onPress?.(event);
         toggleSidebar();
       }}
       {...props}

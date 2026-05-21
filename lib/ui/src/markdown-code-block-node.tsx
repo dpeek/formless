@@ -158,11 +158,10 @@ function MarkdownCodeCopyButton({ code }: { code: string }) {
     <Button
       aria-label={label}
       className="graph-markdown-code-block-copy-button"
-      onClick={() => void copyCode()}
-      size="icon-sm"
-      title={label}
+      onPress={() => void copyCode()}
+      size="sq-xs"
       type="button"
-      variant="ghost"
+      intent="plain"
     >
       {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
     </Button>

@@ -147,8 +147,8 @@ export function DateInput({
             render={
               <InputGroupButton
                 id="date-picker"
-                variant="ghost"
-                size="icon-xs"
+                intent="plain"
+                size="sq-xs"
                 aria-label="Select date"
               >
                 <CalendarIcon />

@@ -414,11 +414,11 @@ function ContextListDetailSelector({
         {context.createAction ? (
           <Button
             aria-label={context.createAction.label}
-            disabled={!context.createAction.enabled}
-            onClick={() => setCreateDialogOpen(true)}
-            size="icon-sm"
+            isDisabled={!context.createAction.enabled}
+            onPress={() => setCreateDialogOpen(true)}
+            size="sq-xs"
             type="button"
-            variant="outline"
+            intent="outline"
           >
             +
           </Button>
@@ -524,11 +524,11 @@ function ContextSelector({
         {context.createAction ? (
           <Button
             aria-label={context.createAction.label}
-            disabled={!context.createAction.enabled}
-            onClick={() => setCreateDialogOpen(true)}
-            size="icon-sm"
+            isDisabled={!context.createAction.enabled}
+            onPress={() => setCreateDialogOpen(true)}
+            size="sq-xs"
             type="button"
-            variant="outline"
+            intent="outline"
           >
             +
           </Button>
@@ -1095,11 +1095,11 @@ function RecordRow({
           <Button
             aria-label="Drag record"
             data-formless-ordering-handle="true"
-            disabled={orderingHandleDisabled ?? true}
+            isDisabled={orderingHandleDisabled ?? true}
             ref={orderingHandleRef}
-            size="icon-xs"
+            size="sq-xs"
             type="button"
-            variant="ghost"
+            intent="plain"
           >
             <span aria-hidden="true">::</span>
           </Button>

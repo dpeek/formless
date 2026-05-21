@@ -490,10 +490,10 @@ function TreeChildAddControls({
             <Button
               aria-label="Add child"
               data-formless-tree-add-trigger={parentRecord.id}
-              disabled={!result.composition?.create}
-              size="icon-xs"
+              isDisabled={!result.composition?.create}
+              size="sq-xs"
               type="button"
-              variant="outline"
+              intent="outline"
             >
               <PlusIcon aria-hidden="true" />
             </Button>
@@ -634,12 +634,11 @@ function TreePlacementRemoveButton({
     <Button
       aria-label="Remove child placement"
       data-formless-tree-remove-placement={placement.id}
-      disabled={isRemoving}
-      onClick={() => void removePlacement()}
-      size="icon-xs"
-      title="Remove child placement"
+      isDisabled={isRemoving}
+      onPress={() => void removePlacement()}
+      size="sq-xs"
       type="button"
-      variant="ghost"
+      intent="plain"
     >
       <span aria-hidden="true">{isRemoving ? "..." : <XIcon />}</span>
     </Button>
@@ -704,11 +703,11 @@ function PlacementOrderingControls({
         <Button
           aria-label="Drag placement"
           data-formless-ordering-handle="true"
-          disabled={orderingHandleDisabled ?? true}
+          isDisabled={orderingHandleDisabled ?? true}
           ref={orderingHandleRef}
-          size="icon-xs"
+          size="sq-xs"
           type="button"
-          variant="ghost"
+          intent="plain"
         >
           <MenuIcon aria-hidden="true" />
         </Button>
@@ -716,14 +715,14 @@ function PlacementOrderingControls({
       {moveItems.map((item) => (
         <Button
           aria-label={item.direction === "up" ? "Move placement up" : "Move placement down"}
-          disabled={
+          key={item.direction}
+          isDisabled={
             item.disabled || (item.direction === "up" ? index === 0 : index >= siblingCount - 1)
           }
-          key={item.direction}
-          onClick={() => void runMove(item)}
-          size="icon-xs"
+          onPress={() => void runMove(item)}
+          size="sq-xs"
           type="button"
-          variant="ghost"
+          intent="plain"
         >
           <span aria-hidden="true">{item.direction === "up" ? "↑" : "↓"}</span>
         </Button>
@@ -864,11 +863,11 @@ function ChildRecordContextLink({
       <span className="min-w-0 truncate text-sm font-medium text-slate-900">{label}</span>
       <Button
         aria-label={`Select ${label}`}
-        disabled={!canSelect}
-        onClick={() => onSelectContext?.(childRecord.id)}
+        isDisabled={!canSelect}
+        onPress={() => onSelectContext?.(childRecord.id)}
         size="xs"
         type="button"
-        variant="outline"
+        intent="outline"
       >
         Open
       </Button>

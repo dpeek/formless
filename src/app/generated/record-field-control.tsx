@@ -533,7 +533,7 @@ function IconFieldControl({
   previewSource: string;
 }) {
   const hasRenderableIcon = parseSvgIconSource(previewSource) !== null;
-  const triggerSize = density === "compact" ? "icon-sm" : "icon-lg";
+  const triggerSize = density === "compact" ? "sq-xs" : "sq-sm";
   const iconSizeClassName = density === "compact" ? "size-4" : "size-5";
   const triggerClassName = hasRenderableIcon
     ? "border-transparent bg-transparent p-0 text-slate-700 hover:bg-slate-100"
@@ -555,12 +555,11 @@ function IconFieldControl({
           data-web-icon-field-edit="trigger"
           data-web-icon-field-empty={hasRenderableIcon ? undefined : "true"}
           data-web-icon-field-preview="compact"
-          disabled={!canPatch || isPending}
-          onClick={() => onOpenChange(true)}
+          isDisabled={!canPatch || isPending}
+          onPress={() => onOpenChange(true)}
           size={triggerSize}
-          title={`Edit ${label}`}
           type="button"
-          variant="ghost"
+          intent="plain"
         >
           <SvgIcon className={iconSizeClassName} source={previewSource} />
         </Button>
@@ -589,8 +588,8 @@ function IconFieldControl({
           />
           {error ? <FieldError>{error}</FieldError> : null}
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button disabled={!canPatch || isPending} onClick={() => void onSave()} type="button">
+            <DialogClose render={<Button intent="outline" type="button" />}>Cancel</DialogClose>
+            <Button isDisabled={!canPatch || isPending} onPress={() => void onSave()} type="button">
               {isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>

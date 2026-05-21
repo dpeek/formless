@@ -356,7 +356,7 @@ function OwnerSetupForm({
           </Field>
         </FieldGroup>
         {submitError ? <FieldError>{submitError}</FieldError> : null}
-        <Button className="w-full" disabled={disabled} type="submit">
+        <Button className="w-full" isDisabled={disabled} type="submit">
           {disabled ? "Creating owner..." : "Create owner"}
         </Button>
       </form>

@@ -131,7 +131,7 @@ export function InvokeActionTableCell({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button aria-label={column.headerLabel} size="icon-xs" type="button" variant="outline">
+            <Button aria-label={column.headerLabel} size="sq-xs" type="button" intent="outline">
               <span aria-hidden="true">...</span>
             </Button>
           }
@@ -183,11 +183,11 @@ function TableActionButton({ action, onOpen }: { action: TableActionConfig; onOp
   return (
     <Button
       aria-label={actionAriaLabel(action)}
-      disabled={action.disabled}
-      onClick={action.type === "editRecord" ? onOpen : undefined}
+      isDisabled={action.disabled}
+      onPress={action.type === "editRecord" ? onOpen : undefined}
       size="xs"
       type="button"
-      variant={action.variant === "destructive" ? "destructive" : "outline"}
+      intent={action.variant === "destructive" ? "danger" : "outline"}
     >
       {action.label}
     </Button>
@@ -302,7 +302,7 @@ function RecordEditDialog({
           </p>
         ) : null}
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" type="button" />}>Done</DialogClose>
+          <DialogClose render={<Button intent="outline" type="button" />}>Done</DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

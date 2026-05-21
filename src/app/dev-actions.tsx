@@ -84,7 +84,7 @@ export function SourceResetControl({
     <div className={className}>
       <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
         <AlertDialogTrigger
-          render={<Button disabled={resetStatus.pending} type="button" variant="destructive" />}
+          render={<Button isDisabled={resetStatus.pending} type="button" intent="danger" />}
         >
           {resetStatus.pending ? "Resetting..." : buttonLabel}
         </AlertDialogTrigger>
@@ -98,11 +98,7 @@ export function SourceResetControl({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void resetSourceData()}
-              type="button"
-              variant="destructive"
-            >
+            <AlertDialogAction onPress={() => void resetSourceData()} type="button" intent="danger">
               Reset
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -162,10 +158,10 @@ export function SnapshotExportControl({
     <div className={className}>
       <Button
         className={buttonClassName}
-        disabled={exportStatus.pending}
-        onClick={() => void exportSnapshot()}
+        isDisabled={exportStatus.pending}
+        onPress={() => void exportSnapshot()}
         type="button"
-        variant="outline"
+        intent="outline"
       >
         {exportStatus.pending ? "Exporting..." : buttonLabel}
       </Button>
