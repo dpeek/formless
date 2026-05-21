@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@dpeek/formless-ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@dpeek/formless-ui/dialog";
+import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formless-ui/modal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -519,18 +519,18 @@ function TreeChildAddControls({
         </DropdownMenuContent>
       </DropdownMenu>
       {activeVariant && createAction ? (
-        <Dialog
-          open={true}
+        <ModalContent
+          isOpen={true}
           onOpenChange={(open) => {
             if (!open) {
               setActiveVariant(null);
             }
           }}
         >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{createAction.label}</DialogTitle>
-            </DialogHeader>
+          <ModalHeader>
+            <ModalTitle>{createAction.label}</ModalTitle>
+          </ModalHeader>
+          <ModalBody>
             <GeneratedCreateDialogForm
               action={createAction}
               onSuccess={() => setActiveVariant(null)}
@@ -544,8 +544,8 @@ function TreeChildAddControls({
                 )
               }
             />
-          </DialogContent>
-        </Dialog>
+          </ModalBody>
+        </ModalContent>
       ) : null}
     </div>
   );

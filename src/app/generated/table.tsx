@@ -3,14 +3,14 @@ import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@dpeek/formless-ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@dpeek/formless-ui/dialog";
+  ModalBody,
+  ModalClose,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import {
   Table,
   TableBody,
@@ -802,15 +802,14 @@ export function ReferencedRecordEditorDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Shared {referenceItem.entity.label}</DialogTitle>
-          <DialogDescription>
-            Changes apply to every rate card that uses this{" "}
-            {referenceItem.entity.label.toLowerCase()}.
-          </DialogDescription>
-        </DialogHeader>
+    <ModalContent isOpen={open} onOpenChange={onOpenChange}>
+      <ModalHeader>
+        <ModalTitle>Shared {referenceItem.entity.label}</ModalTitle>
+        <ModalDescription>
+          {`Changes apply to every rate card that uses this ${referenceItem.entity.label.toLowerCase()}.`}
+        </ModalDescription>
+      </ModalHeader>
+      <ModalBody>
         <ReferencedRecordEditorFields
           referenceItem={referenceItem}
           referenceRecordId={referenceRecordId}
@@ -820,11 +819,13 @@ export function ReferencedRecordEditorDialog({
             Editing is disabled for {referenceItem.entity.label}.
           </p>
         ) : null}
-        <DialogFooter>
-          <DialogClose render={<Button intent="outline" type="button" />}>Done</DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </ModalBody>
+      <ModalFooter>
+        <ModalClose intent="outline" type="button">
+          Done
+        </ModalClose>
+      </ModalFooter>
+    </ModalContent>
   );
 }
 

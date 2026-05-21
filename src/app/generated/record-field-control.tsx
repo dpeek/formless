@@ -2,13 +2,13 @@ import { Button } from "@dpeek/formless-ui/button";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
 import { DateInput } from "@dpeek/formless-ui/date";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@dpeek/formless-ui/dialog";
+  ModalBody,
+  ModalClose,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import { Field, FieldError } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { Label } from "@dpeek/formless-ui/label";
@@ -562,8 +562,8 @@ function IconFieldControl({
           <SvgIcon className={iconSizeClassName} source={previewSource} />
         </Button>
       </div>
-      <Dialog
-        open={open}
+      <ModalContent
+        isOpen={open}
         onOpenChange={(nextOpen) => {
           if (nextOpen) {
             onOpenChange(true);
@@ -571,11 +571,12 @@ function IconFieldControl({
             onCancel();
           }
         }}
+        size="2xl"
       >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit {label}</DialogTitle>
-          </DialogHeader>
+        <ModalHeader>
+          <ModalTitle>Edit {label}</ModalTitle>
+        </ModalHeader>
+        <ModalBody>
           <GeneratedIconSourceFieldControl
             ariaInvalid={error !== null ? true : undefined}
             label={label}
@@ -585,14 +586,16 @@ function IconFieldControl({
             value={draft}
           />
           {error ? <FieldError>{error}</FieldError> : null}
-          <DialogFooter>
-            <DialogClose render={<Button intent="outline" type="button" />}>Cancel</DialogClose>
+          <ModalFooter>
+            <ModalClose intent="outline" type="button">
+              Cancel
+            </ModalClose>
             <Button isDisabled={!canPatch || isPending} onPress={() => void onSave()} type="button">
               {isPending ? "Saving..." : "Save"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+        </ModalBody>
+      </ModalContent>
     </>
   );
 }

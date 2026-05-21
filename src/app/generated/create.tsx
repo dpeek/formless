@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@dpeek/formless-ui/dialog";
+  ModalBody,
+  ModalClose,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import { FieldSet } from "@dpeek/formless-ui/field";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitCreateMutation } from "../../client/sync.ts";
@@ -146,11 +146,11 @@ export function GeneratedCreateDialog({
   queryContext?: QueryEvaluationContext;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{action.label}</DialogTitle>
-        </DialogHeader>
+    <ModalContent isOpen={open} onOpenChange={onOpenChange}>
+      <ModalHeader>
+        <ModalTitle>{action.label}</ModalTitle>
+      </ModalHeader>
+      <ModalBody>
         <GeneratedCreateDialogForm
           action={action}
           onSuccess={(recordId) => {
@@ -159,8 +159,8 @@ export function GeneratedCreateDialog({
           }}
           queryContext={queryContext}
         />
-      </DialogContent>
-    </Dialog>
+      </ModalBody>
+    </ModalContent>
   );
 }
 
@@ -259,9 +259,11 @@ export function GeneratedCreateDialogForm({
         ))}
       </FieldSet>
 
-      <DialogFooter>
+      <ModalFooter>
         {renderDialogCancel ? (
-          <DialogClose render={<Button intent="outline" type="button" />}>Cancel</DialogClose>
+          <ModalClose intent="outline" type="button">
+            Cancel
+          </ModalClose>
         ) : (
           <Button type="button" intent="outline">
             Cancel
@@ -270,7 +272,7 @@ export function GeneratedCreateDialogForm({
         <Button isDisabled={!canSubmit || isSubmitting} type="submit">
           {isSubmitting ? "Saving..." : action.enabled ? action.label : "Create disabled"}
         </Button>
-      </DialogFooter>
+      </ModalFooter>
     </form>
   );
 }

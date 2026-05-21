@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@dpeek/formless-ui/dialog";
+  ModalBody,
+  ModalClose,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -281,12 +281,12 @@ function RecordEditDialog({
   const targetRecord = useRecord(targetRecordId ?? "");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{action.label}</DialogTitle>
-          <DialogDescription>{action.editView.entity.label}</DialogDescription>
-        </DialogHeader>
+    <ModalContent isOpen={open} onOpenChange={onOpenChange} size="3xl">
+      <ModalHeader>
+        <ModalTitle>{action.label}</ModalTitle>
+        <ModalDescription>{action.editView.entity.label}</ModalDescription>
+      </ModalHeader>
+      <ModalBody>
         {targetRecord && targetRecordId ? (
           <EditViewFields
             editView={action.editView}
@@ -301,11 +301,13 @@ function RecordEditDialog({
             Editing is disabled for {action.editView.entity.label}.
           </p>
         ) : null}
-        <DialogFooter>
-          <DialogClose render={<Button intent="outline" type="button" />}>Done</DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </ModalBody>
+      <ModalFooter>
+        <ModalClose intent="outline" type="button">
+          Done
+        </ModalClose>
+      </ModalFooter>
+    </ModalContent>
   );
 }
 

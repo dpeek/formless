@@ -25,6 +25,7 @@ export { Input } from "./input.js";
 export * from "./label.js";
 export * from "./markdown.js";
 export * from "./markdown-renderer.js";
+export * from "./modal.js";
 export * from "./native-select.js";
 export * from "./number-input.js";
 export * from "./popover.js";
