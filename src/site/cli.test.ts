@@ -1073,7 +1073,7 @@ function mediaRecords(): StoredRecord[] {
     block("block-cover", "2026-05-05T00:00:02.000Z", {
       type: "image",
       label: "Cover",
-      href: "/api/site/media/site/images/cover.png",
+      mediaAssetId: "cover.png",
     }),
   ];
 }

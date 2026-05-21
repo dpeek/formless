@@ -178,8 +178,8 @@ describe("Site publish workflow", () => {
           id: "source-image",
           entity: "block",
           values: {
-            href: "/api/site/media/site/images/missing.png",
             label: "Image",
+            mediaAssetId: "missing.png",
             type: "image",
           },
           createdAt: "2026-05-14T00:00:00.000Z",

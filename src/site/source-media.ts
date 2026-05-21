@@ -53,6 +53,13 @@ export function siteMediaDeliveryFactsForAssetId(
     : undefined;
 }
 
+export function siteMediaKeyFromAssetId(assetId: string): string | undefined {
+  return imageMediaDeliveryFactsForAssetId(assetId, {
+    hrefForKey: siteMediaHrefForKey,
+    keyPrefix: SITE_IMAGE_KEY_PREFIX,
+  })?.storageKey;
+}
+
 export function siteMediaKeyFromHref(href: string): string | undefined {
   if (!href.startsWith(SITE_MEDIA_ROUTE_PREFIX)) {
     return undefined;
@@ -86,27 +93,24 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
 
     const href = record.values.href;
 
-    if (typeof href !== "string") {
-      continue;
+    if (typeof href === "string") {
+      const key = siteMediaKeyFromHref(href);
+
+      if (key) {
+        if (!isRestorableSiteMediaKey(key)) {
+          throw new Error(`Site media href "${href}" uses unsupported source media key "${key}".`);
+        }
+
+        setSiteSourceMediaAsset(assetsByKey, key);
+      }
     }
 
-    const key = siteMediaKeyFromHref(href);
+    const mediaAssetId = record.values.mediaAssetId;
+    const mediaAssetKey =
+      typeof mediaAssetId === "string" ? siteMediaKeyFromAssetId(mediaAssetId) : undefined;
 
-    if (!key) {
-      continue;
-    }
-
-    if (!isRestorableSiteMediaKey(key)) {
-      throw new Error(`Site media href "${href}" uses unsupported source media key "${key}".`);
-    }
-
-    if (!assetsByKey.has(key)) {
-      assetsByKey.set(key, {
-        contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
-        href: siteMediaHrefForKey(key),
-        key,
-        sourcePath: siteSourceMediaPathForKey(key),
-      });
+    if (mediaAssetKey) {
+      setSiteSourceMediaAsset(assetsByKey, mediaAssetKey);
     }
   }
 
@@ -119,4 +123,17 @@ export function siteSourceMediaPathForKey(key: string): string {
   }
 
   return `${SITE_SOURCE_MEDIA_ROOT}/${key}`;
+}
+
+function setSiteSourceMediaAsset(assetsByKey: Map<string, SiteSourceMediaAsset>, key: string) {
+  if (assetsByKey.has(key)) {
+    return;
+  }
+
+  assetsByKey.set(key, {
+    contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
+    href: siteMediaHrefForKey(key),
+    key,
+    sourcePath: siteSourceMediaPathForKey(key),
+  });
 }

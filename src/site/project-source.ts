@@ -7,6 +7,7 @@ import {
   isRestorableSiteMediaKey,
   siteMediaContentTypeForKey,
   siteMediaHrefForKey,
+  siteMediaKeyFromAssetId,
   siteMediaKeyFromHref,
 } from "./source-media.ts";
 import { SITE_PROJECT_MEDIA_ROOT, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
@@ -98,27 +99,24 @@ export function siteProjectMediaAssetsFromRecords(
 
     const href = record.values.href;
 
-    if (typeof href !== "string") {
-      continue;
+    if (typeof href === "string") {
+      const key = siteMediaKeyFromHref(href);
+
+      if (key) {
+        if (!isRestorableSiteMediaKey(key)) {
+          throw new Error(`Site project media href "${href}" uses unsupported media key "${key}".`);
+        }
+
+        setSiteProjectMediaAsset(assetsByKey, key, options);
+      }
     }
 
-    const key = siteMediaKeyFromHref(href);
+    const mediaAssetId = record.values.mediaAssetId;
+    const mediaAssetKey =
+      typeof mediaAssetId === "string" ? siteMediaKeyFromAssetId(mediaAssetId) : undefined;
 
-    if (!key) {
-      continue;
-    }
-
-    if (!isRestorableSiteMediaKey(key)) {
-      throw new Error(`Site project media href "${href}" uses unsupported media key "${key}".`);
-    }
-
-    if (!assetsByKey.has(key)) {
-      assetsByKey.set(key, {
-        contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
-        href: siteMediaHrefForKey(key),
-        key,
-        sourcePath: siteProjectMediaPathForKey(key, options),
-      });
+    if (mediaAssetKey) {
+      setSiteProjectMediaAsset(assetsByKey, mediaAssetKey, options);
     }
   }
 
@@ -137,6 +135,23 @@ export function siteProjectMediaPathForKey(
   assertSafeProjectRelativePath("Site project media root", mediaRoot);
 
   return `${mediaRoot}/${key}`;
+}
+
+function setSiteProjectMediaAsset(
+  assetsByKey: Map<string, SiteProjectMediaAsset>,
+  key: string,
+  options: SiteProjectMediaOptions,
+) {
+  if (assetsByKey.has(key)) {
+    return;
+  }
+
+  assetsByKey.set(key, {
+    contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
+    href: siteMediaHrefForKey(key),
+    key,
+    sourcePath: siteProjectMediaPathForKey(key, options),
+  });
 }
 
 function normalizeSiteProjectRecords(records: StoredRecord[], sourceSchema: AppSchema) {

@@ -122,7 +122,7 @@ describe("Site project source", () => {
     });
   });
 
-  it("maps project media from same-origin Site hrefs", () => {
+  it("maps project media from same-origin Site hrefs and media asset ids", () => {
     const records: StoredRecord[] = [
       blockRecord("image-a", "2026-05-05T00:00:01.000Z", {
         href: "/api/site/media/site/images/cover.png",
@@ -144,9 +144,25 @@ describe("Site project source", () => {
         label: "Duplicate",
         type: "image",
       }),
+      blockRecord("image-e", "2026-05-05T00:00:05.000Z", {
+        label: "Asset only",
+        mediaAssetId: "asset-only.webp",
+        type: "image",
+      }),
+      blockRecord("image-f", "2026-05-05T00:00:06.000Z", {
+        label: "Invalid asset",
+        mediaAssetId: "../bad.webp",
+        type: "image",
+      }),
     ];
 
     expect(siteProjectMediaAssetsFromRecords(records)).toEqual([
+      {
+        contentType: "image/webp",
+        href: "/api/site/media/site/images/asset-only.webp",
+        key: "site/images/asset-only.webp",
+        sourcePath: "media/site/images/asset-only.webp",
+      },
       {
         contentType: "image/png",
         href: "/api/site/media/site/images/cover.png",

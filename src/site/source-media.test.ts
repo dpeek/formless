@@ -11,7 +11,7 @@ import {
 } from "./source-media.ts";
 
 describe("Site source media", () => {
-  it("maps internal media hrefs to deterministic source asset paths", () => {
+  it("maps internal media hrefs and asset ids to deterministic source asset paths", () => {
     const records: StoredRecord[] = [
       blockRecord("image-a", "/api/site/media/site/images/cover.png"),
       blockRecord("image-b", "data:image/svg+xml,%3Csvg%20/%3E"),
@@ -21,9 +21,21 @@ describe("Site source media", () => {
         ...blockRecord("image-e", "/api/site/media/site/images/deleted.webp"),
         deletedAt: "2026-05-14T00:00:00.000Z",
       },
+      blockRecord("image-f", undefined, {
+        mediaAssetId: "asset-only.webp",
+      }),
+      blockRecord("image-g", undefined, {
+        mediaAssetId: "../bad.webp",
+      }),
     ];
 
     expect(siteSourceMediaAssetsFromRecords(records)).toEqual([
+      {
+        contentType: "image/webp",
+        href: "/api/site/media/site/images/asset-only.webp",
+        key: "site/images/asset-only.webp",
+        sourcePath: "schema/apps/site/media/site/images/asset-only.webp",
+      },
       {
         contentType: "image/png",
         href: "/api/site/media/site/images/cover.png",
@@ -62,14 +74,19 @@ describe("Site source media", () => {
   });
 });
 
-function blockRecord(id: string, href: string): StoredRecord {
+function blockRecord(
+  id: string,
+  href: string | undefined,
+  extraValues: StoredRecord["values"] = {},
+): StoredRecord {
   return {
     id,
     entity: "block",
     values: {
-      href,
       label: "Image",
       type: "image",
+      ...(href === undefined ? {} : { href }),
+      ...extraValues,
     },
     createdAt: "2026-05-14T00:00:00.000Z",
   };
