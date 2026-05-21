@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button, buttonStyles } from "@dpeek/formless-ui/button";
+import { ControlAddIcon, ControlMenuIcon, ControlRemoveIcon } from "@dpeek/formless-ui/icons";
 import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formless-ui/modal";
 import {
   Menu,
@@ -52,7 +53,6 @@ import {
   selectRecordContextLinkForActiveUnion,
   selectRecordFieldsForActiveUnion,
 } from "./union-presentation.ts";
-import { MenuIcon, PlusIcon, XIcon } from "lucide-react";
 
 type TreeResultConfig = Extract<HomeResultConfig, { type: "tree" }>;
 
@@ -493,7 +493,7 @@ function TreeChildAddControls({
           isDisabled={!result.composition?.create}
           type="button"
         >
-          <PlusIcon aria-hidden="true" />
+          <ControlAddIcon aria-hidden="true" />
         </MenuTrigger>
         <MenuContent className="w-auto min-w-36">
           {allowedChildVariants.map((variant) => (
@@ -636,7 +636,7 @@ function TreePlacementRemoveButton({
       type="button"
       intent="plain"
     >
-      <span aria-hidden="true">{isRemoving ? "..." : <XIcon />}</span>
+      <span aria-hidden="true">{isRemoving ? "..." : <ControlRemoveIcon />}</span>
     </Button>
   );
 }
@@ -705,7 +705,7 @@ function PlacementOrderingControls({
           type="button"
           intent="plain"
         >
-          <MenuIcon aria-hidden="true" />
+          <ControlMenuIcon aria-hidden="true" />
         </Button>
       ) : null}
       {moveItems.map((item) => (

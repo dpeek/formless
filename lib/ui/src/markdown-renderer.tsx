@@ -1,6 +1,6 @@
 import { Button } from "@dpeek/formless-ui/button";
+import { ControlCheckIcon, ControlCopyIcon } from "@dpeek/formless-ui/icons";
 import { cn } from "@dpeek/formless-ui/utils";
-import { CheckIcon, CopyIcon } from "lucide-react";
 import { lexer, type Token, type Tokens } from "marked";
 import { createElement, useEffect, useState, type ReactNode } from "react";
 
@@ -319,7 +319,7 @@ function MarkdownCodeCopyButton({ code }: { code: string }) {
       type="button"
       intent="plain"
     >
-      {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
+      {copyState === "copied" ? <ControlCheckIcon /> : <ControlCopyIcon />}
     </Button>
   );
 }

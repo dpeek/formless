@@ -1,4 +1,3 @@
-import { CheckIcon, MinusIcon } from "@heroicons/react/20/solid";
 import { Checkbox as CheckboxPrimitive, type CheckboxProps } from "react-aria-components/Checkbox";
 import {
   CheckboxGroup as CheckboxGroupPrimitive,
@@ -8,6 +7,7 @@ import { composeRenderProps } from "react-aria-components/composeRenderProps";
 import { twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Label } from "./field";
+import { ControlCheckIcon, ControlIndeterminateIcon } from "./icons";
 
 export function CheckboxGroup({ className, ...props }: CheckboxGroupProps) {
   return (
@@ -37,9 +37,9 @@ export function Checkbox({ className, children, ...props }: CheckboxProps) {
         (children, { isSelected, isIndeterminate, isFocusVisible, isInvalid }) => {
           const isStringChild = typeof children === "string";
           const indicator = isIndeterminate ? (
-            <MinusIcon data-slot="check-indicator" />
+            <ControlIndeterminateIcon data-slot="check-indicator" />
           ) : isSelected ? (
-            <CheckIcon data-slot="check-indicator" />
+            <ControlCheckIcon data-slot="check-indicator" />
           ) : null;
 
           const content = isStringChild ? <CheckboxLabel>{children}</CheckboxLabel> : children;

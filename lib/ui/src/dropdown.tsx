@@ -1,6 +1,5 @@
 "use client";
 
-import { CheckIcon } from "@heroicons/react/20/solid";
 import { Collection } from "react-aria-components/Collection";
 import { composeRenderProps } from "react-aria-components/composeRenderProps";
 import { Header } from "react-aria-components/Header";
@@ -11,6 +10,7 @@ import { Text, type TextProps } from "react-aria-components/Text";
 import { twJoin, twMerge } from "tailwind-merge";
 import { tv } from "tailwind-variants";
 import { Keyboard } from "./keyboard";
+import { ControlCheckIcon } from "./icons";
 
 const dropdownSectionStyles = tv({
   slots: {
@@ -117,7 +117,7 @@ const DropdownItem = ({ className, children, intent, ...props }: DropdownItemPro
       {composeRenderProps(children, (children, { isSelected }) => (
         <>
           {isSelected && (
-            <CheckIcon
+            <ControlCheckIcon
               className={twJoin(
                 "-ms-0.5 me-1.5 h-lh w-4 shrink-0",
                 "group-has-[svg:not([data-slot='check-indicator'])]:absolute group-has-[svg:not([data-slot='check-indicator'])]:inset-e-0.5 group-has-[svg:not([data-slot='check-indicator'])]:top-1/2 group-has-[svg:not([data-slot='check-indicator'])]:-translate-y-1/2",

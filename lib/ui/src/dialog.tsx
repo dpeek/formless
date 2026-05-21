@@ -1,4 +1,3 @@
-import { XMarkIcon } from "@heroicons/react/24/solid";
 import { Button as PrimitiveButton } from "react-aria-components/Button";
 import { Dialog as PrimitiveDialog } from "react-aria-components/Dialog";
 import { Heading, type HeadingProps } from "react-aria-components/Heading";
@@ -6,6 +5,7 @@ import type { TextProps } from "react-aria-components/Text";
 import { twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Button, type ButtonProps } from "./button";
+import { ControlCloseIcon } from "./icons";
 
 const Dialog = ({
   role = "dialog",
@@ -126,7 +126,7 @@ const DialogCloseIcon = ({ className, ...props }: CloseButtonIndicatorProps) => 
         className,
       )}
     >
-      <XMarkIcon className="size-4" />
+      <ControlCloseIcon className="size-4" />
     </PrimitiveButton>
   ) : null;
 };

@@ -1,4 +1,3 @@
-import { CheckIcon, ChevronRightIcon } from "@heroicons/react/20/solid";
 import { Button, type ButtonProps } from "react-aria-components/Button";
 import { Collection } from "react-aria-components/Collection";
 import { composeRenderProps } from "react-aria-components/composeRenderProps";
@@ -27,6 +26,7 @@ import {
   dropdownItemStyles,
   dropdownSectionStyles,
 } from "./dropdown";
+import { ControlCheckIcon, ControlDisclosureIcon } from "./icons";
 import { PopoverContent, type PopoverContentProps } from "./popover";
 
 const Menu = (props: MenuTriggerPrimitiveProps) => <MenuTriggerPrimitive {...props} />;
@@ -125,13 +125,13 @@ const MenuItem = ({ className, intent, children, ...props }: MenuItemProps) => {
       {(values) => (
         <>
           {values.isSelected && ["single", "multiple"].includes(values.selectionMode) && (
-            <CheckIcon />
+            <ControlCheckIcon />
           )}
 
           {typeof children === "function" ? children(values) : children}
 
           {values.hasSubmenu && (
-            <ChevronRightIcon
+            <ControlDisclosureIcon
               data-slot="chevron"
               className="absolute end-0 size-4 -translate-y-1/2"
               style={{

@@ -19,6 +19,7 @@ export {
   FieldSet,
   FieldTitle,
 } from "./field.js";
+export * from "./icons.js";
 export * from "./input-group.js";
 export { Input } from "./input.js";
 export * from "./label.js";

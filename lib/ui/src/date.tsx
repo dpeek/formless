@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { CalendarIcon } from "lucide-react";
 
 import { Calendar } from "@dpeek/formless-ui/calendar";
 import { Dialog } from "@dpeek/formless-ui/dialog";
+import { ControlCalendarIcon } from "@dpeek/formless-ui/icons";
 import {
   InputGroup,
   InputGroupAddon,
@@ -148,7 +148,7 @@ export function DateInput({
       <InputGroupAddon align="inline-end">
         <Popover isOpen={open} onOpenChange={setOpen}>
           <InputGroupButton id="date-picker" intent="plain" size="sq-xs" aria-label="Select date">
-            <CalendarIcon />
+            <ControlCalendarIcon />
             <span className="sr-only">Select date</span>
           </InputGroupButton>
           <PopoverContent

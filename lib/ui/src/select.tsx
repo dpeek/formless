@@ -1,4 +1,3 @@
-import { ChevronUpDownIcon } from "@heroicons/react/20/solid";
 import { Button } from "react-aria-components/Button";
 import { ListBox, type ListBoxProps } from "react-aria-components/ListBox";
 import type { PopoverProps } from "react-aria-components/Popover";
@@ -17,6 +16,7 @@ import {
   DropdownSeparator,
 } from "./dropdown";
 import { fieldStyles } from "./field";
+import { ControlSelectIcon } from "./icons";
 import { PopoverContent } from "./popover";
 
 interface SelectProps<
@@ -117,7 +117,7 @@ const SelectTrigger = ({ children, className, ...props }: SelectTriggerProps) =>
                     "*:mt-0 *:data-[slot=avatar]:[--avatar-size:--spacing(5)] sm:*:data-[slot=avatar]:[--avatar-size:--spacing(4.5)]",
                   ])}
                 />
-                <ChevronUpDownIcon
+                <ControlSelectIcon
                   data-slot="chevron"
                   className="ms-auto -me-1 size-5 shrink-0 text-muted-fg sm:size-4"
                 />

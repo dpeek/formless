@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronRightIcon } from "@heroicons/react/20/solid";
 import { Button } from "react-aria-components/Button";
 import type {
   TreeItemContentProps,
@@ -16,6 +15,7 @@ import {
 import { twJoin, twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Checkbox } from "./checkbox";
+import { ControlDisclosureIcon } from "./icons";
 
 const Tree = <T extends object>({ className, ...props }: TreeProps<T>) => {
   return (
@@ -107,7 +107,7 @@ const TreeIndicator = ({
         values.isExpanded && "text-fg",
       )}
     >
-      <ChevronRightIcon
+      <ControlDisclosureIcon
         data-slot="chevron"
         className={twJoin(
           "-mx-0.5 size-5 transition-transform duration-200 ease-in-out sm:size-4",

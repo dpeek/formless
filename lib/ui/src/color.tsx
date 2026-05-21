@@ -13,7 +13,7 @@ import { Label } from "@dpeek/formless-ui/label";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { cn } from "@dpeek/formless-ui/utils";
-import { Loader2, PipetteIcon } from "lucide-react";
+import { ControlColorPickIcon, ControlLoadingIcon } from "@dpeek/formless-ui/icons";
 import { useEffect, useState } from "react";
 import { HexAlphaColorPicker, HexColorPicker } from "react-colorful";
 
@@ -360,7 +360,7 @@ export function ColorInput({
                       onPress={() => void handleEyeDropper()}
                       isDisabled={disabled || !isEyeDropperAvailable()}
                     >
-                      <PipetteIcon className="h-3 w-3" />
+                      <ControlColorPickIcon className="h-3 w-3" />
                     </Button>
                     {alpha ? (
                       <HexAlphaColorPicker
@@ -559,7 +559,7 @@ export function ColorInput({
         />
         {isLoading ? (
           <InputGroupAddon align="inline-end">
-            <Loader2 className="size-3.5 animate-spin" />
+            <ControlLoadingIcon className="size-3.5 animate-spin" />
           </InputGroupAddon>
         ) : null}
       </InputGroup>
