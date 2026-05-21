@@ -12,8 +12,8 @@ import { unwrapLink, upsertLink } from "@platejs/link";
 import { toggleList } from "@platejs/list";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { Separator } from "@dpeek/formless-ui/separator";
-import { TextTooltip } from "@dpeek/formless-ui/tooltip";
-import { Toggle } from "@dpeek/formless-ui/toggle";
+import { TooltipContent, TooltipTrigger } from "@dpeek/formless-ui/tooltip";
+import { toggleVariants } from "@dpeek/formless-ui/toggle";
 import { cn } from "@dpeek/formless-ui/utils";
 import {
   BoldIcon,
@@ -28,7 +28,7 @@ import {
   QuoteIcon,
   StrikethroughIcon,
 } from "lucide-react";
-import { type ReactNode } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { KEYS, type TElement } from "platejs";
 import {
   type PlateEditor,
@@ -174,9 +174,7 @@ function MarkdownTextBlockSelect() {
       }}
       selectedKey={activeBlockType}
     >
-      <MarkdownToolbarTooltip text="Paragraph style">
-        <SelectTrigger className="h-6 w-32 rounded-md border-transparent bg-transparent px-1.5 py-0 text-xs" />
-      </MarkdownToolbarTooltip>
+      <SelectTrigger className="h-6 w-32 rounded-md border-transparent bg-transparent px-1.5 py-0 text-xs" />
       <SelectContent popover={{ placement: "bottom start", className: "min-w-36" }}>
         {TEXT_BLOCK_OPTIONS.map((option) => (
           <SelectItem key={option.value} id={option.value}>
@@ -288,37 +286,40 @@ function MarkdownToolbarToggle({
   onPress: () => void;
   pressed: boolean;
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+
   return (
-    <MarkdownToolbarTooltip text={label}>
-      <Toggle
+    <>
+      <TooltipTrigger
         aria-label={label}
-        onClick={(event) => {
-          event.preventDefault();
-          onPress();
-        }}
+        aria-pressed={pressed}
+        className={cn(toggleVariants({ size: "sm" }))}
+        data-state={pressed ? "on" : "off"}
+        onBlur={() => setTooltipOpen(false)}
+        onFocus={() => setTooltipOpen(true)}
+        onHoverEnd={() => setTooltipOpen(false)}
+        onHoverStart={() => setTooltipOpen(true)}
+        onMouseEnter={() => setTooltipOpen(true)}
+        onMouseLeave={() => setTooltipOpen(false)}
         onMouseDown={(event) => {
           event.preventDefault();
         }}
-        pressed={pressed}
-        size="sm"
+        onPress={onPress}
+        ref={triggerRef}
         type="button"
       >
         {children}
-      </Toggle>
-    </MarkdownToolbarTooltip>
+      </TooltipTrigger>
+      <TooltipContent isOpen={tooltipOpen} offset={6} triggerRef={triggerRef}>
+        {label}
+      </TooltipContent>
+    </>
   );
 }
 
 function MarkdownToolbarSeparator() {
   return <Separator className="mx-0.5 h-5" orientation="vertical" />;
-}
-
-function MarkdownToolbarTooltip({ children, text }: { children: ReactNode; text: string }) {
-  if (typeof document === "undefined") {
-    return <>{children}</>;
-  }
-
-  return <TextTooltip text={text}>{children}</TextTooltip>;
 }
 
 function setTextBlockType(editor: PlateEditor, type: TextBlockType): void {

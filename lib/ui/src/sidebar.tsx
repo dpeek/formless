@@ -18,7 +18,7 @@ import {
   SheetTitle,
 } from "@dpeek/formless-ui/sheet";
 import { Skeleton } from "@dpeek/formless-ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@dpeek/formless-ui/tooltip";
+import { TooltipContent } from "@dpeek/formless-ui/tooltip";
 import { PanelLeftIcon } from "lucide-react";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
@@ -490,6 +490,8 @@ function SidebarMenuButton({
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar();
+  const tooltipTriggerRef = React.useRef<HTMLSpanElement>(null);
+  const [tooltipOpen, setTooltipOpen] = React.useState(false);
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -498,7 +500,7 @@ function SidebarMenuButton({
       },
       props,
     ),
-    render: !tooltip ? render : <TooltipTrigger render={render} />,
+    render,
     state: {
       slot: "sidebar-menu-button",
       sidebar: "menu-button",
@@ -507,7 +509,7 @@ function SidebarMenuButton({
     },
   });
 
-  if (!tooltip) {
+  if (!tooltip || state !== "collapsed" || isMobile) {
     return comp;
   }
 
@@ -518,15 +520,22 @@ function SidebarMenuButton({
   }
 
   return (
-    <Tooltip>
+    <span
+      className="block"
+      onBlur={() => setTooltipOpen(false)}
+      onFocus={() => setTooltipOpen(true)}
+      onMouseEnter={() => setTooltipOpen(true)}
+      onMouseLeave={() => setTooltipOpen(false)}
+      ref={tooltipTriggerRef}
+    >
       {comp}
       <TooltipContent
-        side="right"
-        align="center"
-        hidden={state !== "collapsed" || isMobile}
+        isOpen={tooltipOpen}
+        placement="right"
+        triggerRef={tooltipTriggerRef}
         {...tooltip}
       />
-    </Tooltip>
+    </span>
   );
 }
 
