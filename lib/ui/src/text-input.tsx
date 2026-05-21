@@ -1,10 +1,12 @@
-import * as React from "react";
-import { Input as InputPrimitive } from "@base-ui/react/input";
+import {
+  Input as InputPrimitive,
+  type InputProps as PrimitiveInputProps,
+} from "react-aria-components/Input";
 
 import { cn } from "@dpeek/formless-ui/utils";
 
 export type AutosizeTextInputProps = Omit<
-  React.ComponentProps<"input">,
+  PrimitiveInputProps,
   "className" | "defaultValue" | "onChange" | "value"
 > & {
   autoSelect?: boolean;
