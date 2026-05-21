@@ -11,13 +11,7 @@ import {
 } from "@dpeek/formless-ui/input-group";
 import { Label } from "@dpeek/formless-ui/label";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@dpeek/formless-ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { cn } from "@dpeek/formless-ui/utils";
 import { Loader2, PipetteIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -79,6 +73,8 @@ interface ColorValues {
   hsla?: { h: number; s: number; l: number; a: number };
 }
 
+type ColorFormat = "HEX" | "HEXA" | "RGB" | "RGBA" | "HSL" | "HSLA";
+
 export function ColorInput({
   value,
   onChange,
@@ -98,7 +94,7 @@ export function ColorInput({
 }: ColorPickerProps) {
   const resolvedLabel = label ?? ariaLabel ?? "Color";
   const resolvedPickerValue = toPickerHexColor(pickerValue ?? value, "#000000");
-  const [colorFormat, setColorFormat] = useState(alpha ? "HEXA" : "HEX");
+  const [colorFormat, setColorFormat] = useState<ColorFormat>(alpha ? "HEXA" : "HEX");
   const [colorValues, setColorValues] = useState<ColorValues>(() => {
     if (alpha) {
       const rgba = hexToRgba(value);
@@ -381,35 +377,42 @@ export function ColorInput({
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <Select value={colorFormat} onValueChange={(format) => setColorFormat(format!)}>
-                      <SelectTrigger
-                        className="h-7! w-[4.8rem]! rounded-sm px-2 py-1 text-sm!"
-                        disabled={disabled}
-                      >
-                        <SelectValue placeholder="Color" />
-                      </SelectTrigger>
-                      <SelectContent className="min-w-20">
+                    <Select
+                      aria-label="Color format"
+                      isDisabled={disabled}
+                      onSelectionChange={(format) => {
+                        if (!format) {
+                          return;
+                        }
+
+                        setColorFormat(format as ColorFormat);
+                      }}
+                      placeholder="Color"
+                      selectedKey={colorFormat}
+                    >
+                      <SelectTrigger className="h-7! w-[4.8rem]! rounded-sm px-2 py-1 text-sm!" />
+                      <SelectContent popover={{ className: "min-w-20" }}>
                         {alpha ? (
                           <>
-                            <SelectItem value="HEXA" className="h-7 text-sm">
+                            <SelectItem id="HEXA" className="h-7 text-sm">
                               HEXA
                             </SelectItem>
-                            <SelectItem value="RGBA" className="h-7 text-sm">
+                            <SelectItem id="RGBA" className="h-7 text-sm">
                               RGBA
                             </SelectItem>
-                            <SelectItem value="HSLA" className="h-7 text-sm">
+                            <SelectItem id="HSLA" className="h-7 text-sm">
                               HSLA
                             </SelectItem>
                           </>
                         ) : (
                           <>
-                            <SelectItem value="HEX" className="h-7 text-sm">
+                            <SelectItem id="HEX" className="h-7 text-sm">
                               HEX
                             </SelectItem>
-                            <SelectItem value="RGB" className="h-7 text-sm">
+                            <SelectItem id="RGB" className="h-7 text-sm">
                               RGB
                             </SelectItem>
-                            <SelectItem value="HSL" className="h-7 text-sm">
+                            <SelectItem id="HSL" className="h-7 text-sm">
                               HSL
                             </SelectItem>
                           </>

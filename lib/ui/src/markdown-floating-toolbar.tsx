@@ -10,13 +10,7 @@ import {
 } from "@platejs/floating";
 import { unwrapLink, upsertLink } from "@platejs/link";
 import { toggleList } from "@platejs/list";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@dpeek/formless-ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { Separator } from "@dpeek/formless-ui/separator";
 import { TextTooltip } from "@dpeek/formless-ui/tooltip";
 import { Toggle } from "@dpeek/formless-ui/toggle";
@@ -168,7 +162,8 @@ function MarkdownTextBlockSelect() {
 
   return (
     <Select
-      onValueChange={(nextValue) => {
+      aria-label="Paragraph style"
+      onSelectionChange={(nextValue) => {
         if (!nextValue) {
           return;
         }
@@ -177,16 +172,14 @@ function MarkdownTextBlockSelect() {
         setTextBlockType(editor, nextValue as TextBlockType);
         editor.tf.focus();
       }}
-      value={activeBlockType}
+      selectedKey={activeBlockType}
     >
       <MarkdownToolbarTooltip text="Paragraph style">
-        <SelectTrigger className="h-6 w-32 border-transparent bg-transparent px-1.5" size="sm">
-          <SelectValue />
-        </SelectTrigger>
+        <SelectTrigger className="h-6 w-32 rounded-md border-transparent bg-transparent px-1.5 py-0 text-xs" />
       </MarkdownToolbarTooltip>
-      <SelectContent align="start" alignItemWithTrigger={false} className="min-w-36">
+      <SelectContent popover={{ placement: "bottom start", className: "min-w-36" }}>
         {TEXT_BLOCK_OPTIONS.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
+          <SelectItem key={option.value} id={option.value}>
             <option.icon />
             {option.label}
           </SelectItem>
