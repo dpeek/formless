@@ -1,5 +1,7 @@
-import * as React from "react";
-import { Input as InputPrimitive } from "@base-ui/react/input";
+import {
+  Input as InputPrimitive,
+  type InputProps as PrimitiveInputProps,
+} from "react-aria-components/Input";
 
 import { cn } from "@dpeek/formless-ui/utils";
 
@@ -10,9 +12,10 @@ export type FormattedNumberInputDecodeResult =
   | { kind: "invalid"; message: string };
 
 export type FormattedNumberInputProps = Omit<
-  React.ComponentProps<"input">,
-  "defaultValue" | "name" | "onChange" | "type" | "value"
+  PrimitiveInputProps,
+  "className" | "defaultValue" | "name" | "onChange" | "type" | "value"
 > & {
+  className?: string;
   commitOnBlur?: boolean;
   commitOnEnter?: boolean;
   decode: (value: string) => FormattedNumberInputDecodeResult;
