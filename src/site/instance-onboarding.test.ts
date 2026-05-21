@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  deployFormlessInstanceWithAlchemy,
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
+  FORMLESS_ALCHEMY_APP_NAME,
+  FORMLESS_WORKER_COMPATIBILITY_DATE,
   formatFormlessInstanceState,
   normalizeFormlessInstanceName,
   parseFormlessInstanceState,
@@ -10,6 +13,9 @@ import {
   planFormlessInstanceDeployment,
   runFormlessInstanceOnboarding,
   selectOnlyFormlessInstanceAccount,
+  type AlchemyFormlessInstanceDeploymentAppOptions,
+  type AlchemyFormlessInstanceDeploymentDependencies,
+  type AlchemyFormlessInstanceDeploymentWorkerProps,
   type DeployFormlessInstanceInput,
   type SelectFormlessInstanceAccountInput,
 } from "./instance-onboarding.ts";
@@ -312,6 +318,228 @@ describe("Formless instance onboarding adapters", () => {
     expect(
       selectOnlyFormlessInstanceAccount({ accounts: [result.account], credentialProfile: null }),
     ).toEqual(result.account);
+  });
+});
+
+describe("Alchemy Formless instance deployment", () => {
+  it("declares one workers.dev Worker with assets, R2, Durable Object storage, vars, and secret binding", async () => {
+    const apps: Array<{
+      name: typeof FORMLESS_ALCHEMY_APP_NAME;
+      options: AlchemyFormlessInstanceDeploymentAppOptions;
+    }> = [];
+    const buckets: Array<{
+      id: string;
+      props: unknown;
+    }> = [];
+    const namespaces: Array<{
+      id: string;
+      props: unknown;
+    }> = [];
+    const secrets: string[] = [];
+    const workers: Array<{
+      id: string;
+      props: AlchemyFormlessInstanceDeploymentWorkerProps;
+    }> = [];
+    const mediaBucket = { type: "r2_bucket", name: "brother-instance-media" };
+    const authorityNamespace = { className: "FormlessAuthority", type: "durable_object_namespace" };
+    const adminSecret = { name: "FORMLESS_ADMIN_TOKEN", type: "secret" };
+    let finalized = 0;
+    const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
+      createApp: async (name, options) => {
+        apps.push({ name, options });
+        return {
+          finalize: async () => {
+            finalized += 1;
+          },
+        };
+      },
+      createDurableObjectNamespace: (id, props) => {
+        namespaces.push({ id, props });
+        return authorityNamespace;
+      },
+      createR2Bucket: async (id, props) => {
+        buckets.push({ id, props });
+        return mediaBucket;
+      },
+      createSecret: (value) => {
+        secrets.push(value);
+        return adminSecret;
+      },
+      deployViteWorker: async (id, props) => {
+        workers.push({ id, props });
+        return { url: props.name ? "https://brother-instance.dpeek.workers.dev" : null };
+      },
+    };
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        name: "Personal",
+        workersDevSubdomain: "dpeek",
+      },
+      instanceName: "Brother Instance",
+      packageVersion: "0.1.8",
+    });
+
+    const result = await deployFormlessInstanceWithAlchemy(
+      {
+        credentialProfile: "personal",
+        packageRoot: "/package",
+        plan,
+        secrets: {
+          FORMLESS_ADMIN_TOKEN: "admin-secret",
+        },
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({ url: "https://brother-instance.dpeek.workers.dev" });
+    expect(apps).toEqual([
+      {
+        name: "formless-instance",
+        options: {
+          phase: "up",
+          profile: "personal",
+          rootDir: "/package",
+          stage: "brother-instance",
+        },
+      },
+    ]);
+    expect(buckets).toEqual([
+      {
+        id: "media",
+        props: {
+          accountId: "account-123",
+          name: "brother-instance-media",
+          profile: "personal",
+        },
+      },
+    ]);
+    expect(namespaces).toEqual([
+      {
+        id: "authority",
+        props: {
+          className: "FormlessAuthority",
+          sqlite: true,
+        },
+      },
+    ]);
+    expect(secrets).toEqual(["admin-secret"]);
+    expect(workers).toEqual([
+      {
+        id: "worker",
+        props: {
+          accountId: "account-123",
+          assets: {
+            directory: "dist/client",
+            not_found_handling: "single-page-application",
+            run_worker_first: [
+              "/*",
+              "!/pages",
+              "!/pages/*",
+              "!/tasks",
+              "!/tasks/*",
+              "!/estii",
+              "!/estii/*",
+              "!/site",
+              "!/site/*",
+              "!/schema",
+              "!/assets/*",
+              "!/src/*",
+              "!/@vite/*",
+              "!/@react-refresh",
+            ],
+          },
+          bindings: {
+            FORMLESS_ADMIN_TOKEN: adminSecret,
+            FORMLESS_AUTHORITY: authorityNamespace,
+            FORMLESS_DEPLOY_VERSION: "0.1.8",
+            FORMLESS_MEDIA: mediaBucket,
+            FORMLESS_RUNTIME_PROFILE: "dev",
+          },
+          build: {
+            command: "bun run build",
+            env: {
+              FORMLESS_DEPLOY_VERSION: "0.1.8",
+              FORMLESS_RUNTIME_PROFILE: "dev",
+              VITE_FORMLESS_RUNTIME_PROFILE: "dev",
+            },
+          },
+          compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
+          cwd: "/package",
+          entrypoint: "src/worker/index.ts",
+          name: "brother-instance",
+          previewSubdomains: false,
+          profile: "personal",
+          url: true,
+        },
+      },
+    ]);
+    expect(finalized).toBe(1);
+  });
+
+  it("rejects missing package roots or admin tokens before Alchemy mutation", async () => {
+    const calls: string[] = [];
+    const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
+      createApp: async () => {
+        calls.push("createApp");
+        return {
+          finalize: async () => {
+            calls.push("finalize");
+          },
+        };
+      },
+      createDurableObjectNamespace: () => {
+        calls.push("createDurableObjectNamespace");
+        return {};
+      },
+      createR2Bucket: async () => {
+        calls.push("createR2Bucket");
+        return {};
+      },
+      createSecret: () => {
+        calls.push("createSecret");
+        return {};
+      },
+      deployViteWorker: async () => {
+        calls.push("deployViteWorker");
+        return {};
+      },
+    };
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      packageVersion: "0.1.8",
+    });
+
+    await expect(
+      deployFormlessInstanceWithAlchemy(
+        {
+          credentialProfile: null,
+          packageRoot: " ",
+          plan,
+          secrets: {
+            FORMLESS_ADMIN_TOKEN: "admin-secret",
+          },
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow("Formless package root must be a non-empty string.");
+    await expect(
+      deployFormlessInstanceWithAlchemy(
+        {
+          credentialProfile: null,
+          packageRoot: "/package",
+          plan,
+          secrets: {
+            FORMLESS_ADMIN_TOKEN: " ",
+          },
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow("Formless admin token must be a non-empty string.");
+    expect(calls).toEqual([]);
   });
 });
 

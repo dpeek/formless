@@ -50,15 +50,22 @@ export {
 } from "./project-publish.ts";
 export { type SaveSiteProjectResult } from "./project-save.ts";
 export {
+  alchemyFormlessInstanceDeploymentAdapter,
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
+  deployFormlessInstanceWithAlchemy,
+  FORMLESS_ALCHEMY_APP_NAME,
   formatFormlessInstanceState,
+  FORMLESS_WORKER_COMPATIBILITY_DATE,
   normalizeFormlessInstanceName,
   parseFormlessInstanceState,
   parseFormlessInstanceStateJson,
   planFormlessInstanceDeployment,
   runFormlessInstanceOnboarding,
   selectOnlyFormlessInstanceAccount,
+  type AlchemyFormlessInstanceDeploymentAppOptions,
+  type AlchemyFormlessInstanceDeploymentDependencies,
+  type AlchemyFormlessInstanceDeploymentWorkerProps,
   type DeployFormlessInstanceInput,
   type DeployFormlessInstanceResult,
   type FormlessInstanceAccountDiscoveryAdapter,

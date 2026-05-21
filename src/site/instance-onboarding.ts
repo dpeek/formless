@@ -1,7 +1,9 @@
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
+export const FORMLESS_ALCHEMY_APP_NAME = "formless-instance";
 export const FORMLESS_INSTANCE_STATE_FILE = "formless.instance.json";
 export const FORMLESS_INSTANCE_STATE_VERSION = 1;
 export const FORMLESS_INSTANCE_STATE_KIND = "formless-instance";
+export const FORMLESS_WORKER_COMPATIBILITY_DATE = "2026-04-28";
 
 export type FormlessInstanceDeploymentAccount = {
   id: string;
@@ -92,6 +94,65 @@ export type DeployFormlessInstanceResult = {
 
 export type FormlessInstanceDeploymentAdapter = {
   deploy: (input: DeployFormlessInstanceInput) => Promise<DeployFormlessInstanceResult>;
+};
+
+export type AlchemyFormlessInstanceDeploymentAppOptions = {
+  phase: "up";
+  profile?: string;
+  rootDir: string;
+  stage: string;
+};
+
+export type AlchemyFormlessInstanceDeploymentWorkerProps = {
+  accountId: string;
+  assets: {
+    directory: "dist/client";
+    not_found_handling: "single-page-application";
+    run_worker_first: string[];
+  };
+  bindings: Record<string, unknown>;
+  build: {
+    command: "bun run build";
+    env: FormlessInstanceDeploymentPlan["runtimeVars"];
+  };
+  compatibilityDate: typeof FORMLESS_WORKER_COMPATIBILITY_DATE;
+  cwd: string;
+  entrypoint: "src/worker/index.ts";
+  name: string;
+  previewSubdomains: false;
+  profile?: string;
+  url: true;
+};
+
+export type AlchemyFormlessInstanceDeploymentDependencies = {
+  createApp: (
+    name: typeof FORMLESS_ALCHEMY_APP_NAME,
+    options: AlchemyFormlessInstanceDeploymentAppOptions,
+  ) => Promise<{
+    finalize: () => Promise<void>;
+  }>;
+  createDurableObjectNamespace: (
+    id: "authority",
+    props: {
+      className: "FormlessAuthority";
+      sqlite: true;
+    },
+  ) => unknown;
+  createR2Bucket: (
+    id: "media",
+    props: {
+      accountId: string;
+      name: string;
+      profile?: string;
+    },
+  ) => Promise<unknown>;
+  createSecret: (value: string) => unknown;
+  deployViteWorker: (
+    id: "worker",
+    props: AlchemyFormlessInstanceDeploymentWorkerProps,
+  ) => Promise<{
+    url?: string | null;
+  }>;
 };
 
 export type RunFormlessInstanceOnboardingInput = {
@@ -276,6 +337,106 @@ export async function runFormlessInstanceOnboarding(
     open: input.open ?? false,
     plan,
     state,
+  };
+}
+
+export async function deployFormlessInstanceWithAlchemy(
+  input: DeployFormlessInstanceInput,
+  dependencies?: AlchemyFormlessInstanceDeploymentDependencies,
+): Promise<DeployFormlessInstanceResult> {
+  const resolvedDependencies = dependencies ?? (await nodeAlchemyFormlessInstanceDependencies());
+  const plan = input.plan;
+  const credentialProfile = normalizeCredentialProfile(input.credentialProfile);
+  const packageRoot = parseRequiredString("Formless package root", input.packageRoot);
+  const adminToken = parseRequiredString(
+    "Formless admin token",
+    input.secrets.FORMLESS_ADMIN_TOKEN,
+  );
+  const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
+  const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
+    phase: "up",
+    ...profileOptions,
+    rootDir: packageRoot,
+    stage: plan.instanceName,
+  });
+  const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
+    accountId: plan.account.id,
+    ...profileOptions,
+    name: plan.resources.mediaBucket.name,
+  });
+  const authorityNamespace = resolvedDependencies.createDurableObjectNamespace("authority", {
+    className: plan.resources.authority.className,
+    sqlite: true,
+  });
+  const worker = await resolvedDependencies.deployViteWorker("worker", {
+    accountId: plan.account.id,
+    assets: formlessInstanceAlchemyAssets(),
+    bindings: {
+      [plan.resources.authority.bindingName]: authorityNamespace,
+      [plan.resources.mediaBucket.bindingName]: mediaBucket,
+      FORMLESS_ADMIN_TOKEN: resolvedDependencies.createSecret(adminToken),
+      FORMLESS_DEPLOY_VERSION: plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
+      FORMLESS_RUNTIME_PROFILE: plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
+    },
+    build: {
+      command: "bun run build",
+      env: plan.runtimeVars,
+    },
+    compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
+    cwd: packageRoot,
+    entrypoint: "src/worker/index.ts",
+    name: plan.resources.worker.name,
+    previewSubdomains: false,
+    ...profileOptions,
+    url: plan.resources.worker.workersDevEnabled,
+  });
+
+  await app.finalize();
+
+  return parseDeployFormlessInstanceResult({
+    url: worker.url ?? plan.expectedUrl.url,
+  });
+}
+
+export const alchemyFormlessInstanceDeploymentAdapter: FormlessInstanceDeploymentAdapter = {
+  deploy: deployFormlessInstanceWithAlchemy,
+};
+
+function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorkerProps["assets"] {
+  return {
+    directory: "dist/client",
+    not_found_handling: "single-page-application",
+    run_worker_first: [
+      "/*",
+      "!/pages",
+      "!/pages/*",
+      "!/tasks",
+      "!/tasks/*",
+      "!/estii",
+      "!/estii/*",
+      "!/site",
+      "!/site/*",
+      "!/schema",
+      "!/assets/*",
+      "!/src/*",
+      "!/@vite/*",
+      "!/@react-refresh",
+    ],
+  };
+}
+
+async function nodeAlchemyFormlessInstanceDependencies(): Promise<AlchemyFormlessInstanceDeploymentDependencies> {
+  const [{ default: alchemy }, cloudflare] = await Promise.all([
+    import("alchemy"),
+    import("alchemy/cloudflare"),
+  ]);
+
+  return {
+    createApp: (name, options) => alchemy(name, options),
+    createDurableObjectNamespace: (id, props) => cloudflare.DurableObjectNamespace(id, props),
+    createR2Bucket: (id, props) => cloudflare.R2Bucket(id, props),
+    createSecret: (value) => alchemy.secret(value),
+    deployViteWorker: (id, props) => cloudflare.Vite(id, props as never),
   };
 }
 
