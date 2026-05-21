@@ -14,6 +14,7 @@ import {
   type CompleteFirstOwnerSetupResult,
   type WriteOwnerSetupCapabilityResult,
 } from "./instance-setup-state.ts";
+import { createOwnerSessionCookie, ownerSessionSigningSecret } from "./owner-session.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 
@@ -65,7 +66,7 @@ export async function handleOwnerSetupDurableObjectRequest(
     }
 
     if (pathname === ownerSetupCompletePath) {
-      return await handleOwnerSetupCompleteRequest(request, storage);
+      return await handleOwnerSetupCompleteRequest(request, storage, env);
     }
 
     return jsonResponse({ error: "Not found." }, 404);
@@ -119,6 +120,7 @@ async function handleOwnerSetupCapabilityRequest(
 async function handleOwnerSetupCompleteRequest(
   request: Request,
   storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -131,7 +133,7 @@ async function handleOwnerSetupCompleteRequest(
     owner: body.owner,
   });
 
-  return ownerSetupCompleteResponse(result);
+  return await ownerSetupCompleteResponse(request, env, result);
 }
 
 function ownerSetupStatusResponse(storage: DurableObjectStorage): OwnerSetupStatusResponse {
@@ -169,14 +171,29 @@ function ownerSetupCapabilityResponse(result: WriteOwnerSetupCapabilityResult): 
   });
 }
 
-function ownerSetupCompleteResponse(result: CompleteFirstOwnerSetupResult): Response {
+async function ownerSetupCompleteResponse(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+  result: CompleteFirstOwnerSetupResult,
+): Promise<Response> {
   if (result.ok) {
     const response: OwnerSetupCompleteResponse = {
       setupComplete: true,
       owner: result.owner,
     };
+    const headers = new Headers();
 
-    return jsonResponse(response);
+    if (ownerSessionSigningSecret(env)) {
+      const session = await createOwnerSessionCookie({
+        env,
+        owner: result.owner,
+        request,
+      });
+
+      headers.set("Set-Cookie", session.cookie);
+    }
+
+    return jsonResponse(response, 200, headers);
   }
 
   const failure = setupFailureResponse(result.reason);

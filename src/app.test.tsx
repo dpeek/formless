@@ -455,6 +455,16 @@ describe("App smoke routes", () => {
     expect(html).not.toContain("Create Content item");
   });
 
+  it('renders the "/setup" owner setup route outside workbench chrome', () => {
+    const html = renderRoute("/setup");
+
+    expect(html).toContain("Checking setup link");
+    expect(html).toContain("Loading setup status.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).not.toContain('aria-label="Workbench apps"');
+  });
+
   it("renders sync details in workbench chrome instead of generated page content", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site");
@@ -725,6 +735,15 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site/schema"');
+  });
+
+  it("renders the owner setup route before published Site wildcard routes", () => {
+    const html = renderRoute("/setup", createPublishedSiteRuntimeProfile());
+
+    expect(html).toContain("Checking setup link");
+    expect(html).not.toContain("Loading setup.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
   });
 
   it('renders an app profile home at "/" without the multi-app switcher', () => {

@@ -38,6 +38,7 @@ import {
   withHomeRouteSelectedSectionContextRecordId,
 } from "./app/routes/home-selection.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
+import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
 import {
   SitePageRoute as DefaultSitePageRoute,
   normalizeSitePageSlug,
@@ -119,8 +120,10 @@ export function App({
     : undefined;
   const isWorkbenchToolRoute =
     runtimeProfile.shell === "dev" && routeWorld?.schemaRoute === location;
+  const isOwnerSetupRoute =
+    isOwnerSetupRouteEnabled(runtimeProfile) && normalizeRoutePath(location) === "/setup";
 
-  if (isPublicSiteRoute || runtimeProfile.shell === "publishedSite") {
+  if (isOwnerSetupRoute || isPublicSiteRoute || runtimeProfile.shell === "publishedSite") {
     return (
       <main className="min-h-dvh">
         <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
@@ -581,6 +584,11 @@ function AppRoutes({
           <Redirect replace to={runtimeProfile.defaultRedirect} />
         </Route>
       ) : null}
+      {isOwnerSetupRouteEnabled(runtimeProfile) ? (
+        <Route path="/setup">
+          <OwnerSetupRoute />
+        </Route>
+      ) : null}
       {runtimeProfile.publishedSite ? (
         <Route path={runtimeProfile.publishedSite.rootRoute}>
           <SitePageRoute linkMode="published" slug={runtimeProfile.publishedSite.homeSlug} />
@@ -665,4 +673,12 @@ function runtimeWildcardSiteSlug(params: unknown): string {
   const wildcard = (params as { "*": string | undefined })["*"];
 
   return normalizeSitePageSlug(wildcard);
+}
+
+function isOwnerSetupRouteEnabled(runtimeProfile: RuntimeProfile) {
+  return runtimeProfile.kind === "dev" || runtimeProfile.kind === "publishedSite";
+}
+
+function normalizeRoutePath(path: string) {
+  return path.split("?")[0] ?? path;
 }

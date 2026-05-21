@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import type { OwnerSetupCompleteResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
+import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -103,6 +104,9 @@ describe("owner setup API routes", () => {
         createdAt: expect.any(String),
       },
     });
+    expect(completed.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(completed.response.headers.get("Set-Cookie")).toContain("HttpOnly");
+    expect(completed.response.headers.get("Set-Cookie")).toContain("SameSite=Lax");
     expect(status.body).toEqual(completed.body);
   });
 

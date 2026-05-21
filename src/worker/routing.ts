@@ -1,6 +1,7 @@
 import { schemaApps } from "../shared/schema-apps.ts";
 
 const clientRoutePrefixes = ["/pages", "/schema", ...schemaApps.map((app) => app.route)] as const;
+const clientRoutePaths = ["/setup"] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 const dynamicSiteIconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;
 const PUBLISHED_SITE_REDIRECT_STATUS = 308;
@@ -83,7 +84,11 @@ export function shouldDeferToStaticAssets(
 
   const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
 
-  return profileKind !== "publishedSite" || looksLikeStaticAssetPath(url.pathname);
+  return (
+    profileKind !== "publishedSite" ||
+    isClientShellPath(url.pathname) ||
+    looksLikeStaticAssetPath(url.pathname)
+  );
 }
 
 export function publishedSiteRedirectForRequest(
@@ -115,9 +120,14 @@ export function isApiPath(pathname: string): boolean {
 }
 
 export function isClientShellRoute(pathname: string): boolean {
-  return clientRoutePrefixes.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  return (
+    isClientShellPath(pathname) ||
+    clientRoutePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
   );
+}
+
+function isClientShellPath(pathname: string): boolean {
+  return clientRoutePaths.includes(pathname as (typeof clientRoutePaths)[number]);
 }
 
 export function looksLikeStaticAssetPath(pathname: string): boolean {
