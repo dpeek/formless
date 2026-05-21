@@ -34,6 +34,7 @@ import {
   siteProjectWranglerPersistPath,
   startSiteProjectLocalPublishBroker,
   type CheckFormlessInstanceDeployMetadataInput,
+  type CreateFormlessInstanceOwnerSetupCapabilityInput,
   type DeployFormlessInstanceInput,
   type FormlessCliDependencies,
   type FormlessCliRunCommandOptions,
@@ -41,6 +42,7 @@ import {
 } from "./cli.ts";
 
 const tempDirs: string[] = [];
+const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 afterEach(async () => {
   await Promise.all(
@@ -319,12 +321,15 @@ describe("Formless Site CLI", () => {
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
     const openedUrls: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const stateWrites: WriteFormlessInstanceStateInput[] = [];
+    const setupUrl = `https://brother-instance.dpeek.workers.dev/setup?token=${setupToken}`;
     const dependencies = cliDeps(process.cwd(), {
       commands,
       healthInputs,
       logs,
       openedUrls,
+      setupInputs,
       stateWrites,
       deploy: async (input) => {
         deployInputs.push(input);
@@ -350,6 +355,9 @@ describe("Formless Site CLI", () => {
       instanceName: "brother-instance",
       mode: "deployed",
       open: true,
+      ownerSetup: {
+        url: setupUrl,
+      },
     });
 
     await runFormlessCli(
@@ -376,10 +384,19 @@ describe("Formless Site CLI", () => {
         url: "https://brother-instance.dpeek.workers.dev",
       },
     ]);
-    expect(openedUrls).toEqual([
-      "https://brother-instance.dpeek.workers.dev",
-      "https://brother-instance.dpeek.workers.dev",
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "generated-token",
+        deploymentUrl: "https://brother-instance.dpeek.workers.dev",
+        setupToken,
+      },
+      {
+        adminToken: "generated-token",
+        deploymentUrl: "https://brother-instance.dpeek.workers.dev",
+        setupToken,
+      },
     ]);
+    expect(openedUrls).toEqual([setupUrl, setupUrl]);
     expect(stateWrites).toHaveLength(2);
     expect(stateWrites.map((write) => write.root)).toEqual([process.cwd(), process.cwd()]);
     expect(stateWrites[0]?.state).toMatchObject({
@@ -390,6 +407,7 @@ describe("Formless Site CLI", () => {
       workersDevUrl: "https://brother-instance.dpeek.workers.dev",
     });
     expect(JSON.stringify(stateWrites)).not.toContain("generated-token");
+    expect(JSON.stringify(stateWrites)).not.toContain(setupToken);
     expect(logs).toEqual([
       [
         "Formless instance deployed.",
@@ -403,8 +421,42 @@ describe("Formless Site CLI", () => {
         `Deploy metadata: version ${packageJson.version} verified.`,
         "State: .formless/formless.instance.json.",
         "Browser opened: yes.",
-        "Writes are protected by the configured FORMLESS_ADMIN_TOKEN secret.",
-        "Owner setup and browser writes remain follow-up work.",
+        "Owner setup: opened in browser.",
+        "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("prints the owner setup URL when onboard does not open a browser", async () => {
+    const logs: string[] = [];
+    const openedUrls: string[] = [];
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
+    const dependencies = cliDeps(process.cwd(), {
+      logs,
+      openedUrls,
+      stateWrites,
+    });
+    const setupUrl = `https://brother-instance.dpeek.workers.dev/setup?token=${setupToken}`;
+
+    await runFormlessCli(["onboard", "--name", "brother-instance", "--no-open"], dependencies);
+
+    expect(openedUrls).toEqual([]);
+    expect(JSON.stringify(stateWrites)).not.toContain(setupToken);
+    expect(logs).toEqual([
+      [
+        "Formless instance deployed.",
+        "Instance: brother-instance.",
+        "Account: Personal (account-123).",
+        "Credential profile: <default>.",
+        "URL: https://brother-instance.dpeek.workers.dev.",
+        "Worker: brother-instance.",
+        "Media bucket: brother-instance-media.",
+        "Authority storage: brother-instance-authority.",
+        `Deploy metadata: version ${packageJson.version} verified.`,
+        "State: .formless/formless.instance.json.",
+        "Browser opened: no.",
+        `Owner setup URL: ${setupUrl}.`,
+        "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
       ].join("\n"),
     ]);
   });
@@ -806,9 +858,12 @@ function cliDeps(
     logs?: string[];
     openedUrls?: string[];
     packageRoot?: string;
+    setupInputs?: CreateFormlessInstanceOwnerSetupCapabilityInput[];
     stateWrites?: WriteFormlessInstanceStateInput[];
   } = {},
 ): FormlessCliDependencies {
+  const randomToken = randomTokenSequence("generated-token", setupToken);
+
   return {
     accountDiscovery: {
       listAccounts: async () => [
@@ -849,7 +904,7 @@ function cliDeps(
       options.openedUrls?.push(url);
     },
     packageRoot: options.packageRoot ?? process.cwd(),
-    randomToken: () => "generated-token",
+    randomToken,
     runCommand: async (
       command: string,
       args: string[],
@@ -873,7 +928,27 @@ function cliDeps(
         };
       },
     },
+    setupCapability: {
+      create: async (input) => {
+        options.setupInputs?.push(input);
+
+        return {
+          capabilityCreated: true,
+          endpointUrl: new URL(
+            "/api/formless/setup/capability",
+            `${input.deploymentUrl}/`,
+          ).toString(),
+          setupComplete: false,
+        };
+      },
+    },
   };
+}
+
+function randomTokenSequence(...tokens: string[]): () => string {
+  let index = 0;
+
+  return () => tokens[index++ % tokens.length] ?? setupToken;
 }
 
 function responseQueue() {

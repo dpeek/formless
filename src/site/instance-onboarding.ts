@@ -4,6 +4,7 @@ import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
+import { parseOwnerSetupToken } from "../shared/protocol.ts";
 import { prepareSiteProjectStateDirectory, siteProjectStatePath } from "./project-state.ts";
 
 export const DEFAULT_FORMLESS_INSTANCE_NAME = "formless";
@@ -12,6 +13,9 @@ export const FORMLESS_INSTANCE_STATE_FILE = "formless.instance.json";
 export const FORMLESS_INSTANCE_STATE_VERSION = 1;
 export const FORMLESS_INSTANCE_STATE_KIND = "formless-instance";
 export const FORMLESS_WORKER_COMPATIBILITY_DATE = "2026-04-28";
+export const FORMLESS_OWNER_SETUP_ROUTE_PATH = "/setup";
+
+const FORMLESS_OWNER_SETUP_CAPABILITY_API_PATH = "/api/formless/setup/capability";
 
 export type FormlessInstanceDeploymentAccount = {
   id: string;
@@ -134,6 +138,29 @@ export type FormlessInstanceDeploymentHealthCheckAdapter = {
   ) => Promise<CheckFormlessInstanceDeployMetadataResult>;
 };
 
+export type CreateFormlessInstanceOwnerSetupCapabilityInput = {
+  adminToken: string;
+  deploymentUrl: string;
+  setupToken: string;
+};
+
+export type CreateFormlessInstanceOwnerSetupCapabilityResult = {
+  capabilityCreated: true;
+  endpointUrl: string;
+  expiresAt?: string;
+  setupComplete: false;
+};
+
+export type CreateFormlessInstanceOwnerSetupCapabilityDependencies = {
+  fetch: typeof fetch;
+};
+
+export type FormlessInstanceOwnerSetupCapabilityAdapter = {
+  create: (
+    input: CreateFormlessInstanceOwnerSetupCapabilityInput,
+  ) => Promise<CreateFormlessInstanceOwnerSetupCapabilityResult>;
+};
+
 export type WriteFormlessInstanceStateInput = {
   root: string;
   state: FormlessInstanceState;
@@ -232,6 +259,7 @@ export type RunFormlessInstanceOnboardingDependencies = {
   ) => Promise<FormlessInstanceDeploymentAccount> | FormlessInstanceDeploymentAccount;
   stateRoot: string;
   stateWriter: FormlessInstanceStateWriter;
+  setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
 
 export type RunFormlessInstanceOnboardingResult = {
@@ -243,6 +271,10 @@ export type RunFormlessInstanceOnboardingResult = {
   instanceName: string;
   mode: "deployed";
   open: boolean;
+  ownerSetup: {
+    capability: CreateFormlessInstanceOwnerSetupCapabilityResult;
+    url: string;
+  };
   plan: FormlessInstanceDeploymentPlan;
   state: FormlessInstanceState;
   stateWrite: WriteFormlessInstanceStateResult;
@@ -378,6 +410,7 @@ export async function runFormlessInstanceOnboarding(
     "Generated Formless admin token",
     dependencies.randomToken(),
   );
+  const setupToken = parseOwnerSetupToken(dependencies.randomToken());
   const deployment = parseDeployFormlessInstanceResult(
     await dependencies.deploymentAdapter.deploy({
       credentialProfile,
@@ -392,6 +425,15 @@ export async function runFormlessInstanceOnboarding(
     expectedVersion: plan.packageVersion,
     url: deployment.url,
   });
+  const setupCapability = await dependencies.setupCapability.create({
+    adminToken,
+    deploymentUrl: deployment.url,
+    setupToken,
+  });
+  const setupUrl = formatFormlessOwnerSetupUrl({
+    deploymentUrl: deployment.url,
+    setupToken,
+  });
 
   const state = createFormlessInstanceState({
     credentialProfile,
@@ -403,7 +445,7 @@ export async function runFormlessInstanceOnboarding(
   });
 
   if (input.open ?? false) {
-    await dependencies.openBrowser(deployment.url);
+    await dependencies.openBrowser(setupUrl);
   }
 
   return {
@@ -415,6 +457,10 @@ export async function runFormlessInstanceOnboarding(
     instanceName: plan.instanceName,
     mode: "deployed",
     open: input.open ?? false,
+    ownerSetup: {
+      capability: setupCapability,
+      url: setupUrl,
+    },
     plan,
     state,
     stateWrite,
@@ -574,6 +620,61 @@ export const fetchFormlessInstanceDeploymentHealthCheckAdapter: FormlessInstance
   {
     check: (input) => checkFormlessInstanceDeployMetadata(input, { fetch }),
   };
+
+export async function createFormlessInstanceOwnerSetupCapability(
+  input: CreateFormlessInstanceOwnerSetupCapabilityInput,
+  dependencies: CreateFormlessInstanceOwnerSetupCapabilityDependencies,
+): Promise<CreateFormlessInstanceOwnerSetupCapabilityResult> {
+  const deploymentUrl = parseWorkersDevUrl(
+    "Formless owner setup deployment URL",
+    input.deploymentUrl,
+  );
+  const adminToken = parseRequiredString("Formless owner setup admin token", input.adminToken);
+  const setupToken = parseOwnerSetupToken(input.setupToken);
+  const endpointUrl = new URL(
+    FORMLESS_OWNER_SETUP_CAPABILITY_API_PATH,
+    `${deploymentUrl}/`,
+  ).toString();
+  const response = await dependencies.fetch(endpointUrl, {
+    body: JSON.stringify({ setupToken }),
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${adminToken}`,
+      "content-type": "application/json",
+    },
+    method: "POST",
+  });
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `Formless owner setup capability creation failed for ${deploymentUrl}: HTTP ${response.status} ${text}`,
+    );
+  }
+
+  return parseOwnerSetupCapabilityResponse(text, endpointUrl);
+}
+
+export const fetchFormlessInstanceOwnerSetupCapabilityAdapter: FormlessInstanceOwnerSetupCapabilityAdapter =
+  {
+    create: (input) => createFormlessInstanceOwnerSetupCapability(input, { fetch }),
+  };
+
+export function formatFormlessOwnerSetupUrl(input: {
+  deploymentUrl: string;
+  setupToken: string;
+}): string {
+  const deploymentUrl = parseWorkersDevUrl(
+    "Formless owner setup URL deployment URL",
+    input.deploymentUrl,
+  );
+  const setupToken = parseOwnerSetupToken(input.setupToken);
+  const url = new URL(FORMLESS_OWNER_SETUP_ROUTE_PATH, `${deploymentUrl}/`);
+
+  url.searchParams.set("token", setupToken);
+
+  return url.toString();
+}
 
 function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorkerProps["assets"] {
   return {
@@ -908,6 +1009,45 @@ function parseFormlessDeployMetadata(text: string, url: string): FormlessDeployM
 
   return {
     version: parsed.version,
+  };
+}
+
+function parseOwnerSetupCapabilityResponse(
+  text: string,
+  endpointUrl: string,
+): CreateFormlessInstanceOwnerSetupCapabilityResult {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(
+      `Formless owner setup capability creation failed for ${endpointUrl}: response was not JSON.`,
+    );
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error(
+      `Formless owner setup capability creation failed for ${endpointUrl}: response must be an object.`,
+    );
+  }
+
+  if (parsed.capabilityCreated !== true || parsed.setupComplete !== false) {
+    throw new Error(
+      `Formless owner setup capability creation failed for ${endpointUrl}: response did not confirm setup capability creation.`,
+    );
+  }
+
+  const expiresAt = parseOptionalString(
+    "Formless owner setup capability response expiresAt",
+    parsed.expiresAt,
+  );
+
+  return {
+    capabilityCreated: true,
+    endpointUrl,
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+    setupComplete: false,
   };
 }
 

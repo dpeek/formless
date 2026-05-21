@@ -2,12 +2,15 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   checkFormlessInstanceDeployMetadata,
+  createFormlessInstanceOwnerSetupCapability,
   deployFormlessInstanceWithAlchemy,
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
   FORMLESS_ALCHEMY_APP_NAME,
+  FORMLESS_OWNER_SETUP_ROUTE_PATH,
   FORMLESS_WORKER_COMPATIBILITY_DATE,
   formatFormlessInstanceState,
+  formatFormlessOwnerSetupUrl,
   listFormlessInstanceAccountsWithAlchemy,
   normalizeFormlessInstanceName,
   parseFormlessInstanceState,
@@ -20,10 +23,14 @@ import {
   type AlchemyFormlessInstanceDeploymentDependencies,
   type AlchemyFormlessInstanceDeploymentWorkerProps,
   type CheckFormlessInstanceDeployMetadataInput,
+  type CreateFormlessInstanceOwnerSetupCapabilityInput,
   type DeployFormlessInstanceInput,
+  type FormlessInstanceOwnerSetupCapabilityAdapter,
   type SelectFormlessInstanceAccountInput,
   type WriteFormlessInstanceStateInput,
 } from "./instance-onboarding.ts";
+
+const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 
 describe("Formless instance onboarding planner", () => {
   it("plans deterministic workers.dev resources from a normalized instance name", () => {
@@ -193,7 +200,12 @@ describe("Formless instance onboarding adapters", () => {
     const deployInputs: DeployFormlessInstanceInput[] = [];
     const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
     const openedUrls: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
     const stateWrites: WriteFormlessInstanceStateInput[] = [];
+    const setupUrl = formatFormlessOwnerSetupUrl({
+      deploymentUrl: "https://brothers-remote-instance.dpeek.workers.dev",
+      setupToken,
+    });
 
     const result = await runFormlessInstanceOnboarding(
       {
@@ -231,9 +243,10 @@ describe("Formless instance onboarding adapters", () => {
         },
         packageRoot: "/package",
         packageVersion: "0.1.8",
-        randomToken: () => "generated-admin-token",
+        randomToken: randomTokenSequence("generated-admin-token", setupToken),
         stateRoot: "/workspace",
         stateWriter: fakeStateWriter(stateWrites),
+        setupCapability: fakeSetupCapability(setupInputs),
       },
     );
 
@@ -254,7 +267,14 @@ describe("Formless instance onboarding adapters", () => {
         url: "https://brothers-remote-instance.dpeek.workers.dev",
       },
     ]);
-    expect(openedUrls).toEqual(["https://brothers-remote-instance.dpeek.workers.dev"]);
+    expect(setupInputs).toEqual([
+      {
+        adminToken: "generated-admin-token",
+        deploymentUrl: "https://brothers-remote-instance.dpeek.workers.dev",
+        setupToken,
+      },
+    ]);
+    expect(openedUrls).toEqual([setupUrl]);
     expect(stateWrites).toEqual([
       {
         root: "/workspace",
@@ -277,9 +297,18 @@ describe("Formless instance onboarding adapters", () => {
       instanceName: "brothers-remote-instance",
       mode: "deployed",
       open: true,
+      ownerSetup: {
+        url: setupUrl,
+      },
       stateWrite: {
         path: "/workspace/.formless/formless.instance.json",
       },
+    });
+    expect(result.ownerSetup.capability).toEqual({
+      capabilityCreated: true,
+      endpointUrl:
+        "https://brothers-remote-instance.dpeek.workers.dev/api/formless/setup/capability",
+      setupComplete: false,
     });
     expect(result.state).toEqual({
       version: 1,
@@ -295,6 +324,8 @@ describe("Formless instance onboarding adapters", () => {
       deploymentTarget: "workers.dev",
       deployedPackageVersion: "0.1.8",
     });
+    expect(JSON.stringify(stateWrites)).not.toContain("generated-admin-token");
+    expect(JSON.stringify(stateWrites)).not.toContain(setupToken);
   });
 
   it("requires account selection before deployment mutation", async () => {
@@ -322,6 +353,7 @@ describe("Formless instance onboarding adapters", () => {
           randomToken: () => "generated-admin-token",
           stateRoot: "/workspace",
           stateWriter: fakeStateWriter(stateWrites),
+          setupCapability: fakeSetupCapability(),
         },
       ),
     ).rejects.toThrow("No Cloudflare accounts were found for the selected credentials.");
@@ -353,6 +385,7 @@ describe("Formless instance onboarding adapters", () => {
           randomToken: () => "generated-admin-token",
           stateRoot: "/workspace",
           stateWriter: fakeStateWriter(stateWrites),
+          setupCapability: fakeSetupCapability(),
         },
       ),
     ).rejects.toThrow(
@@ -365,6 +398,7 @@ describe("Formless instance onboarding adapters", () => {
   it("writes state only after deploy metadata health check succeeds", async () => {
     const stateWrites: WriteFormlessInstanceStateInput[] = [];
     const openedUrls: string[] = [];
+    const setupInputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [];
 
     await expect(
       runFormlessInstanceOnboarding(
@@ -394,12 +428,60 @@ describe("Formless instance onboarding adapters", () => {
           },
           packageRoot: "/package",
           packageVersion: "0.1.8",
-          randomToken: () => "generated-admin-token",
+          randomToken: randomTokenSequence("generated-admin-token", setupToken),
           stateRoot: "/workspace",
           stateWriter: fakeStateWriter(stateWrites),
+          setupCapability: fakeSetupCapability(setupInputs),
         },
       ),
     ).rejects.toThrow("deploy metadata stale");
+
+    expect(stateWrites).toEqual([]);
+    expect(openedUrls).toEqual([]);
+    expect(setupInputs).toEqual([]);
+  });
+
+  it("writes state only after owner setup capability creation succeeds", async () => {
+    const stateWrites: WriteFormlessInstanceStateInput[] = [];
+    const openedUrls: string[] = [];
+
+    await expect(
+      runFormlessInstanceOnboarding(
+        {
+          instanceName: "remote",
+          open: true,
+        },
+        {
+          accountDiscovery: {
+            listAccounts: async () => [
+              {
+                id: "account-123",
+                workersDevSubdomain: "dpeek",
+              },
+            ],
+          },
+          deploymentAdapter: {
+            deploy: async (input) => ({ url: input.plan.expectedUrl.url }),
+          },
+          healthCheck: {
+            check: fakeHealthyDeployment,
+          },
+          openBrowser: async (url) => {
+            openedUrls.push(url);
+          },
+          packageRoot: "/package",
+          packageVersion: "0.1.8",
+          randomToken: randomTokenSequence("generated-admin-token", setupToken),
+          stateRoot: "/workspace",
+          stateWriter: fakeStateWriter(stateWrites),
+          setupCapability: {
+            create: async () => {
+              throw new Error("setup capability failed");
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("setup capability failed");
 
     expect(stateWrites).toEqual([]);
     expect(openedUrls).toEqual([]);
@@ -433,13 +515,14 @@ describe("Formless instance onboarding adapters", () => {
         openBrowser: async () => {},
         packageRoot: "/package",
         packageVersion: "0.1.8",
-        randomToken: () => "generated-admin-token",
+        randomToken: randomTokenSequence("generated-admin-token", setupToken),
         selectAccount: (input) => {
           selectionInputs.push(input);
           return input.accounts[1] as (typeof input.accounts)[number];
         },
         stateRoot: "/workspace",
         stateWriter: fakeStateWriter(),
+        setupCapability: fakeSetupCapability(),
       },
     );
 
@@ -469,6 +552,95 @@ describe("Formless instance onboarding adapters", () => {
     expect(
       selectOnlyFormlessInstanceAccount({ accounts: [result.account], credentialProfile: null }),
     ).toEqual(result.account);
+  });
+});
+
+describe("Formless instance owner setup capability", () => {
+  it("creates a remote setup capability with the generated setup token and admin bearer", async () => {
+    const requests: Array<{
+      body: string;
+      headers: Record<string, string>;
+      method: string;
+      url: string;
+    }> = [];
+    const result = await createFormlessInstanceOwnerSetupCapability(
+      {
+        adminToken: "admin-secret",
+        deploymentUrl: "https://brother-instance.dpeek.workers.dev",
+        setupToken,
+      },
+      {
+        fetch: async (url, init) => {
+          requests.push({
+            body: String(init?.body ?? ""),
+            headers: normalizeHeaders(init?.headers),
+            method: init?.method ?? "GET",
+            url: typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url,
+          });
+
+          return Response.json({
+            capabilityCreated: true,
+            expiresAt: "2026-05-21T05:00:00.000Z",
+            setupComplete: false,
+          });
+        },
+      },
+    );
+
+    expect(requests).toEqual([
+      {
+        body: JSON.stringify({ setupToken }),
+        headers: {
+          accept: "application/json",
+          authorization: "Bearer admin-secret",
+          "content-type": "application/json",
+        },
+        method: "POST",
+        url: "https://brother-instance.dpeek.workers.dev/api/formless/setup/capability",
+      },
+    ]);
+    expect(result).toEqual({
+      capabilityCreated: true,
+      endpointUrl: "https://brother-instance.dpeek.workers.dev/api/formless/setup/capability",
+      expiresAt: "2026-05-21T05:00:00.000Z",
+      setupComplete: false,
+    });
+    expect(
+      formatFormlessOwnerSetupUrl({
+        deploymentUrl: "https://brother-instance.dpeek.workers.dev",
+        setupToken,
+      }),
+    ).toBe(
+      `https://brother-instance.dpeek.workers.dev${FORMLESS_OWNER_SETUP_ROUTE_PATH}?token=${setupToken}`,
+    );
+  });
+
+  it("rejects failed or malformed setup capability responses", async () => {
+    await expect(
+      createFormlessInstanceOwnerSetupCapability(
+        {
+          adminToken: "admin-secret",
+          deploymentUrl: "https://brother-instance.dpeek.workers.dev",
+          setupToken,
+        },
+        {
+          fetch: async () => new Response("unauthorized", { status: 401 }),
+        },
+      ),
+    ).rejects.toThrow("HTTP 401 unauthorized");
+
+    await expect(
+      createFormlessInstanceOwnerSetupCapability(
+        {
+          adminToken: "admin-secret",
+          deploymentUrl: "https://brother-instance.dpeek.workers.dev",
+          setupToken,
+        },
+        {
+          fetch: async () => Response.json({ setupComplete: false }),
+        },
+      ),
+    ).rejects.toThrow("response did not confirm setup capability creation");
   });
 });
 
@@ -936,6 +1108,41 @@ describe("Formless instance state", () => {
     ).toThrow("formless.instance.json workersDevUrl must be a workers.dev origin URL.");
   });
 });
+
+function randomTokenSequence(...tokens: string[]): () => string {
+  let index = 0;
+
+  return () => tokens[index++ % tokens.length] ?? setupToken;
+}
+
+function fakeSetupCapability(
+  inputs: CreateFormlessInstanceOwnerSetupCapabilityInput[] = [],
+): FormlessInstanceOwnerSetupCapabilityAdapter {
+  return {
+    create: async (input) => {
+      inputs.push(input);
+
+      return {
+        capabilityCreated: true,
+        endpointUrl: new URL(
+          "/api/formless/setup/capability",
+          `${input.deploymentUrl}/`,
+        ).toString(),
+        setupComplete: false,
+      };
+    },
+  };
+}
+
+function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  const normalized: Record<string, string> = {};
+
+  new Headers(headers).forEach((value, key) => {
+    normalized[key] = value;
+  });
+
+  return normalized;
+}
 
 function fakeHealthyDeployment(input: CheckFormlessInstanceDeployMetadataInput): Promise<{
   cacheControl: string;

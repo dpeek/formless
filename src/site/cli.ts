@@ -28,11 +28,13 @@ import {
   alchemyFormlessInstanceAccountDiscoveryAdapter,
   alchemyFormlessInstanceDeploymentAdapter,
   fetchFormlessInstanceDeploymentHealthCheckAdapter,
+  fetchFormlessInstanceOwnerSetupCapabilityAdapter,
   runFormlessInstanceOnboarding,
   writeFormlessInstanceState,
   type FormlessInstanceAccountDiscoveryAdapter,
   type FormlessInstanceDeploymentAdapter,
   type FormlessInstanceDeploymentHealthCheckAdapter,
+  type FormlessInstanceOwnerSetupCapabilityAdapter,
   type FormlessInstanceStateWriter,
   type RunFormlessInstanceOnboardingResult,
 } from "./instance-onboarding.ts";
@@ -69,9 +71,13 @@ export {
   createFormlessInstanceState,
   DEFAULT_FORMLESS_INSTANCE_NAME,
   deployFormlessInstanceWithAlchemy,
+  createFormlessInstanceOwnerSetupCapability,
   fetchFormlessInstanceDeploymentHealthCheckAdapter,
+  fetchFormlessInstanceOwnerSetupCapabilityAdapter,
   FORMLESS_ALCHEMY_APP_NAME,
+  FORMLESS_OWNER_SETUP_ROUTE_PATH,
   formatFormlessInstanceState,
+  formatFormlessOwnerSetupUrl,
   FORMLESS_WORKER_COMPATIBILITY_DATE,
   listFormlessInstanceAccountsWithAlchemy,
   normalizeFormlessInstanceName,
@@ -88,6 +94,9 @@ export {
   type CheckFormlessInstanceDeployMetadataDependencies,
   type CheckFormlessInstanceDeployMetadataInput,
   type CheckFormlessInstanceDeployMetadataResult,
+  type CreateFormlessInstanceOwnerSetupCapabilityDependencies,
+  type CreateFormlessInstanceOwnerSetupCapabilityInput,
+  type CreateFormlessInstanceOwnerSetupCapabilityResult,
   type DeployFormlessInstanceInput,
   type DeployFormlessInstanceResult,
   type FormlessInstanceAccountDiscoveryAdapter,
@@ -95,6 +104,7 @@ export {
   type FormlessInstanceDeploymentHealthCheckAdapter,
   type FormlessInstanceDeploymentPlan,
   type FormlessInstanceDeploymentSecrets,
+  type FormlessInstanceOwnerSetupCapabilityAdapter,
   type FormlessInstanceState,
   type FormlessInstanceStateWriter,
   type ListFormlessInstanceAccountsInput,
@@ -131,6 +141,7 @@ export type FormlessCliDependencies = {
   ) => Promise<void>;
   spawn: typeof nodeSpawn;
   stateWriter: FormlessInstanceStateWriter;
+  setupCapability: FormlessInstanceOwnerSetupCapabilityAdapter;
 };
 
 const projectStateGitignoreEntry = SITE_PROJECT_GITIGNORE_ENTRY;
@@ -178,8 +189,10 @@ export async function runFormlessCli(
           `Deploy metadata: version ${result.healthCheck.version} verified.`,
           `State: ${formatCliPath(dependencies.cwd, result.stateWrite.path)}.`,
           `Browser opened: ${result.browserOpened ? "yes" : "no"}.`,
-          "Writes are protected by the configured FORMLESS_ADMIN_TOKEN secret.",
-          "Owner setup and browser writes remain follow-up work.",
+          result.browserOpened
+            ? "Owner setup: opened in browser."
+            : `Owner setup URL: ${result.ownerSetup.url}.`,
+          "Complete owner setup to create the browser write session; automation remains protected by FORMLESS_ADMIN_TOKEN.",
         ].join("\n"),
       );
       return;
@@ -258,6 +271,7 @@ export async function onboardFormlessInstance(
     | "packageRoot"
     | "randomToken"
     | "stateWriter"
+    | "setupCapability"
   > = nodeFormlessCliDependencies(),
 ): Promise<OnboardFormlessInstanceResult> {
   return runFormlessInstanceOnboarding(input, {
@@ -270,6 +284,7 @@ export async function onboardFormlessInstance(
     randomToken: dependencies.randomToken,
     stateRoot: dependencies.cwd,
     stateWriter: dependencies.stateWriter,
+    setupCapability: dependencies.setupCapability,
   });
 }
 
@@ -420,6 +435,7 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
     stateWriter: {
       write: writeFormlessInstanceState,
     },
+    setupCapability: fetchFormlessInstanceOwnerSetupCapabilityAdapter,
   };
 }
 
