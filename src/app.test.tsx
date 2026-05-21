@@ -2542,8 +2542,10 @@ describe("generated collection home", () => {
     expect(html).toContain("Post block should have a link.");
     expect(html).toContain("Post block should include body content.");
     expect(html).toContain("Post without metadata");
-    expect(html).toMatch(/<textarea[^>]*aria-label="Body"/);
-    expect(html).not.toMatch(/aria-label="Body"[^>]*disabled/);
+    const bodyTextarea = html.match(/<textarea[^>]*aria-label="Body"[^>]*>/)?.[0] ?? "";
+
+    expect(bodyTextarea).not.toEqual("");
+    expect(bodyTextarea).not.toMatch(/\sdisabled(?:=|[\s>])/);
   });
 
   it("renders the scoped site composition workspace for selected content", () => {
