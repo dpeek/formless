@@ -11,6 +11,7 @@ export function mediaObjectStoreFromR2Bucket(bucket: R2Bucket): MediaObjectStore
 
       return {
         body: object.body,
+        customMetadata: object.customMetadata,
         httpEtag: object.httpEtag,
         writeHttpMetadata(headers) {
           object.writeHttpMetadata(headers);
@@ -23,6 +24,7 @@ export function mediaObjectStoreFromR2Bucket(bucket: R2Bucket): MediaObjectStore
           cacheControl: write.cacheControl,
           contentType: write.contentType,
         },
+        ...(write.customMetadata ? { customMetadata: write.customMetadata } : {}),
       });
     },
   };

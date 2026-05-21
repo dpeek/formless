@@ -6,6 +6,7 @@ import {
   imageMediaContentTypeForKey,
   imageMediaExtensionForContentType,
   isRestorableImageMediaKey,
+  mediaAssetFromObjectMetadata,
   type MediaObjectStore,
   restoreImageMedia,
   uploadImageMedia,
@@ -20,10 +21,12 @@ describe("core media", () => {
       file: {
         bytes: pngBytes,
         contentType: "image/png; charset=binary",
+        filename: "hero.png",
         size: pngBytes.byteLength,
       },
       hrefForKey: (key) => `/api/site/media/${key}`,
       keyPrefix: "site/images/",
+      provider: "r2",
       randomId: () => "asset-1",
       store,
     });
@@ -31,6 +34,19 @@ describe("core media", () => {
     expect(result).toEqual({
       ok: true,
       upload: {
+        asset: {
+          byteSize: pngBytes.byteLength,
+          contentType: "image/png",
+          deliveryHref: "/api/site/media/site/images/asset-1.png",
+          filename: "hero.png",
+          id: "asset-1.png",
+          kind: "image",
+          label: "hero.png",
+          provider: "r2",
+          status: "ready",
+          storageKey: "site/images/asset-1.png",
+        },
+        assetId: "asset-1.png",
         contentType: "image/png",
         href: "/api/site/media/site/images/asset-1.png",
         key: "site/images/asset-1.png",
@@ -42,9 +58,24 @@ describe("core media", () => {
         bytes: pngBytes,
         cacheControl: MEDIA_OBJECT_CACHE_CONTROL,
         contentType: "image/png",
+        customMetadata: {
+          "formless-media-asset-id": "asset-1.png",
+          "formless-media-byte-size": String(pngBytes.byteLength),
+          "formless-media-content-type": "image/png",
+          "formless-media-delivery-href": "/api/site/media/site/images/asset-1.png",
+          "formless-media-filename": "hero.png",
+          "formless-media-kind": "image",
+          "formless-media-label": "hero.png",
+          "formless-media-provider": "r2",
+          "formless-media-status": "ready",
+          "formless-media-storage-key": "site/images/asset-1.png",
+        },
         key: "site/images/asset-1.png",
       },
     ]);
+    expect(mediaAssetFromObjectMetadata(store.writes[0]?.customMetadata)).toEqual(
+      result.ok ? result.upload.asset : undefined,
+    );
 
     const delivery = await deliveryFactsForMediaObject({
       includeBody: false,
@@ -116,6 +147,32 @@ describe("core media", () => {
       isRestorableImageMediaKey("site/images/../photo.webp", { keyPrefix: "site/images/" }),
     ).toBe(false);
   });
+
+  it("normalizes uploaded filenames into media asset labels", async () => {
+    const result = await uploadImageMedia({
+      file: {
+        bytes: pngBytes,
+        contentType: "image/png",
+        filename: "../nested/\u0000",
+        size: pngBytes.byteLength,
+      },
+      hrefForKey: (key) => `/api/site/media/${key}`,
+      keyPrefix: "site/images/",
+      provider: "r2",
+      randomId: () => "asset-2",
+      store: memoryMediaObjectStore(),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      upload: {
+        asset: {
+          id: "asset-2.png",
+          label: "Uploaded image",
+        },
+      },
+    });
+  });
 });
 
 function memoryMediaObjectStore(): MediaObjectStore & {
@@ -134,6 +191,7 @@ function memoryMediaObjectStore(): MediaObjectStore & {
 
       return {
         body: null,
+        customMetadata: object.customMetadata,
         httpEtag: `"${key}"`,
         writeHttpMetadata(headers) {
           headers.set("Content-Type", object.contentType);

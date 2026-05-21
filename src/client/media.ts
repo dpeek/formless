@@ -1,8 +1,11 @@
 import type { RecordValues } from "../shared/protocol.ts";
+import type { MediaAsset } from "../media/core.ts";
 
 export const SITE_IMAGE_UPLOAD_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
 export type SiteImageUploadResponse = {
+  asset?: MediaAsset;
+  assetId?: string;
   contentType: string;
   href: string;
   key: string;
@@ -55,11 +58,13 @@ export async function uploadSiteImageFile(
 export function siteImageUploadPatchValues({
   heightFieldName,
   hrefFieldName,
+  mediaAssetFieldName,
   upload,
   widthFieldName,
 }: {
   heightFieldName?: string;
   hrefFieldName: string;
+  mediaAssetFieldName?: string;
   upload: UploadedSiteImage;
   widthFieldName?: string;
 }): Partial<RecordValues> {
@@ -70,6 +75,12 @@ export function siteImageUploadPatchValues({
   if (upload.dimensions && widthFieldName && heightFieldName) {
     values[widthFieldName] = upload.dimensions.width;
     values[heightFieldName] = upload.dimensions.height;
+  }
+
+  const mediaAssetId = upload.assetId ?? upload.asset?.id;
+
+  if (mediaAssetFieldName && mediaAssetId) {
+    values[mediaAssetFieldName] = mediaAssetId;
   }
 
   return values;
@@ -133,7 +144,27 @@ function isSiteImageUploadResponse(value: unknown): value is SiteImageUploadResp
     typeof value.contentType === "string" &&
     typeof value.href === "string" &&
     typeof value.key === "string" &&
-    typeof value.size === "number"
+    typeof value.size === "number" &&
+    (!("assetId" in value) || typeof value.assetId === "string") &&
+    (!("asset" in value) || isMediaAsset(value.asset))
+  );
+}
+
+function isMediaAsset(value: unknown): value is MediaAsset {
+  return (
+    isRecord(value) &&
+    typeof value.byteSize === "number" &&
+    typeof value.contentType === "string" &&
+    typeof value.deliveryHref === "string" &&
+    (!("filename" in value) || typeof value.filename === "string") &&
+    (!("height" in value) || typeof value.height === "number") &&
+    typeof value.id === "string" &&
+    value.kind === "image" &&
+    typeof value.label === "string" &&
+    typeof value.provider === "string" &&
+    value.status === "ready" &&
+    typeof value.storageKey === "string" &&
+    (!("width" in value) || typeof value.width === "number")
   );
 }
 

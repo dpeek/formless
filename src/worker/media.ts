@@ -27,6 +27,7 @@ type SiteMediaEnv = AuthorityAdminGuardEnv & {
 type UploadedImageFile = {
   bytes: Uint8Array;
   contentType: string;
+  filename?: string;
   size: number;
 };
 
@@ -84,6 +85,7 @@ async function uploadSiteImage(request: Request, env: SiteMediaEnv) {
     file: fileResult.file,
     hrefForKey: siteMediaHrefForKey,
     keyPrefix: SITE_IMAGE_KEY_PREFIX,
+    provider: "r2",
     store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
   });
 
@@ -178,6 +180,7 @@ async function readMultipartFile(
     file: {
       bytes: file.body,
       contentType: file.contentType,
+      filename: file.filename,
       size: file.body.byteLength,
     },
     ok: true,

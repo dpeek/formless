@@ -21,6 +21,19 @@ describe("Site media client helper", () => {
         expect(body.get("file")).toBe(file);
 
         return Response.json({
+          asset: {
+            byteSize: 3,
+            contentType: "image/png",
+            deliveryHref: "/api/site/media/site/images/uploaded.png",
+            filename: "hero.png",
+            id: "uploaded.png",
+            kind: "image",
+            label: "hero.png",
+            provider: "r2",
+            status: "ready",
+            storageKey: "site/images/uploaded.png",
+          },
+          assetId: "uploaded.png",
           contentType: "image/png",
           href: "/api/site/media/site/images/uploaded.png",
           key: "site/images/uploaded.png",
@@ -35,6 +48,19 @@ describe("Site media client helper", () => {
     });
 
     expect(result).toEqual({
+      asset: {
+        byteSize: 3,
+        contentType: "image/png",
+        deliveryHref: "/api/site/media/site/images/uploaded.png",
+        filename: "hero.png",
+        id: "uploaded.png",
+        kind: "image",
+        label: "hero.png",
+        provider: "r2",
+        status: "ready",
+        storageKey: "site/images/uploaded.png",
+      },
+      assetId: "uploaded.png",
       contentType: "image/png",
       dimensions,
       href: "/api/site/media/site/images/uploaded.png",
@@ -61,7 +87,20 @@ describe("Site media client helper", () => {
       siteImageUploadPatchValues({
         heightFieldName: "height",
         hrefFieldName: "href",
+        mediaAssetFieldName: "mediaAsset",
         upload: {
+          asset: {
+            byteSize: 10,
+            contentType: "image/webp",
+            deliveryHref: "/api/site/media/site/images/uploaded.webp",
+            id: "uploaded.webp",
+            kind: "image",
+            label: "uploaded.webp",
+            provider: "r2",
+            status: "ready",
+            storageKey: "site/images/uploaded.webp",
+          },
+          assetId: "uploaded.webp",
           contentType: "image/webp",
           dimensions: { height: 300, width: 400 },
           href: "/api/site/media/site/images/uploaded.webp",
@@ -72,6 +111,7 @@ describe("Site media client helper", () => {
       }),
     ).toEqual({
       href: "/api/site/media/site/images/uploaded.webp",
+      mediaAsset: "uploaded.webp",
       width: 400,
       height: 300,
     });

@@ -71,6 +71,19 @@ describe("site media worker routes", () => {
     await expectResponseStatus(upload, 200);
 
     const body = (await upload.json()) as {
+      asset: {
+        byteSize: number;
+        contentType: string;
+        deliveryHref: string;
+        filename?: string;
+        id: string;
+        kind: string;
+        label: string;
+        provider: string;
+        status: string;
+        storageKey: string;
+      };
+      assetId: string;
       contentType: string;
       href: string;
       key: string;
@@ -78,10 +91,36 @@ describe("site media worker routes", () => {
     };
 
     expect(body).toEqual({
+      asset: {
+        byteSize: pngBytes.byteLength,
+        contentType: "image/png",
+        deliveryHref: body.href,
+        filename: "hero.png",
+        id: body.assetId,
+        kind: "image",
+        label: "hero.png",
+        provider: "r2",
+        status: "ready",
+        storageKey: body.key,
+      },
+      assetId: expect.stringMatching(/^[0-9a-f-]+\.png$/),
       contentType: "image/png",
       href: expect.stringMatching(/^\/api\/site\/media\/site\/images\/.+\.png$/),
       key: expect.stringMatching(/^site\/images\/.+\.png$/),
       size: pngBytes.byteLength,
+    });
+    expect(body.key).toBe(`site/images/${body.assetId}`);
+    await expectMediaObjectCustomMetadata(harness, body.key, {
+      "formless-media-asset-id": body.assetId,
+      "formless-media-byte-size": String(pngBytes.byteLength),
+      "formless-media-content-type": "image/png",
+      "formless-media-delivery-href": body.href,
+      "formless-media-filename": "hero.png",
+      "formless-media-kind": "image",
+      "formless-media-label": "hero.png",
+      "formless-media-provider": "r2",
+      "formless-media-status": "ready",
+      "formless-media-storage-key": body.key,
     });
 
     const served = await harness.fetch(body.href);
@@ -367,6 +406,17 @@ async function expectMediaBucketKeysUnordered(harness: Harness, expected: unknow
 
   expect(keys).toHaveLength(expected.length);
   expect(keys).toEqual(expect.arrayContaining(expected));
+}
+
+async function expectMediaObjectCustomMetadata(
+  harness: Harness,
+  key: string,
+  expected: Record<string, string>,
+) {
+  const bucket = await harness.mf.getR2Bucket(mediaBinding);
+  const object = await bucket.get(key);
+
+  expect(object?.customMetadata).toEqual(expected);
 }
 
 async function expectResponseStatus(response: HarnessResponse, status: number) {

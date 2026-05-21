@@ -4,6 +4,7 @@ export const MEDIA_OBJECT_CACHE_CONTROL = "public, max-age=31536000, immutable";
 export type MediaImageFile = {
   bytes: Uint8Array;
   contentType: string;
+  filename?: string;
   size: number;
 };
 
@@ -11,11 +12,13 @@ export type MediaObjectWrite = {
   bytes: Uint8Array;
   cacheControl: string;
   contentType: string;
+  customMetadata?: Record<string, string>;
   key: string;
 };
 
 export type MediaStoredObject = {
   body: BodyInit | null;
+  customMetadata?: Record<string, string>;
   httpEtag: string;
   writeHttpMetadata: (headers: Headers) => void;
 };
@@ -26,6 +29,8 @@ export type MediaObjectStore = {
 };
 
 export type MediaWriteResponse = {
+  asset?: MediaAsset;
+  assetId?: string;
   contentType: string;
   href: string;
   key: string;
@@ -46,6 +51,21 @@ export type MediaWriteResult =
 export type MediaDeliveryFacts = {
   body: BodyInit | null;
   headers: Headers;
+};
+
+export type MediaAsset = {
+  byteSize: number;
+  contentType: string;
+  deliveryHref: string;
+  filename?: string;
+  height?: number;
+  id: string;
+  kind: "image";
+  label: string;
+  provider: string;
+  status: "ready";
+  storageKey: string;
+  width?: number;
 };
 
 const imageExtensionsByContentType = new Map([
@@ -97,11 +117,67 @@ export function isValidMediaStorageKey(key: string): boolean {
   );
 }
 
+export function mediaAssetFromObjectMetadata(
+  metadata: Record<string, string> | undefined,
+): MediaAsset | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+
+  const {
+    "formless-media-asset-id": id,
+    "formless-media-byte-size": byteSizeValue,
+    "formless-media-content-type": contentType,
+    "formless-media-delivery-href": deliveryHref,
+    "formless-media-filename": filename,
+    "formless-media-height": heightValue,
+    "formless-media-kind": kind,
+    "formless-media-label": label,
+    "formless-media-provider": provider,
+    "formless-media-status": status,
+    "formless-media-storage-key": storageKey,
+    "formless-media-width": widthValue,
+  } = metadata;
+  const byteSize = parseOptionalMediaInteger(byteSizeValue);
+  const width = parseOptionalMediaInteger(widthValue);
+  const height = parseOptionalMediaInteger(heightValue);
+
+  if (
+    !id ||
+    kind !== "image" ||
+    !label ||
+    !contentType ||
+    byteSize === undefined ||
+    !provider ||
+    !storageKey ||
+    status !== "ready" ||
+    !deliveryHref
+  ) {
+    return undefined;
+  }
+
+  return {
+    byteSize,
+    contentType,
+    deliveryHref,
+    ...(filename ? { filename } : {}),
+    ...(height === undefined ? {} : { height }),
+    id,
+    kind,
+    label,
+    provider,
+    status,
+    storageKey,
+    ...(width === undefined ? {} : { width }),
+  };
+}
+
 export async function uploadImageMedia({
   file,
   hrefForKey,
   keyPrefix,
   maxBytes = MEDIA_IMAGE_UPLOAD_MAX_BYTES,
+  provider,
   randomId = () => crypto.randomUUID(),
   store,
 }: {
@@ -109,6 +185,7 @@ export async function uploadImageMedia({
   hrefForKey: (key: string) => string;
   keyPrefix: string;
   maxBytes?: number;
+  provider: string;
   randomId?: () => string;
   store: MediaObjectStore;
 }): Promise<MediaWriteResult> {
@@ -123,15 +200,32 @@ export async function uploadImageMedia({
     return { error: "Image file is larger than the 5 MB limit.", ok: false, status: 413 };
   }
 
-  const key = `${keyPrefix}${randomId()}.${extension}`;
+  const assetId = `${randomId()}.${extension}`;
+  const key = `${keyPrefix}${assetId}`;
+  const href = hrefForKey(key);
+  const asset: MediaAsset = {
+    byteSize: file.size,
+    contentType,
+    deliveryHref: href,
+    ...mediaAssetFilenameFields(file.filename),
+    id: assetId,
+    kind: "image",
+    provider,
+    status: "ready",
+    storageKey: key,
+  };
 
-  await writeMediaObject(store, key, file.bytes, contentType);
+  await writeMediaObject(store, key, file.bytes, contentType, {
+    customMetadata: mediaObjectMetadataForAsset(asset),
+  });
 
   return {
     ok: true,
     upload: {
+      asset,
+      assetId: asset.id,
       contentType,
-      href: hrefForKey(key),
+      href,
       key,
       size: file.size,
     },
@@ -230,13 +324,69 @@ function writeMediaObject(
   key: string,
   bytes: Uint8Array,
   contentType: string,
+  options: { customMetadata?: Record<string, string> } = {},
 ) {
   return store.putObject({
     bytes,
     cacheControl: MEDIA_OBJECT_CACHE_CONTROL,
     contentType,
+    ...(options.customMetadata ? { customMetadata: options.customMetadata } : {}),
     key,
   });
+}
+
+function mediaObjectMetadataForAsset(asset: MediaAsset): Record<string, string> {
+  return {
+    "formless-media-asset-id": asset.id,
+    "formless-media-byte-size": String(asset.byteSize),
+    "formless-media-content-type": asset.contentType,
+    "formless-media-delivery-href": asset.deliveryHref,
+    ...(asset.filename ? { "formless-media-filename": asset.filename } : {}),
+    ...(asset.height === undefined ? {} : { "formless-media-height": String(asset.height) }),
+    "formless-media-kind": asset.kind,
+    "formless-media-label": asset.label,
+    "formless-media-provider": asset.provider,
+    "formless-media-status": asset.status,
+    "formless-media-storage-key": asset.storageKey,
+    ...(asset.width === undefined ? {} : { "formless-media-width": String(asset.width) }),
+  };
+}
+
+function mediaAssetFilenameFields(filename: string | undefined): {
+  filename?: string;
+  label: string;
+} {
+  const normalized = normalizeMediaFilename(filename);
+
+  return normalized ? { filename: normalized, label: normalized } : { label: "Uploaded image" };
+}
+
+function normalizeMediaFilename(filename: string | undefined): string | undefined {
+  const cleaned = filename
+    ?.split(/[\\/]/)
+    .pop()
+    ?.split("")
+    .filter(isMediaFilenameCharacter)
+    .join("")
+    .trim();
+
+  return cleaned === undefined || cleaned === "" ? undefined : cleaned.slice(0, 200);
+}
+
+function isMediaFilenameCharacter(value: string): boolean {
+  const code = value.charCodeAt(0);
+
+  return (code >= 0x20 && code !== 0x7f) || code > 0x7f;
+}
+
+function parseOptionalMediaInteger(value: string | undefined): number | undefined {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function normalizeMediaContentType(value: string): string {
