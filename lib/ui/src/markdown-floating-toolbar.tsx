@@ -12,8 +12,8 @@ import { unwrapLink, upsertLink } from "@platejs/link";
 import { toggleList } from "@platejs/list";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { Separator } from "@dpeek/formless-ui/separator";
-import { TooltipContent, TooltipTrigger } from "@dpeek/formless-ui/tooltip";
-import { toggleVariants } from "@dpeek/formless-ui/toggle";
+import { TooltipContent } from "@dpeek/formless-ui/tooltip";
+import { Toggle } from "@dpeek/formless-ui/toggle";
 import { cn } from "@dpeek/formless-ui/utils";
 import {
   BoldIcon,
@@ -291,12 +291,14 @@ function MarkdownToolbarToggle({
 
   return (
     <>
-      <TooltipTrigger
+      <Toggle
         aria-label={label}
-        aria-pressed={pressed}
-        className={cn(toggleVariants({ size: "sm" }))}
-        data-state={pressed ? "on" : "off"}
+        intent="plain"
+        isSelected={pressed}
         onBlur={() => setTooltipOpen(false)}
+        onChange={() => {
+          onPress();
+        }}
         onFocus={() => setTooltipOpen(true)}
         onHoverEnd={() => setTooltipOpen(false)}
         onHoverStart={() => setTooltipOpen(true)}
@@ -305,12 +307,11 @@ function MarkdownToolbarToggle({
         onMouseDown={(event) => {
           event.preventDefault();
         }}
-        onPress={onPress}
         ref={triggerRef}
-        type="button"
+        size="sq-xs"
       >
         {children}
-      </TooltipTrigger>
+      </Toggle>
       <TooltipContent isOpen={tooltipOpen} offset={6} triggerRef={triggerRef}>
         {label}
       </TooltipContent>
