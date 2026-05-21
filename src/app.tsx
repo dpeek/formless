@@ -8,20 +8,16 @@ import {
   useState,
 } from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
+import { Button } from "@dpeek/formless-ui/button";
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupAction,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  SidebarItem,
+  SidebarLabel,
   SidebarProvider,
+  SidebarSection,
   SidebarTrigger,
 } from "@dpeek/formless-ui/sidebar";
 import { GeneratedCreateDialog } from "./app/generated/create.tsx";
@@ -285,7 +281,7 @@ function GeneratedAppFrame({
   const frame = (
     <HomeRouteSelectionProvider>
       <SidebarProvider data-frame="generated-app">
-        <Sidebar collapsible="offcanvas">
+        <Sidebar closeButton={false} collapsible="hidden">
           <SidebarHeader>
             <div className="px-2 py-1 text-sm font-semibold">{routeApp?.label ?? "Formless"}</div>
           </SidebarHeader>
@@ -398,22 +394,17 @@ function AppScreenLinks({
   world: RuntimeWorldMount;
 }) {
   return (
-    <SidebarGroup>
-      <SidebarGroupContent>
-        <SidebarMenu aria-label={`${world.app.label} screens`}>
-          {screenLinks.map((model) => (
-            <SidebarMenuItem key={model.screenName}>
-              <SidebarMenuButton
-                isActive={activeScreenPath === model.path}
-                render={<Link href={runtimeScreenRoute(world, model.path)} />}
-              >
-                <span>{model.label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <SidebarSection aria-label={`${world.app.label} screens`}>
+      {screenLinks.map((model) => (
+        <SidebarItem
+          href={runtimeScreenRoute(world, model.path)}
+          isCurrent={activeScreenPath === model.path}
+          key={model.screenName}
+        >
+          <SidebarLabel>{model.label}</SidebarLabel>
+        </SidebarItem>
+      ))}
+    </SidebarSection>
   );
 }
 
@@ -498,38 +489,32 @@ function AppRootRecordNavigationGroup({
   }
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+    <SidebarSection aria-label={`${group.label} roots`} label={group.label}>
       {group.createAction ? (
-        <SidebarGroupAction
+        <Button
           aria-label={group.createAction.label}
-          disabled={!group.createAction.enabled}
-          onClick={() => setCreateDialogOpen(true)}
+          className="ms-auto"
+          data-slot="control"
+          intent="plain"
+          isDisabled={!group.createAction.enabled}
+          onPress={() => setCreateDialogOpen(true)}
+          size="sq-xs"
           type="button"
         >
           +
-        </SidebarGroupAction>
+        </Button>
       ) : null}
-      <SidebarGroupContent>
-        {groupFacts.isEmpty ? null : (
-          <SidebarMenu aria-label={`${group.label} roots`}>
-            {groupFacts.items.map(({ isActive, option }) => (
-              <SidebarMenuItem key={option.id}>
-                <SidebarMenuButton
-                  isActive={isActive}
-                  onClick={() => onSelectRecord(option.id)}
-                  type="button"
-                >
-                  <span>{option.label}</span>
-                </SidebarMenuButton>
-                {context.relatedCollection ? (
-                  <AppRootRecordCountBadge context={context} option={option} />
-                ) : null}
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        )}
-      </SidebarGroupContent>
+      {groupFacts.isEmpty
+        ? null
+        : groupFacts.items.map(({ isActive, option }) => (
+            <AppRootRecordNavigationItem
+              context={context}
+              isActive={isActive}
+              key={option.id}
+              onSelectRecord={onSelectRecord}
+              option={option}
+            />
+          ))}
       {group.createAction && createDialogOpen ? (
         <GeneratedCreateDialog
           action={group.createAction}
@@ -538,23 +523,52 @@ function AppRootRecordNavigationGroup({
           open={true}
         />
       ) : null}
-    </SidebarGroup>
+    </SidebarSection>
   );
 }
 
-function AppRootRecordCountBadge({
+function AppRootRecordNavigationItem({
   context,
+  isActive,
+  onSelectRecord,
   option,
 }: {
   context: GeneratedRootNavigationContext;
+  isActive: boolean;
+  onSelectRecord: (recordId: string) => void;
   option: { id: string; label: string };
 }) {
   const relatedCollection = context.relatedCollection;
 
   if (!relatedCollection) {
-    return null;
+    return (
+      <SidebarItem isCurrent={isActive} onPress={() => onSelectRecord(option.id)}>
+        <SidebarLabel>{option.label}</SidebarLabel>
+      </SidebarItem>
+    );
   }
 
+  return (
+    <AppRootRecordNavigationItemWithCount
+      isActive={isActive}
+      onSelectRecord={onSelectRecord}
+      option={option}
+      relatedCollection={relatedCollection}
+    />
+  );
+}
+
+function AppRootRecordNavigationItemWithCount({
+  isActive,
+  onSelectRecord,
+  option,
+  relatedCollection,
+}: {
+  isActive: boolean;
+  onSelectRecord: (recordId: string) => void;
+  option: { id: string; label: string };
+  relatedCollection: NonNullable<GeneratedRootNavigationContext["relatedCollection"]>;
+}) {
   const count = useEntityRecordCountReferencingField(
     relatedCollection.entityName,
     relatedCollection.referenceFieldName,
@@ -562,9 +576,12 @@ function AppRootRecordCountBadge({
   );
 
   return (
-    <SidebarMenuBadge aria-label={`${option.label} ${relatedCollection.label} count`}>
-      {count}
-    </SidebarMenuBadge>
+    <SidebarItem badge={count} isCurrent={isActive} onPress={() => onSelectRecord(option.id)}>
+      <SidebarLabel>{option.label}</SidebarLabel>
+      <span className="sr-only" aria-label={`${option.label} ${relatedCollection.label} count`}>
+        {count}
+      </span>
+    </SidebarItem>
   );
 }
 
