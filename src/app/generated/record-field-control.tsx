@@ -108,10 +108,9 @@ export function GeneratedRecordFieldControl({
           <Field orientation="horizontal">
             <Checkbox
               aria-label={fieldControl.label}
-              checked={recordValue === true}
-              className="size-4 rounded border-slate-300"
-              disabled={!canPatch || isPending}
-              onCheckedChange={(checked) => {
+              isDisabled={!canPatch || isPending}
+              isSelected={recordValue === true}
+              onChange={(checked) => {
                 if (commitPolicy === "immediate") {
                   onValueCommit(checked);
                 }
@@ -128,10 +127,9 @@ export function GeneratedRecordFieldControl({
         <Field orientation="horizontal">
           <Checkbox
             aria-label={fieldControl.label}
-            checked={recordValue === true}
-            className="size-4 rounded border-slate-300"
-            disabled={!canPatch || isPending}
-            onCheckedChange={(checked) => {
+            isDisabled={!canPatch || isPending}
+            isSelected={recordValue === true}
+            onChange={(checked) => {
               if (commitPolicy === "immediate") {
                 onValueCommit(checked);
               }

@@ -1,11 +1,25 @@
 "use client";
 
 import { useMemo } from "react";
+import { Label as LabelPrimitive, type LabelProps } from "react-aria-components/Label";
 import { cva, type VariantProps } from "class-variance-authority";
+import { tv } from "tailwind-variants";
 
 import { cn } from "@dpeek/formless-ui/utils";
-import { Label } from "@dpeek/formless-ui/label";
+import { Label as LegacyLabel } from "@dpeek/formless-ui/label";
 import { Separator } from "@dpeek/formless-ui/separator";
+
+export const labelStyles = tv({
+  base: [
+    "select-none text-base/6 text-fg in-data-required:not-data-[slot='control-label']:after:ml-1.5 sm:text-sm/6",
+    "in-data-required:not-data-[slot='control-label']:after:text-danger-subtle-fg in-data-required:not-data-[slot='control-label']:after:content-['*']",
+    "in-disabled:pointer-events-none in-disabled:opacity-50 group-disabled:opacity-50",
+  ],
+});
+
+function Label({ className, ...props }: LabelProps) {
+  return <LabelPrimitive data-slot="label" {...props} className={labelStyles({ className })} />;
+}
 
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
@@ -92,9 +106,9 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
+function FieldLabel({ className, ...props }: React.ComponentProps<typeof LegacyLabel>) {
   return (
-    <Label
+    <LegacyLabel
       data-slot="field-label"
       className={cn(
         "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-md has-[>[data-slot=field]]:border *:data-[slot=field]:p-2 dark:has-data-checked:bg-primary/10",
@@ -221,4 +235,5 @@ export {
   FieldSet,
   FieldContent,
   FieldTitle,
+  Label,
 };

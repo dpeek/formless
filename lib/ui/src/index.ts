@@ -8,7 +8,18 @@ export * from "./color.js";
 export * from "./date.js";
 export * from "./dialog.js";
 export * from "./dropdown-menu.js";
-export * from "./field.js";
+export {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
+  FieldTitle,
+} from "./field.js";
 export * from "./input-group.js";
 export { Input } from "./input.js";
 export * from "./label.js";

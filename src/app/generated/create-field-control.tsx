@@ -32,13 +32,14 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.controlKind === "checkbox") {
     return (
-      <Field orientation="horizontal">
+      <Field>
         <Checkbox
-          defaultChecked={fieldControl.createDefaultChecked}
+          defaultSelected={fieldControl.createDefaultChecked}
           name={fieldName}
-          onCheckedChange={(checked) => onValueChange?.(checked)}
-        />
-        <Label>{fieldControl.label}</Label>
+          onChange={(selected) => onValueChange?.(selected)}
+        >
+          {fieldControl.label}
+        </Checkbox>
       </Field>
     );
   }
