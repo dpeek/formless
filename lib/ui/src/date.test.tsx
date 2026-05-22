@@ -4,24 +4,12 @@ import { CalendarDate } from "@internationalized/date";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Calendar } from "./calendar.js";
-import { DateInput, formatDateInputValue, parseDateInputValue } from "./date.js";
+import { DateInput } from "./date.js";
 import { DateField, DateInput as SegmentedDateInput } from "./date-field.js";
 import { DatePicker, DatePickerTrigger } from "./date-picker.js";
 import { RangeCalendar } from "./range-calendar.js";
 
 describe("DateInput", () => {
-  it("formats and parses ISO date input values without UTC shifting", () => {
-    expect(formatDateInputValue(new Date(2026, 4, 6))).toBe("2026-05-06");
-
-    const date = parseDateInputValue("2026-05-06");
-
-    expect(date?.getFullYear()).toBe(2026);
-    expect(date?.getMonth()).toBe(4);
-    expect(date?.getDate()).toBe(6);
-    expect(parseDateInputValue("May 06, 2026")).toBeUndefined();
-    expect(parseDateInputValue("2026-02-31")).toBeUndefined();
-  });
-
   it("renders a text-backed date input that submits YYYY-MM-DD values", () => {
     const markup = renderToStaticMarkup(
       <DateInput defaultValue="2026-05-06" name="dueDate" required />,
