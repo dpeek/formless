@@ -15,6 +15,7 @@
     "./checkbox": "./src/checkbox.tsx",
     "./color-utils": "./src/color-utils.ts",
     "./color-area": "./src/color-area.tsx",
+    "./color-field": "./src/color-field.tsx",
     "./color-picker": "./src/color-picker.tsx",
     "./color-slider": "./src/color-slider.tsx",
     "./color-swatch": "./src/color-swatch.tsx",
