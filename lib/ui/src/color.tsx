@@ -7,6 +7,7 @@ import { Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { ColorArea } from "@dpeek/formless-ui/color-area";
+import { ColorPicker } from "@dpeek/formless-ui/color-picker";
 import { ColorSlider, ColorSliderTrack } from "@dpeek/formless-ui/color-slider";
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { ColorThumb } from "@dpeek/formless-ui/color-thumb";
@@ -17,7 +18,6 @@ import {
   parseColor as parseReactAriaColor,
   type Color as ReactAriaColor,
 } from "react-aria-components/ColorArea";
-import { ColorPicker } from "react-aria-components/ColorPicker";
 
 import {
   hexToRgb,

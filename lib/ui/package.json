@@ -15,6 +15,7 @@
     "./checkbox": "./src/checkbox.tsx",
     "./color-utils": "./src/color-utils.ts",
     "./color-area": "./src/color-area.tsx",
+    "./color-picker": "./src/color-picker.tsx",
     "./color-slider": "./src/color-slider.tsx",
     "./color-swatch": "./src/color-swatch.tsx",
     "./color-thumb": "./src/color-thumb.tsx",
@@ -58,6 +59,7 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
+    "@heroicons/react": "^2.2.0",
     "@internationalized/date": "^3.12.1",
     "@platejs/basic-nodes": "^52.3.10",
     "@platejs/code-block": "^52.3.16",
@@ -66,6 +68,7 @@
     "@platejs/list": "^52.3.10",
     "@platejs/markdown": "^52.3.22",
     "@platejs/table": "^52.3.20",
+    "@react-stately/color": "^3.10.0",
     "@tailwindcss/typography": "^0.5.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
