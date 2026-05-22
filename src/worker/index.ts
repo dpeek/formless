@@ -1,5 +1,5 @@
 import { FormlessAuthority } from "./authority.ts";
-import { findSchemaAppDefinition } from "../shared/schema-apps.ts";
+import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleSiteMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
@@ -66,10 +66,10 @@ export default {
     }
 
     const url = new URL(request.url);
-    const app = parseApiSchemaApp(url.pathname);
+    const authorityRoute = parseAuthorityApiRoute(url.pathname);
 
-    if (app) {
-      const authorityId = env.FORMLESS_AUTHORITY.idFromName(app.key);
+    if (authorityRoute) {
+      const authorityId = env.FORMLESS_AUTHORITY.idFromName(authorityRoute.identity.authorityName);
       const authority = env.FORMLESS_AUTHORITY.get(authorityId);
 
       return authority.fetch(request);
@@ -99,14 +99,4 @@ function redirectResponse(location: string, status: number): Response {
     },
     status,
   });
-}
-
-function parseApiSchemaApp(pathname: string) {
-  const [apiSegment, schemaKey, routeSegment] = pathname.split("/").filter(Boolean);
-
-  if (apiSegment !== "api" || !schemaKey || !routeSegment) {
-    return undefined;
-  }
-
-  return findSchemaAppDefinition(schemaKey);
 }

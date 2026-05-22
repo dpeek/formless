@@ -1,0 +1,147 @@
+import { describe, expect, it } from "vite-plus/test";
+import {
+  installedAppStorageIdentity,
+  parseAuthorityApiRoute,
+  schemaKeyStorageIdentity,
+} from "./app-storage-identity.ts";
+
+describe("app storage identity", () => {
+  it("preserves legacy schema-key storage and route names", () => {
+    expect(schemaKeyStorageIdentity("tasks")).toMatchObject({
+      apiRoutePrefix: "/api/tasks",
+      authorityName: "tasks",
+      broadcastChannelName: "formless:tasks",
+      browserDatabaseName: "formless:tasks",
+      kind: "schemaKey",
+      packageAppKey: "tasks",
+      seedRecordsKey: "tasks",
+      sourceSchemaKey: "tasks",
+    });
+    expect(schemaKeyStorageIdentity("site")).toMatchObject({
+      apiRoutePrefix: "/api/site",
+      authorityName: "site",
+      broadcastChannelName: "formless:site",
+      browserDatabaseName: "formless:site",
+      kind: "schemaKey",
+      packageAppKey: "site",
+      seedRecordsKey: "site",
+      siteMedia: {
+        imageKeyPrefix: "site/images",
+        imageUploadPath: "/api/site/media/images",
+        routePrefix: "/api/site/media",
+      },
+      sourceSchemaKey: "site",
+    });
+    expect(schemaKeyStorageIdentity("site", { projectId: "project-123" })).toMatchObject({
+      broadcastChannelName: "formless:project-123:site",
+      browserDatabaseName: "formless:project-123:site",
+    });
+    expect(schemaKeyStorageIdentity("site", { projectId: "../project" })).toMatchObject({
+      broadcastChannelName: "formless:site",
+      browserDatabaseName: "formless:site",
+    });
+  });
+
+  it("maps an installed Site to install-scoped storage names and API paths", () => {
+    expect(
+      installedAppStorageIdentity({
+        installId: "personal",
+        packageAppKey: "site",
+      }),
+    ).toEqual({
+      apiRoutePrefix: "/api/app-installs/site/personal",
+      authorityName: "app:personal",
+      broadcastChannelName: "formless:app:personal",
+      browserDatabaseName: "formless:app:personal",
+      installId: "personal",
+      kind: "appInstall",
+      packageAppKey: "site",
+      seedRecordsKey: "site",
+      siteMedia: {
+        imageKeyPrefix: "app-installs/personal/site/images",
+        imageUploadPath: "/api/app-installs/site/personal/media/images",
+        routePrefix: "/api/app-installs/site/personal/media",
+      },
+      sourceSchemaKey: "site",
+    });
+    expect(
+      installedAppStorageIdentity({
+        installId: "personal",
+        packageAppKey: "site",
+        projectId: "instance-123",
+      }),
+    ).toMatchObject({
+      broadcastChannelName: "formless:instance-123:app:personal",
+      browserDatabaseName: "formless:instance-123:app:personal",
+    });
+  });
+
+  it("rejects invalid install identities and unsupported packages", () => {
+    expect(installedAppStorageIdentity({ installId: "site", packageAppKey: "site" })).toBe(
+      undefined,
+    );
+    expect(installedAppStorageIdentity({ installId: "Docs", packageAppKey: "site" })).toBe(
+      undefined,
+    );
+    expect(installedAppStorageIdentity({ installId: "tasks", packageAppKey: "tasks" })).toBe(
+      undefined,
+    );
+  });
+
+  it("keeps installed app identity separate from legacy schema identity", () => {
+    const legacySite = schemaKeyStorageIdentity("site");
+    const personal = installedAppStorageIdentity({
+      installId: "personal",
+      packageAppKey: "site",
+    });
+    const docs = installedAppStorageIdentity({ installId: "docs", packageAppKey: "site" });
+
+    expect(personal).toBeDefined();
+    expect(docs).toBeDefined();
+
+    if (!personal || !docs) {
+      throw new Error("Expected installed Site identities.");
+    }
+
+    expect(personal.authorityName).not.toBe(legacySite.authorityName);
+    expect(personal.authorityName).not.toBe(docs.authorityName);
+    expect(personal.browserDatabaseName).not.toBe(docs.browserDatabaseName);
+    expect(personal.broadcastChannelName).not.toBe(docs.broadcastChannelName);
+    expect(personal.siteMedia?.imageKeyPrefix).not.toBe(docs.siteMedia?.imageKeyPrefix);
+  });
+
+  it("parses legacy and installed app API route identities", () => {
+    expect(parseAuthorityApiRoute("/api/site/bootstrap")).toMatchObject({
+      identity: {
+        authorityName: "site",
+        kind: "schemaKey",
+        packageAppKey: "site",
+      },
+      path: "/bootstrap",
+    });
+    expect(
+      parseAuthorityApiRoute("/api/app-installs/site/personal/tree/blog%2Fpost"),
+    ).toMatchObject({
+      identity: {
+        authorityName: "app:personal",
+        installId: "personal",
+        kind: "appInstall",
+        packageAppKey: "site",
+      },
+      path: "/tree/blog%2Fpost",
+    });
+  });
+
+  it("leaves unknown or incomplete API routes unclaimed", () => {
+    for (const pathname of [
+      "/api",
+      "/api/site",
+      "/api/missing/bootstrap",
+      "/api/app-installs/site/personal",
+      "/api/app-installs/site/site/bootstrap",
+      "/api/app-installs/tasks/tasks/bootstrap",
+    ]) {
+      expect(parseAuthorityApiRoute(pathname)).toBeUndefined();
+    }
+  });
+});

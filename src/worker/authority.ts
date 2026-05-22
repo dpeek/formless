@@ -5,6 +5,7 @@ import type {
   SyncSocketServerMessage,
 } from "../shared/protocol.ts";
 import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
+import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import {
   ensureStorageTables,
   getChangesAfter,
@@ -278,19 +279,19 @@ function sendSyncSocketError(socket: WebSocket, message: string) {
 function parseAuthorityRoute(
   pathname: string,
 ): { app: WorkerSchemaAppDefinition; path: string } | undefined {
-  const [apiSegment, schemaKey, ...routeSegments] = pathname.split("/").filter(Boolean);
+  const route = parseAuthorityApiRoute(pathname);
 
-  if (apiSegment !== "api" || !schemaKey || routeSegments.length === 0) {
+  if (!route) {
     return undefined;
   }
 
-  const app = findWorkerSchemaAppDefinition(schemaKey);
+  const app = findWorkerSchemaAppDefinition(route.identity.sourceSchemaKey);
 
   if (!app) {
     return undefined;
   }
 
-  return { app, path: `/${routeSegments.join("/")}` };
+  return { app, path: route.path };
 }
 
 async function readJson(request: Request): Promise<unknown> {

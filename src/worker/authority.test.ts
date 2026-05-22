@@ -91,6 +91,44 @@ describe("authority", () => {
     );
   });
 
+  it("bootstraps installed Site API routes from the bundled Site source", async () => {
+    await resetInstalledApp("site", "starter");
+
+    const body = await getInstalledAppJson<BootstrapResponse>("site", "starter", "/bootstrap");
+
+    expect(body.schema).toEqual(siteSourceSchema);
+    expect(body.schemaUpdatedAt).toEqual(expect.any(String));
+    expect(body.cursor).toBe(siteSeedRecords.length);
+    expectRecordsIgnoringOrder(body.records, siteSeedRecords);
+  });
+
+  it("isolates installed Site storage by install id while preserving legacy Site storage", async () => {
+    await resetInstalledApp("site", "personal");
+    await resetInstalledApp("site", "docs");
+
+    const created = await postInstalledAppJson<MutationResponse>("site", "personal", "/mutations", {
+      mutationId: "mutation-installed-site-page",
+      entity: "block",
+      op: "create",
+      values: {
+        type: "page",
+        label: "Personal only",
+        href: "/personal-only",
+      },
+    });
+
+    const personal = await getInstalledAppJson<BootstrapResponse>("site", "personal", "/bootstrap");
+    const docs = await getInstalledAppJson<BootstrapResponse>("site", "docs", "/bootstrap");
+    useSchemaApp("site");
+    const legacySite = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(personal.records).toContainEqual(created.record);
+    expect(docs.records).not.toContainEqual(created.record);
+    expect(legacySite.records).not.toContainEqual(created.record);
+    expect(docs.schema).toEqual(siteSourceSchema);
+    expect(legacySite.schema).toEqual(siteSourceSchema);
+  });
+
   it("returns a public page tree for a published site page", async () => {
     useSchemaApp("site");
     await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());
@@ -3987,6 +4025,43 @@ function useSchemaApp(schemaKey: SchemaKey) {
 
 function apiPath(path: string, schemaKey?: SchemaKey) {
   return authority.apiPath(path, schemaKey);
+}
+
+async function getInstalledAppJson<T>(packageAppKey: string, installId: string, path: string) {
+  const response = await harness.fetch(installedAppApiPath(packageAppKey, installId, path));
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as T;
+}
+
+async function postInstalledAppJson<T>(
+  packageAppKey: string,
+  installId: string,
+  path: string,
+  body: unknown,
+) {
+  const response = await harness.fetch(installedAppApiPath(packageAppKey, installId, path), {
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as T;
+}
+
+async function resetInstalledApp(packageAppKey: string, installId: string) {
+  await postInstalledAppJson<BootstrapResponse>(packageAppKey, installId, "/reset/seed", {});
+}
+
+function installedAppApiPath(packageAppKey: string, installId: string, path: string) {
+  if (!path.startsWith("/")) {
+    throw new Error(`Expected installed app API operation path, received "${path}".`);
+  }
+
+  return `/api/app-installs/${packageAppKey}/${installId}${path}`;
 }
 
 async function createRateResources(count: number) {
