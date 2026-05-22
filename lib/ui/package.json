@@ -15,6 +15,7 @@
     "./checkbox": "./src/checkbox.tsx",
     "./color-utils": "./src/color-utils.ts",
     "./color-swatch": "./src/color-swatch.tsx",
+    "./color-thumb": "./src/color-thumb.tsx",
     "./color": "./src/color.tsx",
     "./date": "./src/date.tsx",
     "./dialog": "./src/dialog.tsx",
