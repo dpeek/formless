@@ -9,7 +9,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
-import { FieldError, Label } from "@dpeek/formless-ui/field";
+import { FieldError, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { parseSvgIconSource, SvgIcon } from "@dpeek/formless-ui/svg-icon";
@@ -407,7 +407,7 @@ function RecordCheckboxFieldRenderer({
     return (
       <div className="min-w-28 flex-none space-y-1">
         {checkbox}
-        {error ? <FieldError>{error}</FieldError> : null}
+        {error ? <StaticFieldError>{error}</StaticFieldError> : null}
       </div>
     );
   }
@@ -415,7 +415,7 @@ function RecordCheckboxFieldRenderer({
   return (
     <div className={`${density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}>
       {checkbox}
-      {error ? <FieldError>{error}</FieldError> : null}
+      {error ? <StaticFieldError>{error}</StaticFieldError> : null}
     </div>
   );
 }
@@ -474,7 +474,7 @@ function RecordEnumFieldRenderer({
             </option>
           ))}
         </NativeSelectContent>
-        {error ? <FieldError>{error}</FieldError> : null}
+        {error ? <StaticFieldError>{error}</StaticFieldError> : null}
       </NativeSelect>
     </div>
   );
@@ -1493,7 +1493,15 @@ function RecordReferenceFieldControl({
           ))}
         </NativeSelectContent>
       </NativeSelect>
-      {error ? <FieldError>{error}</FieldError> : null}
+      {error ? <StaticFieldError>{error}</StaticFieldError> : null}
+    </div>
+  );
+}
+
+function StaticFieldError({ children }: { children: string }) {
+  return (
+    <div className={fieldErrorStyles()} data-slot="field-error" role="alert" slot="errorMessage">
+      {children}
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { Textarea } from "./textarea.js";
 describe("TextField", () => {
   it("renders label and input inside the React Aria text field root", () => {
     const markup = renderToStaticMarkup(
-      <TextField defaultValue="Draft" isRequired name="title">
+      <TextField defaultValue="Draft" isInvalid isRequired name="title">
         <Label>Title</Label>
         <Input />
         <FieldError>Title is required</FieldError>

@@ -8,7 +8,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
-import { FieldSet } from "@dpeek/formless-ui/field";
+import { Fieldset } from "@dpeek/formless-ui/field";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitCreateMutation } from "../../client/sync.ts";
 import {
@@ -106,7 +106,7 @@ export function GeneratedCreateForm({
         <p className="text-sm text-slate-600">Create is disabled for {entity.label}.</p>
       ) : null}
 
-      <FieldSet className="space-y-4" disabled={!canCreate || isSubmitting}>
+      <Fieldset className="space-y-4" disabled={!canCreate || isSubmitting}>
         {visibleCreateFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
             fieldConfig={fieldConfig}
@@ -123,7 +123,7 @@ export function GeneratedCreateForm({
             }}
           />
         ))}
-      </FieldSet>
+      </Fieldset>
 
       <Button isDisabled={!canCreate || isSubmitting} type="submit">
         {isSubmitting ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
@@ -240,7 +240,7 @@ export function GeneratedCreateDialogForm({
         <p className="text-sm text-slate-600">Create is disabled for {action.entity.label}.</p>
       ) : null}
 
-      <FieldSet className="space-y-4" disabled={!canSubmit || isSubmitting}>
+      <Fieldset className="space-y-4" disabled={!canSubmit || isSubmitting}>
         {visibleFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
             fieldConfig={fieldConfig}
@@ -257,7 +257,7 @@ export function GeneratedCreateDialogForm({
             }}
           />
         ))}
-      </FieldSet>
+      </Fieldset>
 
       <ModalFooter>
         {renderDialogCancel ? (

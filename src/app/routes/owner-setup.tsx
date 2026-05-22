@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearch } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@dpeek/formless-ui/field";
+import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
+import { TextField } from "@dpeek/formless-ui/text-field";
 import {
   parseOwnerSetupToken,
   type OwnerIdentity,
@@ -331,31 +326,36 @@ function OwnerSetupForm({
       <OwnerSetupHeader heading="Claim this Formless instance" message="Create the first owner." />
       <form className="space-y-4" onSubmit={onSubmit}>
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor={nameInputId}>Name</FieldLabel>
-            <Input
-              autoComplete="name"
-              disabled={disabled}
-              id={nameInputId}
-              onChange={(event) => onOwnerNameChange?.(event.currentTarget.value)}
-              required
-              value={ownerName}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={emailInputId}>Email</FieldLabel>
-            <Input
-              autoComplete="email"
-              disabled={disabled}
-              id={emailInputId}
-              onChange={(event) => onOwnerEmailChange?.(event.currentTarget.value)}
-              type="email"
-              value={ownerEmail}
-            />
-            <FieldDescription>Optional</FieldDescription>
-          </Field>
+          <TextField
+            isDisabled={disabled}
+            isRequired
+            onChange={(value) => onOwnerNameChange?.(value)}
+            value={ownerName}
+          >
+            <Label htmlFor={nameInputId}>Name</Label>
+            <Input autoComplete="name" id={nameInputId} />
+          </TextField>
+          <TextField
+            isDisabled={disabled}
+            onChange={(value) => onOwnerEmailChange?.(value)}
+            type="email"
+            value={ownerEmail}
+          >
+            <Label htmlFor={emailInputId}>Email</Label>
+            <Input autoComplete="email" id={emailInputId} />
+            <Description>Optional</Description>
+          </TextField>
         </FieldGroup>
-        {submitError ? <FieldError>{submitError}</FieldError> : null}
+        {submitError ? (
+          <p
+            className={fieldErrorStyles()}
+            data-slot="field-error"
+            role="alert"
+            slot="errorMessage"
+          >
+            {submitError}
+          </p>
+        ) : null}
         <Button className="w-full" isDisabled={disabled} type="submit">
           {disabled ? "Creating owner..." : "Create owner"}
         </Button>

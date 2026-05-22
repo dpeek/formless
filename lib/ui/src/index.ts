@@ -9,17 +9,9 @@ export * from "./dialog.js";
 export * from "./dropdown-menu.js";
 export {
   Description,
-  Field,
-  FieldContent,
-  FieldDescription,
   FieldError,
   FieldGroup,
   Fieldset,
-  FieldLabel,
-  FieldLegend,
-  FieldSeparator,
-  FieldSet,
-  FieldTitle,
   Label,
   Legend,
   descriptionStyles,

@@ -3,7 +3,7 @@
 import { Button } from "@dpeek/formless-ui/button";
 import { Dialog } from "@dpeek/formless-ui/dialog";
 import { Input, InputGroup } from "@dpeek/formless-ui/input";
-import { FieldError, Label } from "@dpeek/formless-ui/field";
+import { Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { cn } from "@dpeek/formless-ui/utils";
@@ -627,7 +627,16 @@ export function ColorInput({
           </span>
         ) : null}
       </InputGroup>
-      {inputError ? <FieldError>{inputError}</FieldError> : null}
+      {inputError ? (
+        <div
+          className={fieldErrorStyles()}
+          data-slot="field-error"
+          role="alert"
+          slot="errorMessage"
+        >
+          {inputError}
+        </div>
+      ) : null}
     </div>
   );
 }
