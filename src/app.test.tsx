@@ -520,7 +520,18 @@ describe("App smoke routes", () => {
     expect(html).toContain("<code>tasks</code>");
     expect(html).not.toContain('aria-label="Tasks route reset controls"');
     expect(html).not.toContain('aria-label="Tasks source reset controls"');
+    expect(html).toContain('aria-label="Schema editor mode"');
+    expect(html).toContain('aria-controls="schema-builder-panel"');
+    expect(html).toContain('aria-controls="schema-source-panel"');
+    expect(html).toContain('aria-selected="true"');
+    expect(html).toContain('aria-label="Builder entities"');
+    expect(html).toContain('aria-label="Builder draft summary"');
+    expect(html).toContain('aria-label="Schema source"');
+    expect(html).toContain("Saved draft");
     expect(html).toContain("Save schema");
+    expect(html).toContain("Revert draft");
+    expect(html).toContain("Open app");
+    expect(html).toContain('href="/tasks"');
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('aria-label="Tasks store snapshot controls"');
     expect(html).not.toContain("Export store snapshot");
@@ -548,7 +559,12 @@ describe("App smoke routes", () => {
     expect(html).toContain("<code>estii</code>");
     expect(html).not.toContain('aria-label="Estii route reset controls"');
     expect(html).not.toContain('aria-label="Estii source reset controls"');
+    expect(html).toContain('aria-label="Schema editor mode"');
+    expect(html).toContain('aria-label="Builder entities"');
+    expect(html).toContain("Saved draft");
     expect(html).toContain("Save schema");
+    expect(html).toContain("Open app");
+    expect(html).toContain('href="/estii"');
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('aria-label="Estii store snapshot controls"');
     expect(html).not.toContain("Export store snapshot");
@@ -578,7 +594,12 @@ describe("App smoke routes", () => {
     expect(html).toContain("<code>site</code>");
     expect(html).not.toContain('aria-label="Site route reset controls"');
     expect(html).not.toContain('aria-label="Site source reset controls"');
+    expect(html).toContain('aria-label="Schema editor mode"');
+    expect(html).toContain('aria-label="Builder entities"');
+    expect(html).toContain("Saved draft");
     expect(html).toContain("Save schema");
+    expect(html).toContain("Open app");
+    expect(html).toContain('href="/site"');
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('aria-label="Site store snapshot controls"');
     expect(html).not.toContain("Export store snapshot");
@@ -724,6 +745,8 @@ describe("App smoke routes", () => {
     expect(html).toContain("Site Schema");
     expect(html).toContain("<code>site</code>");
     expect(html).toContain("Save schema");
+    expect(html).toContain("Open app");
+    expect(html).toContain('href="/admin"');
   });
 
   it("renders a published Site profile slug path outside generated admin navigation", () => {
