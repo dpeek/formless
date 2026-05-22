@@ -9,9 +9,8 @@ import {
   ModalHeader,
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
-import { Field, FieldError } from "@dpeek/formless-ui/field";
+import { Field, FieldError, Label } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
-import { Label } from "@dpeek/formless-ui/label";
 import { NativeSelect, NativeSelectOption } from "@dpeek/formless-ui/native-select";
 import { parseSvgIconSource, SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { Textarea } from "@dpeek/formless-ui/textarea";

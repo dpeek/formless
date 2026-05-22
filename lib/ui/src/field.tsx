@@ -1,13 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ElementType } from "react";
+import {
+  FieldError as FieldErrorPrimitive,
+  type FieldErrorProps as PrimitiveFieldErrorProps,
+} from "react-aria-components/FieldError";
 import { Label as LabelPrimitive, type LabelProps } from "react-aria-components/Label";
+import { Text, type TextProps } from "react-aria-components/Text";
 import { cva, type VariantProps } from "class-variance-authority";
+import { twMerge } from "tailwind-merge";
 import { tv } from "tailwind-variants";
 
-import { cn } from "@dpeek/formless-ui/utils";
-import { Label as LegacyLabel } from "@dpeek/formless-ui/label";
 import { Separator } from "@dpeek/formless-ui/separator";
+import { cn } from "@dpeek/formless-ui/utils";
+
+import { cx } from "./primitive";
 
 export const labelStyles = tv({
   base: [
@@ -15,6 +22,14 @@ export const labelStyles = tv({
     "in-data-required:not-data-[slot='control-label']:after:text-danger-subtle-fg in-data-required:not-data-[slot='control-label']:after:content-['*']",
     "in-disabled:pointer-events-none in-disabled:opacity-50 group-disabled:opacity-50",
   ],
+});
+
+export const descriptionStyles = tv({
+  base: "block text-muted-fg text-sm/6 in-disabled:opacity-50 group-disabled:opacity-50",
+});
+
+export const fieldErrorStyles = tv({
+  base: "block text-danger-subtle-fg text-sm/6 in-disabled:opacity-50 group-disabled:opacity-50 forced-colors:text-[Mark]",
 });
 
 export const fieldStyles = tv({
@@ -31,50 +46,95 @@ export const fieldStyles = tv({
   ],
 });
 
-function Label({ className, ...props }: LabelProps) {
+export function Label({ className, ...props }: LabelProps) {
   return <LabelPrimitive data-slot="label" {...props} className={labelStyles({ className })} />;
 }
 
-function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
+export function Description({ className, ...props }: TextProps) {
+  return <Text {...props} slot="description" className={descriptionStyles({ className })} />;
+}
+
+export function Fieldset({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
     <fieldset
-      data-slot="field-set"
-      className={cn(
-        "flex flex-col gap-4 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3",
-        className,
-      )}
+      className={twMerge("*:data-[slot=text]:mt-1 [&>*+[data-slot=control]]:mt-6", className)}
       {...props}
     />
   );
 }
 
-function FieldLegend({
+export function FieldGroup({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
+  return <div data-slot="control" className={twMerge("space-y-6", className)} {...props} />;
+}
+
+type FieldErrorProps = PrimitiveFieldErrorProps & {
+  errors?: ReadonlyArray<{ message?: string } | undefined>;
+};
+
+export function FieldError({
   className,
-  variant = "legend",
+  children,
+  errors,
+  elementType,
   ...props
-}: React.ComponentProps<"legend"> & { variant?: "legend" | "label" }) {
+}: FieldErrorProps) {
+  const content = useMemo(() => {
+    if (children && typeof children !== "function") {
+      return children;
+    }
+
+    if (!errors?.length) {
+      return null;
+    }
+
+    const uniqueErrors = [...new Map(errors.map((error) => [error?.message, error])).values()];
+
+    if (uniqueErrors.length === 1) {
+      return uniqueErrors[0]?.message;
+    }
+
+    return (
+      <ul className="ms-4 flex list-disc flex-col gap-1">
+        {uniqueErrors.map((error, index) => error?.message && <li key={index}>{error.message}</li>)}
+      </ul>
+    );
+  }, [children, errors]);
+
+  if (content) {
+    const Element = (elementType ?? "div") as ElementType;
+    const resolvedClassName =
+      typeof className === "function" ? fieldErrorStyles() : twMerge(fieldErrorStyles(), className);
+
+    return (
+      <Element
+        role="alert"
+        slot="errorMessage"
+        data-slot="field-error"
+        className={resolvedClassName}
+        {...props}
+      >
+        {content}
+      </Element>
+    );
+  }
+
+  return (
+    <FieldErrorPrimitive
+      {...props}
+      elementType={elementType}
+      className={cx(fieldErrorStyles(), className)}
+    >
+      {children}
+    </FieldErrorPrimitive>
+  );
+}
+
+export function Legend({ className, ...props }: React.ComponentProps<"legend">) {
   return (
     <legend
-      data-slot="field-legend"
-      data-variant={variant}
-      className={cn(
-        "mb-2 font-medium data-[variant=label]:text-xs/relaxed data-[variant=legend]:text-sm",
-        className,
-      )}
+      data-slot="legend"
       {...props}
-    />
-  );
-}
-
-function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="field-group"
-      className={cn(
-        "group/field-group @container/field-group flex w-full flex-col gap-4 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4",
-        className,
-      )}
-      {...props}
+      className={twMerge("font-semibold text-base/6 data-disabled:opacity-50", className)}
     />
   );
 }
@@ -120,9 +180,9 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function FieldLabel({ className, ...props }: React.ComponentProps<typeof LegacyLabel>) {
+function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
   return (
-    <LegacyLabel
+    <Label
       data-slot="field-label"
       className={cn(
         "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-md has-[>[data-slot=field]]:border *:data-[slot=field]:p-2 dark:has-data-checked:bg-primary/10",
@@ -147,9 +207,9 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+function FieldDescription({ className, ...props }: React.ComponentProps<typeof Description>) {
   return (
-    <p
+    <Description
       data-slot="field-description"
       className={cn(
         "text-start text-xs/relaxed leading-normal font-normal text-muted-foreground group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5",
@@ -192,62 +252,16 @@ function FieldSeparator({
   );
 }
 
-function FieldError({
-  className,
-  children,
-  errors,
-  ...props
-}: React.ComponentProps<"div"> & {
-  errors?: ReadonlyArray<{ message?: string } | undefined>;
-}) {
-  const content = useMemo(() => {
-    if (children) {
-      return children;
-    }
-
-    if (!errors?.length) {
-      return null;
-    }
-
-    const uniqueErrors = [...new Map(errors.map((error) => [error?.message, error])).values()];
-
-    if (uniqueErrors?.length == 1) {
-      return uniqueErrors[0]?.message;
-    }
-
-    return (
-      <ul className="ms-4 flex list-disc flex-col gap-1">
-        {uniqueErrors.map((error, index) => error?.message && <li key={index}>{error.message}</li>)}
-      </ul>
-    );
-  }, [children, errors]);
-
-  if (!content) {
-    return null;
-  }
-
-  return (
-    <div
-      role="alert"
-      data-slot="field-error"
-      className={cn("text-xs/relaxed font-normal text-destructive", className)}
-      {...props}
-    >
-      {content}
-    </div>
-  );
-}
+const FieldSet = Fieldset;
+const FieldLegend = Legend;
 
 export {
   Field,
-  FieldLabel,
+  FieldContent,
   FieldDescription,
-  FieldError,
-  FieldGroup,
+  FieldLabel,
   FieldLegend,
   FieldSeparator,
   FieldSet,
-  FieldContent,
   FieldTitle,
-  Label,
 };

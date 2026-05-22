@@ -9,7 +9,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@dpeek/formless-ui/input-group";
-import { Label } from "@dpeek/formless-ui/label";
+import { Label } from "@dpeek/formless-ui/field";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { cn } from "@dpeek/formless-ui/utils";

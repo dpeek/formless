@@ -8,21 +8,28 @@ export * from "./date.js";
 export * from "./dialog.js";
 export * from "./dropdown-menu.js";
 export {
+  Description,
   Field,
   FieldContent,
   FieldDescription,
   FieldError,
   FieldGroup,
+  Fieldset,
   FieldLabel,
   FieldLegend,
   FieldSeparator,
   FieldSet,
   FieldTitle,
+  Label,
+  Legend,
+  descriptionStyles,
+  fieldErrorStyles,
+  fieldStyles,
+  labelStyles,
 } from "./field.js";
 export * from "./icons.js";
 export * from "./input-group.js";
 export { Input } from "./input.js";
-export * from "./label.js";
 export * from "./markdown.js";
 export * from "./markdown-renderer.js";
 export * from "./modal.js";

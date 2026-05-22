@@ -23,7 +23,6 @@
     "./icons": "./src/icons.ts",
     "./input-group": "./src/input-group.tsx",
     "./input": "./src/input.tsx",
-    "./label": "./src/label.tsx",
     "./markdown": "./src/markdown.tsx",
     "./markdown-renderer": "./src/markdown-renderer.tsx",
     "./modal": "./src/modal.tsx",
