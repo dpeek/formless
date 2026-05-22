@@ -1,9 +1,7 @@
-import { ControlSelectDownIcon } from "@dpeek/formless-ui/icons";
 import { twMerge } from "tailwind-merge";
-
 import { fieldStyles } from "./field";
 
-import type React from "react";
+import { ControlSelectIcon } from "./icons";
 
 export function NativeSelect({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -20,7 +18,6 @@ export function NativeSelect({ className, ...props }: React.ComponentProps<"div"
 export interface NativeSelectContentProps extends React.ComponentProps<"select"> {
   isInvalid?: boolean;
 }
-
 export function NativeSelectContent({ className, isInvalid, ...props }: NativeSelectContentProps) {
   return (
     <div data-slot="control" className="relative flex items-center justify-between">
@@ -41,10 +38,7 @@ export function NativeSelectContent({ className, isInvalid, ...props }: NativeSe
         )}
         {...props}
       />
-      <ControlSelectDownIcon
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 right-3 size-5 -translate-y-1/2 text-muted-fg sm:right-2.5 sm:size-4"
-      />
+      <ControlSelectIcon className="pointer-events-none absolute top-1/2 right-3 size-5 -translate-y-1/2 text-muted-fg sm:right-2.5 sm:size-4" />
     </div>
   );
 }

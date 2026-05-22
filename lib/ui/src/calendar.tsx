@@ -1,5 +1,3 @@
-"use client";
-
 import { type CalendarDate, getLocalTimeZone, today } from "@internationalized/date";
 import { useDateFormatter } from "@react-aria/i18n";
 import { use } from "react";
@@ -19,15 +17,9 @@ import { Heading } from "react-aria-components/Heading";
 import { useLocale } from "react-aria-components/I18nProvider";
 import { RangeCalendarStateContext } from "react-aria-components/RangeCalendar";
 import { twMerge } from "tailwind-merge";
+import { Button } from "./button";
+import { Select, SelectContent, SelectItem, SelectLabel, SelectTrigger } from "./select";
 
-import { Button } from "@dpeek/formless-ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-} from "@dpeek/formless-ui/select";
 import { CalendarNextIcon, CalendarPreviousIcon } from "./icons";
 
 interface CalendarProps<T extends DateValue> extends Omit<
@@ -139,8 +131,8 @@ const SelectMonth = () => {
       className="[popover-width:8rem]"
       aria-label="Month"
       style={{ flex: 1, width: "fit-content" }}
-      selectedKey={state.focusedDate.month}
-      onSelectionChange={(key) => {
+      value={state.focusedDate.month}
+      onChange={(key) => {
         if (typeof key === "number") {
           state.setFocusedDate(months[key - 1].date);
         }
@@ -176,12 +168,11 @@ const SelectYear = () => {
       formatted: formatter.format(date.toDate(state.timeZone)),
     });
   }
-
   return (
     <Select
       aria-label="Year"
-      selectedKey={20}
-      onSelectionChange={(key) => {
+      value={20}
+      onChange={(key) => {
         if (typeof key === "number") {
           state.setFocusedDate(years[key].date);
         }

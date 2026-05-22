@@ -7,6 +7,7 @@ import { composeRenderProps } from "react-aria-components/composeRenderProps";
 import { twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Label } from "./field";
+
 import { ControlCheckIcon, ControlIndeterminateIcon } from "./icons";
 
 export function CheckboxGroup({ className, ...props }: CheckboxGroupProps) {

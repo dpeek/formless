@@ -1,5 +1,3 @@
-"use client";
-
 import type { DateDuration } from "@internationalized/date";
 import { Button } from "react-aria-components/Button";
 import type { DateValue } from "react-aria-components/DateField";
@@ -10,17 +8,17 @@ import {
 import type { GroupProps } from "react-aria-components/Group";
 import type { PopoverProps } from "react-aria-components/Popover";
 import { twJoin } from "tailwind-merge";
+import { useIsMobile } from "./use-mobile";
 
-import { Calendar } from "@dpeek/formless-ui/calendar";
-import { DateInput } from "@dpeek/formless-ui/date-field";
-import { fieldStyles } from "@dpeek/formless-ui/field";
-import { InputGroup } from "@dpeek/formless-ui/input";
-import { ModalContent } from "@dpeek/formless-ui/modal";
-import { PopoverContent } from "@dpeek/formless-ui/popover";
-import { RangeCalendar } from "@dpeek/formless-ui/range-calendar";
-import { useIsMobile } from "@dpeek/formless-ui/use-mobile";
 import { ControlCalendarIcon } from "./icons";
 import { cx } from "./primitive";
+import { Calendar } from "./calendar";
+import { DateInput } from "./date-field";
+import { fieldStyles } from "./field";
+import { InputGroup } from "./input";
+import { ModalContent } from "./modal";
+import { PopoverContent } from "./popover";
+import { RangeCalendar } from "./range-calendar";
 
 export interface DatePickerProps<T extends DateValue> extends DatePickerPrimitiveProps<T> {
   popover?: Omit<PopoverProps, "children">;

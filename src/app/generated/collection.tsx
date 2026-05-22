@@ -53,6 +53,7 @@ import { useSchemaKey } from "./schema-app-context.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
+import { ControlAddIcon } from "@dpeek/formless-ui/icons";
 
 export function HomeCollection({
   collection,
@@ -505,7 +506,7 @@ function ContextSelector({
 
   return (
     <section className="space-y-3 border-b border-slate-200 pb-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-4">
         <Tabs
           onSelectionChange={(key) => {
             if (typeof key === "string") {
@@ -528,23 +529,20 @@ function ContextSelector({
             onPress={() => setCreateDialogOpen(true)}
             size="sq-xs"
             type="button"
-            intent="outline"
+            intent="plain"
           >
-            +
+            <ControlAddIcon />
           </Button>
         ) : null}
       </div>
-
       {options.length === 0 ? (
         <p className="text-sm text-slate-600">No {context.label.toLowerCase()} records yet.</p>
       ) : null}
-
       <ContextRecordEditor
         context={context}
         onDeleted={() => onSelectContext?.(null)}
         recordId={selectedContextRecordId}
       />
-
       {context.createAction && createDialogOpen ? (
         <GeneratedCreateDialog
           action={context.createAction}
@@ -712,9 +710,9 @@ function QueryCountBadge({
   const count = useEntityRecordCountMatchingQuery(entityName, queryTab.query, queryContext);
 
   return (
-    <Badge aria-label={`${queryTab.label} count`} className="h-4 px-1.5" intent="outline">
+    <div aria-label={`${queryTab.label} count`} className="ml-2">
       {count}
-    </Badge>
+    </div>
   );
 }
 

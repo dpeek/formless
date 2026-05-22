@@ -1,5 +1,6 @@
 export * from "./badge.js";
 export * from "./button.js";
+export * from "./card.js";
 export * from "./calendar.js";
 export * from "./checkbox.js";
 export * from "./color-area.js";

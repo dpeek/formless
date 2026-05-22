@@ -15,6 +15,7 @@ import {
 import { twJoin, twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Checkbox } from "./checkbox";
+
 import { ControlDisclosureIcon } from "./icons";
 
 const Tree = <T extends object>({ className, ...props }: TreeProps<T>) => {

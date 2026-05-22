@@ -11,6 +11,7 @@
     "./global.css": "./src/global.css",
     "./badge": "./src/badge.tsx",
     "./button": "./src/button.tsx",
+    "./card": "./src/card.tsx",
     "./calendar": "./src/calendar.tsx",
     "./checkbox": "./src/checkbox.tsx",
     "./color-area": "./src/color-area.tsx",
@@ -61,7 +62,6 @@
     "check": "oxlint --type-aware --type-check && oxfmt && bun test ./src"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "^5.2.8",
     "@internationalized/date": "^3.12.1",
     "@platejs/basic-nodes": "^52.3.10",
     "@platejs/code-block": "^52.3.16",
@@ -84,7 +84,6 @@
     "react-aria-components": "^1.17.0",
     "react-dom": "^19.2.4",
     "remark-gfm": "^4.0.1",
-    "shadcn": "^4.3.0",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2",
     "tailwindcss": "^4.2.1",

@@ -7,8 +7,7 @@ import {
   type RangeCalendarProps,
 } from "react-aria-components/RangeCalendar";
 import { twJoin, twMerge } from "tailwind-merge";
-
-import { CalendarGridHeader, CalendarHeader } from "@dpeek/formless-ui/calendar";
+import { CalendarGridHeader, CalendarHeader } from "./calendar";
 
 export function RangeCalendar<T extends DateValue>({
   visibleDuration = { months: 1 },
@@ -59,9 +58,13 @@ export function RangeCalendar<T extends DateValue>({
                             ? "bg-primary text-primary-fg group-invalid/calendar-cell:bg-danger group-invalid/calendar-cell:text-danger-fg forced-colors:bg-[Highlight] forced-colors:text-[HighlightText] forced-colors:group-invalid/calendar-cell:bg-[Mark]"
                             : isSelected
                               ? [
+                                  // hover
                                   "group-hover/calendar-cell:bg-primary/15",
+                                  // pressed
                                   "group-pressed/calendar-cell:bg-(--cell)",
+                                  // invalid
                                   "group-invalid/calendar-cell:text-danger-subtle-fg group-invalid/calendar-cell:group-hover/calendar-cell:bg-danger/15 group-invalid/calendar-cell:group-pressed/calendar-cell:bg-danger/30",
+                                  // forced-colors
                                   "forced-colors:text-[HighlightText] forced-colors:group-pressed/calendar-cell:bg-[Highlight] forced-colors:group-hover/calendar-cell:bg-[Highlight] forced-colors:group-invalid/calendar-cell:group-pressed/calendar-cell:bg-[Mark] forced-colors:group-invalid:group-hover/calendar-cell:bg-[Mark]",
                                 ]
                               : "group-hover/calendar-cell:bg-secondary-fg/15 group-pressed/calendar-cell:bg-secondary-fg/20 forced-colors:group-pressed/calendar-cell:bg-[Highlight]",

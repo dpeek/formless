@@ -1,40 +1,40 @@
 .graph-markdown {
-  --tw-prose-body: color-mix(in oklch, var(--foreground) 88%, var(--muted-foreground));
-  --tw-prose-headings: var(--foreground);
-  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-body: color-mix(in oklch, var(--fg) 88%, var(--muted-fg));
+  --tw-prose-headings: var(--fg);
+  --tw-prose-lead: var(--muted-fg);
   --tw-prose-links: var(--primary);
-  --tw-prose-bold: var(--foreground);
-  --tw-prose-counters: var(--muted-foreground);
-  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-bold: var(--fg);
+  --tw-prose-counters: var(--muted-fg);
+  --tw-prose-bullets: var(--muted-fg);
   --tw-prose-hr: var(--border);
-  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quotes: var(--fg);
   --tw-prose-quote-borders: var(--border);
-  --tw-prose-captions: var(--muted-foreground);
-  --tw-prose-kbd: var(--foreground);
-  --tw-prose-code: var(--foreground);
-  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-captions: var(--muted-fg);
+  --tw-prose-kbd: var(--fg);
+  --tw-prose-code: var(--fg);
+  --tw-prose-pre-code: var(--fg);
   --tw-prose-pre-bg: var(--muted);
   --tw-prose-th-borders: var(--border);
   --tw-prose-td-borders: var(--border);
-  --tw-prose-invert-body: color-mix(in oklch, var(--foreground) 88%, var(--muted-foreground));
-  --tw-prose-invert-headings: var(--foreground);
-  --tw-prose-invert-lead: var(--muted-foreground);
+  --tw-prose-invert-body: color-mix(in oklch, var(--fg) 88%, var(--muted-fg));
+  --tw-prose-invert-headings: var(--fg);
+  --tw-prose-invert-lead: var(--muted-fg);
   --tw-prose-invert-links: var(--primary);
-  --tw-prose-invert-bold: var(--foreground);
-  --tw-prose-invert-counters: var(--muted-foreground);
-  --tw-prose-invert-bullets: var(--muted-foreground);
+  --tw-prose-invert-bold: var(--fg);
+  --tw-prose-invert-counters: var(--muted-fg);
+  --tw-prose-invert-bullets: var(--muted-fg);
   --tw-prose-invert-hr: var(--border);
-  --tw-prose-invert-quotes: var(--foreground);
+  --tw-prose-invert-quotes: var(--fg);
   --tw-prose-invert-quote-borders: var(--border);
-  --tw-prose-invert-captions: var(--muted-foreground);
-  --tw-prose-invert-kbd: var(--foreground);
-  --tw-prose-invert-code: var(--foreground);
-  --tw-prose-invert-pre-code: var(--foreground);
+  --tw-prose-invert-captions: var(--muted-fg);
+  --tw-prose-invert-kbd: var(--fg);
+  --tw-prose-invert-code: var(--fg);
+  --tw-prose-invert-pre-code: var(--fg);
   --tw-prose-invert-pre-bg: var(--muted);
   --tw-prose-invert-th-borders: var(--border);
   --tw-prose-invert-td-borders: var(--border);
   --graph-code-token-attribute: oklch(0.48 0.15 250);
-  --graph-code-token-comment: color-mix(in oklch, var(--muted-foreground) 78%, var(--foreground));
+  --graph-code-token-comment: color-mix(in oklch, var(--muted-fg) 78%, var(--fg));
   --graph-code-token-deletion: oklch(0.52 0.19 27);
   --graph-code-token-keyword: oklch(0.51 0.2 20);
   --graph-code-token-literal: oklch(0.45 0.15 264);
@@ -45,7 +45,7 @@
 
 .dark .graph-markdown {
   --graph-code-token-attribute: oklch(0.74 0.1 247);
-  --graph-code-token-comment: color-mix(in oklch, var(--muted-foreground) 82%, var(--foreground));
+  --graph-code-token-comment: color-mix(in oklch, var(--muted-fg) 82%, var(--fg));
   --graph-code-token-deletion: oklch(0.75 0.14 20);
   --graph-code-token-keyword: oklch(0.72 0.16 28);
   --graph-code-token-literal: oklch(0.76 0.11 264);
@@ -59,8 +59,8 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: color-mix(in oklch, var(--background) 96%, var(--muted));
-  color: var(--foreground);
+  background: color-mix(in oklch, var(--bg) 96%, var(--muted));
+  color: var(--fg);
 }
 
 .graph-markdown.graph-markdown-editor {
@@ -80,12 +80,12 @@
 }
 
 .graph-markdown.graph-markdown-editor[aria-invalid="true"] {
-  outline-color: var(--destructive);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive) 18%, transparent);
+  outline-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger) 18%, transparent);
 }
 
 .graph-markdown.graph-markdown-editor [data-slate-placeholder="true"] {
-  color: var(--muted-foreground);
+  color: var(--muted-fg);
   opacity: 0.78;
 }
 
@@ -136,7 +136,7 @@
 
 .graph-markdown .graph-markdown-code-block-label {
   overflow: hidden;
-  color: var(--muted-foreground);
+  color: var(--muted-fg);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   line-height: 1rem;
@@ -145,11 +145,11 @@
 }
 
 .graph-markdown .graph-markdown-code-block-copy-button {
-  color: var(--muted-foreground);
+  color: var(--muted-fg);
 }
 
 .graph-markdown .graph-markdown-code-block-copy-button:hover {
-  color: var(--foreground);
+  color: var(--fg);
 }
 
 .graph-markdown .graph-markdown-code-block-body {
@@ -162,7 +162,7 @@
   overflow: visible;
   background: transparent;
   padding: 0.875rem 1rem;
-  color: var(--foreground);
+  color: var(--fg);
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   line-height: 1.55;

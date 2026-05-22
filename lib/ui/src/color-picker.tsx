@@ -8,6 +8,7 @@ import {
 import { twMerge } from "tailwind-merge";
 import { Button } from "./button";
 import { fieldStyles } from "./field";
+
 import { ControlColorPickIcon } from "./icons";
 
 interface ColorPickerProps extends ColorPickerPrimitiveProps {

@@ -1,13 +1,20 @@
-import { cn } from "@dpeek/formless-ui/utils";
+import { twMerge } from "tailwind-merge";
 
-function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
+export interface SkeletonProps extends React.ComponentProps<"div"> {
+  soft?: boolean;
+}
+
+export function Skeleton({ ref, soft = false, className, ...props }: SkeletonProps) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      ref={ref}
+      className={twMerge(
+        "shrink-0 animate-pulse rounded-lg",
+        soft ? "bg-muted-fg/20" : "bg-muted-fg/40",
+        className,
+      )}
       {...props}
     />
   );
 }
-
-export { Skeleton };
