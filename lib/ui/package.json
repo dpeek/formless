@@ -20,6 +20,7 @@
     "./color-slider": "./src/color-slider.tsx",
     "./color-swatch": "./src/color-swatch.tsx",
     "./color-thumb": "./src/color-thumb.tsx",
+    "./color-wheel": "./src/color-wheel.tsx",
     "./color": "./src/color.tsx",
     "./date": "./src/date.tsx",
     "./dialog": "./src/dialog.tsx",
