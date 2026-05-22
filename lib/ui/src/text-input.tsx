@@ -26,10 +26,10 @@ const baseTextMetricsClass = "border border-transparent px-1 py-0.5 text-inherit
 
 const baseControlClass = cn(
   "col-start-1 row-start-1 block min-w-0 appearance-none rounded-sm bg-transparent",
-  "transition-colors outline-none placeholder:text-muted-foreground",
-  "focus-visible:border-ring focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring/30",
+  "transition-colors outline-none placeholder:text-muted-fg",
+  "focus-visible:border-ring focus-visible:bg-bg focus-visible:ring-2 focus-visible:ring-ring/30",
   "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
-  "aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20",
+  "aria-invalid:border-danger aria-invalid:ring-2 aria-invalid:ring-danger/20",
 );
 
 function AutosizeTextInput({

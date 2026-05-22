@@ -1,11 +1,11 @@
 import { cn } from "@dpeek/formless-ui/utils";
 import { useState, type AriaAttributes, type ReactNode } from "react";
 
-const sourcePreviewSurfaceClassName = "border-input bg-background rounded-xl border shadow-sm";
+const sourcePreviewSurfaceClassName = "border-input bg-bg rounded-xl border shadow-sm";
 
 export const sourcePreviewPanelClassName = `${sourcePreviewSurfaceClassName} min-h-[22rem] p-4`;
 export const sourcePreviewEditorFrameClassName = `${sourcePreviewSurfaceClassName} overflow-hidden px-4`;
-export const sourcePreviewTextareaClassName = `${sourcePreviewSurfaceClassName} text-foreground min-h-[22rem] w-full px-4 py-3 text-sm leading-6 outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30`;
+export const sourcePreviewTextareaClassName = `${sourcePreviewSurfaceClassName} text-fg min-h-[22rem] w-full px-4 py-3 text-sm leading-6 outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30`;
 
 export type SourcePreviewMode = "source" | "preview";
 
@@ -75,9 +75,7 @@ export function SourcePreviewFieldEditor({
           aria-pressed={isPreview}
           className={cn(
             "border-border/80 absolute top-3 right-3 z-10 inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition",
-            isPreview
-              ? "border-foreground/10 bg-foreground text-background"
-              : "bg-background/90 text-foreground hover:bg-background",
+            isPreview ? "border-fg/10 bg-fg text-bg" : "bg-bg/90 text-fg hover:bg-bg",
           )}
           data-web-source-preview-toggle="preview"
           data-web-source-preview-toggle-state={isPreview ? "active" : "inactive"}
@@ -96,7 +94,7 @@ export function SourcePreviewFieldEditor({
 export function EmptyPreview({ attribute, children }: { attribute: string; children: ReactNode }) {
   return (
     <p
-      className={cn(sourcePreviewPanelClassName, "text-muted-foreground border-dashed text-sm")}
+      className={cn(sourcePreviewPanelClassName, "text-muted-fg border-dashed text-sm")}
       data-web-source-preview-empty={attribute}
     >
       {children}

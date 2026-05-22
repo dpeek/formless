@@ -103,7 +103,7 @@ export function EmptySvgIcon({ ariaLabel, className }: { ariaLabel?: string; cla
     <svg
       aria-hidden={ariaLabel ? undefined : true}
       aria-label={ariaLabel}
-      className={cn(svgIconClassName, "text-muted-foreground", className)}
+      className={cn(svgIconClassName, "text-muted-fg", className)}
       data-web-svg-icon="empty"
       data-web-svg-icon-empty="true"
       fill="none"

@@ -74,7 +74,7 @@ export function MarkdownFloatingToolbar() {
       {...toolbar.props}
       ref={toolbar.ref}
       className={cn(
-        "ignore-click-outside/toolbar z-50 flex !w-fit max-w-[calc(100vw-1rem)] flex-wrap items-center justify-start gap-1 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md",
+        "ignore-click-outside/toolbar z-50 flex !w-fit max-w-[calc(100vw-1rem)] flex-wrap items-center justify-start gap-1 rounded-md border border-border bg-overlay p-1 text-overlay-fg shadow-md",
         toolbar.props.style?.display === "none" && "hidden",
       )}
       data-web-markdown-floating-toolbar="true"

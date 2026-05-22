@@ -65,7 +65,7 @@ function Calendar({
         onMonthChange?.(calendarDateToDate(value));
       }}
       className={cn(
-        "group/calendar w-fit bg-background p-3 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(6)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
+        "group/calendar w-fit bg-bg p-3 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(6)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
         className,
       )}
       data-slot="calendar"
@@ -94,7 +94,7 @@ function Calendar({
       <CalendarGrid className="w-full border-separate border-spacing-0">
         <CalendarGridHeader>
           {(day) => (
-            <CalendarHeaderCell className="h-(--cell-size) text-center text-[0.8rem] font-normal text-muted-foreground select-none">
+            <CalendarHeaderCell className="h-(--cell-size) text-center text-[0.8rem] font-normal text-muted-fg select-none">
               {day}
             </CalendarHeaderCell>
           )}
@@ -123,12 +123,11 @@ function calendarCellClassName({
   return cn(
     buttonStyles({ intent: "plain", size: "sq-xs" }),
     "my-px flex aspect-square size-auto min-w-(--cell-size) items-center justify-center rounded-(--cell-radius) border-0 text-sm leading-none font-normal select-none",
-    "data-[pressed]:bg-secondary data-[hovered]:bg-secondary dark:hover:text-foreground",
-    isToday && "bg-muted text-foreground",
-    isOutsideMonth && "text-muted-foreground",
-    isDisabled && "text-muted-foreground opacity-50",
-    isSelected &&
-      "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+    "data-[pressed]:bg-secondary data-[hovered]:bg-secondary dark:hover:text-fg",
+    isToday && "bg-muted text-fg",
+    isOutsideMonth && "text-muted-fg",
+    isDisabled && "text-muted-fg opacity-50",
+    isSelected && "bg-primary text-primary-fg hover:bg-primary hover:text-primary-fg",
     isFocusVisible && "outline outline-2 outline-offset-2 outline-ring",
   );
 }
