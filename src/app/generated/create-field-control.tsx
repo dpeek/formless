@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { DateInput } from "@dpeek/formless-ui/date";
+import type { DateValue } from "@internationalized/date";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
+import { DatePicker, DatePickerTrigger } from "@dpeek/formless-ui/date-picker";
 import { Label } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
@@ -16,6 +17,7 @@ import {
   GeneratedMarkdownFieldControl,
   GeneratedNumberFieldControl,
 } from "./field-control-primitives.tsx";
+import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-value.ts";
 import { selectGeneratedFieldControl, type GeneratedFieldControl } from "./field-controls.ts";
 import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
 
@@ -45,15 +47,13 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.controlKind === "date") {
     return (
-      <TextField isRequired={fieldControl.required}>
-        <Label>{fieldControl.label}</Label>
-        <DateInput
-          defaultValue={fieldControl.createDefaultValue}
-          name={fieldName}
-          onValueChange={(value) => onValueChange?.(value)}
-          required={fieldControl.required}
-        />
-      </TextField>
+      <CreateDateField
+        defaultValue={fieldControl.createDefaultValue}
+        fieldName={fieldName}
+        label={fieldControl.label}
+        onValueChange={onValueChange}
+        required={fieldControl.required}
+      />
     );
   }
 
@@ -180,6 +180,55 @@ export function GeneratedCreateFieldControl({
       <Label>{fieldControl.label}</Label>
       <Input />
     </TextField>
+  );
+}
+
+function CreateDateField({
+  defaultValue,
+  fieldName,
+  label,
+  onValueChange,
+  required,
+}: {
+  defaultValue: string | undefined;
+  fieldName: string;
+  label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
+  required: boolean;
+}) {
+  const resetValue = defaultValue ?? "";
+  const [value, setValue] = useState<DateValue | null>(
+    () => storedDateValueToDateValue(resetValue).value,
+  );
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
+  const storedValue = dateValueToStoredDateValue(value);
+
+  useEffect(() => {
+    const form = hiddenInputRef.current?.form;
+
+    if (!form) {
+      return;
+    }
+
+    const handleReset = () => setValue(storedDateValueToDateValue(resetValue).value);
+    form.addEventListener("reset", handleReset);
+
+    return () => form.removeEventListener("reset", handleReset);
+  }, [resetValue]);
+
+  return (
+    <DatePicker
+      isRequired={required}
+      onChange={(nextValue) => {
+        setValue(nextValue);
+        onValueChange?.(dateValueToStoredDateValue(nextValue));
+      }}
+      value={value}
+    >
+      <Label>{label}</Label>
+      <DatePickerTrigger />
+      <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={storedValue} />
+    </DatePicker>
   );
 }
 

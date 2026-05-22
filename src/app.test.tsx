@@ -4255,8 +4255,9 @@ describe("generated forms and records", () => {
     expect(html).toMatch(textareaWithName("icon"));
     expect(html).toContain('data-web-field-kind="icon"');
     expect(html).toContain("data-web-svg-source");
-    expect(html).toMatch(inputWithNameAndType("publishedAt", "text"));
-    expect(html).toMatch(inputWithNameAndPlaceholder("publishedAt", "2026-05-06"));
+    expect(html).toMatch(inputWithNameAndType("publishedAt", "hidden"));
+    expect(html).toContain('data-slot="date-picker-trigger"');
+    expect(html).toContain('role="spinbutton"');
     expect(html).toMatch(inputWithNameAndType("count", "hidden"));
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
     expect(html).toContain('data-web-formatted-number-input="true"');
@@ -4548,7 +4549,10 @@ describe("generated forms and records", () => {
 
     expect(createHtml).toContain('name="title"');
     expect(createHtml).toContain('name="dueDate"');
-    expect(createHtml).toContain('aria-label="Select date"');
+    expect(createHtml).toMatch(inputWithNameAndType("dueDate", "hidden"));
+    expect(createHtml).toContain('data-slot="date-picker-trigger"');
+    expect(createHtml).toContain('role="spinbutton"');
+    expect(createHtml).not.toMatch(inputWithNameAndType("dueDate", "text"));
     expect(createHtml).not.toContain('name="estimate"');
     expect(createHtml).toContain('name="priority"');
     expect(createHtml).toContain("High");
@@ -4557,6 +4561,14 @@ describe("generated forms and records", () => {
       title: "Ship field behavior",
       dueDate: "2026-05-06",
       priority: "high",
+    });
+
+    const emptyDateFormData = new FormData();
+    emptyDateFormData.set("dueDate", "");
+    expect(
+      resolveCreateValues(emptyDateFormData, createAction(appSchema.entities.task, ["dueDate"])),
+    ).toEqual({
+      dueDate: "",
     });
 
     applyBootstrapResponse(
@@ -6348,10 +6360,6 @@ function fieldEditorCharacterizationEntity(): EntitySchema {
 
 function inputWithNameAndType(name: string, type: string) {
   return new RegExp(`<input(?=[^>]*name="${name}")(?=[^>]*type="${type}")[^>]*>`);
-}
-
-function inputWithNameAndPlaceholder(name: string, placeholder: string) {
-  return new RegExp(`<input(?=[^>]*name="${name}")(?=[^>]*placeholder="${placeholder}")[^>]*>`);
 }
 
 function inputWithAriaLabelAndType(label: string, type: string) {
