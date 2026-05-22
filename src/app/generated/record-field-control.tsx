@@ -13,6 +13,7 @@ import { Field, FieldError, Label } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { parseSvgIconSource, SvgIcon } from "@dpeek/formless-ui/svg-icon";
+import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
 import { ValueUnitInput } from "@dpeek/formless-ui/value-unit-input";
@@ -34,9 +35,18 @@ import {
   encodeNumberEditorInputValue,
   inputValueToFieldValue,
 } from "./format.ts";
+import type { GeneratedFieldControl } from "./field-controls.ts";
+import {
+  selectGeneratedRecordFieldRendererKind,
+  type GeneratedRecordFieldControlDensity,
+  type GeneratedRecordFieldControlPresentation,
+  type GeneratedRecordFieldRendererKind,
+} from "./record-field-renderer-model.ts";
 
-export type GeneratedRecordFieldControlDensity = "default" | "compact";
-export type GeneratedRecordFieldControlPresentation = "default" | "heading";
+export type {
+  GeneratedRecordFieldControlDensity,
+  GeneratedRecordFieldControlPresentation,
+} from "./record-field-renderer-model.ts";
 
 export function GeneratedRecordFieldControl({
   canPatch,
@@ -93,93 +103,52 @@ export function GeneratedRecordFieldControl({
   unitDraft: string;
   uploadEnabled: boolean;
 }) {
-  const { commit: commitPolicy, editor, field, fieldName, valueUnit } = fieldConfig;
+  const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const fieldControl = selectGeneratedFieldControl({ editor, field, label });
   const labelClass =
     showLabel && presentation !== "heading" ? "text-xs font-medium text-slate-600" : "sr-only";
+  const rendererKind = selectGeneratedRecordFieldRendererKind({
+    density,
+    fieldConfig,
+    fieldControl,
+    presentation,
+    showLabel,
+  });
 
-  if (fieldControl.controlKind === "checkbox") {
-    if (showLabel) {
-      return (
-        <div className="min-w-28 flex-none space-y-1">
-          <Label className={labelClass}>{fieldControl.label}</Label>
-          <Field orientation="horizontal">
-            <Checkbox
-              aria-label={fieldControl.label}
-              isDisabled={!canPatch || isPending}
-              isSelected={recordValue === true}
-              onChange={(checked) => {
-                if (commitPolicy === "immediate") {
-                  onValueCommit(checked);
-                }
-              }}
-            />
-            {error ? <FieldError>{error}</FieldError> : null}
-          </Field>
-        </div>
-      );
-    }
-
+  if (rendererKind === "checkbox") {
     return (
-      <div className={`${density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}>
-        <Field orientation="horizontal">
-          <Checkbox
-            aria-label={fieldControl.label}
-            isDisabled={!canPatch || isPending}
-            isSelected={recordValue === true}
-            onChange={(checked) => {
-              if (commitPolicy === "immediate") {
-                onValueCommit(checked);
-              }
-            }}
-          />
-          {error ? <FieldError>{error}</FieldError> : null}
-        </Field>
-      </div>
+      <RecordCheckboxFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        error={error}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        onValueCommit={onValueCommit}
+        recordValue={recordValue}
+        showLabel={showLabel}
+      />
     );
   }
 
-  if (fieldControl.kind === "enum") {
-    const unknownValue =
-      draft !== "" && !Object.hasOwn(fieldControl.field.values, draft) ? draft : null;
-
+  if (rendererKind === "enum" && fieldControl.kind === "enum") {
     return (
-      <div
-        className={
-          density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-40 flex-none space-y-1"
-        }
-      >
-        <NativeSelect>
-          <Label className={labelClass}>{fieldControl.label}</Label>
-          <NativeSelectContent
-            aria-label={fieldControl.label}
-            className={density === "compact" ? "h-6 py-0.5 pe-6 ps-2 text-xs" : undefined}
-            disabled={!canPatch || isPending}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-
-              onDraftChange(value);
-              onValueCommit(inputValueToFieldValue(field, value));
-            }}
-            required={fieldControl.required}
-            value={draft}
-          >
-            {!fieldControl.required || draft === "" ? <option value="" /> : null}
-            {unknownValue ? <option value={unknownValue}>{unknownValue}</option> : null}
-            {Object.entries(fieldControl.field.values).map(([value, option]) => (
-              <option key={value} value={value}>
-                {option.label}
-              </option>
-            ))}
-          </NativeSelectContent>
-        </NativeSelect>
-        {error ? <FieldError>{error}</FieldError> : null}
-      </div>
+      <RecordEnumFieldRenderer
+        canPatch={canPatch}
+        density={density}
+        draft={draft}
+        error={error}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onValueCommit={onValueCommit}
+      />
     );
   }
 
-  if (fieldControl.kind === "reference") {
+  if (rendererKind === "reference" && fieldControl.kind === "reference") {
     return (
       <RecordReferenceFieldControl
         canPatch={canPatch}
@@ -196,32 +165,220 @@ export function GeneratedRecordFieldControl({
     );
   }
 
-  const control = fieldControl.control;
-  const isIconEditor = fieldControl.controlKind === "icon";
-  const isMarkdownEditor = fieldControl.controlKind === "markdown";
-  const isRichMarkdownEditor = isMarkdownEditor && density !== "compact";
-  const isMultilineTextEditor = control.kind === "textarea" && !isRichMarkdownEditor;
-  const isColorEditor = fieldControl.controlKind === "color";
-  const isImageEditor = fieldControl.controlKind === "image";
-  const isDateEditor = fieldControl.controlKind === "date";
-  const isNumberEditor = fieldControl.controlKind === "number";
-  const isValueUnitEditor = isNumberEditor && valueUnit !== undefined;
-  const isHeadingTextEditor =
-    presentation === "heading" &&
-    fieldControl.kind === "text" &&
-    fieldControl.editor === "text" &&
-    fieldControl.controlKind === "text";
-  const isAutosizeTextEditor =
-    isHeadingTextEditor ||
-    (fieldControl.kind === "text" &&
-      fieldControl.editor === "text" &&
-      fieldControl.controlKind === "text" &&
-      (density === "compact" || (!showLabel && isTitleLikeTextField(fieldName, field))));
+  if (rendererKind === "text") {
+    return (
+      <RecordTextFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onValueCommit={onValueCommit}
+      />
+    );
+  }
 
+  if (rendererKind === "textarea") {
+    return (
+      <RecordTextareaFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        field={field}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onValueCommit={onValueCommit}
+      />
+    );
+  }
+
+  return (
+    <RecordLegacyFieldRenderer
+      canPatch={canPatch}
+      commitPolicy={commitPolicy}
+      density={density}
+      draft={draft}
+      error={error}
+      fieldConfig={fieldConfig}
+      fieldControl={fieldControl}
+      iconDialogDraft={iconDialogDraft}
+      iconDialogOpen={iconDialogOpen}
+      isPending={isPending}
+      labelClass={labelClass}
+      numberFormat={numberFormat}
+      onDraftChange={onDraftChange}
+      onDraftRevert={onDraftRevert}
+      onErrorChange={onErrorChange}
+      onIconCancel={onIconCancel}
+      onIconDraftChange={onIconDraftChange}
+      onIconOpenChange={onIconOpenChange}
+      onIconSave={onIconSave}
+      onImageFileSelect={onImageFileSelect}
+      onPatchValues={onPatchValues}
+      onUnitDraftChange={onUnitDraftChange}
+      onUnitDraftRevert={onUnitDraftRevert}
+      onValueCommit={onValueCommit}
+      presentation={presentation}
+      rendererKind={rendererKind}
+      unitDraft={unitDraft}
+      uploadEnabled={uploadEnabled}
+    />
+  );
+}
+
+function RecordCheckboxFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  error,
+  fieldControl,
+  isPending,
+  onValueCommit,
+  recordValue,
+  showLabel,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  error: string | null;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  onValueCommit: (value: FieldValue) => void;
+  recordValue: FieldValue | undefined;
+  showLabel: boolean;
+}) {
+  const checkbox = (
+    <Checkbox
+      aria-label={fieldControl.label}
+      isDisabled={!canPatch || isPending}
+      isInvalid={error !== null}
+      isSelected={recordValue === true}
+      onChange={(checked) => {
+        if (commitPolicy === "immediate") {
+          onValueCommit(checked);
+        }
+      }}
+    >
+      {showLabel ? fieldControl.label : undefined}
+    </Checkbox>
+  );
+
+  if (showLabel) {
+    return (
+      <div className="min-w-28 flex-none space-y-1">
+        {checkbox}
+        {error ? <FieldError>{error}</FieldError> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}>
+      {checkbox}
+      {error ? <FieldError>{error}</FieldError> : null}
+    </div>
+  );
+}
+
+function RecordEnumFieldRenderer({
+  canPatch,
+  density,
+  draft,
+  error,
+  fieldControl,
+  isPending,
+  labelClass,
+  onDraftChange,
+  onValueCommit,
+}: {
+  canPatch: boolean;
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  fieldControl: Extract<GeneratedFieldControl, { kind: "enum" }>;
+  isPending: boolean;
+  labelClass: string;
+  onDraftChange: (value: string) => void;
+  onValueCommit: (value: FieldValue) => void;
+}) {
+  const unknownValue =
+    draft !== "" && !Object.hasOwn(fieldControl.field.values, draft) ? draft : null;
+
+  return (
+    <div
+      className={
+        density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-40 flex-none space-y-1"
+      }
+    >
+      <NativeSelect>
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <NativeSelectContent
+          aria-label={fieldControl.label}
+          className={density === "compact" ? "h-6 py-0.5 pe-6 ps-2 text-xs" : undefined}
+          disabled={!canPatch || isPending}
+          isInvalid={error !== null}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+
+            onDraftChange(value);
+            onValueCommit(inputValueToFieldValue(fieldControl.field, value));
+          }}
+          required={fieldControl.required}
+          value={draft}
+        >
+          {!fieldControl.required || draft === "" ? <option value="" /> : null}
+          {unknownValue ? <option value={unknownValue}>{unknownValue}</option> : null}
+          {Object.entries(fieldControl.field.values).map(([value, option]) => (
+            <option key={value} value={value}>
+              {option.label}
+            </option>
+          ))}
+        </NativeSelectContent>
+        {error ? <FieldError>{error}</FieldError> : null}
+      </NativeSelect>
+    </div>
+  );
+}
+
+function RecordTextFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  fieldControl,
+  isPending,
+  labelClass,
+  onDraftChange,
+  onDraftRevert,
+  onValueCommit,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onValueCommit: (value: FieldValue) => void;
+}) {
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
+      onValueCommit(inputValueToFieldValue(fieldControl.field, event.currentTarget.value));
       return;
     }
 
@@ -231,7 +388,175 @@ export function GeneratedRecordFieldControl({
     }
   }
 
+  return (
+    <div
+      className={density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-52 flex-1 space-y-1"}
+    >
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+        onChange={onDraftChange}
+        type={fieldControl.control.kind === "input" ? fieldControl.control.inputType : "text"}
+        value={draft}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <Input
+          aria-label={fieldControl.label}
+          className={
+            density === "compact"
+              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+              : "w-full rounded border border-slate-300 px-3 py-2"
+          }
+          onBlur={(event) => {
+            if (commitPolicy === "field-commit") {
+              onValueCommit(inputValueToFieldValue(fieldControl.field, event.currentTarget.value));
+            }
+          }}
+          onKeyDown={handleInputKeyDown}
+          {...fieldControl.inputAttributes}
+        />
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
+    </div>
+  );
+}
+
+function RecordTextareaFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  field,
+  fieldControl,
+  isPending,
+  labelClass,
+  onDraftChange,
+  onDraftRevert,
+  onValueCommit,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  field: FieldSchema;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onValueCommit: (value: FieldValue) => void;
+}) {
   function handleTextareaKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onDraftRevert();
+    }
+  }
+
+  return (
+    <div
+      className={density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-52 flex-1 space-y-1"}
+    >
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+        onChange={onDraftChange}
+        value={draft}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <Textarea
+          aria-label={fieldControl.label}
+          className={
+            density === "compact"
+              ? "min-h-20 w-full rounded border border-slate-300 px-2 py-1 text-xs"
+              : "min-h-28 w-full rounded border border-slate-300 px-3 py-2"
+          }
+          onBlur={(event) => {
+            if (commitPolicy === "field-commit") {
+              onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
+            }
+          }}
+          onKeyDown={handleTextareaKeyDown}
+        />
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
+    </div>
+  );
+}
+
+function RecordLegacyFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  fieldConfig,
+  fieldControl,
+  iconDialogDraft,
+  iconDialogOpen,
+  isPending,
+  labelClass,
+  numberFormat,
+  onDraftChange,
+  onDraftRevert,
+  onErrorChange,
+  onIconCancel,
+  onIconDraftChange,
+  onIconOpenChange,
+  onIconSave,
+  onImageFileSelect,
+  onPatchValues,
+  onUnitDraftChange,
+  onUnitDraftRevert,
+  onValueCommit,
+  presentation,
+  rendererKind,
+  unitDraft,
+  uploadEnabled,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  fieldConfig: RecordFieldConfig;
+  fieldControl: GeneratedFieldControl;
+  iconDialogDraft: string;
+  iconDialogOpen: boolean;
+  isPending: boolean;
+  labelClass: string;
+  numberFormat: TableColumnFormat;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onErrorChange: (message: string | null) => void;
+  onIconCancel: () => void;
+  onIconDraftChange: (value: string) => void;
+  onIconOpenChange: (open: boolean) => void;
+  onIconSave: () => Promise<void>;
+  onImageFileSelect: (file: File | undefined) => void;
+  onPatchValues: (values: Partial<RecordValues>) => void;
+  onUnitDraftChange: (value: string) => void;
+  onUnitDraftRevert: () => void;
+  onValueCommit: (value: FieldValue) => void;
+  presentation: GeneratedRecordFieldControlPresentation;
+  rendererKind: GeneratedRecordFieldRendererKind;
+  unitDraft: string;
+  uploadEnabled: boolean;
+}) {
+  const { field, fieldName, valueUnit } = fieldConfig;
+  const isHeadingTextEditor = rendererKind === "autosize-text" && presentation === "heading";
+
+  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
+      return;
+    }
+
     if (event.key === "Escape") {
       event.preventDefault();
       onDraftRevert();
@@ -258,18 +583,10 @@ export function GeneratedRecordFieldControl({
   }
 
   return (
-    <div
-      className={
-        density === "compact"
-          ? "w-full min-w-0 space-y-1"
-          : isDateEditor || isNumberEditor
-            ? "min-w-36 flex-none space-y-1"
-            : "min-w-52 flex-1 space-y-1"
-      }
-    >
+    <div className={recordLegacyFieldContainerClassName(density, rendererKind)}>
       <Field>
         <Label className={labelClass}>{fieldControl.label}</Label>
-        {isIconEditor ? (
+        {rendererKind === "icon" ? (
           <IconFieldControl
             canPatch={canPatch}
             density={density}
@@ -284,7 +601,7 @@ export function GeneratedRecordFieldControl({
             open={iconDialogOpen}
             previewSource={draft}
           />
-        ) : isImageEditor ? (
+        ) : rendererKind === "image" ? (
           <ImageFieldControl
             canPatch={canPatch}
             density={density}
@@ -301,7 +618,7 @@ export function GeneratedRecordFieldControl({
             required={fieldControl.required}
             uploadEnabled={uploadEnabled}
           />
-        ) : isRichMarkdownEditor ? (
+        ) : rendererKind === "markdown" ? (
           <GeneratedMarkdownFieldControl
             ariaInvalid={error !== null}
             label={fieldControl.label}
@@ -311,26 +628,7 @@ export function GeneratedRecordFieldControl({
             readOnly={!canPatch || isPending}
             value={draft}
           />
-        ) : isMultilineTextEditor ? (
-          <Textarea
-            aria-label={fieldControl.label}
-            className={
-              density === "compact"
-                ? "min-h-20 w-full rounded border border-slate-300 px-2 py-1 text-xs"
-                : "min-h-28 w-full rounded border border-slate-300 px-3 py-2"
-            }
-            disabled={!canPatch || isPending}
-            onBlur={(event) => {
-              if (commitPolicy === "field-commit") {
-                onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
-              }
-            }}
-            onChange={(event) => onDraftChange(event.currentTarget.value)}
-            onKeyDown={handleTextareaKeyDown}
-            required={fieldControl.required}
-            value={draft}
-          />
-        ) : isColorEditor ? (
+        ) : rendererKind === "color" ? (
           <GeneratedColorFieldControl
             className={
               density === "compact"
@@ -349,7 +647,7 @@ export function GeneratedRecordFieldControl({
             required={fieldControl.required}
             value={draft}
           />
-        ) : isAutosizeTextEditor ? (
+        ) : rendererKind === "autosize-text" ? (
           <AutosizeTextInput
             aria-invalid={error !== null ? true : undefined}
             aria-label={fieldControl.label}
@@ -381,7 +679,7 @@ export function GeneratedRecordFieldControl({
             value={draft}
             {...fieldControl.inputAttributes}
           />
-        ) : isDateEditor ? (
+        ) : rendererKind === "date" ? (
           <DateInput
             aria-label={fieldControl.label}
             className={
@@ -405,7 +703,7 @@ export function GeneratedRecordFieldControl({
             required={fieldControl.required}
             value={draft}
           />
-        ) : isValueUnitEditor ? (
+        ) : rendererKind === "value-unit" && valueUnit !== undefined ? (
           <ValueUnitInput
             className="w-full"
             commitOnBlur={commitPolicy === "field-commit"}
@@ -446,7 +744,7 @@ export function GeneratedRecordFieldControl({
             unitLabel={`${fieldControl.label} unit`}
             unitRequired={valueUnit.unitField.required}
           />
-        ) : isNumberEditor ? (
+        ) : (
           <GeneratedNumberFieldControl
             aria-invalid={error !== null ? true : undefined}
             aria-label={fieldControl.label}
@@ -471,32 +769,26 @@ export function GeneratedRecordFieldControl({
             value={draft}
             {...fieldControl.inputAttributes}
           />
-        ) : (
-          <Input
-            aria-label={fieldControl.label}
-            className={
-              density === "compact"
-                ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
-                : "w-full rounded border border-slate-300 px-3 py-2"
-            }
-            disabled={!canPatch || isPending}
-            onBlur={(event) => {
-              if (commitPolicy === "field-commit") {
-                onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
-              }
-            }}
-            onChange={(event) => onDraftChange(event.currentTarget.value)}
-            onKeyDown={handleInputKeyDown}
-            required={fieldControl.required}
-            {...fieldControl.inputAttributes}
-            type={control.kind === "input" ? control.inputType : "text"}
-            value={draft}
-          />
         )}
       </Field>
       {error ? <FieldError>{error}</FieldError> : null}
     </div>
   );
+}
+
+function recordLegacyFieldContainerClassName(
+  density: GeneratedRecordFieldControlDensity,
+  rendererKind: GeneratedRecordFieldRendererKind,
+) {
+  if (density === "compact") {
+    return "w-full min-w-0 space-y-1";
+  }
+
+  if (rendererKind === "date" || rendererKind === "number" || rendererKind === "value-unit") {
+    return "min-w-36 flex-none space-y-1";
+  }
+
+  return "min-w-52 flex-1 space-y-1";
 }
 
 function IconFieldControl({
@@ -734,18 +1026,6 @@ function enumValueUnitOptions(field: NonNullable<RecordFieldConfig["valueUnit"]>
     value,
     label: option.label,
   }));
-}
-
-function isTitleLikeTextField(fieldName: string, field: FieldSchema) {
-  const normalizedFieldName = fieldName.toLowerCase();
-  const normalizedLabel = (field.label ?? "").toLowerCase();
-
-  return (
-    normalizedFieldName === "title" ||
-    normalizedFieldName === "name" ||
-    normalizedLabel === "title" ||
-    normalizedLabel === "name"
-  );
 }
 
 function RecordReferenceFieldControl({
