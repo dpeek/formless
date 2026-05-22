@@ -8,6 +8,7 @@ export * from "./color-field.js";
 export * from "./color-picker.js";
 export * from "./color-slider.js";
 export * from "./color-swatch.js";
+export * from "./color-swatch-picker.js";
 export * from "./color-thumb.js";
 export * from "./color-wheel.js";
 export * from "./color.js";

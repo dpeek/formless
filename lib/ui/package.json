@@ -19,6 +19,7 @@
     "./color-picker": "./src/color-picker.tsx",
     "./color-slider": "./src/color-slider.tsx",
     "./color-swatch": "./src/color-swatch.tsx",
+    "./color-swatch-picker": "./src/color-swatch-picker.tsx",
     "./color-thumb": "./src/color-thumb.tsx",
     "./color-wheel": "./src/color-wheel.tsx",
     "./color": "./src/color.tsx",
