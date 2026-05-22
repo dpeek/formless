@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  applySchemaRouteBuilderIntent,
   commitSchemaRouteDraftState,
   createSchemaRouteDraftState,
   isSchemaRouteDraftDirty,
@@ -60,6 +61,47 @@ describe("schema route draft state", () => {
       ok: false,
     });
     expect(saveResult.ok === false ? saveResult.message : "").toContain("Source schema is invalid");
+  });
+
+  it("updates Source text after Builder intents", () => {
+    const state = createSchemaRouteDraftState(appSchema);
+    const entityResult = applySchemaRouteBuilderIntent(state, {
+      type: "createEntity",
+      key: "project",
+      label: "Project",
+    });
+
+    if (!entityResult.ok) {
+      throw new Error(entityResult.message);
+    }
+
+    const fieldResult = applySchemaRouteBuilderIntent(entityResult.state, {
+      type: "addField",
+      entityKey: "project",
+      fieldKey: "title",
+      fieldType: "text",
+    });
+
+    if (!fieldResult.ok) {
+      throw new Error(fieldResult.message);
+    }
+
+    const saveResult = serializeSchemaRouteDraftForSave(fieldResult.state);
+
+    expect(fieldResult.state.sourceError).toBeNull();
+    expect(fieldResult.state.sourceText).toContain('"project"');
+    expect(fieldResult.state.sourceText).toContain('"title"');
+    expect(isSchemaRouteDraftDirty(fieldResult.state)).toBe(true);
+    expect(saveResult).toMatchObject({
+      ok: true,
+      schema: {
+        entities: {
+          project: {
+            label: "Project",
+          },
+        },
+      },
+    });
   });
 
   it("reverts Source edits and commits saved schema after save", () => {

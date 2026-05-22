@@ -1,10 +1,12 @@
 import {
+  applySchemaBuilderIntent,
   createSchemaBuilderDraft,
   isSchemaBuilderDraftDirty,
   revertSchemaBuilderDraft,
   serializeSchemaBuilderDraft,
   validateSchemaBuilderDraft,
   type SchemaBuilderDraft,
+  type SchemaBuilderIntent,
 } from "../../client/schema-builder.ts";
 import { parseAppSchema, stringifySchema, type AppSchema } from "../../shared/schema.ts";
 
@@ -18,6 +20,16 @@ export type SchemaRouteDraftSaveResult =
   | {
       ok: true;
       schema: AppSchema;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+export type SchemaRouteDraftIntentResult =
+  | {
+      ok: true;
+      state: SchemaRouteDraftState;
     }
   | {
       message: string;
@@ -58,6 +70,29 @@ export function updateSchemaRouteSourceText(
       ...state,
       sourceError: errorMessage(error),
       sourceText,
+    };
+  }
+}
+
+export function applySchemaRouteBuilderIntent(
+  state: SchemaRouteDraftState,
+  intent: SchemaBuilderIntent,
+): SchemaRouteDraftIntentResult {
+  try {
+    const draft = applySchemaBuilderIntent(state.draft, intent);
+
+    return {
+      ok: true,
+      state: {
+        draft,
+        sourceError: null,
+        sourceText: stringifySchema(draft.schema),
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: errorMessage(error),
     };
   }
 }

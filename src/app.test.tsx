@@ -525,7 +525,10 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-controls="schema-source-panel"');
     expect(html).toContain('aria-selected="true"');
     expect(html).toContain('aria-label="Builder entities"');
-    expect(html).toContain('aria-label="Builder draft summary"');
+    expect(html).toContain('aria-label="Create entity"');
+    expect(html).toContain('aria-label="Task fields"');
+    expect(html).toContain('aria-label="Add field"');
+    expect(html).toContain('aria-label="Field details"');
     expect(html).toContain('aria-label="Schema source"');
     expect(html).toContain("Saved draft");
     expect(html).toContain("Save schema");
