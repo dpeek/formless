@@ -3,6 +3,7 @@ export * from "./button.js";
 export * from "./calendar.js";
 export * from "./checkbox.js";
 export * from "./color-utils.js";
+export * from "./color-area.js";
 export * from "./color-slider.js";
 export * from "./color-swatch.js";
 export * from "./color-thumb.js";

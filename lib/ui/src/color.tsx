@@ -6,6 +6,7 @@ import { Input, InputGroup } from "@dpeek/formless-ui/input";
 import { Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
+import { ColorArea } from "@dpeek/formless-ui/color-area";
 import { ColorSlider, ColorSliderTrack } from "@dpeek/formless-ui/color-slider";
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { ColorThumb } from "@dpeek/formless-ui/color-thumb";
@@ -13,7 +14,6 @@ import { cn } from "@dpeek/formless-ui/utils";
 import { ControlColorPickIcon, ControlLoadingIcon } from "@dpeek/formless-ui/icons";
 import { useEffect, useState } from "react";
 import {
-  ColorArea,
   parseColor as parseReactAriaColor,
   type Color as ReactAriaColor,
 } from "react-aria-components/ColorArea";
@@ -81,8 +81,6 @@ const colorAreaClassName =
   "relative h-[244.79px] w-[244.79px] touch-none overflow-hidden rounded-md";
 const colorSliderClassName = "h-5";
 const colorSliderTrackClassName = "relative h-4 rounded overflow-hidden";
-const colorAreaThumbClassName =
-  "size-5 rounded-sm border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] outline-none data-[focus-visible]:ring-2 data-[focus-visible]:ring-ring";
 const colorSliderThumbClassName =
   "h-5 w-4 rounded-sm border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] outline-none data-[focus-visible]:ring-2 data-[focus-visible]:ring-ring";
 
@@ -405,9 +403,7 @@ export function ColorInput({
                         yChannel="brightness"
                         className={colorAreaClassName}
                         isDisabled={disabled}
-                      >
-                        <ColorThumb className={colorAreaThumbClassName} />
-                      </ColorArea>
+                      />
                       {alpha ? (
                         <ColorSlider
                           aria-label={`${resolvedLabel} alpha`}
