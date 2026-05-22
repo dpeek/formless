@@ -6,6 +6,7 @@ import { Input, InputGroup } from "@dpeek/formless-ui/input";
 import { Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
+import { ColorSlider, ColorSliderTrack } from "@dpeek/formless-ui/color-slider";
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { ColorThumb } from "@dpeek/formless-ui/color-thumb";
 import { cn } from "@dpeek/formless-ui/utils";
@@ -17,7 +18,6 @@ import {
   type Color as ReactAriaColor,
 } from "react-aria-components/ColorArea";
 import { ColorPicker } from "react-aria-components/ColorPicker";
-import { ColorSlider, SliderTrack } from "react-aria-components/ColorSlider";
 
 import {
   hexToRgb,
@@ -394,9 +394,9 @@ export function ColorInput({
                         className={cn(colorSliderClassName, "ml-8 w-[210px]")}
                         isDisabled={disabled}
                       >
-                        <SliderTrack className={colorSliderTrackClassName}>
+                        <ColorSliderTrack className={colorSliderTrackClassName}>
                           <ColorThumb className={colorSliderThumbClassName} />
-                        </SliderTrack>
+                        </ColorSliderTrack>
                       </ColorSlider>
                       <ColorArea
                         aria-label={`${resolvedLabel} saturation and brightness`}
@@ -415,9 +415,9 @@ export function ColorInput({
                           className={cn(colorSliderClassName, "w-[244.79px]")}
                           isDisabled={disabled}
                         >
-                          <SliderTrack className={colorSliderTrackClassName}>
+                          <ColorSliderTrack className={colorSliderTrackClassName}>
                             <ColorThumb className={colorSliderThumbClassName} />
-                          </SliderTrack>
+                          </ColorSliderTrack>
                         </ColorSlider>
                       ) : null}
                     </div>
