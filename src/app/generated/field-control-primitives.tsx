@@ -1,4 +1,3 @@
-import { ColorInput } from "@dpeek/formless-ui/color";
 import { MarkdownEditor } from "@dpeek/formless-ui/markdown";
 import { FormattedNumberInput } from "@dpeek/formless-ui/number-input";
 import {
@@ -14,6 +13,7 @@ import type {
   KeyboardEventHandler,
 } from "react";
 import type { TableColumnFormat } from "../../shared/schema.ts";
+import { GeneratedColorInput } from "./color-field-control.tsx";
 import { decodeNumberEditorInputValue, encodeNumberEditorInputValue } from "./format.ts";
 
 const markdownFieldControlClassName =
@@ -71,7 +71,7 @@ export function GeneratedColorFieldControl({
   value: string;
 }) {
   return (
-    <ColorInput
+    <GeneratedColorInput
       ariaLabel={label}
       className={className}
       disabled={disabled}

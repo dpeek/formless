@@ -1,4 +1,3 @@
-import { expandHexColor, isHexColor } from "@dpeek/formless-ui/color-utils";
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
@@ -9,6 +8,7 @@ import type {
 } from "../../client/views.ts";
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
+import { expandHexColor, isHexColor } from "./color-utils.ts";
 import { formatFieldDisplayValue } from "./format.ts";
 
 type DisplayTableColumnConfig = FieldTableColumnConfig | ReferenceFieldTableColumnConfig;

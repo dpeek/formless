@@ -2,23 +2,27 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { ColorInput, colorSchema, parseColor } from "./color.js";
+import {
+  GeneratedColorInput,
+  generatedColorSchema,
+  parseGeneratedColor,
+} from "./color-field-control.tsx";
 
 describe("color input", () => {
   it("keeps the Formless hex parsing contract", () => {
-    expect(parseColor("#abc")).toBe("#ABC");
-    expect(parseColor("#abcd")).toBe("#ABCD");
-    expect(parseColor("#aabbcc")).toBe("#AABBCC");
-    expect(parseColor("#aabbccdd")).toBe("#AABBCCDD");
-    expect(colorSchema.parse("#123456")).toBe("#123456");
+    expect(parseGeneratedColor("#abc")).toBe("#ABC");
+    expect(parseGeneratedColor("#abcd")).toBe("#ABCD");
+    expect(parseGeneratedColor("#aabbcc")).toBe("#AABBCC");
+    expect(parseGeneratedColor("#aabbccdd")).toBe("#AABBCCDD");
+    expect(generatedColorSchema.parse("#123456")).toBe("#123456");
 
-    expect(() => parseColor("red")).toThrow("Color must be a valid hex color");
-    expect(() => parseColor("#ggg")).toThrow("Color must be a valid hex color");
+    expect(() => parseGeneratedColor("red")).toThrow("Color must be a valid hex color");
+    expect(() => parseGeneratedColor("#ggg")).toThrow("Color must be a valid hex color");
   });
 
   it("renders the text-backed color field with swatch, loading, and disabled state", () => {
     const markup = renderToStaticMarkup(
-      <ColorInput
+      <GeneratedColorInput
         ariaLabel="Accent"
         disabled
         isLoading
@@ -43,7 +47,7 @@ describe("color input", () => {
 
   it("keeps alpha-capable manual values when alpha mode is enabled", () => {
     const markup = renderToStaticMarkup(
-      <ColorInput
+      <GeneratedColorInput
         alpha
         ariaLabel="Overlay"
         onBlur={() => undefined}

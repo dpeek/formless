@@ -29,7 +29,7 @@ import {
   rgbToHex,
   rgbToHsl,
   toPickerHexColor,
-} from "./color-utils";
+} from "./color-utils.ts";
 
 const colorPattern = /^#[0-9A-Fa-f]{3,4}$|^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/;
 
@@ -37,7 +37,7 @@ function isValidColor(value: string): boolean {
   return colorPattern.test(value);
 }
 
-export function parseColor(value: string): string {
+export function parseGeneratedColor(value: string): string {
   if (!isValidColor(value)) {
     throw new Error("Color must be a valid hex color (e.g., #F00, #FF0000, or #FF0000FF)");
   }
@@ -45,11 +45,11 @@ export function parseColor(value: string): string {
   return value.toUpperCase();
 }
 
-export const colorSchema = {
-  parse: parseColor,
+export const generatedColorSchema = {
+  parse: parseGeneratedColor,
 };
 
-interface ColorPickerProps {
+interface GeneratedColorInputProps {
   value: string;
   onChange: (value: string) => void;
   onBlur: () => void;
@@ -99,7 +99,7 @@ function colorToHexValue(color: ReactAriaColor, alpha: boolean): string {
   return color.toString(alpha ? "hexa" : "hex").toUpperCase();
 }
 
-export function ColorInput({
+export function GeneratedColorInput({
   value,
   onChange,
   onBlur,
@@ -115,7 +115,7 @@ export function ColorInput({
   pickerValue,
   placeholder,
   required = false,
-}: ColorPickerProps) {
+}: GeneratedColorInputProps) {
   const resolvedLabel = label ?? ariaLabel ?? "Color";
   const resolvedPickerValue = toPickerHexColor(pickerValue ?? value, "#000000");
   const reactAriaPickerValue = toReactAriaPickerColor(
