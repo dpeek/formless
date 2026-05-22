@@ -4,29 +4,11 @@ import { CalendarDate } from "@internationalized/date";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Calendar } from "./calendar.js";
-import { DateInput } from "./date.js";
 import { DateField, DateInput as SegmentedDateInput } from "./date-field.js";
 import { DatePicker, DatePickerTrigger } from "./date-picker.js";
 import { RangeCalendar } from "./range-calendar.js";
 
-describe("DateInput", () => {
-  it("renders a text-backed date input that submits YYYY-MM-DD values", () => {
-    const markup = renderToStaticMarkup(
-      <DateInput defaultValue="2026-05-06" name="dueDate" required />,
-    );
-
-    expect(markup).toContain('name="dueDate"');
-    expect(markup).toContain('type="text"');
-    expect(markup).toContain('inputMode="numeric"');
-    expect(markup).toContain('pattern="\\d{4}-\\d{2}-\\d{2}"');
-    expect(markup).toContain('value="2026-05-06"');
-    expect(markup).toContain('placeholder="2026-05-06"');
-    expect(markup).toContain('aria-label="Select date"');
-    expect(markup).toContain('data-slot="control"');
-    expect(markup).not.toContain('data-slot="input-group"');
-    expect(markup).not.toContain("June 01, 2025");
-  });
-
+describe("date primitives", () => {
   it("renders a React Aria calendar with the selected local date", () => {
     const markup = renderToStaticMarkup(
       <Calendar aria-label="Due date" value={new CalendarDate(2026, 5, 6)} />,

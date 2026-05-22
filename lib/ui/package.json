@@ -23,7 +23,6 @@
     "./color-wheel": "./src/color-wheel.tsx",
     "./date-field": "./src/date-field.tsx",
     "./date-picker": "./src/date-picker.tsx",
-    "./date": "./src/date.tsx",
     "./dialog": "./src/dialog.tsx",
     "./field": "./src/field.tsx",
     "./global": "./src/global.css",

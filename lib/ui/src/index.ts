@@ -12,7 +12,6 @@ export * from "./color-thumb.js";
 export * from "./color-wheel.js";
 export * from "./date-field.js";
 export * from "./date-picker.js";
-export { formatDateInputValue, parseDateInputValue } from "./date.js";
 export * from "./dialog.js";
 export * from "./menu.js";
 export {
