@@ -1,13 +1,17 @@
 import {
   SITE_IMAGE_KEY_PREFIX,
   SITE_MEDIA_ROUTE_PREFIX,
-  siteMediaHrefForKey,
   siteMediaKeyFromPathname,
 } from "../site/source-media.ts";
+import {
+  parseAuthorityApiRoute,
+  type SiteMediaStorageIdentity,
+} from "../shared/app-storage-identity.ts";
 import {
   MEDIA_IMAGE_UPLOAD_MAX_BYTES,
   MEDIA_OBJECT_CACHE_CONTROL,
   deliveryFactsForMediaObject,
+  isValidMediaStorageKey,
   restoreImageMedia,
   uploadImageMedia,
 } from "../media/core.ts";
@@ -18,10 +22,13 @@ import { responseWithoutBodyForHead } from "./head-response.ts";
 export const SITE_IMAGE_UPLOAD_MAX_BYTES = MEDIA_IMAGE_UPLOAD_MAX_BYTES;
 export const SITE_MEDIA_CACHE_CONTROL = MEDIA_OBJECT_CACHE_CONTROL;
 
-const siteImageUploadPath = "/api/site/media/images";
-
 type SiteMediaEnv = AuthorityAdminGuardEnv & {
   FORMLESS_MEDIA: R2Bucket;
+};
+
+type SiteMediaRoute = {
+  media: SiteMediaStorageIdentity;
+  path: string;
 };
 
 type UploadedImageFile = {
@@ -40,21 +47,22 @@ type MultipartPart = {
 
 export async function handleSiteMediaRequest(request: Request, env: SiteMediaEnv) {
   const url = new URL(request.url);
+  const route = siteMediaRouteFromPathname(url.pathname);
 
-  if (!url.pathname.startsWith(SITE_MEDIA_ROUTE_PREFIX)) {
+  if (!route) {
     return undefined;
   }
 
-  if (request.method === "POST" && url.pathname === siteImageUploadPath) {
-    return uploadSiteImage(request, env);
+  if (request.method === "POST" && route.path === "/media/images") {
+    return uploadSiteImage(request, env, route.media);
   }
 
   if (request.method === "PUT") {
-    return restoreSiteMedia(request, env, url.pathname);
+    return restoreSiteMedia(request, env, route);
   }
 
   if (request.method === "GET" || request.method === "HEAD") {
-    const response = await serveSiteMedia(url.pathname, env, {
+    const response = await serveSiteMedia(route, env, {
       includeBody: request.method === "GET",
     });
 
@@ -64,7 +72,11 @@ export async function handleSiteMediaRequest(request: Request, env: SiteMediaEnv
   return jsonResponse({ error: "Not found." }, 404);
 }
 
-async function uploadSiteImage(request: Request, env: SiteMediaEnv) {
+async function uploadSiteImage(
+  request: Request,
+  env: SiteMediaEnv,
+  media: SiteMediaStorageIdentity,
+) {
   const authorization = await authorizeInstanceWrite(request, env);
 
   if (!authorization.authorized) {
@@ -83,8 +95,8 @@ async function uploadSiteImage(request: Request, env: SiteMediaEnv) {
 
   const upload = await uploadImageMedia({
     file: fileResult.file,
-    hrefForKey: siteMediaHrefForKey,
-    keyPrefix: SITE_IMAGE_KEY_PREFIX,
+    hrefForKey: (key) => siteMediaHrefForStorageKey(key, media),
+    keyPrefix: siteMediaImageKeyPrefix(media),
     provider: "r2",
     store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
   });
@@ -96,7 +108,7 @@ async function uploadSiteImage(request: Request, env: SiteMediaEnv) {
   return jsonResponse(upload.upload);
 }
 
-async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: string) {
+async function restoreSiteMedia(request: Request, env: SiteMediaEnv, route: SiteMediaRoute) {
   const authorization = await authorizeInstanceWrite(request, env);
 
   if (!authorization.authorized) {
@@ -107,7 +119,7 @@ async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: s
     );
   }
 
-  const key = siteMediaKeyFromPathname(pathname);
+  const key = siteMediaKeyFromRoutePath(route);
 
   if (!key) {
     return jsonResponse({ error: "Unsupported media restore key." }, 400);
@@ -117,9 +129,9 @@ async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: s
   const restore = await restoreImageMedia({
     bytes,
     contentType: request.headers.get("Content-Type") ?? "",
-    hrefForKey: siteMediaHrefForKey,
+    hrefForKey: (storageKey) => siteMediaHrefForStorageKey(storageKey, route.media),
     key,
-    keyPrefix: SITE_IMAGE_KEY_PREFIX,
+    keyPrefix: siteMediaImageKeyPrefix(route.media),
     store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
   });
 
@@ -131,11 +143,11 @@ async function restoreSiteMedia(request: Request, env: SiteMediaEnv, pathname: s
 }
 
 async function serveSiteMedia(
-  pathname: string,
+  route: SiteMediaRoute,
   env: SiteMediaEnv,
   options: { includeBody?: boolean } = {},
 ) {
-  const key = siteMediaKeyFromPathname(pathname);
+  const key = siteMediaKeyFromRoutePath(route);
 
   if (!key) {
     return jsonResponse({ error: "Not found." }, 404);
@@ -152,6 +164,51 @@ async function serveSiteMedia(
   }
 
   return new Response(delivery.body, { headers: delivery.headers });
+}
+
+function siteMediaRouteFromPathname(pathname: string): SiteMediaRoute | undefined {
+  if (pathname.startsWith(SITE_MEDIA_ROUTE_PREFIX)) {
+    const key = siteMediaKeyFromPathname(pathname);
+
+    return {
+      media: {
+        imageKeyPrefix: SITE_IMAGE_KEY_PREFIX.slice(0, -1),
+        imageUploadPath: "/api/site/media/images",
+        routePrefix: "/api/site/media",
+      },
+      path: key ? `/media/${key}` : "/media",
+    };
+  }
+
+  const route = parseAuthorityApiRoute(pathname);
+
+  if (!route?.identity.siteMedia || !route.path.startsWith("/media")) {
+    return undefined;
+  }
+
+  return { media: route.identity.siteMedia, path: route.path };
+}
+
+function siteMediaKeyFromRoutePath(route: SiteMediaRoute): string | undefined {
+  if (!route.path.startsWith("/media/")) {
+    return undefined;
+  }
+
+  const key = route.path.slice("/media/".length);
+
+  if (!isValidMediaStorageKey(key) || !key.startsWith(siteMediaImageKeyPrefix(route.media))) {
+    return undefined;
+  }
+
+  return key;
+}
+
+function siteMediaImageKeyPrefix(media: SiteMediaStorageIdentity): string {
+  return media.imageKeyPrefix.endsWith("/") ? media.imageKeyPrefix : `${media.imageKeyPrefix}/`;
+}
+
+function siteMediaHrefForStorageKey(key: string, media: SiteMediaStorageIdentity): string {
+  return `${media.routePrefix}/${key}`;
 }
 
 async function readMultipartFile(

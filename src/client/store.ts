@@ -2,6 +2,12 @@ import { useMemo, useSyncExternalStore } from "react";
 import { listenForClientEvents } from "./broadcast.ts";
 import { readLocalSnapshot, type LocalSnapshot } from "./db.ts";
 import {
+  appStorageIdentityForClientTarget,
+  clientTargetSourceSchemaKey,
+  clientTargetStorageName,
+  type ClientAppTarget,
+} from "./app-target.ts";
+import {
   createAggregateValueMatchingQuerySelector,
   createEntityRecordCountMatchingQuerySelector,
   createEntityRecordCountReferencingFieldSelector,
@@ -19,6 +25,7 @@ import type { SchemaKey } from "../shared/schema-apps.ts";
 import type { AggregateSchema, AppSchema, ComputedValueSchema } from "../shared/schema.ts";
 
 export type NormalizedClientState = {
+  activeClientStorageName: string | null;
   activeSchemaKey: SchemaKey | null;
   hydrated: boolean;
   schema: AppSchema | null;
@@ -72,29 +79,38 @@ export function resetClientStore() {
   setState(emptyClientState(null));
 }
 
-export function selectClientStoreSchemaKey(schemaKey: SchemaKey) {
-  if (state.activeSchemaKey === schemaKey) {
+export function selectClientStoreTarget(target: ClientAppTarget) {
+  const identity = appStorageIdentityForClientTarget(target);
+
+  if (state.activeClientStorageName === identity.browserDatabaseName) {
     return;
   }
 
-  setState(emptyClientState(schemaKey));
+  setState(emptyClientState(identity.sourceSchemaKey, identity.browserDatabaseName));
 }
 
-export async function hydrateClientStore(schemaKey: SchemaKey) {
-  applyLocalSnapshot(schemaKey, await readLocalSnapshot(schemaKey));
+export function selectClientStoreSchemaKey(schemaKey: SchemaKey) {
+  selectClientStoreTarget(schemaKey);
 }
 
-export async function refreshClientStoreFromDb(schemaKey: SchemaKey) {
-  applyLocalSnapshot(schemaKey, await readLocalSnapshot(schemaKey));
+export async function hydrateClientStore(target: ClientAppTarget) {
+  applyLocalSnapshot(target, await readLocalSnapshot(target));
 }
 
-export function applyBootstrapResponse(response: BootstrapResponse, schemaKey?: SchemaKey) {
-  if (!shouldApplySchemaKey(schemaKey)) {
+export async function refreshClientStoreFromDb(target: ClientAppTarget) {
+  applyLocalSnapshot(target, await readLocalSnapshot(target));
+}
+
+export function applyBootstrapResponse(response: BootstrapResponse, target?: ClientAppTarget) {
+  if (!shouldApplyClientTarget(target)) {
     return;
   }
 
   setState({
-    activeSchemaKey: schemaKey ?? state.activeSchemaKey,
+    activeClientStorageName: target
+      ? clientTargetStorageName(target)
+      : state.activeClientStorageName,
+    activeSchemaKey: target ? clientTargetSourceSchemaKey(target) : state.activeSchemaKey,
     hydrated: true,
     schema: response.schema,
     schemaUpdatedAt: response.schemaUpdatedAt,
@@ -105,34 +121,41 @@ export function applyBootstrapResponse(response: BootstrapResponse, schemaKey?: 
   });
 }
 
-export function applySchemaSave(schema: AppSchema, schemaUpdatedAt: string, schemaKey?: SchemaKey) {
-  if (!shouldApplySchemaKey(schemaKey)) {
+export function applySchemaSave(
+  schema: AppSchema,
+  schemaUpdatedAt: string,
+  target?: ClientAppTarget,
+) {
+  if (!shouldApplyClientTarget(target)) {
     return;
   }
 
   updateState((current) => ({
     ...current,
-    activeSchemaKey: schemaKey ?? current.activeSchemaKey,
+    activeClientStorageName: target
+      ? clientTargetStorageName(target)
+      : current.activeClientStorageName,
+    activeSchemaKey: target ? clientTargetSourceSchemaKey(target) : current.activeSchemaKey,
     schema,
     schemaUpdatedAt,
     lastSyncedAt: nowIsoString(),
   }));
 }
 
-export function applyChanges(changes: ChangeRow[], cursor: number, schemaKey?: SchemaKey) {
+export function applyChanges(changes: ChangeRow[], cursor: number, target?: ClientAppTarget) {
   applyRecordMerge(
     changes.map((change) => change.payload),
     cursor,
-    schemaKey,
+    target,
   );
 }
 
 export function applyRecordMerge(
   recordsToMerge: StoredRecord[],
   cursor?: number,
-  schemaKey?: SchemaKey,
+  target?: ClientAppTarget,
 ) {
-  if (!shouldApplySchemaKey(schemaKey)) {
+  if (!shouldApplyClientTarget(target)) {
     return;
   }
 
@@ -164,7 +187,10 @@ export function applyRecordMerge(
 
     return {
       ...current,
-      activeSchemaKey: schemaKey ?? current.activeSchemaKey,
+      activeClientStorageName: target
+        ? clientTargetStorageName(target)
+        : current.activeClientStorageName,
+      activeSchemaKey: target ? clientTargetSourceSchemaKey(target) : current.activeSchemaKey,
       recordsById: recordsByIdChanged ? nextRecordsById : current.recordsById,
       recordIdsByEntity,
       cursor: cursor ?? current.cursor,
@@ -312,14 +338,14 @@ export function useLastSyncedAt() {
   return useClientStoreSelector((snapshot) => snapshot.lastSyncedAt);
 }
 
-export function connectBroadcastToClientStore(schemaKey: SchemaKey) {
-  return listenForClientEvents(schemaKey, (event) => {
+export function connectBroadcastToClientStore(target: ClientAppTarget) {
+  return listenForClientEvents(target, (event) => {
     if (
       event.type === "records-updated" ||
       event.type === "cursor-updated" ||
       event.type === "schema-updated"
     ) {
-      void refreshClientStoreFromDb(schemaKey);
+      void refreshClientStoreFromDb(target);
     }
   });
 }
@@ -332,13 +358,14 @@ function useClientStoreSelector<T>(selector: (snapshot: NormalizedClientState) =
   );
 }
 
-function applyLocalSnapshot(schemaKey: SchemaKey, snapshot: LocalSnapshot) {
-  if (!shouldApplySchemaKey(schemaKey)) {
+function applyLocalSnapshot(target: ClientAppTarget, snapshot: LocalSnapshot) {
+  if (!shouldApplyClientTarget(target)) {
     return;
   }
 
   updateState((current) => ({
-    activeSchemaKey: schemaKey,
+    activeClientStorageName: clientTargetStorageName(target),
+    activeSchemaKey: clientTargetSourceSchemaKey(target),
     hydrated: true,
     schema: reuseSchema(current.schema, snapshot.schema),
     schemaUpdatedAt: snapshot.schemaUpdatedAt,
@@ -349,8 +376,12 @@ function applyLocalSnapshot(schemaKey: SchemaKey, snapshot: LocalSnapshot) {
   }));
 }
 
-function emptyClientState(activeSchemaKey: SchemaKey | null): NormalizedClientState {
+function emptyClientState(
+  activeSchemaKey: SchemaKey | null,
+  activeClientStorageName: string | null = null,
+): NormalizedClientState {
   return {
+    activeClientStorageName,
     activeSchemaKey,
     hydrated: false,
     schema: null,
@@ -362,10 +393,14 @@ function emptyClientState(activeSchemaKey: SchemaKey | null): NormalizedClientSt
   };
 }
 
-function shouldApplySchemaKey(schemaKey: SchemaKey | undefined) {
-  return (
-    schemaKey === undefined || state.activeSchemaKey === null || state.activeSchemaKey === schemaKey
-  );
+function shouldApplyClientTarget(target: ClientAppTarget | undefined) {
+  if (target === undefined) {
+    return true;
+  }
+
+  const storageName = clientTargetStorageName(target);
+
+  return state.activeClientStorageName === null || state.activeClientStorageName === storageName;
 }
 
 function updateState(getNextState: (current: NormalizedClientState) => NormalizedClientState) {
@@ -450,6 +485,7 @@ function reconcileRecordIdsByEntity(
 
 function normalizedStatesEqual(left: NormalizedClientState, right: NormalizedClientState) {
   return (
+    left.activeClientStorageName === right.activeClientStorageName &&
     left.activeSchemaKey === right.activeSchemaKey &&
     left.hydrated === right.hydrated &&
     left.schema === right.schema &&

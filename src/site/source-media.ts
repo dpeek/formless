@@ -24,6 +24,11 @@ export type SiteMediaDeliveryFacts = {
   kind: "image";
 };
 
+export type SiteMediaDeliveryOptions = {
+  imageKeyPrefix?: string;
+  routePrefix?: string;
+};
+
 export function siteImageExtensionForContentType(contentType: string): string | undefined {
   return imageMediaExtensionForContentType(contentType);
 }
@@ -32,16 +37,19 @@ export function siteMediaContentTypeForKey(key: string): string | undefined {
   return imageMediaContentTypeForKey(key);
 }
 
-export function siteMediaHrefForKey(key: string): string {
-  return `${SITE_MEDIA_ROUTE_PREFIX}${key}`;
+export function siteMediaHrefForKey(key: string, options: SiteMediaDeliveryOptions = {}): string {
+  const routePrefix = normalizeSiteMediaRoutePrefix(options.routePrefix);
+
+  return `${routePrefix}/${key}`;
 }
 
 export function siteMediaDeliveryFactsForAssetId(
   assetId: string,
+  options: SiteMediaDeliveryOptions = {},
 ): SiteMediaDeliveryFacts | undefined {
   const facts = imageMediaDeliveryFactsForAssetId(assetId, {
-    hrefForKey: siteMediaHrefForKey,
-    keyPrefix: SITE_IMAGE_KEY_PREFIX,
+    hrefForKey: (key) => siteMediaHrefForKey(key, options),
+    keyPrefix: normalizeSiteImageKeyPrefix(options.imageKeyPrefix),
   });
 
   return facts
@@ -58,6 +66,18 @@ export function siteMediaKeyFromAssetId(assetId: string): string | undefined {
     hrefForKey: siteMediaHrefForKey,
     keyPrefix: SITE_IMAGE_KEY_PREFIX,
   })?.storageKey;
+}
+
+function normalizeSiteImageKeyPrefix(value: string | undefined): string {
+  const prefix = value ?? SITE_IMAGE_KEY_PREFIX;
+
+  return prefix.endsWith("/") ? prefix : `${prefix}/`;
+}
+
+function normalizeSiteMediaRoutePrefix(value: string | undefined): string {
+  const prefix = value ?? SITE_MEDIA_ROUTE_PREFIX;
+
+  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
 }
 
 export function siteMediaKeyFromHref(href: string): string | undefined {

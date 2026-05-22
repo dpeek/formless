@@ -8,7 +8,7 @@ import type { EntityActionTargetCountConfig, HomeActionConfig } from "../../clie
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import { createDefaultsAreResolved } from "../../shared/create-defaults.ts";
 import { GeneratedCreateDialog } from "./create.tsx";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
 type EntityHomeActionConfig = Extract<HomeActionConfig, { type: "entity-action" }>;
 type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
@@ -22,7 +22,7 @@ export function HomeActionRow({
   ariaLabel: string;
   queryContext: QueryEvaluationContext;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [createDialogAction, setCreateDialogAction] = useState<CreateHomeActionConfig | null>(null);
 
@@ -35,7 +35,7 @@ export function HomeActionRow({
     setSyncStatus({ state: "syncing", message: `${action.label}...` });
 
     try {
-      const response = await submitAction(schemaKey, action.entityName, action.actionName);
+      const response = await submitAction(appTarget, action.entityName, action.actionName);
       const affected = response.changes.length;
       const message = action.ui.showAffectedCountOnSuccess
         ? `${action.label} synced. ${affected} affected.`

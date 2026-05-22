@@ -129,6 +129,46 @@ describe("authority", () => {
     expect(legacySite.schema).toEqual(siteSourceSchema);
   });
 
+  it("projects installed Site tree media hrefs through the selected install route", async () => {
+    await postInstalledAppJson<BootstrapResponse>(
+      "site",
+      "personal",
+      "/snapshot/restore",
+      siteStoreSnapshot({
+        records: [
+          ...testSiteSeedRecords,
+          {
+            id: "rec_installed_site_image",
+            entity: "block",
+            values: {
+              type: "image",
+              label: "Installed image",
+              mediaAssetId: "installed.webp",
+            },
+            createdAt: "2026-05-22T00:00:00.000Z",
+          },
+          {
+            id: "rec_installed_site_image_place",
+            entity: "blockPlacement",
+            values: {
+              parent: "rec_site_content_home",
+              block: "rec_installed_site_image",
+              order: 9000,
+            },
+            createdAt: "2026-05-22T00:00:01.000Z",
+          },
+        ],
+      }),
+    );
+
+    const body = await getInstalledAppJson<SitePageTreeResponse>("site", "personal", "/tree/home");
+
+    expect(JSON.stringify(body)).toContain(
+      "/api/app-installs/site/personal/media/app-installs/personal/site/images/installed.webp",
+    );
+    expect(JSON.stringify(body)).not.toContain("/api/site/media/site/images/installed.webp");
+  });
+
   it("returns a public page tree for a published site page", async () => {
     useSchemaApp("site");
     await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());

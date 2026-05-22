@@ -13,7 +13,7 @@ import {
   fieldValueToInputValue,
   inputValueToFieldValue,
 } from "./format.ts";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget, useSchemaKey } from "./schema-app-context.tsx";
 
 export function RecordFieldEditor({
   canPatch,
@@ -33,6 +33,7 @@ export function RecordFieldEditor({
   showLabel?: boolean;
 }) {
   const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const { field, fieldName } = fieldConfig;
   const schema = useSchema();
   const numberFormat = fieldConfig.format ?? "plain";
@@ -105,7 +106,7 @@ export function RecordFieldEditor({
     setSyncStatus({ state: "syncing", message: `Updating ${patchFieldNames.join(", ")}...` });
 
     try {
-      await submitPatchMutation(schemaKey, entityName, recordId, patchValues);
+      await submitPatchMutation(appTarget, entityName, recordId, patchValues);
       setError(null);
       setSyncStatus({ state: "idle", message: "Updated and synced." });
       return true;
@@ -189,7 +190,7 @@ export function RecordFieldEditor({
     setSyncStatus({ state: "syncing", message: "Uploading image..." });
 
     try {
-      const upload = await uploadSiteImageFile(file);
+      const upload = await uploadSiteImageFile(file, { target: appTarget });
       const uploadFields = selectImageUploadPatchFields(schema, entityName, fieldName);
       const saved = await commitPatch(
         siteImageUploadPatchValues({

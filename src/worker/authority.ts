@@ -5,7 +5,7 @@ import type {
   SyncSocketServerMessage,
 } from "../shared/protocol.ts";
 import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
-import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
+import { parseAuthorityApiRoute, type AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
   ensureStorageTables,
   getChangesAfter,
@@ -78,6 +78,7 @@ export class FormlessAuthority extends DurableObject<Env> {
         const result = executeAuthorityOperation({
           app: route.app,
           body,
+          identity: route.identity,
           operation,
           source,
           storage: this.ctx.storage,
@@ -278,7 +279,7 @@ function sendSyncSocketError(socket: WebSocket, message: string) {
 
 function parseAuthorityRoute(
   pathname: string,
-): { app: WorkerSchemaAppDefinition; path: string } | undefined {
+): { app: WorkerSchemaAppDefinition; identity: AppStorageIdentity; path: string } | undefined {
   const route = parseAuthorityApiRoute(pathname);
 
   if (!route) {
@@ -291,7 +292,7 @@ function parseAuthorityRoute(
     return undefined;
   }
 
-  return { app, path: route.path };
+  return { app, identity: route.identity, path: route.path };
 }
 
 async function readJson(request: Request): Promise<unknown> {

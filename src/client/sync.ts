@@ -1,4 +1,5 @@
 import { listenForClientEvents, publishClientEvent } from "./broadcast.ts";
+import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 import {
   deleteClientDb,
   mergeChanges,
@@ -15,7 +16,6 @@ import {
 } from "./store.ts";
 import { setSyncStatus } from "./sync-status.ts";
 import { createActionId, createMutationId } from "../shared/ids.ts";
-import type { SchemaKey } from "../shared/schema-apps.ts";
 import type {
   ActionRequest,
   ActionResponse,
@@ -57,106 +57,115 @@ type StartPushSyncOptions = {
   socketFactory?: (url: string) => SyncWebSocket;
 };
 
-export async function bootstrapClient(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
-  const response = await fetchJson<BootstrapResponse>(fetcher, apiPath(schemaKey, "bootstrap"));
+export async function bootstrapClient(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+  const identity = appStorageIdentityForClientTarget(target);
+  const response = await fetchJson<BootstrapResponse>(fetcher, apiPath(identity, "bootstrap"));
 
-  await saveBootstrapResponse(schemaKey, response);
-  applyBootstrapResponse(response, schemaKey);
-  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
+  await saveBootstrapResponse(identity, response);
+  applyBootstrapResponse(response, identity);
+  notifyLocalDataChanged(identity, { schemaChanged: true });
 
   return response;
 }
 
-export async function syncClient(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
-  const cursor = await readCursor(schemaKey);
-  const schemaUpdatedAt = await readSchemaUpdatedAt(schemaKey);
-  const url = syncUrl(schemaKey, cursor, schemaUpdatedAt);
+export async function syncClient(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+  const identity = appStorageIdentityForClientTarget(target);
+  const cursor = await readCursor(identity);
+  const schemaUpdatedAt = await readSchemaUpdatedAt(identity);
+  const url = syncUrl(identity, cursor, schemaUpdatedAt);
   const response = await fetchJson<SyncResponse>(fetcher, url);
 
-  await applySyncResponse(schemaKey, response, { currentCursor: cursor });
+  await applySyncResponse(identity, response, { currentCursor: cursor });
 
   return response;
 }
 
 export async function applySyncResponse(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   response: SyncResponse,
   options: { currentCursor?: number } = {},
 ) {
-  const cursor = options.currentCursor ?? (await readCursor(schemaKey));
+  const identity = appStorageIdentityForClientTarget(target);
+  const cursor = options.currentCursor ?? (await readCursor(identity));
   const schemaChanged = Boolean(response.schema && response.schemaUpdatedAt);
 
   if (response.schema && response.schemaUpdatedAt) {
-    await saveSchema(schemaKey, response.schema, response.schemaUpdatedAt);
-    applySchemaSave(response.schema, response.schemaUpdatedAt, schemaKey);
+    await saveSchema(identity, response.schema, response.schemaUpdatedAt);
+    applySchemaSave(response.schema, response.schemaUpdatedAt, identity);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor) {
-    await mergeChanges(schemaKey, response.changes, response.cursor);
-    applyChanges(response.changes, response.cursor, schemaKey);
+    await mergeChanges(identity, response.changes, response.cursor);
+    applyChanges(response.changes, response.cursor, identity);
   }
 
   if (response.changes.length > 0 || response.cursor !== cursor || schemaChanged) {
-    notifyLocalDataChanged(schemaKey, { schemaChanged });
+    notifyLocalDataChanged(identity, { schemaChanged });
   }
 
   return response;
 }
 
-export async function fetchActiveSchema(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
-  const response = await fetchJson<SchemaResponse>(fetcher, apiPath(schemaKey, "schema"));
+export async function fetchActiveSchema(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+  const identity = appStorageIdentityForClientTarget(target);
+  const response = await fetchJson<SchemaResponse>(fetcher, apiPath(identity, "schema"));
 
-  await saveSchema(schemaKey, response.schema, response.updatedAt);
-  applySchemaSave(response.schema, response.updatedAt, schemaKey);
-  notifySchemaChanged(schemaKey);
+  await saveSchema(identity, response.schema, response.updatedAt);
+  applySchemaSave(response.schema, response.updatedAt, identity);
+  notifySchemaChanged(identity);
 
   return response;
 }
 
 export async function saveActiveSchema(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   schema: AppSchema,
   fetcher: typeof fetch = fetch,
 ) {
-  const response = await postJson<SchemaUpdateResponse>(fetcher, apiPath(schemaKey, "schema"), {
+  const identity = appStorageIdentityForClientTarget(target);
+  const response = await postJson<SchemaUpdateResponse>(fetcher, apiPath(identity, "schema"), {
     schema,
   });
 
-  await saveSchema(schemaKey, response.schema, response.updatedAt);
-  applySchemaSave(response.schema, response.updatedAt, schemaKey);
-  notifySchemaChanged(schemaKey);
+  await saveSchema(identity, response.schema, response.updatedAt);
+  applySchemaSave(response.schema, response.updatedAt, identity);
+  notifySchemaChanged(identity);
 
   return response;
 }
 
-export async function exportStoreSnapshot(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
-  return fetchJson<StoreSnapshot>(fetcher, apiPath(schemaKey, "snapshot"));
+export async function exportStoreSnapshot(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+  const identity = appStorageIdentityForClientTarget(target);
+
+  return fetchJson<StoreSnapshot>(fetcher, apiPath(identity, "snapshot"));
 }
 
 export async function restoreStoreSnapshot(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   snapshot: unknown,
   fetcher: typeof fetch = fetch,
 ) {
+  const identity = appStorageIdentityForClientTarget(target);
   const response = await postJson<BootstrapResponse>(
     fetcher,
-    apiPath(schemaKey, "snapshot/restore"),
+    apiPath(identity, "snapshot/restore"),
     snapshot,
   );
 
-  await saveBootstrapResponse(schemaKey, response);
-  applyBootstrapResponse(response, schemaKey);
-  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
+  await saveBootstrapResponse(identity, response);
+  applyBootstrapResponse(response, identity);
+  notifyLocalDataChanged(identity, { schemaChanged: true });
 
   return response;
 }
 
 export async function submitCreateMutation(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   entity: EntityName,
   values: RecordValues,
   fetcher: typeof fetch = fetch,
 ) {
+  const identity = appStorageIdentityForClientTarget(target);
   const mutation: CreateMutation = {
     mutationId: createMutationId(),
     entity,
@@ -166,24 +175,25 @@ export async function submitCreateMutation(
 
   const response = await postJson<MutationResponse>(
     fetcher,
-    apiPath(schemaKey, "mutations"),
+    apiPath(identity, "mutations"),
     mutation,
   );
 
-  await mergeChanges(schemaKey, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, schemaKey);
-  notifyLocalDataChanged(schemaKey);
+  await mergeChanges(identity, response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, identity);
+  notifyLocalDataChanged(identity);
 
   return response;
 }
 
 export async function submitPatchMutation(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   entity: EntityName,
   recordId: string,
   values: Partial<RecordValues>,
   fetcher: typeof fetch = fetch,
 ) {
+  const identity = appStorageIdentityForClientTarget(target);
   const mutation: PatchMutation = {
     mutationId: createMutationId(),
     entity,
@@ -194,23 +204,24 @@ export async function submitPatchMutation(
 
   const response = await postJson<MutationResponse>(
     fetcher,
-    apiPath(schemaKey, "mutations"),
+    apiPath(identity, "mutations"),
     mutation,
   );
 
-  await mergeChanges(schemaKey, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, schemaKey);
-  notifyLocalDataChanged(schemaKey);
+  await mergeChanges(identity, response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, identity);
+  notifyLocalDataChanged(identity);
 
   return response;
 }
 
 export async function submitDeleteMutation(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   entity: EntityName,
   recordId: string,
   fetcher: typeof fetch = fetch,
 ) {
+  const identity = appStorageIdentityForClientTarget(target);
   const mutation: DeleteMutation = {
     mutationId: createMutationId(),
     entity,
@@ -220,24 +231,25 @@ export async function submitDeleteMutation(
 
   const response = await postJson<MutationResponse>(
     fetcher,
-    apiPath(schemaKey, "mutations"),
+    apiPath(identity, "mutations"),
     mutation,
   );
 
-  await mergeChanges(schemaKey, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, schemaKey);
-  notifyLocalDataChanged(schemaKey);
+  await mergeChanges(identity, response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, identity);
+  notifyLocalDataChanged(identity);
 
   return response;
 }
 
 export async function submitAction(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   entity: EntityName,
   actionName: string,
   inputOrFetcher?: ActionRequest["input"] | typeof fetch,
   maybeFetcher?: typeof fetch,
 ) {
+  const identity = appStorageIdentityForClientTarget(target);
   const input = typeof inputOrFetcher === "function" ? undefined : inputOrFetcher;
   const fetcher = typeof inputOrFetcher === "function" ? inputOrFetcher : (maybeFetcher ?? fetch);
   const action: ActionRequest = {
@@ -247,42 +259,45 @@ export async function submitAction(
     ...(input === undefined ? {} : { input }),
   };
 
-  const response = await postJson<ActionResponse>(fetcher, apiPath(schemaKey, "actions"), action);
+  const response = await postJson<ActionResponse>(fetcher, apiPath(identity, "actions"), action);
 
-  await mergeChanges(schemaKey, response.changes, response.cursor);
-  applyChanges(response.changes, response.cursor, schemaKey);
-  notifyLocalDataChanged(schemaKey);
+  await mergeChanges(identity, response.changes, response.cursor);
+  applyChanges(response.changes, response.cursor, identity);
+  notifyLocalDataChanged(identity);
 
   return response;
 }
 
-export async function resetSourceSchema(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
+export async function resetSourceSchema(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+  const identity = appStorageIdentityForClientTarget(target);
   const response = await postJson<BootstrapResponse>(
     fetcher,
-    apiPath(schemaKey, "reset/schema"),
+    apiPath(identity, "reset/schema"),
     {},
   );
 
-  await saveBootstrapResponse(schemaKey, response);
-  applyBootstrapResponse(response, schemaKey);
-  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
+  await saveBootstrapResponse(identity, response);
+  applyBootstrapResponse(response, identity);
+  notifyLocalDataChanged(identity, { schemaChanged: true });
 
   return response;
 }
 
-export async function resetSeedData(schemaKey: SchemaKey, fetcher: typeof fetch = fetch) {
-  const response = await postJson<BootstrapResponse>(fetcher, apiPath(schemaKey, "reset/seed"), {});
+export async function resetSeedData(target: ClientAppTarget, fetcher: typeof fetch = fetch) {
+  const identity = appStorageIdentityForClientTarget(target);
+  const response = await postJson<BootstrapResponse>(fetcher, apiPath(identity, "reset/seed"), {});
 
   resetClientStore();
-  await deleteClientDb(schemaKey);
-  await saveBootstrapResponse(schemaKey, response);
-  applyBootstrapResponse(response, schemaKey);
-  notifyLocalDataChanged(schemaKey, { schemaChanged: true });
+  await deleteClientDb(identity);
+  await saveBootstrapResponse(identity, response);
+  applyBootstrapResponse(response, identity);
+  notifyLocalDataChanged(identity, { schemaChanged: true });
 
   return response;
 }
 
-export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOptions = {}) {
+export function startPushSync(target: ClientAppTarget, options: StartPushSyncOptions = {}) {
+  const identity = appStorageIdentityForClientTarget(target);
   const onSynced = options.onSynced;
   const reconnectInitialDelayMs =
     options.reconnectInitialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS;
@@ -304,7 +319,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     let nextSocket: SyncWebSocket;
 
     try {
-      nextSocket = socketFactory(syncWebSocketUrl(schemaKey));
+      nextSocket = socketFactory(syncWebSocketUrl(identity));
     } catch {
       setSyncStatus({ state: "error", message: "Push sync unavailable." });
       return;
@@ -321,7 +336,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
       opened = true;
       reconnectDelayMs = reconnectInitialDelayMs;
       setSyncStatus({ state: "idle", message: "Push sync connected." });
-      void sendSyncSocketClientMessage(schemaKey, nextSocket, "hello").catch(() => {
+      void sendSyncSocketClientMessage(identity, nextSocket, "hello").catch(() => {
         if (!stopped && socket === nextSocket) {
           nextSocket.close();
         }
@@ -333,7 +348,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
         return;
       }
 
-      void handleSyncSocketMessage(schemaKey, event)
+      void handleSyncSocketMessage(identity, event)
         .then((didApplySync) => {
           if (didApplySync && !stopped && socket === nextSocket) {
             onSynced?.();
@@ -395,7 +410,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     const currentSocket = socket;
 
     if (currentSocket && currentSocket.readyState === WEB_SOCKET_OPEN_READY_STATE) {
-      void sendSyncSocketClientMessage(schemaKey, currentSocket, "sync-requested").catch(() => {
+      void sendSyncSocketClientMessage(identity, currentSocket, "sync-requested").catch(() => {
         if (!stopped && socket === currentSocket) {
           currentSocket.close();
         }
@@ -403,7 +418,7 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
     }
   }
 
-  stopListening = listenForClientEvents(schemaKey, (event) => {
+  stopListening = listenForClientEvents(identity, (event) => {
     if (event.type === "sync-requested") {
       requestSocketSync();
     }
@@ -427,8 +442,10 @@ export function startPushSync(schemaKey: SchemaKey, options: StartPushSyncOption
   }
 }
 
-export function requestSync(schemaKey: SchemaKey) {
-  publishClientEvent(schemaKey, "sync-requested");
+export function requestSync(target: ClientAppTarget) {
+  const identity = appStorageIdentityForClientTarget(target);
+
+  publishClientEvent(identity, "sync-requested");
 }
 
 function createWebSocket(url: string): SyncWebSocket {
@@ -436,20 +453,21 @@ function createWebSocket(url: string): SyncWebSocket {
 }
 
 async function sendSyncSocketClientMessage(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   socket: SyncWebSocket,
   type: SyncSocketClientMessage["type"],
 ) {
+  const identity = appStorageIdentityForClientTarget(target);
   const message = {
     type,
-    cursor: await readCursor(schemaKey),
-    schemaUpdatedAt: await readSchemaUpdatedAt(schemaKey),
+    cursor: await readCursor(identity),
+    schemaUpdatedAt: await readSchemaUpdatedAt(identity),
   } satisfies SyncSocketClientMessage;
 
   socket.send(JSON.stringify(message));
 }
 
-async function handleSyncSocketMessage(schemaKey: SchemaKey, event: MessageEvent) {
+async function handleSyncSocketMessage(target: ClientAppTarget, event: MessageEvent) {
   const message = parseSyncSocketServerMessage(event.data);
 
   if (!message) {
@@ -461,7 +479,7 @@ async function handleSyncSocketMessage(schemaKey: SchemaKey, event: MessageEvent
     return false;
   }
 
-  await applySyncResponse(schemaKey, message.payload);
+  await applySyncResponse(target, message.payload);
   setSyncStatus({ state: "idle", message: "Pushed sync received." });
   return true;
 }
@@ -518,16 +536,19 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-function notifyLocalDataChanged(schemaKey: SchemaKey, options: { schemaChanged?: boolean } = {}) {
-  publishClientEvent(schemaKey, "records-updated");
-  publishClientEvent(schemaKey, "cursor-updated");
+function notifyLocalDataChanged(
+  target: ClientAppTarget,
+  options: { schemaChanged?: boolean } = {},
+) {
+  publishClientEvent(target, "records-updated");
+  publishClientEvent(target, "cursor-updated");
   if (options.schemaChanged) {
-    publishClientEvent(schemaKey, "schema-updated");
+    publishClientEvent(target, "schema-updated");
   }
 }
 
-function notifySchemaChanged(schemaKey: SchemaKey) {
-  publishClientEvent(schemaKey, "schema-updated");
+function notifySchemaChanged(target: ClientAppTarget) {
+  publishClientEvent(target, "schema-updated");
 }
 
 function isErrorResponse(value: unknown): value is { error: string } {
@@ -540,24 +561,26 @@ function isErrorResponse(value: unknown): value is { error: string } {
   );
 }
 
-function apiPath(schemaKey: SchemaKey, path: string) {
-  return `/api/${schemaKey}/${path}`;
+function apiPath(target: ClientAppTarget, path: string) {
+  const identity = appStorageIdentityForClientTarget(target);
+
+  return `${identity.apiRoutePrefix}/${path}`;
 }
 
-function syncUrl(schemaKey: SchemaKey, cursor: number, schemaUpdatedAt: string | null) {
+function syncUrl(target: ClientAppTarget, cursor: number, schemaUpdatedAt: string | null) {
   const params = new URLSearchParams({ after: String(cursor) });
 
   if (schemaUpdatedAt) {
     params.set("schemaUpdatedAt", schemaUpdatedAt);
   }
 
-  return `${apiPath(schemaKey, "sync")}?${params.toString()}`;
+  return `${apiPath(target, "sync")}?${params.toString()}`;
 }
 
-function syncWebSocketUrl(schemaKey: SchemaKey) {
+function syncWebSocketUrl(target: ClientAppTarget) {
   const baseUrl =
     typeof globalThis.location === "undefined" ? "http://localhost/" : globalThis.location.href;
-  const url = new URL(apiPath(schemaKey, "sync/ws"), baseUrl);
+  const url = new URL(apiPath(target, "sync/ws"), baseUrl);
 
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
 

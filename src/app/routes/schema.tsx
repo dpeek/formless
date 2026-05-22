@@ -10,12 +10,13 @@ import {
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
-  selectClientStoreSchemaKey,
+  selectClientStoreTarget,
   useActiveSchemaKey,
   useSchema,
 } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
+import type { ClientAppTarget } from "../../client/app-target.ts";
 import {
   projectSchemaBuilderDraft,
   validateSchemaBuilderKey,
@@ -45,7 +46,14 @@ import {
 
 type SchemaRouteMode = "builder" | "source";
 
-export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
+export function SchemaRoute({
+  target,
+  schemaKey,
+}: {
+  target?: ClientAppTarget;
+  schemaKey: SchemaKey;
+}) {
+  const appTarget = target ?? schemaKey;
   const app = getSchemaAppDefinition(schemaKey);
   const [location] = useLocation();
   const activeSchemaKey = useActiveSchemaKey();
@@ -65,18 +73,18 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
   const appRoute = appRouteFromSchemaRoute(location);
 
   useEffect(() => {
-    selectClientStoreSchemaKey(schemaKey);
+    selectClientStoreTarget(appTarget);
     setMode("builder");
     setRouteError(null);
     setDraftState(null);
     setSyncStatus({ state: "syncing", message: "Loading active schema." });
-    const stopBroadcast = connectBroadcastToClientStore(schemaKey);
+    const stopBroadcast = connectBroadcastToClientStore(appTarget);
     let cancelled = false;
 
     async function loadSchema() {
       try {
-        await hydrateClientStore(schemaKey);
-        await fetchActiveSchema(schemaKey);
+        await hydrateClientStore(appTarget);
+        await fetchActiveSchema(appTarget);
 
         if (!cancelled) {
           setSyncStatus({ state: "idle", message: "Loaded active schema." });
@@ -97,7 +105,7 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
       cancelled = true;
       stopBroadcast();
     };
-  }, [schemaKey]);
+  }, [appTarget]);
 
   useEffect(() => {
     if (schema) {
@@ -126,7 +134,7 @@ export function SchemaRoute({ schemaKey }: { schemaKey: SchemaKey }) {
     setSyncStatus({ state: "syncing", message: "Saving schema..." });
 
     try {
-      const response = await saveActiveSchema(schemaKey, saveResult.schema);
+      const response = await saveActiveSchema(appTarget, saveResult.schema);
 
       setDraftState(commitSchemaRouteDraftState(response.schema));
       setSyncStatus({ state: "idle", message: `Saved schema at ${response.updatedAt}.` });

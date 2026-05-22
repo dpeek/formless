@@ -56,7 +56,7 @@ import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { DeleteRecordButton, type RecordLabelFieldConfig } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import { InvokeActionTableCell } from "./table-actions.tsx";
 import {
   selectGeneratedTablePresentation,
@@ -89,7 +89,7 @@ export function RecordTable({
   queryName?: string;
   queryContext?: QueryEvaluationContext;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const canPatch = entity.mutations.patch.enabled;
   const canDelete = entity.mutations.delete.enabled;
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
@@ -157,7 +157,7 @@ export function RecordTable({
     setSyncStatus({ state: "syncing", message: "Moving row..." });
 
     try {
-      await submitOrderingPatch(schemaKey, orderingContext, plan);
+      await submitOrderingPatch(appTarget, orderingContext, plan);
       setSyncStatus({ state: "idle", message: "Row moved and synced." });
     } catch (error) {
       setSyncStatus({

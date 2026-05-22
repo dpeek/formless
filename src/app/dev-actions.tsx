@@ -10,6 +10,7 @@ import {
 } from "@dpeek/formless-ui/modal";
 import { exportStoreSnapshot, resetSeedData, restoreStoreSnapshot } from "../client/sync.ts";
 import { setSyncStatus } from "../client/sync-status.ts";
+import type { ClientAppTarget } from "../client/app-target.ts";
 import type { BootstrapResponse, StoreSnapshot } from "../shared/protocol.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../shared/schema-apps.ts";
 
@@ -24,6 +25,7 @@ type SourceResetControlProps = {
   className?: string;
   onResetSourceData?: (response: BootstrapResponse) => void;
   schemaKey: SchemaKey;
+  target?: ClientAppTarget;
 };
 
 type SnapshotControlProps = {
@@ -32,6 +34,7 @@ type SnapshotControlProps = {
   className?: string;
   messageClassName?: string;
   schemaKey: SchemaKey;
+  target?: ClientAppTarget;
 };
 
 type SnapshotRestoreControlProps = SnapshotControlProps & {
@@ -43,6 +46,7 @@ export function SourceResetControl({
   className,
   onResetSourceData,
   schemaKey,
+  target = schemaKey,
 }: SourceResetControlProps) {
   const app = getSchemaAppDefinition(schemaKey);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -61,7 +65,7 @@ export function SourceResetControl({
     setResetStatus({ pending: true, error: null, message: null });
 
     try {
-      const response = await resetSeedData(schemaKey);
+      const response = await resetSeedData(target);
       onResetSourceData?.(response);
       setResetStatus({
         pending: false,
@@ -118,6 +122,7 @@ export function SnapshotExportControl({
   className,
   messageClassName,
   schemaKey,
+  target = schemaKey,
 }: SnapshotControlProps) {
   const app = getSchemaAppDefinition(schemaKey);
   const [exportStatus, setExportStatus] = useState<DevActionStatus>({
@@ -135,7 +140,7 @@ export function SnapshotExportControl({
     setSyncStatus({ state: "syncing", message: `Exporting ${app.label} store snapshot...` });
 
     try {
-      const snapshot = await exportStoreSnapshot(schemaKey);
+      const snapshot = await exportStoreSnapshot(target);
       const message = `Exported ${app.label} snapshot from ${snapshot.exportedAt}.`;
 
       downloadStoreSnapshot(snapshot);
@@ -180,6 +185,7 @@ export function SnapshotRestoreControl({
   messageClassName,
   onRestoreSnapshot,
   schemaKey,
+  target = schemaKey,
 }: SnapshotRestoreControlProps) {
   const app = getSchemaAppDefinition(schemaKey);
   const restoreInputId = useId();
@@ -204,7 +210,7 @@ export function SnapshotRestoreControl({
 
     try {
       const snapshot = JSON.parse(await file.text()) as unknown;
-      const response = await restoreStoreSnapshot(schemaKey, snapshot);
+      const response = await restoreStoreSnapshot(target, snapshot);
       const message = `Restored ${app.label} snapshot at ${response.schemaUpdatedAt}.`;
 
       onRestoreSnapshot?.(response);

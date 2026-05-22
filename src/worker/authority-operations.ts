@@ -1,5 +1,6 @@
 import { buildSitePageTree } from "../site/tree.ts";
 import type { SitePageTreeResponse } from "../shared/protocol.ts";
+import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import {
   executeCreateAfterCreateHooks,
@@ -113,6 +114,7 @@ type AuthorityOperationSelectionInput = {
 type AuthorityOperationExecutionInput = {
   app: WorkerSchemaAppDefinition;
   body?: unknown;
+  identity: AppStorageIdentity;
   operation: AuthorityOperation;
   source: StorageSource;
   storage: DurableObjectStorage;
@@ -216,7 +218,19 @@ export function executeAuthorityOperation(
 
       const slug = parseSiteTreeSlug(operation.metadata.path);
       const { schema } = initializeStorageFromSource(input.storage, input.source);
-      const projection = buildSitePageTree(schema, getBootstrapRecords(input.storage), slug);
+      const projection = buildSitePageTree(
+        schema,
+        getBootstrapRecords(input.storage),
+        slug,
+        input.identity.siteMedia
+          ? {
+              media: {
+                imageKeyPrefix: input.identity.siteMedia.imageKeyPrefix,
+                routePrefix: input.identity.siteMedia.routePrefix,
+              },
+            }
+          : {},
+      );
 
       if (!projection.tree) {
         return {

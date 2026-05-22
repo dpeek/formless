@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
-  selectClientStoreSchemaKey,
+  selectClientStoreTarget,
   useActiveSchemaKey,
   useSchema,
 } from "../../client/store.ts";
 import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
 import { bootstrapClient, startPushSync } from "../../client/sync.ts";
+import type { ClientAppTarget } from "../../client/app-target.ts";
 import { selectScreenModelByPath } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
@@ -33,7 +34,16 @@ export {
   withHomeRouteSelectedSectionQueryName,
 } from "./home-selection.tsx";
 
-export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; screenPath: string }) {
+export function HomeRoute({
+  target,
+  schemaKey,
+  screenPath,
+}: {
+  target?: ClientAppTarget;
+  schemaKey: SchemaKey;
+  screenPath: string;
+}) {
+  const appTarget = target ?? schemaKey;
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
   const schema = activeSchemaKey === null || activeSchemaKey === schemaKey ? activeSchema : null;
@@ -53,8 +63,8 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
   }, [schemaKey, setSelectionState]);
 
   useEffect(() => {
-    selectClientStoreSchemaKey(schemaKey);
-    const stopBroadcast = connectBroadcastToClientStore(schemaKey);
+    selectClientStoreTarget(appTarget);
+    const stopBroadcast = connectBroadcastToClientStore(appTarget);
     let stopPushSync = () => {};
     let cancelled = false;
 
@@ -62,15 +72,15 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
       setSyncStatus({ state: "syncing", message: `Syncing ${app.label}...` });
 
       try {
-        await hydrateClientStore(schemaKey);
-        await bootstrapClient(schemaKey);
+        await hydrateClientStore(appTarget);
+        await bootstrapClient(appTarget);
 
         if (cancelled) {
           return;
         }
 
         setSyncStatus({ state: "idle", message: "Synced." });
-        stopPushSync = startPushSync(schemaKey);
+        stopPushSync = startPushSync(appTarget);
       } catch (error) {
         if (cancelled) {
           return;
@@ -90,7 +100,7 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
       stopBroadcast();
       stopPushSync();
     };
-  }, [app.label, schemaKey]);
+  }, [app.label, appTarget]);
 
   if (!schema) {
     return (
@@ -118,7 +128,7 @@ export function HomeRoute({ schemaKey, screenPath }: { schemaKey: SchemaKey; scr
 
   return (
     <section className="mx-auto w-full max-w-[112rem]">
-      <SchemaAppProvider schemaKey={schemaKey}>
+      <SchemaAppProvider schemaKey={schemaKey} target={appTarget}>
         <HomeScreen
           getSectionSelection={(section) => ({
             selectedContextRecordId: selectHomeRouteSectionContextRecordId(

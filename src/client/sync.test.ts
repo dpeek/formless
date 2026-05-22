@@ -28,6 +28,7 @@ import {
   syncClient,
 } from "./sync.ts";
 import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
+import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type {
   ActionResponse,
   BootstrapResponse,
@@ -50,6 +51,8 @@ import {
 beforeEach(async () => {
   await deleteClientDb("tasks");
   await deleteClientDb("estii");
+  await deleteClientDb(installedSiteIdentity("personal"));
+  await deleteClientDb(installedSiteIdentity("docs"));
   resetClientStore();
 });
 
@@ -86,6 +89,28 @@ describe("client sync", () => {
 
     expect((await readLocalSnapshot("tasks")).records).toEqual([]);
     expect((await readLocalSnapshot("estii")).records).toEqual([record("record-2", "Rate")]);
+  });
+
+  it("bootstraps installed app data into the selected install replica only", async () => {
+    const personal = installedSiteIdentity("personal");
+    const docs = installedSiteIdentity("docs");
+
+    await bootstrapClient(
+      personal,
+      jsonFetcher("/api/app-installs/site/personal/bootstrap", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+        records: [record("record-1", "Personal")],
+        cursor: 1,
+      } satisfies BootstrapResponse),
+    );
+
+    expect((await readLocalSnapshot(personal)).records).toEqual([record("record-1", "Personal")]);
+    expect((await readLocalSnapshot(docs)).records).toEqual([]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:app:personal",
+      activeSchemaKey: "site",
+    });
   });
 
   it("merges incremental sync records and advances the cursor", async () => {
@@ -244,6 +269,21 @@ describe("client sync", () => {
 
     try {
       expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe("/api/estii/sync/ws");
+    } finally {
+      stop();
+    }
+  });
+
+  it("opens installed app push sync on the install API path", () => {
+    const sockets = fakeSocketFactory();
+    const stop = startPushSync(installedSiteIdentity("personal"), {
+      socketFactory: sockets.create,
+    });
+
+    try {
+      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe(
+        "/api/app-installs/site/personal/sync/ws",
+      );
     } finally {
       stop();
     }
@@ -739,6 +779,21 @@ describe("client sync", () => {
     expect(response).toEqual(snapshot);
   });
 
+  it("exports store snapshots from an installed app authority", async () => {
+    const snapshot = storeSnapshot({
+      schemaKey: "site",
+      records: [record("record-1", "Personal")],
+      sourceCursor: 3,
+    });
+
+    const response = await exportStoreSnapshot(
+      installedSiteIdentity("personal"),
+      jsonFetcher("/api/app-installs/site/personal/snapshot", snapshot),
+    );
+
+    expect(response).toEqual(snapshot);
+  });
+
   it("restores store snapshots and replaces the selected local replica", async () => {
     const restoredRecord = record("record-2", "Restored");
     const restoredSchema = schemaWithSummary();
@@ -876,6 +931,43 @@ describe("client sync", () => {
     expect(storeSnapshot.recordsById["record-1"]).toBeUndefined();
     expect(storeSnapshot.recordsById["record-2"]).toEqual(acceptedRecord);
     expect(storeSnapshot.cursor).toBe(2);
+  });
+
+  it("resets seed data for one installed app replica", async () => {
+    const personal = installedSiteIdentity("personal");
+    const docs = installedSiteIdentity("docs");
+    const acceptedRecord = record("record-2", "Personal reset");
+
+    await saveBootstrapResponse(personal, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "Personal old")],
+      cursor: 1,
+    });
+    await saveBootstrapResponse(docs, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-3", "Docs")],
+      cursor: 3,
+    });
+
+    const response = await resetSeedData(
+      personal,
+      jsonFetcher("/api/app-installs/site/personal/reset/seed", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+        records: [acceptedRecord],
+        cursor: 2,
+      } satisfies BootstrapResponse),
+    );
+
+    expect(response.records).toEqual([acceptedRecord]);
+    expect((await readLocalSnapshot(personal)).records).toEqual([acceptedRecord]);
+    expect((await readLocalSnapshot(docs)).records).toEqual([record("record-3", "Docs")]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:app:personal",
+      activeSchemaKey: "site",
+    });
   });
 
   it("can request the rate-card source schema reset", async () => {
@@ -1154,6 +1246,16 @@ function storeSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
     records: [],
     ...overrides,
   };
+}
+
+function installedSiteIdentity(installId: string) {
+  const identity = installedAppStorageIdentity({ installId, packageAppKey: "site" });
+
+  if (!identity) {
+    throw new Error(`Expected installed Site identity for ${installId}.`);
+  }
+
+  return identity;
 }
 
 function record(id: string, title: string, done = false): StoredRecord {

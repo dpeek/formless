@@ -1,7 +1,7 @@
 import type { ResultOrderingConfig } from "../../client/views.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
+import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
-import type { SchemaKey } from "../../shared/schema-apps.ts";
 import {
   calculateOrderingDragMovePlan,
   calculateOrderingMovePlan,
@@ -236,11 +236,11 @@ export function orderingMoveAriaLabel(item: OrderingMoveMenuItem) {
 }
 
 export async function submitOrderingPatch(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   orderingContext: ResultOrderingContext,
   plan: OrderingMovePatchPlan,
 ) {
-  await submitPatchMutation(schemaKey, orderingContext.entityName, plan.recordId, {
+  await submitPatchMutation(target, orderingContext.entityName, plan.recordId, {
     [orderingContext.ordering.fieldName]: plan.rank,
   });
 }

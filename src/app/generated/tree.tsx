@@ -24,7 +24,7 @@ import type {
   RecordValues,
   StoredRecord,
 } from "../../shared/protocol.ts";
-import type { SchemaKey } from "../../shared/schema-apps.ts";
+import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { GeneratedCreateDialogForm, type CreateHomeActionConfig } from "./create.tsx";
 import {
@@ -42,7 +42,7 @@ import {
 } from "./ordering-ui.ts";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import {
   selectRecordContextLinkForActiveUnion,
   selectRecordFieldsForActiveUnion,
@@ -133,7 +133,7 @@ function PlacementSiblingList({
   result: TreeResultConfig;
   selectableContextRecordIds?: Set<string>;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const recordsById = useRecordsById();
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
   const recordIds = placements.map((placement) => placement.id);
@@ -193,7 +193,7 @@ function PlacementSiblingList({
     setSyncStatus({ state: "syncing", message: "Moving placement..." });
 
     try {
-      await submitOrderingPatch(schemaKey, orderingContext, plan);
+      await submitOrderingPatch(appTarget, orderingContext, plan);
       setSyncStatus({ state: "idle", message: "Placement moved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -456,7 +456,7 @@ function TreeChildAddControls({
   parentRecord: StoredRecord;
   result: TreeResultConfig;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const [activeVariant, setActiveVariant] = useState<TreeAllowedChildVariantConfig | null>(null);
   const allowedChildVariants = selectAllowedTreeChildVariants(result, parentRecord);
   const createAction = activeVariant
@@ -526,7 +526,7 @@ function TreeChildAddControls({
               onSuccess={() => setActiveVariant(null)}
               submitValues={(values) =>
                 submitTreeChildCreateAction(
-                  schemaKey,
+                  appTarget,
                   result,
                   parentRecord,
                   values,
@@ -589,7 +589,7 @@ function TreePlacementRemoveButton({
   placement: StoredRecord;
   result: TreeResultConfig;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const [isRemoving, setIsRemoving] = useState(false);
   const removeAction = result.composition?.remove;
 
@@ -606,7 +606,7 @@ function TreePlacementRemoveButton({
     setSyncStatus({ state: "syncing", message: "Removing placement..." });
 
     try {
-      await submitAction(schemaKey, entityName, removeAction.actionName, {
+      await submitAction(appTarget, entityName, removeAction.actionName, {
         placementId: placement.id,
       });
       setSyncStatus({ state: "idle", message: "Placement removed and synced." });
@@ -650,7 +650,7 @@ function PlacementOrderingControls({
   placement: StoredRecord;
   siblingCount: number;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const showDragHandle = orderingContext?.ordering.presentations.includes("dragHandle") === true;
   const moveItems = selectOrderingMoveMenuItems({
     includeOrdering: orderingContext?.ordering.presentations.includes("moveMenu") === true,
@@ -677,7 +677,7 @@ function PlacementOrderingControls({
     setSyncStatus({ state: "syncing", message: "Moving placement..." });
 
     try {
-      await submitOrderingPatch(schemaKey, orderingContext, item.plan);
+      await submitOrderingPatch(appTarget, orderingContext, item.plan);
       setSyncStatus({ state: "idle", message: "Placement moved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -989,7 +989,7 @@ function uniqueCreateFields(fields: CreateFieldConfig[]): CreateFieldConfig[] {
 }
 
 async function submitTreeChildCreateAction(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   result: TreeResultConfig,
   parentRecord: StoredRecord,
   childValues: RecordValues,
@@ -1002,7 +1002,7 @@ async function submitTreeChildCreateAction(
   }
 
   const response = await submitAction(
-    schemaKey,
+    target,
     result.relationship.to.entity,
     createAction.actionName,
     {

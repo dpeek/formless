@@ -1,9 +1,8 @@
 import type { AppSchema } from "../shared/schema.ts";
 import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
 import { nowIsoString } from "../shared/clock.ts";
-import type { SchemaKey } from "../shared/schema-apps.ts";
+import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 
-const DB_NAME_PREFIX = "formless";
 const DB_VERSION = 1;
 
 const META_STORE = "meta";
@@ -22,8 +21,8 @@ export type LocalSnapshot = {
   lastSyncedAt: string | null;
 };
 
-export async function readLocalSnapshot(schemaKey: SchemaKey): Promise<LocalSnapshot> {
-  const db = await openClientDb(schemaKey);
+export async function readLocalSnapshot(target: ClientAppTarget): Promise<LocalSnapshot> {
+  const db = await openClientDb(target);
 
   try {
     const transaction = db.transaction([META_STORE, RECORDS_STORE], "readonly");
@@ -51,8 +50,8 @@ export async function readLocalSnapshot(schemaKey: SchemaKey): Promise<LocalSnap
   }
 }
 
-export async function saveBootstrapResponse(schemaKey: SchemaKey, response: BootstrapResponse) {
-  const db = await openClientDb(schemaKey);
+export async function saveBootstrapResponse(target: ClientAppTarget, response: BootstrapResponse) {
+  const db = await openClientDb(target);
 
   try {
     const transaction = db.transaction([META_STORE, RECORDS_STORE], "readwrite");
@@ -75,8 +74,8 @@ export async function saveBootstrapResponse(schemaKey: SchemaKey, response: Boot
   }
 }
 
-export async function saveSchema(schemaKey: SchemaKey, schema: AppSchema, updatedAt: string) {
-  const db = await openClientDb(schemaKey);
+export async function saveSchema(target: ClientAppTarget, schema: AppSchema, updatedAt: string) {
+  const db = await openClientDb(target);
 
   try {
     const transaction = db.transaction(META_STORE, "readwrite");
@@ -92,20 +91,20 @@ export async function saveSchema(schemaKey: SchemaKey, schema: AppSchema, update
   }
 }
 
-export async function mergeChanges(schemaKey: SchemaKey, changes: ChangeRow[], cursor: number) {
+export async function mergeChanges(target: ClientAppTarget, changes: ChangeRow[], cursor: number) {
   await mergeRecords(
-    schemaKey,
+    target,
     changes.map((change) => change.payload),
     cursor,
   );
 }
 
 export async function mergeRecords(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   recordsToMerge: StoredRecord[],
   cursor?: number,
 ) {
-  const db = await openClientDb(schemaKey);
+  const db = await openClientDb(target);
 
   try {
     const transaction = db.transaction([META_STORE, RECORDS_STORE], "readwrite");
@@ -127,8 +126,8 @@ export async function mergeRecords(
   }
 }
 
-export async function readSchemaUpdatedAt(schemaKey: SchemaKey) {
-  const db = await openClientDb(schemaKey);
+export async function readSchemaUpdatedAt(target: ClientAppTarget) {
+  const db = await openClientDb(target);
 
   try {
     const transaction = db.transaction(META_STORE, "readonly");
@@ -143,8 +142,8 @@ export async function readSchemaUpdatedAt(schemaKey: SchemaKey) {
   }
 }
 
-export async function readCursor(schemaKey: SchemaKey) {
-  const db = await openClientDb(schemaKey);
+export async function readCursor(target: ClientAppTarget) {
+  const db = await openClientDb(target);
 
   try {
     const transaction = db.transaction(META_STORE, "readonly");
@@ -159,9 +158,9 @@ export async function readCursor(schemaKey: SchemaKey) {
   }
 }
 
-export function deleteClientDb(schemaKey: SchemaKey) {
+export function deleteClientDb(target: ClientAppTarget) {
   return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(clientDbName(schemaKey));
+    const request = indexedDB.deleteDatabase(clientDbName(target));
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error ?? new Error("Could not delete IndexedDB."));
@@ -169,20 +168,13 @@ export function deleteClientDb(schemaKey: SchemaKey) {
   });
 }
 
-export function clientDbName(
-  schemaKey: SchemaKey,
-  projectId: string | undefined = clientProjectStorageId(),
-) {
-  const normalizedProjectId = normalizeProjectStorageId(projectId);
-
-  return normalizedProjectId
-    ? `${DB_NAME_PREFIX}:${normalizedProjectId}:${schemaKey}`
-    : `${DB_NAME_PREFIX}:${schemaKey}`;
+export function clientDbName(target: ClientAppTarget, projectId?: string) {
+  return appStorageIdentityForClientTarget(target, { projectId }).browserDatabaseName;
 }
 
-function openClientDb(schemaKey: SchemaKey) {
+function openClientDb(target: ClientAppTarget) {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(clientDbName(schemaKey), DB_VERSION);
+    const request = indexedDB.open(clientDbName(target), DB_VERSION);
 
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -220,20 +212,4 @@ function transactionDone(transaction: IDBTransaction) {
 
 function sortRecords(records: StoredRecord[]) {
   return records.toSorted((left, right) => left.createdAt.localeCompare(right.createdAt));
-}
-
-function clientProjectStorageId(): string | undefined {
-  return stringConfigValue(import.meta.env.VITE_FORMLESS_SITE_PROJECT_ID);
-}
-
-function stringConfigValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function normalizeProjectStorageId(value: string | undefined): string | undefined {
-  if (!value || !/^[A-Za-z0-9._-]+$/.test(value)) {
-    return undefined;
-  }
-
-  return value;
 }

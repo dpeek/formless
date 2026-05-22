@@ -132,6 +132,43 @@ describe("site media worker routes", () => {
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
   });
 
+  it("uploads installed Site images under the install media namespace", async () => {
+    const upload = await uploadInstalledImage(
+      harness,
+      "personal",
+      imageFile("hero.png", "image/png", pngBytes),
+    );
+
+    await expectResponseStatus(upload, 200);
+
+    const body = (await upload.json()) as {
+      assetId: string;
+      href: string;
+      key: string;
+    };
+
+    expect(body).toMatchObject({
+      assetId: expect.stringMatching(/^[0-9a-f-]+\.png$/),
+      href: expect.stringMatching(
+        /^\/api\/app-installs\/site\/personal\/media\/app-installs\/personal\/site\/images\/.+\.png$/,
+      ),
+      key: expect.stringMatching(/^app-installs\/personal\/site\/images\/.+\.png$/),
+    });
+    expect(body.key).toBe(`app-installs/personal/site/images/${body.assetId}`);
+    await expectMediaBucketKeys(harness, [body.key]);
+
+    const served = await harness.fetch(body.href);
+    const crossInstall = await harness.fetch(
+      body.href.replace("/site/personal/media/", "/site/docs/media/"),
+    );
+    const legacy = await harness.fetch(`/api/site/media/${body.key}`);
+
+    expect(served.status).toBe(200);
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
+    expect(crossInstall.status).toBe(404);
+    expect(legacy.status).toBe(404);
+  });
+
   it("rejects missing, repeated, unsupported, and oversized files before R2 writes", async () => {
     const cases = [
       await uploadForm(harness, multipartFormData([])),
@@ -308,12 +345,27 @@ async function uploadImage(harness: Harness, file: TestFile, headers: Record<str
   return uploadForm(harness, multipartFormData([file]), headers);
 }
 
+async function uploadInstalledImage(
+  harness: Harness,
+  installId: string,
+  file: TestFile,
+  headers: Record<string, string> = {},
+) {
+  return uploadForm(
+    harness,
+    multipartFormData([file]),
+    headers,
+    `/api/app-installs/site/${installId}/media/images`,
+  );
+}
+
 async function uploadForm(
   harness: Harness,
   formData: ReturnType<typeof multipartFormData>,
   headers: Record<string, string> = {},
+  path = "/api/site/media/images",
 ) {
-  return harness.fetch("/api/site/media/images", {
+  return harness.fetch(path, {
     body: formData.body.buffer,
     headers: {
       ...headers,

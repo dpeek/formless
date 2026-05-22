@@ -1,4 +1,4 @@
-import type { SchemaKey } from "../shared/schema-apps.ts";
+import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 
 export type BroadcastEventType =
   | "records-updated"
@@ -10,10 +10,8 @@ export type BroadcastEvent = {
   type: BroadcastEventType;
 };
 
-const CHANNEL_NAME_PREFIX = "formless";
-
-export function publishClientEvent(schemaKey: SchemaKey, type: BroadcastEventType) {
-  const channel = createChannel(schemaKey);
+export function publishClientEvent(target: ClientAppTarget, type: BroadcastEventType) {
+  const channel = createChannel(target);
 
   if (!channel) {
     return;
@@ -24,10 +22,10 @@ export function publishClientEvent(schemaKey: SchemaKey, type: BroadcastEventTyp
 }
 
 export function listenForClientEvents(
-  schemaKey: SchemaKey,
+  target: ClientAppTarget,
   listener: (event: BroadcastEvent) => void,
 ) {
-  const channel = createChannel(schemaKey);
+  const channel = createChannel(target);
 
   if (!channel) {
     return () => {};
@@ -44,23 +42,16 @@ export function listenForClientEvents(
   return () => channel.close();
 }
 
-function createChannel(schemaKey: SchemaKey) {
+function createChannel(target: ClientAppTarget) {
   if (typeof BroadcastChannel === "undefined") {
     return undefined;
   }
 
-  return new BroadcastChannel(channelName(schemaKey));
+  return new BroadcastChannel(channelName(target));
 }
 
-export function channelName(
-  schemaKey: SchemaKey,
-  projectId: string | undefined = clientProjectStorageId(),
-) {
-  const normalizedProjectId = normalizeProjectStorageId(projectId);
-
-  return normalizedProjectId
-    ? `${CHANNEL_NAME_PREFIX}:${normalizedProjectId}:${schemaKey}`
-    : `${CHANNEL_NAME_PREFIX}:${schemaKey}`;
+export function channelName(target: ClientAppTarget, projectId?: string) {
+  return appStorageIdentityForClientTarget(target, { projectId }).broadcastChannelName;
 }
 
 function isBroadcastEvent(value: unknown): value is BroadcastEvent {
@@ -74,20 +65,4 @@ function isBroadcastEvent(value: unknown): value is BroadcastEvent {
       value.type === "schema-updated" ||
       value.type === "sync-requested")
   );
-}
-
-function clientProjectStorageId(): string | undefined {
-  return stringConfigValue(import.meta.env.VITE_FORMLESS_SITE_PROJECT_ID);
-}
-
-function stringConfigValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function normalizeProjectStorageId(value: string | undefined): string | undefined {
-  if (!value || !/^[A-Za-z0-9._-]+$/.test(value)) {
-    return undefined;
-  }
-
-  return value;
 }

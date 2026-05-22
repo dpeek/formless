@@ -58,6 +58,7 @@ import {
   useEntityRecordOptionsMatchingQuery,
   useSchema,
 } from "./client/store.ts";
+import type { ClientAppTarget } from "./client/app-target.ts";
 import {
   selectGeneratedRootNavigationFacts,
   selectGeneratedRootNavigationGroupFacts,
@@ -70,9 +71,9 @@ import type { SchemaKey } from "./shared/schema-apps.ts";
 import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.ts";
 import { ControlAddIcon } from "@dpeek/formless-ui/icons";
 
-type HomeRouteProps = { schemaKey: SchemaKey; screenPath: string };
-type SchemaRouteProps = { schemaKey: SchemaKey };
-type SitePageRouteProps = { linkMode?: SitePageLinkMode; slug: string };
+type HomeRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey; screenPath: string };
+type SchemaRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey };
+type SitePageRouteProps = { linkMode?: SitePageLinkMode; slug: string; target?: ClientAppTarget };
 
 export type AppRouteComponents = {
   HomeRoute: ElementType<HomeRouteProps>;

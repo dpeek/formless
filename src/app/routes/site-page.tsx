@@ -4,6 +4,10 @@ import { sitePagePathForSlug, type SitePageLinkMode } from "../site-renderer/lin
 import { readInitialSitePageTree } from "../site-renderer/initial-tree.ts";
 import { listenForClientEvents } from "../../client/broadcast.ts";
 import { startPushSync } from "../../client/sync.ts";
+import {
+  appStorageIdentityForClientTarget,
+  type ClientAppTarget,
+} from "../../client/app-target.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../../shared/protocol.ts";
 import { normalizeSitePageSlug } from "./site-page-slug.ts";
 
@@ -36,14 +40,17 @@ type SitePageRouteSessionOptions = {
   onState: (state: SitePageRouteState) => void;
   slug: string;
   startPreviewSync?: (onSynced: () => void) => () => void;
+  target?: ClientAppTarget;
 };
 
 export function SitePageRoute({
   linkMode = "preview",
   slug,
+  target = "site",
 }: {
   linkMode?: SitePageLinkMode;
   slug: string;
+  target?: ClientAppTarget;
 }) {
   const normalizedSlug = normalizeSitePageSlug(slug);
   const initialTree = useMemo(
@@ -60,8 +67,9 @@ export function SitePageRoute({
       linkMode,
       onState: setState,
       slug: normalizedSlug,
+      target,
     });
-  }, [linkMode, normalizedSlug]);
+  }, [linkMode, normalizedSlug, target]);
 
   return <SitePageRouteView linkMode={linkMode} state={state} />;
 }
@@ -70,12 +78,17 @@ export function startSitePageRouteSession({
   fetcher,
   initialTree,
   linkMode,
-  listenForPreviewChanges = listenForSitePreviewChanges,
+  listenForPreviewChanges,
   onState,
   slug,
-  startPreviewSync = startSitePreviewSync,
+  startPreviewSync,
+  target = "site",
 }: SitePageRouteSessionOptions) {
   const normalizedSlug = normalizeSitePageSlug(slug);
+  const listenForPreviewChangesForTarget =
+    listenForPreviewChanges ?? ((onChanged) => listenForSitePreviewChanges(target, onChanged));
+  const startPreviewSyncForTarget =
+    startPreviewSync ?? ((onSynced) => startSitePreviewSync(target, onSynced));
   let stopped = false;
   let activeController: AbortController | undefined;
   let stopPreviewChanges = () => {};
@@ -91,7 +104,7 @@ export function startSitePageRouteSession({
       onState({ status: "loading", slug: normalizedSlug });
     }
 
-    void fetchSitePageTree(normalizedSlug, { fetcher, signal: controller.signal })
+    void fetchSitePageTree(normalizedSlug, { fetcher, signal: controller.signal, target })
       .then((tree) => {
         if (!stopped && activeController === controller && !controller.signal.aborted) {
           onState({ status: "ready", tree });
@@ -121,8 +134,8 @@ export function startSitePageRouteSession({
 
   if (usesPreviewSync(linkMode)) {
     loadTree(true);
-    stopPreviewSync = startPreviewSync(refetchActiveTree);
-    stopPreviewChanges = listenForPreviewChanges(refetchActiveTree);
+    stopPreviewSync = startPreviewSyncForTarget(refetchActiveTree);
+    stopPreviewChanges = listenForPreviewChangesForTarget(refetchActiveTree);
   } else if (initialTreeMatchesSlug(initialTree, normalizedSlug)) {
     onState({ status: "ready", tree: initialTree });
   } else {
@@ -164,12 +177,12 @@ function initialTreeMatchesSlug(
   return Boolean(tree && normalizeSitePageSlug(tree.meta.slug) === normalizeSitePageSlug(slug));
 }
 
-function startSitePreviewSync(onSynced: () => void) {
-  return startPushSync("site", { onSynced });
+function startSitePreviewSync(target: ClientAppTarget, onSynced: () => void) {
+  return startPushSync(target, { onSynced });
 }
 
-function listenForSitePreviewChanges(onChanged: () => void) {
-  return listenForClientEvents("site", (event) => {
+function listenForSitePreviewChanges(target: ClientAppTarget, onChanged: () => void) {
+  return listenForClientEvents(target, (event) => {
     if (event.type === "records-updated" || event.type === "schema-updated") {
       onChanged();
     }
@@ -197,10 +210,11 @@ export function SitePageRouteView({
 
 export async function fetchSitePageTree(
   slug: string,
-  options: { fetcher?: typeof fetch; signal?: AbortSignal } = {},
+  options: { fetcher?: typeof fetch; signal?: AbortSignal; target?: ClientAppTarget } = {},
 ): Promise<SitePageTree> {
   const fetcher = options.fetcher ?? fetch;
-  const response = await fetcher(`/api/site/tree/${encodeURIComponent(slug)}`, {
+  const identity = appStorageIdentityForClientTarget(options.target ?? "site");
+  const response = await fetcher(`${identity.apiRoutePrefix}/tree/${encodeURIComponent(slug)}`, {
     headers: { Accept: "application/json" },
     signal: options.signal,
   });

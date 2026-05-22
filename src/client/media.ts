@@ -1,5 +1,6 @@
 import type { RecordValues } from "../shared/protocol.ts";
 import type { MediaAsset } from "../media/core.ts";
+import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 
 export const SITE_IMAGE_UPLOAD_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
@@ -24,6 +25,7 @@ export type UploadedSiteImage = SiteImageUploadResponse & {
 type UploadSiteImageFileOptions = {
   fetcher?: typeof fetch;
   readDimensions?: (file: File) => Promise<ImageDimensions | undefined>;
+  target?: ClientAppTarget;
 };
 
 export async function uploadSiteImageFile(
@@ -31,11 +33,12 @@ export async function uploadSiteImageFile(
   options: UploadSiteImageFileOptions = {},
 ): Promise<UploadedSiteImage> {
   const fetcher = options.fetcher ?? fetch;
+  const uploadPath = siteImageUploadPathForTarget(options.target ?? "site");
   const formData = new FormData();
 
   formData.set("file", file);
 
-  const response = await fetcher("/api/site/media/images", {
+  const response = await fetcher(uploadPath, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -53,6 +56,16 @@ export async function uploadSiteImageFile(
   }
 
   return dimensions === undefined ? upload : { ...upload, dimensions };
+}
+
+function siteImageUploadPathForTarget(target: ClientAppTarget): string {
+  const media = appStorageIdentityForClientTarget(target).siteMedia;
+
+  if (!media) {
+    throw new Error("Image upload is only available for Site records.");
+  }
+
+  return media.imageUploadPath;
 }
 
 export function siteImageUploadPatchValues({

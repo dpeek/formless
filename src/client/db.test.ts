@@ -12,11 +12,14 @@ import {
 } from "./db.ts";
 import type { BootstrapResponse, ChangeRow, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { taskSourceSchema as appSchema } from "../test/schema-apps.ts";
 
 beforeEach(async () => {
   await deleteClientDb("tasks");
   await deleteClientDb("estii");
+  await deleteClientDb(installedSiteIdentity("personal"));
+  await deleteClientDb(installedSiteIdentity("docs"));
 });
 
 describe("client db", () => {
@@ -64,6 +67,34 @@ describe("client db", () => {
   it("can scope browser storage by Site project identity", () => {
     expect(clientDbName("site", "project-123")).toBe("formless:project-123:site");
     expect(clientDbName("site", "../project")).toBe("formless:site");
+  });
+
+  it("stores installed app replicas by install id", async () => {
+    const personal = installedSiteIdentity("personal");
+    const docs = installedSiteIdentity("docs");
+
+    await saveBootstrapResponse(personal, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "Personal")],
+      cursor: 1,
+    });
+    await saveBootstrapResponse(docs, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-2", "Docs")],
+      cursor: 2,
+    });
+
+    await deleteRawDatabase("formless:app:docs");
+
+    expect(clientDbName(personal)).toBe("formless:app:personal");
+    expect((await readLocalSnapshot(personal)).records).toEqual([record("record-1", "Personal")]);
+    expect(await readLocalSnapshot(docs)).toMatchObject({
+      schema: null,
+      records: [],
+      cursor: 0,
+    });
   });
 
   it("merges records and advances the cursor", async () => {
@@ -164,6 +195,16 @@ function deleteRawDatabase(name: string) {
     request.onerror = () => reject(request.error ?? new Error(`Could not delete ${name}.`));
     request.onblocked = () => reject(new Error(`${name} delete was blocked.`));
   });
+}
+
+function installedSiteIdentity(installId: string) {
+  const identity = installedAppStorageIdentity({ installId, packageAppKey: "site" });
+
+  if (!identity) {
+    throw new Error(`Expected installed Site identity for ${installId}.`);
+  }
+
+  return identity;
 }
 
 function recordWithEstimate(id: string, title: string, estimate: number): StoredRecord {

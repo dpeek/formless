@@ -49,7 +49,7 @@ import {
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { DeleteRecordButton } from "./record-delete.tsx";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
@@ -867,7 +867,7 @@ export function RecordList({
   recordFields: RecordFieldConfig[];
   recordUnion?: RecordUnionPresentationConfig;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const canPatch = entity.mutations.patch.enabled;
   const canDelete = entity.mutations.delete.enabled;
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
@@ -923,7 +923,7 @@ export function RecordList({
     setSyncStatus({ state: "syncing", message: "Moving list item..." });
 
     try {
-      await submitOrderingPatch(schemaKey, orderingContext, plan);
+      await submitOrderingPatch(appTarget, orderingContext, plan);
       setSyncStatus({ state: "idle", message: "List item moved and synced." });
     } catch (error) {
       setSyncStatus({

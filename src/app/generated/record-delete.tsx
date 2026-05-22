@@ -13,7 +13,7 @@ import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitDeleteMutation } from "../../client/sync.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
 export type RecordLabelFieldConfig = {
   fieldName: string;
@@ -43,7 +43,7 @@ export function DeleteRecordButton({
   size?: "xs" | "sq-xs";
   triggerData?: Record<string, string>;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const record = useRecord(recordId);
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -58,7 +58,7 @@ export function DeleteRecordButton({
     setSyncStatus({ state: "syncing", message: `Deleting ${recordLabel}...` });
 
     try {
-      await submitDeleteMutation(schemaKey, entityName, recordId);
+      await submitDeleteMutation(appTarget, entityName, recordId);
       setOpen(false);
       onDeleted?.();
       setSyncStatus({ state: "idle", message: `Deleted ${recordLabel}.` });

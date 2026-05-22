@@ -12,6 +12,7 @@ import {
   renderInitialSitePageTreeScript,
 } from "../site-renderer/initial-tree.ts";
 import type { SitePageTreeResponse } from "../../shared/protocol.ts";
+import { installedAppStorageIdentity } from "../../shared/app-storage-identity.ts";
 
 describe("public Site page route data loading", () => {
   it("fetches the current tree through the read-only Site tree endpoint", async () => {
@@ -49,6 +50,19 @@ describe("public Site page route data loading", () => {
         signal: undefined,
       },
     ]);
+  });
+
+  it("fetches installed Site trees through the selected install endpoint", async () => {
+    const tree = sitePageTree("home");
+    const fetcher: typeof fetch = async (input) => {
+      expect(input).toBe("/api/app-installs/site/personal/tree/home");
+
+      return Response.json(tree);
+    };
+
+    await expect(
+      fetchSitePageTree("home", { fetcher, target: installedSiteIdentity("personal") }),
+    ).resolves.toEqual(tree);
   });
 
   it("passes abort signals to tree fetches for stale route cleanup", async () => {
@@ -143,6 +157,16 @@ describe("public Site page route data loading", () => {
     expect(listenedForPreviewChanges).toBe(false);
   });
 });
+
+function installedSiteIdentity(installId: string) {
+  const identity = installedAppStorageIdentity({ installId, packageAppKey: "site" });
+
+  if (!identity) {
+    throw new Error(`Expected installed Site identity for ${installId}.`);
+  }
+
+  return identity;
+}
 
 function initialTreeScriptText(tree: SitePageTreeResponse): string {
   const script = renderInitialSitePageTreeScript(tree);

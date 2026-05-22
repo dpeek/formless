@@ -27,7 +27,7 @@ import type {
 } from "../../client/views.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
 import { RecordFieldEditor } from "./record-field-editor.tsx";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 import {
   orderingMoveAriaLabel,
@@ -51,7 +51,7 @@ export function InvokeActionTableCell({
   orderingContext?: ResultOrderingContext;
   sourceRecordId: string;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const [openActionName, setOpenActionName] = useState<string | null>(null);
   const [pendingOrderingDirection, setPendingOrderingDirection] =
     useState<OrderingMoveDirection | null>(null);
@@ -85,7 +85,7 @@ export function InvokeActionTableCell({
     setSyncStatus({ state: "syncing", message: `${item.label}...` });
 
     try {
-      await submitOrderingPatch(schemaKey, orderingContext, item.plan);
+      await submitOrderingPatch(appTarget, orderingContext, item.plan);
       setSyncStatus({ state: "idle", message: "Row moved and synced." });
     } catch (error) {
       setSyncStatus({

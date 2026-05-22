@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { siteImageUploadPatchValues, uploadSiteImageFile, type ImageDimensions } from "./media.ts";
+import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 
 describe("Site media client helper", () => {
   it("uploads one file as multipart form data and returns dimensions when available", async () => {
@@ -82,6 +83,26 @@ describe("Site media client helper", () => {
     ).rejects.toThrow("Unsupported image type.");
   });
 
+  it("uploads installed Site images to the install media route", async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], "hero.png", { type: "image/png" });
+
+    await uploadSiteImageFile(file, {
+      fetcher: async (input) => {
+        expect(input).toBe("/api/app-installs/site/personal/media/images");
+
+        return Response.json({
+          assetId: "uploaded.png",
+          contentType: "image/png",
+          href: "/api/app-installs/site/personal/media/app-installs/personal/site/images/uploaded.png",
+          key: "app-installs/personal/site/images/uploaded.png",
+          size: 3,
+        });
+      },
+      readDimensions: async () => undefined,
+      target: installedSiteIdentity("personal"),
+    });
+  });
+
   it("builds flat patch values for href and optional dimensions", () => {
     expect(
       siteImageUploadPatchValues({
@@ -144,3 +165,13 @@ describe("Site media client helper", () => {
     });
   });
 });
+
+function installedSiteIdentity(installId: string) {
+  const identity = installedAppStorageIdentity({ installId, packageAppKey: "site" });
+
+  if (!identity) {
+    throw new Error(`Expected installed Site identity for ${installId}.`);
+  }
+
+  return identity;
+}

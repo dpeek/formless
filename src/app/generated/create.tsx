@@ -29,7 +29,7 @@ import {
 } from "../../shared/create-defaults.ts";
 import type { FieldVisibilityValue } from "../../shared/schema.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
-import { useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
 export type CreateHomeActionConfig = Extract<HomeActionConfig, { type: "create" }>;
 
@@ -46,7 +46,7 @@ export function GeneratedCreateForm({
   entityName: string;
   union?: CreateUnionPresentationConfig;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [discriminatorValue, setDiscriminatorValue] = useState(() =>
     initialCreateDiscriminatorValue(union, defaults),
@@ -83,7 +83,7 @@ export function GeneratedCreateForm({
     setSyncStatus({ state: "syncing", message: `Saving ${entity.label.toLowerCase()}...` });
 
     try {
-      await submitCreateMutation(schemaKey, entityName, values);
+      await submitCreateMutation(appTarget, entityName, values);
       form.reset();
       setDiscriminatorValue(initialCreateDiscriminatorValue(union, defaults));
       setInputValues({});
@@ -177,7 +177,7 @@ export function GeneratedCreateDialogForm({
   renderDialogCancel?: boolean;
   submitValues?: (values: RecordValues) => Promise<{ recordId: string }>;
 }) {
-  const schemaKey = useSchemaKey();
+  const appTarget = useSchemaAppTarget();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [discriminatorValue, setDiscriminatorValue] = useState(() =>
     initialCreateDiscriminatorValue(action.union, action.defaults),
@@ -215,7 +215,7 @@ export function GeneratedCreateDialogForm({
       const response =
         submitValues === undefined
           ? {
-              recordId: (await submitCreateMutation(schemaKey, action.entityName, values)).record
+              recordId: (await submitCreateMutation(appTarget, action.entityName, values)).record
                 .id,
             }
           : await submitValues(values);
