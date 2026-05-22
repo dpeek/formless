@@ -7,17 +7,17 @@ import { Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
 import { ColorArea } from "@dpeek/formless-ui/color-area";
-import { ColorPicker } from "@dpeek/formless-ui/color-picker";
+import {
+  ColorPicker,
+  parseColor as parsePickerColor,
+  type Color as PickerColor,
+} from "@dpeek/formless-ui/color-picker";
 import { ColorSlider, ColorSliderTrack } from "@dpeek/formless-ui/color-slider";
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { ColorThumb } from "@dpeek/formless-ui/color-thumb";
-import { cn } from "@dpeek/formless-ui/utils";
+import { cn } from "@dpeek/formless-ui/primitive";
 import { ControlColorPickIcon, ControlLoadingIcon } from "@dpeek/formless-ui/icons";
 import { useEffect, useState } from "react";
-import {
-  parseColor as parseReactAriaColor,
-  type Color as ReactAriaColor,
-} from "react-aria-components/ColorArea";
 
 import {
   hexToRgb,
@@ -84,18 +84,18 @@ const colorSliderTrackClassName = "relative h-4 rounded overflow-hidden";
 const colorSliderThumbClassName =
   "h-5 w-4 rounded-sm border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] outline-none data-[focus-visible]:ring-2 data-[focus-visible]:ring-ring";
 
-function toReactAriaPickerColor(value: string, alpha: boolean, fallback: string): ReactAriaColor {
+function toPickerColor(value: string, alpha: boolean, fallback: string): PickerColor {
   const fallbackValue = alpha ? `${toPickerHexColor(fallback, "#000000")}FF` : fallback;
   const colorValue = isValidColor(value) ? value : fallbackValue;
 
   try {
-    return parseReactAriaColor(colorValue).toFormat(alpha ? "hexa" : "hex");
+    return parsePickerColor(colorValue).toFormat(alpha ? "hexa" : "hex");
   } catch {
-    return parseReactAriaColor(fallbackValue).toFormat(alpha ? "hexa" : "hex");
+    return parsePickerColor(fallbackValue).toFormat(alpha ? "hexa" : "hex");
   }
 }
 
-function colorToHexValue(color: ReactAriaColor, alpha: boolean): string {
+function colorToHexValue(color: PickerColor, alpha: boolean): string {
   return color.toString(alpha ? "hexa" : "hex").toUpperCase();
 }
 
@@ -118,11 +118,7 @@ export function GeneratedColorInput({
 }: GeneratedColorInputProps) {
   const resolvedLabel = label ?? ariaLabel ?? "Color";
   const resolvedPickerValue = toPickerHexColor(pickerValue ?? value, "#000000");
-  const reactAriaPickerValue = toReactAriaPickerColor(
-    pickerValue ?? value,
-    alpha,
-    resolvedPickerValue,
-  );
+  const pickerColor = toPickerColor(pickerValue ?? value, alpha, resolvedPickerValue);
   const [colorFormat, setColorFormat] = useState<ColorFormat>(alpha ? "HEXA" : "HEX");
   const [colorValues, setColorValues] = useState<ColorValues>(() => {
     if (alpha) {
@@ -381,7 +377,7 @@ export function GeneratedColorInput({
                     <ControlColorPickIcon className="h-3 w-3" />
                   </Button>
                   <ColorPicker
-                    value={reactAriaPickerValue}
+                    value={pickerColor}
                     onChange={(nextColor) => handleColorChange(colorToHexValue(nextColor, alpha))}
                   >
                     <div className="flex w-[244.79px] flex-col gap-3">

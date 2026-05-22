@@ -3,7 +3,7 @@ import {
   type InputProps as PrimitiveInputProps,
 } from "react-aria-components/Input";
 
-import { cn } from "@dpeek/formless-ui/utils";
+import { cn } from "./primitive";
 
 export type FormattedNumberInputValue = number | "";
 

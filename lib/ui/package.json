@@ -36,6 +36,7 @@
     "./native-select": "./src/native-select.tsx",
     "./number-input": "./src/number-input.tsx",
     "./popover": "./src/popover.tsx",
+    "./primitive": "./src/primitive.ts",
     "./range-calendar": "./src/range-calendar.tsx",
     "./select": "./src/select.tsx",
     "./separator": "./src/separator.tsx",
@@ -52,7 +53,6 @@
     "./toggle": "./src/toggle.tsx",
     "./tooltip": "./src/tooltip.tsx",
     "./use-mobile": "./src/use-mobile.ts",
-    "./utils": "./src/utils.ts",
     "./value-unit-input": "./src/value-unit-input.tsx"
   },
   "publishConfig": {

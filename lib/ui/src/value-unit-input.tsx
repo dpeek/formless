@@ -6,7 +6,7 @@ import {
   type FormattedNumberInputValue,
 } from "@dpeek/formless-ui/number-input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
-import { cn } from "@dpeek/formless-ui/utils";
+import { cn } from "./primitive";
 
 export type ValueUnitInputOption = {
   value: string;

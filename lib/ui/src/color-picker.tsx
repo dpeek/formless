@@ -1,4 +1,4 @@
-import { parseColor } from "@react-stately/color";
+import { parseColor, type Color } from "@react-stately/color";
 import { use } from "react";
 import {
   ColorPicker as ColorPickerPrimitive,
@@ -52,5 +52,5 @@ const EyeDropper = () => {
   );
 };
 
-export type { ColorPickerProps };
-export { ColorPicker, EyeDropper };
+export type { Color, ColorPickerProps };
+export { ColorPicker, EyeDropper, parseColor };

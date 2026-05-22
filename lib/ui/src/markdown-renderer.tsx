@@ -1,12 +1,12 @@
 import { Button } from "@dpeek/formless-ui/button";
 import { ControlCheckIcon, ControlCopyIcon } from "@dpeek/formless-ui/icons";
-import { cn } from "@dpeek/formless-ui/utils";
 import { lexer, type Token, type Tokens } from "marked";
 import { createElement, useEffect, useState, type ReactNode } from "react";
 
 import { parseMarkdownCodeInfo } from "./markdown-code-info.js";
 import { highlightMarkdownCodeHtml } from "./markdown-highlighting.js";
 import type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
+import { cn } from "./primitive";
 
 export type { MarkdownHeadingLevel } from "./markdown-plate-value.js";
 

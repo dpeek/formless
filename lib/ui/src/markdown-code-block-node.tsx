@@ -2,7 +2,7 @@
 
 import { Button } from "@dpeek/formless-ui/button";
 import { ControlCheckIcon, ControlCopyIcon } from "@dpeek/formless-ui/icons";
-import { cn } from "@dpeek/formless-ui/utils";
+import { cn } from "./primitive";
 import { useEffect, useState } from "react";
 import {
   PlateElement,

@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from "react";
 
-import { cn } from "./utils.js";
+import { cn } from "./primitive";
 
 export const svgIconClassName = "inline-block size-5 shrink-0 align-middle text-current";
 

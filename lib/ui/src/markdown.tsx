@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@dpeek/formless-ui/utils";
+import { cn } from "./primitive";
 import { useEffect, useRef } from "react";
 import { type Value } from "platejs";
 import { Plate, PlateContent, usePlateEditor } from "platejs/react";

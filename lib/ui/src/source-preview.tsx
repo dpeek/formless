@@ -1,4 +1,4 @@
-import { cn } from "@dpeek/formless-ui/utils";
+import { cn } from "./primitive";
 import { useState, type AriaAttributes, type ReactNode } from "react";
 
 const sourcePreviewSurfaceClassName = "border-input bg-bg rounded-xl border shadow-sm";

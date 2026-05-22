@@ -1,5 +1,10 @@
+import { clsx, type ClassValue } from "clsx";
 import { composeRenderProps } from "react-aria-components/composeRenderProps";
 import { type ClassNameValue, twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 /** @deprecated Use cx */
 export function composeTailwindRenderProps<T>(

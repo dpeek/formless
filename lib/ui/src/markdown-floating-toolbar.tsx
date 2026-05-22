@@ -27,7 +27,7 @@ import {
   MarkdownQuoteIcon,
   MarkdownStrikethroughIcon,
 } from "@dpeek/formless-ui/icons";
-import { cn } from "@dpeek/formless-ui/utils";
+import { cn } from "./primitive";
 import { type ReactNode, useRef, useState } from "react";
 import { KEYS, type TElement } from "platejs";
 import {
