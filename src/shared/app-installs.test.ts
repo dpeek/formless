@@ -1,0 +1,236 @@
+import { describe, expect, it } from "vite-plus/test";
+import {
+  appInstallRegistryError,
+  createAppInstall,
+  findAppInstall,
+  findBundledAppPackage,
+  listAppInstalls,
+  listBundledAppPackages,
+  validateAppInstallId,
+  type AppInstall,
+  type CreateAppInstallResult,
+} from "./app-installs.ts";
+
+const now = "2026-05-22T08:00:00.000Z";
+
+type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
+type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
+
+describe("app install registry", () => {
+  it("declares Site as the first installable bundled app package", () => {
+    expect(listBundledAppPackages()).toEqual([
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "personal",
+        label: "Site",
+        packageAppKey: "site",
+        publicRouteBase: "/sites",
+        seedRecordsKey: "site",
+        sourceSchemaKey: "site",
+        supportsMultipleInstalls: true,
+      }),
+    ]);
+    expect(findBundledAppPackage("site")?.label).toBe("Site");
+    expect(findBundledAppPackage("tasks")).toBeUndefined();
+    expect(findBundledAppPackage("estii")).toBeUndefined();
+  });
+
+  it("validates route-safe install ids", () => {
+    expect(validateAppInstallId(" docs-site ")).toEqual({
+      ok: true,
+      installId: "docs-site",
+    });
+    expect(validateAppInstallId("d1")).toEqual({
+      ok: true,
+      installId: "d1",
+    });
+    expect(validateAppInstallId("project-site-2026")).toEqual({
+      ok: true,
+      installId: "project-site-2026",
+    });
+
+    for (const value of [
+      "",
+      "a",
+      "Docs",
+      "-docs",
+      "docs-",
+      "docs--site",
+      "docs/site",
+      "site",
+      "x".repeat(49),
+    ]) {
+      expect(validateAppInstallId(value).ok).toBe(false);
+    }
+  });
+
+  it("creates a flat Site install with route metadata and bundled source initialization", () => {
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "personal",
+        label: " Personal Site ",
+        now,
+        packageAppKey: "site",
+      }),
+    );
+
+    expect(result.install).toEqual({
+      adminRoute: "/apps/personal",
+      createdAt: now,
+      installId: "personal",
+      label: "Personal Site",
+      packageAppKey: "site",
+      publicRoute: "/sites/personal",
+      publicRoutePrefix: "/sites/personal/",
+      schemaRoute: "/apps/personal/schema",
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(result.initialization).toEqual({
+      installId: "personal",
+      packageAppKey: "site",
+      seedRecordsKey: "site",
+      sourceSchemaKey: "site",
+    });
+    expect(result.installs).toEqual([result.install]);
+  });
+
+  it("lists and finds installed apps without mutating registry state", () => {
+    const docs = siteInstallFixture({
+      createdAt: "2026-05-22T08:02:00.000Z",
+      installId: "docs",
+      label: "Docs",
+    });
+    const personal = siteInstallFixture({
+      createdAt: "2026-05-22T08:01:00.000Z",
+      installId: "personal",
+      label: "Personal",
+    });
+    const installs = [docs, personal] as const;
+
+    expect(listAppInstalls(installs).map((install) => install.installId)).toEqual([
+      "personal",
+      "docs",
+    ]);
+    expect(findAppInstall(installs, "docs")).toBe(docs);
+    expect(findAppInstall(installs, "missing")).toBeUndefined();
+  });
+
+  it("rejects unsupported packages, invalid labels, and duplicate install ids", () => {
+    const existing = [siteInstallFixture({ installId: "personal", label: "Personal" })] as const;
+
+    const unsupportedPackage = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "tasks",
+        label: "Tasks",
+        now,
+        packageAppKey: "tasks",
+      }),
+    );
+    const invalidLabel = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "docs",
+        label: " ",
+        now,
+        packageAppKey: "site",
+      }),
+    );
+    const duplicateInstallId = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "personal",
+        label: "Other Personal Site",
+        now,
+        packageAppKey: "site",
+      }),
+    );
+
+    expect(unsupportedPackage.error.code).toBe("unsupported-package");
+    expect(invalidLabel.error.code).toBe("invalid-label");
+    expect(duplicateInstallId.error.code).toBe("duplicate-install-id");
+    expect(unsupportedPackage.installs).toBe(existing);
+    expect(invalidLabel.installs).toBe(existing);
+    expect(duplicateInstallId.installs).toBe(existing);
+  });
+
+  it("keeps existing installs unchanged when initial source validation fails", () => {
+    const existing = Object.freeze([
+      siteInstallFixture({
+        installId: "personal",
+        label: "Personal",
+      }),
+    ]);
+    const sourceError = appInstallRegistryError(
+      "source-validation-failed",
+      "source",
+      "Bundled Site seed records are invalid.",
+    );
+    const result = expectFailure(
+      createAppInstall({
+        existingInstalls: existing,
+        installId: "docs",
+        label: "Docs",
+        now,
+        packageAppKey: "site",
+        validateInitialSource: (context) => {
+          expect(context.initialization).toEqual({
+            installId: "docs",
+            packageAppKey: "site",
+            seedRecordsKey: "site",
+            sourceSchemaKey: "site",
+          });
+
+          return sourceError;
+        },
+      }),
+    );
+
+    expect(result.error).toEqual(sourceError);
+    expect(result.installs).toBe(existing);
+    expect(existing).toHaveLength(1);
+  });
+});
+
+function expectSuccess(result: CreateAppInstallResult): CreateAppInstallSuccess {
+  expect(result.ok).toBe(true);
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  return result;
+}
+
+function expectFailure(result: CreateAppInstallResult): CreateAppInstallFailure {
+  expect(result.ok).toBe(false);
+
+  if (result.ok) {
+    throw new Error(`Expected install creation to fail for ${result.install.installId}.`);
+  }
+
+  return result;
+}
+
+function siteInstallFixture(input: {
+  createdAt?: string;
+  installId: string;
+  label: string;
+}): AppInstall {
+  const createdAt = input.createdAt ?? now;
+
+  return {
+    adminRoute: `/apps/${input.installId}`,
+    createdAt,
+    installId: input.installId,
+    label: input.label,
+    packageAppKey: "site",
+    publicRoute: `/sites/${input.installId}`,
+    publicRoutePrefix: `/sites/${input.installId}/`,
+    schemaRoute: `/apps/${input.installId}/schema`,
+    status: "installed",
+    updatedAt: createdAt,
+  };
+}
