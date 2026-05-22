@@ -202,6 +202,51 @@ export function GeneratedRecordFieldControl({
     );
   }
 
+  if (rendererKind === "number") {
+    return (
+      <RecordNumberFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        numberFormat={numberFormat}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onErrorChange={onErrorChange}
+        onValueCommit={onValueCommit}
+      />
+    );
+  }
+
+  if (rendererKind === "value-unit" && fieldConfig.valueUnit !== undefined) {
+    return (
+      <RecordValueUnitFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        fieldName={fieldName}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        numberFormat={numberFormat}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onErrorChange={onErrorChange}
+        onPatchValues={onPatchValues}
+        onUnitDraftChange={onUnitDraftChange}
+        onUnitDraftRevert={onUnitDraftRevert}
+        unitDraft={unitDraft}
+        valueUnit={fieldConfig.valueUnit}
+      />
+    );
+  }
+
   return (
     <RecordLegacyFieldRenderer
       canPatch={canPatch}
@@ -215,22 +260,16 @@ export function GeneratedRecordFieldControl({
       iconDialogOpen={iconDialogOpen}
       isPending={isPending}
       labelClass={labelClass}
-      numberFormat={numberFormat}
       onDraftChange={onDraftChange}
       onDraftRevert={onDraftRevert}
-      onErrorChange={onErrorChange}
       onIconCancel={onIconCancel}
       onIconDraftChange={onIconDraftChange}
       onIconOpenChange={onIconOpenChange}
       onIconSave={onIconSave}
       onImageFileSelect={onImageFileSelect}
-      onPatchValues={onPatchValues}
-      onUnitDraftChange={onUnitDraftChange}
-      onUnitDraftRevert={onUnitDraftRevert}
       onValueCommit={onValueCommit}
       presentation={presentation}
       rendererKind={rendererKind}
-      unitDraft={unitDraft}
       uploadEnabled={uploadEnabled}
     />
   );
@@ -488,6 +527,169 @@ function RecordTextareaFieldRenderer({
   );
 }
 
+function RecordNumberFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  fieldControl,
+  isPending,
+  labelClass,
+  numberFormat,
+  onDraftChange,
+  onDraftRevert,
+  onErrorChange,
+  onValueCommit,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  numberFormat: TableColumnFormat;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onErrorChange: (message: string | null) => void;
+  onValueCommit: (value: FieldValue) => void;
+}) {
+  return (
+    <div className={recordNumberFieldContainerClassName(density)}>
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <span className="block w-full" data-slot="control">
+          <GeneratedNumberFieldControl
+            aria-label={fieldControl.label}
+            className={
+              density === "compact"
+                ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+                : "w-full rounded border border-slate-300 px-3 py-2"
+            }
+            commitOnBlur={commitPolicy === "field-commit"}
+            disabled={!canPatch || isPending}
+            format={numberFormat}
+            onInvalidCommit={(message) => {
+              onErrorChange(message);
+            }}
+            onValueChange={onDraftChange}
+            onValueCommit={(value) => {
+              onErrorChange(null);
+              onValueCommit(value);
+            }}
+            onValueRevert={onDraftRevert}
+            required={fieldControl.required}
+            value={draft}
+            {...fieldControl.inputAttributes}
+          />
+        </span>
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
+    </div>
+  );
+}
+
+function RecordValueUnitFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  fieldName,
+  fieldControl,
+  isPending,
+  labelClass,
+  numberFormat,
+  onDraftChange,
+  onDraftRevert,
+  onErrorChange,
+  onPatchValues,
+  onUnitDraftChange,
+  onUnitDraftRevert,
+  unitDraft,
+  valueUnit,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  fieldName: string;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  numberFormat: TableColumnFormat;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onErrorChange: (message: string | null) => void;
+  onPatchValues: (values: Partial<RecordValues>) => void;
+  onUnitDraftChange: (value: string) => void;
+  onUnitDraftRevert: () => void;
+  unitDraft: string;
+  valueUnit: NonNullable<RecordFieldConfig["valueUnit"]>;
+}) {
+  return (
+    <div className={recordNumberFieldContainerClassName(density)}>
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <div data-slot="control">
+          <ValueUnitInput
+            className="w-full"
+            commitOnBlur={commitPolicy === "field-commit"}
+            decode={(value) => decodeNumberEditorInputValue(value, numberFormat)}
+            disabled={!canPatch || isPending}
+            encode={(value) => encodeNumberEditorInputValue(value, numberFormat)}
+            inputClassName={
+              density === "compact"
+                ? "h-6 rounded border border-slate-300 px-2 py-0.5 text-xs"
+                : "rounded border border-slate-300 px-3 py-2"
+            }
+            inputRequired={fieldControl.required}
+            inputValue={draft}
+            label={fieldControl.label}
+            onInputValueChange={onDraftChange}
+            onInputValueCommit={(value) => {
+              onErrorChange(null);
+              onPatchValues({
+                [fieldName]: value,
+                [valueUnit.unitFieldName]: inputValueToFieldValue(valueUnit.unitField, unitDraft),
+              });
+            }}
+            onInputValueRevert={() => {
+              onDraftRevert();
+              onUnitDraftRevert();
+            }}
+            onInvalidCommit={(message) => {
+              onErrorChange(message);
+            }}
+            onUnitChange={onUnitDraftChange}
+            onUnitCommit={(unit) => {
+              onErrorChange(null);
+              onPatchValues(valueUnitPatch(fieldName, draft, numberFormat, valueUnit, unit));
+            }}
+            options={enumValueUnitOptions(valueUnit.unitField)}
+            unit={unitDraft}
+            unitClassName={density === "compact" ? "w-16" : "w-24"}
+            unitLabel={`${fieldControl.label} unit`}
+            unitRequired={valueUnit.unitField.required}
+          />
+        </div>
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
+    </div>
+  );
+}
+
 function RecordLegacyFieldRenderer({
   canPatch,
   commitPolicy,
@@ -500,22 +702,16 @@ function RecordLegacyFieldRenderer({
   iconDialogOpen,
   isPending,
   labelClass,
-  numberFormat,
   onDraftChange,
   onDraftRevert,
-  onErrorChange,
   onIconCancel,
   onIconDraftChange,
   onIconOpenChange,
   onIconSave,
   onImageFileSelect,
-  onPatchValues,
-  onUnitDraftChange,
-  onUnitDraftRevert,
   onValueCommit,
   presentation,
   rendererKind,
-  unitDraft,
   uploadEnabled,
 }: {
   canPatch: boolean;
@@ -529,25 +725,19 @@ function RecordLegacyFieldRenderer({
   iconDialogOpen: boolean;
   isPending: boolean;
   labelClass: string;
-  numberFormat: TableColumnFormat;
   onDraftChange: (value: string) => void;
   onDraftRevert: () => void;
-  onErrorChange: (message: string | null) => void;
   onIconCancel: () => void;
   onIconDraftChange: (value: string) => void;
   onIconOpenChange: (open: boolean) => void;
   onIconSave: () => Promise<void>;
   onImageFileSelect: (file: File | undefined) => void;
-  onPatchValues: (values: Partial<RecordValues>) => void;
-  onUnitDraftChange: (value: string) => void;
-  onUnitDraftRevert: () => void;
   onValueCommit: (value: FieldValue) => void;
   presentation: GeneratedRecordFieldControlPresentation;
   rendererKind: GeneratedRecordFieldRendererKind;
-  unitDraft: string;
   uploadEnabled: boolean;
 }) {
-  const { field, fieldName, valueUnit } = fieldConfig;
+  const { field } = fieldConfig;
   const isHeadingTextEditor = rendererKind === "autosize-text" && presentation === "heading";
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -703,73 +893,7 @@ function RecordLegacyFieldRenderer({
             required={fieldControl.required}
             value={draft}
           />
-        ) : rendererKind === "value-unit" && valueUnit !== undefined ? (
-          <ValueUnitInput
-            className="w-full"
-            commitOnBlur={commitPolicy === "field-commit"}
-            decode={(value) => decodeNumberEditorInputValue(value, numberFormat)}
-            disabled={!canPatch || isPending}
-            encode={(value) => encodeNumberEditorInputValue(value, numberFormat)}
-            inputClassName={
-              density === "compact"
-                ? "h-6 rounded border border-slate-300 px-2 py-0.5 text-xs"
-                : "rounded border border-slate-300 px-3 py-2"
-            }
-            inputRequired={fieldControl.required}
-            inputValue={draft}
-            label={fieldControl.label}
-            onInputValueChange={onDraftChange}
-            onInputValueCommit={(value) => {
-              onErrorChange(null);
-              onPatchValues({
-                [fieldName]: value,
-                [valueUnit.unitFieldName]: inputValueToFieldValue(valueUnit.unitField, unitDraft),
-              });
-            }}
-            onInputValueRevert={() => {
-              onDraftRevert();
-              onUnitDraftRevert();
-            }}
-            onInvalidCommit={(message) => {
-              onErrorChange(message);
-            }}
-            onUnitChange={onUnitDraftChange}
-            onUnitCommit={(unit) => {
-              onErrorChange(null);
-              onPatchValues(valueUnitPatch(fieldName, draft, numberFormat, valueUnit, unit));
-            }}
-            options={enumValueUnitOptions(valueUnit.unitField)}
-            unit={unitDraft}
-            unitClassName={density === "compact" ? "w-16" : "w-24"}
-            unitLabel={`${fieldControl.label} unit`}
-            unitRequired={valueUnit.unitField.required}
-          />
-        ) : (
-          <GeneratedNumberFieldControl
-            aria-invalid={error !== null ? true : undefined}
-            aria-label={fieldControl.label}
-            className={
-              density === "compact"
-                ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
-                : "w-full rounded border border-slate-300 px-3 py-2"
-            }
-            commitOnBlur={commitPolicy === "field-commit"}
-            disabled={!canPatch || isPending}
-            format={numberFormat}
-            onInvalidCommit={(message) => {
-              onErrorChange(message);
-            }}
-            onValueChange={onDraftChange}
-            onValueCommit={(value) => {
-              onErrorChange(null);
-              onValueCommit(value);
-            }}
-            onValueRevert={onDraftRevert}
-            required={fieldControl.required}
-            value={draft}
-            {...fieldControl.inputAttributes}
-          />
-        )}
+        ) : null}
       </Field>
       {error ? <FieldError>{error}</FieldError> : null}
     </div>
@@ -784,11 +908,15 @@ function recordLegacyFieldContainerClassName(
     return "w-full min-w-0 space-y-1";
   }
 
-  if (rendererKind === "date" || rendererKind === "number" || rendererKind === "value-unit") {
+  if (rendererKind === "date") {
     return "min-w-36 flex-none space-y-1";
   }
 
   return "min-w-52 flex-1 space-y-1";
+}
+
+function recordNumberFieldContainerClassName(density: GeneratedRecordFieldControlDensity) {
+  return density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-36 flex-none space-y-1";
 }
 
 function IconFieldControl({

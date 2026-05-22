@@ -2662,6 +2662,7 @@ describe("generated collection home", () => {
     expect(html.match(/data-web-value-unit-input="true"/g)?.length).toBe(1);
     expect(html).toContain('aria-label="Cost"');
     expect(html).toContain('aria-label="Cost unit"');
+    expectFormattedNumberInputLabel(html, "Cost");
     expect(html).not.toContain('aria-label="Price unit"');
     expect(html).not.toContain('aria-label="Currency"');
     expect(html).not.toContain("USD");
@@ -4147,10 +4148,12 @@ describe("generated forms and records", () => {
     expect(createHtml).toContain('min="0"');
     expect(createHtml).toContain('max="10"');
     expect(createHtml).toContain('step="1"');
+    expectFormattedNumberInputLabel(createHtml, "Estimate");
     expect(rowHtml).toContain('aria-label="Estimate"');
     expect(rowHtml).toContain('data-web-formatted-number-input="true"');
     expect(rowHtml).toMatch(inputWithAriaLabelAndType("Estimate", "text"));
     expect(rowHtml).toContain('value="3"');
+    expectFormattedNumberInputLabel(rowHtml, "Estimate");
   });
 
   it("renders formatted number table editors from column format metadata", () => {
@@ -4205,6 +4208,8 @@ describe("generated forms and records", () => {
     expect(html.match(/data-web-formatted-number-input="true"/g)?.length).toBe(2);
     expect(html).toMatch(inputWithAriaLabelAndType("Price", "text"));
     expect(html).toMatch(inputWithAriaLabelAndType("Margin", "text"));
+    expectFormattedNumberInputLabel(html, "Price");
+    expectFormattedNumberInputLabel(html, "Margin");
     expect(html).toContain('value="$475.00"');
     expect(html).toContain('value="12.5%"');
   });
@@ -6351,6 +6356,26 @@ function inputWithNameAndPlaceholder(name: string, placeholder: string) {
 
 function inputWithAriaLabelAndType(label: string, type: string) {
   return new RegExp(`<input(?=[^>]*aria-label="${label}")(?=[^>]*type="${type}")[^>]*>`);
+}
+
+function expectFormattedNumberInputLabel(html: string, label: string) {
+  const labelMatch = html.match(
+    new RegExp(`<label[^>]*for="([^"]+)"[^>]*>${escapeRegExp(label)}</label>`),
+  );
+
+  expect(labelMatch).not.toBeNull();
+
+  const id = labelMatch?.[1] ?? "";
+
+  expect(html).toMatch(
+    new RegExp(
+      `<input(?=[^>]*id="${escapeRegExp(id)}")(?=[^>]*data-web-formatted-number-input="true")[^>]*>`,
+    ),
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function textareaWithName(name: string) {

@@ -99,16 +99,13 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.controlKind === "number") {
     return (
-      <Field>
-        <Label>{fieldControl.label}</Label>
-        <CreateNumberField
-          defaultValue={fieldControl.createDefaultValue}
-          fieldName={fieldName}
-          inputAttributes={fieldControl.inputAttributes}
-          label={fieldControl.label}
-          required={fieldControl.required}
-        />
-      </Field>
+      <CreateNumberField
+        defaultValue={fieldControl.createDefaultValue}
+        fieldName={fieldName}
+        inputAttributes={fieldControl.inputAttributes}
+        label={fieldControl.label}
+        required={fieldControl.required}
+      />
     );
   }
 
@@ -322,16 +319,19 @@ function CreateNumberField({
   }, [resetValue]);
 
   return (
-    <span className="block" ref={fieldRef}>
-      <GeneratedNumberFieldControl
-        aria-label={label}
-        name={fieldName}
-        onValueChange={setValue}
-        required={required}
-        value={value}
-        {...inputAttributes}
-      />
-    </span>
+    <TextField isRequired={required}>
+      <Label>{label}</Label>
+      <span className="block" data-slot="control" ref={fieldRef}>
+        <GeneratedNumberFieldControl
+          aria-label={label}
+          name={fieldName}
+          onValueChange={setValue}
+          required={required}
+          value={value}
+          {...inputAttributes}
+        />
+      </span>
+    </TextField>
   );
 }
 
