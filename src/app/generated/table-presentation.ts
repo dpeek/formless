@@ -146,18 +146,21 @@ export function selectGeneratedTablePresentation({
   queryName?: string;
 }): GeneratedTablePresentation {
   const visibleColumns = columns.filter((column) => column.display !== "hidden");
-  const rowHeaderColumnKey = selectRowHeaderColumnKey(visibleColumns);
-  const dataColumns = visibleColumns.map(
-    (column): GeneratedTableDataColumnPresentation => ({
+  const rowHeaderColumnIndex = selectRowHeaderColumnIndex(visibleColumns);
+  const columnIdCounts = new Map<string, number>();
+  const dataColumns = visibleColumns.map((column, index): GeneratedTableDataColumnPresentation => {
+    const id = uniqueTableColumnId(column.key, columnIdCounts);
+
+    return {
       type: "data",
-      id: column.key,
-      key: column.key,
+      id,
+      key: id,
       column,
       header: tableHeaderPresentation(column),
-      isRowHeader: column.key === rowHeaderColumnKey,
+      isRowHeader: index === rowHeaderColumnIndex,
       isUtility: isUtilityColumn(column),
-    }),
-  );
+    };
+  });
   const tableColumns: GeneratedTableColumnPresentation[] = canDelete
     ? [...dataColumns, deleteColumnPresentation()]
     : dataColumns;
@@ -285,7 +288,7 @@ function tableFooterPresentation(
         return emptyFooterCell(column);
       }
 
-      const slot = footer.find((candidate) => candidate.columnKey === column.id);
+      const slot = footer.find((candidate) => candidate.columnKey === column.column.key);
 
       if (!slot) {
         return emptyFooterCell(column);
@@ -343,10 +346,17 @@ function deleteColumnPresentation(): GeneratedTableDeleteColumnPresentation {
   };
 }
 
-function selectRowHeaderColumnKey(columns: TableColumnConfig[]) {
-  return (
-    columns.find((column) => !isUtilityColumn(column))?.key ?? columns.find(Boolean)?.key ?? null
-  );
+function uniqueTableColumnId(columnKey: string, seen: Map<string, number>) {
+  const count = seen.get(columnKey) ?? 0;
+  seen.set(columnKey, count + 1);
+
+  return count === 0 ? columnKey : `${columnKey}:${count + 1}`;
+}
+
+function selectRowHeaderColumnIndex(columns: TableColumnConfig[]) {
+  const firstDataColumnIndex = columns.findIndex((column) => !isUtilityColumn(column));
+
+  return firstDataColumnIndex === -1 ? 0 : firstDataColumnIndex;
 }
 
 function isUtilityColumn(column: TableColumnConfig) {

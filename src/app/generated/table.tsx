@@ -15,11 +15,10 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableFooter,
-  TableHead,
+  TableColumn,
   TableHeader,
   TableRow,
-} from "@dpeek/formless-ui/native-table";
+} from "@dpeek/formless-ui/table";
 import {
   useAggregateValueMatchingQuery,
   useEntityRecordIdsMatchingQuery,
@@ -52,7 +51,6 @@ import {
   submitOrderingPatch,
   type ResultOrderingContext,
   type ResultOrderingDragData,
-  type ResultOrderingDragFact,
 } from "./ordering-ui.ts";
 import { RecordFieldDisplay } from "./record-field-display.tsx";
 import { DeleteRecordButton, type RecordLabelFieldConfig } from "./record-delete.tsx";
@@ -60,6 +58,16 @@ import { RecordFieldEditor } from "./record-field-editor.tsx";
 import { RecordReadinessWarnings } from "./readiness-warnings.tsx";
 import { useSchemaKey } from "./schema-app-context.tsx";
 import { InvokeActionTableCell } from "./table-actions.tsx";
+import {
+  selectGeneratedTablePresentation,
+  type GeneratedTableCellPresentation,
+  type GeneratedTableColumnPresentation,
+  type GeneratedTableFooterCellPresentation,
+  type GeneratedTableFooterPresentation,
+  type GeneratedTableHeaderPresentation,
+  type GeneratedTableReadinessWarningPresentation,
+  type GeneratedTableRowPresentation,
+} from "./table-presentation.ts";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 
 export function RecordTable({
@@ -96,11 +104,18 @@ export function RecordTable({
   });
   const orderedRecordIds = orderingContext?.orderedRecordIds ?? recordIds;
   const orderingDragFacts = selectOrderingDragFacts(orderingContext);
-  const visibleColumns = columns.filter((column) => column.display !== "hidden");
-  const visibleFooter = footer.filter(
-    (slot) => queryName === undefined || slot.aggregate.query === queryName,
-  );
-  const deleteLabelFields = labelFieldsForTableColumns(visibleColumns);
+  const presentation = selectGeneratedTablePresentation({
+    canDelete,
+    canPatch,
+    columns,
+    footer,
+    orderedRecordIds,
+    orderingDragFacts,
+    orderingDragPatchEnabled: orderingContext?.canPatch,
+    pendingDragRecordId,
+    query,
+    queryName,
+  });
 
   async function handleOrderingDragEnd(event: DragEndEvent) {
     if (!orderingContext || event.canceled || !isSortableOperation(event.operation)) {
@@ -155,152 +170,153 @@ export function RecordTable({
     }
   }
 
+  const table = (
+    <Table
+      aria-label={`${entity.label} records`}
+      className="min-w-full"
+      data-slot="table"
+      bleed={true}
+    >
+      <TableHeader>
+        {presentation.columns.map((column) => (
+          <TableColumn
+            className={tableHeadClassForPresentationColumn(column)}
+            id={column.id}
+            isRowHeader={column.isRowHeader}
+            key={column.key}
+            textValue={column.header.accessibleLabel}
+          >
+            <RecordTableHeader header={column.header} />
+          </TableColumn>
+        ))}
+      </TableHeader>
+      <TableBody
+        renderEmptyState={() => (
+          <p className="px-1.5 py-3 text-sm text-slate-600">{presentation.emptyState.message}</p>
+        )}
+      >
+        {presentation.emptyState.visible
+          ? null
+          : presentation.rows.map((row) =>
+              row.ordering.type === "drag" ? (
+                <SortableRecordTableRows
+                  canPatch={canPatch}
+                  deleteLabelFields={presentation.delete?.labelFields ?? []}
+                  entity={entity}
+                  entityName={entityName}
+                  key={row.key}
+                  orderingContext={orderingContext}
+                  recordRow={row}
+                />
+              ) : (
+                <StaticRecordTableRows
+                  canPatch={canPatch}
+                  deleteLabelFields={presentation.delete?.labelFields ?? []}
+                  entity={entity}
+                  entityName={entityName}
+                  key={row.key}
+                  orderingContext={orderingContext}
+                  recordRow={row}
+                />
+              ),
+            )}
+        {!presentation.emptyState.visible && presentation.footer ? (
+          <RecordTableFooterRow
+            entityName={entityName}
+            footer={presentation.footer}
+            query={query}
+            queryContext={queryContext}
+          />
+        ) : null}
+      </TableBody>
+    </Table>
+  );
+
   return (
     <section className="space-y-3">
-      {!canPatch && recordIds.length > 0 ? (
+      {presentation.editingDisabled ? (
         <p className="text-sm text-slate-600">Editing is disabled for {entity.label}.</p>
       ) : null}
-
-      {recordIds.length === 0 ? (
-        <p className="text-sm text-slate-600">No records yet.</p>
+      {orderingContext && orderingDragFacts ? (
+        <DragDropProvider onDragEnd={handleOrderingDragEnd}>{table}</DragDropProvider>
       ) : (
-        <Table className="min-w-full table-auto text-xs">
-          <TableHeader>
-            <TableRow>
-              {visibleColumns.map((column) => (
-                <TableHead className={tableHeadClass(column)} key={column.key}>
-                  <RecordTableHeader column={column} />
-                </TableHead>
-              ))}
-              {canDelete ? (
-                <TableHead className="w-16 min-w-16 px-1 text-end">
-                  <span className="sr-only">Delete</span>
-                </TableHead>
-              ) : null}
-            </TableRow>
-          </TableHeader>
-          {orderingContext && orderingDragFacts ? (
-            <DragDropProvider onDragEnd={handleOrderingDragEnd}>
-              {orderedRecordIds.map((recordId) => (
-                <SortableRecordTableRows
-                  canDelete={canDelete}
-                  canPatch={canPatch}
-                  columns={visibleColumns}
-                  deleteLabelFields={deleteLabelFields}
-                  entity={entity}
-                  dragFact={orderingDragFacts.get(recordId)}
-                  entityName={entityName}
-                  key={recordId}
-                  orderingContext={orderingContext}
-                  pendingDragRecordId={pendingDragRecordId}
-                  recordId={recordId}
-                />
-              ))}
-            </DragDropProvider>
-          ) : (
-            <TableBody>
-              {orderedRecordIds.map((recordId) => (
-                <StaticRecordTableRows
-                  canDelete={canDelete}
-                  canPatch={canPatch}
-                  columns={visibleColumns}
-                  deleteLabelFields={deleteLabelFields}
-                  entity={entity}
-                  entityName={entityName}
-                  key={recordId}
-                  orderingContext={orderingContext}
-                  recordId={recordId}
-                />
-              ))}
-            </TableBody>
-          )}
-          {visibleFooter.length > 0 ? (
-            <RecordTableFooter
-              canDelete={canDelete}
-              columns={visibleColumns}
-              entityName={entityName}
-              footer={visibleFooter}
-              query={query}
-              queryContext={queryContext}
-            />
-          ) : null}
-        </Table>
+        table
       )}
     </section>
   );
 }
 
 function StaticRecordTableRows({
-  canDelete,
   canPatch,
-  columns,
   deleteLabelFields,
   entity,
   entityName,
   orderingContext,
-  recordId,
+  recordRow,
 }: {
-  canDelete: boolean;
   canPatch: boolean;
-  columns: TableColumnConfig[];
   deleteLabelFields: RecordLabelFieldConfig[];
   entity: EntitySchema;
   entityName: string;
   orderingContext?: ResultOrderingContext;
-  recordId: string;
+  recordRow: GeneratedTableRowPresentation;
 }) {
   return (
     <Fragment>
-      <TableRow>
+      <TableRow
+        data-formless-record-row={recordRow.recordId}
+        id={recordRow.id}
+        textValue={recordRow.recordId}
+      >
         <RecordTableCells
-          canDelete={canDelete}
           canPatch={canPatch}
-          columns={columns}
           deleteLabelFields={deleteLabelFields}
           entity={entity}
           entityName={entityName}
           orderingContext={orderingContext}
-          recordId={recordId}
+          recordRow={recordRow}
         />
       </TableRow>
-      <ReadinessWarningTableRow
-        columnCount={columns.length + (canDelete ? 1 : 0)}
-        recordId={recordId}
-      />
+      <ReadinessWarningTableRow warning={recordRow.readinessWarning} />
     </Fragment>
   );
 }
 
 function SortableRecordTableRows({
-  canDelete,
   canPatch,
-  columns,
   deleteLabelFields,
-  dragFact,
   entity,
   entityName,
   orderingContext,
-  pendingDragRecordId,
-  recordId,
+  recordRow,
 }: {
-  canDelete: boolean;
   canPatch: boolean;
-  columns: TableColumnConfig[];
   deleteLabelFields: RecordLabelFieldConfig[];
-  dragFact: ResultOrderingDragFact | undefined;
   entity: EntitySchema;
   entityName: string;
-  orderingContext: ResultOrderingContext;
-  pendingDragRecordId: string | null;
-  recordId: string;
+  orderingContext?: ResultOrderingContext;
+  recordRow: GeneratedTableRowPresentation;
 }) {
-  const disabled = !dragFact || !orderingContext.canPatch || pendingDragRecordId !== null;
+  if (recordRow.ordering.type !== "drag") {
+    return (
+      <StaticRecordTableRows
+        canPatch={canPatch}
+        deleteLabelFields={deleteLabelFields}
+        entity={entity}
+        entityName={entityName}
+        orderingContext={orderingContext}
+        recordRow={recordRow}
+      />
+    );
+  }
+
+  const { disabled, dragData, dragFact } = recordRow.ordering;
   const { handleRef, isDragSource, isDropTarget, ref } = useSortable<ResultOrderingDragData>({
-    id: `ordering:${recordId}`,
-    data: {
+    id: `ordering:${recordRow.recordId}`,
+    data: dragData ?? {
       type: ORDERING_DND_TYPE,
-      recordId,
-      scopeKey: dragFact?.scopeKey ?? "",
+      recordId: recordRow.recordId,
+      scopeKey: "",
     },
     group: dragFact?.scopeKey,
     index: dragFact?.index ?? 0,
@@ -318,156 +334,178 @@ function SortableRecordTableRows({
     .join(" ");
 
   return (
-    <tbody
-      data-formless-sortable-row={recordId}
-      data-slot="table-body"
-      ref={ref}
-      className={rowStateClass || undefined}
-    >
-      <TableRow>
+    <Fragment>
+      <TableRow
+        className={rowStateClass || undefined}
+        data-formless-record-row={recordRow.recordId}
+        data-formless-sortable-row={recordRow.recordId}
+        id={recordRow.id}
+        ref={ref}
+        textValue={recordRow.recordId}
+      >
         <RecordTableCells
-          canDelete={canDelete}
           canPatch={canPatch}
-          columns={columns}
           deleteLabelFields={deleteLabelFields}
           entity={entity}
           entityName={entityName}
           orderingContext={orderingContext}
           orderingHandleDisabled={disabled}
           orderingHandleRef={handleRef}
-          recordId={recordId}
+          recordRow={recordRow}
         />
       </TableRow>
-      <ReadinessWarningTableRow
-        columnCount={columns.length + (canDelete ? 1 : 0)}
-        recordId={recordId}
-      />
-    </tbody>
+      <ReadinessWarningTableRow warning={recordRow.readinessWarning} />
+    </Fragment>
   );
 }
 
 function RecordTableCells({
-  canDelete,
   canPatch,
-  columns,
   deleteLabelFields,
   entity,
   entityName,
   orderingContext,
   orderingHandleDisabled,
   orderingHandleRef,
-  recordId,
+  recordRow,
 }: {
-  canDelete: boolean;
   canPatch: boolean;
-  columns: TableColumnConfig[];
   deleteLabelFields: RecordLabelFieldConfig[];
   entity: EntitySchema;
   entityName: string;
   orderingContext?: ResultOrderingContext;
   orderingHandleDisabled?: boolean;
   orderingHandleRef?: (element: Element | null) => void;
-  recordId: string;
+  recordRow: GeneratedTableRowPresentation;
 }) {
   return (
     <>
-      {columns.map((column) => (
-        <TableCell className={tableCellClass(column)} key={column.key}>
-          <RecordTableCell
+      {recordRow.cells.map((cell) => (
+        <TableCell className={tableCellClassForPresentationColumn(cell.column)} key={cell.key}>
+          <RecordTableCellContent
             canPatch={canPatch}
+            cell={cell}
+            deleteLabelFields={deleteLabelFields}
+            entity={entity}
             entityName={entityName}
-            column={column}
             orderingContext={orderingContext}
             orderingHandleDisabled={orderingHandleDisabled}
             orderingHandleRef={orderingHandleRef}
-            recordId={recordId}
           />
         </TableCell>
       ))}
-      {canDelete ? (
-        <TableCell className="w-16 min-w-16 px-1 py-1 text-end">
-          <DeleteRecordButton
-            entityLabel={entity.label}
-            entityName={entityName}
-            labelFields={deleteLabelFields}
-            recordId={recordId}
-            triggerData={{ "data-formless-delete-record": recordId }}
-          />
-        </TableCell>
-      ) : null}
     </>
   );
 }
 
-function RecordTableHeader({ column }: { column: TableColumnConfig }) {
-  if ((column.type === "invokeAction" || column.type === "orderingHandle") && column.label === "") {
-    return <span className="sr-only">{column.headerLabel}</span>;
+function RecordTableCellContent({
+  canPatch,
+  cell,
+  deleteLabelFields,
+  entity,
+  entityName,
+  orderingContext,
+  orderingHandleDisabled,
+  orderingHandleRef,
+}: {
+  canPatch: boolean;
+  cell: GeneratedTableCellPresentation;
+  deleteLabelFields: RecordLabelFieldConfig[];
+  entity: EntitySchema;
+  entityName: string;
+  orderingContext?: ResultOrderingContext;
+  orderingHandleDisabled?: boolean;
+  orderingHandleRef?: (element: Element | null) => void;
+}) {
+  if (cell.column.type === "delete") {
+    return (
+      <DeleteRecordButton
+        entityLabel={entity.label}
+        entityName={entityName}
+        labelFields={deleteLabelFields}
+        recordId={cell.recordId}
+        triggerData={{ "data-formless-delete-record": cell.recordId }}
+      />
+    );
   }
 
-  return column.label;
+  return (
+    <RecordTableCell
+      canPatch={canPatch}
+      entityName={entityName}
+      column={cell.column.column}
+      orderingContext={orderingContext}
+      orderingHandleDisabled={orderingHandleDisabled}
+      orderingHandleRef={orderingHandleRef}
+      recordId={cell.recordId}
+    />
+  );
 }
 
-function RecordTableFooter({
-  canDelete,
-  columns,
+function RecordTableHeader({ header }: { header: GeneratedTableHeaderPresentation }) {
+  if (header.isVisuallyHidden) {
+    return <span className="sr-only">{header.accessibleLabel}</span>;
+  }
+
+  return header.label;
+}
+
+function RecordTableFooterRow({
   entityName,
   footer,
   query,
   queryContext,
 }: {
-  canDelete: boolean;
-  columns: TableColumnConfig[];
   entityName: string;
-  footer: TableFooterSlotConfig[];
+  footer: GeneratedTableFooterPresentation;
   query: HomeQueryTabConfig["query"];
   queryContext?: QueryEvaluationContext;
 }) {
   return (
-    <TableFooter>
-      <TableRow>
-        {columns.map((column) => (
-          <TableCell className={tableCellClass(column)} key={column.key}>
-            <RecordTableFooterCell
-              column={column}
-              entityName={entityName}
-              footer={footer}
-              query={query}
-              queryContext={queryContext}
-            />
-          </TableCell>
-        ))}
-        {canDelete ? <TableCell className="w-16 min-w-16 px-1 py-1" /> : null}
-      </TableRow>
-    </TableFooter>
+    <TableRow
+      className="border-t bg-muted/50 font-medium"
+      data-formless-table-footer="true"
+      data-slot="table-footer"
+      id={footer.id}
+      key={footer.key}
+      textValue="Aggregate footer"
+    >
+      {footer.cells.map((cell) => (
+        <TableCell className={tableCellClassForPresentationColumn(cell.column)} key={cell.key}>
+          <RecordTableFooterCell
+            cell={cell}
+            entityName={entityName}
+            query={query}
+            queryContext={queryContext}
+          />
+        </TableCell>
+      ))}
+    </TableRow>
   );
 }
 
 function RecordTableFooterCell({
-  column,
+  cell,
   entityName,
-  footer,
   query,
   queryContext,
 }: {
-  column: TableColumnConfig;
+  cell: GeneratedTableFooterCellPresentation;
   entityName: string;
-  footer: TableFooterSlotConfig[];
   query: HomeQueryTabConfig["query"];
   queryContext?: QueryEvaluationContext;
 }) {
-  const slot = footer.find((candidate) => candidate.columnKey === column.key);
-
-  if (!slot) {
+  if (cell.type === "empty") {
     return <span aria-hidden="true">&nbsp;</span>;
   }
 
   return (
-    <div className={`flex min-h-6 items-center gap-1 ${tableCellJustifyClass(column)}`}>
+    <div className={`flex min-h-6 items-center gap-1 ${tableCellJustifyClass(cell.column.column)}`}>
       <AggregateFooterValue
         entityName={entityName}
         query={query}
         queryContext={queryContext}
-        slot={slot}
+        slot={cell.slot}
       />
     </div>
   );
@@ -502,21 +540,19 @@ function AggregateFooterValue({
 }
 
 function ReadinessWarningTableRow({
-  columnCount,
-  recordId,
+  warning,
 }: {
-  columnCount: number;
-  recordId: string;
+  warning: GeneratedTableReadinessWarningPresentation;
 }) {
-  const warnings = useRecordReadinessWarnings(recordId);
+  const warnings = useRecordReadinessWarnings(warning.recordId);
 
   if (warnings.length === 0) {
     return null;
   }
 
   return (
-    <TableRow>
-      <TableCell className="px-1.5 py-1" colSpan={columnCount}>
+    <TableRow id={warning.id} textValue="Readiness warnings">
+      <TableCell className="px-1.5 py-1 text-xs" colSpan={warning.columnSpan}>
         <RecordReadinessWarnings warnings={warnings} />
       </TableCell>
     </TableRow>
@@ -863,22 +899,32 @@ export function ReferencedRecordEditorFields({
   );
 }
 
-function labelFieldsForTableColumns(columns: TableColumnConfig[]): RecordLabelFieldConfig[] {
-  return columns.flatMap((column) =>
-    column.type === "field" ? [{ fieldName: column.fieldName, field: column.field }] : [],
-  );
-}
-
 function recordFieldEditorKey(entityName: string, recordId: string, fieldName: string) {
   return `${entityName}:${recordId}:${fieldName}`;
 }
 
+function tableHeadClassForPresentationColumn(column: GeneratedTableColumnPresentation) {
+  if (column.type === "delete") {
+    return "h-8 w-16 min-w-16 px-1 text-end text-xs";
+  }
+
+  return tableHeadClass(column.column);
+}
+
+function tableCellClassForPresentationColumn(column: GeneratedTableColumnPresentation) {
+  if (column.type === "delete") {
+    return "w-16 min-w-16 px-1 py-1 text-end text-xs";
+  }
+
+  return tableCellClass(column.column);
+}
+
 function tableHeadClass(column: TableColumnConfig) {
-  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} h-8 ${tablePaddingClass(column)}`;
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} h-8 text-xs ${tablePaddingClass(column)}`;
 }
 
 function tableCellClass(column: TableColumnConfig) {
-  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} ${tablePaddingClass(column)} py-1`;
+  return `${tableAlignClass(column.align)} ${tableWidthClass(column)} ${tablePaddingClass(column)} py-1 text-xs`;
 }
 
 function tableAlignClass(align: TableColumnConfig["align"]) {

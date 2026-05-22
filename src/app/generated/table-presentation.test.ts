@@ -134,6 +134,29 @@ describe("selectGeneratedTablePresentation", () => {
     });
   });
 
+  it("keeps React Aria column ids unique when generated columns share schema keys", () => {
+    const firstMargin = computedColumn("rateMargin");
+    const secondMargin = computedColumn("rateMargin");
+    const presentation = selectGeneratedTablePresentation({
+      canDelete: false,
+      canPatch: true,
+      columns: [firstMargin, secondMargin],
+      footer: [aggregateFooterSlot("selectedCardAverageMargin", "computed:rateMargin", "rates")],
+      orderedRecordIds: ["rate-1"],
+      query: { kind: "all" },
+    });
+
+    expect(presentation.columns.map((column) => column.id)).toEqual([
+      "computed:rateMargin",
+      "computed:rateMargin:2",
+    ]);
+    expect(presentation.rows[0]?.cells.map((cell) => cell.columnId)).toEqual([
+      "computed:rateMargin",
+      "computed:rateMargin:2",
+    ]);
+    expect(presentation.footer?.cells.map((cell) => cell.type)).toEqual(["aggregate", "aggregate"]);
+  });
+
   it("surfaces empty and disabled-editing presentation state", () => {
     const presentation = selectGeneratedTablePresentation({
       canDelete: false,

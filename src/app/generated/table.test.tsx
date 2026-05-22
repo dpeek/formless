@@ -20,8 +20,23 @@ describe("RecordTable", () => {
     });
 
     expect(html).toContain('value="$825.00"');
-    expect(html).toContain("min-w-full table-auto");
+    expect(html).toContain('role="grid"');
+    expect(html).toContain('data-slot="table-column"');
+    expect(html).not.toContain('data-slot="table-head"');
     expect(html).toContain("w-52 min-w-52 max-w-60");
+  });
+
+  it("renders aggregate footer slots as generated React Aria table rows", () => {
+    const html = renderTableViewHtml({
+      records: rateSeedRecords,
+      schema: rateSourceSchema,
+      viewName: "rateHome",
+    });
+
+    expect(html).toContain('data-formless-table-footer="true"');
+    expect(html).toContain('aria-label="Average cost"');
+    expect(html).toContain('aria-label="Average price"');
+    expect(html).toContain('aria-label="Average margin"');
   });
 
   it("uses icon-sized utility columns for placement reordering and row actions", () => {
