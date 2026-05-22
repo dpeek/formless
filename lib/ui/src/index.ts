@@ -6,7 +6,7 @@ export * from "./color-utils.js";
 export * from "./color.js";
 export * from "./date.js";
 export * from "./dialog.js";
-export * from "./dropdown-menu.js";
+export * from "./menu.js";
 export {
   Description,
   FieldError,

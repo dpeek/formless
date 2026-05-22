@@ -16,7 +16,7 @@ import {
   MenuLabel,
   MenuSeparator,
   MenuTrigger,
-} from "@dpeek/formless-ui/dropdown-menu";
+} from "@dpeek/formless-ui/menu";
 import { useRecord, useRecordField } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import type {
@@ -127,12 +127,27 @@ export function InvokeActionTableCell({
     );
   }
 
+  const actionLabels = column.actions.map((action) => action.label).join("|");
+  const disabledActionLabels = column.actions
+    .filter((action) => action.disabled)
+    .map(actionAriaLabel)
+    .join("|");
+  const dangerActionLabels = column.actions
+    .filter((action) => action.variant === "destructive")
+    .map((action) => action.label)
+    .join("|");
+  const orderingLabels = orderingItems.map(orderingMoveAriaLabel).join("|");
+
   return (
     <>
       <Menu>
         <MenuTrigger
           aria-label={column.headerLabel}
           className={buttonStyles({ intent: "outline", size: "sq-xs" })}
+          data-formless-table-action-labels={actionLabels || undefined}
+          data-formless-table-danger-action-labels={dangerActionLabels || undefined}
+          data-formless-table-disabled-action-labels={disabledActionLabels || undefined}
+          data-formless-table-ordering-labels={orderingLabels || undefined}
           type="button"
         >
           <span aria-hidden="true">...</span>

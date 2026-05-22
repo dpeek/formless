@@ -4,13 +4,7 @@ import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button, buttonStyles } from "@dpeek/formless-ui/button";
 import { ControlAddIcon, ControlMenuIcon, ControlRemoveIcon } from "@dpeek/formless-ui/icons";
 import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formless-ui/modal";
-import {
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuLabel,
-  MenuTrigger,
-} from "@dpeek/formless-ui/dropdown-menu";
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@dpeek/formless-ui/menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitAction } from "../../client/sync.ts";
