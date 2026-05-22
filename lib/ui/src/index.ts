@@ -10,7 +10,9 @@ export * from "./color-swatch.js";
 export * from "./color-swatch-picker.js";
 export * from "./color-thumb.js";
 export * from "./color-wheel.js";
-export * from "./date.js";
+export * from "./date-field.js";
+export * from "./date-picker.js";
+export { formatDateInputValue, parseDateInputValue } from "./date.js";
 export * from "./dialog.js";
 export * from "./menu.js";
 export {
@@ -33,6 +35,7 @@ export * from "./modal.js";
 export * from "./native-select.js";
 export * from "./number-input.js";
 export * from "./popover.js";
+export * from "./range-calendar.js";
 export * from "./select.js";
 export * from "./separator.js";
 export * from "./sheet.js";

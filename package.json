@@ -42,6 +42,8 @@
     "@cloudflare/vite-plugin": "^1.33.2",
     "@dnd-kit/react": "^0.4.0",
     "@dpeek/formless-ui": "^0.1.2",
+    "@heroicons/react": "^2.2.0",
+    "@react-aria/i18n": "^3.12.16",
     "@tailwindcss/vite": "^4.2.4",
     "@vitejs/plugin-react": "^6.0.1",
     "alchemy": "^0.93.9",

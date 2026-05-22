@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CalendarDate } from "@internationalized/date";
 
 import { Button } from "@dpeek/formless-ui/button";
 import { Calendar } from "@dpeek/formless-ui/calendar";
@@ -72,8 +73,16 @@ export function DateInput({
     () => parseDateInputValue(selectedDateValue),
     [selectedDateValue],
   );
+  const selectedCalendarDate = React.useMemo(
+    () => dateToCalendarDate(selectedDate),
+    [selectedDate],
+  );
   const [open, setOpen] = React.useState(false);
   const [month, setMonth] = React.useState<Date | undefined>(selectedDate);
+  const focusedCalendarDate = React.useMemo(
+    () => dateToCalendarDate(month ?? selectedDate),
+    [month, selectedDate],
+  );
 
   React.useEffect(() => {
     if (dateInputValue && !isValueControlled) {
@@ -152,11 +161,13 @@ export function DateInput({
           <Dialog aria-label="Select date">
             <Calendar
               aria-label="Select date"
-              selected={selectedDate}
-              month={month}
-              onMonthChange={setMonth}
-              onSelect={(date) => {
-                updateValue(formatDateInputValue(date), { commit: true });
+              value={selectedCalendarDate ?? null}
+              focusedValue={focusedCalendarDate}
+              onFocusChange={(date) => {
+                setMonth(calendarDateToDate(date));
+              }}
+              onChange={(date) => {
+                updateValue(formatCalendarDateValue(date), { commit: true });
                 setOpen(false);
               }}
             />
@@ -165,4 +176,24 @@ export function DateInput({
       </Popover>
     </InputGroup>
   );
+}
+
+function dateToCalendarDate(date: Date | undefined) {
+  if (!date || Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+
+  return new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
+}
+
+function calendarDateToDate(value: CalendarDate) {
+  return new Date(value.year, value.month - 1, value.day);
+}
+
+function formatCalendarDateValue(date: CalendarDate | null) {
+  if (!date) {
+    return "";
+  }
+
+  return `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`;
 }
