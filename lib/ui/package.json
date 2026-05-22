@@ -21,7 +21,6 @@
     "./field": "./src/field.tsx",
     "./global": "./src/global.css",
     "./icons": "./src/icons.ts",
-    "./input-group": "./src/input-group.tsx",
     "./input": "./src/input.tsx",
     "./markdown": "./src/markdown.tsx",
     "./markdown-renderer": "./src/markdown-renderer.tsx",

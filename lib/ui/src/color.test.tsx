@@ -36,6 +36,8 @@ describe("color input", () => {
     expect(markup).toContain('placeholder="#FF0000"');
     expect(markup).toContain('value="#336699"');
     expect(markup).toContain("animate-spin");
+    expect(markup).toContain('data-slot="control"');
+    expect(markup).not.toContain('data-slot="input-group"');
   });
 
   it("keeps alpha-capable manual values when alpha mode is enabled", () => {

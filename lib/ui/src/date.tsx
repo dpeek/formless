@@ -2,15 +2,11 @@
 
 import * as React from "react";
 
+import { Button } from "@dpeek/formless-ui/button";
 import { Calendar } from "@dpeek/formless-ui/calendar";
 import { Dialog } from "@dpeek/formless-ui/dialog";
 import { ControlCalendarIcon } from "@dpeek/formless-ui/icons";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@dpeek/formless-ui/input-group";
+import { Input, InputGroup } from "@dpeek/formless-ui/input";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 
 export function formatDateInputValue(date: Date | undefined) {
@@ -55,10 +51,7 @@ export function DateInput({
   onValueChange,
   value,
   ...inputProps
-}: Omit<
-  React.ComponentProps<typeof InputGroupInput>,
-  "defaultValue" | "onChange" | "type" | "value"
-> & {
+}: Omit<React.ComponentProps<typeof Input>, "defaultValue" | "onChange" | "type" | "value"> & {
   className?: string;
   date?: Date;
   defaultValue?: string;
@@ -123,7 +116,7 @@ export function DateInput({
 
   return (
     <InputGroup className={className}>
-      <InputGroupInput
+      <Input
         name={name}
         placeholder="2026-05-06"
         {...inputProps}
@@ -145,33 +138,31 @@ export function DateInput({
           inputProps.onKeyDown?.(e);
         }}
       />
-      <InputGroupAddon align="inline-end">
-        <Popover isOpen={open} onOpenChange={setOpen}>
-          <InputGroupButton id="date-picker" intent="plain" size="sq-xs" aria-label="Select date">
-            <ControlCalendarIcon />
-            <span className="sr-only">Select date</span>
-          </InputGroupButton>
-          <PopoverContent
-            className="w-auto overflow-hidden p-0"
-            placement="bottom end"
-            offset={10}
-            crossOffset={-8}
-          >
-            <Dialog aria-label="Select date">
-              <Calendar
-                aria-label="Select date"
-                selected={selectedDate}
-                month={month}
-                onMonthChange={setMonth}
-                onSelect={(date) => {
-                  updateValue(formatDateInputValue(date), { commit: true });
-                  setOpen(false);
-                }}
-              />
-            </Dialog>
-          </PopoverContent>
-        </Popover>
-      </InputGroupAddon>
+      <Popover isOpen={open} onOpenChange={setOpen}>
+        <Button id="date-picker" intent="plain" size="sq-xs" aria-label="Select date" type="button">
+          <ControlCalendarIcon />
+          <span className="sr-only">Select date</span>
+        </Button>
+        <PopoverContent
+          className="w-auto overflow-hidden p-0"
+          placement="bottom end"
+          offset={10}
+          crossOffset={-8}
+        >
+          <Dialog aria-label="Select date">
+            <Calendar
+              aria-label="Select date"
+              selected={selectedDate}
+              month={month}
+              onMonthChange={setMonth}
+              onSelect={(date) => {
+                updateValue(formatDateInputValue(date), { commit: true });
+                setOpen(false);
+              }}
+            />
+          </Dialog>
+        </PopoverContent>
+      </Popover>
     </InputGroup>
   );
 }

@@ -9,7 +9,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
-import { Field, FieldError, Label } from "@dpeek/formless-ui/field";
+import { FieldError, Label } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { parseSvgIconSource, SvgIcon } from "@dpeek/formless-ui/svg-icon";
@@ -247,32 +247,123 @@ export function GeneratedRecordFieldControl({
     );
   }
 
-  return (
-    <RecordLegacyFieldRenderer
-      canPatch={canPatch}
-      commitPolicy={commitPolicy}
-      density={density}
-      draft={draft}
-      error={error}
-      fieldConfig={fieldConfig}
-      fieldControl={fieldControl}
-      iconDialogDraft={iconDialogDraft}
-      iconDialogOpen={iconDialogOpen}
-      isPending={isPending}
-      labelClass={labelClass}
-      onDraftChange={onDraftChange}
-      onDraftRevert={onDraftRevert}
-      onIconCancel={onIconCancel}
-      onIconDraftChange={onIconDraftChange}
-      onIconOpenChange={onIconOpenChange}
-      onIconSave={onIconSave}
-      onImageFileSelect={onImageFileSelect}
-      onValueCommit={onValueCommit}
-      presentation={presentation}
-      rendererKind={rendererKind}
-      uploadEnabled={uploadEnabled}
-    />
-  );
+  if (rendererKind === "markdown") {
+    return (
+      <RecordMarkdownFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        field={field}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onValueCommit={onValueCommit}
+      />
+    );
+  }
+
+  if (rendererKind === "color") {
+    return (
+      <RecordColorFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        field={field}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onValueCommit={onValueCommit}
+      />
+    );
+  }
+
+  if (rendererKind === "date") {
+    return (
+      <RecordDateFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        field={field}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onValueCommit={onValueCommit}
+      />
+    );
+  }
+
+  if (rendererKind === "icon") {
+    return (
+      <RecordIconFieldRenderer
+        canPatch={canPatch}
+        density={density}
+        error={error}
+        fieldControl={fieldControl}
+        iconDialogDraft={iconDialogDraft}
+        iconDialogOpen={iconDialogOpen}
+        isPending={isPending}
+        labelClass={labelClass}
+        onIconCancel={onIconCancel}
+        onIconDraftChange={onIconDraftChange}
+        onIconOpenChange={onIconOpenChange}
+        onIconSave={onIconSave}
+        previewSource={draft}
+      />
+    );
+  }
+
+  if (rendererKind === "image") {
+    return (
+      <RecordImageFieldRenderer
+        canPatch={canPatch}
+        density={density}
+        draft={draft}
+        error={error}
+        field={field}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onImageFileSelect={onImageFileSelect}
+        onValueCommit={onValueCommit}
+        uploadEnabled={uploadEnabled}
+      />
+    );
+  }
+
+  if (rendererKind === "autosize-text") {
+    return (
+      <RecordAutosizeTextFieldRenderer
+        canPatch={canPatch}
+        commitPolicy={commitPolicy}
+        density={density}
+        draft={draft}
+        error={error}
+        field={field}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        labelClass={labelClass}
+        onDraftChange={onDraftChange}
+        onDraftRevert={onDraftRevert}
+        onValueCommit={onValueCommit}
+        presentation={presentation}
+      />
+    );
+  }
+
+  return null;
 }
 
 function RecordCheckboxFieldRenderer({
@@ -690,69 +781,33 @@ function RecordValueUnitFieldRenderer({
   );
 }
 
-function RecordLegacyFieldRenderer({
+function RecordMarkdownFieldRenderer({
   canPatch,
   commitPolicy,
   density,
   draft,
   error,
-  fieldConfig,
+  field,
   fieldControl,
-  iconDialogDraft,
-  iconDialogOpen,
   isPending,
   labelClass,
   onDraftChange,
   onDraftRevert,
-  onIconCancel,
-  onIconDraftChange,
-  onIconOpenChange,
-  onIconSave,
-  onImageFileSelect,
   onValueCommit,
-  presentation,
-  rendererKind,
-  uploadEnabled,
 }: {
   canPatch: boolean;
   commitPolicy: RecordFieldConfig["commit"];
   density: GeneratedRecordFieldControlDensity;
   draft: string;
   error: string | null;
-  fieldConfig: RecordFieldConfig;
+  field: FieldSchema;
   fieldControl: GeneratedFieldControl;
-  iconDialogDraft: string;
-  iconDialogOpen: boolean;
   isPending: boolean;
   labelClass: string;
   onDraftChange: (value: string) => void;
   onDraftRevert: () => void;
-  onIconCancel: () => void;
-  onIconDraftChange: (value: string) => void;
-  onIconOpenChange: (open: boolean) => void;
-  onIconSave: () => Promise<void>;
-  onImageFileSelect: (file: File | undefined) => void;
   onValueCommit: (value: FieldValue) => void;
-  presentation: GeneratedRecordFieldControlPresentation;
-  rendererKind: GeneratedRecordFieldRendererKind;
-  uploadEnabled: boolean;
 }) {
-  const { field } = fieldConfig;
-  const isHeadingTextEditor = rendererKind === "autosize-text" && presentation === "heading";
-
-  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
-      return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onDraftRevert();
-    }
-  }
-
   function handleMarkdownBlur(event: FocusEvent<HTMLDivElement>) {
     const nextTarget = event.relatedTarget;
 
@@ -773,10 +828,198 @@ function RecordLegacyFieldRenderer({
   }
 
   return (
-    <div className={recordLegacyFieldContainerClassName(density, rendererKind)}>
-      <Field>
+    <div className={recordSpecializedFieldContainerClassName(density, "markdown")}>
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+      >
         <Label className={labelClass}>{fieldControl.label}</Label>
-        {rendererKind === "icon" ? (
+        <div data-slot="control">
+          <GeneratedMarkdownFieldControl
+            ariaInvalid={error !== null}
+            label={fieldControl.label}
+            onBlur={handleMarkdownBlur}
+            onChange={onDraftChange}
+            onKeyDown={handleMarkdownKeyDown}
+            readOnly={!canPatch || isPending}
+            value={draft}
+          />
+        </div>
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
+    </div>
+  );
+}
+
+function RecordColorFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  field,
+  fieldControl,
+  isPending,
+  labelClass,
+  onDraftChange,
+  onValueCommit,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  field: FieldSchema;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  onDraftChange: (value: string) => void;
+  onValueCommit: (value: FieldValue) => void;
+}) {
+  return (
+    <div className={recordSpecializedFieldContainerClassName(density, "color")}>
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <GeneratedColorFieldControl
+          className={
+            density === "compact"
+              ? "w-full [&_button]:h-6 [&_input]:h-6 [&_input]:text-xs"
+              : "w-full"
+          }
+          disabled={!canPatch || isPending}
+          error={error ?? undefined}
+          label={fieldControl.label}
+          onBlur={() => {
+            if (commitPolicy === "field-commit") {
+              onValueCommit(inputValueToFieldValue(field, draft));
+            }
+          }}
+          onChange={onDraftChange}
+          required={fieldControl.required}
+          value={draft}
+        />
+      </TextField>
+    </div>
+  );
+}
+
+function RecordDateFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  field,
+  fieldControl,
+  isPending,
+  labelClass,
+  onDraftChange,
+  onDraftRevert,
+  onValueCommit,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  field: FieldSchema;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onValueCommit: (value: FieldValue) => void;
+}) {
+  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onDraftRevert();
+    }
+  }
+
+  return (
+    <div className={recordSpecializedFieldContainerClassName(density, "date")}>
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <DateInput
+          aria-label={fieldControl.label}
+          className="w-full"
+          disabled={!canPatch || isPending}
+          inputClassName={
+            density === "compact"
+              ? "h-6 rounded border border-slate-300 px-2 py-0.5 text-xs"
+              : "rounded border border-slate-300"
+          }
+          onBlur={(event) => {
+            if (commitPolicy === "field-commit") {
+              onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
+            }
+          }}
+          onKeyDown={handleInputKeyDown}
+          onValueCommit={(value) => {
+            if (commitPolicy === "field-commit") {
+              onValueCommit(inputValueToFieldValue(field, value));
+            }
+          }}
+          onValueChange={onDraftChange}
+          required={fieldControl.required}
+          value={draft}
+        />
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
+    </div>
+  );
+}
+
+function RecordIconFieldRenderer({
+  canPatch,
+  density,
+  error,
+  fieldControl,
+  iconDialogDraft,
+  iconDialogOpen,
+  isPending,
+  labelClass,
+  onIconCancel,
+  onIconDraftChange,
+  onIconOpenChange,
+  onIconSave,
+  previewSource,
+}: {
+  canPatch: boolean;
+  density: GeneratedRecordFieldControlDensity;
+  error: string | null;
+  fieldControl: GeneratedFieldControl;
+  iconDialogDraft: string;
+  iconDialogOpen: boolean;
+  isPending: boolean;
+  labelClass: string;
+  onIconCancel: () => void;
+  onIconDraftChange: (value: string) => void;
+  onIconOpenChange: (open: boolean) => void;
+  onIconSave: () => Promise<void>;
+  previewSource: string;
+}) {
+  return (
+    <div className={recordSpecializedFieldContainerClassName(density, "icon")}>
+      <TextField isDisabled={!canPatch || isPending} isInvalid={error !== null}>
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <div data-slot="control">
           <IconFieldControl
             canPatch={canPatch}
             density={density}
@@ -789,118 +1032,144 @@ function RecordLegacyFieldRenderer({
             onOpenChange={onIconOpenChange}
             onSave={onIconSave}
             open={iconDialogOpen}
-            previewSource={draft}
+            previewSource={previewSource}
           />
-        ) : rendererKind === "image" ? (
-          <ImageFieldControl
-            canPatch={canPatch}
-            density={density}
-            draft={draft}
-            error={error}
-            isPending={isPending}
-            label={fieldControl.label}
-            onDraftChange={onDraftChange}
-            onFileSelect={onImageFileSelect}
-            onUrlCommit={(value) => {
-              onValueCommit(inputValueToFieldValue(field, value));
-            }}
-            onUrlRevert={onDraftRevert}
-            required={fieldControl.required}
-            uploadEnabled={uploadEnabled}
-          />
-        ) : rendererKind === "markdown" ? (
-          <GeneratedMarkdownFieldControl
-            ariaInvalid={error !== null}
-            label={fieldControl.label}
-            onBlur={handleMarkdownBlur}
-            onChange={onDraftChange}
-            onKeyDown={handleMarkdownKeyDown}
-            readOnly={!canPatch || isPending}
-            value={draft}
-          />
-        ) : rendererKind === "color" ? (
-          <GeneratedColorFieldControl
-            className={
-              density === "compact"
-                ? "w-full [&_[data-slot=input-group]]:h-6 [&_input]:h-6 [&_input]:text-xs"
-                : "w-full"
-            }
-            disabled={!canPatch || isPending}
-            error={error ?? undefined}
-            label={fieldControl.label}
-            onBlur={() => {
-              if (commitPolicy === "field-commit") {
-                onValueCommit(inputValueToFieldValue(field, draft));
-              }
-            }}
-            onChange={onDraftChange}
-            required={fieldControl.required}
-            value={draft}
-          />
-        ) : rendererKind === "autosize-text" ? (
-          <AutosizeTextInput
-            aria-invalid={error !== null ? true : undefined}
-            aria-label={fieldControl.label}
-            autoSelect
-            className={
-              isHeadingTextEditor
-                ? "w-full min-w-0"
-                : density === "compact"
-                  ? "w-full min-w-0"
-                  : "min-w-[8ch] max-w-full"
-            }
-            commitOnBlur={commitPolicy === "field-commit"}
-            controlClassName={
-              isHeadingTextEditor
-                ? "h-9 w-full text-2xl font-semibold"
-                : density === "compact"
-                  ? "h-6 w-full text-xs"
-                  : "h-7 w-full text-sm font-medium"
-            }
-            disabled={!canPatch || isPending}
-            onValueChange={onDraftChange}
-            onValueCommit={(value) => {
-              onValueCommit(inputValueToFieldValue(field, value));
-            }}
-            onValueRevert={onDraftRevert}
-            placeholder={fieldControl.label}
-            required={fieldControl.required}
-            type="text"
-            value={draft}
-            {...fieldControl.inputAttributes}
-          />
-        ) : rendererKind === "date" ? (
-          <DateInput
-            aria-label={fieldControl.label}
-            className={
-              density === "compact"
-                ? "h-6 w-full rounded border border-slate-300 text-xs"
-                : "w-full rounded border border-slate-300"
-            }
-            disabled={!canPatch || isPending}
-            onBlur={(event) => {
-              if (commitPolicy === "field-commit") {
-                onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
-              }
-            }}
-            onKeyDown={handleInputKeyDown}
-            onValueCommit={(value) => {
-              if (commitPolicy === "field-commit") {
-                onValueCommit(inputValueToFieldValue(field, value));
-              }
-            }}
-            onValueChange={onDraftChange}
-            required={fieldControl.required}
-            value={draft}
-          />
-        ) : null}
-      </Field>
-      {error ? <FieldError>{error}</FieldError> : null}
+        </div>
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
     </div>
   );
 }
 
-function recordLegacyFieldContainerClassName(
+function RecordImageFieldRenderer({
+  canPatch,
+  density,
+  draft,
+  error,
+  field,
+  fieldControl,
+  isPending,
+  labelClass,
+  onDraftChange,
+  onDraftRevert,
+  onImageFileSelect,
+  onValueCommit,
+  uploadEnabled,
+}: {
+  canPatch: boolean;
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  field: FieldSchema;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onImageFileSelect: (file: File | undefined) => void;
+  onValueCommit: (value: FieldValue) => void;
+  uploadEnabled: boolean;
+}) {
+  return (
+    <div className={recordSpecializedFieldContainerClassName(density, "image")}>
+      <Label className={labelClass}>{fieldControl.label}</Label>
+      <ImageFieldControl
+        canPatch={canPatch}
+        density={density}
+        draft={draft}
+        error={error}
+        isPending={isPending}
+        label={fieldControl.label}
+        onDraftChange={onDraftChange}
+        onFileSelect={onImageFileSelect}
+        onUrlCommit={(value) => {
+          onValueCommit(inputValueToFieldValue(field, value));
+        }}
+        onUrlRevert={onDraftRevert}
+        required={fieldControl.required}
+        uploadEnabled={uploadEnabled}
+      />
+    </div>
+  );
+}
+
+function RecordAutosizeTextFieldRenderer({
+  canPatch,
+  commitPolicy,
+  density,
+  draft,
+  error,
+  field,
+  fieldControl,
+  isPending,
+  labelClass,
+  onDraftChange,
+  onDraftRevert,
+  onValueCommit,
+  presentation,
+}: {
+  canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  field: FieldSchema;
+  fieldControl: GeneratedFieldControl;
+  isPending: boolean;
+  labelClass: string;
+  onDraftChange: (value: string) => void;
+  onDraftRevert: () => void;
+  onValueCommit: (value: FieldValue) => void;
+  presentation: GeneratedRecordFieldControlPresentation;
+}) {
+  const isHeadingTextEditor = presentation === "heading";
+
+  return (
+    <div className={recordSpecializedFieldContainerClassName(density, "autosize-text")}>
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <AutosizeTextInput
+          aria-invalid={error !== null ? true : undefined}
+          aria-label={fieldControl.label}
+          autoSelect
+          className={
+            isHeadingTextEditor
+              ? "w-full min-w-0"
+              : density === "compact"
+                ? "w-full min-w-0"
+                : "min-w-[8ch] max-w-full"
+          }
+          commitOnBlur={commitPolicy === "field-commit"}
+          controlClassName={
+            isHeadingTextEditor
+              ? "h-9 w-full text-2xl font-semibold"
+              : density === "compact"
+                ? "h-6 w-full text-xs"
+                : "h-7 w-full text-sm font-medium"
+          }
+          disabled={!canPatch || isPending}
+          onValueChange={onDraftChange}
+          onValueCommit={(value) => {
+            onValueCommit(inputValueToFieldValue(field, value));
+          }}
+          onValueRevert={onDraftRevert}
+          placeholder={fieldControl.label}
+          required={fieldControl.required}
+          type="text"
+          value={draft}
+          {...fieldControl.inputAttributes}
+        />
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
+    </div>
+  );
+}
+
+function recordSpecializedFieldContainerClassName(
   density: GeneratedRecordFieldControlDensity,
   rendererKind: GeneratedRecordFieldRendererKind,
 ) {
@@ -993,15 +1262,20 @@ function IconFieldControl({
           <ModalTitle>Edit {label}</ModalTitle>
         </ModalHeader>
         <ModalBody>
-          <GeneratedIconSourceFieldControl
-            ariaInvalid={error !== null ? true : undefined}
-            label={label}
-            onChange={onDraftChange}
-            readOnly={!canPatch || isPending}
-            sourceLabel={`${label} SVG source`}
-            value={draft}
-          />
-          {error ? <FieldError>{error}</FieldError> : null}
+          <TextField isDisabled={!canPatch || isPending} isInvalid={error !== null}>
+            <Label className="sr-only">{label} SVG source</Label>
+            <div data-slot="control">
+              <GeneratedIconSourceFieldControl
+                ariaInvalid={error !== null ? true : undefined}
+                label={label}
+                onChange={onDraftChange}
+                readOnly={!canPatch || isPending}
+                sourceLabel={`${label} SVG source`}
+                value={draft}
+              />
+            </div>
+            {error ? <FieldError>{error}</FieldError> : null}
+          </TextField>
           <ModalFooter>
             <ModalClose intent="outline" type="button">
               Cancel
@@ -1107,7 +1381,12 @@ function ImageFieldControl({
           type="file"
         />
       </label>
-      <div className="space-y-1">
+      <TextField
+        isDisabled={!canPatch || isPending}
+        isInvalid={error !== null}
+        isRequired={required}
+      >
+        <Label className="sr-only">{label} URL</Label>
         <Input
           aria-invalid={error !== null ? true : undefined}
           aria-label={`${label} URL`}
@@ -1125,7 +1404,8 @@ function ImageFieldControl({
           type="text"
           value={draft}
         />
-      </div>
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DateInput } from "@dpeek/formless-ui/date";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
-import { Field, Label } from "@dpeek/formless-ui/field";
+import { Label } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { TextField } from "@dpeek/formless-ui/text-field";
@@ -45,55 +45,66 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.controlKind === "date") {
     return (
-      <Field>
+      <TextField isRequired={fieldControl.required}>
         <Label>{fieldControl.label}</Label>
         <DateInput
           defaultValue={fieldControl.createDefaultValue}
           name={fieldName}
+          onValueChange={(value) => onValueChange?.(value)}
           required={fieldControl.required}
         />
-      </Field>
+      </TextField>
     );
   }
 
   if (fieldControl.controlKind === "color") {
     return (
-      <Field>
-        <Label>{fieldControl.label}</Label>
-        <CreateColorField
-          defaultValue={fieldControl.createDefaultValue}
-          fieldName={fieldName}
-          label={fieldControl.label}
-          required={fieldControl.required}
-        />
-      </Field>
+      <CreateColorField
+        defaultValue={fieldControl.createDefaultValue}
+        fieldName={fieldName}
+        label={fieldControl.label}
+        onValueChange={onValueChange}
+        required={fieldControl.required}
+      />
     );
   }
 
   if (fieldControl.controlKind === "markdown") {
     return (
-      <Field>
-        <Label>{fieldControl.label}</Label>
-        <CreateMarkdownField
-          defaultValue={fieldControl.createDefaultValue}
-          fieldName={fieldName}
-          label={fieldControl.label}
-        />
-      </Field>
+      <CreateMarkdownField
+        defaultValue={fieldControl.createDefaultValue}
+        fieldName={fieldName}
+        label={fieldControl.label}
+        onValueChange={onValueChange}
+        required={fieldControl.required}
+      />
     );
   }
 
   if (fieldControl.controlKind === "icon") {
     return (
-      <Field>
+      <CreateIconField
+        defaultValue={fieldControl.createDefaultValue}
+        fieldName={fieldName}
+        label={fieldControl.label}
+        onValueChange={onValueChange}
+        required={fieldControl.required}
+      />
+    );
+  }
+
+  if (fieldControl.controlKind === "image") {
+    return (
+      <TextField
+        defaultValue={fieldControl.createDefaultValue}
+        isRequired={fieldControl.required}
+        name={fieldName}
+        onChange={(value) => onValueChange?.(value)}
+        type="text"
+      >
         <Label>{fieldControl.label}</Label>
-        <CreateIconField
-          defaultValue={fieldControl.createDefaultValue}
-          fieldName={fieldName}
-          label={fieldControl.label}
-          required={fieldControl.required}
-        />
-      </Field>
+        <Input {...fieldControl.inputAttributes} />
+      </TextField>
     );
   }
 
@@ -176,11 +187,13 @@ function CreateIconField({
   defaultValue,
   fieldName,
   label,
+  onValueChange,
   required,
 }: {
   defaultValue: string | undefined;
   fieldName: string;
   label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
   required: boolean;
 }) {
   const resetValue = defaultValue ?? "";
@@ -201,15 +214,21 @@ function CreateIconField({
   }, [resetValue]);
 
   return (
-    <div ref={fieldRef}>
-      <GeneratedIconSourceFieldControl
-        label={label}
-        name={fieldName}
-        onChange={setValue}
-        required={required}
-        value={value}
-      />
-    </div>
+    <TextField isRequired={required}>
+      <Label>{label}</Label>
+      <div data-slot="control" ref={fieldRef}>
+        <GeneratedIconSourceFieldControl
+          label={label}
+          name={fieldName}
+          onChange={(nextValue) => {
+            setValue(nextValue);
+            onValueChange?.(nextValue);
+          }}
+          required={required}
+          value={value}
+        />
+      </div>
+    </TextField>
   );
 }
 
@@ -217,45 +236,13 @@ function CreateMarkdownField({
   defaultValue,
   fieldName,
   label,
-}: {
-  defaultValue: string | undefined;
-  fieldName: string;
-  label: string;
-}) {
-  const resetValue = defaultValue ?? "";
-  const [value, setValue] = useState(resetValue);
-  const hiddenInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const form = hiddenInputRef.current?.form;
-
-    if (!form) {
-      return;
-    }
-
-    const handleReset = () => setValue(resetValue);
-    form.addEventListener("reset", handleReset);
-
-    return () => form.removeEventListener("reset", handleReset);
-  }, [resetValue]);
-
-  return (
-    <>
-      <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
-      <GeneratedMarkdownFieldControl label={label} onChange={setValue} value={value} />
-    </>
-  );
-}
-
-function CreateColorField({
-  defaultValue,
-  fieldName,
-  label,
+  onValueChange,
   required,
 }: {
   defaultValue: string | undefined;
   fieldName: string;
   label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
   required: boolean;
 }) {
   const resetValue = defaultValue ?? "";
@@ -276,15 +263,65 @@ function CreateColorField({
   }, [resetValue]);
 
   return (
-    <>
+    <TextField isRequired={required}>
+      <Label>{label}</Label>
+      <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
+      <GeneratedMarkdownFieldControl
+        label={label}
+        onChange={(nextValue) => {
+          setValue(nextValue);
+          onValueChange?.(nextValue);
+        }}
+        value={value}
+      />
+    </TextField>
+  );
+}
+
+function CreateColorField({
+  defaultValue,
+  fieldName,
+  label,
+  onValueChange,
+  required,
+}: {
+  defaultValue: string | undefined;
+  fieldName: string;
+  label: string;
+  onValueChange?: (value: FieldVisibilityValue) => void;
+  required: boolean;
+}) {
+  const resetValue = defaultValue ?? "";
+  const [value, setValue] = useState(resetValue);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const form = hiddenInputRef.current?.form;
+
+    if (!form) {
+      return;
+    }
+
+    const handleReset = () => setValue(resetValue);
+    form.addEventListener("reset", handleReset);
+
+    return () => form.removeEventListener("reset", handleReset);
+  }, [resetValue]);
+
+  return (
+    <TextField isRequired={required}>
+      <Label>{label}</Label>
       <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
       <GeneratedColorFieldControl
         label={label}
-        onChange={setValue}
+        onChange={(nextValue) => {
+          setValue(nextValue);
+          onValueChange?.(nextValue);
+        }}
         required={required}
         value={value}
       />
-    </>
+    </TextField>
   );
 }
 

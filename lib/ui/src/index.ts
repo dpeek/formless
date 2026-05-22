@@ -28,8 +28,7 @@ export {
   labelStyles,
 } from "./field.js";
 export * from "./icons.js";
-export * from "./input-group.js";
-export { Input } from "./input.js";
+export * from "./input.js";
 export * from "./markdown.js";
 export * from "./markdown-renderer.js";
 export * from "./modal.js";

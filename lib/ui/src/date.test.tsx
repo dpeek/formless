@@ -30,6 +30,8 @@ describe("DateInput", () => {
     expect(markup).toContain('value="2026-05-06"');
     expect(markup).toContain('placeholder="2026-05-06"');
     expect(markup).toContain('aria-label="Select date"');
+    expect(markup).toContain('data-slot="control"');
+    expect(markup).not.toContain('data-slot="input-group"');
     expect(markup).not.toContain("June 01, 2025");
   });
 
