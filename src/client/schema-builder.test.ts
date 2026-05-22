@@ -209,6 +209,49 @@ describe("schema builder draft intents", () => {
     expect(bodyProjection?.presentation.validEditors).toContain("media");
   });
 
+  it("resets builder-owned surface editors when a draft field type changes", () => {
+    const draft = applyIntents(
+      createSchemaBuilderDraft(sourceLikeTaskSchema()),
+      { type: "createEntity", key: "project", label: "Project" },
+      {
+        type: "addField",
+        entityKey: "project",
+        fieldKey: "estimate",
+        fieldType: "text",
+      },
+      {
+        type: "updateFieldMetadata",
+        entityKey: "project",
+        fieldKey: "estimate",
+        metadata: { type: "number", default: 1 },
+      },
+    );
+    const schema = serializeSchemaBuilderDraft(draft);
+    const surface = findSchemaBuilderGeneratedSurface(schema, "project");
+    const projection = projectSchemaBuilderDraft(draft);
+    const estimateProjection = projection.entities
+      .find((entity) => entity.key === "project")
+      ?.fields.find((field) => field.key === "estimate");
+
+    expect(schema.entities.project?.fields.estimate).toMatchObject({
+      type: "number",
+      default: 1,
+    });
+    expect(schema.views[surface?.createViewKey ?? ""]).toMatchObject({
+      type: "create",
+      fields: { estimate: { editor: "number" } },
+    });
+    expect(schema.itemViews[surface?.itemViewKey ?? ""]?.fields.estimate).toEqual({
+      editor: "number",
+      commit: "field-commit",
+    });
+    expect(estimateProjection?.presentation).toMatchObject({
+      createEditor: "number",
+      inlineEditor: "number",
+      rendererKind: "number",
+    });
+  });
+
   it("reports field-scoped validation issues for invalid builder drafts", () => {
     const draft = applyIntents(createSchemaBuilderDraft(sourceLikeTaskSchema()), {
       type: "addField",

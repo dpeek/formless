@@ -473,11 +473,17 @@ function updateFieldMetadata(
   }
 
   if (nextType !== field.type) {
-    entity.fields[fieldKey] = createField(schema, fieldKey, nextType, {
+    const nextField = createField(schema, fieldKey, nextType, {
       ...metadata,
       label: metadata.label ?? field.label ?? labelFromKey(fieldKey),
       required: metadata.required ?? field.required,
     });
+    entity.fields[fieldKey] = nextField;
+
+    const surface = findSchemaBuilderGeneratedSurface(schema, entityKey);
+    if (surface !== undefined) {
+      setGeneratedSurfaceFieldDefaults(schema, surface, fieldKey, nextField);
+    }
     return;
   }
 
@@ -756,6 +762,15 @@ function addFieldToGeneratedSurface(
   fieldKey: string,
   field: FieldSchema,
 ) {
+  setGeneratedSurfaceFieldDefaults(schema, surface, fieldKey, field);
+}
+
+function setGeneratedSurfaceFieldDefaults(
+  schema: AppSchema,
+  surface: SchemaBuilderGeneratedSurface,
+  fieldKey: string,
+  field: FieldSchema,
+) {
   const createView = getCreateView(schema, surface.createViewKey);
   const itemView = getItemView(schema, surface.itemViewKey);
   const behavior = getFieldTypeBehavior(field);
@@ -921,6 +936,10 @@ function selectRendererKind(field: FieldSchema, editor: FieldEditor): SchemaBuil
 
   if (control.kind === "reference") {
     return "reference";
+  }
+
+  if (control.kind === "formattedNumber") {
+    return "number";
   }
 
   if (control.kind === "icon") {

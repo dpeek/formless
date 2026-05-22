@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
 import { Link, useLocation } from "wouter";
+import type { GeneratedFieldControlKind } from "../generated/field-controls.ts";
+import { selectGeneratedFieldEditorAdapter } from "../generated/field-ui-adapters.ts";
+import {
+  selectGeneratedRecordFieldRendererKind,
+  type GeneratedRecordFieldRendererKind,
+} from "../generated/record-field-renderer-model.ts";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
@@ -19,7 +25,13 @@ import {
   type SchemaBuilderIntent,
 } from "../../client/schema-builder.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
-import type { EnumValueSchema, FieldSchema, TextFieldFormat } from "../../shared/schema.ts";
+import type {
+  EnumValueSchema,
+  FieldCommitPolicy,
+  FieldEditor,
+  FieldSchema,
+  TextFieldFormat,
+} from "../../shared/schema.ts";
 import {
   applySchemaRouteBuilderIntent,
   commitSchemaRouteDraftState,
@@ -486,6 +498,22 @@ function SchemaBuilderWorkspace({
     });
   }
 
+  function updateSelectedFieldPresentation(presentation: {
+    createEditor?: FieldEditor;
+    inlineEditor?: FieldEditor;
+  }) {
+    if (!selectedEntity || !selectedFieldProjection) {
+      return false;
+    }
+
+    return onApplyIntent({
+      type: "updateFieldPresentation",
+      entityKey: selectedEntity.key,
+      fieldKey: selectedFieldProjection.key,
+      ...presentation,
+    });
+  }
+
   return (
     <div className="grid min-h-[32rem] grid-cols-1 overflow-hidden rounded border border-slate-200 bg-white lg:grid-cols-[18rem_22rem_minmax(0,1fr)]">
       <aside
@@ -657,6 +685,7 @@ function SchemaBuilderWorkspace({
                 field={selectedField}
                 fieldProjection={selectedFieldProjection}
                 onUpdateMetadata={updateSelectedFieldMetadata}
+                onUpdatePresentation={updateSelectedFieldPresentation}
                 schema={schema}
               />
             ) : (
@@ -721,6 +750,7 @@ function FieldDetails({
   field,
   fieldProjection,
   onUpdateMetadata,
+  onUpdatePresentation,
   schema,
 }: {
   entities: SchemaBuilderEntityProjection[];
@@ -728,6 +758,10 @@ function FieldDetails({
   field: FieldSchema;
   fieldProjection: SchemaBuilderFieldProjection;
   onUpdateMetadata: (metadata: SchemaBuilderFieldMetadataUpdate) => boolean;
+  onUpdatePresentation: (presentation: {
+    createEditor?: FieldEditor;
+    inlineEditor?: FieldEditor;
+  }) => boolean;
   schema: SchemaRouteDraftState["draft"]["schema"];
 }) {
   function updateFieldType(fieldType: FieldSchema["type"]) {
@@ -799,8 +833,392 @@ function FieldDetails({
         onUpdateMetadata={onUpdateMetadata}
         schema={schema}
       />
+
+      <FieldPresentationControls
+        entity={entity}
+        field={field}
+        fieldProjection={fieldProjection}
+        onUpdatePresentation={onUpdatePresentation}
+      />
     </section>
   );
+}
+
+function FieldPresentationControls({
+  entity,
+  field,
+  fieldProjection,
+  onUpdatePresentation,
+}: {
+  entity: SchemaBuilderEntityProjection;
+  field: FieldSchema;
+  fieldProjection: SchemaBuilderFieldProjection;
+  onUpdatePresentation: (presentation: {
+    createEditor?: FieldEditor;
+    inlineEditor?: FieldEditor;
+  }) => boolean;
+}) {
+  const presentation = fieldProjection.presentation;
+
+  if (entity.generatedSurface === undefined) {
+    return (
+      <section
+        aria-label={`${fieldProjection.label} presentation`}
+        className="space-y-2 border-t border-slate-200 pt-4"
+      >
+        <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          Presentation
+        </h3>
+        <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Presentation is source-owned.
+        </div>
+      </section>
+    );
+  }
+
+  const createControl = selectGeneratedFieldEditorAdapter(field, presentation.createEditor);
+  const inlineControl = selectGeneratedFieldEditorAdapter(field, presentation.inlineEditor);
+  const rendererKind = selectGeneratedRecordFieldRendererKind({
+    fieldConfig: {
+      fieldName: fieldProjection.key,
+      field,
+      editor: presentation.inlineEditor,
+      commit: presentation.defaultCommit,
+      label: fieldProjection.label,
+    },
+    fieldControl: inlineControl,
+    showLabel: false,
+  });
+
+  return (
+    <section
+      aria-label={`${fieldProjection.label} presentation`}
+      className="space-y-3 border-t border-slate-200 pt-4"
+    >
+      <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Presentation</h3>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FieldEditorSelect
+          label="Create editor"
+          onChange={(createEditor) => onUpdatePresentation({ createEditor })}
+          value={presentation.createEditor}
+          validEditors={presentation.validEditors}
+        />
+        <FieldEditorSelect
+          label="Inline editor"
+          onChange={(inlineEditor) => onUpdatePresentation({ inlineEditor })}
+          value={presentation.inlineEditor}
+          validEditors={presentation.validEditors}
+        />
+      </div>
+
+      <FieldPresentationPreview
+        createControlKind={createControl.controlKind}
+        createEditor={presentation.createEditor}
+        inlineControlKind={inlineControl.controlKind}
+        inlineEditor={presentation.inlineEditor}
+        rendererKind={rendererKind}
+        commit={presentation.defaultCommit}
+      />
+    </section>
+  );
+}
+
+function FieldEditorSelect({
+  label,
+  onChange,
+  validEditors,
+  value,
+}: {
+  label: string;
+  onChange: (editor: FieldEditor) => void;
+  validEditors: FieldEditor[];
+  value: FieldEditor;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs font-medium text-slate-600">{label}</span>
+      <select
+        className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
+        onChange={(event) => onChange(event.currentTarget.value as FieldEditor)}
+        value={value}
+      >
+        {validEditors.map((editor) => (
+          <option key={editor} value={editor}>
+            {fieldEditorLabel(editor)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function FieldPresentationPreview({
+  commit,
+  createControlKind,
+  createEditor,
+  inlineControlKind,
+  inlineEditor,
+  rendererKind,
+}: {
+  commit: FieldCommitPolicy;
+  createControlKind: GeneratedFieldControlKind;
+  createEditor: FieldEditor;
+  inlineControlKind: GeneratedFieldControlKind;
+  inlineEditor: FieldEditor;
+  rendererKind: GeneratedRecordFieldRendererKind;
+}) {
+  return (
+    <dl
+      aria-label="Field presentation preview"
+      className="grid gap-2 rounded border border-slate-200 bg-slate-50 p-2 sm:grid-cols-3"
+    >
+      <FieldPresentationPreviewItem
+        label="Create"
+        meta={fieldEditorLabel(createEditor)}
+        previewKind={createControlKind}
+      />
+      <FieldPresentationPreviewItem
+        label="Inline"
+        meta={`${fieldEditorLabel(inlineEditor)} · ${commitPolicyLabel(commit)}`}
+        previewKind={inlineControlKind}
+      />
+      <div className="rounded border border-slate-200 bg-white p-2">
+        <dt className="text-xs font-medium text-slate-500">Renderer</dt>
+        <dd className="mt-2 text-sm font-medium text-slate-900">
+          {rendererKindLabel(rendererKind)}
+        </dd>
+        <dd className="mt-2">
+          <RendererPreview rendererKind={rendererKind} />
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function FieldPresentationPreviewItem({
+  label,
+  meta,
+  previewKind,
+}: {
+  label: string;
+  meta: string;
+  previewKind: GeneratedFieldControlKind;
+}) {
+  return (
+    <div className="rounded border border-slate-200 bg-white p-2">
+      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+      <dd className="mt-2 text-sm font-medium text-slate-900">{meta}</dd>
+      <dd className="mt-2">
+        <EditorControlPreview controlKind={previewKind} />
+      </dd>
+    </div>
+  );
+}
+
+function EditorControlPreview({ controlKind }: { controlKind: GeneratedFieldControlKind }) {
+  if (controlKind === "checkbox") {
+    return <input checked className="h-4 w-4 rounded border-slate-300" readOnly type="checkbox" />;
+  }
+
+  if (controlKind === "select" || controlKind === "reference") {
+    return (
+      <select
+        aria-label={`${controlKindLabel(controlKind)} preview`}
+        className="h-8 w-full rounded border border-slate-300 bg-white px-2 text-xs text-slate-700"
+        disabled
+      >
+        <option>{controlKind === "reference" ? "Record" : "Option"}</option>
+      </select>
+    );
+  }
+
+  if (controlKind === "textarea" || controlKind === "markdown") {
+    return (
+      <textarea
+        aria-label={`${controlKindLabel(controlKind)} preview`}
+        className="min-h-14 w-full resize-none rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+        defaultValue={controlKind === "markdown" ? "# Heading" : "Long text"}
+        disabled
+      />
+    );
+  }
+
+  if (controlKind === "color") {
+    return (
+      <div className="flex h-8 items-center gap-2 rounded border border-slate-300 bg-white px-2">
+        <span className="h-4 w-4 rounded-sm bg-sky-600" />
+        <span className="text-xs text-slate-700">#2563eb</span>
+      </div>
+    );
+  }
+
+  if (controlKind === "icon" || controlKind === "image" || controlKind === "media") {
+    return (
+      <div className="flex h-14 items-center justify-center rounded border border-dashed border-slate-300 bg-white text-xs text-slate-500">
+        {controlKindLabel(controlKind)}
+      </div>
+    );
+  }
+
+  return (
+    <input
+      aria-label={`${controlKindLabel(controlKind)} preview`}
+      className="h-8 w-full rounded border border-slate-300 bg-white px-2 text-xs text-slate-700"
+      disabled
+      readOnly
+      type={controlKind === "date" ? "date" : controlKind === "number" ? "number" : "text"}
+      value={controlKind === "date" ? "2026-05-22" : controlKind === "number" ? "42" : "Sample"}
+    />
+  );
+}
+
+function RendererPreview({ rendererKind }: { rendererKind: GeneratedRecordFieldRendererKind }) {
+  if (rendererKind === "checkbox") {
+    return <input checked className="h-4 w-4 rounded border-slate-300" readOnly type="checkbox" />;
+  }
+
+  if (rendererKind === "color") {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-800">
+        <span className="h-4 w-4 rounded-sm bg-sky-600" />
+        #2563eb
+      </div>
+    );
+  }
+
+  if (rendererKind === "icon" || rendererKind === "image" || rendererKind === "media") {
+    return (
+      <div className="flex h-14 items-center justify-center rounded border border-slate-200 bg-slate-50 text-xs text-slate-500">
+        {rendererKindLabel(rendererKind)}
+      </div>
+    );
+  }
+
+  if (rendererKind === "markdown") {
+    return <p className="text-sm font-semibold text-slate-900">Heading</p>;
+  }
+
+  if (rendererKind === "textarea") {
+    return <p className="text-sm text-slate-700">Long text</p>;
+  }
+
+  if (rendererKind === "date") {
+    return <p className="text-sm text-slate-900">2026-05-22</p>;
+  }
+
+  if (rendererKind === "number" || rendererKind === "value-unit") {
+    return <p className="text-sm text-slate-900">42</p>;
+  }
+
+  if (rendererKind === "enum") {
+    return <p className="text-sm text-slate-900">Option</p>;
+  }
+
+  if (rendererKind === "reference") {
+    return <p className="text-sm text-slate-900">Record</p>;
+  }
+
+  return <p className="text-sm text-slate-900">Sample</p>;
+}
+
+function fieldEditorLabel(editor: FieldEditor) {
+  switch (editor) {
+    case "boolean":
+      return "Checkbox";
+    case "color":
+      return "Color";
+    case "date":
+      return "Date";
+    case "enum":
+      return "Select";
+    case "href":
+      return "Link";
+    case "icon":
+      return "Icon";
+    case "image":
+      return "Image";
+    case "markdown":
+      return "Markdown";
+    case "media":
+      return "Media";
+    case "number":
+      return "Number";
+    case "reference":
+      return "Reference";
+    case "slug":
+      return "Slug";
+    case "textarea":
+      return "Long text";
+    case "text":
+      return "Text";
+  }
+}
+
+function controlKindLabel(controlKind: GeneratedFieldControlKind) {
+  switch (controlKind) {
+    case "checkbox":
+      return "Checkbox";
+    case "color":
+      return "Color";
+    case "date":
+      return "Date";
+    case "icon":
+      return "Icon";
+    case "image":
+      return "Image";
+    case "markdown":
+      return "Markdown";
+    case "media":
+      return "Media";
+    case "number":
+      return "Number";
+    case "reference":
+      return "Reference";
+    case "select":
+      return "Select";
+    case "textarea":
+      return "Long text";
+    case "text":
+      return "Text";
+  }
+}
+
+function commitPolicyLabel(commit: FieldCommitPolicy) {
+  return commit === "immediate" ? "Immediate" : "Field commit";
+}
+
+function rendererKindLabel(rendererKind: GeneratedRecordFieldRendererKind) {
+  switch (rendererKind) {
+    case "autosize-text":
+      return "Autosize text";
+    case "checkbox":
+      return "Checkbox";
+    case "color":
+      return "Color";
+    case "date":
+      return "Date";
+    case "enum":
+      return "Enum";
+    case "icon":
+      return "Icon";
+    case "image":
+      return "Image";
+    case "markdown":
+      return "Markdown";
+    case "media":
+      return "Media";
+    case "number":
+      return "Number";
+    case "reference":
+      return "Reference";
+    case "textarea":
+      return "Long text";
+    case "value-unit":
+      return "Value/unit";
+    case "text":
+      return "Text";
+  }
 }
 
 function TypedFieldMetadataControls({

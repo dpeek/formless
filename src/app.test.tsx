@@ -27,6 +27,11 @@ import {
   getClientStoreSnapshot,
   resetClientStore,
 } from "./client/store.ts";
+import {
+  applySchemaBuilderIntent,
+  createSchemaBuilderDraft,
+  serializeSchemaBuilderDraft,
+} from "./client/schema-builder.ts";
 import { resetSyncStatus, setSyncStatus } from "./client/sync-status.ts";
 import {
   HomeRoute,
@@ -545,6 +550,34 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;task&quot;");
     expect(html).not.toContain("<code>rates</code>");
     expect(html).not.toContain("<code>estii</code>");
+  });
+
+  it("renders schema builder field presentation controls for builder-owned surfaces", () => {
+    const surfaceDraft = applySchemaBuilderIntent(createSchemaBuilderDraft(appSchema), {
+      type: "createGeneratedSurface",
+      entityKey: "task",
+    });
+    const presentationDraft = applySchemaBuilderIntent(surfaceDraft, {
+      type: "updateFieldPresentation",
+      entityKey: "task",
+      fieldKey: "title",
+      createEditor: "textarea",
+      inlineEditor: "markdown",
+    });
+    const schema = serializeSchemaBuilderDraft(presentationDraft);
+
+    applyBootstrapResponse(bootstrap([], schema), "tasks");
+    const html = renderRoute("/tasks/schema");
+
+    expect(html).toContain('aria-label="Title presentation"');
+    expect(html).toContain("Generated surface is builder-owned.");
+    expect(html).toContain("Create editor");
+    expect(html).toContain("Inline editor");
+    expect(html).toContain('aria-label="Field presentation preview"');
+    expect(html).toContain("Long text");
+    expect(html).toContain("Markdown");
+    expect(html).toContain("Field commit");
+    expect(html).toContain("Renderer");
   });
 
   it('renders the "/estii/schema" route', () => {

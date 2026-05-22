@@ -104,6 +104,52 @@ describe("schema route draft state", () => {
     });
   });
 
+  it("updates Source text after Builder presentation intents", () => {
+    const state = createSchemaRouteDraftState(appSchema);
+    const surfaceResult = applySchemaRouteBuilderIntent(state, {
+      type: "createGeneratedSurface",
+      entityKey: "task",
+    });
+
+    if (!surfaceResult.ok) {
+      throw new Error(surfaceResult.message);
+    }
+
+    const presentationResult = applySchemaRouteBuilderIntent(surfaceResult.state, {
+      type: "updateFieldPresentation",
+      entityKey: "task",
+      fieldKey: "title",
+      createEditor: "textarea",
+      inlineEditor: "markdown",
+    });
+
+    if (!presentationResult.ok) {
+      throw new Error(presentationResult.message);
+    }
+
+    const saveResult = serializeSchemaRouteDraftForSave(presentationResult.state);
+
+    expect(presentationResult.state.sourceError).toBeNull();
+    expect(presentationResult.state.sourceText).toContain('"taskCreate2"');
+    expect(presentationResult.state.sourceText).toContain('"editor": "textarea"');
+    expect(presentationResult.state.sourceText).toContain('"editor": "markdown"');
+    expect(saveResult).toMatchObject({
+      ok: true,
+      schema: {
+        views: {
+          taskCreate2: {
+            type: "create",
+            fields: {
+              title: {
+                editor: "textarea",
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("reverts Source edits and commits saved schema after save", () => {
     const state = createSchemaRouteDraftState(appSchema);
     const nextSchema: AppSchema = {
