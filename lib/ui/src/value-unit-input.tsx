@@ -5,7 +5,7 @@ import {
   type FormattedNumberInputDecodeResult,
   type FormattedNumberInputValue,
 } from "@dpeek/formless-ui/number-input";
-import { NativeSelect, NativeSelectOption } from "@dpeek/formless-ui/native-select";
+import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { cn } from "@dpeek/formless-ui/utils";
 
 export type ValueUnitInputOption = {
@@ -81,29 +81,28 @@ function ValueUnitInput({
         required={inputRequired}
         value={inputValue}
       />
-      <NativeSelect
-        aria-label={unitLabel}
-        className={cn("w-20 shrink-0", unitClassName)}
-        disabled={disabled}
-        onChange={(event) => {
-          const nextUnit = event.currentTarget.value;
+      <NativeSelect className={cn("w-20 shrink-0", unitClassName)}>
+        <NativeSelectContent
+          aria-label={unitLabel}
+          className="h-7 rounded-md py-0.5 pe-6 ps-2 text-xs/relaxed"
+          disabled={disabled}
+          onChange={(event) => {
+            const nextUnit = event.currentTarget.value;
 
-          onUnitChange?.(nextUnit);
-          onUnitCommit?.(nextUnit);
-        }}
-        required={unitRequired}
-        size="sm"
-        value={unit}
-      >
-        {!unitRequired || unit === "" ? <NativeSelectOption value="" /> : null}
-        {unknownUnit ? (
-          <NativeSelectOption value={unknownUnit}>{unknownUnit}</NativeSelectOption>
-        ) : null}
-        {options.map((option) => (
-          <NativeSelectOption key={option.value} value={option.value}>
-            {option.label}
-          </NativeSelectOption>
-        ))}
+            onUnitChange?.(nextUnit);
+            onUnitCommit?.(nextUnit);
+          }}
+          required={unitRequired}
+          value={unit}
+        >
+          {!unitRequired || unit === "" ? <option value="" /> : null}
+          {unknownUnit ? <option value={unknownUnit}>{unknownUnit}</option> : null}
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </NativeSelectContent>
       </NativeSelect>
     </div>
   );

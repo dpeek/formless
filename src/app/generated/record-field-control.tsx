@@ -11,7 +11,7 @@ import {
 } from "@dpeek/formless-ui/modal";
 import { Field, FieldError, Label } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
-import { NativeSelect, NativeSelectOption } from "@dpeek/formless-ui/native-select";
+import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
 import { parseSvgIconSource, SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
@@ -150,13 +150,12 @@ export function GeneratedRecordFieldControl({
           density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-40 flex-none space-y-1"
         }
       >
-        <Field>
+        <NativeSelect>
           <Label className={labelClass}>{fieldControl.label}</Label>
-          <NativeSelect
+          <NativeSelectContent
             aria-label={fieldControl.label}
-            className="w-full"
+            className={density === "compact" ? "h-6 py-0.5 pe-6 ps-2 text-xs" : undefined}
             disabled={!canPatch || isPending}
-            size={density === "compact" ? "sm" : "default"}
             onChange={(event) => {
               const value = event.currentTarget.value;
 
@@ -166,17 +165,15 @@ export function GeneratedRecordFieldControl({
             required={fieldControl.required}
             value={draft}
           >
-            {!fieldControl.required || draft === "" ? <NativeSelectOption value="" /> : null}
-            {unknownValue ? (
-              <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
-            ) : null}
+            {!fieldControl.required || draft === "" ? <option value="" /> : null}
+            {unknownValue ? <option value={unknownValue}>{unknownValue}</option> : null}
             {Object.entries(fieldControl.field.values).map(([value, option]) => (
-              <NativeSelectOption key={value} value={value}>
+              <option key={value} value={value}>
                 {option.label}
-              </NativeSelectOption>
+              </option>
             ))}
-          </NativeSelect>
-        </Field>
+          </NativeSelectContent>
+        </NativeSelect>
         {error ? <FieldError>{error}</FieldError> : null}
       </div>
     );
@@ -784,13 +781,12 @@ function RecordReferenceFieldControl({
         density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-48 flex-none space-y-1"
       }
     >
-      <Field>
+      <NativeSelect>
         <Label className={labelClass}>{label}</Label>
-        <NativeSelect
+        <NativeSelectContent
           aria-label={label}
-          className="w-full"
+          className={density === "compact" ? "h-6 py-0.5 pe-6 ps-2 text-xs" : undefined}
           disabled={!canPatch || isPending}
-          size={density === "compact" ? "sm" : "default"}
           onChange={(event) => {
             const value = event.currentTarget.value;
 
@@ -800,17 +796,15 @@ function RecordReferenceFieldControl({
           required={field.required}
           value={draft}
         >
-          {!field.required || draft === "" ? <NativeSelectOption value="" /> : null}
-          {unknownValue ? (
-            <NativeSelectOption value={unknownValue}>{unknownValue}</NativeSelectOption>
-          ) : null}
+          {!field.required || draft === "" ? <option value="" /> : null}
+          {unknownValue ? <option value={unknownValue}>{unknownValue}</option> : null}
           {options.map((option) => (
-            <NativeSelectOption key={option.id} value={option.id}>
+            <option key={option.id} value={option.id}>
               {option.label}
-            </NativeSelectOption>
+            </option>
           ))}
-        </NativeSelect>
-      </Field>
+        </NativeSelectContent>
+      </NativeSelect>
       {error ? <FieldError>{error}</FieldError> : null}
     </div>
   );

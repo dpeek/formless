@@ -3163,6 +3163,7 @@ describe("generated forms and records", () => {
     expect(html).toContain('name="title"');
     expect(html).toContain('name="done"');
     expect(html).toContain('type="checkbox"');
+    expect(html).toContain('data-slot="label"');
     expect(html).toContain('name="dueDate"');
     expect(html).toContain("Due date");
     expect(html).toContain("Cancel");
@@ -3177,8 +3178,10 @@ describe("generated forms and records", () => {
 
     expect(html).toContain('name="kind"');
     expect(html).toContain("<select");
+    expect(html).toContain('data-slot="select"');
     expect(html).toContain("Role");
     expect(html).toContain("Stream");
+    expect(html).not.toContain("native-select-option");
   });
 
   it("renders create fields for the active union discriminator", () => {
@@ -4219,6 +4222,7 @@ describe("generated forms and records", () => {
 
     expect(html).toContain('name="resource"');
     expect(html).toContain("<select");
+    expect(html).toContain('data-slot="select"');
     expect(html).toContain('value="resource-1"');
     expect(html).toContain("Designer");
     expect(html).toContain("Lead");

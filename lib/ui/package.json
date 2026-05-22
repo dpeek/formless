@@ -38,6 +38,7 @@
     "./svg-icon": "./src/svg-icon.tsx",
     "./tabs": "./src/tabs.tsx",
     "./table": "./src/table.tsx",
+    "./text-field": "./src/text-field.tsx",
     "./text-input": "./src/text-input.tsx",
     "./textarea": "./src/textarea.tsx",
     "./toggle": "./src/toggle.tsx",

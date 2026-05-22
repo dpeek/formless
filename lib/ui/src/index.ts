@@ -45,6 +45,7 @@ export * from "./source-preview.js";
 export * from "./svg-icon.js";
 export * from "./table.js";
 export * from "./tabs.js";
+export * from "./text-field.js";
 export * from "./text-input.js";
 export * from "./textarea.js";
 export * from "./toggle.js";

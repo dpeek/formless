@@ -3,7 +3,8 @@ import { DateInput } from "@dpeek/formless-ui/date";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
 import { Field, Label } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
-import { NativeSelect, NativeSelectOption } from "@dpeek/formless-ui/native-select";
+import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
+import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { useReferenceOptions } from "../../client/store.ts";
 import { fieldLabel, type CreateFieldConfig } from "../../client/views.ts";
@@ -31,15 +32,14 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.controlKind === "checkbox") {
     return (
-      <Field>
-        <Checkbox
-          defaultSelected={fieldControl.createDefaultChecked}
-          name={fieldName}
-          onChange={(selected) => onValueChange?.(selected)}
-        >
-          {fieldControl.label}
-        </Checkbox>
-      </Field>
+      <Checkbox
+        defaultSelected={fieldControl.createDefaultChecked}
+        isRequired={fieldControl.required}
+        name={fieldName}
+        onChange={(selected) => onValueChange?.(selected)}
+      >
+        {fieldControl.label}
+      </Checkbox>
     );
   }
 
@@ -114,23 +114,23 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.kind === "enum") {
     return (
-      <Field>
+      <NativeSelect>
         <Label>{fieldControl.label}</Label>
-        <NativeSelect
-          className="w-full"
+        <NativeSelectContent
+          aria-label={fieldControl.label}
           defaultValue={fieldControl.createDefaultValue}
           name={fieldName}
           onChange={(event) => onValueChange?.(event.currentTarget.value)}
           required={fieldControl.required}
         >
-          {fieldControl.required ? null : <NativeSelectOption value="" />}
+          {fieldControl.required ? null : <option value="" />}
           {Object.entries(fieldControl.field.values).map(([value, option]) => (
-            <NativeSelectOption key={value} value={value}>
+            <option key={value} value={value}>
               {option.label}
-            </NativeSelectOption>
+            </option>
           ))}
-        </NativeSelect>
-      </Field>
+        </NativeSelectContent>
+      </NativeSelect>
     );
   }
 
@@ -149,29 +149,29 @@ export function GeneratedCreateFieldControl({
 
   if (fieldControl.controlKind === "textarea") {
     return (
-      <Field>
+      <TextField
+        defaultValue={fieldControl.createDefaultValue}
+        isRequired={fieldControl.required}
+        name={fieldName}
+        onChange={(value) => onValueChange?.(value)}
+      >
         <Label>{fieldControl.label}</Label>
-        <Textarea
-          defaultValue={fieldControl.createDefaultValue}
-          name={fieldName}
-          onChange={(event) => onValueChange?.(event.currentTarget.value)}
-          required={fieldControl.required}
-        />
-      </Field>
+        <Textarea />
+      </TextField>
     );
   }
 
   return (
-    <Field>
+    <TextField
+      defaultValue={fieldControl.createDefaultValue}
+      isRequired={fieldControl.required}
+      name={fieldName}
+      onChange={(value) => onValueChange?.(value)}
+      type={fieldControl.control.kind === "input" ? fieldControl.control.inputType : "text"}
+    >
       <Label>{fieldControl.label}</Label>
-      <Input
-        defaultValue={fieldControl.createDefaultValue}
-        name={fieldName}
-        onChange={(event) => onValueChange?.(event.currentTarget.value)}
-        required={fieldControl.required}
-        type={fieldControl.control.kind === "input" ? fieldControl.control.inputType : "text"}
-      />
-    </Field>
+      <Input />
+    </TextField>
   );
 }
 
@@ -361,22 +361,22 @@ function ReferenceCreateField({
   const options = useReferenceOptions(field.to, field.displayField);
 
   return (
-    <Field>
+    <NativeSelect>
       <Label>{label}</Label>
-      <NativeSelect
-        className="w-full"
+      <NativeSelectContent
+        aria-label={label}
         defaultValue={defaultValue}
         name={fieldName}
         onChange={(event) => onValueChange?.(event.currentTarget.value)}
         required={required}
       >
-        {required ? null : <NativeSelectOption value="" />}
+        {required ? null : <option value="" />}
         {options.map((option) => (
-          <NativeSelectOption key={option.id} value={option.id}>
+          <option key={option.id} value={option.id}>
             {option.label}
-          </NativeSelectOption>
+          </option>
         ))}
-      </NativeSelect>
-    </Field>
+      </NativeSelectContent>
+    </NativeSelect>
   );
 }
