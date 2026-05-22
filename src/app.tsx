@@ -47,6 +47,7 @@ import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
   installedAppWorldMountFromInstallId,
+  installedSitePublicSurfaceFromRoute,
   isRuntimePublicSiteRoute,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
@@ -75,7 +76,12 @@ import { ControlAddIcon } from "@dpeek/formless-ui/icons";
 
 type HomeRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey; screenPath: string };
 type SchemaRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey };
-type SitePageRouteProps = { linkMode?: SitePageLinkMode; slug: string; target?: ClientAppTarget };
+type SitePageRouteProps = {
+  linkMode?: SitePageLinkMode;
+  routeBase?: `/${string}`;
+  slug: string;
+  target?: ClientAppTarget;
+};
 
 export type AppRouteComponents = {
   HomeRoute: ElementType<HomeRouteProps>;
@@ -709,6 +715,30 @@ function AppRoutes({
           )}
         </Route>
       ) : null}
+      {runtimeProfile.installedSitePublicRoutes ? (
+        <Route path={`${runtimeProfile.installedSitePublicRoutes.siteRouteBase}/:installId`}>
+          {(params) => (
+            <InstalledSitePublicRoute
+              installId={runtimeRouteParam(params, "installId")}
+              routeComponents={routeComponents}
+              runtimeProfile={runtimeProfile}
+              slug={runtimeProfile.installedSitePublicRoutes?.homeSlug ?? "home"}
+            />
+          )}
+        </Route>
+      ) : null}
+      {runtimeProfile.installedSitePublicRoutes ? (
+        <Route path={`${runtimeProfile.installedSitePublicRoutes.siteRouteBase}/:installId/*`}>
+          {(params) => (
+            <InstalledSitePublicRoute
+              installId={runtimeRouteParam(params, "installId")}
+              routeComponents={routeComponents}
+              runtimeProfile={runtimeProfile}
+              slug={runtimeWildcardSiteSlug(params)}
+            />
+          )}
+        </Route>
+      ) : null}
       {runtimeProfile.publicSitePreview ? (
         <Route path={runtimeProfile.publicSitePreview.rootRoute}>
           {runtimeProfile.publicSitePreview.homeRoute ? (
@@ -786,6 +816,39 @@ function InstalledAppHomeRoute({
   }
 
   return <HomeRoute schemaKey={world.app.key} screenPath={screenPath} target={world.target} />;
+}
+
+function InstalledSitePublicRoute({
+  installId,
+  routeComponents,
+  runtimeProfile,
+  slug,
+}: {
+  installId: string | undefined;
+  routeComponents: AppRouteComponents;
+  runtimeProfile: RuntimeProfile;
+  slug: string;
+}) {
+  const { SitePageRoute } = routeComponents;
+  const publicRoutes = runtimeProfile.installedSitePublicRoutes;
+  const sitePath =
+    publicRoutes && installId
+      ? `${publicRoutes.siteRouteBase}/${installId}${slug === publicRoutes.homeSlug ? "" : `/${slug}`}`
+      : "";
+  const surface = installedSitePublicSurfaceFromRoute(runtimeProfile, sitePath);
+
+  if (!surface) {
+    return <NotFoundRoute />;
+  }
+
+  return (
+    <SitePageRoute
+      linkMode="installed"
+      routeBase={surface.routeBase}
+      slug={surface.slug}
+      target={surface.target}
+    />
+  );
 }
 
 function RouteLoading() {

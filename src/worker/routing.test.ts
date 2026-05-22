@@ -108,6 +108,7 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/schema"),
       documentRequest("http://example.com/setup"),
       documentRequest("http://example.com/apps/personal"),
+      documentRequest("http://example.com/sites/personal"),
       documentRequest("http://example.com/assets/index.js"),
       new Request("http://example.com/@vite/client", { headers: { Accept: "*/*" } }),
       new Request("http://example.com/@react-refresh", { headers: { Accept: "*/*" } }),
@@ -188,6 +189,9 @@ describe("Worker document routing", () => {
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/apps/personal"))).toBe(
       true,
     );
+    expect(shouldDeferToStaticAssets(documentRequest("http://example.com/sites/personal"))).toBe(
+      true,
+    );
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/setup"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/site"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://app.example.com/setup"))).toBe(true);
@@ -255,6 +259,16 @@ describe("Worker document routing", () => {
     ).toBe(false);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/apps/personal"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/sites/personal"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/sites/personal/blog"), {
         profile: "publishedSite",
       }),
     ).toBe(true);
@@ -362,6 +376,7 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/estii/setup")).toBe(true);
     expect(isClientShellRoute("/site/schema")).toBe(true);
     expect(isClientShellRoute("/apps/personal")).toBe(true);
+    expect(isClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isClientShellRoute("/setup")).toBe(true);
     expect(isClientShellRoute("/rates")).toBe(false);
     expect(isClientShellRoute("/blog")).toBe(false);

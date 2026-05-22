@@ -11,6 +11,7 @@ import {
   useFooterNavigation,
   useHeaderNavigation,
   useSitePageLinkMode,
+  useSitePageRouteBase,
   useSiteRouteSlug,
 } from "./page.tsx";
 import type { SiteBlockNode, SitePlacementNode } from "../../shared/protocol.ts";
@@ -23,16 +24,17 @@ export function SiteLinkBlock({
   placement?: SitePlacementNode;
 }) {
   const linkMode = useSitePageLinkMode();
+  const routeBase = useSitePageRouteBase();
   const routeSlug = useSiteRouteSlug();
   const isHeaderNavigation = useHeaderNavigation();
   const isFooterNavigation = useFooterNavigation();
-  const href = blockHref(block, linkMode);
+  const href = blockHref(block, linkMode, routeBase);
 
   if (!href) {
     return null;
   }
 
-  const isActive = isHeaderNavigation && siteHrefMatchesRoute(href, routeSlug);
+  const isActive = isHeaderNavigation && siteHrefMatchesRoute(href, routeSlug, routeBase);
   const shouldRenderIcon = Boolean(block.icon && !isHeaderNavigation);
 
   return (
@@ -58,8 +60,9 @@ export function SiteLinkBlock({
 
 export function SiteFooterSocialLink({ placement }: { placement: SitePlacementNode }) {
   const linkMode = useSitePageLinkMode();
+  const routeBase = useSitePageRouteBase();
   const block = placement.block;
-  const href = blockHref(block, linkMode);
+  const href = blockHref(block, linkMode, routeBase);
 
   if (!href) {
     return null;
@@ -85,9 +88,13 @@ export function SiteFooterSocialLink({ placement }: { placement: SitePlacementNo
   );
 }
 
-export function blockHref(block: SiteBlockNode, linkMode: SitePageLinkMode): string | undefined {
+export function blockHref(
+  block: SiteBlockNode,
+  linkMode: SitePageLinkMode,
+  routeBase?: `/${string}`,
+): string | undefined {
   if (block.href) {
-    return profileAwareSiteHref(block.href, linkMode);
+    return profileAwareSiteHref(block.href, linkMode, routeBase);
   }
 
   return undefined;

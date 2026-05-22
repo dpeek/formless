@@ -45,10 +45,12 @@ type SitePageRouteSessionOptions = {
 
 export function SitePageRoute({
   linkMode = "preview",
+  routeBase,
   slug,
   target = "site",
 }: {
   linkMode?: SitePageLinkMode;
+  routeBase?: `/${string}`;
   slug: string;
   target?: ClientAppTarget;
 }) {
@@ -71,7 +73,7 @@ export function SitePageRoute({
     });
   }, [linkMode, normalizedSlug, target]);
 
-  return <SitePageRouteView linkMode={linkMode} state={state} />;
+  return <SitePageRouteView linkMode={linkMode} routeBase={routeBase} state={state} />;
 }
 
 export function startSitePageRouteSession({
@@ -151,7 +153,7 @@ export function startSitePageRouteSession({
 }
 
 function usesPreviewSync(linkMode: SitePageLinkMode): boolean {
-  return linkMode === "preview" || linkMode === "authoring";
+  return linkMode === "preview" || linkMode === "authoring" || linkMode === "installed";
 }
 
 function sitePageRouteInitialState({
@@ -191,16 +193,18 @@ function listenForSitePreviewChanges(target: ClientAppTarget, onChanged: () => v
 
 export function SitePageRouteView({
   linkMode = "preview",
+  routeBase,
   state,
 }: {
   linkMode?: SitePageLinkMode;
+  routeBase?: `/${string}`;
   state: SitePageRouteState;
 }) {
   switch (state.status) {
     case "ready":
-      return <SitePageRenderer linkMode={linkMode} tree={state.tree} />;
+      return <SitePageRenderer linkMode={linkMode} routeBase={routeBase} tree={state.tree} />;
     case "not-found":
-      return <SitePageNotFound linkMode={linkMode} slug={state.slug} />;
+      return <SitePageNotFound linkMode={linkMode} routeBase={routeBase} slug={state.slug} />;
     case "error":
       return <SitePageError message={state.message} slug={state.slug} />;
     case "loading":
@@ -249,7 +253,15 @@ function SitePageLoading({ slug }: { slug: string }) {
   );
 }
 
-function SitePageNotFound({ linkMode, slug }: { linkMode: SitePageLinkMode; slug: string }) {
+function SitePageNotFound({
+  linkMode,
+  routeBase,
+  slug,
+}: {
+  linkMode: SitePageLinkMode;
+  routeBase?: `/${string}`;
+  slug: string;
+}) {
   return (
     <section className="mx-auto max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-semibold">Page not found</h1>
@@ -258,7 +270,7 @@ function SitePageNotFound({ linkMode, slug }: { linkMode: SitePageLinkMode; slug
       </p>
       <a
         className="mt-4 inline-flex text-sm font-medium underline"
-        href={sitePagePathForSlug("home", linkMode)}
+        href={sitePagePathForSlug("home", linkMode, routeBase)}
       >
         Home
       </a>

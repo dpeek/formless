@@ -24,6 +24,20 @@ describe("site renderer links", () => {
     expect(profileAwareSiteHref("/pages/blog", "authoring")).toBe("/blog");
   });
 
+  it("renders installed Site links under the selected install route", () => {
+    expect(sitePagePathForSlug("home", "installed", "/sites/personal")).toBe("/sites/personal");
+    expect(sitePagePathForSlug("blog/post", "installed", "/sites/personal")).toBe(
+      "/sites/personal/blog/post",
+    );
+    expect(profileAwareSiteHref("/", "installed", "/sites/personal")).toBe("/sites/personal");
+    expect(profileAwareSiteHref("/blog", "installed", "/sites/personal")).toBe(
+      "/sites/personal/blog",
+    );
+    expect(profileAwareSiteHref("/pages/blog", "installed", "/sites/personal")).toBe(
+      "/sites/personal/blog",
+    );
+  });
+
   it("leaves external links unchanged", () => {
     expect(profileAwareSiteHref("https://example.com/page", "preview")).toBe(
       "https://example.com/page",
@@ -34,6 +48,9 @@ describe("site renderer links", () => {
     expect(profileAwareSiteHref("https://example.com/page", "published")).toBe(
       "https://example.com/page",
     );
+    expect(profileAwareSiteHref("https://example.com/page", "installed", "/sites/personal")).toBe(
+      "https://example.com/page",
+    );
   });
 
   it("matches public route state for header navigation active links", () => {
@@ -41,6 +58,8 @@ describe("site renderer links", () => {
     expect(siteHrefMatchesRoute("/", "blog")).toBe(false);
     expect(siteHrefMatchesRoute("/pages/blog", "blog/shipping-schema-backed-authoring")).toBe(true);
     expect(siteHrefMatchesRoute("/projects", "projects/future-detail")).toBe(true);
+    expect(siteHrefMatchesRoute("/sites/personal/blog", "blog/post", "/sites/personal")).toBe(true);
+    expect(siteHrefMatchesRoute("/sites/docs/blog", "blog/post", "/sites/personal")).toBe(false);
     expect(siteHrefMatchesRoute("https://example.com/page", "home")).toBe(false);
   });
 });

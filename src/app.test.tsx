@@ -150,9 +150,29 @@ function TargetProbeHomeRoute({
   );
 }
 
-function SitePageRouteProbe({ linkMode, slug }: { linkMode?: string; slug: string }) {
+function SitePageRouteProbe({
+  linkMode,
+  routeBase,
+  slug,
+  target,
+}: {
+  linkMode?: string;
+  routeBase?: string;
+  slug: string;
+  target?: ClientAppTarget;
+}) {
+  const targetKind = typeof target === "string" ? "schemaKey" : (target?.kind ?? "none");
+  const installId =
+    typeof target === "object" && target.kind === "appInstall" ? target.installId : "";
+
   return (
-    <main data-site-link-mode={linkMode} data-site-slug={slug}>
+    <main
+      data-install-id={installId}
+      data-route-base={routeBase}
+      data-site-link-mode={linkMode}
+      data-site-slug={slug}
+      data-target-kind={targetKind}
+    >
       Site page {slug}
     </main>
   );
@@ -581,6 +601,29 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-target-kind="appInstall"');
     expect(html).toContain('data-install-id="personal"');
     expectSyncStatusControl(html, "site");
+  });
+
+  it("routes installed Site public paths without workbench chrome", () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/sites/personal/blog/shipping-schema-backed-authoring">
+        <App
+          routeComponents={{
+            HomeRoute,
+            SchemaRoute,
+            SitePageRoute: SitePageRouteProbe,
+          }}
+          runtimeProfile={createDevRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-site-link-mode="installed"');
+    expect(html).toContain('data-site-slug="blog/shipping-schema-backed-authoring"');
+    expect(html).toContain('data-route-base="/sites/personal"');
+    expect(html).toContain('data-target-kind="appInstall"');
+    expect(html).toContain('data-install-id="personal"');
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
   });
 
   it('renders the "/tasks/schema" route', () => {
@@ -1228,12 +1271,30 @@ describe("public site renderer", () => {
     expect(html).not.toContain('href="/pages/blog"');
   });
 
+  it("renders installed Site links under the selected public route", () => {
+    const html = renderToStaticMarkup(
+      <SitePageRenderer
+        linkMode="installed"
+        routeBase="/sites/personal"
+        tree={sitePageTree("home")}
+      />,
+    );
+
+    expect(html).toContain('href="/sites/personal"');
+    expect(html).toContain('href="/sites/personal/blog"');
+    expect(html).toContain('href="/sites/personal/projects"');
+    expect(html).toContain('href="/sites/personal/resume"');
+    expect(html).toContain('href="/sites/personal/projects/estii"');
+    expect(html).not.toContain('href="/pages/home"');
+    expect(html).not.toContain('href="/pages/blog"');
+  });
+
   it("renders the same published app shell markup from SSR and hydrated route state", () => {
     const tree = sitePageTree("home");
     const ReadySitePageRoute = ({
       linkMode = "preview",
     }: {
-      linkMode?: "preview" | "authoring" | "published";
+      linkMode?: "preview" | "authoring" | "published" | "installed";
       slug: string;
     }) => <SitePageRouteView linkMode={linkMode} state={{ status: "ready", tree }} />;
     const ssrHtml = renderToString(
@@ -1824,6 +1885,21 @@ describe("public site renderer", () => {
     expect(html).toContain("Page not found");
     expect(html).toContain("<code>missing</code>");
     expect(html).toContain('href="/"');
+    expect(html).not.toContain('href="/pages/home"');
+  });
+
+  it("renders an installed Site 404 state with an installed public Home link", () => {
+    const html = renderToStaticMarkup(
+      <SitePageRouteView
+        linkMode="installed"
+        routeBase="/sites/personal"
+        state={{ status: "not-found", slug: "missing" }}
+      />,
+    );
+
+    expect(html).toContain("Page not found");
+    expect(html).toContain("<code>missing</code>");
+    expect(html).toContain('href="/sites/personal"');
     expect(html).not.toContain('href="/pages/home"');
   });
 

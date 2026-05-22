@@ -17,7 +17,7 @@ import {
   primaryImagePlacement,
   slottedImagePlacements,
 } from "./media.tsx";
-import { PagePlacementFlow, useSitePageLinkMode } from "./page.tsx";
+import { PagePlacementFlow, useSitePageLinkMode, useSitePageRouteBase } from "./page.tsx";
 import type { SiteBlockNode, SitePlacementNode } from "../../shared/protocol.ts";
 
 const FEATURE_MEDIA_SLOT = "media";
@@ -251,7 +251,8 @@ function ContentListBlock({ block }: { block: SiteBlockNode }) {
 
 function ContentSummary({ block }: { block: SiteBlockNode }) {
   const linkMode = useSitePageLinkMode();
-  const href = blockHref(block, linkMode);
+  const routeBase = useSitePageRouteBase();
+  const href = blockHref(block, linkMode, routeBase);
   const primaryImage = primaryImagePlacement(block);
   const shouldRenderDate = Boolean(block.date && block.type !== "project");
 

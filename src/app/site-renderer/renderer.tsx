@@ -8,14 +8,22 @@ export { PUBLIC_SITE_THEME_STORAGE_KEY } from "./theme.ts";
 
 export function SitePageRenderer({
   linkMode = "preview",
+  routeBase,
   tree,
 }: {
   linkMode?: SitePageLinkMode;
+  routeBase?: `/${string}`;
   tree: SitePageTree;
 }) {
   const theme = usePublicSiteTheme();
 
   return (
-    <SitePageShell linkMode={linkMode} parts={sitePageRendererParts} theme={theme} tree={tree} />
+    <SitePageShell
+      linkMode={linkMode}
+      parts={sitePageRendererParts}
+      routeBase={routeBase}
+      theme={theme}
+      tree={tree}
+    />
   );
 }

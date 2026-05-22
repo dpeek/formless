@@ -16,6 +16,7 @@ type SitePageRendererParts = {
 };
 
 export const SitePageLinkModeContext = createContext<SitePageLinkMode>("preview");
+export const SitePageRouteBaseContext = createContext<`/${string}` | undefined>(undefined);
 export const SiteRouteSlugContext = createContext<string | undefined>(undefined);
 export const HeaderNavigationContext = createContext(false);
 export const FooterNavigationContext = createContext(false);
@@ -27,11 +28,13 @@ export const SiteThemeContext = createContext<PublicSiteThemeController>({
 export function SitePageShell({
   linkMode,
   parts,
+  routeBase,
   theme,
   tree,
 }: {
   linkMode: SitePageLinkMode;
   parts: SitePageRendererParts;
+  routeBase?: `/${string}`;
   theme: PublicSiteThemeController;
   tree: SitePageTree;
 }) {
@@ -40,22 +43,24 @@ export function SitePageShell({
 
   return (
     <SitePageLinkModeContext.Provider value={linkMode}>
-      <SiteRouteSlugContext.Provider value={tree.route?.slug}>
-        <SiteThemeContext.Provider value={theme}>
-          <article
-            className={
-              theme.theme === "dark"
-                ? "dark flex min-h-dvh flex-col bg-zinc-950 text-zinc-100"
-                : "flex min-h-dvh flex-col bg-white text-zinc-950"
-            }
-            data-site-theme={theme.theme}
-          >
-            {frame.header ? <Header block={frame.header} /> : null}
-            <SiteRoutePage parts={parts} tree={tree} />
-            {frame.footer ? <Footer block={frame.footer} /> : null}
-          </article>
-        </SiteThemeContext.Provider>
-      </SiteRouteSlugContext.Provider>
+      <SitePageRouteBaseContext.Provider value={routeBase}>
+        <SiteRouteSlugContext.Provider value={tree.route?.slug}>
+          <SiteThemeContext.Provider value={theme}>
+            <article
+              className={
+                theme.theme === "dark"
+                  ? "dark flex min-h-dvh flex-col bg-zinc-950 text-zinc-100"
+                  : "flex min-h-dvh flex-col bg-white text-zinc-950"
+              }
+              data-site-theme={theme.theme}
+            >
+              {frame.header ? <Header block={frame.header} /> : null}
+              <SiteRoutePage parts={parts} tree={tree} />
+              {frame.footer ? <Footer block={frame.footer} /> : null}
+            </article>
+          </SiteThemeContext.Provider>
+        </SiteRouteSlugContext.Provider>
+      </SitePageRouteBaseContext.Provider>
     </SitePageLinkModeContext.Provider>
   );
 }
@@ -141,6 +146,10 @@ function isPageFooterPlacement(placement: SitePlacementNode): boolean {
 
 export function useSitePageLinkMode(): SitePageLinkMode {
   return useContext(SitePageLinkModeContext);
+}
+
+export function useSitePageRouteBase(): `/${string}` | undefined {
+  return useContext(SitePageRouteBaseContext);
 }
 
 export function useSiteRouteSlug(): string | undefined {

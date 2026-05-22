@@ -4,8 +4,10 @@ const clientRoutePrefixes = [
   "/apps",
   "/pages",
   "/schema",
+  "/sites",
   ...schemaApps.map((app) => app.route),
 ] as const;
+const publishedProfileClientRoutePrefixes = ["/apps", "/sites"] as const;
 const clientRoutePaths = ["/setup"] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 const dynamicSiteIconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;
@@ -91,7 +93,7 @@ export function shouldDeferToStaticAssets(
 
   return (
     profileKind !== "publishedSite" ||
-    isClientShellPath(url.pathname) ||
+    isPublishedProfileClientShellRoute(url.pathname) ||
     looksLikeStaticAssetPath(url.pathname)
   );
 }
@@ -133,6 +135,15 @@ export function isClientShellRoute(pathname: string): boolean {
 
 function isClientShellPath(pathname: string): boolean {
   return clientRoutePaths.includes(pathname as (typeof clientRoutePaths)[number]);
+}
+
+function isPublishedProfileClientShellRoute(pathname: string): boolean {
+  return (
+    isClientShellPath(pathname) ||
+    publishedProfileClientRoutePrefixes.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )
+  );
 }
 
 export function looksLikeStaticAssetPath(pathname: string): boolean {

@@ -169,6 +169,37 @@ describe("authority", () => {
     expect(JSON.stringify(body)).not.toContain("/api/site/media/site/images/installed.webp");
   });
 
+  it("renders duplicate installed Site public slugs from the selected install storage", async () => {
+    await postInstalledAppJson<BootstrapResponse>(
+      "site",
+      "personal",
+      "/snapshot/restore",
+      siteStoreSnapshot({
+        records: siteRecordsWithHomeLabel("Personal Home"),
+      }),
+    );
+    await postInstalledAppJson<BootstrapResponse>(
+      "site",
+      "docs",
+      "/snapshot/restore",
+      siteStoreSnapshot({
+        records: siteRecordsWithHomeLabel("Docs Home"),
+      }),
+    );
+
+    const personal = await getInstalledAppJson<SitePageTreeResponse>(
+      "site",
+      "personal",
+      "/tree/home",
+    );
+    const docs = await getInstalledAppJson<SitePageTreeResponse>("site", "docs", "/tree/home");
+
+    expect(personal.page.label).toBe("Personal Home");
+    expect(docs.page.label).toBe("Docs Home");
+    expect(personal.meta.slug).toBe("home");
+    expect(docs.meta.slug).toBe("home");
+  });
+
   it("returns a public page tree for a published site page", async () => {
     useSchemaApp("site");
     await postJson<BootstrapResponse>("/api/snapshot/restore", siteStoreSnapshot());
@@ -3523,6 +3554,20 @@ function siteStoreSnapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapsho
     records: testSiteSeedRecords,
     ...overrides,
   });
+}
+
+function siteRecordsWithHomeLabel(label: string): StoredRecord[] {
+  return testSiteSeedRecords.map((record) =>
+    record.id === "rec_site_content_home"
+      ? {
+          ...record,
+          values: {
+            ...record.values,
+            label,
+          },
+        }
+      : record,
+  );
 }
 
 function taskSnapshotRecord(id: string, title: string): StoredRecord {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
@@ -233,13 +233,13 @@ function InstalledAppRow({ install }: { install: AppInstall }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Link className={shellLinkButtonClassName()} href={install.adminRoute}>
+          <a className={shellLinkButtonClassName()} href={install.adminRoute}>
             Open admin
-          </Link>
+          </a>
           {install.publicRoute ? (
-            <Link className={shellLinkButtonClassName("outline")} href={install.publicRoute}>
+            <a className={shellLinkButtonClassName("outline")} href={install.publicRoute}>
               Open public
-            </Link>
+            </a>
           ) : null}
         </div>
       </div>

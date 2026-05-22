@@ -7,6 +7,8 @@ import {
   FORMLESS_RUNTIME_PROFILE_META_NAME,
   findRuntimeWorldMountByRoute,
   installedAppWorldMountFromInstallId,
+  installedSitePublicSurfaceFromRoute,
+  isRuntimePublicSiteRoute,
   readRuntimeProfileDocumentHint,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
@@ -25,6 +27,11 @@ describe("runtime profile resolver", () => {
       appRouteBase: "/apps",
       packageAppKey: "site",
       schemaRoutes: true,
+    });
+    expect(profile.installedSitePublicRoutes).toEqual({
+      homeSlug: "home",
+      packageAppKey: "site",
+      siteRouteBase: "/sites",
     });
     expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "estii", "site"]);
     expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true]);
@@ -61,6 +68,26 @@ describe("runtime profile resolver", () => {
       world.target,
     );
     expect(installedAppWorldMountFromInstallId(profile, "site")).toBeUndefined();
+  });
+
+  it("resolves installed Site public route surfaces from install ids", () => {
+    const profile = createDevRuntimeProfile();
+    const home = installedSitePublicSurfaceFromRoute(profile, "/sites/personal");
+    const nested = installedSitePublicSurfaceFromRoute(profile, "/sites/personal/blog/post");
+
+    if (!home?.target || home.target.kind !== "appInstall") {
+      throw new Error("Missing installed Site public surface.");
+    }
+
+    expect(home.routeBase).toBe("/sites/personal");
+    expect(home.slug).toBe("home");
+    expect(home.target.installId).toBe("personal");
+    expect(home.target.apiRoutePrefix).toBe("/api/app-installs/site/personal");
+    expect(nested?.routeBase).toBe("/sites/personal");
+    expect(nested?.slug).toBe("blog/post");
+    expect(isRuntimePublicSiteRoute(profile, "/sites/personal")).toBe(true);
+    expect(isRuntimePublicSiteRoute(profile, "/sites/personal/blog/post")).toBe(true);
+    expect(installedSitePublicSurfaceFromRoute(profile, "/sites/site")).toBeUndefined();
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {
