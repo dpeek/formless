@@ -3,6 +3,7 @@ export * from "./button.js";
 export * from "./calendar.js";
 export * from "./checkbox.js";
 export * from "./color-utils.js";
+export * from "./color-swatch.js";
 export * from "./color.js";
 export * from "./date.js";
 export * from "./dialog.js";

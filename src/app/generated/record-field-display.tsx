@@ -1,4 +1,5 @@
-import { isHexColor, toPickerHexColor } from "@dpeek/formless-ui/color-utils";
+import { expandHexColor, isHexColor } from "@dpeek/formless-ui/color-utils";
+import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { useRecordField, useReferenceOptions } from "../../client/store.ts";
@@ -121,16 +122,11 @@ function ColorDisplaySwatch({ color, label }: { color: string; label: string }) 
   }
 
   return (
-    <span
+    <ColorSwatch
       aria-label={`${label} color swatch`}
-      className="relative size-3.5 shrink-0 overflow-hidden rounded-sm border border-slate-300"
-    >
-      <span
-        aria-hidden="true"
-        className="absolute inset-0"
-        style={{ backgroundColor: toPickerHexColor(color) }}
-      />
-    </span>
+      className="size-3.5 overflow-hidden rounded-sm border border-slate-300"
+      color={expandHexColor(color)}
+    />
   );
 }
 

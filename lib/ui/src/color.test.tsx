@@ -37,6 +37,7 @@ describe("color input", () => {
     expect(markup).toContain('value="#336699"');
     expect(markup).toContain("animate-spin");
     expect(markup).toContain('data-slot="control"');
+    expect(markup).toContain('data-slot="color-swatch"');
     expect(markup).not.toContain('data-slot="input-group"');
   });
 
@@ -54,6 +55,6 @@ describe("color input", () => {
     expect(markup).toContain('aria-label="Overlay"');
     expect(markup).toContain('placeholder="#FF0000FF"');
     expect(markup).toContain('value="#33669980"');
-    expect(markup).toContain("background-color:#33669980");
+    expect(markup).toContain('data-slot="color-swatch"');
   });
 });

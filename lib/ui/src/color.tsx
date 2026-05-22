@@ -6,6 +6,7 @@ import { Input, InputGroup } from "@dpeek/formless-ui/input";
 import { Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Popover, PopoverContent } from "@dpeek/formless-ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@dpeek/formless-ui/select";
+import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { cn } from "@dpeek/formless-ui/utils";
 import { ControlColorPickIcon, ControlLoadingIcon } from "@dpeek/formless-ui/icons";
 import { useEffect, useState } from "react";
@@ -346,30 +347,11 @@ export function ColorInput({
       ? rgbaToHex(colorValues.rgba.r, colorValues.rgba.g, colorValues.rgba.b, colorValues.rgba.a)
       : resolvedPickerValue;
   const swatch = (
-    <span
-      className="border-border relative size-3.5 overflow-hidden rounded-[calc(var(--radius-sm)-2px)] border"
-      data-slot="color-swatch"
-    >
-      {alpha && colorValues.rgba && colorValues.rgba.a < 1 ? (
-        <span
-          aria-hidden="true"
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `linear-gradient(45deg, #ccc 25%, transparent 25%),
-                              linear-gradient(-45deg, #ccc 25%, transparent 25%),
-                              linear-gradient(45deg, transparent 75%, #ccc 75%),
-                              linear-gradient(-45deg, transparent 75%, #ccc 75%)`,
-            backgroundSize: "8px 8px",
-            backgroundPosition: "0 0, 0 4px, 4px -4px, -4px 0px",
-          }}
-        />
-      ) : null}
-      <span
-        aria-hidden="true"
-        className="absolute inset-0"
-        style={{ backgroundColor: swatchColor }}
-      />
-    </span>
+    <ColorSwatch
+      aria-label={`${resolvedLabel} selected color`}
+      className="border-border size-3.5 overflow-hidden rounded-[calc(var(--radius-sm)-2px)] border"
+      color={swatchColor}
+    />
   );
 
   return (

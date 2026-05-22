@@ -4111,7 +4111,7 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('aria-label="Color color swatch"');
+    expect(html).toContain("Color color swatch");
     expect(html).toContain("#336699");
     expect(html).toContain("not-a-color");
     expect(html).not.toContain('style="background-color:not-a-color"');
