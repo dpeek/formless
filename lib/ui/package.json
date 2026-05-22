@@ -62,7 +62,6 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
-    "@heroicons/react": "^2.2.0",
     "@internationalized/date": "^3.12.1",
     "@platejs/basic-nodes": "^52.3.10",
     "@platejs/code-block": "^52.3.16",

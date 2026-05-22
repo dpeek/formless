@@ -1,4 +1,3 @@
-import { EyeDropperIcon } from "@heroicons/react/24/solid";
 import { parseColor } from "@react-stately/color";
 import { use } from "react";
 import {
@@ -9,6 +8,7 @@ import {
 import { twMerge } from "tailwind-merge";
 import { Button } from "./button";
 import { fieldStyles } from "./field";
+import { ControlColorPickIcon } from "./icons";
 
 interface ColorPickerProps extends ColorPickerPrimitiveProps {
   className?: string;
@@ -46,7 +46,7 @@ const EyeDropper = () => {
         eyeDropper?.open().then((result) => state.setColor(parseColor(result.sRGBHex)));
       }}
     >
-      <EyeDropperIcon />
+      <ControlColorPickIcon />
     </Button>
   );
 };

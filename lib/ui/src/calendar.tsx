@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/20/solid";
 import { type CalendarDate, getLocalTimeZone, today } from "@internationalized/date";
 import { useDateFormatter } from "@react-aria/i18n";
 import { use } from "react";
@@ -29,6 +28,7 @@ import {
   SelectLabel,
   SelectTrigger,
 } from "@dpeek/formless-ui/select";
+import { CalendarNextIcon, CalendarPreviousIcon } from "./icons";
 
 interface CalendarProps<T extends DateValue> extends Omit<
   CalendarPrimitiveProps<T>,
@@ -92,7 +92,7 @@ const CalendarHeader = ({ className, ...props }: React.ComponentProps<"header">)
           intent="plain"
           slot="previous"
         >
-          {direction === "rtl" ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          {direction === "rtl" ? <CalendarNextIcon /> : <CalendarPreviousIcon />}
         </Button>
         <Button
           size="sq-sm"
@@ -101,7 +101,7 @@ const CalendarHeader = ({ className, ...props }: React.ComponentProps<"header">)
           intent="plain"
           slot="next"
         >
-          {direction === "rtl" ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+          {direction === "rtl" ? <CalendarPreviousIcon /> : <CalendarNextIcon />}
         </Button>
       </div>
     </header>

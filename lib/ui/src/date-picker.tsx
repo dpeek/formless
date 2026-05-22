@@ -1,6 +1,5 @@
 "use client";
 
-import { CalendarDaysIcon } from "@heroicons/react/24/outline";
 import type { DateDuration } from "@internationalized/date";
 import { Button } from "react-aria-components/Button";
 import type { DateValue } from "react-aria-components/DateField";
@@ -20,6 +19,7 @@ import { ModalContent } from "@dpeek/formless-ui/modal";
 import { PopoverContent } from "@dpeek/formless-ui/popover";
 import { RangeCalendar } from "@dpeek/formless-ui/range-calendar";
 import { useIsMobile } from "@dpeek/formless-ui/use-mobile";
+import { ControlCalendarIcon } from "./icons";
 import { cx } from "./primitive";
 
 export interface DatePickerProps<T extends DateValue> extends DatePickerPrimitiveProps<T> {
@@ -105,7 +105,7 @@ export function DatePickerTrigger({ className, ...props }: GroupProps) {
           "*:size-5 sm:*:size-4",
         )}
       >
-        <CalendarDaysIcon />
+        <ControlCalendarIcon />
       </Button>
     </InputGroup>
   );
