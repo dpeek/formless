@@ -68,6 +68,7 @@ import {
 import { todayDateString } from "./shared/date.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
 import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.ts";
+import { ControlAddIcon } from "@dpeek/formless-ui/icons";
 
 type HomeRouteProps = { schemaKey: SchemaKey; screenPath: string };
 type SchemaRouteProps = { schemaKey: SchemaKey };
@@ -489,21 +490,26 @@ function AppRootRecordNavigationGroup({
   }
 
   return (
-    <SidebarSection aria-label={`${group.label} roots`} label={group.label}>
-      {group.createAction ? (
-        <Button
-          aria-label={group.createAction.label}
-          className="ms-auto"
-          data-slot="control"
-          intent="plain"
-          isDisabled={!group.createAction.enabled}
-          onPress={() => setCreateDialogOpen(true)}
-          size="sq-xs"
-          type="button"
-        >
-          +
-        </Button>
-      ) : null}
+    <SidebarSection
+      aria-label={`${group.label} roots`}
+      label={group.label}
+      action={
+        group.createAction ? (
+          <Button
+            aria-label={group.createAction.label}
+            className="ms-auto"
+            data-slot="control"
+            intent="plain"
+            isDisabled={!group.createAction.enabled}
+            onPress={() => setCreateDialogOpen(true)}
+            size="sq-xs"
+            type="button"
+          >
+            <ControlAddIcon />
+          </Button>
+        ) : null
+      }
+    >
       {groupFacts.isEmpty
         ? null
         : groupFacts.items.map(({ isActive, option }) => (

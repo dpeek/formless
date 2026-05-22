@@ -624,13 +624,13 @@ function TreePlacementRemoveButton({
     <Button
       aria-label="Remove child placement"
       data-formless-tree-remove-placement={placement.id}
-      isDisabled={isRemoving}
+      isPending={isRemoving}
       onPress={() => void removePlacement()}
       size="sq-xs"
       type="button"
       intent="plain"
     >
-      <span aria-hidden="true">{isRemoving ? "..." : <ControlRemoveIcon />}</span>
+      <ControlRemoveIcon />
     </Button>
   );
 }

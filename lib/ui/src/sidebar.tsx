@@ -374,6 +374,7 @@ const SidebarSectionGroup = ({ className, ...props }: React.ComponentProps<"sect
 
 interface SidebarSectionProps extends React.ComponentProps<"div"> {
   label?: string;
+  action?: React.ReactNode;
 }
 
 const SidebarSection = ({ className, ...props }: SidebarSectionProps) => {
@@ -388,11 +389,14 @@ const SidebarSection = ({ className, ...props }: SidebarSectionProps) => {
       )}
       {...props}
     >
-      {state !== "collapsed" && "label" in props && (
-        <Header className="mb-1 flex shrink-0 items-center rounded-md px-2 text-sidebar-fg/70 text-xs/6 outline-none ring-sidebar-ring transition-[margin,opa] duration-200 ease-linear group-data-[collapsible=dock]:-mt-8 group-data-[collapsible=dock]:opacity-0 *:[svg]:size-4 *:[svg]:shrink-0">
-          {props.label}
-        </Header>
-      )}
+      <div className="flex items-center justify-between">
+        {state !== "collapsed" && "label" in props && (
+          <Header className="mb-1 flex shrink-0 items-center rounded-md px-2 text-sidebar-fg/70 text-xs/6 outline-none ring-sidebar-ring transition-[margin,opa] duration-200 ease-linear group-data-[collapsible=dock]:-mt-8 group-data-[collapsible=dock]:opacity-0 *:[svg]:size-4 *:[svg]:shrink-0">
+            {props.label}
+          </Header>
+        )}
+        {props.action}
+      </div>
       <div
         data-slot="sidebar-section-inner"
         className="grid grid-cols-[auto_1fr] gap-y-0.5 in-data-[state=collapsed]:gap-y-1.5 *:data-[slot=control]:col-span-full"
@@ -463,7 +467,7 @@ const SidebarItem = ({
         <>
           {typeof children === "function" ? children({ ...values, isCollapsed }) : children}
 
-          {badge &&
+          {badge !== undefined &&
             (state !== "collapsed" ? (
               <span
                 data-slot="sidebar-badge"
