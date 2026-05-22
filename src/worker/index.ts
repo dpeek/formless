@@ -1,6 +1,7 @@
 import { FormlessAuthority } from "./authority.ts";
 import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
+import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
 import { handleSiteMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
@@ -63,6 +64,12 @@ export default {
 
     if (ownerSetupResponse) {
       return ownerSetupResponse;
+    }
+
+    const instanceAppInstallsResponse = await handleInstanceAppInstallsApiRequest(request, env);
+
+    if (instanceAppInstallsResponse) {
+      return instanceAppInstallsResponse;
     }
 
     const url = new URL(request.url);

@@ -33,6 +33,7 @@ import {
   useHomeRouteSelectionStore,
   withHomeRouteSelectedSectionContextRecordId,
 } from "./app/routes/home-selection.tsx";
+import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
 import {
@@ -45,6 +46,7 @@ import { SyncStatusControl } from "./app/routes/status-line.tsx";
 import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
+  installedAppWorldMountFromInstallId,
   isRuntimePublicSiteRoute,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
@@ -118,6 +120,8 @@ export function App({
     : undefined;
   const isWorkbenchToolRoute =
     runtimeProfile.shell === "dev" && routeWorld?.schemaRoute === location;
+  const isInstanceShellRoute =
+    runtimeProfile.instanceShell === true && normalizeRoutePath(location) === "/";
   const isOwnerSetupRoute =
     isOwnerSetupRouteEnabled(runtimeProfile) && normalizeRoutePath(location) === "/setup";
 
@@ -150,6 +154,10 @@ export function App({
     <WorkbenchFrame routeWorld={routeWorld} runtimeProfile={runtimeProfile}>
       {isWorkbenchToolRoute ? (
         <main className="bg-bg p-6" data-frame="workbench-tool">
+          <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
+        </main>
+      ) : isInstanceShellRoute ? (
+        <main className="bg-bg" data-frame="instance-shell">
           <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
         </main>
       ) : (
@@ -231,14 +239,21 @@ function WorkbenchToolbarActions({ world }: { world: RuntimeWorldMount | undefin
             className="[&>p]:sr-only"
             messageClassName="sr-only"
             schemaKey={app.key}
+            target={world.target}
           />
           <SnapshotRestoreControl
             buttonClassName={workbenchActionLinkClassName()}
             className="[&>p]:sr-only"
             messageClassName="sr-only"
             schemaKey={app.key}
+            target={world.target}
           />
-          <SourceResetControl buttonLabel="Reset" className="[&>p]:sr-only" schemaKey={app.key} />
+          <SourceResetControl
+            buttonLabel="Reset"
+            className="[&>p]:sr-only"
+            schemaKey={app.key}
+            target={world.target}
+          />
         </>
       ) : (
         <>
@@ -314,7 +329,13 @@ function GeneratedAppFrame({
     </HomeRouteSelectionProvider>
   );
 
-  return routeApp ? <SchemaAppProvider schemaKey={routeApp.key}>{frame}</SchemaAppProvider> : frame;
+  return routeApp ? (
+    <SchemaAppProvider schemaKey={routeApp.key} target={routeWorld?.target}>
+      {frame}
+    </SchemaAppProvider>
+  ) : (
+    frame
+  );
 }
 
 function generatedAppHeaderTitle({
@@ -613,6 +634,11 @@ function AppRoutes({
           <OwnerSetupRoute />
         </Route>
       ) : null}
+      {runtimeProfile.instanceShell ? (
+        <Route path="/">
+          <InstanceShellRoute />
+        </Route>
+      ) : null}
       {runtimeProfile.publishedSite ? (
         <Route path={runtimeProfile.publishedSite.rootRoute}>
           <SitePageRoute linkMode="published" slug={runtimeProfile.publishedSite.homeSlug} />
@@ -628,22 +654,61 @@ function AppRoutes({
       {generatedWorlds.map((world) =>
         world.schemaRoute ? (
           <Route key={world.schemaRoute} path={world.schemaRoute}>
-            <SchemaRoute schemaKey={world.app.key} />
+            <SchemaRoute schemaKey={world.app.key} target={world.target} />
           </Route>
         ) : null,
       )}
       {generatedWorlds.map((world) => (
         <Route key={world.route} path={world.route}>
-          <HomeRoute schemaKey={world.app.key} screenPath="/" />
+          <HomeRoute schemaKey={world.app.key} screenPath="/" target={world.target} />
         </Route>
       ))}
       {generatedWorlds.map((world) => (
         <Route key={`${world.route}/*`} path={runtimeScreenWildcardRoute(world)}>
           {(params) => (
-            <HomeRoute schemaKey={world.app.key} screenPath={runtimeWildcardScreenPath(params)} />
+            <HomeRoute
+              schemaKey={world.app.key}
+              screenPath={runtimeWildcardScreenPath(params)}
+              target={world.target}
+            />
           )}
         </Route>
       ))}
+      {runtimeProfile.installedAppRoutes?.schemaRoutes ? (
+        <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId/schema`}>
+          {(params) => (
+            <InstalledAppSchemaRoute
+              installId={runtimeRouteParam(params, "installId")}
+              routeComponents={routeComponents}
+              runtimeProfile={runtimeProfile}
+            />
+          )}
+        </Route>
+      ) : null}
+      {runtimeProfile.installedAppRoutes ? (
+        <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId`}>
+          {(params) => (
+            <InstalledAppHomeRoute
+              installId={runtimeRouteParam(params, "installId")}
+              routeComponents={routeComponents}
+              runtimeProfile={runtimeProfile}
+              screenPath="/"
+            />
+          )}
+        </Route>
+      ) : null}
+      {runtimeProfile.installedAppRoutes ? (
+        <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId/*`}>
+          {(params) => (
+            <InstalledAppHomeRoute
+              installId={runtimeRouteParam(params, "installId")}
+              routeComponents={routeComponents}
+              runtimeProfile={runtimeProfile}
+              screenPath={runtimeWildcardScreenPath(params)}
+            />
+          )}
+        </Route>
+      ) : null}
       {runtimeProfile.publicSitePreview ? (
         <Route path={runtimeProfile.publicSitePreview.rootRoute}>
           {runtimeProfile.publicSitePreview.homeRoute ? (
@@ -679,6 +744,50 @@ function AppRoutes({
   );
 }
 
+function InstalledAppSchemaRoute({
+  installId,
+  routeComponents,
+  runtimeProfile,
+}: {
+  installId: string | undefined;
+  routeComponents: AppRouteComponents;
+  runtimeProfile: RuntimeProfile;
+}) {
+  const { SchemaRoute } = routeComponents;
+  const world = installId
+    ? installedAppWorldMountFromInstallId(runtimeProfile, installId)
+    : undefined;
+
+  if (!world?.schemaRoute) {
+    return <NotFoundRoute />;
+  }
+
+  return <SchemaRoute schemaKey={world.app.key} target={world.target} />;
+}
+
+function InstalledAppHomeRoute({
+  installId,
+  routeComponents,
+  runtimeProfile,
+  screenPath,
+}: {
+  installId: string | undefined;
+  routeComponents: AppRouteComponents;
+  runtimeProfile: RuntimeProfile;
+  screenPath: string;
+}) {
+  const { HomeRoute } = routeComponents;
+  const world = installId
+    ? installedAppWorldMountFromInstallId(runtimeProfile, installId)
+    : undefined;
+
+  if (!world) {
+    return <NotFoundRoute />;
+  }
+
+  return <HomeRoute schemaKey={world.app.key} screenPath={screenPath} target={world.target} />;
+}
+
 function RouteLoading() {
   return <p className="text-sm text-muted-fg">Loading...</p>;
 }
@@ -697,6 +806,12 @@ function runtimeWildcardSiteSlug(params: unknown): string {
   const wildcard = (params as { "*": string | undefined })["*"];
 
   return normalizeSitePageSlug(wildcard);
+}
+
+function runtimeRouteParam(params: unknown, name: string): string | undefined {
+  const value = (params as Record<string, string | undefined>)[name];
+
+  return value;
 }
 
 function isOwnerSetupRouteEnabled(runtimeProfile: RuntimeProfile) {

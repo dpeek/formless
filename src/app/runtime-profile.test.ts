@@ -6,6 +6,7 @@ import {
   createSiteAuthoringRuntimeProfile,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
   findRuntimeWorldMountByRoute,
+  installedAppWorldMountFromInstallId,
   readRuntimeProfileDocumentHint,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
@@ -18,7 +19,13 @@ describe("runtime profile resolver", () => {
 
     expect(profile.kind).toBe("dev");
     expect(profile.shell).toBe("dev");
-    expect(profile.defaultRedirect).toBe("/tasks");
+    expect(profile.defaultRedirect).toBeUndefined();
+    expect(profile.instanceShell).toBe(true);
+    expect(profile.installedAppRoutes).toEqual({
+      appRouteBase: "/apps",
+      packageAppKey: "site",
+      schemaRoutes: true,
+    });
     expect(profile.worlds.map((world) => world.app.key)).toEqual(["tasks", "estii", "site"]);
     expect(profile.worlds.map((world) => world.generatedRoutes)).toEqual([true, true, true]);
     expect(profile.worlds.map((world) => world.route)).toEqual(["/tasks", "/estii", "/site"]);
@@ -30,6 +37,30 @@ describe("runtime profile resolver", () => {
     expect(profile.publicSitePreview?.homeRoute).toBe("/pages/home");
     expect(findRuntimeWorldMountByRoute(profile, "/rates")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/rates/schema")).toBeUndefined();
+  });
+
+  it("resolves installed Site admin route mounts from install ids", () => {
+    const profile = createDevRuntimeProfile();
+    const world = installedAppWorldMountFromInstallId(profile, "personal");
+
+    if (!world?.target || world.target.kind !== "appInstall") {
+      throw new Error("Missing installed Site world.");
+    }
+
+    expect(world.app.key).toBe("site");
+    expect(world.route).toBe("/apps/personal");
+    expect(world.schemaRoute).toBe("/apps/personal/schema");
+    expect(world.target.installId).toBe("personal");
+    expect(world.target.apiRoutePrefix).toBe("/api/app-installs/site/personal");
+    expect(runtimeScreenRoute(world, "/")).toBe("/apps/personal");
+    expect(runtimeScreenRoute(world, "/settings")).toBe("/apps/personal/settings");
+    expect(runtimeScreenPathFromRoute(world, "/apps/personal")).toBe("/");
+    expect(runtimeScreenPathFromRoute(world, "/apps/personal/settings")).toBe("/settings");
+    expect(runtimeScreenPathFromRoute(world, "/apps/personal/schema")).toBeUndefined();
+    expect(findRuntimeWorldMountByRoute(profile, "/apps/personal/settings")?.target).toEqual(
+      world.target,
+    );
+    expect(installedAppWorldMountFromInstallId(profile, "site")).toBeUndefined();
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {

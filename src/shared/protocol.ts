@@ -1,4 +1,9 @@
 import { parseAppSchema, type AppSchema } from "./schema.ts";
+import type {
+  AppInstall,
+  AppInstallInitializationPlan,
+  BundledAppPackage,
+} from "./app-installs.ts";
 
 export type EntityName = string;
 export type FieldValue = string | boolean | number;
@@ -161,6 +166,23 @@ export type OwnerSetupCompleteRequest = {
 export type OwnerSetupCompleteResponse = {
   setupComplete: true;
   owner: OwnerIdentity;
+};
+
+export type AppInstallsResponse = {
+  packages: BundledAppPackage[];
+  installs: AppInstall[];
+};
+
+export type CreateAppInstallRequest = {
+  packageAppKey: string;
+  installId: string;
+  label: string;
+};
+
+export type CreateAppInstallResponse = {
+  initialization: AppInstallInitializationPlan;
+  install: AppInstall;
+  installs: AppInstall[];
 };
 
 export type MutationResponse = {
@@ -338,6 +360,20 @@ export function parseOwnerSetupCompleteRequest(value: unknown): OwnerSetupComple
   };
 }
 
+export function parseCreateAppInstallRequest(value: unknown): CreateAppInstallRequest {
+  if (!isRecord(value)) {
+    throw new Error("App install request must be an object.");
+  }
+
+  assertCreateAppInstallRequestKeys(value);
+
+  return {
+    packageAppKey: parseTrimmedNonEmptyString("App install package app key", value.packageAppKey),
+    installId: parseTrimmedNonEmptyString("App install id", value.installId),
+    label: parseTrimmedNonEmptyString("App install label", value.label),
+  };
+}
+
 export function parseStoreSnapshot(value: unknown, expectedSchemaKey?: string): StoreSnapshot {
   if (!isRecord(value)) {
     throw new Error("Store snapshot must be an object.");
@@ -482,6 +518,23 @@ function assertOwnerSetupRequestKeys(value: Record<string, unknown>) {
   for (const key of requiredKeys) {
     if (!(key in value)) {
       throw new Error(`Owner setup request must include "${key}".`);
+    }
+  }
+}
+
+function assertCreateAppInstallRequestKeys(value: Record<string, unknown>) {
+  const requiredKeys = ["packageAppKey", "installId", "label"];
+  const allowedKeys = new Set(requiredKeys);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`App install request has unsupported key "${key}".`);
+    }
+  }
+
+  for (const key of requiredKeys) {
+    if (!(key in value)) {
+      throw new Error(`App install request must include "${key}".`);
     }
   }
 }

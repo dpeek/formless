@@ -1,6 +1,11 @@
 import { schemaApps } from "../shared/schema-apps.ts";
 
-const clientRoutePrefixes = ["/pages", "/schema", ...schemaApps.map((app) => app.route)] as const;
+const clientRoutePrefixes = [
+  "/apps",
+  "/pages",
+  "/schema",
+  ...schemaApps.map((app) => app.route),
+] as const;
 const clientRoutePaths = ["/setup"] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 const dynamicSiteIconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;

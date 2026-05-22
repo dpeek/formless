@@ -27,6 +27,7 @@ import {
   getClientStoreSnapshot,
   resetClientStore,
 } from "./client/store.ts";
+import type { ClientAppTarget } from "./client/app-target.ts";
 import {
   applySchemaBuilderIntent,
   createSchemaBuilderDraft,
@@ -103,16 +104,49 @@ function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
 
 function SchemaKeyProbeHomeRoute({
   schemaKey: routeSchemaKey,
+  target,
 }: {
   schemaKey: SchemaKey;
   screenPath: string;
+  target?: ClientAppTarget;
 }) {
   const contextSchemaKey = useSchemaKey();
+  const targetKind = typeof target === "string" ? "schemaKey" : (target?.kind ?? "none");
+  const installId =
+    typeof target === "object" && target.kind === "appInstall" ? target.installId : "";
 
   return (
-    <main data-route-schema-key={routeSchemaKey} data-schema-key={contextSchemaKey}>
+    <main
+      data-install-id={installId}
+      data-route-schema-key={routeSchemaKey}
+      data-schema-key={contextSchemaKey}
+      data-target-kind={targetKind}
+    >
       Schema key {contextSchemaKey}
     </main>
+  );
+}
+
+function TargetProbeHomeRoute({
+  schemaKey,
+  screenPath,
+  target,
+}: {
+  schemaKey: SchemaKey;
+  screenPath: string;
+  target?: ClientAppTarget;
+}) {
+  const targetKind = typeof target === "string" ? "schemaKey" : (target?.kind ?? "none");
+  const installId =
+    typeof target === "object" && target.kind === "appInstall" ? target.installId : "";
+
+  return (
+    <main
+      data-install-id={installId}
+      data-route-schema-key={schemaKey}
+      data-screen-path={screenPath}
+      data-target-kind={targetKind}
+    />
   );
 }
 
@@ -405,6 +439,20 @@ function expectGeneratedAppChromeLabels(
 }
 
 describe("App smoke routes", () => {
+  it('renders the "/" route as the instance shell', () => {
+    const html = renderRoute("/");
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="instance-shell"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).toContain("Instance");
+    expect(html).toContain("Loading installed apps...");
+    expect(html).toContain('aria-label="Workbench apps"');
+    expect(html).toContain('href="/tasks"');
+    expect(html).toContain('href="/site"');
+    expect(html).not.toContain("Loading Tasks...");
+  });
+
   it('renders the "/tasks" route with task navigation', () => {
     const html = renderRoute("/tasks");
 
@@ -509,6 +557,30 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('data-schema-key="site"');
     expect(html).not.toContain('data-schema-key="tasks"');
+  });
+
+  it("routes installed Site admin paths through generated app targets", () => {
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/apps/personal/settings">
+        <App
+          routeComponents={{
+            HomeRoute: TargetProbeHomeRoute,
+            SchemaRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={createDevRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expect(html).toContain('href="/apps/personal/schema"');
+    expect(html).toContain('data-route-schema-key="site"');
+    expect(html).toContain('data-screen-path="/settings"');
+    expect(html).toContain('data-target-kind="appInstall"');
+    expect(html).toContain('data-install-id="personal"');
+    expectSyncStatusControl(html, "site");
   });
 
   it('renders the "/tasks/schema" route', () => {

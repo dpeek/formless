@@ -6,6 +6,10 @@ import {
   type SchemaAppDefinition,
   type SchemaKey,
 } from "../shared/schema-apps.ts";
+import {
+  installedAppStorageIdentity,
+  type AppStorageIdentity,
+} from "../shared/app-storage-identity.ts";
 
 export type RuntimeProfileKind = "dev" | "app" | "siteAuthoring" | "publishedSite";
 
@@ -16,6 +20,13 @@ export type RuntimeWorldMount = {
   generatedRoutes: boolean;
   route: `/${string}`;
   schemaRoute?: `/${string}`;
+  target?: AppStorageIdentity;
+};
+
+export type RuntimeInstalledAppRoutes = {
+  appRouteBase: "/apps";
+  packageAppKey: "site";
+  schemaRoutes: boolean;
 };
 
 export type RuntimePublicSitePreviewLinkMode = "preview" | "authoring";
@@ -44,6 +55,8 @@ export type RuntimeProfile = {
   shell: RuntimeShellKind;
   worlds: readonly RuntimeWorldMount[];
   defaultRedirect?: `/${string}`;
+  instanceShell?: boolean;
+  installedAppRoutes?: RuntimeInstalledAppRoutes;
   localPublish?: RuntimeLocalPublishBroker;
   publicSitePreview?: RuntimePublicSitePreview;
   publishedSite?: RuntimePublishedSiteRoutes;
@@ -97,7 +110,12 @@ export function createDevRuntimeProfile(): RuntimeProfile {
       route: app.route,
       schemaRoute: app.schemaRoute,
     })),
-    defaultRedirect: getSchemaAppDefinition(defaultSchemaKey).route,
+    instanceShell: true,
+    installedAppRoutes: {
+      appRouteBase: "/apps",
+      packageAppKey: "site",
+      schemaRoutes: true,
+    },
     publicSitePreview: {
       rootRoute: "/pages",
       routePattern: "/pages/*",
@@ -172,9 +190,13 @@ export function findRuntimeWorldMountByRoute(
   profile: RuntimeProfile,
   pathname: string,
 ): RuntimeWorldMount | undefined {
-  return profile.worlds
-    .filter(hasGeneratedRoutes)
-    .find((world) => world.schemaRoute === pathname || runtimeScreenPathFromRoute(world, pathname));
+  return (
+    profile.worlds
+      .filter(hasGeneratedRoutes)
+      .find(
+        (world) => world.schemaRoute === pathname || runtimeScreenPathFromRoute(world, pathname),
+      ) ?? installedAppWorldMountFromRoute(profile, pathname)
+  );
 }
 
 export function hasGeneratedRoutes(world: RuntimeWorldMount): boolean {
@@ -225,6 +247,55 @@ export function runtimeScreenPathFromRoute(
   const routePrefix = `${world.route}/`;
 
   return pathname.startsWith(routePrefix) ? pathname.slice(world.route.length) : undefined;
+}
+
+export function installedAppWorldMountFromInstallId(
+  profile: RuntimeProfile,
+  installId: string,
+): RuntimeWorldMount | undefined {
+  const routes = profile.installedAppRoutes;
+
+  if (!routes) {
+    return undefined;
+  }
+
+  const target = installedAppStorageIdentity({
+    installId,
+    packageAppKey: routes.packageAppKey,
+  });
+
+  if (!target) {
+    return undefined;
+  }
+
+  const route = `${routes.appRouteBase}/${target.installId}` as const;
+
+  return {
+    app: getSchemaAppDefinition(routes.packageAppKey),
+    generatedRoutes: true,
+    route,
+    ...(routes.schemaRoutes ? { schemaRoute: `${route}/schema` as const } : {}),
+    target,
+  };
+}
+
+function installedAppWorldMountFromRoute(
+  profile: RuntimeProfile,
+  pathname: string,
+): RuntimeWorldMount | undefined {
+  const routes = profile.installedAppRoutes;
+
+  if (!routes) {
+    return undefined;
+  }
+
+  const [firstSegment, installId] = pathname.split("/").filter(Boolean);
+
+  if (`/${firstSegment}` !== routes.appRouteBase || !installId) {
+    return undefined;
+  }
+
+  return installedAppWorldMountFromInstallId(profile, installId);
 }
 
 function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {

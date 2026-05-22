@@ -15,10 +15,10 @@ import {
   type WriteOwnerSetupCapabilityResult,
 } from "./instance-setup-state.ts";
 import { createOwnerSessionCookie, ownerSessionSigningSecret } from "./owner-session.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 
-const ownerSetupAuthorityName = "__formless_instance__";
 const ownerSetupCapabilityPath = `${OWNER_SETUP_API_PATH}/capability`;
 const ownerSetupCompletePath = `${OWNER_SETUP_API_PATH}/complete`;
 
@@ -40,7 +40,7 @@ export async function handleOwnerSetupApiRequest(
     return undefined;
   }
 
-  const id = env.FORMLESS_AUTHORITY.idFromName(ownerSetupAuthorityName);
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
 
   return env.FORMLESS_AUTHORITY.get(id).fetch(request);
 }

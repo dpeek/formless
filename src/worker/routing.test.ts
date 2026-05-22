@@ -107,6 +107,7 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/site/schema"),
       documentRequest("http://example.com/schema"),
       documentRequest("http://example.com/setup"),
+      documentRequest("http://example.com/apps/personal"),
       documentRequest("http://example.com/assets/index.js"),
       new Request("http://example.com/@vite/client", { headers: { Accept: "*/*" } }),
       new Request("http://example.com/@react-refresh", { headers: { Accept: "*/*" } }),
@@ -184,6 +185,9 @@ describe("Worker document routing", () => {
 
   it("marks client-shell and static asset requests for asset serving fallback", () => {
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/pages/home"))).toBe(true);
+    expect(shouldDeferToStaticAssets(documentRequest("http://example.com/apps/personal"))).toBe(
+      true,
+    );
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/setup"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/site"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://app.example.com/setup"))).toBe(true);
@@ -249,6 +253,11 @@ describe("Worker document routing", () => {
         profile: "publishedSite",
       }),
     ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/apps/personal"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
   });
 
   it("keeps dynamic root icon requests out of static fallback for read methods", () => {
@@ -352,6 +361,7 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/tasks")).toBe(true);
     expect(isClientShellRoute("/estii/setup")).toBe(true);
     expect(isClientShellRoute("/site/schema")).toBe(true);
+    expect(isClientShellRoute("/apps/personal")).toBe(true);
     expect(isClientShellRoute("/setup")).toBe(true);
     expect(isClientShellRoute("/rates")).toBe(false);
     expect(isClientShellRoute("/blog")).toBe(false);

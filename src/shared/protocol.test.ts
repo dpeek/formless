@@ -5,6 +5,7 @@ import {
   isSyncSocketAttachment,
   isSyncSocketClientMessage,
   isSyncSocketServerMessage,
+  parseCreateAppInstallRequest,
   parseOwnerSetupCompleteRequest,
   parseOwnerSetupToken,
   parseStoreSnapshot,
@@ -186,6 +187,36 @@ describe("owner setup protocol", () => {
         redirectTo: "/admin",
       }),
     ).toThrow('Owner setup request has unsupported key "redirectTo".');
+  });
+});
+
+describe("app install protocol", () => {
+  it("parses create app install requests", () => {
+    expect(
+      parseCreateAppInstallRequest({
+        packageAppKey: " site ",
+        installId: " personal ",
+        label: " Personal Site ",
+      }),
+    ).toEqual({
+      packageAppKey: "site",
+      installId: "personal",
+      label: "Personal Site",
+    });
+  });
+
+  it("rejects unsupported create install request shapes", () => {
+    expect(() => parseCreateAppInstallRequest({ installId: "personal", label: "Site" })).toThrow(
+      'App install request must include "packageAppKey".',
+    );
+    expect(() =>
+      parseCreateAppInstallRequest({
+        packageAppKey: "site",
+        installId: "personal",
+        label: "Site",
+        route: "/apps/personal",
+      }),
+    ).toThrow('App install request has unsupported key "route".');
   });
 });
 
