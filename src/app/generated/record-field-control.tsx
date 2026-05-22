@@ -1,6 +1,6 @@
 import { Button } from "@dpeek/formless-ui/button";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
-import { DateInput } from "@dpeek/formless-ui/date";
+import { DatePicker, DatePickerTrigger } from "@dpeek/formless-ui/date-picker";
 import {
   ModalBody,
   ModalClose,
@@ -17,7 +17,9 @@ import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
 import { ValueUnitInput } from "@dpeek/formless-ui/value-unit-input";
+import type { DateValue } from "@internationalized/date";
 import type { FocusEvent, KeyboardEvent } from "react";
+import { useRef } from "react";
 import { SITE_IMAGE_UPLOAD_ACCEPT } from "../../client/media.ts";
 import { useReferenceOptions } from "../../client/store.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
@@ -29,6 +31,7 @@ import {
   GeneratedMarkdownFieldControl,
   GeneratedNumberFieldControl,
 } from "./field-control-primitives.tsx";
+import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-value.ts";
 import { selectGeneratedFieldControl } from "./field-controls.ts";
 import {
   decodeNumberEditorInputValue,
@@ -935,14 +938,73 @@ function RecordDateFieldRenderer({
   onDraftRevert: () => void;
   onValueCommit: (value: FieldValue) => void;
 }) {
-  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  const dateResult = storedDateValueToDateValue(draft);
+  const errorMessage = error ?? (dateResult.kind === "invalid" ? dateResult.message : null);
+  const latestStoredValueRef = useRef(draft);
+  const pickerOpenRef = useRef(false);
+  const pickerCommittedStoredValueRef = useRef<string | null>(null);
+
+  latestStoredValueRef.current = draft;
+
+  function commitStoredValue(value: string) {
+    onValueCommit(inputValueToFieldValue(field, value));
+  }
+
+  function handleDateChange(value: DateValue | null) {
+    const nextStoredValue = dateValueToStoredDateValue(value);
+
+    latestStoredValueRef.current = nextStoredValue;
+    onDraftChange(nextStoredValue);
+
+    if (commitPolicy === "field-commit" && pickerOpenRef.current) {
+      pickerCommittedStoredValueRef.current = nextStoredValue;
+      commitStoredValue(nextStoredValue);
+    }
+  }
+
+  function handleDatePickerBlur(event: FocusEvent<Element>) {
+    const relatedTarget = event.relatedTarget;
+
+    if (
+      typeof Node !== "undefined" &&
+      relatedTarget instanceof Node &&
+      event.currentTarget.contains(relatedTarget)
+    ) {
+      return;
+    }
+
+    if (pickerCommittedStoredValueRef.current === latestStoredValueRef.current) {
+      pickerCommittedStoredValueRef.current = null;
+      return;
+    }
+
+    if (commitPolicy === "field-commit") {
+      commitStoredValue(latestStoredValueRef.current);
+    }
+  }
+
+  function handleDatePickerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const target = event.target;
+    const targetRole =
+      typeof HTMLElement !== "undefined" && target instanceof HTMLElement
+        ? target.getAttribute("role")
+        : null;
+
     if (event.key === "Enter") {
+      if (targetRole !== "spinbutton") {
+        return;
+      }
+
       event.preventDefault();
-      onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
+      commitStoredValue(latestStoredValueRef.current);
       return;
     }
 
     if (event.key === "Escape") {
+      if (pickerOpenRef.current || targetRole !== "spinbutton") {
+        return;
+      }
+
       event.preventDefault();
       onDraftRevert();
     }
@@ -950,40 +1012,43 @@ function RecordDateFieldRenderer({
 
   return (
     <div className={recordSpecializedFieldContainerClassName(density, "date")}>
-      <TextField
+      <DatePicker
+        className="w-full"
         isDisabled={!canPatch || isPending}
-        isInvalid={error !== null}
+        isInvalid={errorMessage !== null}
         isRequired={fieldControl.required}
+        onBlur={handleDatePickerBlur}
+        onChange={handleDateChange}
+        onKeyDown={handleDatePickerKeyDown}
+        onOpenChange={(open) => {
+          pickerOpenRef.current = open;
+        }}
+        value={dateResult.value}
       >
         <Label className={labelClass}>{fieldControl.label}</Label>
-        <DateInput
-          aria-label={fieldControl.label}
-          className="w-full"
-          disabled={!canPatch || isPending}
-          inputClassName={
-            density === "compact"
-              ? "h-6 rounded border border-slate-300 px-2 py-0.5 text-xs"
-              : "rounded border border-slate-300"
-          }
-          onBlur={(event) => {
-            if (commitPolicy === "field-commit") {
-              onValueCommit(inputValueToFieldValue(field, event.currentTarget.value));
-            }
-          }}
-          onKeyDown={handleInputKeyDown}
-          onValueCommit={(value) => {
-            if (commitPolicy === "field-commit") {
-              onValueCommit(inputValueToFieldValue(field, value));
-            }
-          }}
-          onValueChange={onDraftChange}
-          required={fieldControl.required}
-          value={draft}
-        />
-        {error ? <FieldError>{error}</FieldError> : null}
-      </TextField>
+        <DatePickerTrigger className={recordDatePickerTriggerClassName(density)} />
+        {errorMessage ? <FieldError>{errorMessage}</FieldError> : null}
+      </DatePicker>
     </div>
   );
+}
+
+function recordDatePickerTriggerClassName(density: GeneratedRecordFieldControlDensity) {
+  if (density !== "compact") {
+    return undefined;
+  }
+
+  return [
+    "h-6",
+    "[&_[data-slot=control]]:h-6",
+    "[&_[data-slot=control]]:rounded",
+    "[&_[data-slot=control]]:px-2",
+    "[&_[data-slot=control]]:py-0.5",
+    "[&_[data-slot=date-picker-trigger]]:px-2",
+    "[&_[data-slot=date-picker-trigger]]:py-0",
+    "[&_[data-slot=date-picker-trigger]>svg]:size-3.5",
+    "[&_[role=spinbutton]]:text-xs",
+  ].join(" ");
 }
 
 function RecordIconFieldRenderer({

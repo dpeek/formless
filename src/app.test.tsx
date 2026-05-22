@@ -2322,7 +2322,8 @@ describe("generated collection home", () => {
     expect(html).toContain('type="checkbox"');
     expect(html).toContain("checked");
     expect(html).toContain("2026-05-01");
-    expect(html).toContain('aria-label="Due date"');
+    expect(html).toContain('data-slot="date-picker-trigger"');
+    expect(html).toContain('role="spinbutton"');
     expect(html).not.toContain('aria-label="Estimate"');
     expect(html).not.toContain(record.createdAt);
   });
@@ -4316,8 +4317,9 @@ describe("generated forms and records", () => {
     expect(html).toContain('aria-label="Edit Icon"');
     expect(html).toMatch(/data-web-icon-field-edit="trigger"[\s\S]*data-web-svg-icon="empty"/);
     expect(html).not.toContain('value="sparkles"');
-    expect(html).toMatch(inputWithAriaLabelAndType("Published at", "text"));
-    expect(html).toContain('value="2026-05-06"');
+    expect(html).toContain('data-slot="date-picker-trigger"');
+    expect(html).toContain('role="spinbutton"');
+    expect(html).toContain("2026");
     expect(html).toMatch(inputWithAriaLabelAndType("Count", "text"));
     expect(html).toContain('data-web-formatted-number-input="true"');
     expect(html).toContain('value="1200"');
@@ -4596,7 +4598,8 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain('value="Ship field behavior"');
     expect(editHtml).toContain('type="checkbox"');
     expect(editHtml).toContain("checked");
-    expect(editHtml).toContain('value="2026-05-06"');
+    expect(editHtml).toContain('data-slot="date-picker-trigger"');
+    expect(editHtml).toContain('role="spinbutton"');
     expect(editHtml).not.toContain('aria-label="Estimate"');
     expect(editHtml).toContain("High");
   });
@@ -4732,7 +4735,8 @@ describe("generated forms and records", () => {
     expect(editHtml).toContain("<textarea");
     expect(editHtml).not.toContain('aria-label="Featured"');
     expect(editHtml).not.toContain('aria-label="Published at"');
-    expect(editHtml).toMatch(inputWithAriaLabelAndType("Date", "text"));
+    expect(editHtml).toContain('data-slot="date-picker-trigger"');
+    expect(editHtml).toContain('role="spinbutton"');
     expect(editHtml).not.toContain('aria-label="Order"');
     expect(editHtml).toContain('data-web-formatted-number-input="true"');
   });
