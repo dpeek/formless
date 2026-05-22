@@ -13,6 +13,7 @@
     "./button": "./src/button.tsx",
     "./card": "./src/card.tsx",
     "./calendar": "./src/calendar.tsx",
+    "./card": "./src/card.tsx",
     "./checkbox": "./src/checkbox.tsx",
     "./color-area": "./src/color-area.tsx",
     "./color-field": "./src/color-field.tsx",

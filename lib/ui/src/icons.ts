@@ -10,6 +10,7 @@ import {
   CopyIcon as LucideCopyIcon,
   Heading2Icon as LucideHeading2Icon,
   Heading3Icon as LucideHeading3Icon,
+  GripVerticalIcon as LucideGripVerticalIcon,
   ItalicIcon as LucideItalicIcon,
   LinkIcon as LucideLinkIcon,
   ListIcon as LucideListIcon,
@@ -43,6 +44,9 @@ export const ControlSelectIcon = LucideChevronsUpDownIcon;
 export const CalendarCaptionDropdownIcon = LucideChevronDownIcon;
 export const CalendarNextIcon = LucideChevronRightIcon;
 export const CalendarPreviousIcon = LucideChevronLeftIcon;
+export const TableDragHandleIcon = LucideGripVerticalIcon;
+export const TableSortIcon = LucideChevronDownIcon;
+export const TableTreeDisclosureIcon = LucideChevronRightIcon;
 export const MarkdownBoldIcon = LucideBoldIcon;
 export const MarkdownBulletedListIcon = LucideListIcon;
 export const MarkdownCodeIcon = LucideCodeIcon;
