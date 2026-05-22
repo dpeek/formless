@@ -363,7 +363,7 @@ function selectRateHomeModel() {
 
 function expectWorkbenchToolbar(html: string, schemaRoute: string, schemaKey: string) {
   expect(html).toContain('data-frame="workbench-toolbar"');
-  expect(html).toContain("bg-background pb-[var(--workbench-toolbar-height)] text-foreground");
+  expect(html).toContain("bg-bg pb-[var(--workbench-toolbar-height)] text-fg");
   expect(html).toContain(`href="${schemaRoute}"`);
   expect(html).toContain('aria-label="Workbench actions"');
   expect(html).toContain("Export");

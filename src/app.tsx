@@ -147,7 +147,7 @@ export function App({
   return runtimeProfile.shell === "dev" ? (
     <WorkbenchFrame routeWorld={routeWorld} runtimeProfile={runtimeProfile}>
       {isWorkbenchToolRoute ? (
-        <main className="bg-background p-6" data-frame="workbench-tool">
+        <main className="bg-bg p-6" data-frame="workbench-tool">
           <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
         </main>
       ) : (
@@ -177,7 +177,7 @@ function WorkbenchFrame({
       style={{ "--workbench-toolbar-height": "3.5rem" } as CSSProperties}
     >
       <div
-        className="min-h-[calc(100dvh-var(--workbench-toolbar-height))] bg-background pb-[var(--workbench-toolbar-height)] text-foreground"
+        className="min-h-[calc(100dvh-var(--workbench-toolbar-height))] bg-bg pb-[var(--workbench-toolbar-height)] text-fg"
         data-frame="workbench-content"
       >
         {children}
@@ -673,7 +673,7 @@ function AppRoutes({
 }
 
 function RouteLoading() {
-  return <p className="text-sm text-muted-foreground">Loading...</p>;
+  return <p className="text-sm text-muted-fg">Loading...</p>;
 }
 
 function runtimeScreenWildcardRoute(world: RuntimeWorldMount): `/${string}` {

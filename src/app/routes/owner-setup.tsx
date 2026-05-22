@@ -121,9 +121,9 @@ export function OwnerSetupRouteView({
   const visibleSubmitError = submitError ?? (state.status === "failed" ? state.message : undefined);
 
   return (
-    <section className="min-h-dvh bg-background text-foreground">
+    <section className="min-h-dvh bg-bg text-fg">
       <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col justify-center px-4 py-12">
-        <div className="space-y-6 rounded-lg border border-border bg-card p-6 shadow-sm">
+        <div className="space-y-6 rounded-lg border border-border bg-overlay p-6 shadow-sm">
           <OwnerSetupStateBody
             ownerEmail={ownerEmail}
             ownerName={ownerName}
@@ -384,9 +384,9 @@ function OwnerSetupMessage({
 function OwnerSetupHeader({ heading, message }: { heading: string; message: string }) {
   return (
     <header className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Formless</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-fg">Formless</p>
       <h1 className="text-2xl font-semibold">{heading}</h1>
-      <p className="text-sm text-muted-foreground">{message}</p>
+      <p className="text-sm text-muted-fg">{message}</p>
     </header>
   );
 }
@@ -394,7 +394,7 @@ function OwnerSetupHeader({ heading, message }: { heading: string; message: stri
 function OwnerSetupContinueLink() {
   return (
     <a
-      className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/80"
+      className="inline-flex h-7 items-center justify-center rounded-md bg-primary px-2 text-xs font-medium text-primary-fg transition-colors hover:bg-primary/80"
       href="/"
     >
       Continue

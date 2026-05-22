@@ -38,7 +38,7 @@ export function SyncStatusControl({
       </summary>
       <div
         aria-label={worldKey ? `Sync status details for ${worldKey}` : "Sync status details"}
-        className="absolute right-0 z-40 mt-2 w-72 rounded border border-border bg-popover p-3 text-popover-foreground shadow-md"
+        className="absolute right-0 z-40 mt-2 w-72 rounded border border-border bg-overlay p-3 text-overlay-fg shadow-md"
         data-sync-status-details
       >
         <div className="space-y-1 border-b border-border pb-3">
