@@ -1,7 +1,7 @@
 ---
 name: Formless UI Primitives
 description: "Browser primitive ownership, exports, and package boundary for @dpeek/formless-ui."
-last_updated: 2026-05-21
+last_updated: 2026-05-22
 ---
 
 # Formless UI Primitives
@@ -17,6 +17,12 @@ last_updated: 2026-05-21
 `@dpeek/formless-ui` is the canonical package for reusable browser
 presentation primitives. It owns controls, layout helpers, markdown rendering,
 theme CSS, and small browser utility hooks.
+
+IntentUI source modules should stay source-faithful, with one sanctioned
+exception: icons map through `icons.ts` to Lucide-backed aliases. Do not add
+upstream icon packages just to make copied modules byte-identical. Keep local
+icon drift concentrated in `icons.ts`, and keep copied primitive files different
+only where they import those mapped aliases.
 
 The shared theme tokens use `.light` and `.dark` root classes. `global.css`
 also declares matching `color-scheme` values so native controls and scrollbars
