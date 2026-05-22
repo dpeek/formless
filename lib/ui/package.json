@@ -35,6 +35,7 @@
     "./menu": "./src/menu.tsx",
     "./modal": "./src/modal.tsx",
     "./native-select": "./src/native-select.tsx",
+    "./native-table": "./src/native-table.tsx",
     "./number-input": "./src/number-input.tsx",
     "./popover": "./src/popover.tsx",
     "./range-calendar": "./src/range-calendar.tsx",

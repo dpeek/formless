@@ -19,7 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@dpeek/formless-ui/table";
+} from "@dpeek/formless-ui/native-table";
 import {
   useAggregateValueMatchingQuery,
   useEntityRecordIdsMatchingQuery,
