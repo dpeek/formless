@@ -1,0 +1,1009 @@
+import {
+  INSTANCE_ARCHIVE_KIND,
+  parseAppArchive,
+  parseInstanceArchive,
+  parsePortableArchive,
+  type AppArchive,
+  type AppArchiveData,
+  type AppArchiveMediaObject,
+  type ArchiveRestorePolicy,
+  type ArchivedAppInstall,
+  type InstanceArchive,
+  type PortableArchive,
+} from "./archive.ts";
+import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
+import { installedAppStorageIdentity } from "./app-storage-identity.ts";
+import { isValidStoredFieldValue } from "./field-types.ts";
+import type { RecordValues, StoredRecord } from "./protocol.ts";
+import type { AppSchema, FieldSchema } from "./schema.ts";
+import type { SchemaKey } from "./schema-apps.ts";
+import {
+  MEDIA_IMAGE_UPLOAD_MAX_BYTES,
+  imageMediaContentTypeForKey,
+  isRestorableImageMediaKey,
+} from "../media/core.ts";
+
+export type ArchiveRestoreMediaFile = {
+  archivePath: string;
+  byteSize: number;
+  contentType: string;
+};
+
+export type ArchiveRestoreTargetState = {
+  installedApps?: readonly AppInstall[];
+  mediaFiles?: readonly ArchiveRestoreMediaFile[];
+  packages?: readonly BundledAppPackage[];
+  sourceSchemas?: Partial<Record<SchemaKey, AppSchema>>;
+};
+
+export type ArchiveRestorePlanErrorCode =
+  | "broken-reference"
+  | "duplicate-archive-install-id"
+  | "duplicate-media-object"
+  | "duplicate-record-id"
+  | "invalid-archive"
+  | "invalid-media"
+  | "invalid-record"
+  | "install-collision"
+  | "missing-media-object"
+  | "missing-source-schema"
+  | "schema-mismatch"
+  | "unique-constraint"
+  | "unsupported-package";
+
+export type ArchiveRestorePlanError = {
+  appInstallId?: string;
+  code: ArchiveRestorePlanErrorCode;
+  entity?: string;
+  field?: string;
+  message: string;
+  recordId?: string;
+  storageKey?: string;
+};
+
+export type ArchiveRestoreAppAction = "create" | "replace";
+
+export type ArchiveRestoreRecordCounts = {
+  active: number;
+  byEntity: Record<string, number>;
+  tombstoned: number;
+  total: number;
+};
+
+export type ArchiveRestoreAppPlan = {
+  action: ArchiveRestoreAppAction;
+  app: AppInstall;
+  dataKind: AppArchiveData["kind"];
+  mediaCount: number;
+  recordCounts: ArchiveRestoreRecordCounts;
+  schemaKey: string;
+  schemaUpdatedAt: string;
+};
+
+export type ArchiveRestorePlanStep =
+  | {
+      install: AppInstall;
+      kind: "createInstall";
+    }
+  | {
+      install: AppInstall;
+      kind: "replaceInstall";
+    }
+  | {
+      appInstallId: string;
+      archivePath: string;
+      byteSize: number;
+      contentType: string;
+      deliveryHref: string;
+      kind: "restoreMedia";
+      storageKey: string;
+    }
+  | {
+      appInstallId: string;
+      dataKind: AppArchiveData["kind"];
+      kind: "restoreAppData";
+      packageAppKey: string;
+      recordCount: number;
+      schemaKey: string;
+      tombstoneCount: number;
+    };
+
+export type ArchiveRestorePlanSummary = {
+  appCount: number;
+  createdInstalls: string[];
+  mediaCountsByApp: Record<string, number>;
+  recordCountsByApp: Record<string, ArchiveRestoreRecordCounts>;
+  replacedInstalls: string[];
+};
+
+export type ArchiveRestorePlan = {
+  dryRun: boolean;
+  policy: ArchiveRestorePolicy;
+  apps: ArchiveRestoreAppPlan[];
+  steps: ArchiveRestorePlanStep[];
+  summary: ArchiveRestorePlanSummary;
+};
+
+export type ArchiveRestorePlanResult =
+  | {
+      ok: true;
+      plan: ArchiveRestorePlan;
+    }
+  | {
+      errors: ArchiveRestorePlanError[];
+      ok: false;
+    };
+
+type PlannerContext = {
+  existingInstallsById: Map<string, AppInstall>;
+  mediaFilesByPath: Map<string, ArchiveRestoreMediaFile> | undefined;
+  packagesByKey: Map<string, BundledAppPackage>;
+  sourceSchemas: Partial<Record<SchemaKey, AppSchema>> | undefined;
+};
+
+export function planPortableArchiveRestore(
+  value: unknown,
+  target: ArchiveRestoreTargetState = {},
+): ArchiveRestorePlanResult {
+  let archive: PortableArchive;
+
+  try {
+    archive = parsePortableArchive(value);
+  } catch (error) {
+    return invalidArchiveResult(error);
+  }
+
+  return planParsedPortableArchiveRestore(archive, target);
+}
+
+export function planInstanceArchiveRestore(
+  value: unknown,
+  target: ArchiveRestoreTargetState = {},
+): ArchiveRestorePlanResult {
+  let archive: InstanceArchive;
+
+  try {
+    archive = parseInstanceArchive(value);
+  } catch (error) {
+    return invalidArchiveResult(error);
+  }
+
+  return planParsedInstanceArchiveRestore(archive, target);
+}
+
+export function planAppArchiveRestore(
+  value: unknown,
+  target: ArchiveRestoreTargetState = {},
+): ArchiveRestorePlanResult {
+  let archive: AppArchive;
+
+  try {
+    archive = parseAppArchive(value);
+  } catch (error) {
+    return invalidArchiveResult(error);
+  }
+
+  return planParsedAppArchiveRestore(archive, target);
+}
+
+function planParsedPortableArchiveRestore(
+  archive: PortableArchive,
+  target: ArchiveRestoreTargetState,
+): ArchiveRestorePlanResult {
+  if (archive.kind === INSTANCE_ARCHIVE_KIND) {
+    return planParsedInstanceArchiveRestore(archive, target);
+  }
+
+  return planParsedAppArchiveRestore(archive, target);
+}
+
+function planParsedInstanceArchiveRestore(
+  archive: InstanceArchive,
+  target: ArchiveRestoreTargetState,
+): ArchiveRestorePlanResult {
+  return planArchives(archive.apps, archive.restorePolicy, target);
+}
+
+function planParsedAppArchiveRestore(
+  archive: AppArchive,
+  target: ArchiveRestoreTargetState,
+): ArchiveRestorePlanResult {
+  return planArchives([archive], archive.restorePolicy, target);
+}
+
+function planArchives(
+  apps: readonly AppArchive[],
+  policy: ArchiveRestorePolicy,
+  target: ArchiveRestoreTargetState,
+): ArchiveRestorePlanResult {
+  const context = plannerContext(target);
+  const errors: ArchiveRestorePlanError[] = [];
+  const appPlans: ArchiveRestoreAppPlan[] = [];
+  const mediaByApp = new Map<string, AppArchiveMediaObject[]>();
+  const seenInstallIds = new Set<string>();
+
+  for (const app of appsByInstallId(apps)) {
+    if (seenInstallIds.has(app.app.installId)) {
+      errors.push(
+        planError("duplicate-archive-install-id", {
+          appInstallId: app.app.installId,
+          message: `Archive includes duplicate app install "${app.app.installId}".`,
+        }),
+      );
+      continue;
+    }
+
+    seenInstallIds.add(app.app.installId);
+    const result = planAppArchive(app, policy, context);
+
+    errors.push(...result.errors);
+
+    if (result.plan) {
+      appPlans.push(result.plan);
+      mediaByApp.set(app.app.installId, result.media);
+    }
+  }
+
+  if (errors.length > 0) {
+    return { errors: errorsByLocation(errors), ok: false };
+  }
+
+  const sortedPlans = appPlans.sort((left, right) =>
+    left.app.installId.localeCompare(right.app.installId),
+  );
+
+  return {
+    ok: true,
+    plan: {
+      dryRun: policy.dryRun,
+      policy: { ...policy },
+      apps: sortedPlans,
+      steps: planSteps(sortedPlans, mediaByApp),
+      summary: planSummary(sortedPlans),
+    },
+  };
+}
+
+function plannerContext(target: ArchiveRestoreTargetState): PlannerContext {
+  return {
+    existingInstallsById: new Map(
+      (target.installedApps ?? []).map((install) => [install.installId, install]),
+    ),
+    mediaFilesByPath:
+      target.mediaFiles === undefined
+        ? undefined
+        : new Map(target.mediaFiles.map((file) => [file.archivePath, file])),
+    packagesByKey: new Map(
+      (target.packages ?? listBundledAppPackages()).map((appPackage) => [
+        appPackage.packageAppKey,
+        appPackage,
+      ]),
+    ),
+    sourceSchemas: target.sourceSchemas,
+  };
+}
+
+function planAppArchive(
+  archive: AppArchive,
+  policy: ArchiveRestorePolicy,
+  context: PlannerContext,
+): {
+  errors: ArchiveRestorePlanError[];
+  media: AppArchiveMediaObject[];
+  plan?: ArchiveRestoreAppPlan;
+} {
+  const errors: ArchiveRestorePlanError[] = [];
+  const app = archive.app;
+  const appPackage = context.packagesByKey.get(app.packageAppKey);
+  const existingInstall = context.existingInstallsById.get(app.installId);
+  let action: ArchiveRestoreAppAction = "create";
+
+  if (!appPackage) {
+    errors.push(
+      planError("unsupported-package", {
+        appInstallId: app.installId,
+        message: `Archive app "${app.installId}" uses unsupported package "${app.packageAppKey}".`,
+      }),
+    );
+  } else {
+    validatePackageCompatibility(app, appPackage, context, archive.data, errors);
+  }
+
+  if (existingInstall) {
+    if (policy.installCollisions === "reject") {
+      errors.push(
+        planError("install-collision", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" collides with an installed app.`,
+        }),
+      );
+    } else {
+      action = "replace";
+
+      if (existingInstall.packageAppKey !== app.packageAppKey) {
+        errors.push(
+          planError("schema-mismatch", {
+            appInstallId: app.installId,
+            message: `Archive app "${app.installId}" package "${app.packageAppKey}" does not match installed package "${existingInstall.packageAppKey}".`,
+          }),
+        );
+      }
+    }
+  }
+
+  const records = recordsForAppData(archive.data);
+  const schema = schemaForAppData(archive.data);
+
+  validateRecords(app.installId, schema, records, errors);
+  validateMedia(app, archive.media.objects, records, context, errors);
+
+  if (!appPackage || errors.length > 0) {
+    return { errors, media: [] };
+  }
+
+  return {
+    errors,
+    media: sortedMediaObjects(archive.media.objects),
+    plan: {
+      action,
+      app: appInstallForArchive(app, appPackage),
+      dataKind: archive.data.kind,
+      mediaCount: archive.media.objects.length,
+      recordCounts: recordCounts(records),
+      schemaKey: schemaKeyForAppData(archive.data),
+      schemaUpdatedAt: schemaUpdatedAtForAppData(archive.data),
+    },
+  };
+}
+
+function validatePackageCompatibility(
+  app: ArchivedAppInstall,
+  appPackage: BundledAppPackage,
+  context: PlannerContext,
+  data: AppArchiveData,
+  errors: ArchiveRestorePlanError[],
+) {
+  if (appPackage.sourceSchemaKey !== app.sourceSchemaKey) {
+    errors.push(
+      planError("schema-mismatch", {
+        appInstallId: app.installId,
+        message: `Archive app "${app.installId}" source schema "${app.sourceSchemaKey}" does not match package source "${appPackage.sourceSchemaKey}".`,
+      }),
+    );
+  }
+
+  if (!context.sourceSchemas) {
+    return;
+  }
+
+  const sourceSchema = context.sourceSchemas[appPackage.sourceSchemaKey];
+
+  if (!sourceSchema) {
+    errors.push(
+      planError("missing-source-schema", {
+        appInstallId: app.installId,
+        message: `Archive app "${app.installId}" package source "${appPackage.sourceSchemaKey}" is unavailable.`,
+      }),
+    );
+    return;
+  }
+
+  if (
+    data.kind === "sourceRecords" &&
+    stableStringify(data.schema) !== stableStringify(sourceSchema)
+  ) {
+    errors.push(
+      planError("schema-mismatch", {
+        appInstallId: app.installId,
+        message: `Archive app "${app.installId}" source records schema does not match bundled source "${appPackage.sourceSchemaKey}".`,
+      }),
+    );
+  }
+}
+
+function validateRecords(
+  appInstallId: string,
+  schema: AppSchema,
+  records: StoredRecord[],
+  errors: ArchiveRestorePlanError[],
+) {
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of records) {
+    if (record.id.trim() === "") {
+      errors.push(
+        planError("invalid-record", {
+          appInstallId,
+          entity: record.entity,
+          message: `Archive app "${appInstallId}" includes a record with an empty id.`,
+          recordId: record.id,
+        }),
+      );
+      continue;
+    }
+
+    if (recordsById.has(record.id)) {
+      errors.push(
+        planError("duplicate-record-id", {
+          appInstallId,
+          entity: record.entity,
+          message: `Archive app "${appInstallId}" includes duplicate record id "${record.id}".`,
+          recordId: record.id,
+        }),
+      );
+      continue;
+    }
+
+    if (!isIsoTimestamp(record.createdAt)) {
+      errors.push(
+        planError("invalid-record", {
+          appInstallId,
+          entity: record.entity,
+          message: `Archive app "${appInstallId}" record "${record.id}" createdAt must be an ISO timestamp.`,
+          recordId: record.id,
+        }),
+      );
+    }
+
+    if (record.deletedAt !== undefined && !isIsoTimestamp(record.deletedAt)) {
+      errors.push(
+        planError("invalid-record", {
+          appInstallId,
+          entity: record.entity,
+          message: `Archive app "${appInstallId}" record "${record.id}" deletedAt must be an ISO timestamp.`,
+          recordId: record.id,
+        }),
+      );
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  for (const record of records) {
+    validateRecord(appInstallId, record, schema, recordsById, errors);
+  }
+
+  validateUniqueConstraints(appInstallId, schema, records, errors);
+}
+
+function validateRecord(
+  appInstallId: string,
+  record: StoredRecord,
+  schema: AppSchema,
+  recordsById: Map<string, StoredRecord>,
+  errors: ArchiveRestorePlanError[],
+) {
+  const entity = schema.entities[record.entity];
+
+  if (!entity) {
+    errors.push(
+      planError("invalid-record", {
+        appInstallId,
+        entity: record.entity,
+        message: `Archive app "${appInstallId}" record "${record.id}" references unknown entity "${record.entity}".`,
+        recordId: record.id,
+      }),
+    );
+    return;
+  }
+
+  for (const fieldName of Object.keys(record.values)) {
+    if (!entity.fields[fieldName]) {
+      errors.push(
+        planError("invalid-record", {
+          appInstallId,
+          entity: record.entity,
+          field: `${record.entity}.${fieldName}`,
+          message: `Archive app "${appInstallId}" record "${record.id}" includes unknown field "${record.entity}.${fieldName}".`,
+          recordId: record.id,
+        }),
+      );
+    }
+  }
+
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    const value = record.values[fieldName];
+
+    if (!isValidStoredFieldValue(value, field)) {
+      errors.push(
+        planError("invalid-record", {
+          appInstallId,
+          entity: record.entity,
+          field: `${record.entity}.${fieldName}`,
+          message: `Archive app "${appInstallId}" record "${record.id}" has invalid field "${record.entity}.${fieldName}".`,
+          recordId: record.id,
+        }),
+      );
+      continue;
+    }
+
+    if (field.type === "reference" && value !== undefined) {
+      validateReferenceField(appInstallId, record, fieldName, field, value, recordsById, errors);
+    }
+  }
+}
+
+function validateReferenceField(
+  appInstallId: string,
+  record: StoredRecord,
+  fieldName: string,
+  field: Extract<FieldSchema, { type: "reference" }>,
+  value: RecordValues[string],
+  recordsById: Map<string, StoredRecord>,
+  errors: ArchiveRestorePlanError[],
+) {
+  if (typeof value !== "string") {
+    return;
+  }
+
+  const target = recordsById.get(value);
+
+  if (!target) {
+    errors.push(
+      planError("broken-reference", {
+        appInstallId,
+        entity: record.entity,
+        field: `${record.entity}.${fieldName}`,
+        message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" references unknown ${field.to} record "${value}".`,
+        recordId: record.id,
+      }),
+    );
+    return;
+  }
+
+  if (target.entity !== field.to) {
+    errors.push(
+      planError("broken-reference", {
+        appInstallId,
+        entity: record.entity,
+        field: `${record.entity}.${fieldName}`,
+        message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" must reference a ${field.to} record.`,
+        recordId: record.id,
+      }),
+    );
+    return;
+  }
+
+  if (target.deletedAt) {
+    errors.push(
+      planError("broken-reference", {
+        appInstallId,
+        entity: record.entity,
+        field: `${record.entity}.${fieldName}`,
+        message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" cannot reference tombstoned record "${value}".`,
+        recordId: record.id,
+      }),
+    );
+  }
+}
+
+function validateUniqueConstraints(
+  appInstallId: string,
+  schema: AppSchema,
+  records: StoredRecord[],
+  errors: ArchiveRestorePlanError[],
+) {
+  for (const [entityName, entity] of Object.entries(schema.entities)) {
+    const activeRecords = records.filter(
+      (record) => record.entity === entityName && !record.deletedAt,
+    );
+
+    for (const [constraintName, constraint] of Object.entries(entity.constraints ?? {})) {
+      if (constraint.kind !== "unique") {
+        continue;
+      }
+
+      const seen = new Map<string, StoredRecord>();
+
+      for (const record of activeRecords) {
+        const key = uniqueConstraintKey(record.values, constraint.fields);
+        const duplicate = seen.get(key);
+
+        if (duplicate) {
+          errors.push(
+            planError("unique-constraint", {
+              appInstallId,
+              entity: entityName,
+              message: `Archive app "${appInstallId}" violates unique constraint "${entityName}.${constraintName}".`,
+              recordId: record.id,
+            }),
+          );
+          break;
+        }
+
+        seen.set(key, record);
+      }
+    }
+  }
+}
+
+function validateMedia(
+  app: ArchivedAppInstall,
+  mediaObjects: AppArchiveMediaObject[],
+  records: StoredRecord[],
+  context: PlannerContext,
+  errors: ArchiveRestorePlanError[],
+) {
+  const identity = installedAppStorageIdentity({
+    installId: app.installId,
+    packageAppKey: app.packageAppKey,
+  });
+  const seenStorageKeys = new Set<string>();
+  const seenArchivePaths = new Set<string>();
+  const deliveryHrefs = new Set<string>();
+
+  if (!identity?.siteMedia && mediaObjects.length > 0) {
+    for (const object of mediaObjects) {
+      errors.push(
+        planError("invalid-media", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" package "${app.packageAppKey}" does not support app-scoped media.`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+    return;
+  }
+
+  const media = identity?.siteMedia;
+  const keyPrefix = media ? mediaKeyPrefix(media.imageKeyPrefix) : undefined;
+  const deliveryPrefix = media ? `${media.routePrefix}/` : undefined;
+
+  for (const object of sortedMediaObjects(mediaObjects)) {
+    if (seenStorageKeys.has(object.storageKey)) {
+      errors.push(
+        planError("duplicate-media-object", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" includes duplicate media storage key "${object.storageKey}".`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+
+    if (seenArchivePaths.has(object.archivePath)) {
+      errors.push(
+        planError("duplicate-media-object", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" includes duplicate media archive path "${object.archivePath}".`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+
+    seenStorageKeys.add(object.storageKey);
+    seenArchivePaths.add(object.archivePath);
+    deliveryHrefs.add(object.deliveryHref);
+
+    if (!keyPrefix || !isRestorableImageMediaKey(object.storageKey, { keyPrefix })) {
+      errors.push(
+        planError("invalid-media", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" media key "${object.storageKey}" is not install-scoped restorable image media.`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+
+    const expectedContentType = imageMediaContentTypeForKey(object.storageKey);
+
+    if (expectedContentType && normalizeContentType(object.contentType) !== expectedContentType) {
+      errors.push(
+        planError("invalid-media", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" media key "${object.storageKey}" content type must match the file extension.`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+
+    if (object.byteSize === 0) {
+      errors.push(
+        planError("invalid-media", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" media key "${object.storageKey}" must not be empty.`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+
+    if (object.byteSize > MEDIA_IMAGE_UPLOAD_MAX_BYTES) {
+      errors.push(
+        planError("invalid-media", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" media key "${object.storageKey}" exceeds the image restore size limit.`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+
+    if (deliveryPrefix && object.deliveryHref !== `${deliveryPrefix}${object.storageKey}`) {
+      errors.push(
+        planError("invalid-media", {
+          appInstallId: app.installId,
+          message: `Archive app "${app.installId}" media key "${object.storageKey}" delivery href is not install-scoped.`,
+          storageKey: object.storageKey,
+        }),
+      );
+    }
+
+    validateMediaFile(app.installId, object, context.mediaFilesByPath, errors);
+  }
+
+  if (deliveryPrefix) {
+    validateMediaReferences(app.installId, records, deliveryPrefix, deliveryHrefs, errors);
+  }
+}
+
+function validateMediaFile(
+  appInstallId: string,
+  object: AppArchiveMediaObject,
+  mediaFilesByPath: Map<string, ArchiveRestoreMediaFile> | undefined,
+  errors: ArchiveRestorePlanError[],
+) {
+  if (!mediaFilesByPath) {
+    return;
+  }
+
+  const file = mediaFilesByPath.get(object.archivePath);
+
+  if (!file) {
+    errors.push(
+      planError("missing-media-object", {
+        appInstallId,
+        message: `Archive app "${appInstallId}" media file "${object.archivePath}" is missing.`,
+        storageKey: object.storageKey,
+      }),
+    );
+    return;
+  }
+
+  if (normalizeContentType(file.contentType) !== normalizeContentType(object.contentType)) {
+    errors.push(
+      planError("invalid-media", {
+        appInstallId,
+        message: `Archive app "${appInstallId}" media file "${object.archivePath}" content type does not match the manifest.`,
+        storageKey: object.storageKey,
+      }),
+    );
+  }
+
+  if (file.byteSize !== object.byteSize) {
+    errors.push(
+      planError("invalid-media", {
+        appInstallId,
+        message: `Archive app "${appInstallId}" media file "${object.archivePath}" byte size does not match the manifest.`,
+        storageKey: object.storageKey,
+      }),
+    );
+  }
+}
+
+function validateMediaReferences(
+  appInstallId: string,
+  records: StoredRecord[],
+  deliveryPrefix: string,
+  deliveryHrefs: Set<string>,
+  errors: ArchiveRestorePlanError[],
+) {
+  for (const record of records) {
+    for (const [fieldName, value] of Object.entries(record.values)) {
+      if (typeof value !== "string" || !value.startsWith(deliveryPrefix)) {
+        continue;
+      }
+
+      if (!deliveryHrefs.has(value)) {
+        errors.push(
+          planError("missing-media-object", {
+            appInstallId,
+            entity: record.entity,
+            field: `${record.entity}.${fieldName}`,
+            message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" references media missing from the archive manifest.`,
+            recordId: record.id,
+          }),
+        );
+      }
+    }
+  }
+}
+
+function planSteps(
+  appPlans: ArchiveRestoreAppPlan[],
+  mediaByApp: Map<string, AppArchiveMediaObject[]>,
+): ArchiveRestorePlanStep[] {
+  const steps: ArchiveRestorePlanStep[] = [];
+
+  for (const appPlan of appPlans) {
+    steps.push({
+      install: appPlan.app,
+      kind: appPlan.action === "create" ? "createInstall" : "replaceInstall",
+    });
+
+    for (const object of mediaByApp.get(appPlan.app.installId) ?? []) {
+      steps.push({
+        appInstallId: appPlan.app.installId,
+        archivePath: object.archivePath,
+        byteSize: object.byteSize,
+        contentType: object.contentType,
+        deliveryHref: object.deliveryHref,
+        kind: "restoreMedia",
+        storageKey: object.storageKey,
+      });
+    }
+
+    steps.push({
+      appInstallId: appPlan.app.installId,
+      dataKind: appPlan.dataKind,
+      kind: "restoreAppData",
+      packageAppKey: appPlan.app.packageAppKey,
+      recordCount: appPlan.recordCounts.total,
+      schemaKey: appPlan.schemaKey,
+      tombstoneCount: appPlan.recordCounts.tombstoned,
+    });
+  }
+
+  return steps;
+}
+
+function planSummary(appPlans: ArchiveRestoreAppPlan[]): ArchiveRestorePlanSummary {
+  return {
+    appCount: appPlans.length,
+    createdInstalls: appPlans
+      .filter((app) => app.action === "create")
+      .map((app) => app.app.installId),
+    mediaCountsByApp: Object.fromEntries(
+      appPlans.map((app) => [app.app.installId, app.mediaCount]),
+    ),
+    recordCountsByApp: Object.fromEntries(
+      appPlans.map((app) => [app.app.installId, app.recordCounts]),
+    ),
+    replacedInstalls: appPlans
+      .filter((app) => app.action === "replace")
+      .map((app) => app.app.installId),
+  };
+}
+
+function appInstallForArchive(app: ArchivedAppInstall, appPackage: BundledAppPackage): AppInstall {
+  return {
+    installId: app.installId,
+    packageAppKey: appPackage.packageAppKey,
+    label: app.label,
+    status: "installed",
+    createdAt: app.createdAt,
+    updatedAt: app.updatedAt,
+    adminRoute: `${appPackage.adminRouteBase}/${app.installId}`,
+    schemaRoute: `${appPackage.adminRouteBase}/${app.installId}/schema`,
+    ...(appPackage.publicRouteBase === undefined
+      ? {}
+      : {
+          publicRoute: `${appPackage.publicRouteBase}/${app.installId}`,
+          publicRoutePrefix: `${appPackage.publicRouteBase}/${app.installId}/`,
+        }),
+  };
+}
+
+function recordsForAppData(data: AppArchiveData): StoredRecord[] {
+  if (data.kind === "storeSnapshot") {
+    return data.snapshot.records;
+  }
+
+  return data.records.map((record) => ({
+    id: record.id,
+    entity: record.entity,
+    values: record.values,
+    createdAt: record.createdAt,
+  }));
+}
+
+function schemaForAppData(data: AppArchiveData): AppSchema {
+  return data.kind === "storeSnapshot" ? data.snapshot.schema : data.schema;
+}
+
+function schemaKeyForAppData(data: AppArchiveData): string {
+  return data.kind === "storeSnapshot" ? data.snapshot.schemaKey : data.schemaKey;
+}
+
+function schemaUpdatedAtForAppData(data: AppArchiveData): string {
+  return data.kind === "storeSnapshot" ? data.snapshot.schemaUpdatedAt : data.schemaUpdatedAt;
+}
+
+function recordCounts(records: StoredRecord[]): ArchiveRestoreRecordCounts {
+  const byEntity: Record<string, number> = {};
+  let tombstoned = 0;
+
+  for (const record of records) {
+    byEntity[record.entity] = (byEntity[record.entity] ?? 0) + 1;
+
+    if (record.deletedAt) {
+      tombstoned += 1;
+    }
+  }
+
+  return {
+    active: records.length - tombstoned,
+    byEntity: Object.fromEntries(
+      Object.entries(byEntity).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+    tombstoned,
+    total: records.length,
+  };
+}
+
+function appsByInstallId(apps: readonly AppArchive[]): AppArchive[] {
+  return [...apps].sort((left, right) => {
+    const installOrder = left.app.installId.localeCompare(right.app.installId);
+
+    return installOrder === 0 ? left.exportedAt.localeCompare(right.exportedAt) : installOrder;
+  });
+}
+
+function sortedMediaObjects(objects: readonly AppArchiveMediaObject[]): AppArchiveMediaObject[] {
+  return [...objects].sort((left, right) => left.storageKey.localeCompare(right.storageKey));
+}
+
+function uniqueConstraintKey(values: RecordValues, fields: readonly string[]) {
+  return JSON.stringify(fields.map((fieldName) => values[fieldName] ?? null));
+}
+
+function mediaKeyPrefix(prefix: string) {
+  return prefix.endsWith("/") ? prefix : `${prefix}/`;
+}
+
+function normalizeContentType(value: string) {
+  return value.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
+function isIsoTimestamp(value: string) {
+  const date = new Date(value);
+
+  return !Number.isNaN(date.valueOf()) && date.toISOString() === value;
+}
+
+function invalidArchiveResult(error: unknown): ArchiveRestorePlanResult {
+  return {
+    errors: [
+      planError("invalid-archive", {
+        message: error instanceof Error ? error.message : "Archive is invalid.",
+      }),
+    ],
+    ok: false,
+  };
+}
+
+function planError(
+  code: ArchiveRestorePlanErrorCode,
+  details: Omit<ArchiveRestorePlanError, "code">,
+): ArchiveRestorePlanError {
+  return { code, ...details };
+}
+
+function errorsByLocation(errors: ArchiveRestorePlanError[]): ArchiveRestorePlanError[] {
+  return [...errors].sort((left, right) => {
+    return (
+      (left.appInstallId ?? "").localeCompare(right.appInstallId ?? "") ||
+      (left.recordId ?? "").localeCompare(right.recordId ?? "") ||
+      (left.storageKey ?? "").localeCompare(right.storageKey ?? "") ||
+      left.code.localeCompare(right.code) ||
+      left.message.localeCompare(right.message)
+    );
+  });
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(stableValue(value));
+}
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableValue(item)]),
+    );
+  }
+
+  return value;
+}
