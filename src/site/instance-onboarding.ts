@@ -92,8 +92,8 @@ export type FormlessInstanceDeploymentPlan = {
   };
   runtimeVars: {
     FORMLESS_DEPLOY_VERSION: string;
-    FORMLESS_RUNTIME_PROFILE: "dev";
-    VITE_FORMLESS_RUNTIME_PROFILE: "dev";
+    FORMLESS_RUNTIME_PROFILE: "instance";
+    VITE_FORMLESS_RUNTIME_PROFILE: "instance";
   };
   secretRequirements: Array<{
     envName: "FORMLESS_ADMIN_TOKEN";
@@ -411,8 +411,8 @@ export function planFormlessInstanceDeployment(
     },
     runtimeVars: {
       FORMLESS_DEPLOY_VERSION: packageVersion,
-      FORMLESS_RUNTIME_PROFILE: "dev",
-      VITE_FORMLESS_RUNTIME_PROFILE: "dev",
+      FORMLESS_RUNTIME_PROFILE: "instance",
+      VITE_FORMLESS_RUNTIME_PROFILE: "instance",
     },
     secretRequirements: [
       {
@@ -733,22 +733,7 @@ function formlessInstanceAlchemyAssets(): AlchemyFormlessInstanceDeploymentWorke
   return {
     directory: "dist/client",
     not_found_handling: "single-page-application",
-    run_worker_first: [
-      "/*",
-      "!/pages",
-      "!/pages/*",
-      "!/tasks",
-      "!/tasks/*",
-      "!/estii",
-      "!/estii/*",
-      "!/site",
-      "!/site/*",
-      "!/schema",
-      "!/assets/*",
-      "!/src/*",
-      "!/@vite/*",
-      "!/@react-refresh",
-    ],
+    run_worker_first: ["/*", "!/assets/*", "!/src/*", "!/@vite/*", "!/@react-refresh"],
   };
 }
 

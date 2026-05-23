@@ -81,8 +81,8 @@ describe("Formless instance onboarding planner", () => {
       },
       runtimeVars: {
         FORMLESS_DEPLOY_VERSION: "0.1.8",
-        FORMLESS_RUNTIME_PROFILE: "dev",
-        VITE_FORMLESS_RUNTIME_PROFILE: "dev",
+        FORMLESS_RUNTIME_PROFILE: "instance",
+        VITE_FORMLESS_RUNTIME_PROFILE: "instance",
       },
       secretRequirements: [
         {
@@ -855,36 +855,21 @@ describe("Alchemy Formless instance deployment", () => {
           assets: {
             directory: "dist/client",
             not_found_handling: "single-page-application",
-            run_worker_first: [
-              "/*",
-              "!/pages",
-              "!/pages/*",
-              "!/tasks",
-              "!/tasks/*",
-              "!/estii",
-              "!/estii/*",
-              "!/site",
-              "!/site/*",
-              "!/schema",
-              "!/assets/*",
-              "!/src/*",
-              "!/@vite/*",
-              "!/@react-refresh",
-            ],
+            run_worker_first: ["/*", "!/assets/*", "!/src/*", "!/@vite/*", "!/@react-refresh"],
           },
           bindings: {
             FORMLESS_ADMIN_TOKEN: adminSecret,
             FORMLESS_AUTHORITY: authorityNamespace,
             FORMLESS_DEPLOY_VERSION: "0.1.8",
             FORMLESS_MEDIA: mediaBucket,
-            FORMLESS_RUNTIME_PROFILE: "dev",
+            FORMLESS_RUNTIME_PROFILE: "instance",
           },
           build: {
             command: "bun run build",
             env: {
               FORMLESS_DEPLOY_VERSION: "0.1.8",
-              FORMLESS_RUNTIME_PROFILE: "dev",
-              VITE_FORMLESS_RUNTIME_PROFILE: "dev",
+              FORMLESS_RUNTIME_PROFILE: "instance",
+              VITE_FORMLESS_RUNTIME_PROFILE: "instance",
             },
           },
           compatibilityDate: FORMLESS_WORKER_COMPATIBILITY_DATE,
