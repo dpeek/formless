@@ -721,6 +721,15 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Estii source reset controls"');
     expect(html).toContain('aria-label="Schema editor mode"');
     expect(html).toContain('aria-label="Builder entities"');
+    expect(countOccurrences(html, 'data-slot="object-list"')).toBe(2);
+    expect(countOccurrences(html, 'data-slot="object-list-grid"')).toBe(2);
+    expect(html).toContain('role="grid"');
+    expect(html).toContain('aria-label="Entities"');
+    expect(html).toContain('aria-label="Resource fields"');
+    expect(html).toContain('data-key="resource"');
+    expect(html).toContain('data-key="name"');
+    expect(html).toContain("Selected entity");
+    expect(html).toContain("Selected field");
     expect(html).toContain("Saved draft");
     expect(html).toContain("Save schema");
     expect(html).toContain("Open app");
@@ -2529,6 +2538,13 @@ describe("generated collection home", () => {
     );
     const html = renderRoute("/tasks");
 
+    expect(countOccurrences(html, 'data-slot="object-list"')).toBe(1);
+    expect(countOccurrences(html, 'data-slot="object-list-grid"')).toBe(1);
+    expect(html).toContain('aria-label="Task records"');
+    expect(html).toContain('role="grid"');
+    expect(html).toContain('data-key="record-1"');
+    expect(html).toContain('data-key="record-2"');
+    expect(html).toContain('data-key="record-3"');
     expect(html).toMatch(/aria-label="All count"[^>]*>3</);
     expect(html).toMatch(/aria-label="Active count"[^>]*>2</);
     expect(html).toMatch(/aria-label="Completed count"[^>]*>1</);

@@ -25,6 +25,7 @@
   "scripts": {
     "ralph": "bun run scripts/ralph-loop.ts",
     "browser": "agent-browser",
+    "smoke:object-list": "bun run scripts/object-list-smoke.ts",
     "check": "vp check --fix",
     "test": "vp test --reporter=agent",
     "dev": "vp dev",
