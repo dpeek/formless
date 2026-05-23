@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { cloudflare } from "@cloudflare/vite-plugin";
+import { cloudflare, type PluginConfig, type WorkerConfig } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite-plus";
@@ -10,14 +10,28 @@ const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
 const siteProjectRoot = process.env.FORMLESS_SITE_PROJECT_ROOT;
 const wranglerPersistPath = process.env.FORMLESS_WRANGLER_PERSIST;
+const workerRuntimeVars = runtimeWorkerVars(process.env);
 const serverFsAllow = [
   packageRoot,
   ...(installedNodeModulesRoot ? [installedNodeModulesRoot] : []),
   ...(siteProjectRoot ? [siteProjectRoot] : []),
 ];
-const cloudflarePluginConfig = wranglerPersistPath
-  ? { persistState: { path: wranglerPersistPath } }
-  : undefined;
+const cloudflarePluginConfig: PluginConfig | undefined =
+  wranglerPersistPath || Object.keys(workerRuntimeVars).length > 0
+    ? {
+        ...(wranglerPersistPath ? { persistState: { path: wranglerPersistPath } } : {}),
+        ...(Object.keys(workerRuntimeVars).length > 0
+          ? {
+              config: (config: WorkerConfig): Partial<WorkerConfig> => ({
+                vars: {
+                  ...config.vars,
+                  ...workerRuntimeVars,
+                },
+              }),
+            }
+          : {}),
+      }
+    : undefined;
 
 export default defineConfig({
   plugins: [
@@ -113,4 +127,15 @@ function packageInstallNodeModulesRoot(root: string): string | null {
   return path.basename(scopeRoot) === "@dpeek" && path.basename(nodeModulesRoot) === "node_modules"
     ? nodeModulesRoot
     : null;
+}
+
+function runtimeWorkerVars(env: NodeJS.ProcessEnv): Record<string, string> {
+  return {
+    ...optionalWorkerVar("FORMLESS_LAUNCH_FIXTURE", env.FORMLESS_LAUNCH_FIXTURE),
+    ...optionalWorkerVar("FORMLESS_RUNTIME_PROFILE", env.FORMLESS_RUNTIME_PROFILE),
+  };
+}
+
+function optionalWorkerVar(name: string, value: string | undefined): Record<string, string> {
+  return value && value.length > 0 ? { [name]: value } : {};
 }

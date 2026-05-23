@@ -1,5 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import type { AppInstall } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
@@ -117,7 +118,7 @@ function recordIds(records: readonly StoredRecord[]) {
 }
 
 async function writeLaunchFixtureHarness() {
-  launchFixtureHarnessDir = await mkdtemp(resolve(".launch-fixture-harness-"));
+  launchFixtureHarnessDir = await mkdtemp(join(tmpdir(), "formless-launch-fixture-harness-"));
   const tempDir = launchFixtureHarnessDir;
   const harnessPath = join(tempDir, "launch-fixture-harness.ts");
 

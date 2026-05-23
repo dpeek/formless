@@ -19,7 +19,13 @@ import type { Env } from "./index.ts";
 import { authorizeAuthorityOperation } from "./authority-admin-guard.ts";
 import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import { executeAuthorityOperation, selectAuthorityOperation } from "./authority-operations.ts";
+import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
+import {
+  initializeInstanceAppInstallsFromConfiguredLaunchFixture,
+  launchFixtureStorageSourceForAuthorityName,
+  launchFixtureStorageSourceForIdentity,
+} from "./launch-fixtures.ts";
 import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
@@ -32,6 +38,11 @@ export class FormlessAuthority extends DurableObject<Env> {
 
   async fetch(request: Request) {
     const url = new URL(request.url);
+
+    if (this.ctx.id.name === FORMLESS_INSTANCE_AUTHORITY_NAME) {
+      initializeInstanceAppInstallsFromConfiguredLaunchFixture(this.ctx.storage, this.bindings);
+    }
+
     const ownerSetupResponse = await handleOwnerSetupDurableObjectRequest(
       request,
       this.ctx.storage,
@@ -82,7 +93,7 @@ export class FormlessAuthority extends DurableObject<Env> {
 
         const body = operation.metadata.mode === "write" ? await readJson(request) : undefined;
         ensureStorageTables(this.ctx.storage);
-        const source = storageSourceFromApp(route.app);
+        const source = storageSourceFromRoute(route, this.bindings);
         const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
           this.ctx.getWebSockets(),
         );
@@ -119,7 +130,7 @@ export class FormlessAuthority extends DurableObject<Env> {
       return;
     }
 
-    const source = storageSourceFromSyncSocket(this.ctx, socket);
+    const source = storageSourceFromSyncSocket(this.ctx, socket, this.bindings);
     const attachment = {
       cursor: parsedMessage.cursor,
       schemaUpdatedAt: parsedMessage.schemaUpdatedAt,
@@ -189,6 +200,15 @@ class AuthorityWriteModule {
   }
 }
 
+function storageSourceFromRoute(
+  route: { app: WorkerSchemaAppDefinition; identity: AppStorageIdentity },
+  env: Env,
+): StorageSource {
+  return (
+    launchFixtureStorageSourceForIdentity(route.identity, env) ?? storageSourceFromApp(route.app)
+  );
+}
+
 function storageSourceFromApp(app: WorkerSchemaAppDefinition): StorageSource {
   return {
     schema: app.sourceSchema,
@@ -197,7 +217,17 @@ function storageSourceFromApp(app: WorkerSchemaAppDefinition): StorageSource {
   };
 }
 
-function storageSourceFromSyncSocket(ctx: DurableObjectState, socket: WebSocket): StorageSource {
+function storageSourceFromSyncSocket(
+  ctx: DurableObjectState,
+  socket: WebSocket,
+  env: Env,
+): StorageSource {
+  const launchFixtureSource = launchFixtureStorageSourceForAuthorityName(ctx.id.name, env);
+
+  if (launchFixtureSource) {
+    return launchFixtureSource;
+  }
+
   return storageSourceFromSchemaKey(ctx.getTags(socket)[0] ?? ctx.id.name);
 }
 
