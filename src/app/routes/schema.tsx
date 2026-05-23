@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
+import { ObjectList } from "@dpeek/formless-ui/object-list";
 import { Link, useLocation } from "wouter";
 import type { GeneratedFieldControlKind } from "../generated/field-controls.ts";
 import { selectGeneratedFieldEditorAdapter } from "../generated/field-ui-adapters.ts";
@@ -526,40 +527,18 @@ function SchemaBuilderWorkspace({
     <div className="grid min-h-[32rem] grid-cols-1 overflow-hidden rounded border border-slate-200 bg-white lg:grid-cols-[18rem_22rem_minmax(0,1fr)]">
       <aside
         aria-label="Builder entities"
-        className="border-b border-slate-200 bg-slate-50 lg:border-r lg:border-b-0"
+        className="flex min-h-0 flex-col border-b border-slate-200 bg-slate-50 lg:border-r lg:border-b-0"
       >
-        <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Entities
-        </div>
-        <div className="divide-y divide-slate-200">
-          <ul className="max-h-[28rem] overflow-auto">
-            {entities.map((entity) => (
-              <li key={entity.key}>
-                <button
-                  aria-current={entity.key === selectedEntityKey ? "true" : undefined}
-                  className={`block w-full px-3 py-2 text-left hover:bg-white ${
-                    entity.key === selectedEntityKey ? "bg-white" : ""
-                  }`}
-                  onClick={() => {
-                    setSelectedEntityKey(entity.key);
-                    setSelectedFieldKey(null);
-                  }}
-                  type="button"
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-sm font-medium text-slate-900">
-                      {entity.label}
-                    </span>
-                    <code className="shrink-0 text-xs text-slate-500">{entity.key}</code>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {entity.fields.length} {entity.fields.length === 1 ? "field" : "fields"}
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <SchemaBuilderEntityList
+          entities={entities}
+          onSelectEntity={(entityKey) => {
+            setSelectedEntityKey(entityKey);
+            setSelectedFieldKey(null);
+          }}
+          selectedEntityKey={selectedEntityKey}
+        />
 
+        <div className="border-t border-slate-200">
           <div aria-label="Create entity" className="space-y-2 p-3" role="form">
             <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
               New entity
@@ -595,43 +574,11 @@ function SchemaBuilderWorkspace({
       >
         {selectedEntity ? (
           <div className="flex h-full min-h-0 flex-col">
-            <div className="border-b border-slate-200 px-4 py-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <h2 className="truncate text-sm font-semibold text-slate-900">
-                  {selectedEntity.label}
-                </h2>
-                <code className="shrink-0 text-xs text-slate-500">{selectedEntity.key}</code>
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                {selectedEntity.generatedSurface ? "Builder surface" : "Source-owned surface"}
-              </div>
-            </div>
-            <ul className="min-h-0 flex-1 overflow-auto divide-y divide-slate-200">
-              {selectedEntity.fields.map((field) => (
-                <li key={field.key}>
-                  <button
-                    aria-current={field.key === selectedFieldKey ? "true" : undefined}
-                    className={`block w-full px-4 py-2 text-left hover:bg-slate-50 ${
-                      field.key === selectedFieldKey ? "bg-slate-50" : ""
-                    }`}
-                    onClick={() => setSelectedFieldKey(field.key)}
-                    type="button"
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-sm font-medium text-slate-900">
-                        {field.label}
-                      </span>
-                      <code className="shrink-0 text-xs text-slate-500">{field.key}</code>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span>{field.type}</span>
-                      {field.required && <span>Required</span>}
-                      {field.saved ? <span>Saved</span> : <span>Draft</span>}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <SchemaBuilderFieldList
+              entity={selectedEntity}
+              onSelectField={setSelectedFieldKey}
+              selectedFieldKey={selectedFieldKey}
+            />
 
             <div
               aria-label="Add field"
@@ -707,6 +654,93 @@ function SchemaBuilderWorkspace({
         )}
       </section>
     </div>
+  );
+}
+
+function SchemaBuilderEntityList({
+  entities,
+  onSelectEntity,
+  selectedEntityKey,
+}: {
+  entities: SchemaBuilderEntityProjection[];
+  onSelectEntity: (entityKey: string) => void;
+  selectedEntityKey: string | null;
+}) {
+  return (
+    <ObjectList
+      className="flex min-h-0 flex-1 flex-col p-3"
+      emptyState="No entities are currently defined."
+      getKey={(entity) => entity.key}
+      getTextValue={(entity) => entity.label}
+      gridClassName="min-h-0 flex-1 overflow-auto bg-white"
+      itemClassName="px-2 py-2"
+      items={entities}
+      label="Entities"
+      onSelectionChange={(key) => {
+        if (key !== null) {
+          onSelectEntity(String(key));
+        }
+      }}
+      renderItem={({ item: entity, isSelected }) => (
+        <div className="min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-sm font-medium text-slate-900">{entity.label}</span>
+            <code className="shrink-0 text-xs text-slate-500">{entity.key}</code>
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {entity.fields.length} {entity.fields.length === 1 ? "field" : "fields"}
+          </div>
+          {isSelected && <span className="sr-only">Selected entity</span>}
+        </div>
+      )}
+      selectedKey={selectedEntityKey}
+    />
+  );
+}
+
+function SchemaBuilderFieldList({
+  entity,
+  onSelectField,
+  selectedFieldKey,
+}: {
+  entity: SchemaBuilderEntityProjection;
+  onSelectField: (fieldKey: string) => void;
+  selectedFieldKey: string | null;
+}) {
+  const surfaceDescription = entity.generatedSurface ? "Builder surface" : "Source-owned surface";
+
+  return (
+    <ObjectList
+      className="flex min-h-0 flex-1 flex-col p-4"
+      description={`${entity.key} - ${surfaceDescription}`}
+      emptyState="No fields are currently defined."
+      getKey={(field) => field.key}
+      getTextValue={(field) => field.label}
+      gridClassName="min-h-0 flex-1 overflow-auto"
+      itemClassName="px-2 py-2"
+      items={entity.fields}
+      label={`${entity.label} fields`}
+      onSelectionChange={(key) => {
+        if (key !== null) {
+          onSelectField(String(key));
+        }
+      }}
+      renderItem={({ item: field, isSelected }) => (
+        <div className="min-w-0">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="truncate text-sm font-medium text-slate-900">{field.label}</span>
+            <code className="shrink-0 text-xs text-slate-500">{field.key}</code>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>{field.type}</span>
+            {field.required && <span>Required</span>}
+            {field.saved ? <span>Saved</span> : <span>Draft</span>}
+          </div>
+          {isSelected && <span className="sr-only">Selected field</span>}
+        </div>
+      )}
+      selectedKey={selectedFieldKey}
+    />
   );
 }
 

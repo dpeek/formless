@@ -645,8 +645,17 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-controls="schema-source-panel"');
     expect(html).toContain('aria-selected="true"');
     expect(html).toContain('aria-label="Builder entities"');
-    expect(html).toContain('aria-label="Create entity"');
+    expect(countOccurrences(html, 'data-slot="object-list"')).toBe(2);
+    expect(countOccurrences(html, 'data-slot="object-list-grid"')).toBe(2);
+    expect(html).toContain('role="grid"');
+    expect(html).toContain('aria-label="Entities"');
     expect(html).toContain('aria-label="Task fields"');
+    expect(html).toContain('data-key="task"');
+    expect(html).toContain('data-key="title"');
+    expect(html).toContain('aria-selected="true"');
+    expect(html).toContain("Selected entity");
+    expect(html).toContain("Selected field");
+    expect(html).toContain('aria-label="Create entity"');
     expect(html).toContain('aria-label="Add field"');
     expect(html).toContain('aria-label="Field details"');
     expect(html).toContain('aria-label="Schema source"');
