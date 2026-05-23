@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import type { OwnerSetupCompleteResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
+import type {
+  AppInstallsResponse,
+  CreateAppInstallResponse,
+  OwnerSetupCompleteResponse,
+  OwnerSetupStatusResponse,
+} from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 
@@ -94,6 +99,7 @@ describe("owner setup API routes", () => {
       },
     });
     const status = await getJson<OwnerSetupStatusResponse>("/api/formless/setup");
+    const appInstalls = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
     expect(completed.body).toEqual({
       setupComplete: true,
@@ -108,6 +114,39 @@ describe("owner setup API routes", () => {
     expect(completed.response.headers.get("Set-Cookie")).toContain("HttpOnly");
     expect(completed.response.headers.get("Set-Cookie")).toContain("SameSite=Lax");
     expect(status.body).toEqual(completed.body);
+    expect(appInstalls.body.installs).toEqual([
+      expect.objectContaining({
+        adminRoute: "/apps/site",
+        installId: "site",
+        label: "Site",
+        packageAppKey: "site",
+        publicRoute: "/sites/site",
+        status: "installed",
+      }),
+    ]);
+  });
+
+  it("does not duplicate an existing default Site install during owner setup", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "site",
+      label: "Existing Site",
+    });
+    await createSetupCapability();
+
+    const completed = await postJson<OwnerSetupCompleteResponse>("/api/formless/setup/complete", {
+      setupToken,
+      owner: { name: "Ada Owner" },
+    });
+    const appInstalls = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(completed.response.status).toBe(200);
+    expect(appInstalls.body.installs).toEqual([
+      expect.objectContaining({
+        installId: "site",
+        label: "Existing Site",
+      }),
+    ]);
   });
 
   it("rejects malformed and invalid setup completion requests without completing setup", async () => {

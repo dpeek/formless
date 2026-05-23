@@ -16,6 +16,7 @@ import {
 } from "./instance-setup-state.ts";
 import { createOwnerSessionCookie, ownerSessionSigningSecret } from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
+import { ensureDefaultAppInstalls } from "./default-app-installs.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 
@@ -127,11 +128,17 @@ async function handleOwnerSetupCompleteRequest(
   }
 
   const body = parseOwnerSetupCompleteRequest(await readJson(request));
+  const completedAt = nowIsoString();
   const result = completeFirstOwnerSetup(storage, {
     tokenHash: await hashOwnerSetupToken(body.setupToken),
     instanceId: requestInstanceId(request),
+    now: completedAt,
     owner: body.owner,
   });
+
+  if (result.ok) {
+    ensureDefaultAppInstalls(storage, { now: completedAt });
+  }
 
   return await ownerSetupCompleteResponse(request, env, result);
 }

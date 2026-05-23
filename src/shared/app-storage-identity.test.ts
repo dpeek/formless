@@ -76,9 +76,15 @@ describe("app storage identity", () => {
     });
   });
 
-  it("rejects invalid install identities and unsupported packages", () => {
-    expect(installedAppStorageIdentity({ installId: "site", packageAppKey: "site" })).toBe(
-      undefined,
+  it("accepts default Site install identity and rejects invalid identities", () => {
+    expect(installedAppStorageIdentity({ installId: "site", packageAppKey: "site" })).toMatchObject(
+      {
+        apiRoutePrefix: "/api/app-installs/site/site",
+        authorityName: "app:site",
+        browserDatabaseName: "formless:app:site",
+        installId: "site",
+        kind: "appInstall",
+      },
     );
     expect(installedAppStorageIdentity({ installId: "Docs", packageAppKey: "site" })).toBe(
       undefined,
@@ -130,6 +136,15 @@ describe("app storage identity", () => {
       },
       path: "/tree/blog%2Fpost",
     });
+    expect(parseAuthorityApiRoute("/api/app-installs/site/site/bootstrap")).toMatchObject({
+      identity: {
+        authorityName: "app:site",
+        installId: "site",
+        kind: "appInstall",
+        packageAppKey: "site",
+      },
+      path: "/bootstrap",
+    });
   });
 
   it("leaves unknown or incomplete API routes unclaimed", () => {
@@ -138,7 +153,6 @@ describe("app storage identity", () => {
       "/api/site",
       "/api/missing/bootstrap",
       "/api/app-installs/site/personal",
-      "/api/app-installs/site/site/bootstrap",
       "/api/app-installs/tasks/tasks/bootstrap",
     ]) {
       expect(parseAuthorityApiRoute(pathname)).toBeUndefined();

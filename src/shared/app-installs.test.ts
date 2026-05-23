@@ -21,7 +21,7 @@ describe("app install registry", () => {
     expect(listBundledAppPackages()).toEqual([
       expect.objectContaining({
         adminRouteBase: "/apps",
-        defaultInstallId: "personal",
+        defaultInstallId: "site",
         label: "Site",
         packageAppKey: "site",
         publicRouteBase: "/sites",
@@ -48,6 +48,14 @@ describe("app install registry", () => {
       ok: true,
       installId: "project-site-2026",
     });
+    expect(validateAppInstallId("site")).toEqual({
+      ok: true,
+      installId: "site",
+    });
+    expect(validateAppInstallId("tasks")).toEqual({
+      ok: true,
+      installId: "tasks",
+    });
 
     for (const value of [
       "",
@@ -57,7 +65,10 @@ describe("app install registry", () => {
       "docs-",
       "docs--site",
       "docs/site",
-      "site",
+      "api",
+      "apps",
+      "setup",
+      "sites",
       "x".repeat(49),
     ]) {
       expect(validateAppInstallId(value).ok).toBe(false);

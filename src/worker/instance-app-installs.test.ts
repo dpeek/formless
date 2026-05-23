@@ -35,14 +35,14 @@ describe("instance app install API routes", () => {
     const before = await getJson<AppInstallsResponse>("/api/formless/app-installs");
     const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "site",
-      installId: "personal",
-      label: "Personal Site",
+      installId: "site",
+      label: "Site",
     });
     const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
     expect(before.body.packages).toEqual([
       expect.objectContaining({
-        defaultInstallId: "personal",
+        defaultInstallId: "site",
         label: "Site",
         packageAppKey: "site",
       }),
@@ -50,18 +50,18 @@ describe("instance app install API routes", () => {
     expect(before.body.installs).toEqual([]);
     expect(created.response.status).toBe(201);
     expect(created.body.initialization).toEqual({
-      installId: "personal",
+      installId: "site",
       packageAppKey: "site",
       seedRecordsKey: "site",
       sourceSchemaKey: "site",
     });
     expect(created.body.install).toMatchObject({
-      adminRoute: "/apps/personal",
-      installId: "personal",
-      label: "Personal Site",
+      adminRoute: "/apps/site",
+      installId: "site",
+      label: "Site",
       packageAppKey: "site",
-      publicRoute: "/sites/personal",
-      schemaRoute: "/apps/personal/schema",
+      publicRoute: "/sites/site",
+      schemaRoute: "/apps/site/schema",
       status: "installed",
     });
     expect(after.body.installs).toEqual(created.body.installs);

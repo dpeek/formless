@@ -42,6 +42,7 @@ describe("runtime profile resolver", () => {
     expect(findRuntimeWorldMountByRoute(profile, "/site")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/tasks/schema")).toBeUndefined();
     expect(installedAppWorldMountFromInstallId(profile, "personal")?.schemaRoute).toBeUndefined();
+    expect(installedAppWorldMountFromInstallId(profile, "site")?.route).toBe("/apps/site");
     expect(runtimeRoutePolicy(profile)).toEqual({
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
@@ -107,7 +108,7 @@ describe("runtime profile resolver", () => {
     expect(findRuntimeWorldMountByRoute(profile, "/apps/personal/settings")?.target).toEqual(
       world.target,
     );
-    expect(installedAppWorldMountFromInstallId(profile, "site")).toBeUndefined();
+    expect(installedAppWorldMountFromInstallId(profile, "site")?.route).toBe("/apps/site");
   });
 
   it("resolves installed Site public route surfaces from install ids", () => {
@@ -127,7 +128,9 @@ describe("runtime profile resolver", () => {
     expect(nested?.slug).toBe("blog/post");
     expect(isRuntimePublicSiteRoute(profile, "/sites/personal")).toBe(true);
     expect(isRuntimePublicSiteRoute(profile, "/sites/personal/blog/post")).toBe(true);
-    expect(installedSitePublicSurfaceFromRoute(profile, "/sites/site")).toBeUndefined();
+    expect(installedSitePublicSurfaceFromRoute(profile, "/sites/site")?.routeBase).toBe(
+      "/sites/site",
+    );
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {

@@ -57,7 +57,7 @@ export function InstanceShellRoute() {
         );
 
         if (nextSitePackage) {
-          setLabel((current) => (current.trim() === "" ? "Personal Site" : current));
+          setLabel((current) => (current.trim() === "" ? nextSitePackage.label : current));
           setInstallId((current) =>
             current.trim() === ""
               ? availableDefaultInstallId(nextSitePackage, response.installs)
