@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, type AppArchive } from "../shared/archive.ts";
-import type { AppInstallsResponse, BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
+import type {
+  AppInstallsResponse,
+  BootstrapResponse,
+  SitePageTreeResponse,
+  StoredRecord,
+} from "../shared/protocol.ts";
 import { siteSourceSchema } from "../test/schema-apps.ts";
+import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -63,6 +69,30 @@ describe("instance archive restore API", () => {
     expect(bootstrap.body.records).toContainEqual(siteRecord());
   });
 
+  it("restores installed Site media before public tree reads reference it", async () => {
+    const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
+    const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
+    const served = await harness.fetch(installedMediaHref);
+
+    expect(applied.response.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["personal"],
+          mediaCountsByApp: { personal: 1 },
+        },
+      },
+    });
+    expect(JSON.stringify(tree.body)).toContain(installedMediaHref);
+    expect(tree.body.page.label).toBe("Home");
+    expect(served.status).toBe(200);
+    expect(served.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(mediaBytes);
+  });
+
   it("requires write authorization", async () => {
     const response = await harness.fetch("/api/formless/archive/restore", {
       body: JSON.stringify({ archive: appArchive({ dryRun: true }) }),
@@ -77,9 +107,17 @@ describe("instance archive restore API", () => {
   });
 });
 
-async function postArchiveRestore(archive: AppArchive) {
+async function postArchiveRestore(
+  archive: AppArchive,
+  mediaFiles: Array<{
+    archivePath: string;
+    byteSize: number;
+    bytesBase64: string;
+    contentType: string;
+  }> = [],
+) {
   const response = await harness.fetch("/api/formless/archive/restore", {
-    body: JSON.stringify({ archive }),
+    body: JSON.stringify({ archive, mediaFiles }),
     headers: {
       Authorization: `Bearer ${adminToken}`,
       "Content-Type": "application/json",
@@ -126,6 +164,54 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
       records: [siteRecord()],
     },
     media: { objects: [] },
+  };
+}
+
+const mediaBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+const installedMediaStorageKey = "app-installs/personal/site/images/installed.png";
+const installedMediaHref = `/api/app-installs/site/personal/media/${installedMediaStorageKey}`;
+
+function appArchiveWithMedia(input: { dryRun: boolean }): AppArchive {
+  return {
+    ...appArchive(input),
+    data: {
+      kind: "sourceRecords",
+      schemaKey: "site",
+      schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      schema: siteSourceSchema,
+      records: testSiteSeedRecords.map((record) =>
+        record.id === "rec_site_media_avatar"
+          ? {
+              ...record,
+              values: {
+                ...record.values,
+                href: installedMediaHref,
+                mediaAssetId: "installed.png",
+              },
+            }
+          : record,
+      ),
+    },
+    media: {
+      objects: [
+        {
+          archivePath: "media/personal/installed.png",
+          byteSize: mediaBytes.byteLength,
+          contentType: "image/png",
+          deliveryHref: installedMediaHref,
+          storageKey: installedMediaStorageKey,
+        },
+      ],
+    },
+  };
+}
+
+function mediaFile() {
+  return {
+    archivePath: "media/personal/installed.png",
+    byteSize: mediaBytes.byteLength,
+    bytesBase64: Buffer.from(mediaBytes).toString("base64"),
+    contentType: "image/png",
   };
 }
 
