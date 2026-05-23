@@ -149,6 +149,7 @@ describe("ObjectList", () => {
           label: "Move object",
           disabled: true,
           disabledReason: "Move already pending",
+          dragHandleDataAttributes: { "data-test-drag-handle": "true" },
           onReorder: () => {},
         }}
         getKey={(item) => item.id}
@@ -158,6 +159,7 @@ describe("ObjectList", () => {
     );
 
     expect(markup).toContain('data-slot="object-list-drag-handle"');
+    expect(markup).toContain('data-test-drag-handle="true"');
     expect(markup).toContain('slot="drag"');
     expect(markup).toContain('aria-label="Move object"');
     expect(markup).toContain('aria-disabled="true"');

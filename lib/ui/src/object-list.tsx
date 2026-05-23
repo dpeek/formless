@@ -69,6 +69,7 @@ export interface ObjectListReorderOptions {
   label?: string;
   disabled?: boolean;
   disabledReason?: string;
+  dragHandleDataAttributes?: Record<string, string | undefined>;
   onReorder: (intent: ObjectListReorderIntent) => void;
 }
 
@@ -215,6 +216,7 @@ export function ObjectList<T extends object>({
                   isReorderEnabled={reorder != null}
                   isReorderDisabled={reorder?.disabled === true}
                   item={item}
+                  reorderDragHandleDataAttributes={reorder?.dragHandleDataAttributes}
                   reorderLabel={reorder?.label}
                   reorderReason={reorder?.disabledReason}
                   renderItem={renderItem}
@@ -262,6 +264,7 @@ interface ObjectListItemContentProps<T extends object> {
   isReorderEnabled: boolean;
   isReorderDisabled: boolean;
   item: T;
+  reorderDragHandleDataAttributes?: Record<string, string | undefined>;
   reorderLabel?: string;
   reorderReason?: string;
   renderItem: (props: ObjectListRenderProps<T>) => React.ReactNode;
@@ -276,6 +279,7 @@ function ObjectListItemContent<T extends object>({
   isReorderEnabled,
   isReorderDisabled,
   item,
+  reorderDragHandleDataAttributes,
   reorderLabel = "Reorder",
   reorderReason,
   renderItem,
@@ -287,6 +291,7 @@ function ObjectListItemContent<T extends object>({
     <div className="flex min-w-0 items-center gap-2">
       {isReorderEnabled && (
         <ObjectListDragHandle
+          dataAttributes={reorderDragHandleDataAttributes}
           disabled={isReorderDisabled}
           label={reorderLabel}
           reason={reorderReason}
@@ -468,12 +473,18 @@ function runObjectListAction<T extends object>({
 }
 
 interface ObjectListDragHandleProps {
+  dataAttributes?: Record<string, string | undefined>;
   disabled: boolean;
   label: string;
   reason?: string;
 }
 
-function ObjectListDragHandle({ disabled, label, reason }: ObjectListDragHandleProps) {
+function ObjectListDragHandle({
+  dataAttributes,
+  disabled,
+  label,
+  reason,
+}: ObjectListDragHandleProps) {
   if (!label) {
     return null;
   }
@@ -490,6 +501,7 @@ function ObjectListDragHandle({ disabled, label, reason }: ObjectListDragHandleP
         "hover:bg-secondary hover:text-fg focus-visible:ring-2 focus-visible:ring-ring",
         disabled && "opacity-50",
       )}
+      {...dataAttributes}
       data-slot="object-list-drag-handle"
       slot="drag"
     >

@@ -2550,6 +2550,9 @@ describe("generated collection home", () => {
       />,
     );
 
+    expect(html).toContain('data-slot="object-list"');
+    expect(html).toContain('aria-label="Task records"');
+    expect(html).toContain('role="grid"');
     expect(html).toContain("First");
     expect(html).toContain('type="text"');
     expect(html).toContain('type="checkbox"');
@@ -2583,6 +2586,14 @@ describe("generated collection home", () => {
     expect(firstIndex).toBeGreaterThan(-1);
     expect(firstIndex).toBeLessThan(secondIndex);
     expect(secondIndex).toBeLessThan(thirdIndex);
+    expect(html).toContain('data-slot="object-list"');
+    expect(html).toContain(
+      'data-object-list-action-labels="Move to top|Move up|Move down|Move to bottom"',
+    );
+    expect(html).toContain(
+      'data-object-list-disabled-action-labels="Move to top: Already first|Move up: Already first"',
+    );
+    expect(html).toContain("Move to bottom");
     expect(html).toContain('data-formless-sortable-list-item="record-1"');
     expect(html.match(/data-formless-ordering-handle="true"/g) ?? []).toHaveLength(3);
   });
@@ -5819,7 +5830,7 @@ function taskListOrderingSchema(): AppSchema {
     fieldName: "order",
     field: orderField,
     scope: [],
-    presentations: ["dragHandle"],
+    presentations: ["dragHandle", "moveMenu"],
   };
 
   if (taskHome?.type !== "collection" || taskHome.result.type !== "list") {
