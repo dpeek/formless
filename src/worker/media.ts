@@ -18,6 +18,10 @@ import {
 import { mediaObjectStoreFromR2Bucket } from "../media/r2.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { responseWithoutBodyForHead } from "./head-response.ts";
+import {
+  areSchemaKeyApiRoutesEnabledForRequest,
+  type WorkerRuntimeProfileInput,
+} from "./routing.ts";
 
 export const SITE_IMAGE_UPLOAD_MAX_BYTES = MEDIA_IMAGE_UPLOAD_MAX_BYTES;
 export const SITE_MEDIA_CACHE_CONTROL = MEDIA_OBJECT_CACHE_CONTROL;
@@ -45,9 +49,12 @@ type MultipartPart = {
   name: string | undefined;
 };
 
-export async function handleSiteMediaRequest(request: Request, env: SiteMediaEnv) {
-  const url = new URL(request.url);
-  const route = siteMediaRouteFromPathname(url.pathname);
+export async function handleSiteMediaRequest(
+  request: Request,
+  env: SiteMediaEnv,
+  runtimeProfile: WorkerRuntimeProfileInput = {},
+) {
+  const route = siteMediaRouteFromPathname(request, runtimeProfile);
 
   if (!route) {
     return undefined;
@@ -166,8 +173,17 @@ async function serveSiteMedia(
   return new Response(delivery.body, { headers: delivery.headers });
 }
 
-function siteMediaRouteFromPathname(pathname: string): SiteMediaRoute | undefined {
+function siteMediaRouteFromPathname(
+  request: Request,
+  runtimeProfile: WorkerRuntimeProfileInput,
+): SiteMediaRoute | undefined {
+  const pathname = new URL(request.url).pathname;
+
   if (pathname.startsWith(SITE_MEDIA_ROUTE_PREFIX)) {
+    if (!areSchemaKeyApiRoutesEnabledForRequest(request, runtimeProfile)) {
+      return undefined;
+    }
+
     const key = siteMediaKeyFromPathname(pathname);
 
     return {
@@ -183,6 +199,13 @@ function siteMediaRouteFromPathname(pathname: string): SiteMediaRoute | undefine
   const route = parseAuthorityApiRoute(pathname);
 
   if (!route?.identity.siteMedia || !route.path.startsWith("/media")) {
+    return undefined;
+  }
+
+  if (
+    route.identity.kind === "schemaKey" &&
+    !areSchemaKeyApiRoutesEnabledForRequest(request, runtimeProfile)
+  ) {
     return undefined;
   }
 

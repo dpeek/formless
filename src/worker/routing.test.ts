@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  areSchemaKeyApiRoutesEnabledForRequest,
   isClientShellRoute,
   isDynamicSiteIconPath,
   publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
   shouldHandlePublishedSiteDocument,
   shouldHandlePublishedSiteIndexingResource,
+  workerRuntimeRoutePolicy,
 } from "./routing.ts";
 
 describe("Worker document routing", () => {
@@ -72,6 +74,72 @@ describe("Worker document routing", () => {
     ).toBe(true);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/admin"), {
+        profile: "siteAuthoring",
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps product instance browser fallback to instance route roots", () => {
+    const instanceProfile = { profile: "instance" };
+
+    expect(shouldDeferToStaticAssets(documentRequest("http://example.com/"), instanceProfile)).toBe(
+      true,
+    );
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/setup"), instanceProfile),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(
+        documentRequest("http://example.com/apps/personal"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(
+        documentRequest("http://example.com/sites/personal/blog"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(
+        documentRequest("http://example.com/assets/index.js"),
+        instanceProfile,
+      ),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/tasks"), instanceProfile),
+    ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/estii/setup"), instanceProfile),
+    ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/site/schema"), instanceProfile),
+    ).toBe(false);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/pages/home"), instanceProfile),
+    ).toBe(false);
+  });
+
+  it("answers schema-key route policy by runtime profile", () => {
+    expect(workerRuntimeRoutePolicy({ profile: "instance" })).toEqual({
+      instanceBrowserRoutes: true,
+      installedAppApiRoutes: true,
+      schemaKeyApiRoutes: false,
+      schemaKeyBrowserRoutes: false,
+    });
+    expect(workerRuntimeRoutePolicy({ profile: "dev" })).toEqual({
+      instanceBrowserRoutes: true,
+      installedAppApiRoutes: true,
+      schemaKeyApiRoutes: true,
+      schemaKeyBrowserRoutes: true,
+    });
+    expect(
+      areSchemaKeyApiRoutesEnabledForRequest(
+        new Request("http://instance.example.com/api/site/bootstrap"),
+      ),
+    ).toBe(false);
+    expect(
+      areSchemaKeyApiRoutesEnabledForRequest(new Request("http://example.com/api/site/bootstrap"), {
         profile: "siteAuthoring",
       }),
     ).toBe(true);

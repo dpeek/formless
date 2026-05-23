@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   createAppRuntimeProfile,
+  createDevWorkbenchRuntimeProfile,
   createDevRuntimeProfile,
+  createInstanceRuntimeProfile,
   createPublishedSiteRuntimeProfile,
   createSiteAuthoringRuntimeProfile,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
@@ -11,13 +13,45 @@ import {
   isRuntimePublicSiteRoute,
   readRuntimeProfileDocumentHint,
   resolveRuntimeProfile,
+  runtimeRoutePolicy,
   runtimeScreenPathFromRoute,
   runtimeScreenRoute,
 } from "./runtime-profile.ts";
 
 describe("runtime profile resolver", () => {
-  it("resolves the dev profile with schema-keyed app mounts", () => {
-    const profile = createDevRuntimeProfile();
+  it("resolves the product instance profile without schema-keyed app mounts", () => {
+    const profile = createInstanceRuntimeProfile();
+
+    expect(profile.kind).toBe("instance");
+    expect(profile.shell).toBe("instance");
+    expect(profile.defaultRedirect).toBeUndefined();
+    expect(profile.instanceShell).toBe(true);
+    expect(profile.installedAppRoutes).toEqual({
+      appRouteBase: "/apps",
+      packageAppKey: "site",
+      schemaRoutes: false,
+    });
+    expect(profile.installedSitePublicRoutes).toEqual({
+      homeSlug: "home",
+      packageAppKey: "site",
+      siteRouteBase: "/sites",
+    });
+    expect(profile.worlds).toEqual([]);
+    expect(findRuntimeWorldMountByRoute(profile, "/tasks")).toBeUndefined();
+    expect(findRuntimeWorldMountByRoute(profile, "/estii")).toBeUndefined();
+    expect(findRuntimeWorldMountByRoute(profile, "/site")).toBeUndefined();
+    expect(findRuntimeWorldMountByRoute(profile, "/tasks/schema")).toBeUndefined();
+    expect(installedAppWorldMountFromInstallId(profile, "personal")?.schemaRoute).toBeUndefined();
+    expect(runtimeRoutePolicy(profile)).toEqual({
+      installedAppBrowserRoutes: true,
+      installedSitePublicRoutes: true,
+      schemaKeyApiRoutes: false,
+      schemaKeyBrowserRoutes: false,
+    });
+  });
+
+  it("resolves the dev workbench profile with schema-keyed app mounts", () => {
+    const profile = createDevWorkbenchRuntimeProfile();
 
     expect(profile.kind).toBe("dev");
     expect(profile.shell).toBe("dev");
@@ -44,6 +78,12 @@ describe("runtime profile resolver", () => {
     expect(profile.publicSitePreview?.homeRoute).toBe("/pages/home");
     expect(findRuntimeWorldMountByRoute(profile, "/rates")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/rates/schema")).toBeUndefined();
+    expect(runtimeRoutePolicy(profile)).toEqual({
+      installedAppBrowserRoutes: true,
+      installedSitePublicRoutes: true,
+      schemaKeyApiRoutes: true,
+      schemaKeyBrowserRoutes: true,
+    });
   });
 
   it("resolves installed Site admin route mounts from install ids", () => {
@@ -183,6 +223,7 @@ describe("runtime profile resolver", () => {
   });
 
   it("uses explicit config first and host config only as a deterministic fallback", () => {
+    expect(resolveRuntimeProfile({ profile: "instance" }).kind).toBe("instance");
     expect(resolveRuntimeProfile({ profile: "app", schemaKey: "estii" }).kind).toBe("app");
     expect(resolveRuntimeProfile({ profile: "siteAuthoring" }).kind).toBe("siteAuthoring");
     expect(resolveRuntimeProfile({ profile: "publishedSite" }).kind).toBe("publishedSite");
@@ -201,6 +242,7 @@ describe("runtime profile resolver", () => {
     expect(resolveRuntimeProfile({ hostname: "published-site.formless.local" }).kind).toBe(
       "publishedSite",
     );
+    expect(resolveRuntimeProfile({ hostname: "instance.formless.local" }).kind).toBe("instance");
     expect(resolveRuntimeProfile({ hostname: "formless.twitchy.workers.dev" }).kind).toBe(
       "publishedSite",
     );

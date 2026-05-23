@@ -11,9 +11,9 @@ import {
   type AppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 
-export type RuntimeProfileKind = "dev" | "app" | "siteAuthoring" | "publishedSite";
+export type RuntimeProfileKind = "instance" | "dev" | "app" | "siteAuthoring" | "publishedSite";
 
-export type RuntimeShellKind = "dev" | "app" | "publishedSite";
+export type RuntimeShellKind = "instance" | "dev" | "app" | "publishedSite";
 
 export type RuntimeWorldMount = {
   app: SchemaAppDefinition;
@@ -75,6 +75,13 @@ export type RuntimeProfile = {
   publishedSite?: RuntimePublishedSiteRoutes;
 };
 
+export type RuntimeRoutePolicy = {
+  installedAppBrowserRoutes: boolean;
+  installedSitePublicRoutes: boolean;
+  schemaKeyApiRoutes: boolean;
+  schemaKeyBrowserRoutes: boolean;
+};
+
 export type RuntimeProfileResolverInput = {
   profile?: string | undefined;
   schemaKey?: string | undefined;
@@ -100,6 +107,8 @@ export function resolveRuntimeProfile(
   const schemaKey = parseSchemaKey(input.schemaKey) ?? defaultSchemaKey;
 
   switch (profileKind) {
+    case "instance":
+      return createInstanceRuntimeProfile();
     case "app":
       return createAppRuntimeProfile(schemaKey);
     case "siteAuthoring":
@@ -113,7 +122,30 @@ export function resolveRuntimeProfile(
   }
 }
 
+export function createInstanceRuntimeProfile(): RuntimeProfile {
+  return {
+    kind: "instance",
+    shell: "instance",
+    worlds: [],
+    instanceShell: true,
+    installedAppRoutes: {
+      appRouteBase: "/apps",
+      packageAppKey: "site",
+      schemaRoutes: false,
+    },
+    installedSitePublicRoutes: {
+      homeSlug: "home",
+      packageAppKey: "site",
+      siteRouteBase: "/sites",
+    },
+  };
+}
+
 export function createDevRuntimeProfile(): RuntimeProfile {
+  return createDevWorkbenchRuntimeProfile();
+}
+
+export function createDevWorkbenchRuntimeProfile(): RuntimeProfile {
   return {
     kind: "dev",
     shell: "dev",
@@ -141,6 +173,15 @@ export function createDevRuntimeProfile(): RuntimeProfile {
       homeSlug: "home",
       linkMode: "preview",
     },
+  };
+}
+
+export function runtimeRoutePolicy(profile: RuntimeProfile): RuntimeRoutePolicy {
+  return {
+    installedAppBrowserRoutes: profile.installedAppRoutes !== undefined,
+    installedSitePublicRoutes: profile.installedSitePublicRoutes !== undefined,
+    schemaKeyApiRoutes: profile.kind !== "instance",
+    schemaKeyBrowserRoutes: profile.kind === "dev",
   };
 }
 
@@ -391,6 +432,7 @@ export function readRuntimeProfileDocumentHint(
 
 function parseRuntimeProfileKind(value: string | undefined): RuntimeProfileKind | undefined {
   switch (value) {
+    case "instance":
     case "dev":
     case "app":
     case "siteAuthoring":
@@ -410,6 +452,10 @@ function runtimeProfileKindFromHost(hostname: string | undefined): RuntimeProfil
 
   if (normalized.startsWith("published-site.")) {
     return "publishedSite";
+  }
+
+  if (normalized.startsWith("instance.")) {
+    return "instance";
   }
 
   if (normalized.startsWith("app.")) {

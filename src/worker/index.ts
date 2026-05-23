@@ -6,6 +6,7 @@ import { handleSiteMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
+  areSchemaKeyApiRoutesEnabledForRequest,
   publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
   workerRuntimeProfileInput,
@@ -27,7 +28,8 @@ export type Env = {
 
 export default {
   async fetch(request, env) {
-    const mediaResponse = await handleSiteMediaRequest(request, env);
+    const runtimeProfile = workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE);
+    const mediaResponse = await handleSiteMediaRequest(request, env, runtimeProfile);
 
     if (mediaResponse) {
       return mediaResponse;
@@ -39,10 +41,7 @@ export default {
       return siteIconResponse;
     }
 
-    const publishedSiteRedirect = publishedSiteRedirectForRequest(
-      request,
-      workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
-    );
+    const publishedSiteRedirect = publishedSiteRedirectForRequest(request, runtimeProfile);
 
     if (publishedSiteRedirect) {
       return redirectResponse(publishedSiteRedirect.location, publishedSiteRedirect.status);
@@ -76,6 +75,13 @@ export default {
     const authorityRoute = parseAuthorityApiRoute(url.pathname);
 
     if (authorityRoute) {
+      if (
+        authorityRoute.identity.kind === "schemaKey" &&
+        !areSchemaKeyApiRoutesEnabledForRequest(request, runtimeProfile)
+      ) {
+        return Response.json({ error: "Not found." }, { status: 404 });
+      }
+
       const authorityId = env.FORMLESS_AUTHORITY.idFromName(authorityRoute.identity.authorityName);
       const authority = env.FORMLESS_AUTHORITY.get(authorityId);
 
@@ -88,10 +94,7 @@ export default {
       return siteDocumentResponse;
     }
 
-    if (
-      env.ASSETS &&
-      shouldDeferToStaticAssets(request, workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE))
-    ) {
+    if (env.ASSETS && shouldDeferToStaticAssets(request, runtimeProfile)) {
       return env.ASSETS.fetch(request);
     }
 

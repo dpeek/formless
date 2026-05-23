@@ -131,7 +131,12 @@ export function App({
   const isOwnerSetupRoute =
     isOwnerSetupRouteEnabled(runtimeProfile) && normalizeRoutePath(location) === "/setup";
 
-  if (isOwnerSetupRoute || isPublicSiteRoute || runtimeProfile.shell === "publishedSite") {
+  if (
+    isOwnerSetupRoute ||
+    isPublicSiteRoute ||
+    runtimeProfile.shell === "publishedSite" ||
+    (runtimeProfile.shell === "instance" && (isInstanceShellRoute || !routeWorld))
+  ) {
     return (
       <main className="min-h-dvh">
         <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
@@ -878,7 +883,11 @@ function runtimeRouteParam(params: unknown, name: string): string | undefined {
 }
 
 function isOwnerSetupRouteEnabled(runtimeProfile: RuntimeProfile) {
-  return runtimeProfile.kind === "dev" || runtimeProfile.kind === "publishedSite";
+  return (
+    runtimeProfile.kind === "instance" ||
+    runtimeProfile.kind === "dev" ||
+    runtimeProfile.kind === "publishedSite"
+  );
 }
 
 function normalizeRoutePath(path: string) {

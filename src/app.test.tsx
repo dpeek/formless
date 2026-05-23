@@ -49,6 +49,7 @@ import { buildSitePageTree } from "./site/tree.ts";
 import {
   createDevRuntimeProfile,
   createAppRuntimeProfile,
+  createInstanceRuntimeProfile,
   createPublishedSiteRuntimeProfile,
   createSiteAuthoringRuntimeProfile,
   type RuntimeProfile,
@@ -536,6 +537,38 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).not.toContain('data-frame="generated-app"');
     expect(html).not.toContain('aria-label="Workbench apps"');
+  });
+
+  it("renders product instance routes outside the dev workbench route vocabulary", () => {
+    const instanceProfile = createInstanceRuntimeProfile();
+    const shellHtml = renderRoute("/", instanceProfile);
+    const legacyHtml = renderRoute("/site", instanceProfile);
+    const adminHtml = renderToStaticMarkup(
+      <Router ssrPath="/apps/personal/settings">
+        <App
+          routeComponents={{
+            HomeRoute: SchemaKeyProbeHomeRoute,
+            SchemaRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={instanceProfile}
+        />
+      </Router>,
+    );
+
+    expect(shellHtml).toContain("Instance");
+    expect(shellHtml).toContain("Loading installed apps...");
+    expect(shellHtml).not.toContain('data-frame="workbench"');
+    expect(shellHtml).not.toContain('aria-label="Workbench apps"');
+    expect(legacyHtml).toContain("Not found");
+    expect(legacyHtml).not.toContain('data-frame="workbench"');
+    expect(legacyHtml).not.toContain('href="/tasks"');
+    expect(legacyHtml).not.toContain('href="/site"');
+    expect(adminHtml).toContain('data-frame="generated-app"');
+    expect(adminHtml).toContain('data-target-kind="appInstall"');
+    expect(adminHtml).toContain('data-install-id="personal"');
+    expect(adminHtml).not.toContain('href="/apps/personal/schema"');
+    expect(adminHtml).not.toContain('data-frame="workbench"');
   });
 
   it("renders sync details in workbench chrome instead of generated page content", () => {

@@ -8,12 +8,14 @@ const clientRoutePrefixes = [
   ...schemaApps.map((app) => app.route),
 ] as const;
 const publishedProfileClientRoutePrefixes = ["/apps", "/sites"] as const;
+const instanceProfileClientRoutePrefixes = ["/apps", "/sites"] as const;
 const clientRoutePaths = ["/setup"] as const;
+const instanceProfileClientRoutePaths = ["/", "/setup"] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 const dynamicSiteIconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;
 const PUBLISHED_SITE_REDIRECT_STATUS = 308;
 
-type WorkerRuntimeProfileKind = "dev" | "app" | "siteAuthoring" | "publishedSite";
+type WorkerRuntimeProfileKind = "instance" | "dev" | "app" | "siteAuthoring" | "publishedSite";
 
 export type WorkerRuntimeProfileInput = {
   hostname?: string | undefined;
@@ -25,10 +27,33 @@ export type PublishedSiteRedirect = {
   status: typeof PUBLISHED_SITE_REDIRECT_STATUS;
 };
 
+export type WorkerRuntimeRoutePolicy = {
+  instanceBrowserRoutes: boolean;
+  installedAppApiRoutes: boolean;
+  schemaKeyApiRoutes: boolean;
+  schemaKeyBrowserRoutes: boolean;
+};
+
 export function workerRuntimeProfileInput(profile: string | undefined): WorkerRuntimeProfileInput {
   return {
     profile: stringConfigValue(profile),
   };
+}
+
+export function workerRuntimeRoutePolicy(
+  input: WorkerRuntimeProfileInput = {},
+): WorkerRuntimeRoutePolicy {
+  return workerRuntimeRoutePolicyFromKind(resolveWorkerRuntimeProfileKind(input));
+}
+
+export function areSchemaKeyApiRoutesEnabledForRequest(
+  request: Request,
+  input: WorkerRuntimeProfileInput = {},
+): boolean {
+  const url = new URL(request.url);
+  const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
+
+  return workerRuntimeRoutePolicyFromKind(profileKind).schemaKeyApiRoutes;
 }
 
 export function shouldHandlePublishedSiteDocument(
@@ -91,11 +116,19 @@ export function shouldDeferToStaticAssets(
 
   const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
 
-  return (
-    profileKind !== "publishedSite" ||
-    isPublishedProfileClientShellRoute(url.pathname) ||
-    looksLikeStaticAssetPath(url.pathname)
-  );
+  if (profileKind === "publishedSite") {
+    return (
+      isPublishedProfileClientShellRoute(url.pathname) || looksLikeStaticAssetPath(url.pathname)
+    );
+  }
+
+  if (profileKind === "instance") {
+    return (
+      isInstanceProfileClientShellRoute(url.pathname) || looksLikeStaticAssetPath(url.pathname)
+    );
+  }
+
+  return true;
 }
 
 export function publishedSiteRedirectForRequest(
@@ -146,6 +179,28 @@ function isPublishedProfileClientShellRoute(pathname: string): boolean {
   );
 }
 
+function isInstanceProfileClientShellRoute(pathname: string): boolean {
+  return (
+    instanceProfileClientRoutePaths.includes(
+      pathname as (typeof instanceProfileClientRoutePaths)[number],
+    ) ||
+    instanceProfileClientRoutePrefixes.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )
+  );
+}
+
+function workerRuntimeRoutePolicyFromKind(
+  profileKind: WorkerRuntimeProfileKind,
+): WorkerRuntimeRoutePolicy {
+  return {
+    instanceBrowserRoutes: profileKind === "instance" || profileKind === "dev",
+    installedAppApiRoutes: true,
+    schemaKeyApiRoutes: profileKind !== "instance",
+    schemaKeyBrowserRoutes: profileKind === "dev",
+  };
+}
+
 export function looksLikeStaticAssetPath(pathname: string): boolean {
   const lastSegment = pathname.split("/").at(-1) ?? "";
 
@@ -173,6 +228,7 @@ function resolveWorkerRuntimeProfileKind(
 
 function parseRuntimeProfileKind(value: string | undefined): WorkerRuntimeProfileKind | undefined {
   switch (value) {
+    case "instance":
     case "dev":
     case "app":
     case "siteAuthoring":
@@ -198,6 +254,10 @@ function runtimeProfileKindFromHost(
 
   if (normalized.startsWith("published-site.")) {
     return "publishedSite";
+  }
+
+  if (normalized.startsWith("instance.")) {
+    return "instance";
   }
 
   if (isAppProfileHost(normalized)) {
