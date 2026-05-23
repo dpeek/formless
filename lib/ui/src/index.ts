@@ -34,6 +34,7 @@ export * from "./markdown-renderer.js";
 export * from "./modal.js";
 export * from "./native-select.js";
 export * from "./number-input.js";
+export * from "./object-list.js";
 export * from "./popover.js";
 export * from "./primitive.js";
 export * from "./range-calendar.js";
