@@ -1,6 +1,7 @@
 import {
   appInstallRegistryError,
   createAppInstall,
+  findAppInstall,
   findBundledAppPackage,
   listAppInstalls,
   type AppInstall,
@@ -94,6 +95,59 @@ export function createInstanceAppInstall(
       ...result,
       installs: readInstanceAppInstalls(storage),
     };
+  });
+}
+
+export function restoreInstanceAppInstall(
+  storage: DurableObjectStorage,
+  input: { action: "create" | "replace"; install: AppInstall },
+): AppInstall[] {
+  ensureInstanceAppInstallTables(storage);
+
+  return storage.transactionSync(() => {
+    const existing = findAppInstall(readAppInstalls(storage), input.install.installId);
+
+    if (input.action === "create" && existing) {
+      throw new Error(`Install id "${input.install.installId}" is already installed.`);
+    }
+
+    if (input.action === "replace" && !existing) {
+      throw new Error(`Install id "${input.install.installId}" is not installed.`);
+    }
+
+    if (existing && existing.packageAppKey !== input.install.packageAppKey) {
+      throw new Error(
+        `Install id "${input.install.installId}" uses package "${existing.packageAppKey}", not "${input.install.packageAppKey}".`,
+      );
+    }
+
+    storage.sql.exec(
+      `
+        INSERT INTO app_installs (
+          install_id,
+          package_app_key,
+          label,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(install_id) DO UPDATE SET
+          package_app_key = excluded.package_app_key,
+          label = excluded.label,
+          status = excluded.status,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at
+      `,
+      input.install.installId,
+      input.install.packageAppKey,
+      input.install.label,
+      input.install.status,
+      input.install.createdAt,
+      input.install.updatedAt,
+    );
+
+    return readInstanceAppInstalls(storage);
   });
 }
 
