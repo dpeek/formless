@@ -55,6 +55,14 @@ export {
   type SiteProjectSource,
 } from "./project-files.ts";
 export {
+  buildSiteProjectAppArchiveEntry,
+  readSiteProjectAppArchiveEntry,
+  type SiteProjectAppArchiveEntry,
+  type SiteProjectAppArchiveMediaFile,
+  type SiteProjectAppArchiveReport,
+  type SiteProjectMediaHrefRewrite,
+} from "./project-archive.ts";
+export {
   readSiteProjectDevStateSource,
   siteProjectDevEnv,
   siteProjectStorageId,
