@@ -6,6 +6,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import packageJson from "../../package.json";
+import {
+  exportAppArchive as exportAppArchiveCommand,
+  exportInstanceArchive as exportInstanceArchiveCommand,
+  importSiteProjectArchive as importSiteProjectArchiveCommand,
+  restoreAppArchive as restoreAppArchiveCommand,
+  restorePortableArchive as restorePortableArchiveCommand,
+  type ArchiveDiskWriteResult,
+  type ImportSiteProjectArchiveResult,
+  type RestorePortableArchiveResult,
+} from "./archive-workflows.ts";
 import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
 import { SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
@@ -62,6 +72,10 @@ export {
   type SiteProjectAppArchiveReport,
   type SiteProjectMediaHrefRewrite,
 } from "./project-archive.ts";
+export {
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
+  type ArchiveRestoreRemoteResult,
+} from "./archive-workflows.ts";
 export {
   readSiteProjectDevStateSource,
   siteProjectDevEnv,
@@ -257,6 +271,56 @@ export async function runFormlessCli(
       );
       return;
     }
+    case "archiveExport": {
+      const result = await exportInstanceArchive(command, dependencies);
+      dependencies.log(
+        formatArchiveWriteResult("Instance archive exported", result, dependencies.cwd),
+      );
+      return;
+    }
+    case "archiveExportApp": {
+      const result = await exportAppArchive(command, dependencies);
+      dependencies.log(
+        formatArchiveWriteResult(
+          `App archive exported for ${command.installId}`,
+          result,
+          dependencies.cwd,
+        ),
+      );
+      return;
+    }
+    case "archiveRestore": {
+      const result = await restorePortableArchive(command, dependencies);
+      dependencies.log(
+        formatArchiveRestoreResult("Archive restore", command.apply, result, dependencies.cwd),
+      );
+      return;
+    }
+    case "archiveRestoreApp": {
+      const result = await restoreAppArchive(command, dependencies);
+      dependencies.log(
+        formatArchiveRestoreResult(
+          `App archive restore for ${command.installId}`,
+          command.apply,
+          result,
+          dependencies.cwd,
+        ),
+      );
+      return;
+    }
+    case "archiveImportSite": {
+      const result = await importSiteProjectArchive(command, dependencies);
+      dependencies.log(
+        [
+          `Site project archive written for ${result.report.installId}.`,
+          `Archive: ${formatCliPath(dependencies.cwd, result.archivePath)}.`,
+          `Records: ${result.recordCount}.`,
+          `Media files: ${result.mediaCount}.`,
+          `Rewritten media hrefs: ${result.report.rewrittenMediaHrefs.length}.`,
+        ].join("\n"),
+      );
+      return;
+    }
     case "save": {
       const result = await saveSiteProject(command, dependencies);
       dependencies.log(
@@ -355,6 +419,74 @@ export async function publishSiteProject(
   return publishSiteProjectCommand(input, dependencies);
 }
 
+export async function exportInstanceArchive(
+  input: { outDir: string; target: string },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<ArchiveDiskWriteResult> {
+  return exportInstanceArchiveCommand(input, dependencies);
+}
+
+export async function exportAppArchive(
+  input: { installId: string; outDir: string; target: string },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<ArchiveDiskWriteResult> {
+  return exportAppArchiveCommand(input, dependencies);
+}
+
+export async function restorePortableArchive(
+  input: {
+    adminToken?: string | null;
+    apply: boolean;
+    archiveDir: string;
+    replace: boolean;
+    target: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<RestorePortableArchiveResult> {
+  return restorePortableArchiveCommand(input, dependencies);
+}
+
+export async function restoreAppArchive(
+  input: {
+    adminToken?: string | null;
+    apply: boolean;
+    archiveDir: string;
+    installId: string;
+    replace: boolean;
+    target: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<RestorePortableArchiveResult> {
+  return restoreAppArchiveCommand(input, dependencies);
+}
+
+export async function importSiteProjectArchive(
+  input: {
+    installId: string;
+    label?: string | null;
+    outDir: string;
+    projectPath: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<ImportSiteProjectArchiveResult> {
+  return importSiteProjectArchiveCommand(input, dependencies);
+}
+
 export async function startSiteProjectLocalPublishBroker(
   input: { projectPath: string; source: () => string | null },
   dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
@@ -395,6 +527,48 @@ function runCommandWithSpawn(
 
 function formatAccountLabel(account: { id: string; name?: string }): string {
   return account.name ? `${account.name} (${account.id})` : account.id;
+}
+
+function formatArchiveWriteResult(
+  label: string,
+  result: ArchiveDiskWriteResult,
+  cwd: string,
+): string {
+  return [
+    `${label}.`,
+    `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
+    `Apps: ${result.appCount}.`,
+    `Records: ${result.recordCount}.`,
+    `Media files: ${result.mediaCount}.`,
+  ].join("\n");
+}
+
+function formatArchiveRestoreResult(
+  label: string,
+  applied: boolean,
+  result: RestorePortableArchiveResult,
+  cwd: string,
+): string {
+  const summary = result.remote.report?.summary ?? result.remote.plan?.summary;
+  const status = applied ? "applied" : "dry run";
+
+  if (!result.remote.ok) {
+    return [
+      `${label} ${status} failed.`,
+      `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
+      ...(result.remote.errors ?? []).map((error) => `Error: ${error.message}`),
+    ].join("\n");
+  }
+
+  return [
+    `${label} ${status} ok.`,
+    `Archive: ${formatCliPath(cwd, result.archivePath)}.`,
+    summary ? `Apps: ${summary.appCount}.` : null,
+    summary ? `Created installs: ${summary.createdInstalls.join(", ") || "none"}.` : null,
+    summary ? `Replaced installs: ${summary.replacedInstalls.join(", ") || "none"}.` : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 }
 
 function formatCliPath(cwd: string, filePath: string): string {

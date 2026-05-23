@@ -1,5 +1,40 @@
 export type FormlessCliCommand =
   | {
+      adminToken: string | null;
+      apply: boolean;
+      archiveDir: string;
+      kind: "archiveRestore";
+      replace: boolean;
+      target: string;
+    }
+  | {
+      adminToken: string | null;
+      apply: boolean;
+      archiveDir: string;
+      installId: string;
+      kind: "archiveRestoreApp";
+      replace: boolean;
+      target: string;
+    }
+  | {
+      installId: string;
+      kind: "archiveExportApp";
+      outDir: string;
+      target: string;
+    }
+  | {
+      kind: "archiveExport";
+      outDir: string;
+      target: string;
+    }
+  | {
+      installId: string;
+      kind: "archiveImportSite";
+      label: string | null;
+      outDir: string;
+      projectPath: string;
+    }
+  | {
       accountId: string | null;
       adminToken: string | null;
       createBucket: boolean;
@@ -36,6 +71,14 @@ export function formlessCliUsage(): string {
     "  deploy setup [options]              Store deploy config and local admin token",
     "  publish [--project <path>]          Deploy code, media, and records",
     "       [--dry-run] [--yes]",
+    "  archive export --target <url> --out <dir>",
+    "  archive export-app --target <url> --install <id> --out <dir>",
+    "  archive restore --target <url> --archive <dir> [--apply] [--replace]",
+    "       [--admin-token <token>]",
+    "  archive restore-app --target <url> --archive <dir> --install <id>",
+    "       [--apply] [--replace] [--admin-token <token>]",
+    "  archive import-site --project <path> --install <id> --out <dir>",
+    "       [--label <label>]",
   ].join("\n");
 }
 
@@ -59,6 +102,8 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
       return parseDeployArgs(rest);
     case "publish":
       return parsePublishArgs(rest);
+    case "archive":
+      return parseArchiveArgs(rest);
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -279,6 +324,286 @@ function parsePublishArgs(args: string[]): FormlessCliCommand {
   }
 
   return { dryRun, kind: "publish", projectPath: options.projectPath, yes };
+}
+
+function parseArchiveArgs(args: string[]): FormlessCliCommand {
+  const [subcommand, ...rest] = args;
+
+  switch (subcommand) {
+    case "export":
+      return parseArchiveExportArgs(rest);
+    case "export-app":
+      return parseArchiveExportAppArgs(rest);
+    case "restore":
+      return parseArchiveRestoreArgs(rest);
+    case "restore-app":
+      return parseArchiveRestoreAppArgs(rest);
+    case "import-site":
+      return parseArchiveImportSiteArgs(rest);
+    default:
+      throw new Error(
+        "Usage: formless archive <export|export-app|restore|restore-app|import-site>",
+      );
+  }
+}
+
+function parseArchiveExportArgs(args: string[]): FormlessCliCommand {
+  const options = parseArchiveTargetOutOptions(args, "formless archive export");
+
+  if (options.rest.length > 0) {
+    throw new Error(`Unknown option for formless archive export: ${options.rest[0]}`);
+  }
+
+  return {
+    kind: "archiveExport",
+    outDir: options.outDir,
+    target: options.target,
+  };
+}
+
+function parseArchiveExportAppArgs(args: string[]): FormlessCliCommand {
+  const options = parseArchiveTargetOutOptions(args, "formless archive export-app");
+  let installId: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--install") {
+      installId = readOptionValue(options.rest, index, "--install");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless archive export-app: ${arg}`);
+  }
+
+  if (!installId) {
+    throw new Error("Missing required option for formless archive export-app: --install.");
+  }
+
+  return {
+    installId,
+    kind: "archiveExportApp",
+    outDir: options.outDir,
+    target: options.target,
+  };
+}
+
+function parseArchiveRestoreArgs(args: string[]): FormlessCliCommand {
+  const options = parseArchiveRestoreOptions(args, "formless archive restore");
+
+  if (options.rest.length > 0) {
+    throw new Error(`Unknown option for formless archive restore: ${options.rest[0]}`);
+  }
+
+  return {
+    adminToken: options.adminToken,
+    apply: options.apply,
+    archiveDir: options.archiveDir,
+    kind: "archiveRestore",
+    replace: options.replace,
+    target: options.target,
+  };
+}
+
+function parseArchiveRestoreAppArgs(args: string[]): FormlessCliCommand {
+  const options = parseArchiveRestoreOptions(args, "formless archive restore-app");
+  let installId: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--install") {
+      installId = readOptionValue(options.rest, index, "--install");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless archive restore-app: ${arg}`);
+  }
+
+  if (!installId) {
+    throw new Error("Missing required option for formless archive restore-app: --install.");
+  }
+
+  return {
+    adminToken: options.adminToken,
+    apply: options.apply,
+    archiveDir: options.archiveDir,
+    installId,
+    kind: "archiveRestoreApp",
+    replace: options.replace,
+    target: options.target,
+  };
+}
+
+function parseArchiveImportSiteArgs(args: string[]): FormlessCliCommand {
+  const options = parseProjectOptions(args, "formless archive import-site");
+  let installId: string | null = null;
+  let label: string | null = null;
+  let outDir: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--install") {
+      installId = readOptionValue(options.rest, index, "--install");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--label") {
+      label = readOptionValue(options.rest, index, "--label");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--out") {
+      outDir = readOptionValue(options.rest, index, "--out");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless archive import-site: ${arg}`);
+  }
+
+  if (!installId) {
+    throw new Error("Missing required option for formless archive import-site: --install.");
+  }
+
+  if (!outDir) {
+    throw new Error("Missing required option for formless archive import-site: --out.");
+  }
+
+  return {
+    installId,
+    kind: "archiveImportSite",
+    label,
+    outDir,
+    projectPath: options.projectPath,
+  };
+}
+
+function parseArchiveTargetOutOptions(
+  args: string[],
+  usage: string,
+): { outDir: string; rest: string[]; target: string } {
+  let outDir: string | null = null;
+  const options = parseArchiveTargetOptions(args, usage);
+  const rest: string[] = [];
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--out") {
+      outDir = readOptionValue(options.rest, index, "--out");
+      index += 1;
+      continue;
+    }
+
+    rest.push(arg);
+  }
+
+  if (!outDir) {
+    throw new Error(`Missing required option for ${usage}: --out.`);
+  }
+
+  return { outDir, rest, target: options.target };
+}
+
+function parseArchiveRestoreOptions(
+  args: string[],
+  usage: string,
+): {
+  adminToken: string | null;
+  apply: boolean;
+  archiveDir: string;
+  replace: boolean;
+  rest: string[];
+  target: string;
+} {
+  const options = parseArchiveTargetOptions(args, usage);
+  let adminToken: string | null = null;
+  let apply = false;
+  let archiveDir: string | null = null;
+  let replace = false;
+  const rest: string[] = [];
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--archive") {
+      archiveDir = readOptionValue(options.rest, index, "--archive");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--apply") {
+      apply = true;
+      continue;
+    }
+
+    if (arg === "--dry-run") {
+      apply = false;
+      continue;
+    }
+
+    if (arg === "--replace") {
+      replace = true;
+      continue;
+    }
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    rest.push(arg);
+  }
+
+  if (!archiveDir) {
+    throw new Error(`Missing required option for ${usage}: --archive.`);
+  }
+
+  return {
+    adminToken,
+    apply,
+    archiveDir,
+    replace,
+    rest,
+    target: options.target,
+  };
+}
+
+function parseArchiveTargetOptions(
+  args: string[],
+  usage: string,
+): { rest: string[]; target: string } {
+  let target: string | null = null;
+  const rest: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--target") {
+      target = normalizeSourceUrl(readOptionValue(args, index, "--target"));
+      index += 1;
+      continue;
+    }
+
+    if (arg === "-h" || arg === "--help") {
+      throw new Error(`Usage: ${usage} --target <url>`);
+    }
+
+    rest.push(arg);
+  }
+
+  if (!target) {
+    throw new Error(`Missing required option for ${usage}: --target.`);
+  }
+
+  return { rest, target };
 }
 
 function parseProjectOptions(

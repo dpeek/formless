@@ -1,5 +1,6 @@
 import { FormlessAuthority } from "./authority.ts";
 import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
+import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
 import { handleSiteMediaRequest } from "./media.ts";
@@ -64,6 +65,12 @@ export default {
 
     if (ownerSetupResponse) {
       return ownerSetupResponse;
+    }
+
+    const archiveResponse = await handleInstanceArchiveApiRequest(request, env);
+
+    if (archiveResponse) {
+      return archiveResponse;
     }
 
     const instanceAppInstallsResponse = await handleInstanceAppInstallsApiRequest(request, env);

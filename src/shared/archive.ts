@@ -235,7 +235,7 @@ function parseArchivedAppInstall(context: string, value: unknown): ArchivedAppIn
   };
 }
 
-function parseAppArchiveData(
+export function parseAppArchiveData(
   context: string,
   value: unknown,
   expectedSchemaKey: string,

@@ -7,6 +7,10 @@ import type {
 import { isSyncSocketAttachment, isSyncSocketClientMessage } from "../shared/protocol.ts";
 import { parseAuthorityApiRoute, type AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
+  handleArchiveAppDataRestoreDurableObjectRequest,
+  handleInstanceArchiveDurableObjectRequest,
+} from "./archive-api.ts";
+import {
   ensureStorageTables,
   getChangesAfter,
   getCurrentCursor,
@@ -63,6 +67,16 @@ export class FormlessAuthority extends DurableObject<Env> {
       return instanceAppInstallsResponse;
     }
 
+    const instanceArchiveResponse = await handleInstanceArchiveDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (instanceArchiveResponse) {
+      return instanceArchiveResponse;
+    }
+
     const route = parseAuthorityRoute(url.pathname);
 
     if (!route) {
@@ -72,6 +86,26 @@ export class FormlessAuthority extends DurableObject<Env> {
     try {
       if (route.path === "/sync/ws") {
         return this.handleSyncWebSocketRequest(request, route.app);
+      }
+
+      const source = storageSourceFromRoute(route, this.bindings);
+      const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
+        this.ctx.getWebSockets(),
+      );
+      const archiveAppDataRestoreResponse = await handleArchiveAppDataRestoreDurableObjectRequest(
+        request,
+        {
+          app: route.app,
+          env: this.bindings,
+          identity: route.identity,
+          path: route.path,
+          storage: this.ctx.storage,
+          writes,
+        },
+      );
+
+      if (archiveAppDataRestoreResponse) {
+        return archiveAppDataRestoreResponse;
       }
 
       const operation = selectAuthorityOperation({
@@ -93,10 +127,6 @@ export class FormlessAuthority extends DurableObject<Env> {
 
         const body = operation.metadata.mode === "write" ? await readJson(request) : undefined;
         ensureStorageTables(this.ctx.storage);
-        const source = storageSourceFromRoute(route, this.bindings);
-        const writes = new AuthorityWriteModule(this.ctx.storage, source, () =>
-          this.ctx.getWebSockets(),
-        );
         const result = executeAuthorityOperation({
           app: route.app,
           body,

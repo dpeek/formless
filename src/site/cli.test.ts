@@ -5,6 +5,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import packageJson from "../../package.json";
+import { APP_ARCHIVE_KIND, parsePortableArchive, type AppArchive } from "../shared/archive.ts";
+import { listBundledAppPackages } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -26,6 +28,7 @@ import {
 import {
   initSiteProject,
   onboardFormlessInstance,
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
   publishSiteProject,
   runFormlessCli,
   saveSiteProject,
@@ -65,6 +68,14 @@ describe("Formless Site CLI", () => {
       "  deploy setup [options]              Store deploy config and local admin token",
       "  publish [--project <path>]          Deploy code, media, and records",
       "       [--dry-run] [--yes]",
+      "  archive export --target <url> --out <dir>",
+      "  archive export-app --target <url> --install <id> --out <dir>",
+      "  archive restore --target <url> --archive <dir> [--apply] [--replace]",
+      "       [--admin-token <token>]",
+      "  archive restore-app --target <url> --archive <dir> --install <id>",
+      "       [--apply] [--replace] [--admin-token <token>]",
+      "  archive import-site --project <path> --install <id> --out <dir>",
+      "       [--label <label>]",
     ].join("\n");
     const logs: string[] = [];
 
@@ -289,6 +300,90 @@ describe("Formless Site CLI", () => {
         yes: true,
       },
     );
+  });
+
+  it("parses archive commands", () => {
+    expect(
+      parseFormlessCliArgs([
+        "archive",
+        "export",
+        "--target",
+        "https://instance.example/?draft=1",
+        "--out",
+        "backup",
+      ]),
+    ).toEqual({
+      kind: "archiveExport",
+      outDir: "backup",
+      target: "https://instance.example",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "archive",
+        "export-app",
+        "--install",
+        "personal",
+        "--target",
+        "https://instance.example",
+        "--out",
+        "personal-backup",
+      ]),
+    ).toEqual({
+      installId: "personal",
+      kind: "archiveExportApp",
+      outDir: "personal-backup",
+      target: "https://instance.example",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "archive",
+        "restore-app",
+        "--target",
+        "https://instance.example",
+        "--archive",
+        "personal-backup",
+        "--install",
+        "copy",
+        "--apply",
+        "--replace",
+        "--admin-token",
+        "secret",
+      ]),
+    ).toEqual({
+      adminToken: "secret",
+      apply: true,
+      archiveDir: "personal-backup",
+      installId: "copy",
+      kind: "archiveRestoreApp",
+      replace: true,
+      target: "https://instance.example",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "archive",
+        "import-site",
+        "--project",
+        "../site",
+        "--install",
+        "personal",
+        "--label",
+        "Personal Site",
+        "--out",
+        "personal-archive",
+      ]),
+    ).toEqual({
+      installId: "personal",
+      kind: "archiveImportSite",
+      label: "Personal Site",
+      outDir: "personal-archive",
+      projectPath: "../site",
+    });
+    expect(() => parseFormlessCliArgs(["archive", "export"])).toThrow(
+      "Missing required option for formless archive export: --target.",
+    );
+    expect(() =>
+      parseFormlessCliArgs(["archive", "restore", "--target", "https://instance.example"]),
+    ).toThrow("Missing required option for formless archive restore: --archive.");
   });
 
   it("initializes a Site project with config, deterministic records, and no starter media", async () => {
@@ -532,6 +627,192 @@ describe("Formless Site CLI", () => {
         { cwd: tempDir, fetch: fetcher },
       ),
     ).rejects.toThrow("Site project source is stale: media/site/images/cover.png.");
+  });
+
+  it("exports app archives and restores them through the archive API", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "personal-backup");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const sourceRecords = mediaRecords();
+
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/personal",
+          createdAt: "2026-05-01T00:00:00.000Z",
+          installId: "personal",
+          label: "Personal",
+          packageAppKey: "site",
+          publicRoute: "/sites/personal",
+          publicRoutePrefix: "/sites/personal/",
+          schemaRoute: "/apps/personal/schema",
+          status: "installed",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        },
+      ],
+    });
+    responses.queueJson(snapshot(sourceRecords));
+    responses.queueBinary(Buffer.from([4, 5, 6]), "image/png");
+
+    await runFormlessCli(
+      [
+        "archive",
+        "export-app",
+        "--target",
+        "https://instance.example",
+        "--install",
+        "personal",
+        "--out",
+        outDir,
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const archivePath = path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
+    const archive = parsePortableArchive(
+      JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+    );
+
+    if (archive.kind !== APP_ARCHIVE_KIND) {
+      throw new Error("Expected app archive.");
+    }
+
+    expect(archive.app.installId).toBe("personal");
+    expect(archive.media.objects).toEqual([
+      expect.objectContaining({
+        archivePath: "media/personal/app-installs/personal/site/images/cover.png",
+        deliveryHref:
+          "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+        storageKey: "app-installs/personal/site/images/cover.png",
+      }),
+    ]);
+    await expect(
+      readFile(path.join(outDir, "media/personal/app-installs/personal/site/images/cover.png")),
+    ).resolves.toEqual(Buffer.from([4, 5, 6]));
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://instance.example/api/formless/app-installs",
+      "GET https://instance.example/api/app-installs/site/personal/snapshot",
+      "GET https://instance.example/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+    ]);
+
+    responses.queueJson({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["personal-copy"],
+          mediaCountsByApp: { "personal-copy": 1 },
+          recordCountsByApp: { "personal-copy": { total: sourceRecords.length } },
+          replacedInstalls: [],
+        },
+      },
+    });
+
+    await runFormlessCli(
+      [
+        "archive",
+        "restore-app",
+        "--target",
+        "https://instance.example",
+        "--archive",
+        outDir,
+        "--install",
+        "personal-copy",
+        "--apply",
+        "--admin-token",
+        "secret",
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = JSON.parse(String(restoreRequest?.body)) as {
+      archive: AppArchive;
+      mediaFiles: { bytesBase64: string }[];
+    };
+
+    expect(`${restoreRequest?.method} ${restoreRequest?.url}`).toBe(
+      "POST https://instance.example/api/formless/archive/restore",
+    );
+    expect(restoreRequest?.headers.authorization).toBe("Bearer secret");
+    expect(restoreBody.archive.app.installId).toBe("personal-copy");
+    expect(restoreBody.archive.restorePolicy).toEqual({
+      dryRun: false,
+      installCollisions: "reject",
+    });
+    expect(restoreBody.archive.media.objects[0]).toMatchObject({
+      deliveryHref:
+        "/api/app-installs/site/personal-copy/media/app-installs/personal-copy/site/images/cover.png",
+      storageKey: "app-installs/personal-copy/site/images/cover.png",
+    });
+    expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
+    expect(logs.at(-1)).toContain("App archive restore for personal-copy applied ok.");
+  });
+
+  it("imports a standalone Site project into an app archive directory", async () => {
+    const tempDir = await makeTempDir();
+    const projectRoot = path.join(tempDir, "site");
+    const outDir = path.join(tempDir, "site-archive");
+    const logs: string[] = [];
+
+    await writeFileTree(projectRoot, mediaRecords());
+    await mkdir(path.join(projectRoot, "media/site/images"), { recursive: true });
+    await writeFile(path.join(projectRoot, "media/site/images/cover.png"), Buffer.from([7, 8]));
+
+    await runFormlessCli(
+      [
+        "archive",
+        "import-site",
+        "--project",
+        projectRoot,
+        "--install",
+        "personal",
+        "--out",
+        outDir,
+      ],
+      cliDeps(tempDir, { logs }),
+    );
+
+    const archive = parsePortableArchive(
+      JSON.parse(
+        await readFile(path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE), "utf8"),
+      ) as unknown,
+    );
+
+    if (archive.kind !== APP_ARCHIVE_KIND) {
+      throw new Error("Expected app archive.");
+    }
+
+    expect(archive.app.installId).toBe("personal");
+    expect(archive.data.kind).toBe("sourceRecords");
+    expect(archive.media.objects[0]).toMatchObject({
+      archivePath: "media/personal/site/images/cover.png",
+      deliveryHref:
+        "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+      storageKey: "app-installs/personal/site/images/cover.png",
+    });
+    await expect(
+      readFile(path.join(outDir, "media/personal/site/images/cover.png")),
+    ).resolves.toEqual(Buffer.from([7, 8]));
+    expect(logs).toEqual([
+      [
+        "Site project archive written for personal.",
+        `Archive: ${path.relative(tempDir, path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE))}.`,
+        `Records: ${mediaRecords().length}.`,
+        "Media files: 1.",
+        "Rewritten media hrefs: 0.",
+      ].join("\n"),
+    ]);
   });
 
   it("sets up project deploy config, ignored local secret env, and optional Wrangler calls", async () => {
