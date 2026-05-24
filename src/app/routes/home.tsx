@@ -3,12 +3,16 @@ import {
   connectBroadcastToClientStore,
   hydrateClientStore,
   selectClientStoreTarget,
+  useActiveClientStorageName,
   useActiveSchemaKey,
   useSchema,
 } from "../../client/store.ts";
 import { setSyncStatus, useSyncStatus } from "../../client/sync-status.ts";
 import { bootstrapClient, startPushSync } from "../../client/sync.ts";
-import type { ClientAppTarget } from "../../client/app-target.ts";
+import {
+  appStorageIdentityForClientTarget,
+  type ClientAppTarget,
+} from "../../client/app-target.ts";
 import { selectScreenModelByPath } from "../../client/views.ts";
 import { todayDateString } from "../../shared/date.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
@@ -44,9 +48,17 @@ export function HomeRoute({
   screenPath: string;
 }) {
   const appTarget = target ?? schemaKey;
+  const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);
+  const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
-  const schema = activeSchemaKey === null || activeSchemaKey === schemaKey ? activeSchema : null;
+  const routeStoreMatchesTarget =
+    activeClientStorageName === null ||
+    activeClientStorageName === appTargetIdentity.browserDatabaseName;
+  const routeIsActive =
+    routeStoreMatchesTarget &&
+    (activeSchemaKey === null || activeSchemaKey === appTargetIdentity.sourceSchemaKey);
+  const schema = routeIsActive ? activeSchema : null;
   const app = getSchemaAppDefinition(schemaKey);
   const homeScreen = useMemo(
     () => (schema ? selectScreenModelByPath(schema, screenPath) : undefined),
@@ -60,7 +72,7 @@ export function HomeRoute({
 
   useEffect(() => {
     setSelectionState(createHomeRouteSelectionState());
-  }, [schemaKey, setSelectionState]);
+  }, [appTargetIdentity.browserDatabaseName, setSelectionState]);
 
   useEffect(() => {
     selectClientStoreTarget(appTarget);
@@ -100,7 +112,7 @@ export function HomeRoute({
       stopBroadcast();
       stopPushSync();
     };
-  }, [app.label, appTarget]);
+  }, [app.label, appTargetIdentity.browserDatabaseName]);
 
   if (!schema) {
     return (

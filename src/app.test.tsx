@@ -1,7 +1,7 @@
 import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { Router } from "wouter";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { App } from "./app.tsx";
+import { App, selectRuntimeShellInstalledAppLinks } from "./app.tsx";
 import { HomeCollection, RecordList } from "./app/generated/collection.tsx";
 import {
   GeneratedCreateDialogForm,
@@ -52,6 +52,7 @@ import {
   createInstanceRuntimeProfile,
   createPublishedSiteRuntimeProfile,
   createSiteAuthoringRuntimeProfile,
+  findRuntimeWorldMountByRoute,
   type RuntimeProfile,
 } from "./app/runtime-profile.ts";
 import {
@@ -91,6 +92,7 @@ import {
   sitePlacementRecord,
 } from "./test/site-editor.ts";
 import { testSiteSeedRecords } from "./test/site-records.ts";
+import type { AppInstall } from "./shared/app-installs.ts";
 
 function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
   return renderToStaticMarkup(
@@ -219,6 +221,19 @@ function linkHtml(html: string, href: string): string {
   return html.slice(linkStart, linkEnd + "</a>".length);
 }
 
+function sidebarItemHtml(html: string, text: string): string {
+  const labelIndex = html.indexOf(`>${text}</span>`);
+  const slotIndex = html.lastIndexOf('data-slot="sidebar-item"', labelIndex);
+  const itemStart = html.lastIndexOf("<a", slotIndex);
+  const itemEnd = html.indexOf("</a>", labelIndex);
+
+  if (labelIndex === -1 || slotIndex === -1 || itemStart === -1 || itemEnd === -1) {
+    throw new Error(`Missing sidebar item for "${text}".`);
+  }
+
+  return html.slice(itemStart, itemEnd + "</a>".length);
+}
+
 function articleHtml(html: string, text: string): string {
   const textIndex = html.indexOf(text);
   const articleStart = html.lastIndexOf("<article", textIndex);
@@ -240,6 +255,32 @@ function mainHtml(html: string): string {
   }
 
   return html.slice(start, end + "</main>".length);
+}
+
+function runtimeShellHtml(html: string): string {
+  const frameIndex = html.indexOf('data-frame="runtime-shell"');
+  const footerStart = html.lastIndexOf("<footer", frameIndex);
+  const footerEnd = html.indexOf("</footer>", frameIndex);
+
+  if (frameIndex === -1 || footerStart === -1 || footerEnd === -1) {
+    throw new Error("Missing runtime shell.");
+  }
+
+  return html.slice(footerStart, footerEnd + "</footer>".length);
+}
+
+function generatedAppFrameHtml(html: string): string {
+  const frameIndex = html.indexOf('data-frame="generated-app"');
+
+  if (frameIndex === -1) {
+    throw new Error("Missing generated app frame.");
+  }
+
+  const runtimeShellIndex = html.indexOf('data-frame="runtime-shell"', frameIndex);
+
+  return runtimeShellIndex === -1
+    ? html.slice(frameIndex)
+    : html.slice(frameIndex, runtimeShellIndex);
 }
 
 function recordsWithContentListBlocks(
@@ -421,27 +462,105 @@ function selectRateHomeModel() {
   return model;
 }
 
-function expectWorkbenchToolbar(html: string, schemaRoute: string, schemaKey: string) {
-  expect(html).toContain('data-frame="workbench-toolbar"');
-  expect(html).toContain("bg-bg pb-[var(--workbench-toolbar-height)] text-fg");
-  expect(html).toContain(`href="${schemaRoute}"`);
-  expect(html).toContain('aria-label="Workbench actions"');
-  expect(html).toContain("Export");
-  expect(html).toContain("Restore");
-  expect(html).toContain("Reset");
-  expect(html).toContain('type="file"');
-  expect(html).toContain(`aria-label="Sync status details for ${schemaKey}"`);
-  expect(html).not.toContain("data-workbench-tools");
-  expect(html).not.toContain("Tools");
-  expect(html).not.toContain("Dev profile");
+function appInstallFixture({
+  installId,
+  label,
+  packageAppKey = "site",
+}: {
+  installId: string;
+  label: string;
+  packageAppKey?: SchemaKey;
+}): AppInstall {
+  return {
+    adminRoute: `/apps/${installId}`,
+    createdAt: "2026-05-25T00:00:00.000Z",
+    installId,
+    label,
+    packageAppKey,
+    publicRoute: `/sites/${installId}`,
+    publicRoutePrefix: `/sites/${installId}/`,
+    schemaRoute: `/apps/${installId}/schema`,
+    status: "installed",
+    updatedAt: "2026-05-25T00:00:00.000Z",
+  };
+}
+
+const localPublishBroker = {
+  endpoint: "http://127.0.0.1:43123/publish",
+  token: "local-broker-token",
+};
+
+function expectRuntimeShell(html: string) {
+  const shellHtml = runtimeShellHtml(html);
+
+  expect(html).toContain('data-frame="runtime-shell"');
+  expect(html).toContain("bg-bg pb-[var(--runtime-shell-height)] text-fg");
+  expect(html).toContain('aria-label="Runtime apps"');
+  expect(shellHtml).toContain("App management");
+  expect(shellHtml).not.toContain("/schema");
+  expect(shellHtml).not.toContain("data-sync-status-control");
+  expect(shellHtml).not.toContain("Sync details");
+  expect(shellHtml).not.toContain("Reset source seed data");
+  expect(shellHtml).not.toContain("Publish");
+  expect(shellHtml).not.toContain("Export store snapshot");
+  expect(shellHtml).not.toContain("Restore store snapshot");
+  expect(shellHtml).not.toContain("Portable archive");
+  expect(shellHtml).not.toContain("App archive");
+  expect(shellHtml).not.toContain("Instance archive");
+  expect(shellHtml).not.toContain("Restore archive");
+  expect(shellHtml).not.toContain("Import app");
+  expect(shellHtml).not.toContain("Backup");
+  expect(html).not.toContain('aria-label="Workbench actions"');
+  expect(html).not.toContain('data-frame="workbench-toolbar"');
+}
+
+function expectAppSettings(
+  html: string,
+  {
+    appLabel,
+    resetScopeLabel = appLabel,
+    schemaKey,
+    schemaRoute,
+    syncWorldKey = schemaKey,
+  }: {
+    appLabel: string;
+    resetScopeLabel?: string;
+    schemaKey: string;
+    schemaRoute?: string;
+    syncWorldKey?: string;
+  },
+) {
+  expect(html).toContain(`aria-label="${appLabel} app settings"`);
+  expect(html).toContain(">App settings<");
+  expect(html).toContain(`aria-label="Toggle ${appLabel} navigation and app settings"`);
+  expectSyncStatusControl(html, syncWorldKey);
+  if (schemaRoute) {
+    expect(html).toContain(`href="${schemaRoute}"`);
+  }
+  expect(html).toContain("Reset source seed data");
+  expect(html).toContain(`aria-label="Reset source seed data for ${resetScopeLabel}"`);
+  expect(html).not.toContain("Export store snapshot");
+  expect(html).not.toContain("Restore store snapshot");
+  expect(html).not.toContain("snapshot file");
+  expect(html).not.toContain(`aria-label="Restore snapshot for ${appLabel}"`);
+  expect(html).not.toContain("Portable archive");
+  expect(html).not.toContain("App archive");
+  expect(html).not.toContain("Instance archive");
+  expect(html).not.toContain("Restore archive");
+  expect(html).not.toContain("Import app");
+  expect(html).not.toContain("Backup");
 }
 
 function expectSyncStatusControl(html: string, schemaKey: string) {
   expect(html).toContain("data-sync-status-control");
   expect(html).toContain(`aria-label="Sync status details for ${schemaKey}"`);
+  expect(html).toContain("Sync details");
+  expect(html).toContain("World</dt>");
   expect(html).toContain(`<code>${schemaKey}</code>`);
-  expect(html).toContain("Push sync");
-  expect(html).toContain("Cursor");
+  expect(html).toContain("Schema</dt><dd>");
+  expect(html).toContain("Cursor</dt><dd>");
+  expect(html).toContain('Push sync</dt><dd><span class="capitalize">');
+  expect(html).toContain("Last sync</dt><dd>");
 }
 
 function expectGeneratedAppChromeLabels(
@@ -466,12 +585,26 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="instance-shell"');
     expect(html).not.toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain('aria-current="page"');
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain("App management");
     expect(html).toContain("Instance");
     expect(html).toContain("Loading installed apps...");
-    expect(html).toContain('aria-label="Workbench apps"');
     expect(html).toContain('href="/tasks"');
     expect(html).toContain('href="/site"');
     expect(html).not.toContain("Loading Tasks...");
+  });
+
+  it("does not mark app management current on unknown dev routes", () => {
+    const html = renderRoute("/unknown");
+
+    expect(html).toContain("Not found");
+    expectRuntimeShell(html);
+    expect(runtimeShellHtml(html)).not.toContain('aria-current="page"');
+    expect(linkHtml(runtimeShellHtml(html), "/")).toContain("App management");
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).not.toContain("Toggle app navigation and settings");
+    expect(html).not.toContain("App settings");
   });
 
   it('renders the "/tasks" route with task navigation', () => {
@@ -479,14 +612,20 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expect(html).toContain('aria-label="Workbench apps"');
+    expectRuntimeShell(html);
+    expect(linkHtml(runtimeShellHtml(html), "/")).not.toContain('aria-current="page"');
+    expect(linkHtml(runtimeShellHtml(html), "/tasks")).toContain('aria-current="page"');
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/estii"');
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expectWorkbenchToolbar(html, "/tasks/schema", "tasks");
+    expectAppSettings(html, {
+      appLabel: "Tasks",
+      schemaKey: "tasks",
+      schemaRoute: "/tasks/schema",
+    });
     expect(html).toContain('aria-label="Tasks screens"');
     expect(html).toContain("Loading Tasks...");
     expect(html).not.toContain("Create Task");
@@ -497,14 +636,18 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expect(html).toContain('aria-label="Workbench apps"');
+    expectRuntimeShell(html);
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/estii"');
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expectWorkbenchToolbar(html, "/estii/schema", "estii");
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      schemaKey: "estii",
+      schemaRoute: "/estii/schema",
+    });
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain("Loading Estii...");
     expect(html).not.toContain("Create Resource");
@@ -515,18 +658,53 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expect(html).toContain('aria-label="Workbench apps"');
+    expectRuntimeShell(html);
     expect(html).toContain('href="/tasks"');
     expect(html).toContain("Tasks");
     expect(html).toContain('href="/estii"');
     expect(html).toContain("Estii");
     expect(html).toContain('href="/site"');
     expect(html).toContain("Site");
-    expectWorkbenchToolbar(html, "/site/schema", "site");
-    expectSyncStatusControl(html, "site");
+    expectAppSettings(html, {
+      appLabel: "Site",
+      schemaKey: "site",
+      schemaRoute: "/site/schema",
+    });
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain("Loading Site...");
     expect(html).not.toContain("Create Content item");
+  });
+
+  it("marks active app sidebar screen and settings links as current", () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
+    const devSetupHtml = generatedAppFrameHtml(renderRoute("/estii/setup"));
+
+    expect(linkHtml(devSetupHtml, "/estii/setup")).toContain('aria-current="page"');
+    expect(linkHtml(devSetupHtml, "/estii")).not.toContain('aria-current="page"');
+    expect(linkHtml(devSetupHtml, "/estii/schema")).not.toContain('aria-current="page"');
+
+    const appSchemaHtml = generatedAppFrameHtml(
+      renderRoute("/schema", createAppRuntimeProfile("estii")),
+    );
+
+    expect(linkHtml(appSchemaHtml, "/schema")).toContain('aria-current="page"');
+    expect(linkHtml(appSchemaHtml, "/setup")).not.toContain('aria-current="page"');
+
+    resetClientStore();
+    const installedWorld = findRuntimeWorldMountByRoute(
+      createDevRuntimeProfile(),
+      "/apps/personal/schema",
+    );
+    if (!installedWorld?.target) {
+      throw new Error("Expected installed app target for /apps/personal/schema.");
+    }
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
+    const installedSchemaHtml = generatedAppFrameHtml(renderRoute("/apps/personal/schema"));
+
+    expect(linkHtml(installedSchemaHtml, "/apps/personal/schema")).toContain('aria-current="page"');
+    expect(linkHtml(installedSchemaHtml, "/apps/personal/settings")).not.toContain(
+      'aria-current="page"',
+    );
   });
 
   it('renders the "/setup" owner setup route outside workbench chrome', () => {
@@ -536,7 +714,7 @@ describe("App smoke routes", () => {
     expect(html).toContain("Loading setup status.");
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).not.toContain('data-frame="generated-app"');
-    expect(html).not.toContain('aria-label="Workbench apps"');
+    expect(html).not.toContain('aria-label="Runtime apps"');
   });
 
   it("renders product instance routes outside the dev workbench route vocabulary", () => {
@@ -559,7 +737,7 @@ describe("App smoke routes", () => {
     expect(shellHtml).toContain("Instance");
     expect(shellHtml).toContain("Loading installed apps...");
     expect(shellHtml).not.toContain('data-frame="workbench"');
-    expect(shellHtml).not.toContain('aria-label="Workbench apps"');
+    expect(shellHtml).not.toContain('aria-label="Runtime apps"');
     expect(legacyHtml).toContain("Not found");
     expect(legacyHtml).not.toContain('data-frame="workbench"');
     expect(legacyHtml).not.toContain('href="/tasks"');
@@ -567,17 +745,26 @@ describe("App smoke routes", () => {
     expect(adminHtml).toContain('data-frame="generated-app"');
     expect(adminHtml).toContain('data-target-kind="appInstall"');
     expect(adminHtml).toContain('data-install-id="personal"');
+    expect(adminHtml).toContain('aria-label="Site management"');
+    expect(adminHtml).toContain('href="/"');
+    expect(adminHtml).toContain("App management");
+    expect(adminHtml).toContain(
+      'aria-label="Reset source seed data for Site app install personal"',
+    );
+    expectSyncStatusControl(adminHtml, "app:personal");
     expect(adminHtml).not.toContain('href="/apps/personal/schema"');
     expect(adminHtml).not.toContain('data-frame="workbench"');
   });
 
-  it("renders sync details in workbench chrome instead of generated page content", () => {
+  it("renders sync details in app settings instead of generated page content", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderRoute("/site");
 
+    expect(html).toContain('aria-label="Site app settings"');
     expectSyncStatusControl(html, "site");
-    expect(html).toContain("Sync details");
+    expect(html).toContain('World</dt><dd class="min-w-0 truncate"><code>site</code></dd>');
     expect(html).toContain("Schema</dt><dd>v1</dd>");
+    expect(html).toContain("Cursor</dt><dd>1</dd>");
     expect(html).toContain('Push sync</dt><dd><span class="capitalize">idle</span>');
     expect(html).toContain("Local cache ready.");
     expect(html).toContain("Last sync</dt><dd><time");
@@ -591,7 +778,7 @@ describe("App smoke routes", () => {
     expectSyncStatusControl(html, "site");
     expect(html).toContain("Sync issue");
     expect(html).toContain("Push sync unavailable.");
-    expect(html).toContain("text-red-200");
+    expect(html).toContain("text-red-700");
   });
 
   it("provides the route schema key through the generated app frame", () => {
@@ -613,6 +800,7 @@ describe("App smoke routes", () => {
   });
 
   it("routes installed Site admin paths through generated app targets", () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const html = renderToStaticMarkup(
       <Router ssrPath="/apps/personal/settings">
         <App
@@ -628,12 +816,161 @@ describe("App smoke routes", () => {
 
     expect(html).toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
     expect(html).toContain('href="/apps/personal/schema"');
     expect(html).toContain('data-route-schema-key="site"');
     expect(html).toContain('data-screen-path="/settings"');
     expect(html).toContain('data-target-kind="appInstall"');
     expect(html).toContain('data-install-id="personal"');
-    expectSyncStatusControl(html, "site");
+    expectAppSettings(html, {
+      appLabel: "Site",
+      resetScopeLabel: "Site app install personal",
+      schemaKey: "site",
+      schemaRoute: "/apps/personal/schema",
+      syncWorldKey: "app:personal",
+    });
+    expect(html).toContain("Schema</dt><dd>Loading</dd>");
+    expect(html).toContain("Cursor</dt><dd>0</dd>");
+    expect(html).not.toContain("Schema</dt><dd>v1</dd>");
+    expect(runtimeShellHtml(html)).toContain("App management");
+    expect(linkHtml(runtimeShellHtml(html), "/site")).not.toContain('aria-current="page"');
+    expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain('aria-current="page"');
+    expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain("Site personal");
+    expect(html.slice(0, html.indexOf('data-frame="runtime-shell"'))).not.toContain(
+      "App management",
+    );
+  });
+
+  it("keeps installed Site home routes scoped to the installed app target", () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const loadingHtml = renderRoute("/apps/personal/settings");
+
+    expect(loadingHtml).toContain('data-frame="workbench"');
+    expect(loadingHtml).toContain('data-frame="generated-app"');
+    expectRuntimeShell(loadingHtml);
+    expectGeneratedAppChromeLabels(loadingHtml, { appTitle: "Site", screenTitle: "Site" });
+    expectAppSettings(loadingHtml, {
+      appLabel: "Site",
+      resetScopeLabel: "Site app install personal",
+      schemaKey: "site",
+      schemaRoute: "/apps/personal/schema",
+      syncWorldKey: "app:personal",
+    });
+    expect(loadingHtml).toContain("Loading Site...");
+    expect(loadingHtml).toContain("Schema</dt><dd>Loading</dd>");
+    expect(loadingHtml).not.toContain('aria-label="Pages roots"');
+    expect(loadingHtml).not.toContain('href="/apps/personal/settings"');
+    expect(loadingHtml).not.toContain("Schema</dt><dd>v1</dd>");
+
+    resetClientStore();
+    const installedWorld = findRuntimeWorldMountByRoute(
+      createDevRuntimeProfile(),
+      "/apps/personal/settings",
+    );
+    if (!installedWorld?.target) {
+      throw new Error("Expected installed app target for /apps/personal/settings.");
+    }
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
+    const activeHtml = renderRoute("/apps/personal/settings");
+
+    expectGeneratedAppChromeLabels(activeHtml, { appTitle: "Site", screenTitle: "Settings" });
+    expect(activeHtml).toContain('href="/apps/personal/settings"');
+    expect(activeHtml).toContain("Schema</dt><dd>v1</dd>");
+    expect(activeHtml).not.toContain("Loading Site...");
+  });
+
+  it("keeps installed Site schema routes scoped to the installed app target", () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const loadingHtml = renderRoute("/apps/personal/schema");
+
+    expect(loadingHtml).toContain('data-frame="workbench"');
+    expect(loadingHtml).toContain('data-frame="generated-app"');
+    expectRuntimeShell(loadingHtml);
+    expectGeneratedAppChromeLabels(loadingHtml, { appTitle: "Site", screenTitle: "Schema" });
+    expectAppSettings(loadingHtml, {
+      appLabel: "Site",
+      resetScopeLabel: "Site app install personal",
+      schemaKey: "site",
+      schemaRoute: "/apps/personal/schema",
+      syncWorldKey: "app:personal",
+    });
+    expect(loadingHtml).toContain("Site Schema");
+    expect(loadingHtml).toContain("Loading draft");
+    expect(loadingHtml).toContain('href="/apps/personal"');
+    expect(loadingHtml).toContain("Open app");
+    expect(loadingHtml).toContain("Schema</dt><dd>Loading</dd>");
+    expect(loadingHtml).not.toContain("Saved draft");
+    expect(loadingHtml).not.toContain("&quot;siteSettingsHome&quot;");
+    expect(loadingHtml).not.toContain("Schema</dt><dd>v1</dd>");
+
+    resetClientStore();
+    const installedWorld = findRuntimeWorldMountByRoute(
+      createDevRuntimeProfile(),
+      "/apps/personal/schema",
+    );
+    if (!installedWorld?.target) {
+      throw new Error("Expected installed app target for /apps/personal/schema.");
+    }
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
+    const activeHtml = renderRoute("/apps/personal/schema");
+
+    expect(activeHtml).toContain("Saved draft");
+    expect(activeHtml).toContain("&quot;siteSettingsHome&quot;");
+    expect(activeHtml).toContain("Schema</dt><dd>v1</dd>");
+  });
+
+  it("selects supported installed apps for the dev runtime shell picker", () => {
+    const runtimeProfile = createDevRuntimeProfile();
+    const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, "/apps/personal/settings");
+
+    const links = selectRuntimeShellInstalledAppLinks({
+      installs: [
+        appInstallFixture({ installId: "personal", label: "Personal Site" }),
+        appInstallFixture({ installId: "docs", label: "Docs Site" }),
+        appInstallFixture({
+          installId: "task-workspace",
+          label: "Task Workspace",
+          packageAppKey: "tasks",
+        }),
+      ],
+      routeWorld,
+      runtimeProfile,
+    });
+
+    expect(links).toEqual([
+      {
+        href: "/apps/personal",
+        installId: "personal",
+        isCurrent: true,
+        key: "site:personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+      },
+      {
+        href: "/apps/docs",
+        installId: "docs",
+        isCurrent: false,
+        key: "site:docs",
+        label: "Docs Site",
+        packageAppKey: "site",
+      },
+    ]);
+    expect(
+      selectRuntimeShellInstalledAppLinks({
+        installs: [],
+        routeWorld,
+        runtimeProfile,
+      }),
+    ).toEqual([
+      {
+        href: "/apps/personal",
+        installId: "personal",
+        isCurrent: true,
+        key: "site:personal",
+        label: "Site personal",
+        packageAppKey: "site",
+      },
+    ]);
   });
 
   it("routes installed Site public paths without workbench chrome", () => {
@@ -664,11 +1001,16 @@ describe("App smoke routes", () => {
     const html = renderRoute("/tasks/schema");
 
     expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="workbench-tool"');
-    expect(html).not.toContain('data-frame="generated-app"');
-    expect(html).toContain('aria-label="Workbench apps"');
-    expectWorkbenchToolbar(html, "/tasks/schema", "tasks");
-    expect(html).not.toContain('aria-label="Tasks screens"');
+    expect(html).not.toContain('data-frame="workbench-tool"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Schema" });
+    expectAppSettings(html, {
+      appLabel: "Tasks",
+      schemaKey: "tasks",
+      schemaRoute: "/tasks/schema",
+    });
+    expect(html).toContain('aria-label="Tasks screens"');
     expect(html).toContain("Tasks Schema");
     expect(html).toContain("<code>tasks</code>");
     expect(html).not.toContain('aria-label="Tasks route reset controls"');
@@ -742,12 +1084,16 @@ describe("App smoke routes", () => {
     const html = renderRoute("/estii/schema");
 
     expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="workbench-tool"');
-    expect(html).not.toContain('data-frame="generated-app"');
-    expect(html).toContain('aria-label="Workbench apps"');
-    expectWorkbenchToolbar(html, "/estii/schema", "estii");
-    expect(html).not.toContain('aria-label="Estii screens"');
-    expect(html).not.toContain('href="/estii/setup"');
+    expect(html).not.toContain('data-frame="workbench-tool"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      schemaKey: "estii",
+      schemaRoute: "/estii/schema",
+    });
+    expect(html).toContain('aria-label="Estii screens"');
+    expect(html).toContain('href="/estii/setup"');
     expect(html).toContain("Estii Schema");
     expect(html).toContain("<code>estii</code>");
     expect(html).not.toContain('aria-label="Estii route reset controls"');
@@ -785,11 +1131,15 @@ describe("App smoke routes", () => {
     const html = renderRoute("/site/schema");
 
     expect(html).toContain('data-frame="workbench"');
-    expect(html).toContain('data-frame="workbench-tool"');
-    expect(html).not.toContain('data-frame="generated-app"');
-    expect(html).toContain('aria-label="Workbench apps"');
-    expectWorkbenchToolbar(html, "/site/schema", "site");
-    expect(html).not.toContain('aria-label="Site screens"');
+    expect(html).not.toContain('data-frame="workbench-tool"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expectAppSettings(html, {
+      appLabel: "Site",
+      schemaKey: "site",
+      schemaRoute: "/site/schema",
+    });
+    expect(html).toContain('aria-label="Site screens"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
     expect(html).toContain("Site Schema");
@@ -894,7 +1244,7 @@ describe("App smoke routes", () => {
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectSyncStatusControl(html, "site");
+    expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
     expect(html).toContain('<div class="px-2 py-1 text-sm font-semibold">Site</div>');
     expect(html).toContain('<h1 class="truncate text-sm font-medium">');
     expect(html).toContain('aria-label="Site screens"');
@@ -913,14 +1263,12 @@ describe("App smoke routes", () => {
     const html = renderRoute(
       "/admin",
       createSiteAuthoringRuntimeProfile({
-        localPublish: {
-          endpoint: "http://127.0.0.1:43123/publish",
-          token: "local-broker-token",
-        },
+        localPublish: localPublishBroker,
       }),
     );
 
     expect(html).toContain('data-frame="generated-app"');
+    expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
     expect(html).toContain('aria-label="Publish Site through local CLI"');
     expect(html).toContain(">Publish</span>");
     expect(html).not.toContain("local-broker-token");
@@ -931,6 +1279,7 @@ describe("App smoke routes", () => {
     const html = renderRoute("/admin/schema", createSiteAuthoringRuntimeProfile());
 
     expect(html).toContain('data-frame="generated-app"');
+    expectAppSettings(html, { appLabel: "Site", schemaKey: "site" });
     expect(html).toContain("Not found");
     expect(html).not.toContain("Site Schema");
     expect(html).not.toContain("Save schema");
@@ -944,6 +1293,11 @@ describe("App smoke routes", () => {
     );
 
     expect(html).toContain('data-frame="generated-app"');
+    expectAppSettings(html, {
+      appLabel: "Site",
+      schemaKey: "site",
+      schemaRoute: "/admin/schema",
+    });
     expect(html).toContain("Site Schema");
     expect(html).toContain("<code>site</code>");
     expect(html).toContain("Save schema");
@@ -977,12 +1331,15 @@ describe("App smoke routes", () => {
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
-    expectSyncStatusControl(html, "estii");
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      schemaKey: "estii",
+      schemaRoute: "/schema",
+    });
     expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Rates" });
     expect(html).toContain(">Rates</h1>");
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/setup"');
-    expect(html).not.toContain('href="/schema"');
     expect(html).not.toContain('href="/tasks"');
     expect(html).not.toContain('href="/site"');
     expect(html).not.toContain('href="/estii"');
@@ -998,10 +1355,50 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/"');
     expect(html).toContain('href="/setup"');
-    expect(html).not.toContain('href="/schema"');
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      schemaKey: "estii",
+      schemaRoute: "/schema",
+    });
     expect(html).toContain(">Rate cards</h2>");
     expect(html).toContain(">Resources</h2>");
     expect(html).not.toContain('href="/estii/setup"');
+  });
+
+  it("renders app profile Site publish when the profile exposes a local broker", () => {
+    applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const html = renderRoute("/", {
+      ...createAppRuntimeProfile("site"),
+      localPublish: localPublishBroker,
+    });
+
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectAppSettings(html, {
+      appLabel: "Site",
+      schemaKey: "site",
+      schemaRoute: "/schema",
+    });
+    expect(html).toContain('aria-label="Publish Site through local CLI"');
+    expect(html).toContain(">Publish</span>");
+    expect(html).not.toContain("local-broker-token");
+  });
+
+  it("keeps local Site publish hidden for non-Site active apps", () => {
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
+    const html = renderRoute("/", {
+      ...createAppRuntimeProfile("estii"),
+      localPublish: localPublishBroker,
+    });
+
+    expect(html).toContain('data-frame="generated-app"');
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      schemaKey: "estii",
+      schemaRoute: "/schema",
+    });
+    expect(html).not.toContain('aria-label="Publish Site through local CLI"');
+    expect(html).not.toContain(">Publish</span>");
   });
 
   it('renders an app profile schema editor at "/schema" with the selected schema key', () => {
@@ -1010,10 +1407,15 @@ describe("App smoke routes", () => {
 
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
+    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Schema" });
     expect(html).toContain("Estii Schema");
     expect(html).toContain("<code>estii</code>");
     expect(html).toContain('href="/setup"');
-    expect(html).not.toContain('href="/schema"');
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      schemaKey: "estii",
+      schemaRoute: "/schema",
+    });
     expect(html).not.toContain('aria-label="Estii route reset controls"');
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('href="/tasks"');
@@ -2738,12 +3140,13 @@ describe("generated collection home", () => {
 
   it("renders the site route with root sidebar navigation", () => {
     bootstrapSiteEditor();
-    const html = renderRoute("/site");
+    const html = generatedAppFrameHtml(renderRoute("/site"));
 
     expect(html).toContain("<h1");
     expect(html).toContain(">Blocks</h1>");
     expect(html).toContain('aria-label="Site screens"');
     expect(html).toContain('href="/site/settings"');
+    expect(linkHtml(html, "/site/settings")).not.toContain('aria-current="page"');
     expect(html).toContain('aria-label="Pages roots"');
     expect(html).toContain('aria-label="Posts roots"');
     expect(html).toContain('aria-label="Projects roots"');
@@ -2760,6 +3163,7 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Create Project"');
     expect(html).toContain('aria-label="Site roots list detail"');
     expect(html).toContain("Home");
+    expect(sidebarItemHtml(html, "Home")).toContain('aria-current="page"');
     expect(html).toContain('aria-label="Placement tree"');
     expect(html).not.toContain("Add placement");
     expect(html).not.toContain('aria-label="Create Site"');

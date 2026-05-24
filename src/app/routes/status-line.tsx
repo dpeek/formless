@@ -1,27 +1,36 @@
-import { useActiveSchemaKey, useCursor, useLastSyncedAt, useSchema } from "../../client/store.ts";
+import {
+  appStorageIdentityForClientTarget,
+  type ClientAppTarget,
+} from "../../client/app-target.ts";
+import {
+  useActiveClientStorageName,
+  useCursor,
+  useLastSyncedAt,
+  useSchema,
+} from "../../client/store.ts";
 import { useSyncStatus, type SyncStatus } from "../../client/sync-status.ts";
-import type { SchemaKey } from "../../shared/schema-apps.ts";
 
 type SyncStatusTone = "default" | "dark";
 
 export function SyncStatusControl({
-  appKey,
+  target,
   tone = "default",
 }: {
-  appKey?: SchemaKey;
+  target: ClientAppTarget;
   tone?: SyncStatusTone;
 }) {
-  const activeSchemaKey = useActiveSchemaKey();
+  const activeClientStorageName = useActiveClientStorageName();
   const schema = useSchema();
   const lastSyncedAt = useLastSyncedAt();
   const cursor = useCursor();
   const syncStatus = useSyncStatus();
+  const identity = appStorageIdentityForClientTarget(target);
   const storeMatchesWorld =
-    appKey === undefined || activeSchemaKey === null || activeSchemaKey === appKey;
+    activeClientStorageName === null || activeClientStorageName === identity.browserDatabaseName;
   const displaySchema = storeMatchesWorld ? schema : null;
   const displayCursor = storeMatchesWorld ? cursor : 0;
   const displayLastSyncedAt = storeMatchesWorld ? lastSyncedAt : null;
-  const worldKey = appKey ?? activeSchemaKey;
+  const worldKey = identity.authorityName;
   const summary = syncStatusSummary(syncStatus);
 
   return (

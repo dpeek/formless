@@ -12,12 +12,16 @@ import {
   connectBroadcastToClientStore,
   hydrateClientStore,
   selectClientStoreTarget,
+  useActiveClientStorageName,
   useActiveSchemaKey,
   useSchema,
 } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { fetchActiveSchema, saveActiveSchema } from "../../client/sync.ts";
-import type { ClientAppTarget } from "../../client/app-target.ts";
+import {
+  appStorageIdentityForClientTarget,
+  type ClientAppTarget,
+} from "../../client/app-target.ts";
 import {
   projectSchemaBuilderDraft,
   validateSchemaBuilderKey,
@@ -55,11 +59,18 @@ export function SchemaRoute({
   schemaKey: SchemaKey;
 }) {
   const appTarget = target ?? schemaKey;
+  const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);
   const app = getSchemaAppDefinition(schemaKey);
   const [location] = useLocation();
+  const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
-  const routeIsActive = activeSchemaKey === null || activeSchemaKey === schemaKey;
+  const routeStoreMatchesTarget =
+    activeClientStorageName === null ||
+    activeClientStorageName === appTargetIdentity.browserDatabaseName;
+  const routeIsActive =
+    routeStoreMatchesTarget &&
+    (activeSchemaKey === null || activeSchemaKey === appTargetIdentity.sourceSchemaKey);
   const schema = routeIsActive ? activeSchema : null;
   const [mode, setMode] = useState<SchemaRouteMode>("builder");
   const [routeError, setRouteError] = useState<string | null>(null);

@@ -207,6 +207,10 @@ export function useActiveSchemaKey() {
   return useClientStoreSelector((snapshot) => snapshot.activeSchemaKey);
 }
 
+export function useActiveClientStorageName() {
+  return useClientStoreSelector((snapshot) => snapshot.activeClientStorageName);
+}
+
 export function useSchema() {
   return useClientStoreSelector((snapshot) => snapshot.schema);
 }

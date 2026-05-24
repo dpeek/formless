@@ -4,35 +4,12 @@ import {
   type CSSProperties,
   type ElementType,
   type ReactNode,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
-import { Button } from "@dpeek/formless-ui/button";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarInset,
-  SidebarItem,
-  SidebarLabel,
-  SidebarProvider,
-  SidebarSection,
-  SidebarTrigger,
-} from "@dpeek/formless-ui/sidebar";
-import { GeneratedCreateDialog } from "./app/generated/create.tsx";
-import { SchemaAppProvider } from "./app/generated/schema-app-context.tsx";
-import {
-  SnapshotExportControl,
-  SnapshotRestoreControl,
-  SourceResetControl,
-} from "./app/dev-actions.tsx";
-import {
-  HomeRouteSelectionProvider,
-  selectHomeRouteSectionContextRecordId,
-  useHomeRouteSelectionStore,
-  withHomeRouteSelectedSectionContextRecordId,
-} from "./app/routes/home-selection.tsx";
+import { ActiveAppSurface } from "./app/app-surface.tsx";
 import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
@@ -41,8 +18,6 @@ import {
   normalizeSitePageSlug,
 } from "./app/routes/site-page.tsx";
 import type { SitePageLinkMode } from "./app/site-renderer/links.ts";
-import { LocalSitePublishControl } from "./app/local-site-publish.tsx";
-import { SyncStatusControl } from "./app/routes/status-line.tsx";
 import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
@@ -51,28 +26,15 @@ import {
   isRuntimePublicSiteRoute,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
-  runtimeScreenRoute,
   type RuntimeProfile,
   type RuntimeWorldMount,
 } from "./app/runtime-profile.ts";
-import {
-  useActiveSchemaKey,
-  useEntityRecordCountReferencingField,
-  useEntityRecordOptionsMatchingQuery,
-  useSchema,
-} from "./client/store.ts";
-import type { ClientAppTarget } from "./client/app-target.ts";
-import {
-  selectGeneratedRootNavigationFacts,
-  selectGeneratedRootNavigationGroupFacts,
-  selectGeneratedRootNavigationStateFacts,
-  type GeneratedRootNavigationContext,
-  type GeneratedRootNavigationFacts,
-} from "./client/generated-authoring.ts";
-import { todayDateString } from "./shared/date.ts";
+import { fetchInstanceAppInstalls } from "./client/app-installs.ts";
+import { useActiveClientStorageName, useActiveSchemaKey, useSchema } from "./client/store.ts";
+import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./client/app-target.ts";
+import type { AppInstall } from "./shared/app-installs.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
-import { selectPrimaryScreenModels, type HomeScreenModel } from "./client/views.ts";
-import { ControlAddIcon } from "@dpeek/formless-ui/icons";
+import { selectPrimaryScreenModels } from "./client/views.ts";
 
 type HomeRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey; screenPath: string };
 type SchemaRouteProps = { target?: ClientAppTarget; schemaKey: SchemaKey };
@@ -111,10 +73,20 @@ export function App({
   const isPublicSiteRoute = isRuntimePublicSiteRoute(runtimeProfile, location);
   const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location);
   const routeApp = routeWorld?.app;
+  const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
+  const routeAppTargetIdentity = routeWorld
+    ? appStorageIdentityForClientTarget(routeWorld.target ?? routeWorld.app.key)
+    : undefined;
+  const routeStoreMatchesTarget =
+    activeClientStorageName === null ||
+    (routeAppTargetIdentity !== undefined &&
+      activeClientStorageName === routeAppTargetIdentity.browserDatabaseName);
   const routeAppSchema =
-    routeApp && (activeSchemaKey === null || activeSchemaKey === routeApp.key)
+    routeApp &&
+    routeStoreMatchesTarget &&
+    (activeSchemaKey === null || activeSchemaKey === routeAppTargetIdentity?.sourceSchemaKey)
       ? activeSchema
       : null;
   const routeAppScreenModels = useMemo(
@@ -124,8 +96,6 @@ export function App({
   const activeScreenPath = routeWorld
     ? runtimeScreenPathFromRoute(routeWorld, location)
     : undefined;
-  const isWorkbenchToolRoute =
-    runtimeProfile.shell === "dev" && routeWorld?.schemaRoute === location;
   const isInstanceShellRoute =
     runtimeProfile.instanceShell === true && normalizeRoutePath(location) === "/";
   const isOwnerSetupRoute =
@@ -145,30 +115,26 @@ export function App({
   }
 
   const generatedAppFrame = (
-    <GeneratedAppFrame
+    <ActiveAppSurface
       activeScreenPath={activeScreenPath}
-      localPublish={
-        runtimeProfile.kind === "siteAuthoring" && routeApp?.key === "site"
-          ? runtimeProfile.localPublish
-          : undefined
-      }
-      routeApp={routeApp}
-      routeWorld={routeWorld}
+      localPublish={localPublishForWorld(runtimeProfile, routeWorld)}
+      managementHref={appManagementHref(runtimeProfile, routeWorld)}
+      currentPath={location}
       screenModels={routeAppScreenModels}
-      showSyncStatus={runtimeProfile.shell === "app"}
+      world={routeWorld}
     >
       <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
-    </GeneratedAppFrame>
+    </ActiveAppSurface>
   );
 
   return runtimeProfile.shell === "dev" ? (
-    <WorkbenchFrame routeWorld={routeWorld} runtimeProfile={runtimeProfile}>
-      {isWorkbenchToolRoute ? (
-        <main className="bg-bg p-6" data-frame="workbench-tool">
+    <WorkbenchFrame currentPath={location} routeWorld={routeWorld} runtimeProfile={runtimeProfile}>
+      {isInstanceShellRoute ? (
+        <main className="bg-bg" data-frame="instance-shell">
           <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
         </main>
-      ) : isInstanceShellRoute ? (
-        <main className="bg-bg" data-frame="instance-shell">
+      ) : routeWorld === undefined ? (
+        <main className="bg-bg">
           <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
         </main>
       ) : (
@@ -182,186 +148,71 @@ export function App({
 
 function WorkbenchFrame({
   children,
+  currentPath,
   routeWorld,
   runtimeProfile,
 }: {
   children: ReactNode;
+  currentPath: string;
   routeWorld: RuntimeWorldMount | undefined;
   runtimeProfile: RuntimeProfile;
 }) {
-  const routeApp = routeWorld?.app;
+  const installedAppLinks = useRuntimeShellInstalledAppLinks(runtimeProfile, routeWorld);
+  const appManagementIsCurrent = normalizeRoutePath(currentPath) === "/";
 
   return (
     <div
       className="min-h-dvh bg-slate-950"
       data-frame="workbench"
-      style={{ "--workbench-toolbar-height": "3.5rem" } as CSSProperties}
+      style={{ "--runtime-shell-height": "3.5rem" } as CSSProperties}
     >
       <div
-        className="min-h-[calc(100dvh-var(--workbench-toolbar-height))] bg-bg pb-[var(--workbench-toolbar-height)] text-fg"
+        className="min-h-[calc(100dvh-var(--runtime-shell-height))] bg-bg pb-[var(--runtime-shell-height)] text-fg"
         data-frame="workbench-content"
       >
         {children}
       </div>
       <footer
-        aria-label="Workbench toolbar"
+        aria-label="Runtime shell"
         className="fixed inset-x-0 bottom-0 z-[60] overflow-x-auto border-t border-slate-800 bg-slate-950 text-slate-100 shadow-lg shadow-black/25"
-        data-frame="workbench-toolbar"
+        data-frame="runtime-shell"
       >
         <div className="flex h-14 min-w-max items-center justify-between gap-4 px-3 sm:px-4">
-          <nav aria-label="Workbench apps" className="flex items-center gap-1">
+          <nav aria-label="Runtime apps" className="flex items-center gap-1">
+            <Link
+              aria-current={appManagementIsCurrent ? "page" : undefined}
+              className={workbenchAppLinkClassName(appManagementIsCurrent)}
+              href="/"
+            >
+              App management
+            </Link>
             {runtimeProfile.worlds.map(({ app, route }) => (
               <Link
-                className={workbenchAppLinkClassName(routeApp?.key === app.key)}
+                aria-current={routeWorld?.route === route ? "page" : undefined}
+                className={workbenchAppLinkClassName(routeWorld?.route === route)}
                 href={route}
                 key={app.key}
               >
                 {app.label}
               </Link>
             ))}
+            {installedAppLinks.length > 0 ? (
+              <span aria-hidden="true" className="mx-1 h-4 w-px bg-slate-700" />
+            ) : null}
+            {installedAppLinks.map((link) => (
+              <Link
+                aria-current={link.isCurrent ? "page" : undefined}
+                className={workbenchAppLinkClassName(link.isCurrent)}
+                href={link.href}
+                key={link.key}
+              >
+                {link.label}
+              </Link>
+            ))}
           </nav>
-          <div className="flex items-center gap-2">
-            <SyncStatusControl appKey={routeApp?.key} tone="dark" />
-            <WorkbenchToolbarActions world={routeWorld} />
-          </div>
         </div>
       </footer>
     </div>
-  );
-}
-
-function WorkbenchToolbarActions({ world }: { world: RuntimeWorldMount | undefined }) {
-  const app = world?.app;
-
-  return (
-    <div aria-label="Workbench actions" className="flex items-center gap-2">
-      {world?.schemaRoute ? (
-        <Link className={workbenchActionLinkClassName()} href={world.schemaRoute}>
-          Schema
-        </Link>
-      ) : (
-        <span className={workbenchUnavailableActionClassName()}>Schema</span>
-      )}
-
-      {app ? (
-        <>
-          <SnapshotExportControl
-            buttonClassName={workbenchActionLinkClassName()}
-            className="[&>p]:sr-only"
-            messageClassName="sr-only"
-            schemaKey={app.key}
-            target={world.target}
-          />
-          <SnapshotRestoreControl
-            buttonClassName={workbenchActionLinkClassName()}
-            className="[&>p]:sr-only"
-            messageClassName="sr-only"
-            schemaKey={app.key}
-            target={world.target}
-          />
-          <SourceResetControl
-            buttonLabel="Reset"
-            className="[&>p]:sr-only"
-            schemaKey={app.key}
-            target={world.target}
-          />
-        </>
-      ) : (
-        <>
-          <button className={workbenchUnavailableActionClassName()} disabled type="button">
-            Export
-          </button>
-          <button className={workbenchUnavailableActionClassName()} disabled type="button">
-            Restore
-          </button>
-          <button className={workbenchUnavailableActionClassName()} disabled type="button">
-            Reset
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
-function GeneratedAppFrame({
-  activeScreenPath,
-  children,
-  localPublish,
-  routeApp,
-  routeWorld,
-  screenModels,
-  showSyncStatus,
-}: {
-  activeScreenPath: string | undefined;
-  children: ReactNode;
-  localPublish: RuntimeProfile["localPublish"];
-  routeApp: RuntimeWorldMount["app"] | undefined;
-  routeWorld: RuntimeWorldMount | undefined;
-  screenModels: HomeScreenModel[];
-  showSyncStatus: boolean;
-}) {
-  const headerTitle = generatedAppHeaderTitle({
-    activeScreenPath,
-    routeAppLabel: routeApp?.label,
-    screenModels,
-  });
-
-  const frame = (
-    <HomeRouteSelectionProvider>
-      <SidebarProvider data-frame="generated-app">
-        <Sidebar closeButton={false} collapsible="hidden">
-          <SidebarHeader>
-            <div className="px-2 py-1 text-sm font-semibold">{routeApp?.label ?? "Formless"}</div>
-          </SidebarHeader>
-          <SidebarContent>
-            {routeWorld ? (
-              <AppScreenNavigation
-                activeScreenPath={activeScreenPath}
-                world={routeWorld}
-                screenModels={screenModels}
-              />
-            ) : null}
-          </SidebarContent>
-        </Sidebar>
-        <SidebarInset>
-          <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
-            <div className="flex min-w-0 items-center gap-2">
-              <SidebarTrigger />
-              <h1 className="truncate text-sm font-medium">{headerTitle}</h1>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {localPublish ? <LocalSitePublishControl broker={localPublish} /> : null}
-              {showSyncStatus ? <SyncStatusControl appKey={routeApp?.key} /> : null}
-            </div>
-          </header>
-          <div className="min-w-0 flex-1 p-4 sm:p-6">{children}</div>
-        </SidebarInset>
-      </SidebarProvider>
-    </HomeRouteSelectionProvider>
-  );
-
-  return routeApp ? (
-    <SchemaAppProvider schemaKey={routeApp.key} target={routeWorld?.target}>
-      {frame}
-    </SchemaAppProvider>
-  ) : (
-    frame
-  );
-}
-
-function generatedAppHeaderTitle({
-  activeScreenPath,
-  routeAppLabel,
-  screenModels,
-}: {
-  activeScreenPath: string | undefined;
-  routeAppLabel: string | undefined;
-  screenModels: HomeScreenModel[];
-}) {
-  return (
-    screenModels.find((model) => model.path === activeScreenPath)?.label ??
-    routeAppLabel ??
-    "Formless"
   );
 }
 
@@ -373,255 +224,103 @@ function workbenchAppLinkClassName(isActive: boolean) {
     : `${base} text-slate-300 hover:bg-slate-800 hover:text-white`;
 }
 
-function workbenchActionLinkClassName() {
-  return "flex h-7 cursor-pointer items-center rounded border border-slate-700 px-2 text-xs font-medium text-slate-100 transition-colors hover:border-slate-500 hover:bg-slate-800";
-}
+export type RuntimeShellInstalledAppLink = {
+  href: `/apps/${string}`;
+  installId: string;
+  isCurrent: boolean;
+  key: string;
+  label: string;
+  packageAppKey: SchemaKey;
+};
 
-function workbenchUnavailableActionClassName() {
-  return "flex h-7 items-center rounded border border-slate-800 px-2 text-xs font-medium text-slate-500";
-}
-
-function AppScreenNavigation({
-  activeScreenPath,
-  screenModels,
-  world,
+export function selectRuntimeShellInstalledAppLinks({
+  installs,
+  routeWorld,
+  runtimeProfile,
 }: {
-  activeScreenPath: string | undefined;
-  screenModels: HomeScreenModel[];
-  world: RuntimeWorldMount;
-}) {
-  const activeScreen = screenModels.find((model) => model.path === activeScreenPath);
-  const rootNavigation = activeScreen
-    ? selectGeneratedRootNavigationFacts(activeScreen)
-    : undefined;
-  const screenLinks = screenModels.filter(
-    (model): model is HomeScreenModel & { path: string } => model.path !== undefined,
-  );
+  installs: readonly AppInstall[];
+  routeWorld: RuntimeWorldMount | undefined;
+  runtimeProfile: RuntimeProfile;
+}): RuntimeShellInstalledAppLink[] {
+  const installedAppRoutes = runtimeProfile.installedAppRoutes;
 
-  if (rootNavigation) {
-    return (
-      <>
-        {screenLinks.length > 1 ? (
-          <AppScreenLinks
-            activeScreenPath={activeScreenPath}
-            screenLinks={screenLinks}
-            world={world}
-          />
-        ) : null}
-        <AppRootRecordNavigation rootNavigation={rootNavigation} />
-      </>
-    );
+  if (runtimeProfile.shell !== "dev" || !installedAppRoutes) {
+    return [];
   }
 
-  return (
-    <AppScreenLinks activeScreenPath={activeScreenPath} screenLinks={screenLinks} world={world} />
-  );
-}
+  const supportedPackageAppKey = installedAppRoutes.packageAppKey;
+  const currentInstall =
+    routeWorld?.target?.kind === "appInstall" && routeWorld.app.key === supportedPackageAppKey
+      ? {
+          href: routeWorld.route as `/apps/${string}`,
+          installId: routeWorld.target.installId,
+          label: `${routeWorld.app.label} ${routeWorld.target.installId}`,
+          packageAppKey: supportedPackageAppKey,
+        }
+      : undefined;
+  const links = installs
+    .filter((install) => install.packageAppKey === supportedPackageAppKey)
+    .map((install) => ({
+      href: install.adminRoute,
+      installId: install.installId,
+      label: install.label,
+      packageAppKey: install.packageAppKey,
+    }));
 
-function AppScreenLinks({
-  activeScreenPath,
-  screenLinks,
-  world,
-}: {
-  activeScreenPath: string | undefined;
-  screenLinks: (HomeScreenModel & { path: string })[];
-  world: RuntimeWorldMount;
-}) {
-  return (
-    <SidebarSection aria-label={`${world.app.label} screens`}>
-      {screenLinks.map((model) => (
-        <SidebarItem
-          href={runtimeScreenRoute(world, model.path)}
-          isCurrent={activeScreenPath === model.path}
-          key={model.screenName}
-        >
-          <SidebarLabel>{model.label}</SidebarLabel>
-        </SidebarItem>
-      ))}
-    </SidebarSection>
-  );
-}
-
-function AppRootRecordNavigation({
-  rootNavigation,
-}: {
-  rootNavigation: GeneratedRootNavigationFacts;
-}) {
-  const routeSelectionStore = useHomeRouteSelectionStore();
-  const today = todayDateString();
-  const { context, screen, section } = rootNavigation;
-  const allOptions = useEntityRecordOptionsMatchingQuery(
-    context.entityName,
-    context.query,
-    context.labelField,
-    { today },
-  );
-  const selectedRecordId =
-    routeSelectionStore === null
-      ? null
-      : selectHomeRouteSectionContextRecordId(
-          routeSelectionStore.selectionState,
-          screen.screenName,
-          section.id,
-        );
-  const { activeRecordId } = selectGeneratedRootNavigationStateFacts({
-    options: allOptions,
-    selectedRecordId,
-  });
-
-  function selectRecord(recordId: string) {
-    routeSelectionStore?.setSelectionState((current) =>
-      withHomeRouteSelectedSectionContextRecordId(current, screen.screenName, section.id, recordId),
-    );
+  if (currentInstall && !links.some((link) => link.installId === currentInstall.installId)) {
+    links.push(currentInstall);
   }
 
-  return (
-    <>
-      {rootNavigation.groups.map((group) => (
-        <AppRootRecordNavigationGroup
-          activeRecordId={activeRecordId}
-          context={context}
-          group={group}
-          key={group.queryName}
-          onSelectRecord={selectRecord}
-          today={today}
-        />
-      ))}
-    </>
-  );
+  return links.map((link) => ({
+    ...link,
+    isCurrent:
+      routeWorld?.target?.kind === "appInstall" && routeWorld.target.installId === link.installId,
+    key: `${link.packageAppKey}:${link.installId}`,
+  }));
 }
 
-function AppRootRecordNavigationGroup({
-  activeRecordId,
-  context,
-  group,
-  onSelectRecord,
-  today,
-}: {
-  activeRecordId: string | null;
-  context: GeneratedRootNavigationContext;
-  group: GeneratedRootNavigationFacts["groups"][number];
-  onSelectRecord: (recordId: string) => void;
-  today: string;
-}) {
-  const options = useEntityRecordOptionsMatchingQuery(
-    context.entityName,
-    group.query,
-    context.labelField,
-    {
-      today,
-    },
-  );
-  const groupFacts = selectGeneratedRootNavigationGroupFacts({
-    activeRecordId,
-    options,
-  });
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+function useRuntimeShellInstalledAppLinks(
+  runtimeProfile: RuntimeProfile,
+  routeWorld: RuntimeWorldMount | undefined,
+): RuntimeShellInstalledAppLink[] {
+  const [installs, setInstalls] = useState<AppInstall[]>([]);
+  const shouldLoad =
+    runtimeProfile.shell === "dev" && runtimeProfile.installedAppRoutes !== undefined;
+  const activeInstallId =
+    routeWorld?.target?.kind === "appInstall" ? routeWorld.target.installId : "";
 
-  if (groupFacts.isEmpty && !group.createAction) {
-    return null;
-  }
+  useEffect(() => {
+    if (!shouldLoad) {
+      setInstalls([]);
+      return;
+    }
 
-  return (
-    <SidebarSection
-      aria-label={`${group.label} roots`}
-      label={group.label}
-      action={
-        group.createAction ? (
-          <Button
-            aria-label={group.createAction.label}
-            className="ms-auto"
-            data-slot="control"
-            intent="plain"
-            isDisabled={!group.createAction.enabled}
-            onPress={() => setCreateDialogOpen(true)}
-            size="sq-xs"
-            type="button"
-          >
-            <ControlAddIcon />
-          </Button>
-        ) : null
+    const controller = new AbortController();
+    let stopped = false;
+
+    async function loadInstalls() {
+      try {
+        const response = await fetchInstanceAppInstalls({ signal: controller.signal });
+
+        if (!stopped) {
+          setInstalls(response.installs);
+        }
+      } catch {
+        if (!stopped && !controller.signal.aborted) {
+          setInstalls([]);
+        }
       }
-    >
-      {groupFacts.isEmpty
-        ? null
-        : groupFacts.items.map(({ isActive, option }) => (
-            <AppRootRecordNavigationItem
-              context={context}
-              isActive={isActive}
-              key={option.id}
-              onSelectRecord={onSelectRecord}
-              option={option}
-            />
-          ))}
-      {group.createAction && createDialogOpen ? (
-        <GeneratedCreateDialog
-          action={group.createAction}
-          onOpenChange={(open) => setCreateDialogOpen(open)}
-          onSuccess={onSelectRecord}
-          open={true}
-        />
-      ) : null}
-    </SidebarSection>
-  );
-}
+    }
 
-function AppRootRecordNavigationItem({
-  context,
-  isActive,
-  onSelectRecord,
-  option,
-}: {
-  context: GeneratedRootNavigationContext;
-  isActive: boolean;
-  onSelectRecord: (recordId: string) => void;
-  option: { id: string; label: string };
-}) {
-  const relatedCollection = context.relatedCollection;
+    void loadInstalls();
 
-  if (!relatedCollection) {
-    return (
-      <SidebarItem isCurrent={isActive} onPress={() => onSelectRecord(option.id)}>
-        <SidebarLabel>{option.label}</SidebarLabel>
-      </SidebarItem>
-    );
-  }
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, [activeInstallId, shouldLoad]);
 
-  return (
-    <AppRootRecordNavigationItemWithCount
-      isActive={isActive}
-      onSelectRecord={onSelectRecord}
-      option={option}
-      relatedCollection={relatedCollection}
-    />
-  );
-}
-
-function AppRootRecordNavigationItemWithCount({
-  isActive,
-  onSelectRecord,
-  option,
-  relatedCollection,
-}: {
-  isActive: boolean;
-  onSelectRecord: (recordId: string) => void;
-  option: { id: string; label: string };
-  relatedCollection: NonNullable<GeneratedRootNavigationContext["relatedCollection"]>;
-}) {
-  const count = useEntityRecordCountReferencingField(
-    relatedCollection.entityName,
-    relatedCollection.referenceFieldName,
-    option.id,
-  );
-
-  return (
-    <SidebarItem badge={count} isCurrent={isActive} onPress={() => onSelectRecord(option.id)}>
-      <SidebarLabel>{option.label}</SidebarLabel>
-      <span className="sr-only" aria-label={`${option.label} ${relatedCollection.label} count`}>
-        {count}
-      </span>
-    </SidebarItem>
-  );
+  return selectRuntimeShellInstalledAppLinks({ installs, routeWorld, runtimeProfile });
 }
 
 function AppRoutes({
@@ -888,6 +587,24 @@ function isOwnerSetupRouteEnabled(runtimeProfile: RuntimeProfile) {
     runtimeProfile.kind === "dev" ||
     runtimeProfile.kind === "publishedSite"
   );
+}
+
+function appManagementHref(
+  runtimeProfile: RuntimeProfile,
+  routeWorld: RuntimeWorldMount | undefined,
+): "/" | undefined {
+  return runtimeProfile.shell === "instance" && routeWorld?.target ? "/" : undefined;
+}
+
+function localPublishForWorld(
+  runtimeProfile: RuntimeProfile,
+  routeWorld: RuntimeWorldMount | undefined,
+): RuntimeProfile["localPublish"] {
+  if (routeWorld?.app.key !== "site") {
+    return undefined;
+  }
+
+  return runtimeProfile.localPublish;
 }
 
 function normalizeRoutePath(path: string) {
