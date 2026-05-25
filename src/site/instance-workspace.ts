@@ -1,3 +1,4 @@
+import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -13,6 +14,7 @@ import {
   type PortableArchive,
 } from "../shared/archive.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstallsResponse } from "../shared/protocol.ts";
 import {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
@@ -188,6 +190,41 @@ export type PushFormlessInstanceWorkspaceResult = {
   replaceInstallSet: boolean;
   selectedTarget: FormlessInstanceWorkspaceTarget;
   source: PushFormlessInstanceWorkspaceSource;
+  workspaceRoot: string;
+};
+
+export type FormlessInstanceWorkspaceDevCommand = {
+  args: string[];
+  command: string;
+  label: string;
+};
+
+export type DevFormlessInstanceWorkspaceInput = {
+  workspacePath?: string;
+};
+
+export type DevFormlessInstanceWorkspaceDependencies = {
+  cwd: string;
+  devCommand: FormlessInstanceWorkspaceDevCommand;
+  env?: NodeJS.ProcessEnv;
+  fetch: typeof fetch;
+  log: (message: string) => void;
+  now: () => string;
+  packageRoot: string;
+  spawn: typeof nodeSpawn;
+};
+
+export type ResetFormlessInstanceWorkspaceLocalStateInput = {
+  workspacePath?: string;
+};
+
+export type ResetFormlessInstanceWorkspaceLocalStateDependencies = {
+  cwd: string;
+};
+
+export type ResetFormlessInstanceWorkspaceLocalStateResult = {
+  localStateRoot: string;
+  manifestPath: string;
   workspaceRoot: string;
 };
 
@@ -533,6 +570,114 @@ export async function pushFormlessInstanceWorkspace(
   }
 }
 
+export async function runFormlessInstanceWorkspaceDev(
+  input: DevFormlessInstanceWorkspaceInput,
+  dependencies: DevFormlessInstanceWorkspaceDependencies,
+): Promise<void> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const localStateRoot = formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest);
+  const candidateOrigins = new Set(defaultDevSourceCandidates(dependencies.env));
+
+  await prepareWorkspaceDirectories(workspaceRoot, manifest);
+
+  const child = dependencies.spawn(dependencies.devCommand.command, dependencies.devCommand.args, {
+    cwd: dependencies.packageRoot,
+    env: formlessInstanceWorkspaceDevEnv(dependencies.env ?? {}, workspaceRoot, manifest),
+    stdio: "pipe",
+  });
+
+  forwardDevOutput(child, dependencies.log, candidateOrigins);
+
+  try {
+    const source = await waitForInstanceDevServer(child, dependencies.fetch, candidateOrigins);
+    const bootstrap = await bootstrapWorkspaceLocalInstance(
+      {
+        manifest,
+        source,
+        workspaceRoot,
+      },
+      dependencies,
+    );
+
+    dependencies.log(`Instance shell: ${source}/`);
+    dependencies.log(`Local state: ${relativeDependencyPath(dependencies.cwd, localStateRoot)}.`);
+
+    if (bootstrap.status === "restored") {
+      dependencies.log(
+        `Workspace archive restored: ${bootstrap.sourceKind} (${bootstrap.appCount} apps, ${bootstrap.recordCount} records, ${bootstrap.mediaCount} media).`,
+      );
+    } else {
+      dependencies.log(
+        `Workspace archive restore skipped: local installs already exist (${bootstrap.installIds.join(", ") || "none"}).`,
+      );
+    }
+
+    await waitForChildExit(child);
+  } catch (error) {
+    child.kill();
+    throw error;
+  }
+}
+
+export async function resetFormlessInstanceWorkspaceLocalState(
+  input: ResetFormlessInstanceWorkspaceLocalStateInput,
+  dependencies: ResetFormlessInstanceWorkspaceLocalStateDependencies,
+): Promise<ResetFormlessInstanceWorkspaceLocalStateResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest, manifestPath } = await readWorkspaceManifest(workspaceRoot);
+  const localStateRoot = formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest);
+
+  await rm(localStateRoot, { force: true, recursive: true });
+  await mkdir(localStateRoot, { recursive: true });
+
+  return {
+    localStateRoot,
+    manifestPath,
+    workspaceRoot,
+  };
+}
+
+export function formlessInstanceWorkspaceLocalStateRoot(
+  workspaceRoot: string,
+  manifest: FormlessInstanceWorkspaceManifest,
+): string {
+  return path.resolve(workspaceRoot, manifest.local.stateRoot);
+}
+
+export function formlessInstanceWorkspaceWranglerPersistPath(
+  workspaceRoot: string,
+  manifest: FormlessInstanceWorkspaceManifest,
+): string {
+  return path.join(formlessInstanceWorkspaceLocalStateRoot(workspaceRoot, manifest), "wrangler");
+}
+
+export function formlessInstanceWorkspaceDevEnv(
+  env: NodeJS.ProcessEnv,
+  workspaceRoot: string,
+  manifest: FormlessInstanceWorkspaceManifest,
+): NodeJS.ProcessEnv {
+  const nextEnv: NodeJS.ProcessEnv = {
+    ...env,
+    FORMLESS_LAUNCH_FIXTURE: "empty",
+    FORMLESS_RUNTIME_PROFILE: "instance",
+    FORMLESS_WRANGLER_PERSIST: formlessInstanceWorkspaceWranglerPersistPath(
+      workspaceRoot,
+      manifest,
+    ),
+    VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+  };
+
+  delete nextEnv.FORMLESS_ADMIN_TOKEN;
+  delete nextEnv.FORMLESS_SITE_PROJECT_ID;
+  delete nextEnv.FORMLESS_SITE_PROJECT_ROOT;
+  delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN;
+  delete nextEnv.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL;
+  delete nextEnv.VITE_FORMLESS_SITE_PROJECT_ID;
+
+  return nextEnv;
+}
+
 export async function adoptFormlessInstanceWorkspaceAdminToken(
   input: AdoptFormlessInstanceWorkspaceAdminTokenInput,
   dependencies: AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
@@ -617,6 +762,193 @@ type WorkspaceArchiveDirectory = {
   mediaFiles: ArchiveDiskMediaFile[];
   missingMediaFiles: string[];
 };
+
+type WorkspaceLocalBootstrapResult =
+  | {
+      appCount: number;
+      mediaCount: number;
+      recordCount: number;
+      sourceKind: "app archives" | "instance archive";
+      status: "restored";
+    }
+  | {
+      installIds: string[];
+      status: "existing";
+    };
+
+type WorkspaceLocalRestoreArchiveSource = {
+  appCount: number;
+  archiveRoot: string;
+  mediaCount: number;
+  recordCount: number;
+  sourceKind: "app archives" | "instance archive";
+};
+
+async function bootstrapWorkspaceLocalInstance(
+  input: {
+    manifest: FormlessInstanceWorkspaceManifest;
+    source: string;
+    workspaceRoot: string;
+  },
+  dependencies: Pick<DevFormlessInstanceWorkspaceDependencies, "cwd" | "env" | "fetch" | "now">,
+): Promise<WorkspaceLocalBootstrapResult> {
+  const registry = await fetchWorkspaceJson<AppInstallsResponse>(
+    dependencies.fetch,
+    instanceAppInstallsUrl(input.source),
+  );
+  const installIds = registry.installs
+    .map((install) => install.installId)
+    .sort((left, right) => left.localeCompare(right));
+
+  if (installIds.length > 0) {
+    return {
+      installIds,
+      status: "existing",
+    };
+  }
+
+  const tempRoot = await createWorkspaceTempRoot(input.workspaceRoot, "local-dev");
+
+  try {
+    const sourceArchive = await workspaceLocalRestoreArchiveSource({
+      exportedAt: dependencies.now(),
+      manifest: input.manifest,
+      tempRoot,
+      workspaceRoot: input.workspaceRoot,
+    });
+    const restore = await restorePortableArchive(
+      {
+        adminToken: null,
+        apply: true,
+        archiveDir: sourceArchive.archiveRoot,
+        replace: false,
+        target: input.source,
+      },
+      {
+        cwd: dependencies.cwd,
+        env: withoutAdminToken(dependencies.env),
+        fetch: dependencies.fetch,
+        now: dependencies.now,
+      },
+    );
+
+    if (!restore.remote.ok) {
+      throw new Error(
+        `Formless instance local dev archive restore failed: ${restoreErrors(restore)}.`,
+      );
+    }
+
+    return {
+      appCount: sourceArchive.appCount,
+      mediaCount: sourceArchive.mediaCount,
+      recordCount: sourceArchive.recordCount,
+      sourceKind: sourceArchive.sourceKind,
+      status: "restored",
+    };
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+}
+
+async function workspaceLocalRestoreArchiveSource(input: {
+  exportedAt: string;
+  manifest: FormlessInstanceWorkspaceManifest;
+  tempRoot: string;
+  workspaceRoot: string;
+}): Promise<WorkspaceLocalRestoreArchiveSource> {
+  const appArchives = await readCompleteWorkspaceAppArchives(input.workspaceRoot, input.manifest);
+
+  if (appArchives) {
+    const write = await writeComposedWorkspacePushArchive({
+      archiveRoot: path.join(input.tempRoot, "archive"),
+      archives: appArchives,
+      exportedAt: input.exportedAt,
+    });
+
+    return {
+      appCount: write.appCount,
+      archiveRoot: path.dirname(write.archivePath),
+      mediaCount: write.mediaCount,
+      recordCount: write.recordCount,
+      sourceKind: "app archives",
+    };
+  }
+
+  const instanceArchiveRoot = path.join(input.workspaceRoot, input.manifest.archives.instance);
+  const instanceArchive = await readArchiveDirectoryForCheck(instanceArchiveRoot);
+
+  if (!instanceArchive) {
+    throw new Error(
+      "Formless instance local dev requires workspace archives. Run `formless instance pull` first or add declared app archives.",
+    );
+  }
+
+  if (instanceArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+    throw new Error(
+      `Formless instance local dev requires ${input.manifest.archives.instance} to be an instance archive.`,
+    );
+  }
+
+  return {
+    appCount: instanceArchive.archive.apps.length,
+    archiveRoot: instanceArchiveRoot,
+    mediaCount: instanceArchive.archive.apps.reduce(
+      (count, app) => count + app.media.objects.length,
+      0,
+    ),
+    recordCount: instanceArchive.archive.apps.reduce(
+      (count, app) => count + appRecordCount(app),
+      0,
+    ),
+    sourceKind: "instance archive",
+  };
+}
+
+async function readCompleteWorkspaceAppArchives(
+  workspaceRoot: string,
+  manifest: FormlessInstanceWorkspaceManifest,
+): Promise<WorkspaceArchiveDirectory[] | undefined> {
+  if (manifest.apps.length === 0) {
+    return undefined;
+  }
+
+  const archives: WorkspaceArchiveDirectory[] = [];
+
+  for (const app of manifest.apps) {
+    const archive = await readArchiveDirectoryForCheck(path.join(workspaceRoot, app.archivePath));
+
+    if (!archive) {
+      return undefined;
+    }
+
+    if (archive.archive.kind !== APP_ARCHIVE_KIND) {
+      throw new Error(
+        `Formless instance local dev requires ${app.archivePath} to be an app archive.`,
+      );
+    }
+
+    if (archive.archive.app.installId !== app.installId) {
+      throw new Error(
+        `Formless instance local dev app archive ${app.archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
+      );
+    }
+
+    if (archive.archive.app.packageAppKey !== app.packageAppKey) {
+      throw new Error(
+        `Formless instance local dev app archive ${app.archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
+      );
+    }
+
+    archives.push(archive);
+  }
+
+  return archives.sort((left, right) => {
+    const leftInstall = left.archive.kind === APP_ARCHIVE_KIND ? left.archive.app.installId : "";
+    const rightInstall = right.archive.kind === APP_ARCHIVE_KIND ? right.archive.app.installId : "";
+
+    return leftInstall.localeCompare(rightInstall);
+  });
+}
 
 async function pullWorkspaceAppArchive(
   input: {
@@ -1256,6 +1588,156 @@ function workerNameFromWorkersDevUrl(targetUrl: string | undefined): string | un
   const [workerName] = withoutSuffix.split(".");
 
   return workerName || undefined;
+}
+
+function defaultDevSourceCandidates(env: NodeJS.ProcessEnv | undefined): string[] {
+  const port = env?.PORT && /^\d+$/.test(env.PORT) ? env.PORT : "5173";
+
+  return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
+}
+
+function forwardDevOutput(
+  child: ChildProcessWithoutNullStreams,
+  log: (message: string) => void,
+  candidateOrigins: Set<string>,
+) {
+  const handleOutput = (chunk: Buffer) => {
+    const text = chunk.toString();
+
+    for (const origin of httpOriginsFromText(text)) {
+      candidateOrigins.add(origin);
+    }
+
+    for (const line of text.split(/\r?\n/)) {
+      if (line.length > 0) {
+        log(line);
+      }
+    }
+  };
+
+  child.stdout.on("data", handleOutput);
+  child.stderr.on("data", handleOutput);
+}
+
+async function waitForInstanceDevServer(
+  child: ChildProcessWithoutNullStreams,
+  fetcher: typeof fetch,
+  candidateOrigins: Set<string>,
+): Promise<string> {
+  const startedAt = Date.now();
+  let spawnError: Error | null = null;
+
+  child.once("error", (error) => {
+    spawnError = error;
+  });
+
+  while (Date.now() - startedAt < 30_000) {
+    if (spawnError) {
+      throw spawnError;
+    }
+
+    if (child.exitCode !== null) {
+      throw new Error(`Formless instance dev server exited with code ${child.exitCode}.`);
+    }
+
+    for (const origin of candidateOrigins) {
+      if (await isInstanceDevServerReady(fetcher, origin)) {
+        return origin;
+      }
+    }
+
+    await delay(250);
+  }
+
+  throw new Error("Timed out waiting for the Formless instance dev server.");
+}
+
+async function isInstanceDevServerReady(fetcher: typeof fetch, origin: string): Promise<boolean> {
+  try {
+    const response = await fetcher(instanceAppInstallsUrl(origin), {
+      headers: {
+        accept: "application/json",
+      },
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function httpOriginsFromText(text: string): string[] {
+  const origins = new Set<string>();
+
+  for (const match of text.matchAll(/https?:\/\/[^\s),]+/g)) {
+    try {
+      origins.add(new URL(match[0]).origin);
+    } catch {
+      // Ignore non-URL terminal fragments.
+    }
+  }
+
+  return [...origins];
+}
+
+function waitForChildExit(child: ChildProcessWithoutNullStreams): Promise<void> {
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          signal
+            ? `Formless instance dev server exited with signal ${signal}.`
+            : `Formless instance dev server exited with code ${code ?? "unknown"}.`,
+        ),
+      );
+    });
+  });
+}
+
+async function fetchWorkspaceJson<T>(fetcher: typeof fetch, url: string): Promise<T> {
+  const response = await fetcher(url, { headers: { accept: "application/json" } });
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Failed GET ${url}: HTTP ${response.status} ${text}`);
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Failed GET ${url}: response was not JSON.`);
+  }
+}
+
+function instanceAppInstallsUrl(origin: string): string {
+  return new URL("/api/formless/app-installs", `${origin}/`).toString();
+}
+
+function restoreErrors(restore: RestorePortableArchiveResult): string {
+  return restore.remote.errors?.map((error) => error.message).join("; ") || "unknown error";
+}
+
+function withoutAdminToken(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv {
+  const nextEnv = { ...env };
+
+  delete nextEnv.FORMLESS_ADMIN_TOKEN;
+  return nextEnv;
+}
+
+function relativeDependencyPath(cwd: string, filePath: string): string {
+  const relativePath = path.relative(cwd, filePath);
+
+  return relativePath === "" ? "." : relativePath.split(path.sep).join("/");
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function stableValue(value: unknown): unknown {

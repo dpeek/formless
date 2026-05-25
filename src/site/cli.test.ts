@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -1265,6 +1266,183 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("Instance workspace admin token rotated.");
   });
 
+  it("runs instance workspace dev with product profile, isolated persistence, and first-run archive restore", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+    const spawnCalls: CapturedSpawn[] = [];
+    const localDavid = appArchive("david", "David Peek", {
+      mediaBytes: Buffer.from([4, 5, 6]),
+      records: mediaRecords(),
+    });
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid, {
+      david: Buffer.from([4, 5, 6]),
+    });
+
+    const run = runFormlessCli(
+      ["instance", "dev", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        env: {
+          FORMLESS_ADMIN_TOKEN: "remote-token",
+          FORMLESS_SITE_PROJECT_ROOT: "/old-site",
+          KEEP: "value",
+          PORT: "4444",
+          VITE_FORMLESS_SITE_PROJECT_ID: "old-site-id",
+        },
+        fetch: localInstanceDevFetch(requests, []),
+        logs,
+        packageRoot: "/package",
+        spawn: ((command: string, args: string[], options: CapturedSpawnOptions) => {
+          spawnCalls.push({
+            args,
+            command,
+            cwd: options.cwd,
+            env: options.env,
+          });
+
+          return child as unknown as ReturnType<typeof spawn>;
+        }) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() =>
+      logs.some((line) => line.startsWith("Workspace archive restored: app archives")),
+    );
+    child.close(0);
+    await run;
+
+    expect(spawnCalls).toHaveLength(1);
+    expect(spawnCalls[0]).toMatchObject({
+      args: ["run", "dev"],
+      command: "npm",
+      cwd: "/package",
+    });
+    expect(spawnCalls[0]?.env).toMatchObject({
+      FORMLESS_LAUNCH_FIXTURE: "empty",
+      FORMLESS_RUNTIME_PROFILE: "instance",
+      FORMLESS_WRANGLER_PERSIST: path.join(workspaceRoot, ".formless/local/wrangler"),
+      KEEP: "value",
+      PORT: "4444",
+      VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+    });
+    expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_ADMIN_TOKEN");
+    expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_SITE_PROJECT_ROOT");
+    expect(spawnCalls[0]?.env).not.toHaveProperty("VITE_FORMLESS_SITE_PROJECT_ID");
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:4444/api/formless/app-installs",
+      "GET http://localhost:4444/api/formless/app-installs",
+      "POST http://localhost:4444/api/formless/archive/restore",
+    ]);
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = JSON.parse(String(restoreRequest?.body)) as {
+      archive: InstanceArchive;
+      mediaFiles: { bytesBase64: string }[];
+    };
+
+    expect(restoreRequest?.headers.authorization).toBeUndefined();
+    expect(restoreBody.archive.restorePolicy).toEqual({
+      dryRun: false,
+      installCollisions: "reject",
+    });
+    expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
+    expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
+    expect(logs).toEqual([
+      "Instance shell: http://localhost:4444/",
+      `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
+      `Workspace archive restored: app archives (1 apps, ${mediaRecords().length} records, 1 media).`,
+    ]);
+    expect(child.killed).toBe(false);
+  });
+
+  it("keeps existing workspace-local installs on instance dev rerun", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const child = new FakeCliDevChild();
+    const logs: string[] = [];
+    const requests: CapturedFetchRequest[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    const run = runFormlessCli(
+      ["instance", "dev", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        env: { PORT: "4445" },
+        fetch: localInstanceDevFetch(requests, [installedSite("david", "David Peek")]),
+        logs,
+        spawn: (() => child as unknown as ReturnType<typeof spawn>) as typeof spawn,
+      }),
+    );
+
+    await waitUntil(() =>
+      logs.some((line) => line.startsWith("Workspace archive restore skipped")),
+    );
+    child.close(0);
+    await run;
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET http://localhost:4445/api/formless/app-installs",
+      "GET http://localhost:4445/api/formless/app-installs",
+    ]);
+    expect(logs.at(-1)).toBe(
+      "Workspace archive restore skipped: local installs already exist (david).",
+    );
+  });
+
+  it("resets only instance workspace local state", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/apps/david"),
+      appArchive("david", "David Peek"),
+    );
+    await mkdir(path.join(workspaceRoot, ".formless/local/wrangler"), { recursive: true });
+    await mkdir(path.join(workspaceRoot, ".formless/backups"), { recursive: true });
+    await writeFile(path.join(workspaceRoot, ".formless/local/wrangler/state.txt"), "state");
+    await writeFile(path.join(workspaceRoot, ".formless/backups/keep.txt"), "backup");
+    await writeFile(path.join(workspaceRoot, ".formless/instance.env"), "FORMLESS_ADMIN_TOKEN=x\n");
+
+    await runFormlessCli(
+      ["instance", "reset-local", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { logs }),
+    );
+
+    await expect(
+      stat(path.join(workspaceRoot, ".formless/local/wrangler/state.txt")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/backups/keep.txt"), "utf8"),
+    ).resolves.toBe("backup");
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
+    ).resolves.toBe("FORMLESS_ADMIN_TOKEN=x\n");
+    await expect(
+      readFile(
+        path.join(workspaceRoot, "archives/apps/david", PORTABLE_ARCHIVE_MANIFEST_FILE),
+        "utf8",
+      ),
+    ).resolves.toContain('"installId": "david"');
+    expect(logs).toEqual([
+      [
+        "Instance workspace local state reset.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        `Manifest: ${path.relative(
+          tempDir,
+          path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+        )}.`,
+        `Local state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/local"))}.`,
+        "Next dev run will rebuild local runtime state from workspace archives.",
+      ].join("\n"),
+    ]);
+  });
+
   it("initializes a Site project with config, deterministic records, and no starter media", async () => {
     const tempDir = await makeTempDir();
     const result = await initSiteProject(
@@ -2246,12 +2424,41 @@ type CapturedCommand = {
   env?: NodeJS.ProcessEnv;
 };
 
+type CapturedSpawnOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+};
+
+type CapturedSpawn = {
+  args: string[];
+  command: string;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+};
+
 type CapturedFetchRequest = {
   body: BodyInit | null | undefined;
   headers: Record<string, string>;
   method: string;
   url: string;
 };
+
+class FakeCliDevChild extends EventEmitter {
+  exitCode: number | null = null;
+  killed = false;
+  stderr = new EventEmitter();
+  stdout = new EventEmitter();
+
+  kill() {
+    this.killed = true;
+    return true;
+  }
+
+  close(code: number, signal: NodeJS.Signals | null = null) {
+    this.exitCode = code;
+    this.emit("close", code, signal);
+  }
+}
 
 async function writeFileTree(
   projectRoot: string,
@@ -2499,6 +2706,38 @@ function pushArchiveFetch(
   };
 }
 
+function localInstanceDevFetch(
+  requests: CapturedFetchRequest[],
+  installs: ReturnType<typeof installedApp>[],
+): typeof fetch {
+  return async (url, init) => {
+    const requestUrl =
+      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const parsedUrl = new URL(requestUrl);
+    const method = init?.method ?? "GET";
+
+    requests.push({
+      body: init?.body,
+      headers: normalizeHeaders(init?.headers),
+      method,
+      url: requestUrl,
+    });
+
+    if (method === "GET" && parsedUrl.pathname === "/api/formless/app-installs") {
+      return Response.json({
+        packages: listBundledAppPackages(),
+        installs,
+      });
+    }
+
+    if (method === "POST" && parsedUrl.pathname === "/api/formless/archive/restore") {
+      return Response.json(restoreReport({ createdInstalls: ["david"] }));
+    }
+
+    return Response.json({ error: "not found" }, { status: 404 });
+  };
+}
+
 function restorePlan(
   summary: Partial<{
     createdInstalls: string[];
@@ -2568,6 +2807,7 @@ function cliDeps(
     openedUrls?: string[];
     packageRoot?: string;
     setupInputs?: CreateFormlessInstanceOwnerSetupCapabilityInput[];
+    spawn?: typeof spawn;
     stateRoot?: string;
     stateWrites?: WriteFormlessInstanceStateInput[];
   } = {},
@@ -2636,7 +2876,7 @@ function cliDeps(
         env: commandOptions.env,
       });
     },
-    spawn,
+    spawn: options.spawn ?? spawn,
     stateRoot: options.stateRoot ?? path.join(cwd, ".formless"),
     stateWriter: {
       write: async (input) => {
@@ -2817,4 +3057,18 @@ function normalizeHeaders(headers: HeadersInit | undefined): Record<string, stri
   }
 
   return headers;
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 1000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  throw new Error("Timed out waiting for predicate.");
 }

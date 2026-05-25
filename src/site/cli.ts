@@ -29,15 +29,19 @@ import {
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
+  resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
+  runFormlessInstanceWorkspaceDev as runFormlessInstanceWorkspaceDevCommand,
   pullFormlessInstanceWorkspace as pullFormlessInstanceWorkspaceCommand,
   pushFormlessInstanceWorkspace as pushFormlessInstanceWorkspaceCommand,
   rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
   type CheckFormlessInstanceWorkspaceResult,
+  type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
   type PullFormlessInstanceWorkspaceResult,
   type PushFormlessInstanceWorkspaceResult,
+  type ResetFormlessInstanceWorkspaceLocalStateResult,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
 } from "./instance-workspace.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
@@ -125,15 +129,21 @@ export {
   type WriteFormlessInstanceWorkspaceSecretStateResult,
 } from "./instance-workspace-secrets.ts";
 export {
+  formlessInstanceWorkspaceDevEnv,
+  formlessInstanceWorkspaceLocalStateRoot,
+  formlessInstanceWorkspaceWranglerPersistPath,
   type AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
   type AdoptFormlessInstanceWorkspaceAdminTokenInput,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
   type CheckFormlessInstanceWorkspaceDependencies,
   type CheckFormlessInstanceWorkspaceInput,
   type CheckFormlessInstanceWorkspaceResult,
+  type DevFormlessInstanceWorkspaceDependencies,
+  type DevFormlessInstanceWorkspaceInput,
   type FormlessInstanceWorkspaceStatusDependencies,
   type FormlessInstanceWorkspaceStatusInput,
   type FormlessInstanceWorkspaceStatusResult,
+  type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceDriftSummary,
   type FormlessInstanceWorkspacePackageMismatch,
   type InitFormlessInstanceWorkspaceDependencies,
@@ -146,6 +156,9 @@ export {
   type PushFormlessInstanceWorkspaceDependencies,
   type PushFormlessInstanceWorkspaceInput,
   type PushFormlessInstanceWorkspaceResult,
+  type ResetFormlessInstanceWorkspaceLocalStateDependencies,
+  type ResetFormlessInstanceWorkspaceLocalStateInput,
+  type ResetFormlessInstanceWorkspaceLocalStateResult,
   type RotateFormlessInstanceWorkspaceAdminTokenDependencies,
   type RotateFormlessInstanceWorkspaceAdminTokenInput,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
@@ -446,6 +459,16 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspacePushResult(result, dependencies.cwd));
       return;
     }
+    case "instanceDev":
+      await runFormlessInstanceWorkspaceDev(command, dependencies, {
+        devCommand: packageRunScriptCommand("dev", dependencies.env),
+      });
+      return;
+    case "instanceResetLocal": {
+      const result = await resetFormlessInstanceWorkspaceLocalState(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceResetLocalResult(result, dependencies.cwd));
+      return;
+    }
     case "instanceTokenAdopt": {
       const result = await adoptFormlessInstanceWorkspaceAdminToken(command, dependencies);
       dependencies.log(formatInstanceWorkspaceTokenAdoptResult(result, dependencies.cwd));
@@ -456,8 +479,6 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceTokenRotateResult(result, dependencies.cwd));
       return;
     }
-    case "instanceDev":
-    case "instanceResetLocal":
     case "instanceDeploy":
       dependencies.log(formatInstanceWorkspaceCommandSkeleton(command, dependencies.cwd));
       return;
@@ -695,6 +716,33 @@ export async function pushFormlessInstanceWorkspace(
   > = nodeFormlessCliDependencies(),
 ): Promise<PushFormlessInstanceWorkspaceResult> {
   return pushFormlessInstanceWorkspaceCommand(input, dependencies);
+}
+
+export async function runFormlessInstanceWorkspaceDev(
+  input: {
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch" | "log" | "now" | "packageRoot" | "spawn"
+  > = nodeFormlessCliDependencies(),
+  options: {
+    devCommand?: FormlessInstanceWorkspaceDevCommand;
+  } = {},
+): Promise<void> {
+  return runFormlessInstanceWorkspaceDevCommand(input, {
+    ...dependencies,
+    devCommand: options.devCommand ?? packageRunScriptCommand("dev", dependencies.env),
+  });
+}
+
+export async function resetFormlessInstanceWorkspaceLocalState(
+  input: {
+    workspacePath?: string;
+  },
+  dependencies: Pick<FormlessCliDependencies, "cwd"> = nodeFormlessCliDependencies(),
+): Promise<ResetFormlessInstanceWorkspaceLocalStateResult> {
+  return resetFormlessInstanceWorkspaceLocalStateCommand(input, dependencies);
 }
 
 export async function adoptFormlessInstanceWorkspaceAdminToken(
@@ -941,6 +989,19 @@ function formatInstanceWorkspacePushResult(
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
+}
+
+function formatInstanceWorkspaceResetLocalResult(
+  result: ResetFormlessInstanceWorkspaceLocalStateResult,
+  cwd: string,
+): string {
+  return [
+    "Instance workspace local state reset.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
+    `Local state: ${formatCliPath(cwd, result.localStateRoot)}.`,
+    "Next dev run will rebuild local runtime state from workspace archives.",
+  ].join("\n");
 }
 
 function formatInstanceWorkspaceTokenAdoptResult(
