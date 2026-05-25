@@ -1,5 +1,4 @@
 import type { RecordFieldConfig } from "../../client/views.ts";
-import type { FieldSchema } from "../../shared/schema.ts";
 import type { GeneratedFieldControl } from "./field-controls.ts";
 
 export type GeneratedRecordFieldControlDensity = "default" | "compact";
@@ -98,11 +97,8 @@ export function selectGeneratedRecordFieldRendererKind({
 }
 
 export function selectAutosizeTextRecordRenderer({
-  density = "default",
-  fieldConfig,
   fieldControl,
   presentation = "default",
-  showLabel = false,
 }: {
   density?: GeneratedRecordFieldControlDensity;
   fieldConfig: RecordFieldConfig;
@@ -122,20 +118,5 @@ export function selectAutosizeTextRecordRenderer({
     return true;
   }
 
-  return (
-    density === "compact" ||
-    (!showLabel && isTitleLikeTextField(fieldConfig.fieldName, fieldConfig.field))
-  );
-}
-
-export function isTitleLikeTextField(fieldName: string, field: FieldSchema) {
-  const normalizedFieldName = fieldName.toLowerCase();
-  const normalizedLabel = (field.label ?? "").toLowerCase();
-
-  return (
-    normalizedFieldName === "title" ||
-    normalizedFieldName === "name" ||
-    normalizedLabel === "title" ||
-    normalizedLabel === "name"
-  );
+  return false;
 }

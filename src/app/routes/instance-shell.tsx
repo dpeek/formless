@@ -3,6 +3,15 @@ import { useLocation } from "wouter";
 import { Button } from "@dpeek/formless-ui/button";
 import { Description, FieldGroup, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
+import {
+  ModalBody,
+  ModalClose,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import { TextField } from "@dpeek/formless-ui/text-field";
 import { ControlAddIcon } from "@dpeek/formless-ui/icons";
 import {
@@ -173,6 +182,8 @@ export function InstanceShellRouteView({
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
   state: InstanceShellRouteState;
 }) {
+  const [installDialogOpen, setInstallDialogOpen] = useState(false);
+
   if (state.status === "loading") {
     return (
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
@@ -196,63 +207,45 @@ export function InstanceShellRouteView({
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <ShellHeader />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <section className="space-y-3" aria-labelledby="installed-apps-heading">
-          <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
+      <section className="space-y-3" aria-labelledby="installed-apps-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
+          <div className="flex items-center gap-2">
             <h2 id="installed-apps-heading" className="text-sm font-semibold">
               Installed apps
             </h2>
             <span className="text-xs text-muted-fg">{state.installs.length}</span>
           </div>
-          {state.installs.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
-              No installed apps.
-            </div>
-          ) : (
-            <div className="grid gap-3">
-              {state.installs.map((install) => (
-                <InstalledAppRow install={install} key={install.installId} />
-              ))}
-            </div>
-          )}
-        </section>
-        <section className="space-y-3" aria-labelledby="bundled-apps-heading">
-          <div className="border-b border-border pb-2">
-            <h2 id="bundled-apps-heading" className="text-sm font-semibold">
-              Bundled apps
-            </h2>
+          <Button
+            aria-haspopup="dialog"
+            isDisabled={state.installing || state.packages.length === 0}
+            onPress={() => setInstallDialogOpen(true)}
+            size="sm"
+            type="button"
+          >
+            <ControlAddIcon />
+            Install
+          </Button>
+        </div>
+        {state.installs.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
+            No installed apps.
           </div>
-          {state.packages.length > 0 ? (
-            <div className="grid gap-3">
-              {state.packages.map((appPackage) => (
-                <PackageInstallForm
-                  appPackage={appPackage}
-                  draft={
-                    installDrafts[appPackage.packageAppKey] ?? {
-                      installId: appPackage.defaultInstallId,
-                      label: appPackage.label,
-                    }
-                  }
-                  installError={
-                    state.installErrorPackageAppKey === appPackage.packageAppKey
-                      ? state.installError
-                      : undefined
-                  }
-                  installing={
-                    state.installing && state.installingPackageAppKey === appPackage.packageAppKey
-                  }
-                  isDisabled={state.installing}
-                  key={appPackage.packageAppKey}
-                  onDraftChange={(draft) => onInstallDraftChange?.(appPackage.packageAppKey, draft)}
-                  onSubmit={(event) => onSubmitInstall?.(appPackage.packageAppKey, event)}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-fg">No bundled apps are available.</p>
-          )}
-        </section>
-      </div>
+        ) : (
+          <div className="grid gap-3">
+            {state.installs.map((install) => (
+              <InstalledAppRow install={install} key={install.installId} />
+            ))}
+          </div>
+        )}
+      </section>
+      <InstallAppDialog
+        installDrafts={installDrafts}
+        onDraftChange={onInstallDraftChange}
+        onOpenChange={setInstallDialogOpen}
+        onSubmitInstall={onSubmitInstall}
+        open={installDialogOpen}
+        state={state}
+      />
     </section>
   );
 }
@@ -291,72 +284,235 @@ function InstalledAppRow({ install }: { install: AppInstall }) {
   );
 }
 
-function PackageInstallForm({
+export function InstallAppDialog({
+  installDrafts = {},
+  onDraftChange,
+  onOpenChange,
+  onSubmitInstall,
+  open,
+  state,
+}: {
+  installDrafts?: PackageInstallDrafts;
+  onDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
+  onOpenChange: (open: boolean) => void;
+  onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
+  open: boolean;
+  state: Extract<InstanceShellRouteState, { status: "ready" }>;
+}) {
+  return (
+    <ModalContent isOpen={open} onOpenChange={onOpenChange} size="lg">
+      <InstallAppDialogForm
+        installDrafts={installDrafts}
+        onDraftChange={onDraftChange}
+        onSubmitInstall={onSubmitInstall}
+        state={state}
+      />
+    </ModalContent>
+  );
+}
+
+export function InstallAppDialogForm({
+  installDrafts = {},
+  onDraftChange,
+  onSubmitInstall,
+  state,
+}: {
+  installDrafts?: PackageInstallDrafts;
+  onDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
+  onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
+  state: Extract<InstanceShellRouteState, { status: "ready" }>;
+}) {
+  const [selectedPackageAppKey, setSelectedPackageAppKey] = useState<PackageAppKey | null>(
+    state.packages[0]?.packageAppKey ?? null,
+  );
+
+  useEffect(() => {
+    if (
+      state.installErrorPackageAppKey &&
+      state.packages.some(
+        (appPackage) => appPackage.packageAppKey === state.installErrorPackageAppKey,
+      )
+    ) {
+      if (selectedPackageAppKey !== state.installErrorPackageAppKey) {
+        setSelectedPackageAppKey(state.installErrorPackageAppKey);
+      }
+      return;
+    }
+
+    if (
+      selectedPackageAppKey &&
+      state.packages.some((appPackage) => appPackage.packageAppKey === selectedPackageAppKey)
+    ) {
+      return;
+    }
+
+    setSelectedPackageAppKey(state.packages[0]?.packageAppKey ?? null);
+  }, [selectedPackageAppKey, state.installErrorPackageAppKey, state.packages]);
+
+  const selectedPackage =
+    state.packages.find((appPackage) => appPackage.packageAppKey === selectedPackageAppKey) ??
+    state.packages[0];
+
+  if (!selectedPackage) {
+    return null;
+  }
+
+  const selectedDraft = installDrafts[selectedPackage.packageAppKey] ?? {
+    installId: selectedPackage.defaultInstallId,
+    label: selectedPackage.label,
+  };
+  const selectedInstallError =
+    state.installErrorPackageAppKey === selectedPackage.packageAppKey
+      ? state.installError
+      : undefined;
+  const selectedInstalling =
+    state.installing && state.installingPackageAppKey === selectedPackage.packageAppKey;
+
+  return (
+    <form
+      onSubmit={(event) => onSubmitInstall?.(selectedPackage.packageAppKey, event)}
+      className="contents"
+    >
+      <ModalHeader>
+        <ModalTitle>Install app</ModalTitle>
+        <ModalDescription>
+          Choose a bundled app type, then set its instance label and install id.
+        </ModalDescription>
+      </ModalHeader>
+      <ModalBody>
+        <div className="space-y-5">
+          <PackageTypeSwitcher
+            isDisabled={state.installing}
+            onSelect={setSelectedPackageAppKey}
+            packages={state.packages}
+            selectedPackageAppKey={selectedPackage.packageAppKey}
+          />
+          <PackageInstallFields
+            appPackage={selectedPackage}
+            draft={selectedDraft}
+            installError={selectedInstallError}
+            isDisabled={state.installing}
+            onDraftChange={(draft) => onDraftChange?.(selectedPackage.packageAppKey, draft)}
+          />
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <ModalClose intent="outline" isDisabled={state.installing} type="button">
+          Cancel
+        </ModalClose>
+        <Button isDisabled={state.installing} type="submit">
+          <ControlAddIcon />
+          {selectedInstalling ? "Installing..." : `Install ${selectedPackage.label}`}
+        </Button>
+      </ModalFooter>
+    </form>
+  );
+}
+
+function PackageTypeSwitcher({
+  isDisabled,
+  onSelect,
+  packages,
+  selectedPackageAppKey,
+}: {
+  isDisabled: boolean;
+  onSelect: (packageAppKey: PackageAppKey) => void;
+  packages: readonly BundledAppPackage[];
+  selectedPackageAppKey: PackageAppKey;
+}) {
+  return (
+    <div
+      aria-label="Install app type"
+      className="grid grid-cols-3 gap-1 rounded-md border border-border bg-muted p-1"
+      role="tablist"
+    >
+      {packages.map((appPackage) => {
+        const isSelected = appPackage.packageAppKey === selectedPackageAppKey;
+
+        return (
+          <button
+            aria-controls="install-app-type-panel"
+            aria-selected={isSelected}
+            className={packageTypeButtonClassName(isSelected)}
+            disabled={isDisabled}
+            key={appPackage.packageAppKey}
+            onClick={() => onSelect(appPackage.packageAppKey)}
+            role="tab"
+            type="button"
+          >
+            {appPackage.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PackageInstallFields({
   appPackage,
   draft,
   installError,
-  installing,
   isDisabled,
   onDraftChange,
-  onSubmit,
 }: {
   appPackage: BundledAppPackage;
   draft: PackageInstallDraft;
   installError: string | undefined;
-  installing: boolean;
   isDisabled: boolean;
   onDraftChange?: (draft: PackageInstallDraft) => void;
-  onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   const labelInputId = useMemo(
-    () => `${appPackage.packageAppKey}-install-label`,
+    () => `${appPackage.packageAppKey}-install-dialog-label`,
     [appPackage.packageAppKey],
   );
   const installIdInputId = useMemo(
-    () => `${appPackage.packageAppKey}-install-id`,
+    () => `${appPackage.packageAppKey}-install-dialog-id`,
     [appPackage.packageAppKey],
   );
 
   return (
-    <form className="rounded-md border border-border bg-overlay p-4" onSubmit={onSubmit}>
-      <div className="space-y-4">
-        <header className="space-y-1">
-          <h3 className="text-sm font-semibold">{appPackage.label}</h3>
-          <p className="text-xs text-muted-fg">{appPackage.description}</p>
-        </header>
-        <FieldGroup>
-          <TextField
-            isDisabled={isDisabled}
-            isRequired
-            onChange={(value) => onDraftChange?.({ ...draft, label: value })}
-            value={draft.label}
-          >
-            <Label htmlFor={labelInputId}>Label</Label>
-            <Input id={labelInputId} />
-          </TextField>
-          <TextField
-            isDisabled={isDisabled}
-            isRequired
-            onChange={(value) => onDraftChange?.({ ...draft, installId: value })}
-            value={draft.installId}
-          >
-            <Label htmlFor={installIdInputId}>Install id</Label>
-            <Input id={installIdInputId} />
-            <Description>Lowercase letters, numbers, and hyphens</Description>
-          </TextField>
-        </FieldGroup>
-        {installError ? (
-          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
-            {installError}
-          </p>
-        ) : null}
-        <Button className="w-full" isDisabled={isDisabled} type="submit">
-          <ControlAddIcon />
-          {installing ? "Installing..." : `Install ${appPackage.label}`}
-        </Button>
-      </div>
-    </form>
+    <div className="space-y-4" id="install-app-type-panel" role="tabpanel">
+      <header className="space-y-1">
+        <h3 className="text-sm font-semibold">{appPackage.label}</h3>
+        <p className="text-xs text-muted-fg">{appPackage.description}</p>
+      </header>
+      <FieldGroup>
+        <TextField
+          isDisabled={isDisabled}
+          isRequired
+          onChange={(value) => onDraftChange?.({ ...draft, label: value })}
+          value={draft.label}
+        >
+          <Label htmlFor={labelInputId}>Label</Label>
+          <Input id={labelInputId} />
+        </TextField>
+        <TextField
+          isDisabled={isDisabled}
+          isRequired
+          onChange={(value) => onDraftChange?.({ ...draft, installId: value })}
+          value={draft.installId}
+        >
+          <Label htmlFor={installIdInputId}>Install id</Label>
+          <Input id={installIdInputId} />
+          <Description>Lowercase letters, numbers, and hyphens</Description>
+        </TextField>
+      </FieldGroup>
+      {installError ? (
+        <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
+          {installError}
+        </p>
+      ) : null}
+    </div>
   );
+}
+
+function packageTypeButtonClassName(isSelected: boolean) {
+  const base =
+    "min-h-8 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+
+  return isSelected
+    ? `${base} bg-overlay text-fg shadow-xs`
+    : `${base} text-muted-fg hover:bg-overlay/70 hover:text-fg`;
 }
 
 function initializePackageInstallDrafts({

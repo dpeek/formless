@@ -98,6 +98,7 @@ export interface ObjectListProps<T extends object> extends Omit<
   reorder?: ObjectListReorderOptions;
   className?: string;
   gridClassName?: GridListPrimitiveProps<T>["className"];
+  hideLabel?: boolean;
   itemClassName?: string;
 }
 
@@ -122,6 +123,7 @@ export function ObjectList<T extends object>({
   reorder,
   className,
   gridClassName,
+  hideLabel = false,
   itemClassName,
   ...props
 }: ObjectListProps<T>) {
@@ -149,27 +151,32 @@ export function ObjectList<T extends object>({
     },
   });
   const describedById = description ? `${stringFromKey(label)}-description` : undefined;
+  const renderHeader = !hideLabel || description || listActions.length > 0;
 
   return (
     <div data-slot="object-list" className={twMerge("space-y-2", className)}>
-      <div className="flex min-h-8 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate font-medium text-fg text-sm/5">{label}</div>
-          {description && (
-            <div id={describedById} className="text-muted-fg text-xs/5">
-              {description}
+      {renderHeader ? (
+        <div className="flex min-h-8 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className={hideLabel ? "sr-only" : "truncate font-medium text-fg text-sm/5"}>
+              {label}
             </div>
+            {description && (
+              <div id={describedById} className="text-muted-fg text-xs/5">
+                {description}
+              </div>
+            )}
+          </div>
+          {listActions.length > 0 && (
+            <ObjectListActionControls
+              actions={listActions}
+              item={undefined}
+              placement="list"
+              setPendingAction={setPendingAction}
+            />
           )}
         </div>
-        {listActions.length > 0 && (
-          <ObjectListActionControls
-            actions={listActions}
-            item={undefined}
-            placement="list"
-            setPendingAction={setPendingAction}
-          />
-        )}
-      </div>
+      ) : null}
       <GridListPrimitive
         {...props}
         aria-label={label}

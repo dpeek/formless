@@ -16,7 +16,7 @@ import {
   type AppArchive,
   type InstanceArchive,
 } from "../shared/archive.ts";
-import { listBundledAppPackages } from "../shared/app-installs.ts";
+import { listBundledAppPackages, type BundledAppPackage } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -925,16 +925,11 @@ describe("Formless Site CLI", () => {
       installedApp("james", "James", "tasks"),
       installedSite("extra", "Extra"),
     ];
-    const fetcher = archiveFetch(
-      requests,
-      remoteInstalls,
-      {
-        david: { mediaBytes: Buffer.from([2]), records: publishRecords() },
-        extra: { records: [] },
-        james: { records: [] },
-      },
-      [tasksPackage()],
-    );
+    const fetcher = archiveFetch(requests, remoteInstalls, {
+      david: { mediaBytes: Buffer.from([2]), records: publishRecords() },
+      extra: { records: [] },
+      james: { records: [] },
+    });
 
     await writeWorkspaceManifest(workspaceRoot, {
       apps: [
@@ -2745,7 +2740,7 @@ function archiveFetch(
   requests: CapturedFetchRequest[],
   installs: ReturnType<typeof installedApp>[],
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
-  extraPackages: ReturnType<typeof tasksPackage>[] = [],
+  extraPackages: BundledAppPackage[] = [],
 ): typeof fetch {
   return async (url, init) => {
     const requestUrl =
@@ -2771,9 +2766,12 @@ function archiveFetch(
     );
 
     if (snapshotMatch) {
+      const packageAppKey = snapshotMatch[1] ?? "";
       const installId = snapshotMatch[2] ?? "";
 
-      return Response.json(snapshot(dataByInstall[installId]?.records ?? []));
+      return Response.json(
+        snapshotForPackage(packageAppKey, dataByInstall[installId]?.records ?? []),
+      );
     }
 
     const mediaMatch = parsedUrl.pathname.match(/^\/api\/app-installs\/site\/([^/]+)\/media\//);
@@ -2798,7 +2796,7 @@ function pushArchiveFetch(
   installs: ReturnType<typeof installedApp>[],
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
   restoreResponses: unknown[],
-  extraPackages: ReturnType<typeof tasksPackage>[] = [],
+  extraPackages: BundledAppPackage[] = [],
 ): typeof fetch {
   const readFetch = archiveFetch(requests, installs, dataByInstall, extraPackages);
 
@@ -2902,19 +2900,6 @@ function restoreSummary(
     mediaCountsByApp: { david: 0 },
     recordCountsByApp: { david: { total: 0 } },
     replacedInstalls: summary.replacedInstalls ?? [],
-  };
-}
-
-function tasksPackage() {
-  return {
-    adminRouteBase: "/apps" as const,
-    defaultInstallId: "tasks",
-    description: "Test package mismatch.",
-    label: "Tasks",
-    packageAppKey: "tasks" as const,
-    seedRecordsKey: "site" as const,
-    sourceSchemaKey: "site" as const,
-    supportsMultipleInstalls: true,
   };
 }
 
@@ -3129,6 +3114,22 @@ function rateSnapshot(records: StoredRecord[]): StoreSnapshot {
     schema: rateSourceSchema,
     records,
   };
+}
+
+function snapshotForPackage(packageAppKey: string, records: StoredRecord[]): StoreSnapshot {
+  if (packageAppKey === "site") {
+    return snapshot(records);
+  }
+
+  if (packageAppKey === "tasks") {
+    return taskSnapshot(records);
+  }
+
+  if (packageAppKey === "estii") {
+    return rateSnapshot(records);
+  }
+
+  throw new Error(`Unsupported test package "${packageAppKey}".`);
 }
 
 function mediaRecords(): StoredRecord[] {

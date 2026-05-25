@@ -51,6 +51,13 @@ export type {
   GeneratedRecordFieldControlPresentation,
 } from "./record-field-renderer-model.ts";
 
+const compactNativeInputClassName =
+  "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs/4 sm:px-2 sm:py-0.5 sm:text-xs/4 md:text-xs/4";
+const compactNativeTextareaClassName =
+  "min-h-20 w-full rounded border border-slate-300 px-2 py-1 text-xs/4 sm:px-2 sm:py-1 sm:text-xs/4 md:text-xs/4";
+const compactNativeSelectClassName =
+  "h-6 py-0.5 pe-6 ps-2 text-xs/4 sm:py-0.5 sm:pe-6 sm:ps-2 sm:pr-6 sm:pl-2 sm:text-xs/4 md:text-xs/4";
+
 export function GeneratedRecordFieldControl({
   canPatch,
   density = "default",
@@ -109,10 +116,11 @@ export function GeneratedRecordFieldControl({
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
   const fieldControl = selectGeneratedFieldControl({ editor, field, label });
+  const controlDensity = density === "compact" && showLabel ? "default" : density;
   const labelClass =
     showLabel && presentation !== "heading" ? "text-xs font-medium text-slate-600" : "sr-only";
   const rendererKind = selectGeneratedRecordFieldRendererKind({
-    density,
+    density: controlDensity,
     fieldConfig,
     fieldControl,
     presentation,
@@ -124,7 +132,7 @@ export function GeneratedRecordFieldControl({
       <RecordCheckboxFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         error={error}
         fieldControl={fieldControl}
         isPending={isPending}
@@ -139,7 +147,7 @@ export function GeneratedRecordFieldControl({
     return (
       <RecordEnumFieldRenderer
         canPatch={canPatch}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         fieldControl={fieldControl}
@@ -155,7 +163,7 @@ export function GeneratedRecordFieldControl({
     return (
       <RecordReferenceFieldControl
         canPatch={canPatch}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         field={fieldControl.field}
@@ -173,7 +181,7 @@ export function GeneratedRecordFieldControl({
       <RecordTextFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         fieldControl={fieldControl}
@@ -191,7 +199,7 @@ export function GeneratedRecordFieldControl({
       <RecordTextareaFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         field={field}
@@ -210,7 +218,7 @@ export function GeneratedRecordFieldControl({
       <RecordNumberFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         fieldControl={fieldControl}
@@ -230,7 +238,7 @@ export function GeneratedRecordFieldControl({
       <RecordValueUnitFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         fieldName={fieldName}
@@ -255,7 +263,7 @@ export function GeneratedRecordFieldControl({
       <RecordMarkdownFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         field={field}
@@ -274,7 +282,7 @@ export function GeneratedRecordFieldControl({
       <RecordColorFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         field={field}
@@ -292,7 +300,7 @@ export function GeneratedRecordFieldControl({
       <RecordDateFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         field={field}
@@ -310,7 +318,7 @@ export function GeneratedRecordFieldControl({
     return (
       <RecordIconFieldRenderer
         canPatch={canPatch}
-        density={density}
+        density={controlDensity}
         error={error}
         fieldControl={fieldControl}
         iconDialogDraft={iconDialogDraft}
@@ -330,7 +338,7 @@ export function GeneratedRecordFieldControl({
     return (
       <RecordMediaFieldRenderer
         canPatch={canPatch}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         field={field}
@@ -352,7 +360,7 @@ export function GeneratedRecordFieldControl({
       <RecordAutosizeTextFieldRenderer
         canPatch={canPatch}
         commitPolicy={commitPolicy}
-        density={density}
+        density={controlDensity}
         draft={draft}
         error={error}
         field={field}
@@ -458,7 +466,7 @@ function RecordEnumFieldRenderer({
         <Label className={labelClass}>{fieldControl.label}</Label>
         <NativeSelectContent
           aria-label={fieldControl.label}
-          className={density === "compact" ? "h-6 py-0.5 pe-6 ps-2 text-xs" : undefined}
+          className={density === "compact" ? compactNativeSelectClassName : undefined}
           disabled={!canPatch || isPending}
           isInvalid={error !== null}
           onChange={(event) => {
@@ -539,7 +547,7 @@ function RecordTextFieldRenderer({
           aria-label={fieldControl.label}
           className={
             density === "compact"
-              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+              ? compactNativeInputClassName
               : "w-full rounded border border-slate-300 px-3 py-2"
           }
           onBlur={(event) => {
@@ -606,7 +614,7 @@ function RecordTextareaFieldRenderer({
           aria-label={fieldControl.label}
           className={
             density === "compact"
-              ? "min-h-20 w-full rounded border border-slate-300 px-2 py-1 text-xs"
+              ? compactNativeTextareaClassName
               : "min-h-28 w-full rounded border border-slate-300 px-3 py-2"
           }
           onBlur={(event) => {
@@ -664,7 +672,7 @@ function RecordNumberFieldRenderer({
             aria-label={fieldControl.label}
             className={
               density === "compact"
-                ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+                ? compactNativeInputClassName
                 : "w-full rounded border border-slate-300 px-3 py-2"
             }
             commitOnBlur={commitPolicy === "field-commit"}
@@ -746,7 +754,7 @@ function RecordValueUnitFieldRenderer({
             encode={(value) => encodeNumberEditorInputValue(value, numberFormat)}
             inputClassName={
               density === "compact"
-                ? "h-6 rounded border border-slate-300 px-2 py-0.5 text-xs"
+                ? compactNativeInputClassName
                 : "rounded border border-slate-300 px-3 py-2"
             }
             inputRequired={fieldControl.required}
@@ -892,7 +900,7 @@ function RecordColorFieldRenderer({
         <GeneratedColorFieldControl
           className={
             density === "compact"
-              ? "w-full [&_button]:h-6 [&_input]:h-6 [&_input]:text-xs"
+              ? "w-full [&_button]:h-6 [&_input]:h-6 [&_input]:py-0.5 [&_input]:text-xs/4 sm:[&_input]:py-0.5 sm:[&_input]:text-xs/4 md:[&_input]:text-xs/4"
               : "w-full"
           }
           disabled={!canPatch || isPending}
@@ -1045,10 +1053,16 @@ function recordDatePickerTriggerClassName(density: GeneratedRecordFieldControlDe
     "[&_[data-slot=control]]:rounded",
     "[&_[data-slot=control]]:px-2",
     "[&_[data-slot=control]]:py-0.5",
+    "sm:[&_[data-slot=control]]:px-2",
+    "sm:[&_[data-slot=control]]:py-0.5",
     "[&_[data-slot=date-picker-trigger]]:px-2",
     "[&_[data-slot=date-picker-trigger]]:py-0",
+    "sm:[&_[data-slot=date-picker-trigger]]:px-2",
+    "sm:[&_[data-slot=date-picker-trigger]]:py-0",
     "[&_[data-slot=date-picker-trigger]>svg]:size-3.5",
-    "[&_[role=spinbutton]]:text-xs",
+    "[&_[role=spinbutton]]:text-xs/4",
+    "sm:[&_[role=spinbutton]]:text-xs/4",
+    "md:[&_[role=spinbutton]]:text-xs/4",
   ].join(" ");
 }
 
@@ -1247,7 +1261,7 @@ function recordSpecializedFieldContainerClassName(
   }
 
   if (rendererKind === "date") {
-    return "min-w-36 flex-none space-y-1";
+    return "w-fit max-w-full min-w-36 flex-none space-y-1";
   }
 
   return "min-w-52 flex-1 space-y-1";
@@ -1467,7 +1481,7 @@ function MediaFieldControl({
           aria-label={`${label} URL`}
           className={
             density === "compact"
-              ? "h-6 w-full rounded border border-slate-300 px-2 py-0.5 text-xs"
+              ? compactNativeInputClassName
               : "w-full rounded border border-slate-300 px-3 py-2"
           }
           disabled={!canPatch || isPending}
@@ -1548,7 +1562,7 @@ function RecordReferenceFieldControl({
         <Label className={labelClass}>{label}</Label>
         <NativeSelectContent
           aria-label={label}
-          className={density === "compact" ? "h-6 py-0.5 pe-6 ps-2 text-xs" : undefined}
+          className={density === "compact" ? compactNativeSelectClassName : undefined}
           disabled={!canPatch || isPending}
           onChange={(event) => {
             const value = event.currentTarget.value;

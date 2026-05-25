@@ -264,14 +264,14 @@ function mainHtml(html: string): string {
 
 function runtimeShellHtml(html: string): string {
   const frameIndex = html.indexOf('data-frame="runtime-shell"');
-  const footerStart = html.lastIndexOf("<footer", frameIndex);
-  const footerEnd = html.indexOf("</footer>", frameIndex);
+  const shellStart = html.lastIndexOf("<header", frameIndex);
+  const shellEnd = html.indexOf("</header>", frameIndex);
 
-  if (frameIndex === -1 || footerStart === -1 || footerEnd === -1) {
+  if (frameIndex === -1 || shellStart === -1 || shellEnd === -1) {
     throw new Error("Missing runtime shell.");
   }
 
-  return html.slice(footerStart, footerEnd + "</footer>".length);
+  return html.slice(shellStart, shellEnd + "</header>".length);
 }
 
 function generatedAppFrameHtml(html: string): string {
@@ -503,7 +503,7 @@ function expectRuntimeShell(html: string) {
   const shellHtml = runtimeShellHtml(html);
 
   expect(html).toContain('data-frame="runtime-shell"');
-  expect(html).toContain("bg-bg pb-[var(--runtime-shell-height)] text-fg");
+  expect(html).toContain("bg-bg pt-[var(--runtime-shell-height)] text-fg");
   expect(html).toContain('aria-label="Runtime apps"');
   expect(shellHtml).toContain("App management");
   expect(shellHtml).not.toContain("/schema");
@@ -5253,7 +5253,7 @@ describe("generated forms and records", () => {
     );
 
     expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
-    expect(html).toContain('data-web-autosize-text-input="true"');
+    expect(html).not.toContain('data-web-autosize-text-input="true"');
     expect(html).toContain('value="Plain title"');
     expect(html).toMatch(textareaWithAriaLabel("Summary"));
     expect(html).toContain('data-web-markdown-editor="plate"');
@@ -5320,7 +5320,7 @@ describe("generated forms and records", () => {
     expect(html).not.toContain("data-web-svg-source");
   });
 
-  it("renders compact text table editors as autosizing editable text", () => {
+  it("renders compact text table editors as regular text inputs", () => {
     const entity = fieldEditorCharacterizationEntity();
     const columns: TableColumnConfig[] = [
       {
@@ -5347,10 +5347,63 @@ describe("generated forms and records", () => {
       />,
     );
 
-    expect(html).toContain('data-web-autosize-text-input="true"');
+    expect(html).not.toContain('data-web-autosize-text-input="true"');
     expect(html).toMatch(inputWithAriaLabelAndType("Title", "text"));
     expect(html).toContain('value="Plain title"');
-    expect(html).not.toContain('data-slot="input"');
+  });
+
+  it("keeps compact native record controls scoped to unlabeled inline editors", () => {
+    const entity = fieldEditorCharacterizationEntity();
+
+    applyBootstrapResponse(
+      bootstrap([resourceRecord("resource-1", "Designer"), fieldEditorCharacterizationRecord()]),
+    );
+
+    function renderCompactField(
+      fieldName: string,
+      editor: RecordFieldConfig["editor"],
+      commit: RecordFieldConfig["commit"],
+      showLabel = false,
+    ) {
+      return renderToStaticMarkup(
+        <SchemaAppProvider schemaKey="tasks">
+          <RecordFieldEditor
+            canPatch
+            density="compact"
+            entityName="editorCase"
+            fieldConfig={recordFieldConfig(entity, fieldName, editor, commit)}
+            recordId="record-editor-case-1"
+            showLabel={showLabel}
+          />
+        </SchemaAppProvider>,
+      );
+    }
+
+    const textHtml = renderCompactField("title", "text", "field-commit");
+    const textareaHtml = renderCompactField("summary", "textarea", "field-commit");
+    const enumHtml = renderCompactField("status", "enum", "immediate");
+    const referenceHtml = renderCompactField("resource", "reference", "immediate");
+    const labeledTextHtml = renderCompactField("title", "text", "field-commit", true);
+    const labeledDateHtml = renderCompactField("publishedAt", "date", "field-commit", true);
+    const labeledEnumHtml = renderCompactField("status", "enum", "immediate", true);
+
+    expect(textHtml).toContain("h-6");
+    expect(textHtml).toContain("sm:py-0.5");
+    expect(textHtml).toContain("sm:text-xs/4");
+    expect(textareaHtml).toContain("min-h-20");
+    expect(textareaHtml).toContain("sm:py-1");
+    expect(textareaHtml).toContain("sm:text-xs/4");
+    expect(enumHtml).toContain("h-6");
+    expect(enumHtml).toContain("sm:py-0.5");
+    expect(enumHtml).toContain("sm:text-xs/4");
+    expect(referenceHtml).toContain("h-6");
+    expect(referenceHtml).toContain("sm:py-0.5");
+    expect(referenceHtml).toContain("sm:text-xs/4");
+    expect(labeledTextHtml).toContain("px-3 py-2");
+    expect(labeledTextHtml).not.toContain("h-6 w-full rounded");
+    expect(labeledDateHtml).toContain("w-fit max-w-full min-w-36");
+    expect(labeledDateHtml).not.toContain("[&amp;_[data-slot=control]]:h-6");
+    expect(labeledEnumHtml).not.toContain("h-6 py-0.5 pe-6 ps-2 text-xs/4");
   });
 
   it("renders the rate-home resource create dialog with only name visible", () => {

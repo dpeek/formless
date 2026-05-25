@@ -1,4 +1,0 @@
-[data-frame="workbench"] [data-slot="sidebar-container"] {
-  bottom: var(--workbench-toolbar-height);
-  height: calc(100svh - var(--workbench-toolbar-height));
-}

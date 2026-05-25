@@ -1023,6 +1023,7 @@ export function RecordList({
           })
         }
         gridClassName="gap-0 divide-y divide-slate-200 rounded border-slate-200 bg-bg p-0"
+        hideLabel={true}
         itemClassName="rounded-none px-0 py-0 hover:bg-secondary/50"
         items={listItems}
         label={`${entity.label} records`}
@@ -1139,8 +1140,8 @@ function RecordRow({
       className="p-3"
       data-formless-sortable-list-item={showOrderingHandle ? recordId : undefined}
     >
-      <div className="flex items-start gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {visibleFields.map((fieldConfig) => (
             <RecordFieldEditor
               canPatch={canPatch}

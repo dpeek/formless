@@ -6,7 +6,8 @@ import { selectGeneratedRecordFieldRendererKind } from "./record-field-renderer-
 
 describe("generated record field renderer model", () => {
   it("selects field-specific record renderers from field behavior facts", () => {
-    expect(recordRenderer("title", "text")).toBe("autosize-text");
+    expect(recordRenderer("title", "text")).toBe("text");
+    expect(recordRenderer("title", "text", { presentation: "heading" })).toBe("autosize-text");
     expect(recordRenderer("body", "textarea")).toBe("textarea");
     expect(recordRenderer("body", "markdown")).toBe("markdown");
     expect(recordRenderer("body", "markdown", { density: "compact" })).toBe("textarea");

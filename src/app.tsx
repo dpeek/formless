@@ -271,15 +271,9 @@ function WorkbenchFrame({
       data-frame="workbench"
       style={{ "--runtime-shell-height": "3.5rem" } as CSSProperties}
     >
-      <div
-        className="min-h-[calc(100dvh-var(--runtime-shell-height))] bg-bg pb-[var(--runtime-shell-height)] text-fg"
-        data-frame="workbench-content"
-      >
-        {children}
-      </div>
-      <footer
+      <header
         aria-label="Runtime shell"
-        className="fixed inset-x-0 bottom-0 z-[60] overflow-x-auto border-t border-slate-800 bg-slate-950 text-slate-100 shadow-lg shadow-black/25"
+        className="fixed inset-x-0 top-0 z-[60] overflow-x-auto border-b border-slate-800 bg-slate-950 text-slate-100 shadow-lg shadow-black/25"
         data-frame="runtime-shell"
       >
         <div className="flex h-14 min-w-max items-center justify-between gap-4 px-3 sm:px-4">
@@ -316,7 +310,13 @@ function WorkbenchFrame({
             ))}
           </nav>
         </div>
-      </footer>
+      </header>
+      <div
+        className="min-h-dvh bg-bg pt-[var(--runtime-shell-height)] text-fg"
+        data-frame="workbench-content"
+      >
+        {children}
+      </div>
     </div>
   );
 }

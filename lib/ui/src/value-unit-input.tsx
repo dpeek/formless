@@ -84,7 +84,7 @@ function ValueUnitInput({
       <NativeSelect className={cn("w-20 shrink-0", unitClassName)}>
         <NativeSelectContent
           aria-label={unitLabel}
-          className="h-7 rounded-md py-0.5 pe-6 ps-2 text-xs/relaxed"
+          className="h-7 rounded-md py-0.5 pe-6 ps-2 text-xs/relaxed sm:py-0.5 sm:pe-6 sm:ps-2 sm:pr-6 sm:pl-2 sm:text-xs/relaxed md:text-xs/relaxed"
           disabled={disabled}
           onChange={(event) => {
             const nextUnit = event.currentTarget.value;

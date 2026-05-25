@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import { listBundledAppPackages, type AppInstall } from "../../shared/app-installs.ts";
-import { InstanceShellRouteView } from "./instance-shell.tsx";
+import { InstallAppDialogForm, InstanceShellRouteView } from "./instance-shell.tsx";
 
 describe("instance shell route view", () => {
-  it("lists installed apps and renders bundled package install forms", () => {
+  it("lists installed apps and renders one install button", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
         installDrafts={{
@@ -31,23 +31,47 @@ describe("instance shell route view", () => {
     expect(html).toContain("<code>personal</code>");
     expect(html).toContain('href="/apps/personal"');
     expect(html).toContain('href="/sites/personal"');
-    expect(html).toContain("Bundled apps");
-    expect(html).toContain("Public website app backed by the bundled Site schema");
-    expect(html).toContain("Task tracking app backed by the bundled Tasks schema");
-    expect(html).toContain("Rate-card app backed by the bundled Estii schema");
-    expect(html).toContain("Install Site");
-    expect(html).toContain("Install Tasks");
-    expect(html).toContain("Install Estii");
-    expect(html).toContain('value="Docs Site"');
-    expect(html).toContain('value="docs"');
-    expect(html).toContain('value="Task Space"');
-    expect(html).toContain('value="tasks"');
-    expect(html).toContain('value="Rates"');
-    expect(html).toContain('value="rates"');
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain("Install");
+    expect(html).not.toContain("Bundled apps");
+    expect(html).not.toContain("Public website app backed by the bundled Site schema");
+    expect(html).not.toContain("Task tracking app backed by the bundled Tasks schema");
+    expect(html).not.toContain("Rate-card app backed by the bundled Estii schema");
   });
 
-  it("renders install errors without hiding existing installs", () => {
+  it("renders the install dialog with a bundled app type switcher", () => {
     const html = renderToStaticMarkup(
+      <InstallAppDialogForm
+        installDrafts={{
+          site: { installId: "docs", label: "Docs Site" },
+          tasks: { installId: "tasks", label: "Task Space" },
+          estii: { installId: "rates", label: "Rates" },
+        }}
+        state={{
+          installing: false,
+          installs: [],
+          packages: listBundledAppPackages(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Install app");
+    expect(html).toContain('aria-label="Install app type"');
+    expect(html).toContain('role="tab"');
+    expect(html).toContain("Site");
+    expect(html).toContain("Tasks");
+    expect(html).toContain("Estii");
+    expect(html).toContain("Public website app backed by the bundled Site schema");
+    expect(html).toContain("Install Site");
+    expect(html).toContain('value="Docs Site"');
+    expect(html).toContain('value="docs"');
+    expect(html).not.toContain('value="Task Space"');
+    expect(html).not.toContain('value="Rates"');
+  });
+
+  it("renders install errors in the dialog without hiding existing installs", () => {
+    const viewHtml = renderToStaticMarkup(
       <InstanceShellRouteView
         installDrafts={{
           site: { installId: "personal", label: "Other Site" },
@@ -62,10 +86,25 @@ describe("instance shell route view", () => {
         }}
       />,
     );
+    const dialogHtml = renderToStaticMarkup(
+      <InstallAppDialogForm
+        installDrafts={{
+          site: { installId: "personal", label: "Other Site" },
+        }}
+        state={{
+          installError: 'Install id "personal" is already installed.',
+          installErrorPackageAppKey: "site",
+          installing: false,
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+          packages: listBundledAppPackages(),
+          status: "ready",
+        }}
+      />,
+    );
 
-    expect(html).toContain("Personal Site");
-    expect(html).toContain('role="alert"');
-    expect(html).toContain("already installed");
+    expect(viewHtml).toContain("Personal Site");
+    expect(dialogHtml).toContain('role="alert"');
+    expect(dialogHtml).toContain("already installed");
   });
 });
 
