@@ -1443,6 +1443,128 @@ describe("Formless Site CLI", () => {
     ]);
   });
 
+  it("deploys a claimed instance workspace with instance runtime vars and existing migration policy", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const deployInputs: DeployFormlessInstanceInput[] = [];
+    const healthInputs: CheckFormlessInstanceDeployMetadataInput[] = [];
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["instance", "deploy", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        deploy: async (input) => {
+          deployInputs.push(input);
+          return { url: input.plan.expectedUrl.url };
+        },
+        healthInputs,
+        logs,
+        packageRoot: "/package",
+      }),
+    );
+
+    expect(deployInputs).toHaveLength(1);
+    expect(deployInputs[0]).toMatchObject({
+      credentialProfile: null,
+      packageRoot: "/package",
+      secrets: {
+        ALCHEMY_PASSWORD: "alchemy-password",
+        FORMLESS_ADMIN_TOKEN: "local-token",
+      },
+      stateRoot: path.join(workspaceRoot, ".formless/deploy/personal"),
+    });
+    expect(deployInputs[0]?.plan).toMatchObject({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      expectedUrl: {
+        url: "https://personal.dpeek.workers.dev",
+      },
+      instanceName: "personal",
+      migrationPolicy: "existing",
+      packageVersion: packageJson.version,
+      resources: {
+        mediaBucket: {
+          name: "personal-media",
+        },
+        worker: {
+          name: "personal",
+        },
+      },
+      runtimeVars: {
+        FORMLESS_DEPLOY_VERSION: packageJson.version,
+        FORMLESS_RUNTIME_PROFILE: "instance",
+        VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+      },
+    });
+    expect(healthInputs).toEqual([
+      {
+        expectedVersion: packageJson.version,
+        url: "https://personal.dpeek.workers.dev",
+      },
+    ]);
+    expect(logs).toEqual([
+      [
+        "Instance workspace deployed.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Worker: personal.",
+        "Media bucket: personal-media.",
+        "Migration policy: existing.",
+        "Runtime profile: server instance, client instance.",
+        `Deploy metadata: version ${packageJson.version} verified.`,
+        `Deployment state: ${path.relative(
+          tempDir,
+          path.join(workspaceRoot, ".formless/deploy/personal"),
+        )}.`,
+        `Local deploy secrets: ${path.relative(
+          tempDir,
+          path.join(workspaceRoot, ".formless/deploy/personal/deploy.env"),
+        )}.`,
+        `Automation secret state: ${path.relative(
+          tempDir,
+          path.join(workspaceRoot, ".formless/instance.env"),
+        )}.`,
+      ].join("\n"),
+    ]);
+  });
+
+  it("guards instance workspace deploy against missing secrets and target identity changes", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    await expect(
+      runFormlessCli(["instance", "deploy", "--workspace", workspaceRoot], cliDeps(tempDir)),
+    ).rejects.toThrow("Formless instance deploy requires an admin token.");
+
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await expect(
+      runFormlessCli(
+        ["instance", "deploy", "--workspace", workspaceRoot],
+        cliDeps(tempDir, {
+          deploy: async () => ({ url: "https://wrong.dpeek.workers.dev" }),
+        }),
+      ),
+    ).rejects.toThrow(
+      "Formless instance deploy returned https://wrong.dpeek.workers.dev, expected claimed target https://personal.dpeek.workers.dev.",
+    );
+  });
+
   it("initializes a Site project with config, deterministic records, and no starter media", async () => {
     const tempDir = await makeTempDir();
     const result = await initSiteProject(
@@ -2491,6 +2613,7 @@ async function writeWorkspaceManifest(
       apps: options.apps ?? [workspaceApp("david", "David Peek")],
       deploy: {
         accountId: "account-123",
+        mediaBucket: "personal-media",
         workerName: "personal",
         migrationPolicy: "existing",
       },

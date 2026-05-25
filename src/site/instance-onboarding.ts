@@ -59,8 +59,12 @@ export type PlanFormlessInstanceDeploymentInput = {
   account: FormlessInstanceDeploymentAccount;
   defaults?: FormlessInstanceDeploymentDefaults;
   instanceName?: string | null;
+  mediaBucketName?: string | null;
+  migrationPolicy?: FormlessInstanceDeploymentMigrationPolicy;
   packageVersion: string;
 };
+
+export type FormlessInstanceDeploymentMigrationPolicy = "existing" | "new";
 
 export type FormlessInstanceDeploymentPlan = {
   account: FormlessInstanceDeploymentAccount;
@@ -71,6 +75,7 @@ export type FormlessInstanceDeploymentPlan = {
     url: string;
   };
   instanceName: string;
+  migrationPolicy: FormlessInstanceDeploymentMigrationPolicy;
   packageVersion: string;
   resources: {
     assets: {
@@ -197,6 +202,7 @@ export type AlchemyFormlessInstanceDeploymentAppOptions = {
 };
 
 export type AlchemyFormlessInstanceDeploymentWorkerProps = {
+  adopt: boolean;
   accountId: string;
   assets: {
     directory: "dist/client";
@@ -234,6 +240,7 @@ export type AlchemyFormlessInstanceDeploymentDependencies = {
   createR2Bucket: (
     id: "media",
     props: {
+      adopt: boolean;
       accountId: string;
       name: string;
       profile?: string;
@@ -376,8 +383,13 @@ export function planFormlessInstanceDeployment(
   const instanceName = normalizeFormlessInstanceName(rawInstanceName);
   const account = parseDeploymentAccount(input.account);
   const packageVersion = parseRequiredString("Package version", input.packageVersion);
+  const migrationPolicy = parseDeploymentMigrationPolicy(input.migrationPolicy ?? "new");
   const workerName = instanceName;
-  const mediaBucketName = `${instanceName}-media`;
+  const mediaBucketName =
+    parseOptionalString(
+      "Formless instance media bucket name",
+      input.mediaBucketName ?? undefined,
+    ) ?? `${instanceName}-media`;
   const authorityNamespaceName = `${instanceName}-authority`;
   const host = `${workerName}.${account.workersDevSubdomain}.${workersDevDomain}`;
 
@@ -390,6 +402,7 @@ export function planFormlessInstanceDeployment(
       url: `https://${host}`,
     },
     instanceName,
+    migrationPolicy,
     packageVersion,
     resources: {
       assets: {
@@ -619,6 +632,7 @@ export async function deployFormlessInstanceWithAlchemy(
     input.secrets.ALCHEMY_PASSWORD,
   );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
+  const adoptExistingDeployment = plan.migrationPolicy === "existing";
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
     phase: "up",
     password: alchemyPassword,
@@ -627,6 +641,7 @@ export async function deployFormlessInstanceWithAlchemy(
     stage: plan.instanceName,
   });
   const mediaBucket = await resolvedDependencies.createR2Bucket("media", {
+    adopt: adoptExistingDeployment,
     accountId: plan.account.id,
     ...profileOptions,
     name: plan.resources.mediaBucket.name,
@@ -636,6 +651,7 @@ export async function deployFormlessInstanceWithAlchemy(
     sqlite: true,
   });
   const worker = await resolvedDependencies.deployViteWorker("worker", {
+    adopt: adoptExistingDeployment,
     accountId: plan.account.id,
     assets: formlessInstanceAlchemyAssets(),
     bindings: {
@@ -1242,6 +1258,14 @@ function parseDeploymentTarget(value: unknown): "workers.dev" {
   }
 
   return "workers.dev";
+}
+
+function parseDeploymentMigrationPolicy(value: unknown): FormlessInstanceDeploymentMigrationPolicy {
+  if (value === "existing" || value === "new") {
+    return value;
+  }
+
+  throw new Error('Formless instance deployment migration policy must be "new" or "existing".');
 }
 
 function parseRequiredString(context: string, value: unknown): string {

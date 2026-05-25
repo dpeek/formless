@@ -60,6 +60,7 @@ describe("Formless instance onboarding planner", () => {
         url: "https://brothers-remote-instance.dpeek.workers.dev",
       },
       instanceName: "brothers-remote-instance",
+      migrationPolicy: "new",
       packageVersion: "0.1.8",
       resources: {
         assets: {
@@ -831,6 +832,7 @@ describe("Alchemy Formless instance deployment", () => {
       {
         id: "media",
         props: {
+          adopt: false,
           accountId: "account-123",
           name: "brother-instance-media",
           profile: "personal",
@@ -851,6 +853,7 @@ describe("Alchemy Formless instance deployment", () => {
       {
         id: "worker",
         props: {
+          adopt: false,
           accountId: "account-123",
           assets: {
             directory: "dist/client",
@@ -883,6 +886,65 @@ describe("Alchemy Formless instance deployment", () => {
       },
     ]);
     expect(finalized).toBe(1);
+  });
+
+  it("marks Worker and media resources for adoption when deploying an existing instance", async () => {
+    const buckets: Array<{ props: unknown }> = [];
+    const workers: Array<{ props: AlchemyFormlessInstanceDeploymentWorkerProps }> = [];
+    const dependencies: AlchemyFormlessInstanceDeploymentDependencies = {
+      createApp: async () => ({
+        finalize: async () => {},
+      }),
+      createDurableObjectNamespace: () => ({}),
+      createR2Bucket: async (_id, props) => {
+        buckets.push({ props });
+        return {};
+      },
+      createSecret: () => ({}),
+      deployViteWorker: async (_id, props) => {
+        workers.push({ props });
+        return { url: props.name ? "https://brother-instance.dpeek.workers.dev" : null };
+      },
+    };
+    const plan = planFormlessInstanceDeployment({
+      account: {
+        id: "account-123",
+        workersDevSubdomain: "dpeek",
+      },
+      instanceName: "brother-instance",
+      mediaBucketName: "existing-media",
+      migrationPolicy: "existing",
+      packageVersion: "0.1.8",
+    });
+
+    await deployFormlessInstanceWithAlchemy(
+      {
+        credentialProfile: null,
+        packageRoot: "/package",
+        plan,
+        secrets: {
+          ALCHEMY_PASSWORD: "alchemy-password",
+          FORMLESS_ADMIN_TOKEN: "admin-secret",
+        },
+        stateRoot: "/state",
+      },
+      dependencies,
+    );
+
+    expect(plan).toMatchObject({
+      migrationPolicy: "existing",
+      resources: {
+        mediaBucket: {
+          name: "existing-media",
+        },
+      },
+      runtimeVars: {
+        FORMLESS_RUNTIME_PROFILE: "instance",
+        VITE_FORMLESS_RUNTIME_PROFILE: "instance",
+      },
+    });
+    expect(buckets[0]?.props).toMatchObject({ adopt: true });
+    expect(workers[0]?.props).toMatchObject({ adopt: true });
   });
 
   it("rejects missing package roots, admin tokens, or Alchemy passwords before mutation", async () => {

@@ -24,6 +24,7 @@ import {
   parseFormlessInstanceWorkspaceManifestJson,
   type FormlessInstanceWorkspaceApp,
   type FormlessInstanceWorkspaceManifest,
+  type FormlessInstanceWorkspaceMigrationPolicy,
   type FormlessInstanceWorkspaceTarget,
 } from "./instance-workspace-config.ts";
 import {
@@ -50,6 +51,16 @@ import {
   type ArchiveDiskWriteResult,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
+import {
+  planFormlessInstanceDeployment,
+  type CheckFormlessInstanceDeployMetadataResult,
+  type DeployFormlessInstanceResult,
+  type FormlessInstanceDeploymentAdapter,
+  type FormlessInstanceDeploymentHealthCheckAdapter,
+  type FormlessInstanceDeploymentPlan,
+  type FormlessInstanceLocalSecretEnvStore,
+  type EnsureFormlessInstanceLocalSecretEnvResult,
+} from "./instance-onboarding.ts";
 import { packageExecCommand } from "./package-commands.ts";
 
 export type InitFormlessInstanceWorkspaceInput = {
@@ -225,6 +236,35 @@ export type ResetFormlessInstanceWorkspaceLocalStateDependencies = {
 export type ResetFormlessInstanceWorkspaceLocalStateResult = {
   localStateRoot: string;
   manifestPath: string;
+  workspaceRoot: string;
+};
+
+export type DeployFormlessInstanceWorkspaceInput = {
+  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
+  targetAlias?: string | null;
+  workspacePath?: string;
+};
+
+export type DeployFormlessInstanceWorkspaceDependencies = {
+  cwd: string;
+  deploymentAdapter: FormlessInstanceDeploymentAdapter;
+  env?: NodeJS.ProcessEnv;
+  healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
+  localSecretEnv: FormlessInstanceLocalSecretEnvStore;
+  packageRoot: string;
+  packageVersion: string;
+  randomToken: () => string;
+};
+
+export type DeployFormlessInstanceWorkspaceResult = {
+  deployment: DeployFormlessInstanceResult;
+  deploymentStateRoot: string;
+  healthCheck: CheckFormlessInstanceDeployMetadataResult;
+  localSecretEnv: EnsureFormlessInstanceLocalSecretEnvResult;
+  migrationPolicy: FormlessInstanceWorkspaceMigrationPolicy;
+  plan: FormlessInstanceDeploymentPlan;
+  secretPath: string;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
 
@@ -634,6 +674,74 @@ export async function resetFormlessInstanceWorkspaceLocalState(
   return {
     localStateRoot,
     manifestPath,
+    workspaceRoot,
+  };
+}
+
+export async function deployFormlessInstanceWorkspace(
+  input: DeployFormlessInstanceWorkspaceInput,
+  dependencies: DeployFormlessInstanceWorkspaceDependencies,
+): Promise<DeployFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "deploy");
+  const plan = formlessInstanceWorkspaceDeploymentPlan({
+    manifest,
+    migrationPolicy: input.migrationPolicy,
+    packageVersion: dependencies.packageVersion,
+    selectedTarget,
+  });
+  const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
+  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    secretState,
+  });
+
+  if (!adminToken) {
+    throw new Error(missingAdminTokenMessage("deploy"));
+  }
+
+  await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
+
+  const deploymentStateRoot = formlessInstanceWorkspaceDeployStateRoot(workspaceRoot, plan);
+  const localSecretEnv = await dependencies.localSecretEnv.ensure({
+    createSecret: dependencies.randomToken,
+    root: deploymentStateRoot,
+  });
+  const deployment = await dependencies.deploymentAdapter.deploy({
+    credentialProfile: null,
+    packageRoot: dependencies.packageRoot,
+    plan,
+    secrets: {
+      ALCHEMY_PASSWORD: localSecretEnv.secrets.ALCHEMY_PASSWORD,
+      FORMLESS_ADMIN_TOKEN: adminToken,
+    },
+    stateRoot: deploymentStateRoot,
+  });
+  const deploymentUrl = normalizeFormlessInstanceWorkspaceTargetUrl(deployment.url);
+
+  if (deploymentUrl !== plan.expectedUrl.url) {
+    throw new Error(
+      `Formless instance deploy returned ${deploymentUrl}, expected claimed target ${plan.expectedUrl.url}.`,
+    );
+  }
+
+  const healthCheck = await dependencies.healthCheck.check({
+    expectedVersion: plan.packageVersion,
+    url: deploymentUrl,
+  });
+
+  return {
+    deployment: {
+      url: deploymentUrl,
+    },
+    deploymentStateRoot,
+    healthCheck,
+    localSecretEnv,
+    migrationPolicy: plan.migrationPolicy,
+    plan,
+    secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
+    selectedTarget,
     workspaceRoot,
   };
 }
@@ -1341,7 +1449,7 @@ function appRecordCount(app: AppArchive): number {
 function requireWorkspaceTarget(
   manifest: FormlessInstanceWorkspaceManifest,
   targetAlias: string | null | undefined,
-  commandName: "check" | "pull" | "push",
+  commandName: "check" | "deploy" | "pull" | "push",
 ): FormlessInstanceWorkspaceTarget {
   const target = selectWorkspaceTarget(manifest, targetAlias);
 
@@ -1350,6 +1458,94 @@ function requireWorkspaceTarget(
   }
 
   return target;
+}
+
+function formlessInstanceWorkspaceDeploymentPlan(input: {
+  manifest: FormlessInstanceWorkspaceManifest;
+  migrationPolicy?: FormlessInstanceWorkspaceMigrationPolicy | null;
+  packageVersion: string;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+}): FormlessInstanceDeploymentPlan {
+  const deploy = input.manifest.deploy;
+
+  if (!deploy) {
+    throw new Error("Formless instance deploy requires manifest deploy config.");
+  }
+
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(
+    deploy.workersDevUrl ?? input.selectedTarget.url,
+  );
+
+  if (targetUrl !== input.selectedTarget.url) {
+    throw new Error(
+      `Formless instance deploy target ${input.selectedTarget.url} does not match deploy.workersDevUrl ${targetUrl}.`,
+    );
+  }
+
+  const facts = workersDevTargetFacts(targetUrl, deploy.workerName);
+  const accountId = deploy.accountId?.trim();
+
+  if (!accountId) {
+    throw new Error("Formless instance deploy requires deploy.accountId.");
+  }
+
+  const migrationPolicy = input.migrationPolicy ?? deploy.migrationPolicy;
+
+  if (migrationPolicy === "existing" && !deploy.mediaBucket) {
+    throw new Error(
+      "Formless instance deploy requires deploy.mediaBucket when migrationPolicy is existing.",
+    );
+  }
+
+  return planFormlessInstanceDeployment({
+    account: {
+      id: accountId,
+      workersDevSubdomain: facts.workersDevSubdomain,
+    },
+    instanceName: facts.workerName,
+    mediaBucketName: deploy.mediaBucket,
+    migrationPolicy,
+    packageVersion: input.packageVersion,
+  });
+}
+
+function formlessInstanceWorkspaceDeployStateRoot(
+  workspaceRoot: string,
+  plan: FormlessInstanceDeploymentPlan,
+): string {
+  return path.join(workspaceRoot, ".formless/deploy", plan.resources.worker.name);
+}
+
+function workersDevTargetFacts(
+  targetUrl: string,
+  expectedWorkerName: string | undefined,
+): { workerName: string; workersDevSubdomain: string } {
+  const url = new URL(targetUrl);
+  const suffix = ".workers.dev";
+
+  if (url.protocol !== "https:" || !url.hostname.endsWith(suffix)) {
+    throw new Error("Formless instance deploy supports workers.dev target URLs only.");
+  }
+
+  const labels = url.hostname.slice(0, -suffix.length).split(".");
+
+  if (labels.length !== 2) {
+    throw new Error("Formless instance deploy requires a workers.dev target host.");
+  }
+
+  const [workerName, workersDevSubdomain] = labels;
+
+  if (!workerName || !workersDevSubdomain) {
+    throw new Error("Formless instance deploy requires a workers.dev target host.");
+  }
+
+  if (expectedWorkerName !== undefined && expectedWorkerName !== workerName) {
+    throw new Error(
+      `Formless instance deploy target worker "${workerName}" does not match deploy.workerName "${expectedWorkerName}".`,
+    );
+  }
+
+  return { workerName, workersDevSubdomain };
 }
 
 async function readWorkspaceAppArchivesForPush(
@@ -1532,10 +1728,14 @@ function requiredGeneratedToken(value: string): string {
   return token;
 }
 
-function missingAdminTokenMessage(action: "adopt"): string {
+function missingAdminTokenMessage(action: "adopt" | "deploy"): string {
   return [
-    `Formless instance token ${action} requires an admin token.`,
-    `Cloudflare Worker secrets cannot be read back; pass --admin-token or set ${FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME}.`,
+    action === "adopt"
+      ? "Formless instance token adopt requires an admin token."
+      : "Formless instance deploy requires an admin token.",
+    action === "adopt"
+      ? `Cloudflare Worker secrets cannot be read back; pass --admin-token or set ${FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME}.`
+      : `Cloudflare Worker secrets cannot be read back; run \`formless instance token adopt\`, run \`formless instance token rotate\`, or set ${FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME}.`,
   ].join(" ");
 }
 

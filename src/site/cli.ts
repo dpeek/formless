@@ -16,9 +16,8 @@ import {
   type ImportSiteProjectArchiveResult,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
-import { formlessCliUsage, parseFormlessCliArgs, type FormlessCliCommand } from "./cli-command.ts";
+import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
 import {
-  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
   type FormlessInstanceWorkspaceApp,
   type FormlessInstanceWorkspaceManifest,
   type FormlessInstanceWorkspaceTarget,
@@ -27,6 +26,7 @@ import { FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH } from "./instance-worksp
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
+  deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
   resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
@@ -36,6 +36,8 @@ import {
   rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
   type CheckFormlessInstanceWorkspaceResult,
+  type DeployFormlessInstanceWorkspaceInput,
+  type DeployFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
@@ -138,6 +140,9 @@ export {
   type CheckFormlessInstanceWorkspaceDependencies,
   type CheckFormlessInstanceWorkspaceInput,
   type CheckFormlessInstanceWorkspaceResult,
+  type DeployFormlessInstanceWorkspaceDependencies,
+  type DeployFormlessInstanceWorkspaceInput,
+  type DeployFormlessInstanceWorkspaceResult,
   type DevFormlessInstanceWorkspaceDependencies,
   type DevFormlessInstanceWorkspaceInput,
   type FormlessInstanceWorkspaceStatusDependencies,
@@ -479,9 +484,11 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceTokenRotateResult(result, dependencies.cwd));
       return;
     }
-    case "instanceDeploy":
-      dependencies.log(formatInstanceWorkspaceCommandSkeleton(command, dependencies.cwd));
+    case "instanceDeploy": {
+      const result = await deployFormlessInstanceWorkspace(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
       return;
+    }
     case "save": {
       const result = await saveSiteProject(command, dependencies);
       dependencies.log(
@@ -743,6 +750,31 @@ export async function resetFormlessInstanceWorkspaceLocalState(
   dependencies: Pick<FormlessCliDependencies, "cwd"> = nodeFormlessCliDependencies(),
 ): Promise<ResetFormlessInstanceWorkspaceLocalStateResult> {
   return resetFormlessInstanceWorkspaceLocalStateCommand(input, dependencies);
+}
+
+export async function deployFormlessInstanceWorkspace(
+  input: DeployFormlessInstanceWorkspaceInput,
+  dependencies: Pick<
+    FormlessCliDependencies,
+    | "cwd"
+    | "deploymentAdapter"
+    | "env"
+    | "healthCheck"
+    | "localSecretEnv"
+    | "packageRoot"
+    | "randomToken"
+  > = nodeFormlessCliDependencies(),
+): Promise<DeployFormlessInstanceWorkspaceResult> {
+  return deployFormlessInstanceWorkspaceCommand(input, {
+    cwd: dependencies.cwd,
+    deploymentAdapter: dependencies.deploymentAdapter,
+    env: dependencies.env,
+    healthCheck: dependencies.healthCheck,
+    localSecretEnv: dependencies.localSecretEnv,
+    packageRoot: dependencies.packageRoot,
+    packageVersion: packageJson.version,
+    randomToken: dependencies.randomToken,
+  });
 }
 
 export async function adoptFormlessInstanceWorkspaceAdminToken(
@@ -1029,71 +1061,23 @@ function formatInstanceWorkspaceTokenRotateResult(
   ].join("\n");
 }
 
-function formatInstanceWorkspaceCommandSkeleton(
-  command: FormlessInstanceWorkspaceCliCommand,
+function formatInstanceWorkspaceDeployResult(
+  result: DeployFormlessInstanceWorkspaceResult,
   cwd: string,
 ): string {
-  const workspaceRoot = path.resolve(cwd, command.workspacePath);
-  const lines = [
-    `Instance workspace command parsed: ${formatInstanceWorkspaceCommandName(command)}.`,
-    `Workspace: ${formatCliPath(cwd, workspaceRoot)}.`,
-    `Manifest: ${formatCliPath(cwd, path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE))}.`,
-    `Secret state: ${formatCliPath(cwd, path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH))}.`,
-  ];
-
-  if ("targetAlias" in command) {
-    lines.push(`Target: ${command.targetAlias ?? "<manifest default>"}.`);
-  }
-
-  if (command.kind === "instanceInitWorkspace" && command.targetUrl) {
-    lines.push(`Target URL: ${command.targetUrl}.`);
-  }
-
-  lines.push("No files changed: this command skeleton only validates arguments.");
-
-  return lines.join("\n");
-}
-
-type FormlessInstanceWorkspaceCliCommand = Extract<
-  FormlessCliCommand,
-  {
-    kind:
-      | "instanceCheck"
-      | "instanceDeploy"
-      | "instanceDev"
-      | "instanceInitWorkspace"
-      | "instancePull"
-      | "instancePush"
-      | "instanceResetLocal"
-      | "instanceStatus"
-      | "instanceTokenAdopt"
-      | "instanceTokenRotate";
-  }
->;
-
-function formatInstanceWorkspaceCommandName(command: FormlessInstanceWorkspaceCliCommand): string {
-  switch (command.kind) {
-    case "instanceInitWorkspace":
-      return "init-workspace";
-    case "instanceStatus":
-      return "status";
-    case "instancePull":
-      return "pull";
-    case "instanceCheck":
-      return "check";
-    case "instancePush":
-      return "push";
-    case "instanceDev":
-      return "dev";
-    case "instanceResetLocal":
-      return "reset-local";
-    case "instanceDeploy":
-      return "deploy";
-    case "instanceTokenAdopt":
-      return "token adopt";
-    case "instanceTokenRotate":
-      return "token rotate";
-  }
+  return [
+    "Instance workspace deployed.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Worker: ${result.plan.resources.worker.name}.`,
+    `Media bucket: ${result.plan.resources.mediaBucket.name}.`,
+    `Migration policy: ${result.migrationPolicy}.`,
+    "Runtime profile: server instance, client instance.",
+    `Deploy metadata: version ${result.healthCheck.version} verified.`,
+    `Deployment state: ${formatCliPath(cwd, result.deploymentStateRoot)}.`,
+    `Local deploy secrets: ${formatCliPath(cwd, result.localSecretEnv.path)}.`,
+    `Automation secret state: ${formatCliPath(cwd, result.secretPath)}.`,
+  ].join("\n");
 }
 
 function formatWorkspaceTargets(manifest: FormlessInstanceWorkspaceManifest): string {
