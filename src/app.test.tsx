@@ -94,10 +94,15 @@ import {
 import { testSiteSeedRecords } from "./test/site-records.ts";
 import type { AppInstall } from "./shared/app-installs.ts";
 
-function renderRoute(path: string, runtimeProfile?: RuntimeProfile) {
+function renderRoute(
+  path: string,
+  runtimeProfile?: RuntimeProfile,
+  installedAppRouteInstalls?: readonly AppInstall[],
+) {
   return renderToStaticMarkup(
     <Router ssrPath={path}>
       <App
+        installedAppRouteInstalls={installedAppRouteInstalls}
         routeComponents={{ HomeRoute, SchemaRoute, SitePageRoute }}
         runtimeProfile={runtimeProfile ?? createDevRuntimeProfile()}
       />
@@ -477,11 +482,15 @@ function appInstallFixture({
     installId,
     label,
     packageAppKey,
-    publicRoute: `/sites/${installId}`,
-    publicRoutePrefix: `/sites/${installId}/`,
     schemaRoute: `/apps/${installId}/schema`,
     status: "installed",
     updatedAt: "2026-05-25T00:00:00.000Z",
+    ...(packageAppKey === "site"
+      ? {
+          publicRoute: `/sites/${installId}` as const,
+          publicRoutePrefix: `/sites/${installId}/` as const,
+        }
+      : {}),
   };
 }
 
@@ -691,15 +700,21 @@ describe("App smoke routes", () => {
     expect(linkHtml(appSchemaHtml, "/setup")).not.toContain('aria-current="page"');
 
     resetClientStore();
+    const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const installedWorld = findRuntimeWorldMountByRoute(
       createDevRuntimeProfile(),
       "/apps/personal/schema",
+      {
+        appInstalls,
+      },
     );
     if (!installedWorld?.target) {
       throw new Error("Expected installed app target for /apps/personal/schema.");
     }
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
-    const installedSchemaHtml = generatedAppFrameHtml(renderRoute("/apps/personal/schema"));
+    const installedSchemaHtml = generatedAppFrameHtml(
+      renderRoute("/apps/personal/schema", undefined, appInstalls),
+    );
 
     expect(linkHtml(installedSchemaHtml, "/apps/personal/schema")).toContain('aria-current="page"');
     expect(linkHtml(installedSchemaHtml, "/apps/personal/settings")).not.toContain(
@@ -719,11 +734,13 @@ describe("App smoke routes", () => {
 
   it("renders product instance routes outside the dev workbench route vocabulary", () => {
     const instanceProfile = createInstanceRuntimeProfile();
+    const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const shellHtml = renderRoute("/", instanceProfile);
     const legacyHtml = renderRoute("/site", instanceProfile);
     const adminHtml = renderToStaticMarkup(
       <Router ssrPath="/apps/personal/settings">
         <App
+          installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute: SchemaKeyProbeHomeRoute,
             SchemaRoute,
@@ -801,9 +818,11 @@ describe("App smoke routes", () => {
 
   it("routes installed Site admin paths through generated app targets", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
+    const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const html = renderToStaticMarkup(
       <Router ssrPath="/apps/personal/settings">
         <App
+          installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute: TargetProbeHomeRoute,
             SchemaRoute,
@@ -835,15 +854,58 @@ describe("App smoke routes", () => {
     expect(runtimeShellHtml(html)).toContain("App management");
     expect(linkHtml(runtimeShellHtml(html), "/site")).not.toContain('aria-current="page"');
     expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain('aria-current="page"');
-    expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain("Site personal");
+    expect(linkHtml(runtimeShellHtml(html), "/apps/personal")).toContain("Personal Site");
     expect(html.slice(0, html.indexOf('data-frame="runtime-shell"'))).not.toContain(
       "App management",
     );
   });
 
+  it("routes installed Tasks admin paths through install metadata", () => {
+    const appInstalls = [
+      appInstallFixture({
+        installId: "task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/apps/task-workspace">
+        <App
+          installedAppRouteInstalls={appInstalls}
+          routeComponents={{
+            HomeRoute: TargetProbeHomeRoute,
+            SchemaRoute,
+            SitePageRoute,
+          }}
+          runtimeProfile={createDevRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectRuntimeShell(html);
+    expect(html).toContain('data-route-schema-key="tasks"');
+    expect(html).toContain('data-screen-path="/"');
+    expect(html).toContain('data-target-kind="appInstall"');
+    expect(html).toContain('data-install-id="task-workspace"');
+    expectAppSettings(html, {
+      appLabel: "Tasks",
+      resetScopeLabel: "Tasks app install task-workspace",
+      schemaKey: "tasks",
+      schemaRoute: "/apps/task-workspace/schema",
+      syncWorldKey: "app:task-workspace",
+    });
+    expect(linkHtml(runtimeShellHtml(html), "/apps/task-workspace")).toContain(
+      'aria-current="page"',
+    );
+    expect(linkHtml(runtimeShellHtml(html), "/apps/task-workspace")).toContain("Task Workspace");
+  });
+
   it("keeps installed Site home routes scoped to the installed app target", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
-    const loadingHtml = renderRoute("/apps/personal/settings");
+    const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
+    const loadingHtml = renderRoute("/apps/personal/settings", undefined, appInstalls);
 
     expect(loadingHtml).toContain('data-frame="workbench"');
     expect(loadingHtml).toContain('data-frame="generated-app"');
@@ -866,12 +928,13 @@ describe("App smoke routes", () => {
     const installedWorld = findRuntimeWorldMountByRoute(
       createDevRuntimeProfile(),
       "/apps/personal/settings",
+      { appInstalls },
     );
     if (!installedWorld?.target) {
       throw new Error("Expected installed app target for /apps/personal/settings.");
     }
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
-    const activeHtml = renderRoute("/apps/personal/settings");
+    const activeHtml = renderRoute("/apps/personal/settings", undefined, appInstalls);
 
     expectGeneratedAppChromeLabels(activeHtml, { appTitle: "Site", screenTitle: "Settings" });
     expect(activeHtml).toContain('href="/apps/personal/settings"');
@@ -881,7 +944,8 @@ describe("App smoke routes", () => {
 
   it("keeps installed Site schema routes scoped to the installed app target", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
-    const loadingHtml = renderRoute("/apps/personal/schema");
+    const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
+    const loadingHtml = renderRoute("/apps/personal/schema", undefined, appInstalls);
 
     expect(loadingHtml).toContain('data-frame="workbench"');
     expect(loadingHtml).toContain('data-frame="generated-app"');
@@ -907,12 +971,15 @@ describe("App smoke routes", () => {
     const installedWorld = findRuntimeWorldMountByRoute(
       createDevRuntimeProfile(),
       "/apps/personal/schema",
+      {
+        appInstalls,
+      },
     );
     if (!installedWorld?.target) {
       throw new Error("Expected installed app target for /apps/personal/schema.");
     }
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
-    const activeHtml = renderRoute("/apps/personal/schema");
+    const activeHtml = renderRoute("/apps/personal/schema", undefined, appInstalls);
 
     expect(activeHtml).toContain("Saved draft");
     expect(activeHtml).toContain("&quot;siteSettingsHome&quot;");
@@ -921,18 +988,21 @@ describe("App smoke routes", () => {
 
   it("selects supported installed apps for the dev runtime shell picker", () => {
     const runtimeProfile = createDevRuntimeProfile();
-    const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, "/apps/personal/settings");
+    const appInstalls = [
+      appInstallFixture({ installId: "personal", label: "Personal Site" }),
+      appInstallFixture({ installId: "docs", label: "Docs Site" }),
+      appInstallFixture({
+        installId: "task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      }),
+    ];
+    const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, "/apps/personal/settings", {
+      appInstalls,
+    });
 
     const links = selectRuntimeShellInstalledAppLinks({
-      installs: [
-        appInstallFixture({ installId: "personal", label: "Personal Site" }),
-        appInstallFixture({ installId: "docs", label: "Docs Site" }),
-        appInstallFixture({
-          installId: "task-workspace",
-          label: "Task Workspace",
-          packageAppKey: "tasks",
-        }),
-      ],
+      installs: appInstalls,
       routeWorld,
       runtimeProfile,
     });
@@ -954,6 +1024,14 @@ describe("App smoke routes", () => {
         label: "Docs Site",
         packageAppKey: "site",
       },
+      {
+        href: "/apps/task-workspace",
+        installId: "task-workspace",
+        isCurrent: false,
+        key: "tasks:task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      },
     ]);
     expect(
       selectRuntimeShellInstalledAppLinks({
@@ -974,9 +1052,11 @@ describe("App smoke routes", () => {
   });
 
   it("routes installed Site public paths without workbench chrome", () => {
+    const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
     const html = renderToStaticMarkup(
       <Router ssrPath="/sites/personal/blog/shipping-schema-backed-authoring">
         <App
+          installedAppRouteInstalls={appInstalls}
           routeComponents={{
             HomeRoute,
             SchemaRoute,
@@ -992,6 +1072,34 @@ describe("App smoke routes", () => {
     expect(html).toContain('data-route-base="/sites/personal"');
     expect(html).toContain('data-target-kind="appInstall"');
     expect(html).toContain('data-install-id="personal"');
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+  });
+
+  it("does not route non-Site installs through installed Site public paths", () => {
+    const appInstalls = [
+      appInstallFixture({
+        installId: "task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <Router ssrPath="/sites/task-workspace">
+        <App
+          installedAppRouteInstalls={appInstalls}
+          routeComponents={{
+            HomeRoute,
+            SchemaRoute,
+            SitePageRoute: SitePageRouteProbe,
+          }}
+          runtimeProfile={createDevRuntimeProfile()}
+        />
+      </Router>,
+    );
+
+    expect(html).toContain("Not found");
+    expect(html).not.toContain('data-site-link-mode="installed"');
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).not.toContain('data-frame="generated-app"');
   });

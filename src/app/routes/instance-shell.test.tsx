@@ -4,11 +4,13 @@ import { listBundledAppPackages, type AppInstall } from "../../shared/app-instal
 import { InstanceShellRouteView } from "./instance-shell.tsx";
 
 describe("instance shell route view", () => {
-  it("lists installed apps and keeps Site installable as a bundled app", () => {
+  it("lists installed apps and renders bundled package install forms", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
-        installId="docs"
-        label="Docs Site"
+        installDrafts={{
+          site: { installId: "docs", label: "Docs Site" },
+          tasks: { installId: "tasks", label: "Task Space" },
+        }}
         state={{
           installing: false,
           installs: [
@@ -30,18 +32,24 @@ describe("instance shell route view", () => {
     expect(html).toContain('href="/sites/personal"');
     expect(html).toContain("Bundled apps");
     expect(html).toContain("Public website app backed by the bundled Site schema");
+    expect(html).toContain("Task tracking app backed by the bundled Tasks schema");
     expect(html).toContain("Install Site");
+    expect(html).toContain("Install Tasks");
     expect(html).toContain('value="Docs Site"');
     expect(html).toContain('value="docs"');
+    expect(html).toContain('value="Task Space"');
+    expect(html).toContain('value="tasks"');
   });
 
   it("renders install errors without hiding existing installs", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
-        installId="personal"
-        label="Other Site"
+        installDrafts={{
+          site: { installId: "personal", label: "Other Site" },
+        }}
         state={{
           installError: 'Install id "personal" is already installed.',
+          installErrorPackageAppKey: "site",
           installing: false,
           installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
           packages: listBundledAppPackages(),

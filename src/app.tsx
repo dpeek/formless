@@ -21,8 +21,10 @@ import type { SitePageLinkMode } from "./app/site-renderer/links.ts";
 import {
   findRuntimeWorldMountByRoute,
   hasGeneratedRoutes,
+  installedAppWorldMountFromInstall,
   installedAppWorldMountFromInstallId,
   installedSitePublicSurfaceFromRoute,
+  isInstalledSitePublicRoutePath,
   isRuntimePublicSiteRoute,
   resolveRuntimeProfile,
   runtimeScreenPathFromRoute,
@@ -62,16 +64,34 @@ const defaultRouteComponents: AppRouteComponents = {
 };
 
 export function App({
+  installedAppRouteInstalls: installedAppRouteInstallsProp,
   routeComponents = defaultRouteComponents,
   runtimeProfile: runtimeProfileProp,
-}: { routeComponents?: AppRouteComponents; runtimeProfile?: RuntimeProfile } = {}) {
+}: {
+  installedAppRouteInstalls?: readonly AppInstall[];
+  routeComponents?: AppRouteComponents;
+  runtimeProfile?: RuntimeProfile;
+} = {}) {
   const [location] = useLocation();
   const runtimeProfile = useMemo(
     () => runtimeProfileProp ?? resolveRuntimeProfile(),
     [runtimeProfileProp],
   );
-  const isPublicSiteRoute = isRuntimePublicSiteRoute(runtimeProfile, location);
-  const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location);
+  const installedAppRouteInstalls = useRuntimeInstalledAppRouteInstalls(
+    runtimeProfile,
+    installedAppRouteInstallsProp,
+    location,
+  );
+  const routeContext = useMemo(
+    () => ({ appInstalls: installedAppRouteInstalls }),
+    [installedAppRouteInstalls],
+  );
+  const isPublicSiteRoute = isRuntimePublicSiteRoute(runtimeProfile, location, routeContext);
+  const isPotentialInstalledSitePublicRoute = isInstalledSitePublicRoutePath(
+    runtimeProfile,
+    location,
+  );
+  const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location, routeContext);
   const routeApp = routeWorld?.app;
   const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
@@ -104,12 +124,17 @@ export function App({
   if (
     isOwnerSetupRoute ||
     isPublicSiteRoute ||
+    isPotentialInstalledSitePublicRoute ||
     runtimeProfile.shell === "publishedSite" ||
     (runtimeProfile.shell === "instance" && (isInstanceShellRoute || !routeWorld))
   ) {
     return (
       <main className="min-h-dvh">
-        <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
+        <AppRoutes
+          installedAppRouteInstalls={installedAppRouteInstalls}
+          routeComponents={routeComponents}
+          runtimeProfile={runtimeProfile}
+        />
       </main>
     );
   }
@@ -123,19 +148,36 @@ export function App({
       screenModels={routeAppScreenModels}
       world={routeWorld}
     >
-      <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
+      <AppRoutes
+        installedAppRouteInstalls={installedAppRouteInstalls}
+        routeComponents={routeComponents}
+        runtimeProfile={runtimeProfile}
+      />
     </ActiveAppSurface>
   );
 
   return runtimeProfile.shell === "dev" ? (
-    <WorkbenchFrame currentPath={location} routeWorld={routeWorld} runtimeProfile={runtimeProfile}>
+    <WorkbenchFrame
+      currentPath={location}
+      installedAppRouteInstalls={installedAppRouteInstalls}
+      routeWorld={routeWorld}
+      runtimeProfile={runtimeProfile}
+    >
       {isInstanceShellRoute ? (
         <main className="bg-bg" data-frame="instance-shell">
-          <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
+          <AppRoutes
+            installedAppRouteInstalls={installedAppRouteInstalls}
+            routeComponents={routeComponents}
+            runtimeProfile={runtimeProfile}
+          />
         </main>
       ) : routeWorld === undefined ? (
         <main className="bg-bg">
-          <AppRoutes routeComponents={routeComponents} runtimeProfile={runtimeProfile} />
+          <AppRoutes
+            installedAppRouteInstalls={installedAppRouteInstalls}
+            routeComponents={routeComponents}
+            runtimeProfile={runtimeProfile}
+          />
         </main>
       ) : (
         generatedAppFrame
@@ -146,18 +188,77 @@ export function App({
   );
 }
 
+function useRuntimeInstalledAppRouteInstalls(
+  runtimeProfile: RuntimeProfile,
+  initialInstalls: readonly AppInstall[] | undefined,
+  refreshKey: string,
+): AppInstall[] | undefined {
+  const shouldLoad =
+    runtimeProfile.installedAppRoutes !== undefined ||
+    runtimeProfile.installedSitePublicRoutes !== undefined;
+  const [installs, setInstalls] = useState<AppInstall[] | undefined>(() =>
+    initialInstalls ? [...initialInstalls] : shouldLoad ? undefined : [],
+  );
+
+  useEffect(() => {
+    if (initialInstalls) {
+      setInstalls([...initialInstalls]);
+      return;
+    }
+
+    if (!shouldLoad) {
+      setInstalls([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    let stopped = false;
+
+    setInstalls(undefined);
+
+    async function loadInstalls() {
+      try {
+        const response = await fetchInstanceAppInstalls({ signal: controller.signal });
+
+        if (!stopped) {
+          setInstalls(response.installs);
+        }
+      } catch {
+        if (!stopped && !controller.signal.aborted) {
+          setInstalls([]);
+        }
+      }
+    }
+
+    void loadInstalls();
+
+    return () => {
+      stopped = true;
+      controller.abort();
+    };
+  }, [initialInstalls, refreshKey, shouldLoad]);
+
+  return installs;
+}
+
 function WorkbenchFrame({
   children,
   currentPath,
+  installedAppRouteInstalls,
   routeWorld,
   runtimeProfile,
 }: {
   children: ReactNode;
   currentPath: string;
+  installedAppRouteInstalls: readonly AppInstall[] | undefined;
   routeWorld: RuntimeWorldMount | undefined;
   runtimeProfile: RuntimeProfile;
 }) {
-  const installedAppLinks = useRuntimeShellInstalledAppLinks(runtimeProfile, routeWorld);
+  const installedAppLinks = useRuntimeShellInstalledAppLinks(
+    runtimeProfile,
+    routeWorld,
+    installedAppRouteInstalls,
+  );
   const appManagementIsCurrent = normalizeRoutePath(currentPath) === "/";
 
   return (
@@ -248,18 +349,17 @@ export function selectRuntimeShellInstalledAppLinks({
     return [];
   }
 
-  const supportedPackageAppKey = installedAppRoutes.packageAppKey;
   const currentInstall =
-    routeWorld?.target?.kind === "appInstall" && routeWorld.app.key === supportedPackageAppKey
+    routeWorld?.target?.kind === "appInstall"
       ? {
           href: routeWorld.route as `/apps/${string}`,
           installId: routeWorld.target.installId,
           label: `${routeWorld.app.label} ${routeWorld.target.installId}`,
-          packageAppKey: supportedPackageAppKey,
+          packageAppKey: routeWorld.app.key,
         }
       : undefined;
   const links = installs
-    .filter((install) => install.packageAppKey === supportedPackageAppKey)
+    .filter((install) => installedAppWorldMountFromInstall(runtimeProfile, install) !== undefined)
     .map((install) => ({
       href: install.adminRoute,
       installId: install.installId,
@@ -282,56 +382,32 @@ export function selectRuntimeShellInstalledAppLinks({
 function useRuntimeShellInstalledAppLinks(
   runtimeProfile: RuntimeProfile,
   routeWorld: RuntimeWorldMount | undefined,
+  installs: readonly AppInstall[] | undefined,
 ): RuntimeShellInstalledAppLink[] {
-  const [installs, setInstalls] = useState<AppInstall[]>([]);
-  const shouldLoad =
-    runtimeProfile.shell === "dev" && runtimeProfile.installedAppRoutes !== undefined;
-  const activeInstallId =
-    routeWorld?.target?.kind === "appInstall" ? routeWorld.target.installId : "";
-
-  useEffect(() => {
-    if (!shouldLoad) {
-      setInstalls([]);
-      return;
-    }
-
-    const controller = new AbortController();
-    let stopped = false;
-
-    async function loadInstalls() {
-      try {
-        const response = await fetchInstanceAppInstalls({ signal: controller.signal });
-
-        if (!stopped) {
-          setInstalls(response.installs);
-        }
-      } catch {
-        if (!stopped && !controller.signal.aborted) {
-          setInstalls([]);
-        }
-      }
-    }
-
-    void loadInstalls();
-
-    return () => {
-      stopped = true;
-      controller.abort();
-    };
-  }, [activeInstallId, shouldLoad]);
-
-  return selectRuntimeShellInstalledAppLinks({ installs, routeWorld, runtimeProfile });
+  return useMemo(
+    () =>
+      selectRuntimeShellInstalledAppLinks({
+        installs: installs ?? [],
+        routeWorld,
+        runtimeProfile,
+      }),
+    [installs, routeWorld, runtimeProfile],
+  );
 }
 
 function AppRoutes({
+  installedAppRouteInstalls,
   routeComponents,
   runtimeProfile,
 }: {
+  installedAppRouteInstalls: readonly AppInstall[] | undefined;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
 }) {
   const { HomeRoute, SchemaRoute, SitePageRoute } = routeComponents;
   const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
+  const hasLazyGeneratedRoutes =
+    generatedWorlds.length > 0 || runtimeProfile.installedAppRoutes !== undefined;
   const routes = (
     <Switch>
       {runtimeProfile.defaultRedirect ? (
@@ -388,6 +464,7 @@ function AppRoutes({
         <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId/schema`}>
           {(params) => (
             <InstalledAppSchemaRoute
+              installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -399,6 +476,7 @@ function AppRoutes({
         <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId`}>
           {(params) => (
             <InstalledAppHomeRoute
+              installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -411,6 +489,7 @@ function AppRoutes({
         <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId/*`}>
           {(params) => (
             <InstalledAppHomeRoute
+              installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -423,6 +502,7 @@ function AppRoutes({
         <Route path={`${runtimeProfile.installedSitePublicRoutes.siteRouteBase}/:installId`}>
           {(params) => (
             <InstalledSitePublicRoute
+              installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -435,6 +515,7 @@ function AppRoutes({
         <Route path={`${runtimeProfile.installedSitePublicRoutes.siteRouteBase}/:installId/*`}>
           {(params) => (
             <InstalledSitePublicRoute
+              installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
@@ -471,7 +552,7 @@ function AppRoutes({
     </Switch>
   );
 
-  return generatedWorlds.length > 0 ? (
+  return hasLazyGeneratedRoutes ? (
     <Suspense fallback={<RouteLoading />}>{routes}</Suspense>
   ) : (
     routes
@@ -479,18 +560,29 @@ function AppRoutes({
 }
 
 function InstalledAppSchemaRoute({
+  installedAppRouteInstalls,
   installId,
   routeComponents,
   runtimeProfile,
 }: {
+  installedAppRouteInstalls: readonly AppInstall[] | undefined;
   installId: string | undefined;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
 }) {
   const { SchemaRoute } = routeComponents;
-  const world = installId
-    ? installedAppWorldMountFromInstallId(runtimeProfile, installId)
-    : undefined;
+
+  if (!installId) {
+    return <NotFoundRoute />;
+  }
+
+  if (installedAppRouteInstalls === undefined) {
+    return <RouteLoading />;
+  }
+
+  const world = installedAppWorldMountFromInstallId(runtimeProfile, installId, {
+    appInstalls: installedAppRouteInstalls,
+  });
 
   if (!world?.schemaRoute) {
     return <NotFoundRoute />;
@@ -500,22 +592,33 @@ function InstalledAppSchemaRoute({
 }
 
 function InstalledAppHomeRoute({
+  installedAppRouteInstalls,
   installId,
   routeComponents,
   runtimeProfile,
   screenPath,
 }: {
+  installedAppRouteInstalls: readonly AppInstall[] | undefined;
   installId: string | undefined;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
   screenPath: string;
 }) {
   const { HomeRoute } = routeComponents;
-  const world = installId
-    ? installedAppWorldMountFromInstallId(runtimeProfile, installId)
-    : undefined;
 
-  if (!world) {
+  if (!installId) {
+    return <NotFoundRoute />;
+  }
+
+  if (installedAppRouteInstalls === undefined) {
+    return <RouteLoading />;
+  }
+
+  const world = installedAppWorldMountFromInstallId(runtimeProfile, installId, {
+    appInstalls: installedAppRouteInstalls,
+  });
+
+  if (!world || (!world.schemaRoute && screenPath === "/schema")) {
     return <NotFoundRoute />;
   }
 
@@ -523,11 +626,13 @@ function InstalledAppHomeRoute({
 }
 
 function InstalledSitePublicRoute({
+  installedAppRouteInstalls,
   installId,
   routeComponents,
   runtimeProfile,
   slug,
 }: {
+  installedAppRouteInstalls: readonly AppInstall[] | undefined;
   installId: string | undefined;
   routeComponents: AppRouteComponents;
   runtimeProfile: RuntimeProfile;
@@ -535,11 +640,21 @@ function InstalledSitePublicRoute({
 }) {
   const { SitePageRoute } = routeComponents;
   const publicRoutes = runtimeProfile.installedSitePublicRoutes;
-  const sitePath =
-    publicRoutes && installId
-      ? `${publicRoutes.siteRouteBase}/${installId}${slug === publicRoutes.homeSlug ? "" : `/${slug}`}`
-      : "";
-  const surface = installedSitePublicSurfaceFromRoute(runtimeProfile, sitePath);
+
+  if (!installId) {
+    return <NotFoundRoute />;
+  }
+
+  if (installedAppRouteInstalls === undefined) {
+    return <RouteLoading />;
+  }
+
+  const sitePath = publicRoutes
+    ? `${publicRoutes.siteRouteBase}/${installId}${slug === publicRoutes.homeSlug ? "" : `/${slug}`}`
+    : "";
+  const surface = installedSitePublicSurfaceFromRoute(runtimeProfile, sitePath, {
+    appInstalls: installedAppRouteInstalls,
+  });
 
   if (!surface) {
     return <NotFoundRoute />;

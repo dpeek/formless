@@ -17,6 +17,34 @@ import {
   runtimeScreenPathFromRoute,
   runtimeScreenRoute,
 } from "./runtime-profile.ts";
+import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
+
+function appInstallFixture({
+  installId,
+  label,
+  packageAppKey = "site",
+}: {
+  installId: string;
+  label: string;
+  packageAppKey?: PackageAppKey;
+}): AppInstall {
+  return {
+    adminRoute: `/apps/${installId}`,
+    createdAt: "2026-05-25T00:00:00.000Z",
+    installId,
+    label,
+    packageAppKey,
+    schemaRoute: `/apps/${installId}/schema`,
+    status: "installed",
+    updatedAt: "2026-05-25T00:00:00.000Z",
+    ...(packageAppKey === "site"
+      ? {
+          publicRoute: `/sites/${installId}` as const,
+          publicRoutePrefix: `/sites/${installId}/` as const,
+        }
+      : {}),
+  };
+}
 
 describe("runtime profile resolver", () => {
   it("resolves the product instance profile without schema-keyed app mounts", () => {
@@ -28,7 +56,6 @@ describe("runtime profile resolver", () => {
     expect(profile.instanceShell).toBe(true);
     expect(profile.installedAppRoutes).toEqual({
       appRouteBase: "/apps",
-      packageAppKey: "site",
       schemaRoutes: false,
     });
     expect(profile.installedSitePublicRoutes).toEqual({
@@ -41,8 +68,6 @@ describe("runtime profile resolver", () => {
     expect(findRuntimeWorldMountByRoute(profile, "/estii")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/site")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/tasks/schema")).toBeUndefined();
-    expect(installedAppWorldMountFromInstallId(profile, "personal")?.schemaRoute).toBeUndefined();
-    expect(installedAppWorldMountFromInstallId(profile, "site")?.route).toBe("/apps/site");
     expect(runtimeRoutePolicy(profile)).toEqual({
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
@@ -60,7 +85,6 @@ describe("runtime profile resolver", () => {
     expect(profile.instanceShell).toBe(true);
     expect(profile.installedAppRoutes).toEqual({
       appRouteBase: "/apps",
-      packageAppKey: "site",
       schemaRoutes: true,
     });
     expect(profile.installedSitePublicRoutes).toEqual({
@@ -87,12 +111,27 @@ describe("runtime profile resolver", () => {
     });
   });
 
-  it("resolves installed Site admin route mounts from install ids", () => {
+  it("resolves installed admin route mounts from install records", () => {
     const profile = createDevRuntimeProfile();
-    const world = installedAppWorldMountFromInstallId(profile, "personal");
+    const appInstalls = [
+      appInstallFixture({ installId: "personal", label: "Personal Site" }),
+      appInstallFixture({
+        installId: "task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      }),
+    ];
+    const world = installedAppWorldMountFromInstallId(profile, "personal", { appInstalls });
+    const tasksWorld = installedAppWorldMountFromInstallId(profile, "task-workspace", {
+      appInstalls,
+    });
 
     if (!world?.target || world.target.kind !== "appInstall") {
       throw new Error("Missing installed Site world.");
+    }
+
+    if (!tasksWorld?.target || tasksWorld.target.kind !== "appInstall") {
+      throw new Error("Missing installed Tasks world.");
     }
 
     expect(world.app.key).toBe("site");
@@ -100,21 +139,68 @@ describe("runtime profile resolver", () => {
     expect(world.schemaRoute).toBe("/apps/personal/schema");
     expect(world.target.installId).toBe("personal");
     expect(world.target.apiRoutePrefix).toBe("/api/app-installs/site/personal");
+    expect(tasksWorld.app.key).toBe("tasks");
+    expect(tasksWorld.route).toBe("/apps/task-workspace");
+    expect(tasksWorld.schemaRoute).toBe("/apps/task-workspace/schema");
+    expect(tasksWorld.target.installId).toBe("task-workspace");
+    expect(tasksWorld.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
     expect(runtimeScreenRoute(world, "/")).toBe("/apps/personal");
     expect(runtimeScreenRoute(world, "/settings")).toBe("/apps/personal/settings");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal")).toBe("/");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal/settings")).toBe("/settings");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal/schema")).toBeUndefined();
-    expect(findRuntimeWorldMountByRoute(profile, "/apps/personal/settings")?.target).toEqual(
-      world.target,
+    expect(
+      findRuntimeWorldMountByRoute(profile, "/apps/personal/settings", { appInstalls })?.target,
+    ).toEqual(world.target);
+    expect(
+      findRuntimeWorldMountByRoute(profile, "/apps/task-workspace", { appInstalls })?.target,
+    ).toEqual(tasksWorld.target);
+    expect(
+      installedAppWorldMountFromInstallId(profile, "missing", { appInstalls }),
+    ).toBeUndefined();
+  });
+
+  it("preserves product instance schema policy for installed app routes", () => {
+    const profile = createInstanceRuntimeProfile();
+    const appInstalls = [
+      appInstallFixture({
+        installId: "task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      }),
+    ];
+    const world = installedAppWorldMountFromInstallId(profile, "task-workspace", { appInstalls });
+
+    if (!world?.target || world.target.kind !== "appInstall") {
+      throw new Error("Missing installed Tasks world.");
+    }
+
+    expect(world.app.key).toBe("tasks");
+    expect(world.route).toBe("/apps/task-workspace");
+    expect(world.schemaRoute).toBeUndefined();
+    expect(world.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
+    expect(findRuntimeWorldMountByRoute(profile, "/apps/task-workspace", { appInstalls })).toEqual(
+      world,
     );
-    expect(installedAppWorldMountFromInstallId(profile, "site")?.route).toBe("/apps/site");
+    expect(
+      findRuntimeWorldMountByRoute(profile, "/apps/task-workspace/schema", { appInstalls }),
+    ).toBeUndefined();
   });
 
   it("resolves installed Site public route surfaces from install ids", () => {
     const profile = createDevRuntimeProfile();
-    const home = installedSitePublicSurfaceFromRoute(profile, "/sites/personal");
-    const nested = installedSitePublicSurfaceFromRoute(profile, "/sites/personal/blog/post");
+    const appInstalls = [
+      appInstallFixture({ installId: "personal", label: "Personal Site" }),
+      appInstallFixture({
+        installId: "task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      }),
+    ];
+    const home = installedSitePublicSurfaceFromRoute(profile, "/sites/personal", { appInstalls });
+    const nested = installedSitePublicSurfaceFromRoute(profile, "/sites/personal/blog/post", {
+      appInstalls,
+    });
 
     if (!home?.target || home.target.kind !== "appInstall") {
       throw new Error("Missing installed Site public surface.");
@@ -126,11 +212,14 @@ describe("runtime profile resolver", () => {
     expect(home.target.apiRoutePrefix).toBe("/api/app-installs/site/personal");
     expect(nested?.routeBase).toBe("/sites/personal");
     expect(nested?.slug).toBe("blog/post");
-    expect(isRuntimePublicSiteRoute(profile, "/sites/personal")).toBe(true);
-    expect(isRuntimePublicSiteRoute(profile, "/sites/personal/blog/post")).toBe(true);
-    expect(installedSitePublicSurfaceFromRoute(profile, "/sites/site")?.routeBase).toBe(
-      "/sites/site",
+    expect(isRuntimePublicSiteRoute(profile, "/sites/personal", { appInstalls })).toBe(true);
+    expect(isRuntimePublicSiteRoute(profile, "/sites/personal/blog/post", { appInstalls })).toBe(
+      true,
     );
+    expect(
+      installedSitePublicSurfaceFromRoute(profile, "/sites/task-workspace", { appInstalls }),
+    ).toBeUndefined();
+    expect(isRuntimePublicSiteRoute(profile, "/sites/task-workspace", { appInstalls })).toBe(false);
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {

@@ -10,14 +10,23 @@ import {
   createInstanceAppInstall,
   fetchInstanceAppInstalls,
 } from "../../client/app-installs.ts";
-import type { AppInstall, BundledAppPackage } from "../../shared/app-installs.ts";
+import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/app-installs.ts";
+
+export type PackageInstallDraft = {
+  installId: string;
+  label: string;
+};
+
+export type PackageInstallDrafts = Partial<Record<PackageAppKey, PackageInstallDraft>>;
 
 export type InstanceShellRouteState =
   | { status: "failed"; message: string }
   | { status: "loading" }
   | {
       installError?: string;
+      installErrorPackageAppKey?: PackageAppKey;
       installing: boolean;
+      installingPackageAppKey?: PackageAppKey;
       installs: AppInstall[];
       packages: BundledAppPackage[];
       status: "ready";
@@ -26,12 +35,7 @@ export type InstanceShellRouteState =
 export function InstanceShellRoute() {
   const [, setLocation] = useLocation();
   const [state, setState] = useState<InstanceShellRouteState>({ status: "loading" });
-  const [label, setLabel] = useState("");
-  const [installId, setInstallId] = useState("");
-  const sitePackage =
-    state.status === "ready"
-      ? state.packages.find((appPackage) => appPackage.packageAppKey === "site")
-      : undefined;
+  const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -51,19 +55,13 @@ export function InstanceShellRoute() {
           packages: response.packages,
           status: "ready",
         });
-
-        const nextSitePackage = response.packages.find(
-          (appPackage) => appPackage.packageAppKey === "site",
+        setInstallDrafts((current) =>
+          initializePackageInstallDrafts({
+            currentDrafts: current,
+            installs: response.installs,
+            packages: response.packages,
+          }),
         );
-
-        if (nextSitePackage) {
-          setLabel((current) => (current.trim() === "" ? nextSitePackage.label : current));
-          setInstallId((current) =>
-            current.trim() === ""
-              ? availableDefaultInstallId(nextSitePackage, response.installs)
-              : current,
-          );
-        }
       } catch (error) {
         if (!stopped && !controller.signal.aborted) {
           setState({
@@ -82,20 +80,38 @@ export function InstanceShellRoute() {
     };
   }, []);
 
-  async function submitInstall(event: React.FormEvent<HTMLFormElement>) {
+  async function submitInstall(
+    packageAppKey: PackageAppKey,
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
 
-    if (state.status !== "ready" || !sitePackage || state.installing) {
+    if (state.status !== "ready" || state.installing) {
       return;
     }
 
-    setState({ ...state, installing: true, installError: undefined });
+    const appPackage = state.packages.find(
+      (candidate) => candidate.packageAppKey === packageAppKey,
+    );
+    const draft = installDrafts[packageAppKey];
+
+    if (!appPackage || !draft) {
+      return;
+    }
+
+    setState({
+      ...state,
+      installing: true,
+      installingPackageAppKey: packageAppKey,
+      installError: undefined,
+      installErrorPackageAppKey: undefined,
+    });
 
     try {
       const response = await createInstanceAppInstall({
-        packageAppKey: sitePackage.packageAppKey,
-        installId,
-        label,
+        packageAppKey: appPackage.packageAppKey,
+        installId: draft.installId,
+        label: draft.label,
       });
 
       setState({
@@ -104,23 +120,42 @@ export function InstanceShellRoute() {
         packages: state.packages,
         status: "ready",
       });
+      setInstallDrafts((current) =>
+        initializePackageInstallDrafts({
+          currentDrafts: {
+            ...current,
+            [packageAppKey]: { installId: "", label: "" },
+          },
+          installs: response.installs,
+          packages: state.packages,
+        }),
+      );
       setLocation(response.install.adminRoute);
     } catch (error) {
       const message =
         error instanceof AppInstallApiError || error instanceof Error
           ? error.message
-          : "Site install failed.";
+          : `${appPackage.label} install failed.`;
 
-      setState({ ...state, installing: false, installError: message });
+      setState({
+        ...state,
+        installing: false,
+        installingPackageAppKey: undefined,
+        installError: message,
+        installErrorPackageAppKey: packageAppKey,
+      });
     }
   }
 
   return (
     <InstanceShellRouteView
-      installId={installId}
-      label={label}
-      onInstallIdChange={setInstallId}
-      onLabelChange={setLabel}
+      installDrafts={installDrafts}
+      onInstallDraftChange={(packageAppKey, draft) =>
+        setInstallDrafts((current) => ({
+          ...current,
+          [packageAppKey]: draft,
+        }))
+      }
       onSubmitInstall={submitInstall}
       state={state}
     />
@@ -128,18 +163,14 @@ export function InstanceShellRoute() {
 }
 
 export function InstanceShellRouteView({
-  installId = "",
-  label = "",
-  onInstallIdChange,
-  onLabelChange,
+  installDrafts = {},
+  onInstallDraftChange,
   onSubmitInstall,
   state,
 }: {
-  installId?: string;
-  label?: string;
-  onInstallIdChange?: (value: string) => void;
-  onLabelChange?: (value: string) => void;
-  onSubmitInstall?: (event: React.FormEvent<HTMLFormElement>) => void;
+  installDrafts?: PackageInstallDrafts;
+  onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
+  onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
   state: InstanceShellRouteState;
 }) {
   if (state.status === "loading") {
@@ -161,8 +192,6 @@ export function InstanceShellRouteView({
       </section>
     );
   }
-
-  const sitePackage = state.packages.find((appPackage) => appPackage.packageAppKey === "site");
 
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
@@ -193,17 +222,32 @@ export function InstanceShellRouteView({
               Bundled apps
             </h2>
           </div>
-          {sitePackage ? (
-            <SiteInstallForm
-              installError={state.installError}
-              installId={installId}
-              installing={state.installing}
-              label={label}
-              onInstallIdChange={onInstallIdChange}
-              onLabelChange={onLabelChange}
-              onSubmit={onSubmitInstall}
-              sitePackage={sitePackage}
-            />
+          {state.packages.length > 0 ? (
+            <div className="grid gap-3">
+              {state.packages.map((appPackage) => (
+                <PackageInstallForm
+                  appPackage={appPackage}
+                  draft={
+                    installDrafts[appPackage.packageAppKey] ?? {
+                      installId: appPackage.defaultInstallId,
+                      label: appPackage.label,
+                    }
+                  }
+                  installError={
+                    state.installErrorPackageAppKey === appPackage.packageAppKey
+                      ? state.installError
+                      : undefined
+                  }
+                  installing={
+                    state.installing && state.installingPackageAppKey === appPackage.packageAppKey
+                  }
+                  isDisabled={state.installing}
+                  key={appPackage.packageAppKey}
+                  onDraftChange={(draft) => onInstallDraftChange?.(appPackage.packageAppKey, draft)}
+                  onSubmit={(event) => onSubmitInstall?.(appPackage.packageAppKey, event)}
+                />
+              ))}
+            </div>
           ) : (
             <p className="text-sm text-muted-fg">No bundled apps are available.</p>
           )}
@@ -247,50 +291,54 @@ function InstalledAppRow({ install }: { install: AppInstall }) {
   );
 }
 
-function SiteInstallForm({
+function PackageInstallForm({
+  appPackage,
+  draft,
   installError,
-  installId,
   installing,
-  label,
-  onInstallIdChange,
-  onLabelChange,
+  isDisabled,
+  onDraftChange,
   onSubmit,
-  sitePackage,
 }: {
+  appPackage: BundledAppPackage;
+  draft: PackageInstallDraft;
   installError: string | undefined;
-  installId: string;
   installing: boolean;
-  label: string;
-  onInstallIdChange?: (value: string) => void;
-  onLabelChange?: (value: string) => void;
+  isDisabled: boolean;
+  onDraftChange?: (draft: PackageInstallDraft) => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
-  sitePackage: BundledAppPackage;
 }) {
-  const labelInputId = useMemo(() => "site-install-label", []);
-  const installIdInputId = useMemo(() => "site-install-id", []);
+  const labelInputId = useMemo(
+    () => `${appPackage.packageAppKey}-install-label`,
+    [appPackage.packageAppKey],
+  );
+  const installIdInputId = useMemo(
+    () => `${appPackage.packageAppKey}-install-id`,
+    [appPackage.packageAppKey],
+  );
 
   return (
     <form className="rounded-md border border-border bg-overlay p-4" onSubmit={onSubmit}>
       <div className="space-y-4">
         <header className="space-y-1">
-          <h3 className="text-sm font-semibold">{sitePackage.label}</h3>
-          <p className="text-xs text-muted-fg">{sitePackage.description}</p>
+          <h3 className="text-sm font-semibold">{appPackage.label}</h3>
+          <p className="text-xs text-muted-fg">{appPackage.description}</p>
         </header>
         <FieldGroup>
           <TextField
-            isDisabled={installing}
+            isDisabled={isDisabled}
             isRequired
-            onChange={(value) => onLabelChange?.(value)}
-            value={label}
+            onChange={(value) => onDraftChange?.({ ...draft, label: value })}
+            value={draft.label}
           >
             <Label htmlFor={labelInputId}>Label</Label>
             <Input id={labelInputId} />
           </TextField>
           <TextField
-            isDisabled={installing}
+            isDisabled={isDisabled}
             isRequired
-            onChange={(value) => onInstallIdChange?.(value)}
-            value={installId}
+            onChange={(value) => onDraftChange?.({ ...draft, installId: value })}
+            value={draft.installId}
           >
             <Label htmlFor={installIdInputId}>Install id</Label>
             <Input id={installIdInputId} />
@@ -302,13 +350,38 @@ function SiteInstallForm({
             {installError}
           </p>
         ) : null}
-        <Button className="w-full" isDisabled={installing} type="submit">
+        <Button className="w-full" isDisabled={isDisabled} type="submit">
           <ControlAddIcon />
-          {installing ? "Installing..." : "Install Site"}
+          {installing ? "Installing..." : `Install ${appPackage.label}`}
         </Button>
       </div>
     </form>
   );
+}
+
+function initializePackageInstallDrafts({
+  currentDrafts,
+  installs,
+  packages,
+}: {
+  currentDrafts: PackageInstallDrafts;
+  installs: readonly AppInstall[];
+  packages: readonly BundledAppPackage[];
+}): PackageInstallDrafts {
+  const nextDrafts: PackageInstallDrafts = {};
+
+  for (const appPackage of packages) {
+    const current = currentDrafts[appPackage.packageAppKey];
+
+    nextDrafts[appPackage.packageAppKey] = {
+      label: current?.label.trim() ? current.label : appPackage.label,
+      installId: current?.installId.trim()
+        ? current.installId
+        : availableDefaultInstallId(appPackage, installs),
+    };
+  }
+
+  return nextDrafts;
 }
 
 function availableDefaultInstallId(appPackage: BundledAppPackage, installs: readonly AppInstall[]) {
