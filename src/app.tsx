@@ -12,6 +12,7 @@ import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import { ActiveAppSurface } from "./app/app-surface.tsx";
 import { InstanceShellRoute } from "./app/routes/instance-shell.tsx";
 import { NotFoundRoute } from "./app/routes/not-found.tsx";
+import { OwnerLoginRoute } from "./app/routes/owner-login.tsx";
 import { OwnerSetupRoute } from "./app/routes/owner-setup.tsx";
 import {
   SitePageRoute as DefaultSitePageRoute,
@@ -118,10 +119,13 @@ export function App({
     : undefined;
   const isInstanceShellRoute =
     runtimeProfile.instanceShell === true && normalizeRoutePath(location) === "/";
+  const isOwnerLoginRoute =
+    isOwnerSessionRouteEnabled(runtimeProfile) && normalizeRoutePath(location) === "/login";
   const isOwnerSetupRoute =
     isOwnerSetupRouteEnabled(runtimeProfile) && normalizeRoutePath(location) === "/setup";
 
   if (
+    isOwnerLoginRoute ||
     isOwnerSetupRoute ||
     isPublicSiteRoute ||
     isPotentialInstalledSitePublicRoute ||
@@ -420,6 +424,11 @@ function AppRoutes({
           <OwnerSetupRoute />
         </Route>
       ) : null}
+      {isOwnerSessionRouteEnabled(runtimeProfile) ? (
+        <Route path="/login">
+          <OwnerLoginRoute />
+        </Route>
+      ) : null}
       {runtimeProfile.instanceShell ? (
         <Route path="/">
           <InstanceShellRoute />
@@ -697,6 +706,10 @@ function runtimeRouteParam(params: unknown, name: string): string | undefined {
 }
 
 function isOwnerSetupRouteEnabled(runtimeProfile: RuntimeProfile) {
+  return isOwnerSessionRouteEnabled(runtimeProfile);
+}
+
+function isOwnerSessionRouteEnabled(runtimeProfile: RuntimeProfile) {
   return (
     runtimeProfile.kind === "instance" ||
     runtimeProfile.kind === "dev" ||

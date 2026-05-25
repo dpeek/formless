@@ -732,6 +732,16 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Runtime apps"');
   });
 
+  it('renders the "/login" owner login route outside workbench chrome', () => {
+    const html = renderRoute("/login");
+
+    expect(html).toContain("Checking owner session");
+    expect(html).toContain("Loading sign-in state.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+    expect(html).not.toContain('aria-label="Runtime apps"');
+  });
+
   it("renders product instance routes outside the dev workbench route vocabulary", () => {
     const instanceProfile = createInstanceRuntimeProfile();
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
@@ -1557,6 +1567,15 @@ describe("App smoke routes", () => {
 
     expect(html).toContain("Checking setup link");
     expect(html).not.toContain("Loading setup.");
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).not.toContain('data-frame="generated-app"');
+  });
+
+  it("renders the owner login route before published Site wildcard routes", () => {
+    const html = renderRoute("/login", createPublishedSiteRuntimeProfile());
+
+    expect(html).toContain("Checking owner session");
+    expect(html).not.toContain("Loading login.");
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).not.toContain('data-frame="generated-app"');
   });

@@ -9,8 +9,8 @@ const clientRoutePrefixes = [
 ] as const;
 const publishedProfileClientRoutePrefixes = ["/apps", "/sites"] as const;
 const instanceProfileClientRoutePrefixes = ["/apps", "/sites"] as const;
-const clientRoutePaths = ["/setup"] as const;
-const instanceProfileClientRoutePaths = ["/", "/setup"] as const;
+const clientRoutePaths = ["/login", "/setup"] as const;
+const instanceProfileClientRoutePaths = ["/", "/login", "/setup"] as const;
 const staticAssetPathPrefixes = ["/@fs/", "/@id/", "/@vite/", "/@react-refresh"] as const;
 const dynamicSiteIconPaths = ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"] as const;
 const PUBLISHED_SITE_REDIRECT_STATUS = 308;

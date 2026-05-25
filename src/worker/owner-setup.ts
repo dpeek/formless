@@ -14,11 +14,16 @@ import {
   type CompleteFirstOwnerSetupResult,
   type WriteOwnerSetupCapabilityResult,
 } from "./instance-setup-state.ts";
-import { createOwnerSessionCookie, ownerSessionSigningSecret } from "./owner-session.ts";
+import {
+  createOwnerSessionCookie,
+  ownerSessionSigningSecret,
+  validateOwnerSessionCookie,
+} from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { ensureDefaultAppInstalls } from "./default-app-installs.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
+export const OWNER_SESSION_API_PATH = "/api/formless/session";
 
 const ownerSetupCapabilityPath = `${OWNER_SETUP_API_PATH}/capability`;
 const ownerSetupCompletePath = `${OWNER_SETUP_API_PATH}/complete`;
@@ -37,7 +42,7 @@ export async function handleOwnerSetupApiRequest(
   request: Request,
   env: OwnerSetupApiEnv,
 ): Promise<Response | undefined> {
-  if (!isOwnerSetupApiPath(new URL(request.url).pathname)) {
+  if (!isOwnerApiPath(new URL(request.url).pathname)) {
     return undefined;
   }
 
@@ -53,11 +58,15 @@ export async function handleOwnerSetupDurableObjectRequest(
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
 
-  if (!isOwnerSetupApiPath(pathname)) {
+  if (!isOwnerApiPath(pathname)) {
     return undefined;
   }
 
   try {
+    if (pathname === OWNER_SESSION_API_PATH) {
+      return await handleOwnerSessionRequest(request, storage, env);
+    }
+
     if (pathname === OWNER_SETUP_API_PATH) {
       return handleOwnerSetupStatusRequest(request, storage);
     }
@@ -76,8 +85,100 @@ export async function handleOwnerSetupDurableObjectRequest(
   }
 }
 
+function isOwnerApiPath(pathname: string) {
+  return isOwnerSetupApiPath(pathname) || pathname === OWNER_SESSION_API_PATH;
+}
+
 function isOwnerSetupApiPath(pathname: string) {
   return pathname === OWNER_SETUP_API_PATH || pathname.startsWith(`${OWNER_SETUP_API_PATH}/`);
+}
+
+async function handleOwnerSessionRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
+): Promise<Response> {
+  switch (request.method) {
+    case "GET":
+      return await handleOwnerSessionStatusRequest(request, storage, env);
+    case "POST":
+      return await handleOwnerLoginRequest(request, storage, env);
+    default:
+      return methodNotAllowedResponse("GET, POST");
+  }
+}
+
+async function handleOwnerSessionStatusRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
+): Promise<Response> {
+  const state = readInstanceSetupState(storage);
+
+  if (!state.owner) {
+    return jsonResponse({ authenticated: false, setupComplete: false });
+  }
+
+  const session = await validateOwnerSessionCookie(request, env);
+
+  if (session.ok && session.session.ownerId === state.owner.id) {
+    return jsonResponse({
+      authenticated: true,
+      owner: state.owner,
+      session: { expiresAt: session.session.expiresAt },
+      setupComplete: true,
+    });
+  }
+
+  return jsonResponse({
+    authenticated: false,
+    owner: state.owner,
+    setupComplete: true,
+  });
+}
+
+async function handleOwnerLoginRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
+): Promise<Response> {
+  const state = readInstanceSetupState(storage);
+
+  if (!state.owner) {
+    return jsonResponse(
+      { authenticated: false, error: "Owner setup must be complete before login." },
+      409,
+    );
+  }
+
+  const authorization = authorizeOwnerLogin(request, env);
+
+  if (!authorization.authorized) {
+    return jsonResponse(
+      { authenticated: false, error: authorization.error },
+      authorization.status,
+      authorization.headers,
+    );
+  }
+
+  const session = await createOwnerSessionCookie({
+    env,
+    owner: state.owner,
+    request,
+  });
+  const headers = new Headers();
+
+  headers.set("Set-Cookie", session.cookie);
+
+  return jsonResponse(
+    {
+      authenticated: true,
+      owner: state.owner,
+      session: { expiresAt: session.session.expiresAt },
+    },
+    200,
+    headers,
+  );
 }
 
 function handleOwnerSetupStatusRequest(request: Request, storage: DurableObjectStorage): Response {
@@ -281,6 +382,42 @@ function methodNotAllowedResponse(allow: string): Response {
   return jsonResponse({ error: "Method not allowed." }, 405, { Allow: allow });
 }
 
+function authorizeOwnerLogin(
+  request: Request,
+  env: AuthorityAdminGuardEnv,
+):
+  | { authorized: true }
+  | {
+      authorized: false;
+      error: string;
+      headers: HeadersInit;
+      status: number;
+    } {
+  const adminToken = normalizedSecret(env.FORMLESS_ADMIN_TOKEN);
+
+  if (!adminToken) {
+    return {
+      authorized: false,
+      error: "Owner login requires a configured admin token.",
+      headers: {},
+      status: 409,
+    };
+  }
+
+  if (requestAdminToken(request) === adminToken) {
+    return { authorized: true };
+  }
+
+  return {
+    authorized: false,
+    error: "Owner login requires the admin token.",
+    headers: {
+      "WWW-Authenticate": 'Bearer realm="formless-admin"',
+    },
+    status: 401,
+  };
+}
+
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}): Response {
   const responseHeaders = new Headers(headers);
 
@@ -308,4 +445,22 @@ function parseTrimmedNonEmptyString(context: string, value: unknown): string {
   }
 
   return value.trim();
+}
+
+function requestAdminToken(request: Request) {
+  const authorization = request.headers.get("Authorization");
+
+  if (!authorization) {
+    return undefined;
+  }
+
+  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
+
+  return match?.[1];
+}
+
+function normalizedSecret(value: string | undefined): string | undefined {
+  const secret = value?.trim();
+
+  return secret === "" ? undefined : secret;
 }

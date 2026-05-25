@@ -89,6 +89,9 @@ describe("Worker document routing", () => {
       shouldDeferToStaticAssets(documentRequest("http://example.com/setup"), instanceProfile),
     ).toBe(true);
     expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/login"), instanceProfile),
+    ).toBe(true);
+    expect(
       shouldDeferToStaticAssets(
         documentRequest("http://example.com/apps/personal"),
         instanceProfile,
@@ -175,6 +178,7 @@ describe("Worker document routing", () => {
       documentRequest("http://example.com/site/schema"),
       documentRequest("http://example.com/schema"),
       documentRequest("http://example.com/setup"),
+      documentRequest("http://example.com/login"),
       documentRequest("http://example.com/apps/personal"),
       documentRequest("http://example.com/sites/personal"),
       documentRequest("http://example.com/assets/index.js"),
@@ -261,8 +265,10 @@ describe("Worker document routing", () => {
       true,
     );
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/setup"))).toBe(true);
+    expect(shouldDeferToStaticAssets(documentRequest("http://example.com/login"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/site"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://app.example.com/setup"))).toBe(true);
+    expect(shouldDeferToStaticAssets(documentRequest("http://app.example.com/login"))).toBe(true);
     expect(shouldDeferToStaticAssets(documentRequest("http://example.com/assets/index.js"))).toBe(
       true,
     );
@@ -289,7 +295,7 @@ describe("Worker document routing", () => {
     ).toBe(false);
   });
 
-  it("limits published profile static fallback to asset-like paths and setup shell route", () => {
+  it("limits published profile static fallback to asset-like paths and owner shell routes", () => {
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/assets/index.js"), {
         profile: "publishedSite",
@@ -317,6 +323,11 @@ describe("Worker document routing", () => {
     ).toBe(false);
     expect(
       shouldDeferToStaticAssets(documentRequest("http://example.com/setup"), {
+        profile: "publishedSite",
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferToStaticAssets(documentRequest("http://example.com/login"), {
         profile: "publishedSite",
       }),
     ).toBe(true);
@@ -446,6 +457,7 @@ describe("Worker document routing", () => {
     expect(isClientShellRoute("/apps/personal")).toBe(true);
     expect(isClientShellRoute("/sites/personal/blog")).toBe(true);
     expect(isClientShellRoute("/setup")).toBe(true);
+    expect(isClientShellRoute("/login")).toBe(true);
     expect(isClientShellRoute("/rates")).toBe(false);
     expect(isClientShellRoute("/blog")).toBe(false);
   });

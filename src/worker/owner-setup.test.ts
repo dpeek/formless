@@ -29,6 +29,25 @@ type OwnerSetupFailureResponse = {
   setupComplete: boolean;
 };
 
+type OwnerSessionStatusResponse =
+  | {
+      authenticated: false;
+      owner?: OwnerSetupStatusResponse["owner"];
+      setupComplete: boolean;
+    }
+  | {
+      authenticated: true;
+      owner: NonNullable<OwnerSetupStatusResponse["owner"]>;
+      session: { expiresAt: string };
+      setupComplete: true;
+    };
+
+type OwnerLoginResponse = {
+  authenticated: true;
+  owner: NonNullable<OwnerSetupStatusResponse["owner"]>;
+  session: { expiresAt: string };
+};
+
 const adminToken = "test-admin-token";
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
 const otherSetupToken = "xyzXYZ0123456789_-xyzXYZ0123456789_-";
@@ -300,14 +319,77 @@ describe("owner setup API routes", () => {
     expect(status.body).toEqual(completed.body);
   });
 
+  it("creates post-setup owner sessions from the admin bearer token", async () => {
+    await createSetupCapability();
+
+    const completed = await postJson<OwnerSetupCompleteResponse>("/api/formless/setup/complete", {
+      setupToken,
+      owner: { name: "Ada Owner", email: "ada@example.com" },
+    });
+    const statusWithoutCookie = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
+    const rejected = await harness.fetch("/api/formless/session", { method: "POST" });
+    const accepted = await harness.fetch("/api/formless/session", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      method: "POST",
+    });
+    const acceptedBody = (await accepted.json()) as OwnerLoginResponse;
+    const setCookie = accepted.headers.get("Set-Cookie");
+    const statusWithCookie = await harness.fetch("/api/formless/session", {
+      headers: { Cookie: cookiePair(setCookie) },
+    });
+    const statusWithCookieBody = (await statusWithCookie.json()) as OwnerSessionStatusResponse;
+
+    expect(statusWithoutCookie.body).toEqual({
+      authenticated: false,
+      owner: completed.body.owner,
+      setupComplete: true,
+    });
+    expect(rejected.status).toBe(401);
+    expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await rejected.json()).toEqual({
+      authenticated: false,
+      error: "Owner login requires the admin token.",
+    });
+    expect(accepted.status).toBe(200);
+    expect(setCookie).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(setCookie).toContain("HttpOnly");
+    expect(acceptedBody).toEqual({
+      authenticated: true,
+      owner: completed.body.owner,
+      session: { expiresAt: expect.any(String) },
+    });
+    expect(statusWithCookieBody).toEqual({
+      authenticated: true,
+      owner: completed.body.owner,
+      session: { expiresAt: acceptedBody.session.expiresAt },
+      setupComplete: true,
+    });
+  });
+
+  it("requires owner setup before owner login", async () => {
+    const rejected = await harness.fetch("/api/formless/session", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      method: "POST",
+    });
+
+    expect(rejected.status).toBe(409);
+    expect(await rejected.json()).toEqual({
+      authenticated: false,
+      error: "Owner setup must be complete before login.",
+    });
+  });
+
   it("returns method errors for known setup API paths", async () => {
     const status = await harness.fetch("/api/formless/setup", { method: "POST" });
     const complete = await harness.fetch("/api/formless/setup/complete", { method: "GET" });
+    const session = await harness.fetch("/api/formless/session", { method: "PUT" });
 
     expect(status.status).toBe(405);
     expect(status.headers.get("Allow")).toBe("GET");
     expect(complete.status).toBe(405);
     expect(complete.headers.get("Allow")).toBe("POST");
+    expect(session.status).toBe(405);
+    expect(session.headers.get("Allow")).toBe("GET, POST");
   });
 });
 
@@ -358,4 +440,12 @@ async function postAdminJson<T>(path: string, body: unknown) {
     body: (await response.json()) as T,
     response,
   };
+}
+
+function cookiePair(cookie: string | null) {
+  if (!cookie) {
+    throw new Error("Missing Set-Cookie header.");
+  }
+
+  return cookie.split(";")[0] ?? cookie;
 }
