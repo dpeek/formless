@@ -940,6 +940,83 @@ describe("App smoke routes", () => {
     expect(installedWorld.target.browserDatabaseName).toBe("formless:app:task-workspace");
   });
 
+  it("renders installed Estii rates from the install-scoped target", () => {
+    const appInstalls = [
+      appInstallFixture({
+        installId: "rates",
+        label: "Rates",
+        packageAppKey: "estii",
+      }),
+    ];
+    const installedWorld = findRuntimeWorldMountByRoute(createDevRuntimeProfile(), "/apps/rates", {
+      appInstalls,
+    });
+
+    if (
+      !installedWorld?.target ||
+      typeof installedWorld.target !== "object" ||
+      installedWorld.target.kind !== "appInstall"
+    ) {
+      throw new Error("Expected installed Estii target for /apps/rates.");
+    }
+
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), installedWorld.target);
+    const html = renderRoute("/apps/rates", undefined, appInstalls);
+
+    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Rates" });
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      resetScopeLabel: "Estii app install rates",
+      schemaKey: "estii",
+      schemaRoute: "/apps/rates/schema",
+      syncWorldKey: "app:rates",
+    });
+    expect(html).toContain('href="/apps/rates/setup"');
+    expect(html).toContain("Create Resource");
+    expect(html).toContain("Average cost");
+    expect(html).toContain("Average margin");
+    expect(html).toContain("Margin");
+    expect(html).not.toContain("Loading Estii...");
+    expect(installedWorld.target.browserDatabaseName).toBe("formless:app:rates");
+  });
+
+  it("routes installed Estii setup through the app-relative setup screen", () => {
+    const appInstalls = [
+      appInstallFixture({
+        installId: "rates",
+        label: "Rates",
+        packageAppKey: "estii",
+      }),
+    ];
+    const installedWorld = findRuntimeWorldMountByRoute(
+      createDevRuntimeProfile(),
+      "/apps/rates/setup",
+      { appInstalls },
+    );
+
+    if (!installedWorld?.target) {
+      throw new Error("Expected installed Estii target for /apps/rates/setup.");
+    }
+
+    applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), installedWorld.target);
+    const html = renderRoute("/apps/rates/setup", undefined, appInstalls);
+
+    expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Setup" });
+    expectAppSettings(html, {
+      appLabel: "Estii",
+      resetScopeLabel: "Estii app install rates",
+      schemaKey: "estii",
+      schemaRoute: "/apps/rates/schema",
+      syncWorldKey: "app:rates",
+    });
+    expect(linkHtml(generatedAppFrameHtml(html), "/apps/rates/setup")).toContain(
+      'aria-current="page"',
+    );
+    expect(html).toContain("Rate cards");
+    expect(html).toContain("Resources");
+    expect(html).not.toContain("Loading Estii...");
+  });
+
   it("keeps installed Site home routes scoped to the installed app target", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];
@@ -1034,6 +1111,11 @@ describe("App smoke routes", () => {
         label: "Task Workspace",
         packageAppKey: "tasks",
       }),
+      appInstallFixture({
+        installId: "rates",
+        label: "Rates",
+        packageAppKey: "estii",
+      }),
     ];
     const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, "/apps/personal/settings", {
       appInstalls,
@@ -1069,6 +1151,14 @@ describe("App smoke routes", () => {
         key: "tasks:task-workspace",
         label: "Task Workspace",
         packageAppKey: "tasks",
+      },
+      {
+        href: "/apps/rates",
+        installId: "rates",
+        isCurrent: false,
+        key: "estii:rates",
+        label: "Rates",
+        packageAppKey: "estii",
       },
     ]);
     expect(

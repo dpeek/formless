@@ -10,6 +10,7 @@ describe("instance shell route view", () => {
         installDrafts={{
           site: { installId: "docs", label: "Docs Site" },
           tasks: { installId: "tasks", label: "Task Space" },
+          estii: { installId: "rates", label: "Rates" },
         }}
         state={{
           installing: false,
@@ -33,12 +34,16 @@ describe("instance shell route view", () => {
     expect(html).toContain("Bundled apps");
     expect(html).toContain("Public website app backed by the bundled Site schema");
     expect(html).toContain("Task tracking app backed by the bundled Tasks schema");
+    expect(html).toContain("Rate-card app backed by the bundled Estii schema");
     expect(html).toContain("Install Site");
     expect(html).toContain("Install Tasks");
+    expect(html).toContain("Install Estii");
     expect(html).toContain('value="Docs Site"');
     expect(html).toContain('value="docs"');
     expect(html).toContain('value="Task Space"');
     expect(html).toContain('value="tasks"');
+    expect(html).toContain('value="Rates"');
+    expect(html).toContain('value="rates"');
   });
 
   it("renders install errors without hiding existing installs", () => {

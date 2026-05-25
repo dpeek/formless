@@ -55,6 +55,8 @@ beforeEach(async () => {
   await deleteClientDb(installedSiteIdentity("docs"));
   await deleteClientDb(installedTasksIdentity("work"));
   await deleteClientDb(installedTasksIdentity("team"));
+  await deleteClientDb(installedEstiiIdentity("rates"));
+  await deleteClientDb(installedEstiiIdentity("alt-rates"));
   resetClientStore();
 });
 
@@ -135,6 +137,30 @@ describe("client sync", () => {
     expect(getClientStoreSnapshot()).toMatchObject({
       activeClientStorageName: "formless:app:work",
       activeSchemaKey: "tasks",
+    });
+  });
+
+  it("bootstraps installed Estii into an install-scoped replica only", async () => {
+    const rates = installedEstiiIdentity("rates");
+    const altRates = installedEstiiIdentity("alt-rates");
+    const rate = rateRecord("rate-1", "resource-1", "card-1");
+
+    await bootstrapClient(
+      rates,
+      jsonFetcher("/api/app-installs/estii/rates/bootstrap", {
+        schema: rateCardSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+        records: [rate],
+        cursor: 1,
+      } satisfies BootstrapResponse),
+    );
+
+    expect((await readLocalSnapshot(rates)).records).toEqual([rate]);
+    expect((await readLocalSnapshot(altRates)).records).toEqual([]);
+    expect((await readLocalSnapshot("estii")).records).toEqual([]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:app:rates",
+      activeSchemaKey: "estii",
     });
   });
 
@@ -323,6 +349,21 @@ describe("client sync", () => {
     try {
       expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe(
         "/api/app-installs/tasks/work/sync/ws",
+      );
+    } finally {
+      stop();
+    }
+  });
+
+  it("opens installed Estii push sync on the Estii install API path", () => {
+    const sockets = fakeSocketFactory();
+    const stop = startPushSync(installedEstiiIdentity("rates"), {
+      socketFactory: sockets.create,
+    });
+
+    try {
+      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe(
+        "/api/app-installs/estii/rates/sync/ws",
       );
     } finally {
       stop();
@@ -802,6 +843,136 @@ describe("client sync", () => {
     expect(getClientStoreSnapshot()).toMatchObject({
       activeClientStorageName: "formless:app:work",
       activeSchemaKey: "tasks",
+      cursor: 7,
+    });
+  });
+
+  it("uses installed Estii API paths for sync, writes, actions, snapshots, and resets", async () => {
+    const rates = installedEstiiIdentity("rates");
+    const existingRate = rateRecord("rate-1", "resource-1", "card-1");
+    const syncedRate = rateRecord("rate-2", "resource-2", "card-1");
+    const createdResource = resourceRecord("resource-2", "Writer");
+    const actionRate = rateRecord("rate-3", createdResource.id, "card-2");
+    const restoredRate = rateRecord("rate-4", "resource-4", "card-2");
+
+    await saveBootstrapResponse(rates, {
+      schema: rateCardSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [existingRate],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb(rates);
+
+    await syncClient(
+      rates,
+      jsonFetcher(
+        "/api/app-installs/estii/rates/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
+        {
+          changes: [mutationChange(2, "mutation-rate-sync", syncedRate, "create")],
+          cursor: 2,
+        } satisfies SyncResponse,
+      ),
+    );
+
+    await submitCreateMutation(
+      rates,
+      "resource",
+      { name: "Writer", kind: "role", unit: "day" },
+      async (input, init) => {
+        const mutation = parseRequestBody(init?.body);
+
+        expect(input).toBe("/api/app-installs/estii/rates/mutations");
+        expect(init?.method).toBe("POST");
+
+        return Response.json({
+          record: createdResource,
+          changes: [mutationChange(3, mutation.mutationId, createdResource, "create")],
+          cursor: 3,
+          mutationId: mutation.mutationId,
+        } satisfies MutationResponse);
+      },
+    );
+
+    await submitAction(rates, "rate", "regenerateMissingRates", async (input, init) => {
+      const action = parseActionRequestBody(init?.body);
+
+      expect(input).toBe("/api/app-installs/estii/rates/actions");
+      expect(init?.method).toBe("POST");
+      expect(action).toMatchObject({
+        entity: "rate",
+        action: "regenerateMissingRates",
+      });
+
+      return Response.json({
+        actionId: action.actionId,
+        changes: [actionChange(4, actionRate, action.actionId)],
+        cursor: 4,
+      } satisfies ActionResponse);
+    });
+
+    const exported = await exportStoreSnapshot(
+      rates,
+      jsonFetcher(
+        "/api/app-installs/estii/rates/snapshot",
+        storeSnapshot({
+          schemaKey: "estii",
+          schema: rateCardSchema,
+          records: [actionRate],
+          sourceCursor: 4,
+        }),
+      ),
+    );
+    const restored = await restoreStoreSnapshot(
+      rates,
+      storeSnapshot({
+        schemaKey: "estii",
+        schema: rateCardSchema,
+        records: [restoredRate],
+        sourceCursor: 4,
+      }),
+      async (input, init) => {
+        expect(input).toBe("/api/app-installs/estii/rates/snapshot/restore");
+        expect(init?.method).toBe("POST");
+
+        return Response.json({
+          schema: rateCardSchema,
+          schemaUpdatedAt: "2026-04-28T00:04:00.000Z",
+          records: [restoredRate],
+          cursor: 5,
+        } satisfies BootstrapResponse);
+      },
+    );
+
+    await resetSourceSchema(
+      rates,
+      jsonFetcher("/api/app-installs/estii/rates/reset/schema", {
+        schema: rateCardSchema,
+        schemaUpdatedAt: "2026-04-28T00:05:00.000Z",
+        records: [restoredRate],
+        cursor: 6,
+      } satisfies BootstrapResponse),
+    );
+
+    const reset = await resetSeedData(
+      rates,
+      jsonFetcher("/api/app-installs/estii/rates/reset/seed", {
+        schema: rateCardSchema,
+        schemaUpdatedAt: "2026-04-28T00:06:00.000Z",
+        records: [rateRecord("rate-5", "resource-5", "card-2")],
+        cursor: 7,
+      } satisfies BootstrapResponse),
+    );
+
+    expect(exported.records).toEqual([actionRate]);
+    expect(restored.records).toEqual([restoredRate]);
+    expect(reset.records).toEqual([rateRecord("rate-5", "resource-5", "card-2")]);
+    expect((await readLocalSnapshot("estii")).records).toEqual([]);
+    expect((await readLocalSnapshot(rates)).records).toEqual([
+      rateRecord("rate-5", "resource-5", "card-2"),
+    ]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:app:rates",
+      activeSchemaKey: "estii",
       cursor: 7,
     });
   });
@@ -1423,11 +1594,34 @@ function installedTasksIdentity(installId: string) {
   return identity;
 }
 
+function installedEstiiIdentity(installId: string) {
+  const identity = installedAppStorageIdentity({ installId, packageAppKey: "estii" });
+
+  if (!identity) {
+    throw new Error(`Expected installed Estii identity for ${installId}.`);
+  }
+
+  return identity;
+}
+
 function record(id: string, title: string, done = false): StoredRecord {
   return {
     id,
     entity: "task",
     values: { title, done },
+    createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
+  };
+}
+
+function resourceRecord(id: string, name: string): StoredRecord {
+  return {
+    id,
+    entity: "resource",
+    values: {
+      name,
+      kind: "role",
+      unit: "day",
+    },
     createdAt: `2026-04-28T00:00:0${id.at(-1)}.000Z`,
   };
 }

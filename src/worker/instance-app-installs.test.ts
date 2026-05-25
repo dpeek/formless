@@ -4,7 +4,12 @@ import type {
   BootstrapResponse,
   CreateAppInstallResponse,
 } from "../shared/protocol.ts";
-import { taskSeedRecords, taskSourceSchema } from "../test/schema-apps.ts";
+import {
+  rateSeedRecords,
+  rateSourceSchema,
+  taskSeedRecords,
+  taskSourceSchema,
+} from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -55,6 +60,11 @@ describe("instance app install API routes", () => {
         defaultInstallId: "tasks",
         label: "Tasks",
         packageAppKey: "tasks",
+      }),
+      expect.objectContaining({
+        defaultInstallId: "estii",
+        label: "Estii",
+        packageAppKey: "estii",
       }),
     ]);
     expect(before.body.installs).toEqual([]);
@@ -107,6 +117,38 @@ describe("instance app install API routes", () => {
     expect(bootstrap.body.schema).toEqual(taskSourceSchema);
     expect(bootstrap.body.records).toEqual(taskSeedRecords);
     expect(bootstrap.body.cursor).toBe(taskSeedRecords.length);
+  });
+
+  it("persists Estii installs and bootstraps from the bundled Estii source", async () => {
+    const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "estii",
+      installId: "rates",
+      label: "Rates",
+    });
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/estii/rates/bootstrap");
+
+    expect(created.response.status).toBe(201);
+    expect(created.body.initialization).toEqual({
+      installId: "rates",
+      packageAppKey: "estii",
+      seedRecordsKey: "estii",
+      sourceSchemaKey: "estii",
+    });
+    expect(created.body.install).toEqual(
+      expect.objectContaining({
+        adminRoute: "/apps/rates",
+        installId: "rates",
+        label: "Rates",
+        packageAppKey: "estii",
+        schemaRoute: "/apps/rates/schema",
+        status: "installed",
+      }),
+    );
+    expect(created.body.install).not.toHaveProperty("publicRoute");
+    expect(created.body.install).not.toHaveProperty("publicRoutePrefix");
+    expect(bootstrap.body.schema).toEqual(rateSourceSchema);
+    expect(bootstrap.body.records).toEqual(rateSeedRecords);
+    expect(bootstrap.body.cursor).toBe(rateSeedRecords.length);
   });
 
   it("rejects duplicate and invalid installs without mutating existing installs", async () => {

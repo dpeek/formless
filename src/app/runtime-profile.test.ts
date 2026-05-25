@@ -120,11 +120,17 @@ describe("runtime profile resolver", () => {
         label: "Task Workspace",
         packageAppKey: "tasks",
       }),
+      appInstallFixture({
+        installId: "rates",
+        label: "Rates",
+        packageAppKey: "estii",
+      }),
     ];
     const world = installedAppWorldMountFromInstallId(profile, "personal", { appInstalls });
     const tasksWorld = installedAppWorldMountFromInstallId(profile, "task-workspace", {
       appInstalls,
     });
+    const estiiWorld = installedAppWorldMountFromInstallId(profile, "rates", { appInstalls });
 
     if (!world?.target || world.target.kind !== "appInstall") {
       throw new Error("Missing installed Site world.");
@@ -132,6 +138,10 @@ describe("runtime profile resolver", () => {
 
     if (!tasksWorld?.target || tasksWorld.target.kind !== "appInstall") {
       throw new Error("Missing installed Tasks world.");
+    }
+
+    if (!estiiWorld?.target || estiiWorld.target.kind !== "appInstall") {
+      throw new Error("Missing installed Estii world.");
     }
 
     expect(world.app.key).toBe("site");
@@ -144,17 +154,27 @@ describe("runtime profile resolver", () => {
     expect(tasksWorld.schemaRoute).toBe("/apps/task-workspace/schema");
     expect(tasksWorld.target.installId).toBe("task-workspace");
     expect(tasksWorld.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
+    expect(estiiWorld.app.key).toBe("estii");
+    expect(estiiWorld.route).toBe("/apps/rates");
+    expect(estiiWorld.schemaRoute).toBe("/apps/rates/schema");
+    expect(estiiWorld.target.installId).toBe("rates");
+    expect(estiiWorld.target.apiRoutePrefix).toBe("/api/app-installs/estii/rates");
     expect(runtimeScreenRoute(world, "/")).toBe("/apps/personal");
     expect(runtimeScreenRoute(world, "/settings")).toBe("/apps/personal/settings");
+    expect(runtimeScreenRoute(estiiWorld, "/setup")).toBe("/apps/rates/setup");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal")).toBe("/");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal/settings")).toBe("/settings");
     expect(runtimeScreenPathFromRoute(world, "/apps/personal/schema")).toBeUndefined();
+    expect(runtimeScreenPathFromRoute(estiiWorld, "/apps/rates/setup")).toBe("/setup");
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/personal/settings", { appInstalls })?.target,
     ).toEqual(world.target);
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/task-workspace", { appInstalls })?.target,
     ).toEqual(tasksWorld.target);
+    expect(
+      findRuntimeWorldMountByRoute(profile, "/apps/rates/setup", { appInstalls })?.target,
+    ).toEqual(estiiWorld.target);
     expect(
       installedAppWorldMountFromInstallId(profile, "missing", { appInstalls }),
     ).toBeUndefined();
@@ -167,6 +187,11 @@ describe("runtime profile resolver", () => {
         installId: "task-workspace",
         label: "Task Workspace",
         packageAppKey: "tasks",
+      }),
+      appInstallFixture({
+        installId: "rates",
+        label: "Rates",
+        packageAppKey: "estii",
       }),
     ];
     const world = installedAppWorldMountFromInstallId(profile, "task-workspace", { appInstalls });
@@ -219,7 +244,11 @@ describe("runtime profile resolver", () => {
     expect(
       installedSitePublicSurfaceFromRoute(profile, "/sites/task-workspace", { appInstalls }),
     ).toBeUndefined();
+    expect(
+      installedSitePublicSurfaceFromRoute(profile, "/sites/rates", { appInstalls }),
+    ).toBeUndefined();
     expect(isRuntimePublicSiteRoute(profile, "/sites/task-workspace", { appInstalls })).toBe(false);
+    expect(isRuntimePublicSiteRoute(profile, "/sites/rates", { appInstalls })).toBe(false);
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {

@@ -76,7 +76,7 @@ describe("app storage identity", () => {
     });
   });
 
-  it("maps an installed Tasks app without Site media facts", () => {
+  it("maps installed non-Site apps without Site media facts", () => {
     expect(
       installedAppStorageIdentity({
         installId: "tasks",
@@ -93,6 +93,22 @@ describe("app storage identity", () => {
       seedRecordsKey: "tasks",
       sourceSchemaKey: "tasks",
     });
+    expect(
+      installedAppStorageIdentity({
+        installId: "estii",
+        packageAppKey: "estii",
+      }),
+    ).toEqual({
+      apiRoutePrefix: "/api/app-installs/estii/estii",
+      authorityName: "app:estii",
+      broadcastChannelName: "formless:app:estii",
+      browserDatabaseName: "formless:app:estii",
+      installId: "estii",
+      kind: "appInstall",
+      packageAppKey: "estii",
+      seedRecordsKey: "estii",
+      sourceSchemaKey: "estii",
+    });
   });
 
   it("accepts default Site install identity and rejects invalid identities", () => {
@@ -108,7 +124,7 @@ describe("app storage identity", () => {
     expect(installedAppStorageIdentity({ installId: "Docs", packageAppKey: "site" })).toBe(
       undefined,
     );
-    expect(installedAppStorageIdentity({ installId: "estii", packageAppKey: "estii" })).toBe(
+    expect(installedAppStorageIdentity({ installId: "estii", packageAppKey: "missing" })).toBe(
       undefined,
     );
   });
@@ -173,6 +189,15 @@ describe("app storage identity", () => {
       },
       path: "/bootstrap",
     });
+    expect(parseAuthorityApiRoute("/api/app-installs/estii/estii/bootstrap")).toMatchObject({
+      identity: {
+        authorityName: "app:estii",
+        installId: "estii",
+        kind: "appInstall",
+        packageAppKey: "estii",
+      },
+      path: "/bootstrap",
+    });
   });
 
   it("leaves unknown or incomplete API routes unclaimed", () => {
@@ -181,7 +206,7 @@ describe("app storage identity", () => {
       "/api/site",
       "/api/missing/bootstrap",
       "/api/app-installs/site/personal",
-      "/api/app-installs/estii/estii/bootstrap",
+      "/api/app-installs/missing/estii/bootstrap",
     ]) {
       expect(parseAuthorityApiRoute(pathname)).toBeUndefined();
     }

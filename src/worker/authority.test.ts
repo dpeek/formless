@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { WebSocketEventMap } from "miniflare";
 import type {
+  ActionResponse,
   BootstrapResponse,
   MutationResponse,
   SchemaResponse,
@@ -200,6 +201,87 @@ describe("authority", () => {
     expect(legacy.records).toEqual(taskSeedRecords);
     expect(team.records).not.toContainEqual(created.record);
     expect(legacy.records).not.toContainEqual(created.record);
+  });
+
+  it("isolates installed Estii storage, sync, reset, snapshot, and actions by install id", async () => {
+    await resetInstalledApp("estii", "rates");
+    await resetInstalledApp("estii", "team-rates");
+
+    const omittedRate = rateCardSeedRecords.find(
+      (record) => record.id === "rec_rate_default_designer",
+    );
+
+    if (!omittedRate) {
+      throw new Error("Expected Estii seed records to include the default designer rate.");
+    }
+
+    const restoredRecords = rateCardSeedRecords.filter((record) => record.id !== omittedRate.id);
+    const initialSync = await getInstalledAppJson<SyncResponse>("estii", "rates", "/sync?after=0");
+    const restored = await postInstalledAppJson<BootstrapResponse>(
+      "estii",
+      "rates",
+      "/snapshot/restore",
+      storeSnapshot({
+        schemaKey: "estii",
+        sourceCursor: rateCardSeedRecords.length,
+        schema: rateCardSchema,
+        records: restoredRecords,
+      }),
+    );
+    const action = await postInstalledAppJson<ActionResponse>("estii", "rates", "/actions", {
+      actionId: "action-installed-estii-regenerate-rates",
+      entity: "rate",
+      action: "regenerateMissingRates",
+    });
+    const ratesSnapshot = await getInstalledAppJson<StoreSnapshot>("estii", "rates", "/snapshot");
+    const reset = await postInstalledAppJson<BootstrapResponse>(
+      "estii",
+      "rates",
+      "/reset/seed",
+      {},
+    );
+    const rates = await getInstalledAppJson<BootstrapResponse>("estii", "rates", "/bootstrap");
+    const team = await getInstalledAppJson<BootstrapResponse>("estii", "team-rates", "/bootstrap");
+    useSchemaApp("estii");
+    const legacy = await getJson<BootstrapResponse>("/api/bootstrap");
+    const createdRate = action.changes[0]?.payload;
+    const restoredActiveRecords = restored.records.filter((record) => !record.deletedAt);
+
+    expect(initialSync.cursor).toBe(rateCardSeedRecords.length);
+    expect(initialSync.changes.map((change) => change.payload)).toEqual(rateCardSeedRecords);
+    expect(restored.schema).toEqual(rateCardSchema);
+    expect(restoredActiveRecords).toEqual(restoredRecords);
+    expect(restored.records).toContainEqual(
+      expect.objectContaining({
+        deletedAt: expect.any(String),
+        id: omittedRate.id,
+      }),
+    );
+    expect(action.changes).toHaveLength(1);
+    expect(createdRate).toMatchObject({
+      entity: "rate",
+      values: {
+        resource: omittedRate.values.resource,
+        card: omittedRate.values.card,
+        cost: 0,
+        costUnit: "day",
+        price: 0,
+        priceSet: true,
+        currency: "usd",
+      },
+    });
+    expect(ratesSnapshot).toMatchObject({
+      kind: "formless.storeSnapshot",
+      schemaKey: "estii",
+      schema: rateCardSchema,
+    });
+    expect(ratesSnapshot.records).toContainEqual(createdRate);
+    expect(reset.records).toEqual(rateCardSeedRecords);
+    expect(rates.records).toEqual(rateCardSeedRecords);
+    expect(team.records).toEqual(rateCardSeedRecords);
+    expect(legacy.records).toEqual(rateCardSeedRecords);
+    expect(team.records).not.toContainEqual(createdRate);
+    expect(legacy.records).not.toContainEqual(createdRate);
   });
 
   it("projects installed Site tree media hrefs through the selected install route", async () => {

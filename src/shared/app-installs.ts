@@ -131,6 +131,16 @@ export const bundledAppPackages = [
     seedRecordsKey: "tasks",
     adminRouteBase: "/apps",
   },
+  {
+    packageAppKey: "estii",
+    label: schemaAppDefinitions.estii.label,
+    description: "Rate-card app backed by the bundled Estii schema and starter records.",
+    defaultInstallId: "estii",
+    supportsMultipleInstalls: true,
+    sourceSchemaKey: "estii",
+    seedRecordsKey: "estii",
+    adminRouteBase: "/apps",
+  },
 ] as const satisfies readonly BundledAppPackage[];
 
 export function listBundledAppPackages(): BundledAppPackage[] {

@@ -17,7 +17,7 @@ type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
 describe("app install registry", () => {
-  it("declares Site and Tasks as installable bundled app packages", () => {
+  it("declares Site, Tasks, and Estii as installable bundled app packages", () => {
     expect(listBundledAppPackages()).toEqual([
       expect.objectContaining({
         adminRouteBase: "/apps",
@@ -38,10 +38,19 @@ describe("app install registry", () => {
         sourceSchemaKey: "tasks",
         supportsMultipleInstalls: true,
       }),
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "estii",
+        label: "Estii",
+        packageAppKey: "estii",
+        seedRecordsKey: "estii",
+        sourceSchemaKey: "estii",
+        supportsMultipleInstalls: true,
+      }),
     ]);
     expect(findBundledAppPackage("site")?.label).toBe("Site");
     expect(findBundledAppPackage("tasks")?.label).toBe("Tasks");
-    expect(findBundledAppPackage("estii")).toBeUndefined();
+    expect(findBundledAppPackage("estii")?.label).toBe("Estii");
   });
 
   it("validates route-safe install ids", () => {
@@ -142,6 +151,35 @@ describe("app install registry", () => {
       packageAppKey: "tasks",
       seedRecordsKey: "tasks",
       sourceSchemaKey: "tasks",
+    });
+  });
+
+  it("creates a flat Estii install without Site public route metadata", () => {
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "estii",
+        label: " Estii ",
+        now,
+        packageAppKey: "estii",
+      }),
+    );
+
+    expect(result.install).toEqual({
+      adminRoute: "/apps/estii",
+      createdAt: now,
+      installId: "estii",
+      label: "Estii",
+      packageAppKey: "estii",
+      schemaRoute: "/apps/estii/schema",
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(result.initialization).toEqual({
+      installId: "estii",
+      packageAppKey: "estii",
+      seedRecordsKey: "estii",
+      sourceSchemaKey: "estii",
     });
   });
 

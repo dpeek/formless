@@ -7,7 +7,7 @@ import type {
   SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
-import { siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
+import { rateSourceSchema, siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -110,6 +110,49 @@ describe("instance archive restore API", () => {
     expect(installs.body.installs[0]).not.toHaveProperty("publicRoute");
     expect(bootstrap.body.schema).toEqual(taskSourceSchema);
     expect(bootstrap.body.records).toEqual([taskRecord()]);
+  });
+
+  it("restores installed Estii app archives without Site media", async () => {
+    const dryRun = await postArchiveRestore(estiiAppArchive({ dryRun: true }));
+    const applied = await postArchiveRestore(estiiAppArchive({ dryRun: false }));
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/estii/rates/bootstrap");
+
+    expect(dryRun.response.status).toBe(200);
+    expect(dryRun.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: false,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["rates"],
+          mediaCountsByApp: { rates: 0 },
+        },
+      },
+    });
+    expect(applied.response.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["rates"],
+          mediaCountsByApp: { rates: 0 },
+        },
+      },
+    });
+    expect(installs.body.installs).toEqual([
+      expect.objectContaining({
+        adminRoute: "/apps/rates",
+        installId: "rates",
+        packageAppKey: "estii",
+        schemaRoute: "/apps/rates/schema",
+      }),
+    ]);
+    expect(installs.body.installs[0]).not.toHaveProperty("publicRoute");
+    expect(bootstrap.body.schema).toEqual(rateSourceSchema);
+    expect(bootstrap.body.records).toEqual(estiiRecords());
   });
 
   it("restores installed Site media before public tree reads reference it", async () => {
@@ -243,6 +286,39 @@ function tasksAppArchive(input: { dryRun: boolean }): AppArchive {
   };
 }
 
+function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
+  return {
+    kind: APP_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
+    app: {
+      installId: "rates",
+      packageAppKey: "estii",
+      sourceSchemaKey: "estii",
+      label: "Rates",
+      status: "installed",
+      createdAt: "2026-05-12T00:00:00.000Z",
+      updatedAt: "2026-05-12T00:00:00.000Z",
+    },
+    data: {
+      kind: "storeSnapshot",
+      snapshot: {
+        kind: "formless.storeSnapshot",
+        version: 1,
+        schemaKey: "estii",
+        exportedAt: "2026-05-12T00:00:00.000Z",
+        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+        sourceCursor: 3,
+        schema: rateSourceSchema,
+        records: estiiRecords(),
+      },
+    },
+    media: { objects: [] },
+  };
+}
+
 const mediaBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const installedMediaStorageKey = "app-installs/personal/site/images/installed.png";
 const installedMediaHref = `/api/app-installs/site/personal/media/${installedMediaStorageKey}`;
@@ -314,4 +390,45 @@ function taskRecord(): StoredRecord {
       priority: "normal",
     },
   };
+}
+
+function estiiRecords(): StoredRecord[] {
+  return [
+    {
+      id: "card-restored",
+      createdAt: "2026-05-12T00:00:00.000Z",
+      entity: "card",
+      values: {
+        name: "Restored card",
+        isDefault: true,
+        marginMin: 0.4,
+        marginMed: 0.5,
+        marginMax: 0.6,
+      },
+    },
+    {
+      id: "resource-restored",
+      createdAt: "2026-05-12T00:00:01.000Z",
+      entity: "resource",
+      values: {
+        name: "Restored resource",
+        kind: "role",
+        unit: "day",
+      },
+    },
+    {
+      id: "rate-restored",
+      createdAt: "2026-05-12T00:00:02.000Z",
+      entity: "rate",
+      values: {
+        resource: "resource-restored",
+        card: "card-restored",
+        cost: 500,
+        costUnit: "day",
+        price: 750,
+        priceSet: true,
+        currency: "usd",
+      },
+    },
+  ];
 }
