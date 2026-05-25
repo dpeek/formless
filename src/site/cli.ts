@@ -26,12 +26,16 @@ import {
 import { FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH } from "./instance-workspace-secrets.ts";
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
+  checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
+  pullFormlessInstanceWorkspace as pullFormlessInstanceWorkspaceCommand,
   rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
+  type CheckFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
+  type PullFormlessInstanceWorkspaceResult,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
 } from "./instance-workspace.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
@@ -122,12 +126,21 @@ export {
   type AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
   type AdoptFormlessInstanceWorkspaceAdminTokenInput,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
+  type CheckFormlessInstanceWorkspaceDependencies,
+  type CheckFormlessInstanceWorkspaceInput,
+  type CheckFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceStatusDependencies,
   type FormlessInstanceWorkspaceStatusInput,
   type FormlessInstanceWorkspaceStatusResult,
+  type FormlessInstanceWorkspaceDriftSummary,
+  type FormlessInstanceWorkspacePackageMismatch,
   type InitFormlessInstanceWorkspaceDependencies,
   type InitFormlessInstanceWorkspaceInput,
   type InitFormlessInstanceWorkspaceResult,
+  type PullFormlessInstanceWorkspaceAppArchiveResult,
+  type PullFormlessInstanceWorkspaceDependencies,
+  type PullFormlessInstanceWorkspaceInput,
+  type PullFormlessInstanceWorkspaceResult,
   type RotateFormlessInstanceWorkspaceAdminTokenDependencies,
   type RotateFormlessInstanceWorkspaceAdminTokenInput,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
@@ -413,6 +426,16 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceStatusResult(result, dependencies.cwd));
       return;
     }
+    case "instancePull": {
+      const result = await pullFormlessInstanceWorkspace(command, dependencies);
+      dependencies.log(formatInstanceWorkspacePullResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceCheck": {
+      const result = await checkFormlessInstanceWorkspace(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceCheckResult(result, dependencies.cwd));
+      return;
+    }
     case "instanceTokenAdopt": {
       const result = await adoptFormlessInstanceWorkspaceAdminToken(command, dependencies);
       dependencies.log(formatInstanceWorkspaceTokenAdoptResult(result, dependencies.cwd));
@@ -423,8 +446,6 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceTokenRotateResult(result, dependencies.cwd));
       return;
     }
-    case "instancePull":
-    case "instanceCheck":
     case "instancePush":
     case "instanceDev":
     case "instanceResetLocal":
@@ -624,6 +645,32 @@ export async function getFormlessInstanceWorkspaceStatus(
   return getFormlessInstanceWorkspaceStatusCommand(input, dependencies);
 }
 
+export async function pullFormlessInstanceWorkspace(
+  input: {
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<PullFormlessInstanceWorkspaceResult> {
+  return pullFormlessInstanceWorkspaceCommand(input, dependencies);
+}
+
+export async function checkFormlessInstanceWorkspace(
+  input: {
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<CheckFormlessInstanceWorkspaceResult> {
+  return checkFormlessInstanceWorkspaceCommand(input, dependencies);
+}
+
 export async function adoptFormlessInstanceWorkspaceAdminToken(
   input: {
     adminToken?: string | null;
@@ -788,6 +835,45 @@ function formatInstanceWorkspaceStatusResult(
     .join("\n");
 }
 
+function formatInstanceWorkspacePullResult(
+  result: PullFormlessInstanceWorkspaceResult,
+  cwd: string,
+): string {
+  return [
+    "Instance workspace pulled.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Instance archive: ${formatCliPath(cwd, result.instanceArchive.archivePath)}.`,
+    `Apps: ${result.instanceArchive.appCount}.`,
+    `Records: ${result.instanceArchive.recordCount}.`,
+    `Media files: ${result.instanceArchive.mediaCount}.`,
+    `App archives: ${formatPulledAppArchives(result.appArchives)}.`,
+  ].join("\n");
+}
+
+function formatInstanceWorkspaceCheckResult(
+  result: CheckFormlessInstanceWorkspaceResult,
+  cwd: string,
+): string {
+  const drift = result.drift;
+
+  return [
+    "Instance workspace check.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Drift: ${drift.status === "no-drift" ? "none" : "detected"}.`,
+    `Local apps: ${drift.localAppCount}. Remote apps: ${drift.remoteAppCount}.`,
+    `Local records: ${drift.localRecordCount}. Remote records: ${drift.remoteRecordCount}.`,
+    `Local media files: ${drift.localMediaCount}. Remote media files: ${drift.remoteMediaCount}.`,
+    `Missing remote installs: ${formatList(drift.missingInstalls)}.`,
+    `Extra remote installs: ${formatList(drift.extraInstalls)}.`,
+    `Package mismatches: ${formatPackageMismatches(drift.packageMismatches)}.`,
+    `Changed records: ${formatList(drift.changedRecords)}.`,
+    `Changed media: ${formatList(drift.changedMedia)}.`,
+    `Changed archive paths: ${formatList(drift.changedArchivePaths)}.`,
+  ].join("\n");
+}
+
 function formatInstanceWorkspaceTokenAdoptResult(
   result: AdoptFormlessInstanceWorkspaceAdminTokenResult,
   cwd: string,
@@ -900,6 +986,18 @@ function formatWorkspaceApps(apps: readonly FormlessInstanceWorkspaceApp[]): str
   return apps.map((app) => `${app.installId} (${app.packageAppKey})`).join(", ");
 }
 
+function formatPulledAppArchives(
+  apps: readonly PullFormlessInstanceWorkspaceResult["appArchives"][number][],
+): string {
+  if (apps.length === 0) {
+    return "none";
+  }
+
+  return apps
+    .map((app) => `${app.installId} (${app.recordCount} records, ${app.mediaCount} media)`)
+    .join(", ");
+}
+
 function formatRemoteInstalls(
   installs: readonly { installId: string; label: string; packageAppKey: string }[],
 ): string {
@@ -914,6 +1012,29 @@ function formatRemoteInstalls(
 
 function formatDeployMetadataVersion(version: string | null): string {
   return version ?? "<missing>";
+}
+
+function formatList(values: readonly string[]): string {
+  return values.length === 0 ? "none" : values.join(", ");
+}
+
+function formatPackageMismatches(
+  mismatches: readonly {
+    installId: string;
+    localPackageAppKey: string;
+    remotePackageAppKey: string;
+  }[],
+): string {
+  if (mismatches.length === 0) {
+    return "none";
+  }
+
+  return mismatches
+    .map(
+      (mismatch) =>
+        `${mismatch.installId} (local ${mismatch.localPackageAppKey}, remote ${mismatch.remotePackageAppKey})`,
+    )
+    .join(", ");
 }
 
 function formatOwnerSetup(status: {

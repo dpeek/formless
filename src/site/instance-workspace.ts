@@ -1,9 +1,11 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
   APP_ARCHIVE_KIND,
   INSTANCE_ARCHIVE_KIND,
+  formatAppArchive,
+  formatInstanceArchive,
   parsePortableArchive,
   type AppArchive,
   type PortableArchive,
@@ -35,7 +37,13 @@ import {
   readFormlessInstanceTargetStatus,
   type FormlessInstanceTargetStatus,
 } from "./instance-target-client.ts";
-import { PORTABLE_ARCHIVE_MANIFEST_FILE } from "./archive-workflows.ts";
+import {
+  exportAppArchive,
+  exportInstanceArchive,
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
+  type ArchiveDiskMediaFile,
+  type ArchiveDiskWriteResult,
+} from "./archive-workflows.ts";
 import { packageExecCommand } from "./package-commands.ts";
 
 export type InitFormlessInstanceWorkspaceInput = {
@@ -78,6 +86,68 @@ export type FormlessInstanceWorkspaceStatusResult = {
   remoteStatus?: FormlessInstanceTargetStatus;
   secretState: "env" | "missing" | "stored";
   selectedTarget?: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type PullFormlessInstanceWorkspaceInput = {
+  targetAlias?: string | null;
+  workspacePath?: string;
+};
+
+export type PullFormlessInstanceWorkspaceDependencies = {
+  cwd: string;
+  fetch: typeof fetch;
+  now: () => string;
+};
+
+export type PullFormlessInstanceWorkspaceAppArchiveResult = ArchiveDiskWriteResult & {
+  archiveRoot: string;
+  installId: string;
+};
+
+export type PullFormlessInstanceWorkspaceResult = {
+  appArchives: PullFormlessInstanceWorkspaceAppArchiveResult[];
+  instanceArchive: ArchiveDiskWriteResult;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type CheckFormlessInstanceWorkspaceInput = {
+  targetAlias?: string | null;
+  workspacePath?: string;
+};
+
+export type CheckFormlessInstanceWorkspaceDependencies = {
+  cwd: string;
+  fetch: typeof fetch;
+  now: () => string;
+};
+
+export type FormlessInstanceWorkspacePackageMismatch = {
+  installId: string;
+  localPackageAppKey: string;
+  remotePackageAppKey: string;
+};
+
+export type FormlessInstanceWorkspaceDriftSummary = {
+  changedArchivePaths: string[];
+  changedMedia: string[];
+  changedRecords: string[];
+  extraInstalls: string[];
+  localAppCount: number;
+  localMediaCount: number;
+  localRecordCount: number;
+  missingInstalls: string[];
+  packageMismatches: FormlessInstanceWorkspacePackageMismatch[];
+  remoteAppCount: number;
+  remoteMediaCount: number;
+  remoteRecordCount: number;
+  status: "drift" | "no-drift";
+};
+
+export type CheckFormlessInstanceWorkspaceResult = {
+  drift: FormlessInstanceWorkspaceDriftSummary;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
   workspaceRoot: string;
 };
 
@@ -194,6 +264,112 @@ export async function getFormlessInstanceWorkspaceStatus(
   };
 }
 
+export async function pullFormlessInstanceWorkspace(
+  input: PullFormlessInstanceWorkspaceInput,
+  dependencies: PullFormlessInstanceWorkspaceDependencies,
+): Promise<PullFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "pull");
+  const instanceArchiveRoot = path.join(workspaceRoot, manifest.archives.instance);
+
+  await prepareWorkspaceDirectories(workspaceRoot, manifest);
+  await rm(instanceArchiveRoot, { force: true, recursive: true });
+
+  const instanceArchive = await exportInstanceArchive(
+    {
+      outDir: instanceArchiveRoot,
+      target: selectedTarget.url,
+    },
+    dependencies,
+  );
+  const pulledInstanceArchive = await readArchiveDirectoryForCheck(instanceArchiveRoot);
+
+  if (!pulledInstanceArchive || pulledInstanceArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+    throw new Error("Formless instance pull did not write an instance archive.");
+  }
+
+  const appArchives: PullFormlessInstanceWorkspaceAppArchiveResult[] = [];
+
+  for (const app of archiveApps(pulledInstanceArchive.archive)) {
+    const archiveRoot = path.join(
+      workspaceRoot,
+      workspaceAppArchivePath(manifest, app.app.installId),
+    );
+    const archive = await pullWorkspaceAppArchive(
+      {
+        archiveRoot,
+        installId: app.app.installId,
+        targetUrl: selectedTarget.url,
+      },
+      dependencies,
+    );
+
+    appArchives.push(archive);
+  }
+
+  return {
+    appArchives: appArchives.sort((left, right) => left.installId.localeCompare(right.installId)),
+    instanceArchive,
+    selectedTarget,
+    workspaceRoot,
+  };
+}
+
+export async function checkFormlessInstanceWorkspace(
+  input: CheckFormlessInstanceWorkspaceInput,
+  dependencies: CheckFormlessInstanceWorkspaceDependencies,
+): Promise<CheckFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "check");
+  const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "check");
+
+  try {
+    const remoteArchiveRoot = path.join(tempRoot, "instance");
+
+    await exportInstanceArchive(
+      {
+        outDir: remoteArchiveRoot,
+        target: selectedTarget.url,
+      },
+      dependencies,
+    );
+
+    const remoteArchive = await readArchiveDirectoryForCheck(remoteArchiveRoot);
+
+    if (!remoteArchive || remoteArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+      throw new Error("Formless instance check did not write a remote instance archive.");
+    }
+
+    const localInstanceArchive = await readArchiveDirectoryForCheck(
+      path.join(workspaceRoot, manifest.archives.instance),
+    );
+    const localAppArchives = new Map<string, WorkspaceArchiveDirectory>();
+
+    for (const app of manifest.apps) {
+      const archive = await readArchiveDirectoryForCheck(path.join(workspaceRoot, app.archivePath));
+
+      if (archive) {
+        localAppArchives.set(app.installId, archive);
+      }
+    }
+
+    return {
+      drift: compareWorkspaceArchives({
+        localAppArchives,
+        localInstanceArchive,
+        manifest,
+        remoteArchive,
+      }),
+      selectedTarget,
+      workspaceRoot,
+    };
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+}
+
 export async function adoptFormlessInstanceWorkspaceAdminToken(
   input: AdoptFormlessInstanceWorkspaceAdminTokenInput,
   dependencies: AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
@@ -270,6 +446,257 @@ export async function rotateFormlessInstanceWorkspaceAdminToken(
     workerName,
     workspaceRoot,
   };
+}
+
+type WorkspaceArchiveDirectory = {
+  archive: PortableArchive;
+  archivePath: string;
+  mediaFiles: ArchiveDiskMediaFile[];
+  missingMediaFiles: string[];
+};
+
+async function pullWorkspaceAppArchive(
+  input: {
+    archiveRoot: string;
+    installId: string;
+    targetUrl: string;
+  },
+  dependencies: PullFormlessInstanceWorkspaceDependencies,
+): Promise<PullFormlessInstanceWorkspaceAppArchiveResult> {
+  await rm(input.archiveRoot, { force: true, recursive: true });
+
+  const write = await exportAppArchive(
+    {
+      installId: input.installId,
+      outDir: input.archiveRoot,
+      target: input.targetUrl,
+    },
+    dependencies,
+  );
+
+  return {
+    ...write,
+    archiveRoot: input.archiveRoot,
+    installId: input.installId,
+  };
+}
+
+async function readArchiveDirectoryForCheck(
+  archiveRoot: string,
+): Promise<WorkspaceArchiveDirectory | undefined> {
+  const archivePath = path.join(archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE);
+  let contents: string;
+
+  try {
+    contents = await readFile(archivePath, "utf8");
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+
+  const archive = parsePortableArchive(JSON.parse(contents) as unknown);
+  const mediaFiles: ArchiveDiskMediaFile[] = [];
+  const missingMediaFiles: string[] = [];
+
+  for (const app of archiveApps(archive)) {
+    for (const object of app.media.objects) {
+      try {
+        const bytes = new Uint8Array(await readFile(path.join(archiveRoot, object.archivePath)));
+
+        mediaFiles.push({
+          archivePath: object.archivePath,
+          byteSize: bytes.byteLength,
+          bytes,
+          contentType: object.contentType,
+        });
+      } catch (error) {
+        if (isNodeError(error) && error.code === "ENOENT") {
+          missingMediaFiles.push(object.archivePath);
+          continue;
+        }
+
+        throw error;
+      }
+    }
+  }
+
+  return {
+    archive,
+    archivePath,
+    mediaFiles,
+    missingMediaFiles: missingMediaFiles.sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+function compareWorkspaceArchives(input: {
+  localAppArchives: ReadonlyMap<string, WorkspaceArchiveDirectory>;
+  localInstanceArchive: WorkspaceArchiveDirectory | undefined;
+  manifest: FormlessInstanceWorkspaceManifest;
+  remoteArchive: WorkspaceArchiveDirectory;
+}): FormlessInstanceWorkspaceDriftSummary {
+  const remoteApps = archiveApps(input.remoteArchive.archive);
+  const remoteAppsByInstall = new Map(remoteApps.map((app) => [app.app.installId, app]));
+  const manifestAppsByInstall = new Map(input.manifest.apps.map((app) => [app.installId, app]));
+  const changedArchivePaths = new Set<string>();
+  const changedMedia = new Set<string>();
+  const changedRecords = new Set<string>();
+  const packageMismatches: FormlessInstanceWorkspacePackageMismatch[] = [];
+  const missingInstalls = input.manifest.apps
+    .filter((app) => !remoteAppsByInstall.has(app.installId))
+    .map((app) => app.installId)
+    .sort((left, right) => left.localeCompare(right));
+  const extraInstalls = remoteApps
+    .filter((app) => !manifestAppsByInstall.has(app.app.installId))
+    .map((app) => app.app.installId)
+    .sort((left, right) => left.localeCompare(right));
+
+  if (
+    !input.localInstanceArchive ||
+    input.localInstanceArchive.archive.kind !== INSTANCE_ARCHIVE_KIND ||
+    comparableArchiveJson(input.localInstanceArchive.archive) !==
+      comparableArchiveJson(input.remoteArchive.archive)
+  ) {
+    changedArchivePaths.add(input.manifest.archives.instance);
+  }
+
+  for (const installId of missingInstalls) {
+    const app = manifestAppsByInstall.get(installId);
+
+    if (app) {
+      changedArchivePaths.add(app.archivePath);
+    }
+  }
+
+  for (const remoteApp of remoteApps) {
+    const manifestApp = manifestAppsByInstall.get(remoteApp.app.installId);
+
+    if (!manifestApp) {
+      continue;
+    }
+
+    const localArchive = input.localAppArchives.get(remoteApp.app.installId);
+
+    if (!localArchive || localArchive.archive.kind !== APP_ARCHIVE_KIND) {
+      changedArchivePaths.add(manifestApp.archivePath);
+      continue;
+    }
+
+    const localPackageAppKey = localArchive.archive.app.packageAppKey;
+
+    if (localPackageAppKey !== remoteApp.app.packageAppKey) {
+      packageMismatches.push({
+        installId: remoteApp.app.installId,
+        localPackageAppKey,
+        remotePackageAppKey: remoteApp.app.packageAppKey,
+      });
+      changedArchivePaths.add(manifestApp.archivePath);
+      continue;
+    }
+
+    if (comparableAppRecordsJson(localArchive.archive) !== comparableAppRecordsJson(remoteApp)) {
+      changedRecords.add(remoteApp.app.installId);
+      changedArchivePaths.add(manifestApp.archivePath);
+    }
+
+    if (
+      comparableAppMediaJson(localArchive, localArchive.archive) !==
+      comparableAppMediaJson(input.remoteArchive, remoteApp)
+    ) {
+      changedMedia.add(remoteApp.app.installId);
+      changedArchivePaths.add(manifestApp.archivePath);
+    }
+  }
+
+  const localArchives = [...input.localAppArchives.values()]
+    .map((archive) => (archive.archive.kind === APP_ARCHIVE_KIND ? archive.archive : undefined))
+    .filter((archive): archive is AppArchive => archive !== undefined);
+  const hasDrift =
+    changedArchivePaths.size > 0 ||
+    changedMedia.size > 0 ||
+    changedRecords.size > 0 ||
+    extraInstalls.length > 0 ||
+    missingInstalls.length > 0 ||
+    packageMismatches.length > 0;
+
+  return {
+    changedArchivePaths: [...changedArchivePaths].sort((left, right) => left.localeCompare(right)),
+    changedMedia: [...changedMedia].sort((left, right) => left.localeCompare(right)),
+    changedRecords: [...changedRecords].sort((left, right) => left.localeCompare(right)),
+    extraInstalls,
+    localAppCount: input.manifest.apps.length,
+    localMediaCount: localArchives.reduce((count, app) => count + app.media.objects.length, 0),
+    localRecordCount: localArchives.reduce((count, app) => count + appRecordCount(app), 0),
+    missingInstalls,
+    packageMismatches: packageMismatches.sort((left, right) =>
+      left.installId.localeCompare(right.installId),
+    ),
+    remoteAppCount: remoteApps.length,
+    remoteMediaCount: remoteApps.reduce((count, app) => count + app.media.objects.length, 0),
+    remoteRecordCount: remoteApps.reduce((count, app) => count + appRecordCount(app), 0),
+    status: hasDrift ? "drift" : "no-drift",
+  };
+}
+
+function comparableArchiveJson(archive: PortableArchive): string {
+  const normalized = normalizeGeneratedArchiveTimestamps(archive);
+
+  return normalized.kind === INSTANCE_ARCHIVE_KIND
+    ? formatInstanceArchive(normalized)
+    : formatAppArchive(normalized);
+}
+
+function comparableAppRecordsJson(archive: AppArchive): string {
+  return JSON.stringify(stableValue(normalizeGeneratedArchiveTimestamps(archive).data));
+}
+
+function comparableAppMediaJson(directory: WorkspaceArchiveDirectory, archive: AppArchive): string {
+  const bytesByArchivePath = new Map(
+    directory.mediaFiles.map((file) => [
+      file.archivePath,
+      Buffer.from(file.bytes).toString("base64"),
+    ]),
+  );
+  const missing = new Set(directory.missingMediaFiles);
+  const media = archive.media.objects
+    .map((object) => ({
+      archivePath: object.archivePath,
+      byteSize: object.byteSize,
+      bytesBase64: bytesByArchivePath.get(object.archivePath) ?? null,
+      contentType: object.contentType,
+      deliveryHref: object.deliveryHref,
+      missing: missing.has(object.archivePath),
+      storageKey: object.storageKey,
+    }))
+    .sort((left, right) => {
+      const storageKeyOrder = left.storageKey.localeCompare(right.storageKey);
+
+      return storageKeyOrder === 0
+        ? left.archivePath.localeCompare(right.archivePath)
+        : storageKeyOrder;
+    });
+
+  return JSON.stringify(stableValue(media));
+}
+
+function normalizeGeneratedArchiveTimestamps<T extends PortableArchive>(archive: T): T {
+  const nextArchive = jsonClone(archive);
+  const generatedAt = "1970-01-01T00:00:00.000Z";
+
+  nextArchive.exportedAt = generatedAt;
+
+  if (nextArchive.kind === INSTANCE_ARCHIVE_KIND) {
+    nextArchive.apps = nextArchive.apps.map((app) => normalizeGeneratedArchiveTimestamps(app));
+    return nextArchive;
+  }
+
+  if (nextArchive.data.kind === "storeSnapshot") {
+    nextArchive.data.snapshot.exportedAt = generatedAt;
+  }
+
+  return nextArchive;
 }
 
 function withSingleTarget(
@@ -406,6 +833,48 @@ async function prepareWorkspaceDirectories(
   ]);
 }
 
+function archiveApps(archive: PortableArchive): AppArchive[] {
+  return archive.kind === INSTANCE_ARCHIVE_KIND ? archive.apps : [archive];
+}
+
+function appRecordCount(app: AppArchive): number {
+  return app.data.kind === "storeSnapshot"
+    ? app.data.snapshot.records.length
+    : app.data.records.length;
+}
+
+function requireWorkspaceTarget(
+  manifest: FormlessInstanceWorkspaceManifest,
+  targetAlias: string | null | undefined,
+  commandName: "check" | "pull",
+): FormlessInstanceWorkspaceTarget {
+  const target = selectWorkspaceTarget(manifest, targetAlias);
+
+  if (!target) {
+    throw new Error(`Formless instance ${commandName} requires a workspace target.`);
+  }
+
+  return target;
+}
+
+async function createWorkspaceTempRoot(workspaceRoot: string, name: string): Promise<string> {
+  const tempParent = path.join(workspaceRoot, ".formless");
+
+  await mkdir(tempParent, { recursive: true });
+
+  return mkdtemp(path.join(tempParent, `${name}-`));
+}
+
+function workspaceAppArchivePath(
+  manifest: FormlessInstanceWorkspaceManifest,
+  installId: string,
+): string {
+  return (
+    manifest.apps.find((app) => app.installId === installId)?.archivePath ??
+    `${manifest.archives.apps}/${installId}`
+  );
+}
+
 function selectWorkspaceTarget(
   manifest: FormlessInstanceWorkspaceManifest,
   targetAlias: string | null | undefined,
@@ -533,6 +1002,26 @@ function workerNameFromWorkersDevUrl(targetUrl: string | undefined): string | un
   const [workerName] = withoutSuffix.split(".");
 
   return workerName || undefined;
+}
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, stableValue(child)]),
+  );
+}
+
+function jsonClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

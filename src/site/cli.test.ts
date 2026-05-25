@@ -9,6 +9,8 @@ import {
   APP_ARCHIVE_KIND,
   ARCHIVE_VERSION,
   INSTANCE_ARCHIVE_KIND,
+  formatAppArchive,
+  formatInstanceArchive,
   parsePortableArchive,
   type AppArchive,
   type InstanceArchive,
@@ -524,13 +526,13 @@ describe("Formless Site CLI", () => {
     });
 
     await runFormlessCli(
-      ["instance", "check", "--workspace", "../personal", "--target", "remote"],
+      ["instance", "push", "--workspace", "../personal", "--target", "remote"],
       cliDeps("/workspace/project", { logs }),
     );
 
     expect(logs).toEqual([
       [
-        "Instance workspace command parsed: check.",
+        "Instance workspace command parsed: push.",
         "Workspace: /workspace/personal.",
         "Manifest: /workspace/personal/formless.instance-workspace.json.",
         "Secret state: /workspace/personal/.formless/instance.env.",
@@ -800,6 +802,191 @@ describe("Formless Site CLI", () => {
         `Deploy metadata: ${packageJson.version}.`,
         "Owner setup: incomplete.",
         "Remote apps: david (site: David Peek).",
+      ].join("\n"),
+    ]);
+  });
+
+  it("pulls instance workspace archives into deterministic local layout", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const installs = [installedSite("david", "David Peek"), installedSite("james", "James Peek")];
+    const fetcher = archiveFetch(requests, installs, {
+      david: { mediaBytes: Buffer.from([4, 5, 6]), records: mediaRecords() },
+      james: { records: [] },
+    });
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      apps: [workspaceApp("david", "David Peek"), workspaceApp("james", "James Peek")],
+    });
+
+    await runFormlessCli(
+      ["instance", "pull", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    const instanceArchivePath = path.join(
+      workspaceRoot,
+      "archives/instance",
+      PORTABLE_ARCHIVE_MANIFEST_FILE,
+    );
+    const pulledInstance = parsePortableArchive(
+      JSON.parse(await readFile(instanceArchivePath, "utf8")) as unknown,
+    );
+
+    if (pulledInstance.kind !== INSTANCE_ARCHIVE_KIND) {
+      throw new Error("Expected instance archive.");
+    }
+
+    expect(pulledInstance.apps.map((app) => app.app.installId)).toEqual(["david", "james"]);
+    await expect(
+      readFile(
+        path.join(
+          workspaceRoot,
+          "archives/apps/david/media/david/app-installs/david/site/images/cover.png",
+        ),
+      ),
+    ).resolves.toEqual(Buffer.from([4, 5, 6]));
+    await expect(
+      readFile(
+        path.join(workspaceRoot, "archives/apps/james", PORTABLE_ARCHIVE_MANIFEST_FILE),
+        "utf8",
+      ),
+    ).resolves.toContain('"installId": "james"');
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/snapshot",
+      "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
+      "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/media/app-installs/david/site/images/cover.png",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/snapshot",
+      "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/media/app-installs/david/site/images/cover.png",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
+    ]);
+    expect(logs).toEqual([
+      [
+        "Instance workspace pulled.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        `Instance archive: ${path.relative(tempDir, instanceArchivePath)}.`,
+        "Apps: 2.",
+        `Records: ${mediaRecords().length}.`,
+        "Media files: 1.",
+        `App archives: david (${mediaRecords().length} records, 1 media), james (0 records, 0 media).`,
+      ].join("\n"),
+    ]);
+  });
+
+  it("checks workspace archives without treating generated export timestamps as drift", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localApp = appArchive("david", "David Peek");
+    const fetcher = archiveFetch(requests, [installedSite("david", "David Peek")], {
+      david: { records: [] },
+    });
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localApp]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localApp);
+
+    await runFormlessCli(
+      ["instance", "check", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    expect(logs).toEqual([
+      [
+        "Instance workspace check.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Drift: none.",
+        "Local apps: 1. Remote apps: 1.",
+        "Local records: 0. Remote records: 0.",
+        "Local media files: 0. Remote media files: 0.",
+        "Missing remote installs: none.",
+        "Extra remote installs: none.",
+        "Package mismatches: none.",
+        "Changed records: none.",
+        "Changed media: none.",
+        "Changed archive paths: none.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("reports workspace archive drift by install set, package, records, and media", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localDavid = appArchive("david", "David Peek", {
+      mediaBytes: Buffer.from([1]),
+      records: mediaRecords(),
+    });
+    const localDom = appArchive("dom", "Dom");
+    const localJames = appArchive("james", "James");
+    const remoteInstalls = [
+      installedSite("david", "David Peek"),
+      installedApp("james", "James", "tasks"),
+      installedSite("extra", "Extra"),
+    ];
+    const fetcher = archiveFetch(
+      requests,
+      remoteInstalls,
+      {
+        david: { mediaBytes: Buffer.from([2]), records: publishRecords() },
+        extra: { records: [] },
+        james: { records: [] },
+      },
+      [tasksPackage()],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      apps: [
+        workspaceApp("david", "David Peek"),
+        workspaceApp("dom", "Dom"),
+        workspaceApp("james", "James"),
+      ],
+    });
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid, localDom, localJames]),
+      {
+        david: Buffer.from([1]),
+      },
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid, {
+      david: Buffer.from([1]),
+    });
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/dom"), localDom);
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/james"), localJames);
+
+    await runFormlessCli(
+      ["instance", "check", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    expect(logs).toEqual([
+      [
+        "Instance workspace check.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Drift: detected.",
+        "Local apps: 3. Remote apps: 3.",
+        `Local records: ${mediaRecords().length}. Remote records: ${publishRecords().length}.`,
+        "Local media files: 1. Remote media files: 1.",
+        "Missing remote installs: dom.",
+        "Extra remote installs: extra.",
+        "Package mismatches: james (local site, remote tasks).",
+        "Changed records: david.",
+        "Changed media: david.",
+        "Changed archive paths: archives/apps/david, archives/apps/dom, archives/apps/james, archives/instance.",
       ].join("\n"),
     ]);
   });
@@ -1860,7 +2047,12 @@ async function writeFileTree(
   await writeFile(path.join(projectRoot, "site.records.json"), formatSiteProjectRecords(records));
 }
 
-async function writeWorkspaceManifest(workspaceRoot: string) {
+async function writeWorkspaceManifest(
+  workspaceRoot: string,
+  options: {
+    apps?: ReturnType<typeof workspaceApp>[];
+  } = {},
+) {
   await mkdir(workspaceRoot, { recursive: true });
   await writeFile(
     path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
@@ -1873,14 +2065,7 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
       archives: { instance: "archives/instance", apps: "archives/apps" },
       local: { stateRoot: ".formless/local" },
       defaultAppPolicy: "declared-installs",
-      apps: [
-        {
-          installId: "david",
-          packageAppKey: "site",
-          label: "David Peek",
-          archivePath: "archives/apps/david",
-        },
-      ],
+      apps: options.apps ?? [workspaceApp("david", "David Peek")],
       deploy: {
         accountId: "account-123",
         workerName: "personal",
@@ -1890,15 +2075,32 @@ async function writeWorkspaceManifest(workspaceRoot: string) {
   );
 }
 
+function workspaceApp(installId: string, label: string) {
+  return {
+    installId,
+    packageAppKey: "site",
+    label,
+    archivePath: `archives/apps/${installId}`,
+  };
+}
+
 function installedSite(installId: string, label: string) {
+  return installedApp(installId, label, "site");
+}
+
+function installedApp(installId: string, label: string, packageAppKey: "site" | "tasks") {
   return {
     adminRoute: `/apps/${installId}` as `/apps/${string}`,
     createdAt: "2026-05-01T00:00:00.000Z",
     installId,
     label,
-    packageAppKey: "site" as const,
-    publicRoute: `/sites/${installId}` as `/sites/${string}`,
-    publicRoutePrefix: `/sites/${installId}/` as `/sites/${string}/`,
+    packageAppKey,
+    ...(packageAppKey === "site"
+      ? {
+          publicRoute: `/sites/${installId}` as `/sites/${string}`,
+          publicRoutePrefix: `/sites/${installId}/` as `/sites/${string}/`,
+        }
+      : {}),
     schemaRoute: `/apps/${installId}/schema` as `/apps/${string}/schema`,
     status: "installed" as const,
     updatedAt: "2026-05-01T00:00:00.000Z",
@@ -1916,7 +2118,15 @@ function instanceArchive(apps: AppArchive[]): InstanceArchive {
   };
 }
 
-function appArchive(installId: string, label: string): AppArchive {
+function appArchive(
+  installId: string,
+  label: string,
+  options: {
+    mediaBytes?: Uint8Array;
+    packageAppKey?: string;
+    records?: StoredRecord[];
+  } = {},
+): AppArchive {
   return {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
@@ -1925,7 +2135,7 @@ function appArchive(installId: string, label: string): AppArchive {
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: {
       installId,
-      packageAppKey: "site",
+      packageAppKey: options.packageAppKey ?? "site",
       sourceSchemaKey: "site",
       label,
       status: "installed",
@@ -1934,11 +2144,119 @@ function appArchive(installId: string, label: string): AppArchive {
     },
     data: {
       kind: "storeSnapshot",
-      snapshot: snapshot([]),
+      snapshot: snapshot(options.records ?? []),
     },
     media: {
-      objects: [],
+      objects: options.mediaBytes
+        ? [
+            {
+              archivePath: `media/${installId}/app-installs/${installId}/site/images/cover.png`,
+              byteSize: options.mediaBytes.byteLength,
+              contentType: "image/png",
+              deliveryHref: `/api/app-installs/site/${installId}/media/app-installs/${installId}/site/images/cover.png`,
+              storageKey: `app-installs/${installId}/site/images/cover.png`,
+            },
+          ]
+        : [],
     },
+  };
+}
+
+async function writeArchiveDirectory(
+  archiveRoot: string,
+  archive: InstanceArchive | AppArchive,
+  mediaByInstall: Record<string, Uint8Array> = {},
+) {
+  await mkdir(archiveRoot, { recursive: true });
+  await writeFile(
+    path.join(archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE),
+    archive.kind === INSTANCE_ARCHIVE_KIND
+      ? formatInstanceArchive(archive)
+      : formatAppArchive(archive),
+  );
+
+  for (const app of archive.kind === INSTANCE_ARCHIVE_KIND ? archive.apps : [archive]) {
+    const bytes = mediaByInstall[app.app.installId];
+
+    if (!bytes) {
+      continue;
+    }
+
+    const object = app.media.objects[0];
+
+    if (!object) {
+      throw new Error(`Expected media object for ${app.app.installId}.`);
+    }
+
+    const mediaPath = path.join(archiveRoot, object.archivePath);
+
+    await mkdir(path.dirname(mediaPath), { recursive: true });
+    await writeFile(mediaPath, Buffer.from(bytes));
+  }
+}
+
+function archiveFetch(
+  requests: CapturedFetchRequest[],
+  installs: ReturnType<typeof installedApp>[],
+  dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
+  extraPackages: ReturnType<typeof tasksPackage>[] = [],
+): typeof fetch {
+  return async (url, init) => {
+    const requestUrl =
+      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const parsedUrl = new URL(requestUrl);
+
+    requests.push({
+      body: init?.body,
+      headers: normalizeHeaders(init?.headers),
+      method: init?.method ?? "GET",
+      url: requestUrl,
+    });
+
+    if (parsedUrl.pathname === "/api/formless/app-installs") {
+      return Response.json({
+        packages: [...listBundledAppPackages(), ...extraPackages],
+        installs,
+      });
+    }
+
+    const snapshotMatch = parsedUrl.pathname.match(
+      /^\/api\/app-installs\/([^/]+)\/([^/]+)\/snapshot$/,
+    );
+
+    if (snapshotMatch) {
+      const installId = snapshotMatch[2] ?? "";
+
+      return Response.json(snapshot(dataByInstall[installId]?.records ?? []));
+    }
+
+    const mediaMatch = parsedUrl.pathname.match(/^\/api\/app-installs\/site\/([^/]+)\/media\//);
+
+    if (mediaMatch) {
+      const installId = mediaMatch[1] ?? "";
+      const mediaBytes = dataByInstall[installId]?.mediaBytes;
+
+      if (mediaBytes) {
+        return new Response(Buffer.from(mediaBytes), {
+          headers: { "content-type": "image/png" },
+        });
+      }
+    }
+
+    return Response.json({ error: "not found" }, { status: 404 });
+  };
+}
+
+function tasksPackage() {
+  return {
+    adminRouteBase: "/apps" as const,
+    defaultInstallId: "tasks",
+    description: "Test package mismatch.",
+    label: "Tasks",
+    packageAppKey: "tasks" as const,
+    seedRecordsKey: "site" as const,
+    sourceSchemaKey: "site" as const,
+    supportsMultipleInstalls: true,
   };
 }
 
