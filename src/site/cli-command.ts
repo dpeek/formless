@@ -1,3 +1,9 @@
+import {
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
+  normalizeFormlessInstanceWorkspaceTargetUrl,
+  parseFormlessInstanceWorkspaceTargetAlias,
+} from "./instance-workspace-config.ts";
+
 export type FormlessCliCommand =
   | {
       adminToken: string | null;
@@ -33,6 +39,46 @@ export type FormlessCliCommand =
       label: string | null;
       outDir: string;
       projectPath: string;
+    }
+  | {
+      fromArchive: string | null;
+      fromRemote: boolean;
+      kind: "instanceInitWorkspace";
+      name: string | null;
+      targetAlias: string;
+      targetUrl: string | null;
+      workspacePath: string;
+    }
+  | { kind: "instanceStatus"; targetAlias: string | null; workspacePath: string }
+  | { kind: "instancePull"; targetAlias: string | null; workspacePath: string }
+  | { kind: "instanceCheck"; targetAlias: string | null; workspacePath: string }
+  | {
+      allowStale: boolean;
+      apply: boolean;
+      kind: "instancePush";
+      replace: boolean;
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | { kind: "instanceDev"; workspacePath: string }
+  | { kind: "instanceResetLocal"; workspacePath: string }
+  | {
+      kind: "instanceDeploy";
+      migrationPolicy: "existing" | "new" | null;
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
+      adminToken: string | null;
+      kind: "instanceTokenAdopt";
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
+      adminToken: string | null;
+      kind: "instanceTokenRotate";
+      targetAlias: string | null;
+      workspacePath: string;
     }
   | {
       accountId: string | null;
@@ -79,6 +125,16 @@ export function formlessCliUsage(): string {
     "       [--apply] [--replace] [--admin-token <token>]",
     "  archive import-site --project <path> --install <id> --out <dir>",
     "       [--label <label>]",
+    "  instance init-workspace [--workspace <path>] [--name <name>]",
+    "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
+    "  instance status|pull|check [--workspace <path>] [--target <alias>]",
+    "  instance push [--workspace <path>] [--target <alias>]",
+    "       [--apply] [--replace] [--allow-stale]",
+    "  instance dev|reset-local [--workspace <path>]",
+    "  instance deploy [--workspace <path>] [--target <alias>]",
+    "       [--migration-policy <new|existing>]",
+    "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
+    "       [--admin-token <token>]",
   ].join("\n");
 }
 
@@ -104,6 +160,8 @@ export function parseFormlessCliArgs(args: string[]): FormlessCliCommand {
       return parsePublishArgs(rest);
     case "archive":
       return parseArchiveArgs(rest);
+    case "instance":
+      return parseInstanceArgs(rest);
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -482,6 +540,313 @@ function parseArchiveImportSiteArgs(args: string[]): FormlessCliCommand {
     outDir,
     projectPath: options.projectPath,
   };
+}
+
+function parseInstanceArgs(args: string[]): FormlessCliCommand {
+  const [subcommand, ...rest] = args;
+
+  switch (subcommand) {
+    case "init-workspace":
+      return parseInstanceInitWorkspaceArgs(rest);
+    case "status":
+      return parseInstanceTargetCommandArgs(rest, "formless instance status", "instanceStatus");
+    case "pull":
+      return parseInstanceTargetCommandArgs(rest, "formless instance pull", "instancePull");
+    case "check":
+      return parseInstanceTargetCommandArgs(rest, "formless instance check", "instanceCheck");
+    case "push":
+      return parseInstancePushArgs(rest);
+    case "dev":
+      return parseInstanceWorkspaceOnlyArgs(rest, "formless instance dev", "instanceDev");
+    case "reset-local":
+      return parseInstanceWorkspaceOnlyArgs(
+        rest,
+        "formless instance reset-local",
+        "instanceResetLocal",
+      );
+    case "deploy":
+      return parseInstanceDeployArgs(rest);
+    case "token":
+      return parseInstanceTokenArgs(rest);
+    default:
+      throw new Error(
+        "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|token>",
+      );
+  }
+}
+
+function parseInstanceInitWorkspaceArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceWorkspaceOptions(args, "formless instance init-workspace");
+  let fromArchive: string | null = null;
+  let fromRemote = false;
+  let name: string | null = null;
+  let targetAlias = DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS;
+  let targetUrl: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--name") {
+      name = readOptionValue(options.rest, index, "--name");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--target-url") {
+      targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(
+        readOptionValue(options.rest, index, "--target-url"),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--target") {
+      targetAlias = parseCliTargetAlias(readOptionValue(options.rest, index, "--target"));
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--from-remote") {
+      fromRemote = true;
+      continue;
+    }
+
+    if (arg === "--from-archive") {
+      fromArchive = readOptionValue(options.rest, index, "--from-archive");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance init-workspace: ${arg}`);
+  }
+
+  if (fromRemote && fromArchive) {
+    throw new Error(
+      "formless instance init-workspace cannot combine --from-remote and --from-archive.",
+    );
+  }
+
+  if (fromRemote && !targetUrl) {
+    throw new Error("Missing required option for formless instance init-workspace: --target-url.");
+  }
+
+  return {
+    fromArchive,
+    fromRemote,
+    kind: "instanceInitWorkspace",
+    name,
+    targetAlias,
+    targetUrl,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseInstanceTargetCommandArgs<
+  TKind extends "instanceCheck" | "instancePull" | "instanceStatus",
+>(args: string[], usage: string, kind: TKind): Extract<FormlessCliCommand, { kind: TKind }> {
+  const options = parseInstanceTargetOptions(args, usage);
+
+  if (options.rest.length > 0) {
+    throw new Error(`Unknown option for ${usage}: ${options.rest[0]}`);
+  }
+
+  return {
+    kind,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  } as Extract<FormlessCliCommand, { kind: TKind }>;
+}
+
+function parseInstancePushArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance push");
+  let allowStale = false;
+  let apply = false;
+  let replace = false;
+
+  for (const arg of options.rest) {
+    if (arg === "--apply") {
+      apply = true;
+      continue;
+    }
+
+    if (arg === "--dry-run") {
+      apply = false;
+      continue;
+    }
+
+    if (arg === "--replace") {
+      replace = true;
+      continue;
+    }
+
+    if (arg === "--allow-stale") {
+      allowStale = true;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance push: ${arg}`);
+  }
+
+  return {
+    allowStale,
+    apply,
+    kind: "instancePush",
+    replace,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseInstanceWorkspaceOnlyArgs<TKind extends "instanceDev" | "instanceResetLocal">(
+  args: string[],
+  usage: string,
+  kind: TKind,
+): Extract<FormlessCliCommand, { kind: TKind }> {
+  const options = parseInstanceWorkspaceOptions(args, usage);
+
+  if (options.rest.length > 0) {
+    throw new Error(`Unknown option for ${usage}: ${options.rest[0]}`);
+  }
+
+  return {
+    kind,
+    workspacePath: options.workspacePath,
+  } as Extract<FormlessCliCommand, { kind: TKind }>;
+}
+
+function parseInstanceDeployArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance deploy");
+  let migrationPolicy: "existing" | "new" | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--migration-policy") {
+      const value = readOptionValue(options.rest, index, "--migration-policy");
+
+      if (value !== "existing" && value !== "new") {
+        throw new Error('formless instance deploy --migration-policy must be "new" or "existing".');
+      }
+
+      migrationPolicy = value;
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance deploy: ${arg}`);
+  }
+
+  return {
+    kind: "instanceDeploy",
+    migrationPolicy,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseInstanceTokenArgs(args: string[]): FormlessCliCommand {
+  const [subcommand, ...rest] = args;
+
+  switch (subcommand) {
+    case "adopt":
+      return parseInstanceTokenCommandArgs(
+        rest,
+        "formless instance token adopt",
+        "instanceTokenAdopt",
+      );
+    case "rotate":
+      return parseInstanceTokenCommandArgs(
+        rest,
+        "formless instance token rotate",
+        "instanceTokenRotate",
+      );
+    default:
+      throw new Error("Usage: formless instance token <adopt|rotate>");
+  }
+}
+
+function parseInstanceTokenCommandArgs<TKind extends "instanceTokenAdopt" | "instanceTokenRotate">(
+  args: string[],
+  usage: string,
+  kind: TKind,
+): Extract<FormlessCliCommand, { kind: TKind }> {
+  const options = parseInstanceTargetOptions(args, usage);
+  let adminToken: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for ${usage}: ${arg}`);
+  }
+
+  return {
+    adminToken,
+    kind,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  } as Extract<FormlessCliCommand, { kind: TKind }>;
+}
+
+function parseInstanceTargetOptions(
+  args: string[],
+  usage: string,
+): { rest: string[]; targetAlias: string | null; workspacePath: string } {
+  const options = parseInstanceWorkspaceOptions(args, usage);
+  let targetAlias: string | null = null;
+  const rest: string[] = [];
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--target") {
+      targetAlias = parseCliTargetAlias(readOptionValue(options.rest, index, "--target"));
+      index += 1;
+      continue;
+    }
+
+    rest.push(arg);
+  }
+
+  return { rest, targetAlias, workspacePath: options.workspacePath };
+}
+
+function parseInstanceWorkspaceOptions(
+  args: string[],
+  usage: string,
+): { rest: string[]; workspacePath: string } {
+  let workspacePath = ".";
+  const rest: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--workspace") {
+      workspacePath = readOptionValue(args, index, "--workspace");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "-h" || arg === "--help") {
+      throw new Error(`Usage: ${usage} [--workspace <path>]`);
+    }
+
+    rest.push(arg);
+  }
+
+  return { rest, workspacePath };
+}
+
+function parseCliTargetAlias(value: string): string {
+  return parseFormlessInstanceWorkspaceTargetAlias(
+    "Formless instance workspace target alias",
+    value,
+  );
 }
 
 function parseArchiveTargetOutOptions(

@@ -16,7 +16,9 @@ import {
   type ImportSiteProjectArchiveResult,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
-import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
+import { formlessCliUsage, parseFormlessCliArgs, type FormlessCliCommand } from "./cli-command.ts";
+import { FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE } from "./instance-workspace-config.ts";
+import { FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH } from "./instance-workspace-secrets.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
 import { SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import { initSiteProjectSource, type InitSiteProjectSourceResult } from "./project-files.ts";
@@ -59,6 +61,44 @@ export {
   parseFormlessCliArgs,
   type FormlessCliCommand,
 } from "./cli-command.ts";
+export {
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_INSTANCE_ARCHIVE_PATH,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_LOCAL_STATE_ROOT,
+  DEFAULT_FORMLESS_INSTANCE_WORKSPACE_TARGET_ALIAS,
+  FORMLESS_INSTANCE_WORKSPACE_KIND,
+  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  FORMLESS_INSTANCE_WORKSPACE_VERSION,
+  defaultFormlessInstanceWorkspaceManifest,
+  formatFormlessInstanceWorkspaceManifest,
+  normalizeFormlessInstanceWorkspaceTargetUrl,
+  parseFormlessInstanceWorkspaceManifest,
+  parseFormlessInstanceWorkspaceManifestJson,
+  parseFormlessInstanceWorkspaceTargetAlias,
+  type FormlessInstanceWorkspaceApp,
+  type FormlessInstanceWorkspaceAppRoutes,
+  type FormlessInstanceWorkspaceArchives,
+  type FormlessInstanceWorkspaceDefaultAppPolicy,
+  type FormlessInstanceWorkspaceDeploy,
+  type FormlessInstanceWorkspaceDomainIntent,
+  type FormlessInstanceWorkspaceLocalState,
+  type FormlessInstanceWorkspaceManifest,
+  type FormlessInstanceWorkspaceMigrationPolicy,
+  type FormlessInstanceWorkspaceTarget,
+} from "./instance-workspace-config.ts";
+export {
+  FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
+  FORMLESS_INSTANCE_WORKSPACE_GITIGNORE_ENTRY,
+  FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_DIRECTORY,
+  FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_FILE,
+  FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
+  formlessInstanceWorkspaceSecretStatePath,
+  formatFormlessInstanceWorkspaceSecretState,
+  parseFormlessInstanceWorkspaceSecretState,
+  resolveFormlessInstanceWorkspaceAdminToken,
+  type FormlessInstanceWorkspaceSecretState,
+} from "./instance-workspace-secrets.ts";
 export {
   readSiteProjectSource,
   resolveSiteProjectRoot,
@@ -321,6 +361,18 @@ export async function runFormlessCli(
       );
       return;
     }
+    case "instanceInitWorkspace":
+    case "instanceStatus":
+    case "instancePull":
+    case "instanceCheck":
+    case "instancePush":
+    case "instanceDev":
+    case "instanceResetLocal":
+    case "instanceDeploy":
+    case "instanceTokenAdopt":
+    case "instanceTokenRotate":
+      dependencies.log(formatInstanceWorkspaceCommandSkeleton(command, dependencies.cwd));
+      return;
     case "save": {
       const result = await saveSiteProject(command, dependencies);
       dependencies.log(
@@ -569,6 +621,73 @@ function formatArchiveRestoreResult(
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
+}
+
+function formatInstanceWorkspaceCommandSkeleton(
+  command: FormlessInstanceWorkspaceCliCommand,
+  cwd: string,
+): string {
+  const workspaceRoot = path.resolve(cwd, command.workspacePath);
+  const lines = [
+    `Instance workspace command parsed: ${formatInstanceWorkspaceCommandName(command)}.`,
+    `Workspace: ${formatCliPath(cwd, workspaceRoot)}.`,
+    `Manifest: ${formatCliPath(cwd, path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE))}.`,
+    `Secret state: ${formatCliPath(cwd, path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH))}.`,
+  ];
+
+  if ("targetAlias" in command) {
+    lines.push(`Target: ${command.targetAlias ?? "<manifest default>"}.`);
+  }
+
+  if (command.kind === "instanceInitWorkspace" && command.targetUrl) {
+    lines.push(`Target URL: ${command.targetUrl}.`);
+  }
+
+  lines.push("No files changed: this command skeleton only validates arguments.");
+
+  return lines.join("\n");
+}
+
+type FormlessInstanceWorkspaceCliCommand = Extract<
+  FormlessCliCommand,
+  {
+    kind:
+      | "instanceCheck"
+      | "instanceDeploy"
+      | "instanceDev"
+      | "instanceInitWorkspace"
+      | "instancePull"
+      | "instancePush"
+      | "instanceResetLocal"
+      | "instanceStatus"
+      | "instanceTokenAdopt"
+      | "instanceTokenRotate";
+  }
+>;
+
+function formatInstanceWorkspaceCommandName(command: FormlessInstanceWorkspaceCliCommand): string {
+  switch (command.kind) {
+    case "instanceInitWorkspace":
+      return "init-workspace";
+    case "instanceStatus":
+      return "status";
+    case "instancePull":
+      return "pull";
+    case "instanceCheck":
+      return "check";
+    case "instancePush":
+      return "push";
+    case "instanceDev":
+      return "dev";
+    case "instanceResetLocal":
+      return "reset-local";
+    case "instanceDeploy":
+      return "deploy";
+    case "instanceTokenAdopt":
+      return "token adopt";
+    case "instanceTokenRotate":
+      return "token rotate";
+  }
 }
 
 function formatCliPath(cwd: string, filePath: string): string {

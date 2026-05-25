@@ -88,6 +88,16 @@ describe("Formless Site CLI", () => {
       "       [--apply] [--replace] [--admin-token <token>]",
       "  archive import-site --project <path> --install <id> --out <dir>",
       "       [--label <label>]",
+      "  instance init-workspace [--workspace <path>] [--name <name>]",
+      "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
+      "  instance status|pull|check [--workspace <path>] [--target <alias>]",
+      "  instance push [--workspace <path>] [--target <alias>]",
+      "       [--apply] [--replace] [--allow-stale]",
+      "  instance dev|reset-local [--workspace <path>]",
+      "  instance deploy [--workspace <path>] [--target <alias>]",
+      "       [--migration-policy <new|existing>]",
+      "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
+      "       [--admin-token <token>]",
     ].join("\n");
     const logs: string[] = [];
 
@@ -396,6 +406,163 @@ describe("Formless Site CLI", () => {
     expect(() =>
       parseFormlessCliArgs(["archive", "restore", "--target", "https://instance.example"]),
     ).toThrow("Missing required option for formless archive restore: --archive.");
+  });
+
+  it("parses instance workspace command skeletons", async () => {
+    const logs: string[] = [];
+
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "init-workspace",
+        "--workspace",
+        "../personal",
+        "--name",
+        "personal-sites",
+        "--target-url",
+        "https://formless.example.workers.dev/setup?token=ignored",
+        "--target",
+        "remote",
+        "--from-remote",
+      ]),
+    ).toEqual({
+      fromArchive: null,
+      fromRemote: true,
+      kind: "instanceInitWorkspace",
+      name: "personal-sites",
+      targetAlias: "remote",
+      targetUrl: "https://formless.example.workers.dev",
+      workspacePath: "../personal",
+    });
+    expect(
+      parseFormlessCliArgs(["instance", "init-workspace", "--from-archive", "archives"]),
+    ).toEqual({
+      fromArchive: "archives",
+      fromRemote: false,
+      kind: "instanceInitWorkspace",
+      name: null,
+      targetAlias: "remote",
+      targetUrl: null,
+      workspacePath: ".",
+    });
+    expect(parseFormlessCliArgs(["instance", "status", "--target", "local"])).toEqual({
+      kind: "instanceStatus",
+      targetAlias: "local",
+      workspacePath: ".",
+    });
+    expect(parseFormlessCliArgs(["instance", "pull", "--workspace", "../personal"])).toEqual({
+      kind: "instancePull",
+      targetAlias: null,
+      workspacePath: "../personal",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "push",
+        "--target",
+        "remote",
+        "--apply",
+        "--replace",
+        "--allow-stale",
+      ]),
+    ).toEqual({
+      allowStale: true,
+      apply: true,
+      kind: "instancePush",
+      replace: true,
+      targetAlias: "remote",
+      workspacePath: ".",
+    });
+    expect(parseFormlessCliArgs(["instance", "dev", "--workspace", "../personal"])).toEqual({
+      kind: "instanceDev",
+      workspacePath: "../personal",
+    });
+    expect(parseFormlessCliArgs(["instance", "reset-local"])).toEqual({
+      kind: "instanceResetLocal",
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "deploy",
+        "--target",
+        "remote",
+        "--migration-policy",
+        "existing",
+      ]),
+    ).toEqual({
+      kind: "instanceDeploy",
+      migrationPolicy: "existing",
+      targetAlias: "remote",
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "token",
+        "adopt",
+        "--target",
+        "remote",
+        "--admin-token",
+        "secret",
+      ]),
+    ).toEqual({
+      adminToken: "secret",
+      kind: "instanceTokenAdopt",
+      targetAlias: "remote",
+      workspacePath: ".",
+    });
+    expect(parseFormlessCliArgs(["instance", "token", "rotate"])).toEqual({
+      adminToken: null,
+      kind: "instanceTokenRotate",
+      targetAlias: null,
+      workspacePath: ".",
+    });
+
+    await runFormlessCli(
+      ["instance", "status", "--workspace", "../personal", "--target", "remote"],
+      cliDeps("/workspace/project", { logs }),
+    );
+
+    expect(logs).toEqual([
+      [
+        "Instance workspace command parsed: status.",
+        "Workspace: /workspace/personal.",
+        "Manifest: /workspace/personal/formless.instance-workspace.json.",
+        "Secret state: /workspace/personal/.formless/instance.env.",
+        "Target: remote.",
+        "No files changed: this command skeleton only validates arguments.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("validates instance workspace command options", () => {
+    expect(() => parseFormlessCliArgs(["instance"])).toThrow(
+      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|token>",
+    );
+    expect(() => parseFormlessCliArgs(["instance", "init-workspace", "--from-remote"])).toThrow(
+      "Missing required option for formless instance init-workspace: --target-url.",
+    );
+    expect(() =>
+      parseFormlessCliArgs([
+        "instance",
+        "init-workspace",
+        "--target-url",
+        "https://formless.example.workers.dev",
+        "--from-remote",
+        "--from-archive",
+        "archives",
+      ]),
+    ).toThrow("formless instance init-workspace cannot combine --from-remote and --from-archive.");
+    expect(() => parseFormlessCliArgs(["instance", "status", "--target", "Remote"])).toThrow(
+      "Formless instance workspace target alias must start with a lowercase letter",
+    );
+    expect(() =>
+      parseFormlessCliArgs(["instance", "deploy", "--migration-policy", "auto"]),
+    ).toThrow('formless instance deploy --migration-policy must be "new" or "existing".');
+    expect(() => parseFormlessCliArgs(["instance", "token", "forget"])).toThrow(
+      "Usage: formless instance token <adopt|rotate>",
+    );
   });
 
   it("initializes a Site project with config, deterministic records, and no starter media", async () => {
