@@ -10,6 +10,7 @@ Repo docs are project memory. Keep claims source-faithful: point to code, schema
 - `CONTEXT.md`: project vocabulary.
 - `doc/current.md`: shipped behavior index.
 - `doc/roadmap.md`: possible directions for next work.
+- `doc/v1/vision.md`: big-picture product vision for V1.
 - `doc/directions/`: larger product direction docs before PRD issues.
 - `doc/agents/`: skill and tracker configuration.
 
