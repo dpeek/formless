@@ -9,7 +9,7 @@ const now = "2026-05-23T00:00:00.000Z";
 
 describe("launch fixture registry", () => {
   it("lists and resolves named product instance fixtures", () => {
-    expect(listLaunchFixtureNames()).toEqual(["empty", "default-site", "multi-site"]);
+    expect(listLaunchFixtureNames()).toEqual(["empty", "default-site", "multi-site", "mixed-apps"]);
     expect(resolveLaunchFixture("empty")).toEqual({
       appInstalls: [],
       description: "Product instance with no installed apps.",
@@ -80,6 +80,36 @@ describe("launch fixture registry", () => {
       { kind: "source", seedRecordsKey: "site" },
       { kind: "source", seedRecordsKey: "site" },
       { kind: "source", seedRecordsKey: "site" },
+    ]);
+  });
+
+  it("creates mixed app initialization plans with Site-only public routes", () => {
+    const plan = createLaunchFixtureInitializationPlan("mixed-apps", { now });
+
+    expect(plan?.appInstalls.map((app) => app.install.installId)).toEqual([
+      "site",
+      "tasks",
+      "estii",
+    ]);
+    expect(plan?.appInstalls.map((app) => app.install.packageAppKey)).toEqual([
+      "site",
+      "tasks",
+      "estii",
+    ]);
+    expect(plan?.appInstalls.map((app) => app.install.adminRoute)).toEqual([
+      "/apps/site",
+      "/apps/tasks",
+      "/apps/estii",
+    ]);
+    expect(plan?.appInstalls.map((app) => app.install.publicRoute)).toEqual([
+      "/sites/site",
+      undefined,
+      undefined,
+    ]);
+    expect(plan?.appInstalls.map((app) => app.seed)).toEqual([
+      { kind: "source", seedRecordsKey: "site" },
+      { kind: "source", seedRecordsKey: "tasks" },
+      { kind: "source", seedRecordsKey: "estii" },
     ]);
   });
 });

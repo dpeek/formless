@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { APP_ARCHIVE_KIND, ARCHIVE_VERSION, type AppArchive } from "../shared/archive.ts";
+import {
+  APP_ARCHIVE_KIND,
+  ARCHIVE_VERSION,
+  INSTANCE_ARCHIVE_KIND,
+  type AppArchive,
+  type InstanceArchive,
+} from "../shared/archive.ts";
 import type {
   AppInstallsResponse,
   BootstrapResponse,
@@ -155,6 +161,57 @@ describe("instance archive restore API", () => {
     expect(bootstrap.body.records).toEqual(estiiRecords());
   });
 
+  it("restores mixed Site, Tasks, and Estii instance archives without non-Site media", async () => {
+    const dryRun = await postArchiveRestore(mixedInstanceArchive({ dryRun: true }));
+    const applied = await postArchiveRestore(mixedInstanceArchive({ dryRun: false }));
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const site = await getJson<BootstrapResponse>("/api/app-installs/site/personal/bootstrap");
+    const tasks = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
+    const estii = await getJson<BootstrapResponse>("/api/app-installs/estii/rates/bootstrap");
+
+    expect(dryRun.response.status).toBe(200);
+    expect(dryRun.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: false,
+        summary: {
+          appCount: 3,
+          createdInstalls: ["personal", "rates", "work"],
+          mediaCountsByApp: { personal: 0, rates: 0, work: 0 },
+        },
+      },
+    });
+    expect(applied.response.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 3,
+          createdInstalls: ["personal", "rates", "work"],
+          mediaCountsByApp: { personal: 0, rates: 0, work: 0 },
+        },
+      },
+    });
+    expect(installs.body.installs.map((install) => install.packageAppKey)).toEqual([
+      "site",
+      "estii",
+      "tasks",
+    ]);
+    expect(
+      installs.body.installs.find((install) => install.installId === "work"),
+    ).not.toHaveProperty("publicRoute");
+    expect(
+      installs.body.installs.find((install) => install.installId === "rates"),
+    ).not.toHaveProperty("publicRoute");
+    expect(site.body.schema).toEqual(siteSourceSchema);
+    expect(site.body.records).toEqual([siteRecord()]);
+    expect(tasks.body.schema).toEqual(taskSourceSchema);
+    expect(tasks.body.records).toEqual([taskRecord()]);
+    expect(estii.body.schema).toEqual(rateSourceSchema);
+    expect(estii.body.records).toEqual(estiiRecords());
+  });
+
   it("restores installed Site media before public tree reads reference it", async () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
@@ -194,7 +251,7 @@ describe("instance archive restore API", () => {
 });
 
 async function postArchiveRestore(
-  archive: AppArchive,
+  archive: AppArchive | InstanceArchive,
   mediaFiles: Array<{
     archivePath: string;
     byteSize: number;
@@ -223,6 +280,17 @@ async function getJson<T>(path: string) {
   return {
     body: (await response.json()) as T,
     response,
+  };
+}
+
+function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {
+  return {
+    kind: INSTANCE_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
+    apps: [appArchive(input), tasksAppArchive(input), estiiAppArchive(input)],
   };
 }
 

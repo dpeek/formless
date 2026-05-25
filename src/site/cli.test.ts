@@ -5,7 +5,13 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import packageJson from "../../package.json";
-import { APP_ARCHIVE_KIND, parsePortableArchive, type AppArchive } from "../shared/archive.ts";
+import {
+  APP_ARCHIVE_KIND,
+  INSTANCE_ARCHIVE_KIND,
+  parsePortableArchive,
+  type AppArchive,
+  type InstanceArchive,
+} from "../shared/archive.ts";
 import { listBundledAppPackages } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
@@ -13,7 +19,13 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
-import { siteSourceSchema, taskSeedRecords, taskSourceSchema } from "../test/schema-apps.ts";
+import {
+  rateSeedRecords,
+  rateSourceSchema,
+  siteSourceSchema,
+  taskSeedRecords,
+  taskSourceSchema,
+} from "../test/schema-apps.ts";
 import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
 import {
   defaultSiteProjectConfig,
@@ -826,6 +838,164 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("App archive exported for work.");
   });
 
+  it("exports and restores mixed instance archives without non-Site media requests", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "instance-backup");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const sourceRecords = mediaRecords();
+
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/personal",
+          createdAt: "2026-05-01T00:00:00.000Z",
+          installId: "personal",
+          label: "Personal",
+          packageAppKey: "site",
+          publicRoute: "/sites/personal",
+          publicRoutePrefix: "/sites/personal/",
+          schemaRoute: "/apps/personal/schema",
+          status: "installed",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        },
+        {
+          adminRoute: "/apps/work",
+          createdAt: "2026-05-01T00:00:00.000Z",
+          installId: "work",
+          label: "Work Tasks",
+          packageAppKey: "tasks",
+          schemaRoute: "/apps/work/schema",
+          status: "installed",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        },
+        {
+          adminRoute: "/apps/rates",
+          createdAt: "2026-05-01T00:00:00.000Z",
+          installId: "rates",
+          label: "Rates",
+          packageAppKey: "estii",
+          schemaRoute: "/apps/rates/schema",
+          status: "installed",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        },
+      ],
+    });
+    responses.queueJson(snapshot(sourceRecords));
+    responses.queueJson(taskSnapshot(taskSeedRecords));
+    responses.queueJson(rateSnapshot(rateSeedRecords));
+    responses.queueBinary(Buffer.from([4, 5, 6]), "image/png");
+
+    await runFormlessCli(
+      ["archive", "export", "--target", "https://instance.example", "--out", outDir],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const archivePath = path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
+    const archive = parsePortableArchive(
+      JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+    );
+
+    if (archive.kind !== INSTANCE_ARCHIVE_KIND) {
+      throw new Error("Expected instance archive.");
+    }
+
+    const personal = archive.apps.find((app) => app.app.installId === "personal");
+    const rates = archive.apps.find((app) => app.app.installId === "rates");
+    const work = archive.apps.find((app) => app.app.installId === "work");
+
+    expect(archive.apps.map((app) => [app.app.installId, app.app.packageAppKey])).toEqual([
+      ["personal", "site"],
+      ["rates", "estii"],
+      ["work", "tasks"],
+    ]);
+    expect(personal?.media.objects).toEqual([
+      expect.objectContaining({
+        archivePath: "media/personal/app-installs/personal/site/images/cover.png",
+        storageKey: "app-installs/personal/site/images/cover.png",
+      }),
+    ]);
+    expect(rates?.media.objects).toEqual([]);
+    expect(work?.media.objects).toEqual([]);
+    await expect(
+      readFile(path.join(outDir, "media/personal/app-installs/personal/site/images/cover.png")),
+    ).resolves.toEqual(Buffer.from([4, 5, 6]));
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://instance.example/api/formless/app-installs",
+      "GET https://instance.example/api/app-installs/site/personal/snapshot",
+      "GET https://instance.example/api/app-installs/tasks/work/snapshot",
+      "GET https://instance.example/api/app-installs/estii/rates/snapshot",
+      "GET https://instance.example/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+    ]);
+    expect(logs.at(-1)).toContain("Instance archive exported.");
+
+    responses.queueJson({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 3,
+          createdInstalls: ["personal", "rates", "work"],
+          mediaCountsByApp: { personal: 1, rates: 0, work: 0 },
+          recordCountsByApp: {
+            personal: { total: sourceRecords.length },
+            rates: { total: rateSeedRecords.length },
+            work: { total: taskSeedRecords.length },
+          },
+          replacedInstalls: [],
+        },
+      },
+    });
+
+    await runFormlessCli(
+      [
+        "archive",
+        "restore",
+        "--target",
+        "https://instance.example",
+        "--archive",
+        outDir,
+        "--apply",
+        "--admin-token",
+        "secret",
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = JSON.parse(String(restoreRequest?.body)) as {
+      archive: InstanceArchive;
+      mediaFiles: { bytesBase64: string }[];
+    };
+
+    expect(`${restoreRequest?.method} ${restoreRequest?.url}`).toBe(
+      "POST https://instance.example/api/formless/archive/restore",
+    );
+    expect(restoreRequest?.headers.authorization).toBe("Bearer secret");
+    expect(restoreBody.archive.kind).toBe(INSTANCE_ARCHIVE_KIND);
+    expect(restoreBody.archive.restorePolicy).toEqual({
+      dryRun: false,
+      installCollisions: "reject",
+    });
+    expect(
+      restoreBody.archive.apps.find((app) => app.app.installId === "rates")?.media.objects,
+    ).toEqual([]);
+    expect(
+      restoreBody.archive.apps.find((app) => app.app.installId === "work")?.media.objects,
+    ).toEqual([]);
+    expect(restoreBody.mediaFiles).toHaveLength(1);
+    expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
+    expect(logs.at(-1)).toContain("Archive restore applied ok.");
+  });
+
   it("imports a standalone Site project into an app archive directory", async () => {
     const tempDir = await makeTempDir();
     const projectRoot = path.join(tempDir, "site");
@@ -1420,6 +1590,19 @@ function taskSnapshot(records: StoredRecord[]): StoreSnapshot {
     schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
     sourceCursor: records.length,
     schema: taskSourceSchema,
+    records,
+  };
+}
+
+function rateSnapshot(records: StoredRecord[]): StoreSnapshot {
+  return {
+    kind: STORE_SNAPSHOT_KIND,
+    version: STORE_SNAPSHOT_VERSION,
+    schemaKey: "estii",
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+    sourceCursor: records.length,
+    schema: rateSourceSchema,
     records,
   };
 }

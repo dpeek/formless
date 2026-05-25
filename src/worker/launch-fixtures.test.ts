@@ -5,7 +5,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import type { AppInstall } from "../shared/app-installs.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
-import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
+import {
+  rateSeedRecords,
+  rateSourceSchema,
+  siteSeedRecords,
+  siteSourceSchema,
+  taskSeedRecords,
+  taskSourceSchema,
+} from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -77,6 +84,37 @@ describe("worker launch fixture initialization", () => {
     expect(second.installs).toEqual(first.installs);
   });
 
+  it("initializes instance app metadata from a mixed app fixture idempotently", async () => {
+    const first = await getJson<InstanceInitializationResponse>(
+      "/instance?fixture=mixed-apps",
+      "instance-mixed-apps",
+    );
+    const second = await getJson<InstanceInitializationResponse>(
+      "/instance?fixture=mixed-apps",
+      "instance-mixed-apps",
+    );
+
+    expect(first.fixtureName).toBe("mixed-apps");
+    expect(first.createdInstalls.map((install) => install.installId)).toEqual([
+      "site",
+      "tasks",
+      "estii",
+    ]);
+    expect(first.installs.map((install) => install.installId)).toEqual(["estii", "site", "tasks"]);
+    expect(first.installs.map((install) => install.packageAppKey)).toEqual([
+      "estii",
+      "site",
+      "tasks",
+    ]);
+    expect(first.installs.map((install) => install.publicRoute)).toEqual([
+      undefined,
+      "/sites/site",
+      undefined,
+    ]);
+    expect(second.createdInstalls).toEqual([]);
+    expect(second.installs).toEqual(first.installs);
+  });
+
   it("initializes fixture-installed Site storage from the selected source seed", async () => {
     const body = await getJson<AppStorageInitializationResponse>(
       "/app/docs?fixture=multi-site",
@@ -87,6 +125,27 @@ describe("worker launch fixture initialization", () => {
     expect(body.schemaUpdatedAt).toEqual(expect.any(String));
     expect(body.cursor).toBe(siteSeedRecords.length);
     expect(recordIds(body.records)).toEqual(recordIds(siteSeedRecords));
+  });
+
+  it("initializes fixture-installed non-Site storage from selected source seeds", async () => {
+    const tasks = await getJson<AppStorageInitializationResponse>(
+      "/app/tasks?fixture=mixed-apps",
+      "app-mixed-tasks",
+    );
+    const estii = await getJson<AppStorageInitializationResponse>(
+      "/app/estii?fixture=mixed-apps",
+      "app-mixed-estii",
+    );
+
+    expect(tasks.schema).toEqual(taskSourceSchema);
+    expect(tasks.schemaUpdatedAt).toEqual(expect.any(String));
+    expect(tasks.cursor).toBe(taskSeedRecords.length);
+    expect(recordIds(tasks.records)).toEqual(recordIds(taskSeedRecords));
+
+    expect(estii.schema).toEqual(rateSourceSchema);
+    expect(estii.schemaUpdatedAt).toEqual(expect.any(String));
+    expect(estii.cursor).toBe(rateSeedRecords.length);
+    expect(recordIds(estii.records)).toEqual(recordIds(rateSeedRecords));
   });
 
   it("keeps the empty fixture empty", async () => {

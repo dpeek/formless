@@ -6,7 +6,7 @@ import {
 } from "./app-installs.ts";
 import type { SchemaKey } from "./schema-apps.ts";
 
-export type LaunchFixtureName = "empty" | "default-site" | "multi-site";
+export type LaunchFixtureName = "empty" | "default-site" | "multi-site" | "mixed-apps";
 
 export type LaunchFixtureSeedChoice = {
   kind: "source";
@@ -88,6 +88,31 @@ const launchFixtureDefinitions = {
     description: "Product instance with three installed Sites.",
     label: "Multi Site",
     name: "multi-site",
+  },
+  "mixed-apps": {
+    appInstalls: [
+      {
+        installId: "site",
+        label: "Site",
+        packageAppKey: "site",
+        seed: { kind: "source", seedRecordsKey: "site" },
+      },
+      {
+        installId: "tasks",
+        label: "Tasks",
+        packageAppKey: "tasks",
+        seed: { kind: "source", seedRecordsKey: "tasks" },
+      },
+      {
+        installId: "estii",
+        label: "Estii",
+        packageAppKey: "estii",
+        seed: { kind: "source", seedRecordsKey: "estii" },
+      },
+    ],
+    description: "Product instance with Site, Tasks, and Estii installed.",
+    label: "Mixed Apps",
+    name: "mixed-apps",
   },
 } as const satisfies Record<LaunchFixtureName, LaunchFixtureDefinition>;
 

@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { AppInstallsResponse, BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
-import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
+import {
+  rateSeedRecords,
+  rateSourceSchema,
+  siteSeedRecords,
+  siteSourceSchema,
+  taskSeedRecords,
+  taskSourceSchema,
+} from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -39,6 +46,38 @@ describe("worker launch fixture startup", () => {
     expect(docs.schema).toEqual(siteSourceSchema);
     expect(docs.cursor).toBe(siteSeedRecords.length);
     expect(recordIds(docs.records)).toEqual(recordIds(siteSeedRecords));
+  });
+
+  it("starts a product instance from the mixed app fixture without schema-key APIs", async () => {
+    harness = await createFixtureHarness("mixed-apps");
+
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const legacyTasks = await harness.fetch("/api/tasks/bootstrap");
+    const tasks = await getJson<BootstrapResponse>("/api/app-installs/tasks/tasks/bootstrap");
+    const estii = await getJson<BootstrapResponse>("/api/app-installs/estii/estii/bootstrap");
+
+    expect(installs.installs.map((install) => install.installId)).toEqual([
+      "estii",
+      "site",
+      "tasks",
+    ]);
+    expect(installs.installs.map((install) => install.packageAppKey)).toEqual([
+      "estii",
+      "site",
+      "tasks",
+    ]);
+    expect(installs.installs.map((install) => install.publicRoute)).toEqual([
+      undefined,
+      "/sites/site",
+      undefined,
+    ]);
+    expect(legacyTasks.status).toBe(404);
+    expect(tasks.schema).toEqual(taskSourceSchema);
+    expect(tasks.cursor).toBe(taskSeedRecords.length);
+    expect(recordIds(tasks.records)).toEqual(recordIds(taskSeedRecords));
+    expect(estii.schema).toEqual(rateSourceSchema);
+    expect(estii.cursor).toBe(rateSeedRecords.length);
+    expect(recordIds(estii.records)).toEqual(recordIds(rateSeedRecords));
   });
 
   it("starts an empty product instance when the empty fixture is selected", async () => {

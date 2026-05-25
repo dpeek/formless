@@ -24,7 +24,13 @@ import {
   type StoredRecord,
 } from "./protocol.ts";
 import { cloneTestValue } from "../test/schema-builders.ts";
-import { siteSourceSchema } from "../test/schema-apps.ts";
+import {
+  rateSeedRecords,
+  rateSourceSchema,
+  siteSourceSchema,
+  taskSeedRecords,
+  taskSourceSchema,
+} from "../test/schema-apps.ts";
 
 const now = "2026-05-23T00:00:00.000Z";
 
@@ -100,6 +106,73 @@ describe("archive restore planner", () => {
     expect(
       plan.steps.filter((step) => step.kind === "restoreMedia").map((step) => step.storageKey),
     ).toEqual(["app-installs/personal/site/images/hero.png"]);
+  });
+
+  it("plans mixed Site, Tasks, and Estii instance archive restores without non-Site media", () => {
+    const archive = instanceArchive({
+      apps: [
+        appArchive({
+          app: archivedInstall("site", "Site"),
+          data: {
+            kind: "storeSnapshot",
+            snapshot: storeSnapshot({
+              records: [imageBlock("site", "hero"), siteRecord("rec_site_settings_site", "site")],
+            }),
+          },
+          media: {
+            objects: [mediaObject("site", "hero")],
+          },
+        }),
+        appArchive({
+          app: archivedInstall("tasks", "Tasks", "tasks"),
+          data: {
+            kind: "storeSnapshot",
+            snapshot: storeSnapshot({
+              records: taskSeedRecords,
+              schema: taskSourceSchema,
+              schemaKey: "tasks",
+              sourceCursor: taskSeedRecords.length,
+            }),
+          },
+          media: { objects: [] },
+        }),
+        appArchive({
+          app: archivedInstall("estii", "Estii", "estii"),
+          data: {
+            kind: "storeSnapshot",
+            snapshot: storeSnapshot({
+              records: rateSeedRecords,
+              schema: rateSourceSchema,
+              schemaKey: "estii",
+              sourceCursor: rateSeedRecords.length,
+            }),
+          },
+          media: { objects: [] },
+        }),
+      ],
+    });
+
+    const plan = expectPlan(
+      planInstanceArchiveRestore(archive, {
+        mediaFiles: [mediaFile("site", "hero")],
+        sourceSchemas: {
+          estii: rateSourceSchema,
+          site: siteSourceSchema,
+          tasks: taskSourceSchema,
+        },
+      }),
+    );
+
+    expect(plan.summary.appCount).toBe(3);
+    expect(plan.summary.createdInstalls).toEqual(["estii", "site", "tasks"]);
+    expect(plan.summary.mediaCountsByApp).toEqual({
+      estii: 0,
+      site: 1,
+      tasks: 0,
+    });
+    expect(
+      plan.steps.filter((step) => step.kind === "restoreMedia").map((step) => step.appInstallId),
+    ).toEqual(["site"]);
   });
 
   it("rejects install collisions unless replacement is explicit", () => {
@@ -341,11 +414,15 @@ function sourceRecordAppArchive(): AppArchive {
   });
 }
 
-function archivedInstall(installId: string, label: string): AppArchive["app"] {
+function archivedInstall(
+  installId: string,
+  label: string,
+  packageAppKey = "site",
+): AppArchive["app"] {
   return {
     installId,
-    packageAppKey: "site",
-    sourceSchemaKey: "site",
+    packageAppKey,
+    sourceSchemaKey: packageAppKey,
     label,
     status: "installed",
     createdAt: "2026-05-23T00:00:00.000Z",
