@@ -17,8 +17,23 @@ import {
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
 import { formlessCliUsage, parseFormlessCliArgs, type FormlessCliCommand } from "./cli-command.ts";
-import { FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE } from "./instance-workspace-config.ts";
+import {
+  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  type FormlessInstanceWorkspaceApp,
+  type FormlessInstanceWorkspaceManifest,
+  type FormlessInstanceWorkspaceTarget,
+} from "./instance-workspace-config.ts";
 import { FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH } from "./instance-workspace-secrets.ts";
+import {
+  adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
+  getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
+  initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
+  rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
+  type AdoptFormlessInstanceWorkspaceAdminTokenResult,
+  type FormlessInstanceWorkspaceStatusResult,
+  type InitFormlessInstanceWorkspaceResult,
+  type RotateFormlessInstanceWorkspaceAdminTokenResult,
+} from "./instance-workspace.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
 import { SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import { initSiteProjectSource, type InitSiteProjectSourceResult } from "./project-files.ts";
@@ -93,12 +108,39 @@ export {
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_DIRECTORY,
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_FILE,
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
+  ensureFormlessInstanceWorkspaceSecretStateIgnored,
   formlessInstanceWorkspaceSecretStatePath,
   formatFormlessInstanceWorkspaceSecretState,
   parseFormlessInstanceWorkspaceSecretState,
+  readFormlessInstanceWorkspaceSecretState,
   resolveFormlessInstanceWorkspaceAdminToken,
+  writeFormlessInstanceWorkspaceSecretState,
   type FormlessInstanceWorkspaceSecretState,
+  type WriteFormlessInstanceWorkspaceSecretStateResult,
 } from "./instance-workspace-secrets.ts";
+export {
+  type AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
+  type AdoptFormlessInstanceWorkspaceAdminTokenInput,
+  type AdoptFormlessInstanceWorkspaceAdminTokenResult,
+  type FormlessInstanceWorkspaceStatusDependencies,
+  type FormlessInstanceWorkspaceStatusInput,
+  type FormlessInstanceWorkspaceStatusResult,
+  type InitFormlessInstanceWorkspaceDependencies,
+  type InitFormlessInstanceWorkspaceInput,
+  type InitFormlessInstanceWorkspaceResult,
+  type RotateFormlessInstanceWorkspaceAdminTokenDependencies,
+  type RotateFormlessInstanceWorkspaceAdminTokenInput,
+  type RotateFormlessInstanceWorkspaceAdminTokenResult,
+} from "./instance-workspace.ts";
+export {
+  readFormlessInstanceAppRegistry,
+  readFormlessInstanceDeployMetadata,
+  readFormlessInstanceOwnerSetupStatus,
+  readFormlessInstanceTargetStatus,
+  type FormlessInstanceTargetClientDependencies,
+  type FormlessInstanceTargetDeployMetadata,
+  type FormlessInstanceTargetStatus,
+} from "./instance-target-client.ts";
 export {
   readSiteProjectSource,
   resolveSiteProjectRoot,
@@ -361,16 +403,32 @@ export async function runFormlessCli(
       );
       return;
     }
-    case "instanceInitWorkspace":
-    case "instanceStatus":
+    case "instanceInitWorkspace": {
+      const result = await initFormlessInstanceWorkspace(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceInitResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceStatus": {
+      const result = await getFormlessInstanceWorkspaceStatus(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceStatusResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceTokenAdopt": {
+      const result = await adoptFormlessInstanceWorkspaceAdminToken(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceTokenAdoptResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceTokenRotate": {
+      const result = await rotateFormlessInstanceWorkspaceAdminToken(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceTokenRotateResult(result, dependencies.cwd));
+      return;
+    }
     case "instancePull":
     case "instanceCheck":
     case "instancePush":
     case "instanceDev":
     case "instanceResetLocal":
     case "instanceDeploy":
-    case "instanceTokenAdopt":
-    case "instanceTokenRotate":
       dependencies.log(formatInstanceWorkspaceCommandSkeleton(command, dependencies.cwd));
       return;
     case "save": {
@@ -539,6 +597,58 @@ export async function importSiteProjectArchive(
   return importSiteProjectArchiveCommand(input, dependencies);
 }
 
+export async function initFormlessInstanceWorkspace(
+  input: {
+    fromArchive?: string | null;
+    fromRemote?: boolean;
+    name?: string | null;
+    targetAlias?: string;
+    targetUrl?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<FormlessCliDependencies, "cwd" | "fetch"> = nodeFormlessCliDependencies(),
+): Promise<InitFormlessInstanceWorkspaceResult> {
+  return initFormlessInstanceWorkspaceCommand(input, dependencies);
+}
+
+export async function getFormlessInstanceWorkspaceStatus(
+  input: {
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch"
+  > = nodeFormlessCliDependencies(),
+): Promise<FormlessInstanceWorkspaceStatusResult> {
+  return getFormlessInstanceWorkspaceStatusCommand(input, dependencies);
+}
+
+export async function adoptFormlessInstanceWorkspaceAdminToken(
+  input: {
+    adminToken?: string | null;
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<FormlessCliDependencies, "cwd" | "env"> = nodeFormlessCliDependencies(),
+): Promise<AdoptFormlessInstanceWorkspaceAdminTokenResult> {
+  return adoptFormlessInstanceWorkspaceAdminTokenCommand(input, dependencies);
+}
+
+export async function rotateFormlessInstanceWorkspaceAdminToken(
+  input: {
+    adminToken?: string | null;
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "packageRoot" | "randomToken" | "runCommand"
+  > = nodeFormlessCliDependencies(),
+): Promise<RotateFormlessInstanceWorkspaceAdminTokenResult> {
+  return rotateFormlessInstanceWorkspaceAdminTokenCommand(input, dependencies);
+}
+
 export async function startSiteProjectLocalPublishBroker(
   input: { projectPath: string; source: () => string | null },
   dependencies: FormlessCliDependencies = nodeFormlessCliDependencies(),
@@ -623,6 +733,86 @@ function formatArchiveRestoreResult(
     .join("\n");
 }
 
+function formatInstanceWorkspaceInitResult(
+  result: InitFormlessInstanceWorkspaceResult,
+  cwd: string,
+): string {
+  return [
+    "Instance workspace initialized.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
+    `Secret state: ${formatCliPath(cwd, path.join(result.workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH))}.`,
+    `Targets: ${formatWorkspaceTargets(result.manifest)}.`,
+    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
+    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
+    result.archiveSourcePath ? `Archive source: ${result.archiveSourcePath}.` : null,
+    result.remoteStatus
+      ? `Deploy metadata: ${formatDeployMetadataVersion(result.remoteStatus.deployMetadata.version)}.`
+      : null,
+    result.remoteStatus
+      ? `Owner setup: ${formatOwnerSetup(result.remoteStatus.ownerSetup)}.`
+      : null,
+    result.remoteStatus
+      ? `Remote apps: ${formatRemoteInstalls(result.remoteStatus.appRegistry.installs)}.`
+      : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+function formatInstanceWorkspaceStatusResult(
+  result: FormlessInstanceWorkspaceStatusResult,
+  cwd: string,
+): string {
+  return [
+    "Instance workspace status.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Manifest: ${formatCliPath(cwd, result.manifestPath)}.`,
+    `Targets: ${formatWorkspaceTargets(result.manifest)}.`,
+    `Default target: ${result.manifest.defaultTarget ?? "<none>"}.`,
+    `Selected target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Automation token: ${formatSecretState(result.secretState)}.`,
+    `Default app policy: ${result.manifest.defaultAppPolicy}.`,
+    `Local apps: ${formatWorkspaceApps(result.manifest.apps)}.`,
+    result.remoteStatus
+      ? `Deploy metadata: ${formatDeployMetadataVersion(result.remoteStatus.deployMetadata.version)}.`
+      : null,
+    result.remoteStatus
+      ? `Owner setup: ${formatOwnerSetup(result.remoteStatus.ownerSetup)}.`
+      : null,
+    result.remoteStatus
+      ? `Remote apps: ${formatRemoteInstalls(result.remoteStatus.appRegistry.installs)}.`
+      : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+function formatInstanceWorkspaceTokenAdoptResult(
+  result: AdoptFormlessInstanceWorkspaceAdminTokenResult,
+  cwd: string,
+): string {
+  return [
+    "Instance workspace admin token adopted.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Secret state: ${formatCliPath(cwd, result.secretPath)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+  ].join("\n");
+}
+
+function formatInstanceWorkspaceTokenRotateResult(
+  result: RotateFormlessInstanceWorkspaceAdminTokenResult,
+  cwd: string,
+): string {
+  return [
+    "Instance workspace admin token rotated.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Secret state: ${formatCliPath(cwd, result.secretPath)}.`,
+    `Worker: ${result.workerName}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+  ].join("\n");
+}
+
 function formatInstanceWorkspaceCommandSkeleton(
   command: FormlessInstanceWorkspaceCliCommand,
   cwd: string,
@@ -687,6 +877,70 @@ function formatInstanceWorkspaceCommandName(command: FormlessInstanceWorkspaceCl
       return "token adopt";
     case "instanceTokenRotate":
       return "token rotate";
+  }
+}
+
+function formatWorkspaceTargets(manifest: FormlessInstanceWorkspaceManifest): string {
+  if (manifest.targets.length === 0) {
+    return "none";
+  }
+
+  return manifest.targets.map((target) => `${target.alias}=${target.url}`).join(", ");
+}
+
+function formatSelectedTarget(target: FormlessInstanceWorkspaceTarget | undefined): string {
+  return target ? `${target.alias} (${target.url})` : "<none>";
+}
+
+function formatWorkspaceApps(apps: readonly FormlessInstanceWorkspaceApp[]): string {
+  if (apps.length === 0) {
+    return "none";
+  }
+
+  return apps.map((app) => `${app.installId} (${app.packageAppKey})`).join(", ");
+}
+
+function formatRemoteInstalls(
+  installs: readonly { installId: string; label: string; packageAppKey: string }[],
+): string {
+  if (installs.length === 0) {
+    return "none";
+  }
+
+  return installs
+    .map((install) => `${install.installId} (${install.packageAppKey}: ${install.label})`)
+    .join(", ");
+}
+
+function formatDeployMetadataVersion(version: string | null): string {
+  return version ?? "<missing>";
+}
+
+function formatOwnerSetup(status: {
+  owner?: { email?: string; name: string };
+  setupComplete: boolean;
+}) {
+  if (!status.setupComplete) {
+    return "incomplete";
+  }
+
+  const owner = status.owner;
+
+  if (!owner) {
+    return "complete";
+  }
+
+  return owner.email ? `complete (${owner.name} <${owner.email}>)` : `complete (${owner.name})`;
+}
+
+function formatSecretState(state: FormlessInstanceWorkspaceStatusResult["secretState"]): string {
+  switch (state) {
+    case "env":
+      return "env override";
+    case "stored":
+      return "stored";
+    case "missing":
+      return "missing";
   }
 }
 

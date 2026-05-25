@@ -1,6 +1,8 @@
 import path from "node:path";
 
-import { describe, expect, it } from "vite-plus/test";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN_ENV_NAME,
@@ -8,9 +10,20 @@ import {
   FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
   formlessInstanceWorkspaceSecretStatePath,
   formatFormlessInstanceWorkspaceSecretState,
+  readFormlessInstanceWorkspaceSecretState,
   parseFormlessInstanceWorkspaceSecretState,
   resolveFormlessInstanceWorkspaceAdminToken,
+  ensureFormlessInstanceWorkspaceSecretStateIgnored,
+  writeFormlessInstanceWorkspaceSecretState,
 } from "./instance-workspace-secrets.ts";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs.splice(0).map((tempDir) => rm(tempDir, { force: true, recursive: true })),
+  );
+});
 
 describe("Formless instance workspace secret state", () => {
   it("defines the ignored workspace secret path", () => {
@@ -61,4 +74,52 @@ describe("Formless instance workspace secret state", () => {
       }),
     ).toBeNull();
   });
+
+  it("reads and writes ignored workspace secret state", async () => {
+    const workspaceRoot = await makeTempDir();
+
+    await expect(readFormlessInstanceWorkspaceSecretState(workspaceRoot)).resolves.toEqual({});
+
+    const write = await writeFormlessInstanceWorkspaceSecretState(workspaceRoot, {
+      adminToken: "secret",
+    });
+
+    expect(write).toEqual({
+      path: path.join(workspaceRoot, ".formless/instance.env"),
+      state: { adminToken: "secret" },
+    });
+    await expect(readFile(write.path, "utf8")).resolves.toBe("FORMLESS_ADMIN_TOKEN=secret\n");
+    await expect(readFormlessInstanceWorkspaceSecretState(workspaceRoot)).resolves.toEqual({
+      adminToken: "secret",
+    });
+  });
+
+  it("ensures workspace secret state is ignored without duplicates", async () => {
+    const workspaceRoot = await makeTempDir();
+
+    await writeFile(path.join(workspaceRoot, ".gitignore"), "dist\n");
+    await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
+    await ensureFormlessInstanceWorkspaceSecretStateIgnored(workspaceRoot);
+
+    await expect(readFile(path.join(workspaceRoot, ".gitignore"), "utf8")).resolves.toBe(
+      "dist\n.formless/\n",
+    );
+
+    const existingRoot = await makeTempDir();
+
+    await writeFile(path.join(existingRoot, ".gitignore"), ".formless\nnode_modules\n");
+    await ensureFormlessInstanceWorkspaceSecretStateIgnored(existingRoot);
+    await expect(readFile(path.join(existingRoot, ".gitignore"), "utf8")).resolves.toBe(
+      ".formless\nnode_modules\n",
+    );
+  });
 });
+
+async function makeTempDir(): Promise<string> {
+  const tempDir = await mkdtemp(path.resolve(".instance-workspace-secrets-test-"));
+
+  tempDirs.push(tempDir);
+  await mkdir(tempDir, { recursive: true });
+
+  return tempDir;
+}

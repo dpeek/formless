@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import packageJson from "../../package.json";
 import {
   APP_ARCHIVE_KIND,
+  ARCHIVE_VERSION,
   INSTANCE_ARCHIVE_KIND,
   parsePortableArchive,
   type AppArchive,
@@ -41,6 +42,9 @@ import {
   initSiteProject,
   onboardFormlessInstance,
   PORTABLE_ARCHIVE_MANIFEST_FILE,
+  FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
+  formatFormlessInstanceWorkspaceManifest,
+  parseFormlessInstanceWorkspaceManifestJson,
   publishSiteProject,
   runFormlessCli,
   saveSiteProject,
@@ -520,13 +524,13 @@ describe("Formless Site CLI", () => {
     });
 
     await runFormlessCli(
-      ["instance", "status", "--workspace", "../personal", "--target", "remote"],
+      ["instance", "check", "--workspace", "../personal", "--target", "remote"],
       cliDeps("/workspace/project", { logs }),
     );
 
     expect(logs).toEqual([
       [
-        "Instance workspace command parsed: status.",
+        "Instance workspace command parsed: check.",
         "Workspace: /workspace/personal.",
         "Manifest: /workspace/personal/formless.instance-workspace.json.",
         "Secret state: /workspace/personal/.formless/instance.env.",
@@ -563,6 +567,299 @@ describe("Formless Site CLI", () => {
     expect(() => parseFormlessCliArgs(["instance", "token", "forget"])).toThrow(
       "Usage: formless instance token <adopt|rotate>",
     );
+  });
+
+  it("initializes an instance workspace from remote target status", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({
+      setupComplete: true,
+      owner: {
+        createdAt: "2026-05-01T00:00:00.000Z",
+        email: "david@example.com",
+        id: "owner-1",
+        name: "David Peek",
+      },
+    });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek"), installedSite("james", "James Peek")],
+    });
+
+    await runFormlessCli(
+      [
+        "instance",
+        "init-workspace",
+        "--workspace",
+        workspaceRoot,
+        "--name",
+        "personal-sites",
+        "--target-url",
+        "https://personal.dpeek.workers.dev/setup?token=ignored",
+        "--target",
+        "prod",
+        "--from-remote",
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const manifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    );
+
+    expect(manifest).toEqual({
+      version: 1,
+      kind: "formless-instance-workspace",
+      name: "personal-sites",
+      defaultTarget: "prod",
+      targets: [{ alias: "prod", url: "https://personal.dpeek.workers.dev" }],
+      archives: {
+        instance: "archives/instance",
+        apps: "archives/apps",
+      },
+      local: {
+        stateRoot: ".formless/local",
+      },
+      defaultAppPolicy: "declared-installs",
+      apps: [
+        {
+          installId: "david",
+          packageAppKey: "site",
+          label: "David Peek",
+          archivePath: "archives/apps/david",
+          routes: {
+            admin: "/apps/david",
+            schema: "/apps/david/schema",
+            public: "/sites/david",
+          },
+        },
+        {
+          installId: "james",
+          packageAppKey: "site",
+          label: "James Peek",
+          archivePath: "archives/apps/james",
+          routes: {
+            admin: "/apps/james",
+            schema: "/apps/james/schema",
+            public: "/sites/james",
+          },
+        },
+      ],
+      deploy: {
+        workerName: "personal",
+        workersDevUrl: "https://personal.dpeek.workers.dev",
+        migrationPolicy: "existing",
+      },
+    });
+    await expect(readFile(path.join(workspaceRoot, ".gitignore"), "utf8")).resolves.toBe(
+      ".formless/\n",
+    );
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+    ]);
+    expect(logs).toEqual([
+      [
+        "Instance workspace initialized.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        `Manifest: ${path.relative(tempDir, path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE))}.`,
+        `Secret state: ${path.relative(tempDir, path.join(workspaceRoot, ".formless/instance.env"))}.`,
+        "Targets: prod=https://personal.dpeek.workers.dev.",
+        "Default app policy: declared-installs.",
+        "Local apps: david (site), james (site).",
+        `Deploy metadata: ${packageJson.version}.`,
+        "Owner setup: complete (David Peek <david@example.com>).",
+        "Remote apps: david (site: David Peek), james (site: James Peek).",
+      ].join("\n"),
+    ]);
+  });
+
+  it("initializes a fresh instance workspace from a local instance archive", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const archiveRoot = path.join(workspaceRoot, "archives/instance");
+    const logs: string[] = [];
+
+    await mkdir(archiveRoot, { recursive: true });
+    await writeFile(
+      path.join(archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE),
+      JSON.stringify(instanceArchive([appArchive("david", "David Peek")]), null, 2),
+    );
+
+    await runFormlessCli(
+      [
+        "instance",
+        "init-workspace",
+        "--workspace",
+        workspaceRoot,
+        "--name",
+        "personal-sites",
+        "--from-archive",
+        archiveRoot,
+      ],
+      cliDeps(tempDir, { logs }),
+    );
+
+    const manifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    );
+
+    expect(manifest).toMatchObject({
+      name: "personal-sites",
+      targets: [],
+      archives: {
+        instance: "archives/instance",
+        apps: "archives/apps",
+      },
+      defaultAppPolicy: "declared-installs",
+      apps: [
+        {
+          installId: "david",
+          packageAppKey: "site",
+          label: "David Peek",
+          archivePath: "archives/apps/david",
+          routes: {
+            admin: "/apps/david",
+            schema: "/apps/david/schema",
+            public: "/sites/david",
+          },
+        },
+      ],
+    });
+    expect(logs.at(-1)).toContain("Archive source: archives/instance.");
+  });
+
+  it("reports instance workspace status from manifest, secret state, and target reads", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    await mkdir(workspaceRoot, { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+      formatFormlessInstanceWorkspaceManifest({
+        version: 1,
+        kind: "formless-instance-workspace",
+        name: "personal-sites",
+        defaultTarget: "remote",
+        targets: [{ alias: "remote", url: "https://personal.dpeek.workers.dev" }],
+        archives: { instance: "archives/instance", apps: "archives/apps" },
+        local: { stateRoot: ".formless/local" },
+        defaultAppPolicy: "declared-installs",
+        apps: [
+          {
+            installId: "david",
+            packageAppKey: "site",
+            label: "David Peek",
+            archivePath: "archives/apps/david",
+          },
+        ],
+        deploy: { workerName: "personal", migrationPolicy: "existing" },
+      }),
+    );
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=secret\n",
+    );
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: false });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+
+    await runFormlessCli(
+      ["instance", "status", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: responses.fetcher(requests), logs }),
+    );
+
+    expect(logs).toEqual([
+      [
+        "Instance workspace status.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        `Manifest: ${path.relative(tempDir, path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE))}.`,
+        "Targets: remote=https://personal.dpeek.workers.dev.",
+        "Default target: remote.",
+        "Selected target: remote (https://personal.dpeek.workers.dev).",
+        "Automation token: stored.",
+        "Default app policy: declared-installs.",
+        "Local apps: david (site).",
+        `Deploy metadata: ${packageJson.version}.`,
+        "Owner setup: incomplete.",
+        "Remote apps: david (site: David Peek).",
+      ].join("\n"),
+    ]);
+  });
+
+  it("adopts and rotates instance workspace admin tokens explicitly", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const commands: CapturedCommand[] = [];
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "token", "adopt", "--workspace", workspaceRoot],
+        cliDeps(tempDir),
+      ),
+    ).rejects.toThrow(
+      "Cloudflare Worker secrets cannot be read back; pass --admin-token or set FORMLESS_ADMIN_TOKEN.",
+    );
+
+    await runFormlessCli(
+      ["instance", "token", "adopt", "--workspace", workspaceRoot, "--admin-token", "local-secret"],
+      cliDeps(tempDir, { logs }),
+    );
+
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
+    ).resolves.toBe("FORMLESS_ADMIN_TOKEN=local-secret\n");
+
+    await runFormlessCli(
+      ["instance", "token", "rotate", "--workspace", workspaceRoot],
+      cliDeps(tempDir, {
+        commands,
+        logs,
+        packageRoot: "/package",
+      }),
+    );
+
+    expect(commands).toEqual([
+      {
+        args: [
+          "exec",
+          "--",
+          "wrangler",
+          "secret",
+          "bulk",
+          path.join(workspaceRoot, ".formless/instance.env.next"),
+          "--name",
+          "personal",
+        ],
+        command: "npm",
+        cwd: "/package",
+        env: { CLOUDFLARE_ACCOUNT_ID: "account-123" },
+      },
+    ]);
+    await expect(
+      readFile(path.join(workspaceRoot, ".formless/instance.env"), "utf8"),
+    ).resolves.toBe("FORMLESS_ADMIN_TOKEN=generated-token\n");
+    expect(logs.at(-1)).toContain("Instance workspace admin token rotated.");
   });
 
   it("initializes a Site project with config, deterministic records, and no starter media", async () => {
@@ -1563,11 +1860,94 @@ async function writeFileTree(
   await writeFile(path.join(projectRoot, "site.records.json"), formatSiteProjectRecords(records));
 }
 
+async function writeWorkspaceManifest(workspaceRoot: string) {
+  await mkdir(workspaceRoot, { recursive: true });
+  await writeFile(
+    path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE),
+    formatFormlessInstanceWorkspaceManifest({
+      version: 1,
+      kind: "formless-instance-workspace",
+      name: "personal-sites",
+      defaultTarget: "remote",
+      targets: [{ alias: "remote", url: "https://personal.dpeek.workers.dev" }],
+      archives: { instance: "archives/instance", apps: "archives/apps" },
+      local: { stateRoot: ".formless/local" },
+      defaultAppPolicy: "declared-installs",
+      apps: [
+        {
+          installId: "david",
+          packageAppKey: "site",
+          label: "David Peek",
+          archivePath: "archives/apps/david",
+        },
+      ],
+      deploy: {
+        accountId: "account-123",
+        workerName: "personal",
+        migrationPolicy: "existing",
+      },
+    }),
+  );
+}
+
+function installedSite(installId: string, label: string) {
+  return {
+    adminRoute: `/apps/${installId}` as `/apps/${string}`,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    installId,
+    label,
+    packageAppKey: "site" as const,
+    publicRoute: `/sites/${installId}` as `/sites/${string}`,
+    publicRoutePrefix: `/sites/${installId}/` as `/sites/${string}/`,
+    schemaRoute: `/apps/${installId}/schema` as `/apps/${string}/schema`,
+    status: "installed" as const,
+    updatedAt: "2026-05-01T00:00:00.000Z",
+  };
+}
+
+function instanceArchive(apps: AppArchive[]): InstanceArchive {
+  return {
+    kind: INSTANCE_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    restorePolicy: { dryRun: true, installCollisions: "reject" },
+    apps,
+  };
+}
+
+function appArchive(installId: string, label: string): AppArchive {
+  return {
+    kind: APP_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    restorePolicy: { dryRun: true, installCollisions: "reject" },
+    app: {
+      installId,
+      packageAppKey: "site",
+      sourceSchemaKey: "site",
+      label,
+      status: "installed",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    },
+    data: {
+      kind: "storeSnapshot",
+      snapshot: snapshot([]),
+    },
+    media: {
+      objects: [],
+    },
+  };
+}
+
 function cliDeps(
   cwd: string,
   options: {
     commands?: CapturedCommand[];
     deploy?: (input: DeployFormlessInstanceInput) => Promise<{ url: string }>;
+    env?: NodeJS.ProcessEnv;
     fetch?: typeof fetch;
     healthInputs?: CheckFormlessInstanceDeployMetadataInput[];
     logs?: string[];
@@ -1598,7 +1978,7 @@ function cliDeps(
           url: input.plan.expectedUrl.url,
         })),
     },
-    env: {},
+    env: options.env ?? {},
     fetch: options.fetch ?? fetch,
     healthCheck: {
       check: async (input) => {
