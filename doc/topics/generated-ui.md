@@ -1,6 +1,6 @@
 # Generated UI
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Current Facts
 
@@ -8,13 +8,14 @@ Last updated: 2026-05-25
 - Active app surface: `src/app/app-surface.tsx`.
 - Runtime profile resolver: `src/app/runtime-profile.ts`.
 - Runtime profile kinds: `instance`, `dev`, `app`, `siteAuthoring`, `publishedSite`.
-- Product instance profile mounts instance shell, installed app admin routes, and installed Site public routes.
+- Product instance profile mounts instance shell, owner setup/login routes, installed app admin routes, and installed Site public routes.
 - Dev workbench profile mounts Tasks, Estii, Site, schema editors, public Site preview, instance shell, installed app admin routes, and installed Site public routes.
 - App profile mounts one selected schema app at `/`, app-relative screen subpaths, and `/schema`.
 - Site authoring profile mounts public Site preview at `/` and generated admin at `/admin`.
 - Published Site profile mounts public Site rendering at `/`.
 - Current dev browser routes include `/`, `/tasks`, `/estii`, `/site`, `/tasks/schema`, `/estii/schema`, `/site/schema`, `/apps/:installId`, `/apps/:installId/schema`, `/sites/:installId`, `/sites/:installId/*`, `/pages`, `/pages/*`.
-- Product instance browser routes include `/`, `/setup`, `/apps/:installId`, `/sites/:installId`, and `/sites/:installId/*`.
+- Product instance browser routes include `/`, `/setup`, `/login`, `/apps/:installId`, `/sites/:installId`, and `/sites/:installId/*`.
+- Owner setup and owner login routes render outside workbench chrome.
 - Current dev screen subpaths include `/estii/setup` and `/site/settings`.
 - Legacy dev redirects map `/rates` to `/estii` and `/rates/schema` to `/estii/schema`.
 - Home route: `src/app/routes/home.tsx`.
@@ -27,6 +28,8 @@ Last updated: 2026-05-25
 - Workbench runtime shell source: `src/app.tsx`.
 - Workbench runtime shell sits below app content.
 - Workbench runtime shell switches App management, Tasks, Estii, Site, and supported installed apps.
+- Instance shell renders package-generic install controls for bundled app packages.
+- Bundled install controls support Site, Tasks, and Estii.
 - Workbench runtime shell does not own app-local Schema, sync, reset, publish, archive, Export, or Restore controls.
 - Active app sidebar owns app screens, root/context navigation, and app settings.
 - App settings source: `src/app/app-surface.tsx`.
@@ -43,6 +46,11 @@ Last updated: 2026-05-25
 - App profile renders generated app chrome without workbench runtime shell.
 - Published Site profile renders without workbench chrome and without generated admin chrome.
 - Product instance installed app admin routes can show a Management sidebar section linking back to `/`.
+- Installed admin routes under `/apps/<installId>` resolve package metadata from app install records.
+- Installed Tasks admin surfaces render under `/apps/<installId>`.
+- Installed Estii admin surfaces render under `/apps/<installId>`.
+- Installed Estii app-relative setup route renders under `/apps/<installId>/setup`.
+- Non-Site installed apps do not resolve under `/sites/<installId>`.
 - Unknown dev routes render Not found without mounting the active app surface.
 
 ## Screen And Collection Rendering
@@ -166,6 +174,8 @@ Last updated: 2026-05-25
 - App tests: `src/app.test.tsx`.
 - Runtime profile tests: `src/app/runtime-profile.test.ts`.
 - App surface source: `src/app/app-surface.tsx`.
+- Instance shell tests: `src/app/routes/instance-shell.test.tsx`.
+- Owner login route tests: `src/app/routes/owner-login.test.tsx`.
 - View model tests: `src/client/views.test.ts`.
 - Table model tests: `src/client/table-model.test.ts`.
 - Generated table tests: `src/app/generated/table.test.tsx`.

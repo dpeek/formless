@@ -1,6 +1,6 @@
 # Authority, Storage, And Sync
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Current Facts
 
@@ -30,7 +30,7 @@ Last updated: 2026-05-25
 - Installed Site media API paths include `/api/app-installs/site/:installId/media/images` and `/api/app-installs/site/:installId/media/*`.
 - Site media route handling runs before Authority dispatch in `src/worker/index.ts`.
 - Site media upload and restore use the `FORMLESS_MEDIA` R2 binding, not Durable Object storage.
-- Site media upload and restore use the same admin bearer-token guard as authority writes.
+- Site media upload and restore use the same instance write guard as authority writes.
 - Site media reads are public and do not touch the Authority Durable Object.
 - Authority responses default to `Cache-Control: no-store` when an operation does not set cache headers.
 - Public Site tree API reads use `Cache-Control: no-store`.
@@ -50,19 +50,28 @@ Last updated: 2026-05-25
 - Instance app install registry: `src/shared/app-installs.ts`.
 - Instance app install state: `src/worker/instance-app-installs-state.ts`.
 - Durable instance app install metadata is stored in `app_installs` on the instance authority.
-- Site is the only installable bundled package right now.
-- Installed Site app creation initializes from bundled Site source schema and seed records.
+- Bundled installable packages are Site, Tasks, and Estii.
+- Installed app creation initializes from the package source schema and seed records.
+- Site is the only installed package with public Site routes and Site media facts.
+- Installed Tasks and Estii use install-scoped storage identity without Site public routes or Site media facts.
 - Default product Site bootstrap: `src/worker/default-app-installs.ts`.
-- Owner setup creates the default installed Site id `site` label `Site` idempotently.
+- Owner setup uses the default app bootstrap policy `starter-site-if-empty`.
+- Blank owner setup creates the default installed Site id `site` label `Site`.
+- Owner setup does not add starter `site` when installed app metadata already exists.
+- Owner setup API path: `/api/formless/setup`.
+- Owner session API path: `/api/formless/session`.
+- Owner sessions use signed HTTP-only cookies.
 - Launch fixture registry: `src/shared/launch-fixtures.ts`.
 - Worker launch fixture wiring: `src/worker/launch-fixtures.ts`.
 - `FORMLESS_LAUNCH_FIXTURE` selects fixture initial installed apps and source seed choices.
-- Current launch fixtures: `empty`, `default-site`, `multi-site`.
+- Current launch fixtures: `empty`, `default-site`, `multi-site`, `mixed-apps`.
+- The `mixed-apps` fixture initializes Site, Tasks, and Estii installed apps.
 - Product instance runtime blocks schema-key API routes.
 - Dev, app, Site authoring, and published Site compatibility profiles allow schema-key API routes.
 - Installed app API routes stay available when product instance blocks schema-key API routes.
-- Write operations require `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when `FORMLESS_ADMIN_TOKEN` is configured.
-- Read operations stay public when the admin token is configured.
+- Write operations accept `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when `FORMLESS_ADMIN_TOKEN` is configured.
+- Write operations accept valid owner session cookies when `FORMLESS_OWNER_SESSION_SECRET` is configured.
+- Read operations stay public when write protection is configured.
 - Unauthorized writes return `401` before JSON body parsing, storage setup, or operation execution.
 
 ## Writes
@@ -145,5 +154,6 @@ Last updated: 2026-05-25
 - Authority admin guard tests: `src/worker/authority-admin-guard.test.ts`.
 - Instance app install tests: `src/worker/instance-app-installs.test.ts`.
 - Owner setup tests: `src/worker/owner-setup.test.ts`.
+- Owner session tests: `src/worker/owner-session.test.ts`.
 - Storage tests: `src/worker/storage.test.ts`.
 - Worker routing tests: `src/worker/routing.test.ts`.

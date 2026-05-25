@@ -1,6 +1,6 @@
 # Site Runtime
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Current Facts
 
@@ -19,6 +19,8 @@ Last updated: 2026-05-25
 - Installed Site public routes: `/sites/:installId`, `/sites/:installId/*`.
 - Product default installed Site id: `site`.
 - Product default installed Site label: `Site`.
+- Blank owner setup can create the product default installed Site.
+- Owner setup does not create starter `site` when installed app metadata already exists.
 - Public tree endpoint: `/api/site/tree/:slug`.
 - Installed Site public tree endpoint: `/api/app-installs/site/:installId/tree/:slug`.
 - Tree projection: `src/site/tree.ts`.

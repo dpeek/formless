@@ -1,6 +1,6 @@
 # Instance Media Direction
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Purpose: product and architecture direction before media PRDs.
 
@@ -221,9 +221,11 @@ or DASH logic.
 - Portable Site project import rewrites legacy same-origin media hrefs into
   install-scoped media hrefs.
 
-## Next PRD Candidate
+## PRD
 
-Core media app for images should:
+Core media app for images is GitHub issue #28.
+
+The PRD should:
 
 - introduce media asset records or metadata enough to prove the model;
 - add a common media editor path;

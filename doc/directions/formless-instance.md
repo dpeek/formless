@@ -1,6 +1,6 @@
 # Formless Instance Direction
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Purpose: product direction for Formless instance work.
 
@@ -20,6 +20,7 @@ This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
 - Current product instance profile uses installed app identity. See `doc/topics/generated-ui.md`.
 - Current default product app is installed Site id `site`. See `doc/topics/site-runtime.md`.
 - Current portable archives support installed app and instance backup/restore/import. See `doc/topics/site-cli-publish.md`.
+- Current `formless instance` workspace commands support claim, pull, check, push, local dev, deploy, and token workflows. See `doc/topics/site-cli-publish.md`.
 - Current Site publish can deploy code/assets and restore source Site data to a remote target. See `doc/topics/site-cli-publish.md`.
 - Current generated app shell can mount different runtime profiles. See `doc/topics/generated-ui.md`.
 - Core instance media direction lives in `doc/directions/instance-media.md`.
@@ -91,12 +92,22 @@ The browser should own product setup:
 
 - `formless onboard` deploys one Cloudflare `workers.dev` Formless instance.
 - Owner setup creates the default installed Site id `site`.
-- Product instance route vocabulary is `/`, `/setup`, `/apps/<installId>`, and `/sites/<installId>`.
+- Owner login can mint owner sessions from the configured admin token.
+- Product instance route vocabulary is `/`, `/setup`, `/login`, `/apps/<installId>`, and `/sites/<installId>`.
 - Development workbench keeps schema-key app routes for package development.
 - Product instance profile blocks schema-key API routes.
 - Installed app API routes stay available through `/api/app-installs/<packageAppKey>/<installId>`.
+- Site, Tasks, and Estii are bundled installable packages.
+- Installed app admin routes resolve package metadata from app install records.
+- Installed Site public routes remain Site-only.
 - Launch fixtures select initial installed app state without adding route shapes.
+- Launch fixtures include `mixed-apps` with Site, Tasks, and Estii installed.
 - Portable app and instance archives provide backup, restore, and import plumbing.
+- Formless instance workspaces provide CLI claim, pull, check, push, local dev, deploy, and token workflows over portable archives.
+- Workspace archive movement is explicit backup, restore, and import movement, not bidirectional instance sync.
+- Workspace local dev can run a product instance profile from workspace archive state with workspace-local persistence.
+- Workspace deploy sets both server and client runtime profile variables for instance builds.
+- Owner setup uses `starter-site-if-empty` default app policy.
 
 Current constraints still held:
 
@@ -108,7 +119,7 @@ Current constraints still held:
 - no multi-user roles;
 - package-bundled apps only;
 - no instance-to-instance sync;
-- no local/offline instance UX beyond preserving current local Site workflow.
+- no local/offline primary instance workflow beyond workspace-local dev and explicit archive movement.
 
 ## Alchemy And Cloudflare Boundary
 
@@ -150,6 +161,7 @@ Current shipped pieces already point in this direction:
 - Site project dev runs a local authority-backed workflow;
 - Site publish can push source data to a remote target;
 - portable archives can export and restore installed app and instance state;
+- instance workspaces can pull, check, push, and run local product instances from archive state;
 - snapshot export and restore still exist as lower-level authority storage operations.
 
 Those pieces are not yet instance sync. Archive restore and snapshot restore are
@@ -213,14 +225,15 @@ Defer:
 - cross-app references;
 - broad media library and video platform work beyond the first media spine;
 - bidirectional instance sync;
-- local/offline instance UX;
+- local/offline primary instance workflow;
 - billing.
 
 ## Open Questions
 
 - What is the exact Alchemy state-store API to use for the pinned package version?
 - Does the first deploy use Alchemy only, Wrangler only, or Alchemy plus selected Cloudflare API calls?
-- How does the instance shell name and expose apps without turning app install into a marketplace?
 - How does core instance media install and expose the Media app without requiring general cross-app references?
+- What browser management UI should expose portable archive and workspace operations safely?
+- What minimum user and permission model follows first owner sessions?
 - What minimum route/domain preflight is required before custom domain work starts?
 - What existing local Site workflow should stay untouched during future instance work?

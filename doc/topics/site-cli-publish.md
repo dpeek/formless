@@ -1,6 +1,6 @@
 # Site CLI And Publish
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Current Facts
 
@@ -16,6 +16,10 @@ Last updated: 2026-05-25
 - Site seed promotion script: `scripts/site-pull-seed.ts`.
 - Site project archive import source: `src/site/project-archive.ts`.
 - Portable archive disk workflow source: `src/site/archive-workflows.ts`.
+- Formless instance workspace workflow source: `src/site/instance-workspace.ts`.
+- Formless instance workspace manifest source: `src/site/instance-workspace-config.ts`.
+- Formless instance workspace secret source: `src/site/instance-workspace-secrets.ts`.
+- Formless instance target status source: `src/site/instance-target-client.ts`.
 - Site publish workflow source: `src/site/publish.ts`.
 - Site publish script: `scripts/site-publish.ts`.
 - Formless instance onboarding source: `src/site/instance-onboarding.ts`.
@@ -43,6 +47,17 @@ Last updated: 2026-05-25
 - `formless archive restore-app --target <url> --archive <dir> --install <id>` dry-runs app archive restore to an install id.
 - `formless archive restore-app --target <url> --archive <dir> --install <id> --apply` applies app archive restore.
 - `formless archive import-site --project <path> --install <id> --out <dir>` writes a standalone Site project as an installed Site app archive.
+- `formless instance init-workspace` creates or adopts a Formless instance workspace.
+- `formless instance status` reports workspace target, credential, setup, install, and drift-adjacent state.
+- `formless instance pull` writes target instance and app archives into the workspace.
+- `formless instance check` compares workspace archives with the selected target.
+- `formless instance push` dry-runs workspace archive restore to the selected target.
+- `formless instance push --apply` backs up, dry-runs, and applies workspace archive restore.
+- `formless instance dev` runs a local product instance profile from workspace archive state.
+- `formless instance reset-local` clears workspace-local runtime state only.
+- `formless instance deploy` deploys code and assets for a claimed instance workspace.
+- `formless instance token adopt` stores an automation admin token in ignored workspace secret state.
+- `formless instance token rotate` uploads a new automation admin token and updates ignored workspace secret state.
 - `bun run site:pull-seed` promotes local Site authority state into `schema/apps/site/seed-records.json`.
 - `bun run site:publish` validates and publishes source Site data.
 
@@ -96,6 +111,34 @@ Last updated: 2026-05-25
 - Site project import preserves external URLs.
 - Portable archives are backup, restore, and import workflows, not bidirectional instance sync.
 
+## Instance Workspaces
+
+- Instance workspace manifest file: `formless.instance-workspace.json`.
+- Instance workspace manifests store reviewable target, archive, deploy, local state, app, default app policy, and domain intent.
+- Instance workspace manifests reject secret-looking fields.
+- Instance workspace ignored secret state file: `.formless/instance.env`.
+- Instance workspace secret state can store the automation admin token.
+- Environment variable `FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN` can provide the automation admin token.
+- Cloudflare Worker secrets cannot be read back by workspace status.
+- Workspace pull exports the selected target to `archives/instance` and app archives under `archives/apps/<installId>`.
+- Workspace check exports target archive state to ignored temporary state and reports drift after generated archive timestamp normalization.
+- Workspace push composes declared app archives into a temporary instance archive.
+- Workspace push defaults to dry-run.
+- Workspace push apply requires `--apply`, takes a fresh whole-instance backup, dry-runs, then applies in one process.
+- Workspace push apply refuses current target drift unless `--allow-stale` acknowledges it.
+- Workspace push requires `--replace` for app install collision replacement.
+- Workspace `--replace-install-set` reports unsupported install pruning instead of deleting extra remote installs.
+- Workspace local dev uses product instance runtime profile vars and the `empty` launch fixture.
+- Workspace local dev uses workspace-local Wrangler persistence under the manifest local state root.
+- Workspace local dev restores workspace archives only when the local installed app registry is empty.
+- Workspace deploy sets `FORMLESS_RUNTIME_PROFILE=instance`, `VITE_FORMLESS_RUNTIME_PROFILE=instance`, and `FORMLESS_DEPLOY_VERSION`.
+- Existing-instance workspace deploys use migration policy `existing`.
+- New-instance workspace deploys use migration policy `new`.
+- Workspace deploy refuses target URL changes returned by the deployment adapter.
+- Workspace deploy verifies no-store deploy metadata after upload.
+- Workspace deploy state and Alchemy local secrets live under ignored `.formless/deploy/<workerName>`.
+- Instance workspace archive movement is explicit backup, restore, and import movement, not bidirectional instance sync.
+
 ## Key Tests
 
 - CLI tests: `src/site/cli.test.ts`.
@@ -105,6 +148,9 @@ Last updated: 2026-05-25
 - Seed promotion tests: `src/site/seed-promotion.test.ts`.
 - Project archive import tests: `src/site/project-archive.test.ts`.
 - Portable archive CLI workflow tests: `src/site/cli.test.ts`.
+- Instance workspace CLI workflow tests: `src/site/cli.test.ts`.
+- Instance workspace manifest tests: `src/site/instance-workspace-config.test.ts`.
+- Instance workspace secret tests: `src/site/instance-workspace-secrets.test.ts`.
 - Instance onboarding tests: `src/site/instance-onboarding.test.ts`.
 - Publish tests: `src/site/publish.test.ts`.
 - Local publish client tests: `src/client/local-publish.test.ts`.

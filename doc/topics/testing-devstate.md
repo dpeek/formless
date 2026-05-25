@@ -1,6 +1,6 @@
 # Testing And Devstate
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Current Facts
 
@@ -16,6 +16,7 @@ Last updated: 2026-05-25
 - `bun run dev:instance` starts product instance profile with the `default-site` fixture.
 - `bun run dev:instance:empty` starts product instance profile with the `empty` fixture.
 - `bun run dev:instance:multi-site` starts product instance profile with the `multi-site` fixture.
+- The `mixed-apps` launch fixture is available through `FORMLESS_LAUNCH_FIXTURE=mixed-apps`.
 - Fixture selection changes initial installed app state, not route shape.
 
 ## Main Test Anchors
@@ -59,6 +60,7 @@ Last updated: 2026-05-25
 - Site editor test helpers: `src/test/site-editor.ts`.
 - Authority write test helpers: `src/test/authority-write.ts`.
 - Site record fixtures: `src/test/site-records.ts`.
+- Instance workspace tests fake target clients and deployment adapters.
 - Site tests use Site record fixtures, not exact `schema/apps/site/seed-records.json` content.
 
 ## Browser Smoke

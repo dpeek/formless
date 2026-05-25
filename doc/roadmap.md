@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Purpose: possible directions for what to work on next.
 
@@ -86,12 +86,12 @@ Why:
 - Current runtime pieces work locally and in Workers.
 - Productization decides whether Formless can support real users and deployments.
 - The Formless instance direction names the deployment model before onboarding PRDs. See `doc/directions/formless-instance.md`.
-- Product instance profile, default installed Site, installed Site routes, launch fixtures, and portable archives now exist.
+- Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, and claimable instance workspaces now exist.
 
 Good next chunks:
 
-- Claimable instance workspace lifecycle.
-- Generic bundled app installs beyond Site.
+- Core media app for image assets. GitHub issue #28 owns this PRD.
+- Common generated media editor path for app records.
 - Browser management UI for portable app and instance archives.
 - Safer archive review and replacement UX.
 - Users and permissions.
