@@ -7,20 +7,23 @@ import {
 export const DEFAULT_SITE_INSTALL_ID = "site";
 export const DEFAULT_SITE_INSTALL_LABEL = "Site";
 
+export type DefaultAppBootstrapPolicy = "starter-site" | "starter-site-if-empty";
+
 export type EnsureDefaultAppInstallsResult = {
   defaultSite: {
     created: boolean;
     install: AppInstall;
-  };
+  } | null;
   installs: AppInstall[];
 };
 
 export function ensureDefaultAppInstalls(
   storage: DurableObjectStorage,
-  input: { now: string },
+  input: { now: string; policy?: DefaultAppBootstrapPolicy },
 ): EnsureDefaultAppInstallsResult {
   const existingInstalls = readInstanceAppInstalls(storage);
   const existingSite = findAppInstall(existingInstalls, DEFAULT_SITE_INSTALL_ID);
+  const policy = input.policy ?? "starter-site-if-empty";
 
   if (existingSite) {
     return {
@@ -28,6 +31,13 @@ export function ensureDefaultAppInstalls(
         created: false,
         install: existingSite,
       },
+      installs: existingInstalls,
+    };
+  }
+
+  if (policy === "starter-site-if-empty" && existingInstalls.length > 0) {
+    return {
+      defaultSite: null,
       installs: existingInstalls,
     };
   }

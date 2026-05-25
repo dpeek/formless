@@ -149,6 +149,55 @@ describe("owner setup API routes", () => {
     ]);
   });
 
+  it("does not add starter Site when setup completes against preseeded workspace installs", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "david",
+      label: "David Peek",
+    });
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "dom",
+      label: "Dominic De Lorenzo",
+    });
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "james",
+      label: "James Peek",
+    });
+    await createSetupCapability();
+
+    const completed = await postJson<OwnerSetupCompleteResponse>("/api/formless/setup/complete", {
+      setupToken,
+      owner: { name: "Ada Owner" },
+    });
+    const appInstalls = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(completed.response.status).toBe(200);
+    expect(appInstalls.body.installs.map((install) => install.installId)).toEqual([
+      "david",
+      "dom",
+      "james",
+    ]);
+    expect(appInstalls.body.installs).toEqual([
+      expect.objectContaining({
+        installId: "david",
+        label: "David Peek",
+        publicRoute: "/sites/david",
+      }),
+      expect.objectContaining({
+        installId: "dom",
+        label: "Dominic De Lorenzo",
+        publicRoute: "/sites/dom",
+      }),
+      expect.objectContaining({
+        installId: "james",
+        label: "James Peek",
+        publicRoute: "/sites/james",
+      }),
+    ]);
+  });
+
   it("rejects malformed and invalid setup completion requests without completing setup", async () => {
     await createSetupCapability();
 

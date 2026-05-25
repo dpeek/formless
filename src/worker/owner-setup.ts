@@ -137,7 +137,10 @@ async function handleOwnerSetupCompleteRequest(
   });
 
   if (result.ok) {
-    ensureDefaultAppInstalls(storage, { now: completedAt });
+    ensureDefaultAppInstalls(storage, {
+      now: completedAt,
+      policy: "starter-site-if-empty",
+    });
   }
 
   return await ownerSetupCompleteResponse(request, env, result);
