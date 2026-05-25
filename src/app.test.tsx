@@ -902,6 +902,44 @@ describe("App smoke routes", () => {
     expect(linkHtml(runtimeShellHtml(html), "/apps/task-workspace")).toContain("Task Workspace");
   });
 
+  it("renders installed Tasks generated UI from the install-scoped target", () => {
+    const appInstalls = [
+      appInstallFixture({
+        installId: "task-workspace",
+        label: "Task Workspace",
+        packageAppKey: "tasks",
+      }),
+    ];
+    const installedWorld = findRuntimeWorldMountByRoute(
+      createDevRuntimeProfile(),
+      "/apps/task-workspace",
+      { appInstalls },
+    );
+
+    if (
+      !installedWorld?.target ||
+      typeof installedWorld.target !== "object" ||
+      installedWorld.target.kind !== "appInstall"
+    ) {
+      throw new Error("Expected installed Tasks target for /apps/task-workspace.");
+    }
+
+    applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema), installedWorld.target);
+    const html = renderRoute("/apps/task-workspace", undefined, appInstalls);
+
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
+    expectAppSettings(html, {
+      appLabel: "Tasks",
+      resetScopeLabel: "Tasks app install task-workspace",
+      schemaKey: "tasks",
+      schemaRoute: "/apps/task-workspace/schema",
+      syncWorldKey: "app:task-workspace",
+    });
+    expect(html).toContain("Create Task");
+    expect(html).not.toContain("Loading Tasks...");
+    expect(installedWorld.target.browserDatabaseName).toBe("formless:app:task-workspace");
+  });
+
   it("keeps installed Site home routes scoped to the installed app target", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), "site");
     const appInstalls = [appInstallFixture({ installId: "personal", label: "Personal Site" })];

@@ -53,6 +53,8 @@ beforeEach(async () => {
   await deleteClientDb("estii");
   await deleteClientDb(installedSiteIdentity("personal"));
   await deleteClientDb(installedSiteIdentity("docs"));
+  await deleteClientDb(installedTasksIdentity("work"));
+  await deleteClientDb(installedTasksIdentity("team"));
   resetClientStore();
 });
 
@@ -110,6 +112,29 @@ describe("client sync", () => {
     expect(getClientStoreSnapshot()).toMatchObject({
       activeClientStorageName: "formless:app:personal",
       activeSchemaKey: "site",
+    });
+  });
+
+  it("bootstraps installed Tasks into an install-scoped replica only", async () => {
+    const work = installedTasksIdentity("work");
+    const team = installedTasksIdentity("team");
+
+    await bootstrapClient(
+      work,
+      jsonFetcher("/api/app-installs/tasks/work/bootstrap", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+        records: [record("record-1", "Work task")],
+        cursor: 1,
+      } satisfies BootstrapResponse),
+    );
+
+    expect((await readLocalSnapshot(work)).records).toEqual([record("record-1", "Work task")]);
+    expect((await readLocalSnapshot(team)).records).toEqual([]);
+    expect((await readLocalSnapshot("tasks")).records).toEqual([]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:app:work",
+      activeSchemaKey: "tasks",
     });
   });
 
@@ -283,6 +308,21 @@ describe("client sync", () => {
     try {
       expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe(
         "/api/app-installs/site/personal/sync/ws",
+      );
+    } finally {
+      stop();
+    }
+  });
+
+  it("opens installed Tasks push sync on the Tasks install API path", () => {
+    const sockets = fakeSocketFactory();
+    const stop = startPushSync(installedTasksIdentity("work"), {
+      socketFactory: sockets.create,
+    });
+
+    try {
+      expect(new URL(sockets.instances[0]?.url ?? "").pathname).toBe(
+        "/api/app-installs/tasks/work/sync/ws",
       );
     } finally {
       stop();
@@ -649,6 +689,121 @@ describe("client sync", () => {
     expect(storeSnapshot.recordsById["record-1"]).toEqual(tombstone);
     expect(storeSnapshot.recordIdsByEntity.task ?? []).toEqual([]);
     expect(storeSnapshot.cursor).toBe(2);
+  });
+
+  it("uses installed Tasks API paths for sync, writes, actions, snapshots, and resets", async () => {
+    const work = installedTasksIdentity("work");
+    const createdRecord = record("record-2", "Created in work");
+    const tombstone = {
+      ...createdRecord,
+      deletedAt: "2026-04-28T00:03:00.000Z",
+    };
+    const restoredRecord = record("record-4", "Restored work");
+
+    await saveBootstrapResponse(work, {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "Existing work")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb(work);
+
+    await syncClient(
+      work,
+      jsonFetcher(
+        "/api/app-installs/tasks/work/sync?after=1&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z",
+        {
+          changes: [change(2, "record-2", "Created in work")],
+          cursor: 2,
+        } satisfies SyncResponse,
+      ),
+    );
+
+    await submitCreateMutation(
+      work,
+      "task",
+      { title: "Created in work", done: false },
+      async (input, init) => {
+        const mutation = parseRequestBody(init?.body);
+
+        expect(input).toBe("/api/app-installs/tasks/work/mutations");
+        expect(init?.method).toBe("POST");
+
+        return Response.json({
+          record: createdRecord,
+          changes: [mutationChange(3, mutation.mutationId, createdRecord, "create")],
+          cursor: 3,
+          mutationId: mutation.mutationId,
+        } satisfies MutationResponse);
+      },
+    );
+
+    await submitAction(work, "task", "clearCompletedTasks", async (input, init) => {
+      const action = parseActionRequestBody(init?.body);
+
+      expect(input).toBe("/api/app-installs/tasks/work/actions");
+      expect(init?.method).toBe("POST");
+
+      return Response.json({
+        actionId: action.actionId,
+        changes: [actionChange(4, tombstone, action.actionId)],
+        cursor: 4,
+      } satisfies ActionResponse);
+    });
+
+    const exported = await exportStoreSnapshot(
+      work,
+      jsonFetcher(
+        "/api/app-installs/tasks/work/snapshot",
+        storeSnapshot({ records: [tombstone], sourceCursor: 4 }),
+      ),
+    );
+    const restored = await restoreStoreSnapshot(
+      work,
+      storeSnapshot({ records: [restoredRecord], sourceCursor: 4 }),
+      async (input, init) => {
+        expect(input).toBe("/api/app-installs/tasks/work/snapshot/restore");
+        expect(init?.method).toBe("POST");
+
+        return Response.json({
+          schema: appSchema,
+          schemaUpdatedAt: "2026-04-28T00:04:00.000Z",
+          records: [restoredRecord],
+          cursor: 5,
+        } satisfies BootstrapResponse);
+      },
+    );
+
+    await resetSourceSchema(
+      work,
+      jsonFetcher("/api/app-installs/tasks/work/reset/schema", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:05:00.000Z",
+        records: [restoredRecord],
+        cursor: 6,
+      } satisfies BootstrapResponse),
+    );
+
+    const reset = await resetSeedData(
+      work,
+      jsonFetcher("/api/app-installs/tasks/work/reset/seed", {
+        schema: appSchema,
+        schemaUpdatedAt: "2026-04-28T00:06:00.000Z",
+        records: [record("record-5", "Seeded work")],
+        cursor: 7,
+      } satisfies BootstrapResponse),
+    );
+
+    expect(exported.records).toEqual([tombstone]);
+    expect(restored.records).toEqual([restoredRecord]);
+    expect(reset.records).toEqual([record("record-5", "Seeded work")]);
+    expect((await readLocalSnapshot("tasks")).records).toEqual([]);
+    expect((await readLocalSnapshot(work)).records).toEqual([record("record-5", "Seeded work")]);
+    expect(getClientStoreSnapshot()).toMatchObject({
+      activeClientStorageName: "formless:app:work",
+      activeSchemaKey: "tasks",
+      cursor: 7,
+    });
   });
 
   it("submits rate-card actions to the Estii API and merges created rates", async () => {
@@ -1253,6 +1408,16 @@ function installedSiteIdentity(installId: string) {
 
   if (!identity) {
     throw new Error(`Expected installed Site identity for ${installId}.`);
+  }
+
+  return identity;
+}
+
+function installedTasksIdentity(installId: string) {
+  const identity = installedAppStorageIdentity({ installId, packageAppKey: "tasks" });
+
+  if (!identity) {
+    throw new Error(`Expected installed Tasks identity for ${installId}.`);
   }
 
   return identity;

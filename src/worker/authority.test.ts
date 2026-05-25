@@ -129,6 +129,79 @@ describe("authority", () => {
     expect(legacySite.schema).toEqual(siteSourceSchema);
   });
 
+  it("isolates installed Tasks storage, sync, reset, snapshot, and actions by install id", async () => {
+    await resetInstalledApp("tasks", "work");
+    await resetInstalledApp("tasks", "team");
+
+    const initialSync = await getInstalledAppJson<SyncResponse>("tasks", "work", "/sync?after=0");
+    const created = await postInstalledAppJson<MutationResponse>("tasks", "work", "/mutations", {
+      mutationId: "mutation-installed-tasks-work",
+      entity: "task",
+      op: "create",
+      values: {
+        title: "Installed work only",
+        done: true,
+      },
+    });
+    const workSnapshot = await getInstalledAppJson<StoreSnapshot>("tasks", "work", "/snapshot");
+    const restoredRecord = taskSnapshotRecord("snapshot-installed-task", "Restored installed task");
+    const restored = await postInstalledAppJson<BootstrapResponse>(
+      "tasks",
+      "work",
+      "/snapshot/restore",
+      storeSnapshot({
+        sourceCursor: workSnapshot.sourceCursor,
+        schemaUpdatedAt: workSnapshot.schemaUpdatedAt,
+        records: [restoredRecord],
+      }),
+    );
+    const cleared = await postInstalledAppJson<MutationResponse>("tasks", "work", "/mutations", {
+      mutationId: "mutation-installed-tasks-completed",
+      entity: "task",
+      op: "create",
+      values: {
+        title: "Completed installed task",
+        done: true,
+      },
+    });
+    const action = await postInstalledAppJson<{
+      actionId: string;
+      changes: Array<{ payload: StoredRecord }>;
+      cursor: number;
+    }>("tasks", "work", "/actions", {
+      actionId: "action-installed-tasks-clear-completed",
+      entity: "task",
+      action: "clearCompletedTasks",
+    });
+    const reset = await postInstalledAppJson<BootstrapResponse>("tasks", "work", "/reset/seed", {});
+    const work = await getInstalledAppJson<BootstrapResponse>("tasks", "work", "/bootstrap");
+    const team = await getInstalledAppJson<BootstrapResponse>("tasks", "team", "/bootstrap");
+    const legacy = await getJson<BootstrapResponse>("/api/bootstrap");
+
+    expect(initialSync.cursor).toBe(taskSeedRecords.length);
+    expect(initialSync.changes.map((change) => change.payload)).toEqual(taskSeedRecords);
+    expect(workSnapshot).toMatchObject({
+      kind: "formless.storeSnapshot",
+      schemaKey: "tasks",
+      schema: appSchema,
+      sourceCursor: created.cursor,
+    });
+    expect(workSnapshot.records).toEqual([...taskSeedRecords, created.record]);
+    expect(restored.records).toContainEqual(restoredRecord);
+    expect(action.changes.map((change) => change.payload)).toContainEqual(
+      expect.objectContaining({
+        id: cleared.record.id,
+        deletedAt: expect.any(String),
+      }),
+    );
+    expect(reset.records).toEqual(taskSeedRecords);
+    expect(work.records).toEqual(taskSeedRecords);
+    expect(team.records).toEqual(taskSeedRecords);
+    expect(legacy.records).toEqual(taskSeedRecords);
+    expect(team.records).not.toContainEqual(created.record);
+    expect(legacy.records).not.toContainEqual(created.record);
+  });
+
   it("projects installed Site tree media hrefs through the selected install route", async () => {
     await postInstalledAppJson<BootstrapResponse>(
       "site",

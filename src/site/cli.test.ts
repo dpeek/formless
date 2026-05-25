@@ -13,7 +13,7 @@ import {
   type StoreSnapshot,
   type StoredRecord,
 } from "../shared/protocol.ts";
-import { siteSourceSchema } from "../test/schema-apps.ts";
+import { siteSourceSchema, taskSeedRecords, taskSourceSchema } from "../test/schema-apps.ts";
 import { formlessCliUsage, normalizeSourceUrl, parseFormlessCliArgs } from "./cli-command.ts";
 import {
   defaultSiteProjectConfig,
@@ -759,6 +759,73 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("App archive restore for personal-copy applied ok.");
   });
 
+  it("exports installed Tasks app archives without media requests", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "tasks-backup");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [
+        {
+          adminRoute: "/apps/work",
+          createdAt: "2026-05-01T00:00:00.000Z",
+          installId: "work",
+          label: "Work Tasks",
+          packageAppKey: "tasks",
+          schemaRoute: "/apps/work/schema",
+          status: "installed",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+        },
+      ],
+    });
+    responses.queueJson(taskSnapshot(taskSeedRecords));
+
+    await runFormlessCli(
+      [
+        "archive",
+        "export-app",
+        "--target",
+        "https://instance.example",
+        "--install",
+        "work",
+        "--out",
+        outDir,
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const archivePath = path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE);
+    const archive = parsePortableArchive(
+      JSON.parse(await readFile(archivePath, "utf8")) as unknown,
+    );
+
+    if (archive.kind !== APP_ARCHIVE_KIND) {
+      throw new Error("Expected app archive.");
+    }
+
+    expect(archive.app).toMatchObject({
+      installId: "work",
+      packageAppKey: "tasks",
+      sourceSchemaKey: "tasks",
+    });
+    expect(archive.data).toEqual({
+      kind: "storeSnapshot",
+      snapshot: taskSnapshot(taskSeedRecords),
+    });
+    expect(archive.media.objects).toEqual([]);
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://instance.example/api/formless/app-installs",
+      "GET https://instance.example/api/app-installs/tasks/work/snapshot",
+    ]);
+    expect(logs.at(-1)).toContain("App archive exported for work.");
+  });
+
   it("imports a standalone Site project into an app archive directory", async () => {
     const tempDir = await makeTempDir();
     const projectRoot = path.join(tempDir, "site");
@@ -1340,6 +1407,19 @@ function snapshot(records: StoredRecord[]): StoreSnapshot {
     schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
     sourceCursor: 1,
     schema: siteSourceSchema,
+    records,
+  };
+}
+
+function taskSnapshot(records: StoredRecord[]): StoreSnapshot {
+  return {
+    kind: STORE_SNAPSHOT_KIND,
+    version: STORE_SNAPSHOT_VERSION,
+    schemaKey: "tasks",
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+    sourceCursor: records.length,
+    schema: taskSourceSchema,
     records,
   };
 }

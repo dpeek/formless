@@ -7,7 +7,7 @@ import type {
   SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
-import { siteSourceSchema } from "../test/schema-apps.ts";
+import { siteSourceSchema, taskSourceSchema } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -67,6 +67,49 @@ describe("instance archive restore API", () => {
     });
     expect(after.body.installs.map((install) => install.installId)).toEqual(["personal"]);
     expect(bootstrap.body.records).toContainEqual(siteRecord());
+  });
+
+  it("restores installed Tasks app archives without Site media", async () => {
+    const dryRun = await postArchiveRestore(tasksAppArchive({ dryRun: true }));
+    const applied = await postArchiveRestore(tasksAppArchive({ dryRun: false }));
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
+
+    expect(dryRun.response.status).toBe(200);
+    expect(dryRun.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: false,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["work"],
+          mediaCountsByApp: { work: 0 },
+        },
+      },
+    });
+    expect(applied.response.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["work"],
+          mediaCountsByApp: { work: 0 },
+        },
+      },
+    });
+    expect(installs.body.installs).toEqual([
+      expect.objectContaining({
+        adminRoute: "/apps/work",
+        installId: "work",
+        packageAppKey: "tasks",
+        schemaRoute: "/apps/work/schema",
+      }),
+    ]);
+    expect(installs.body.installs[0]).not.toHaveProperty("publicRoute");
+    expect(bootstrap.body.schema).toEqual(taskSourceSchema);
+    expect(bootstrap.body.records).toEqual([taskRecord()]);
   });
 
   it("restores installed Site media before public tree reads reference it", async () => {
@@ -167,6 +210,39 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
   };
 }
 
+function tasksAppArchive(input: { dryRun: boolean }): AppArchive {
+  return {
+    kind: APP_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
+    app: {
+      installId: "work",
+      packageAppKey: "tasks",
+      sourceSchemaKey: "tasks",
+      label: "Work Tasks",
+      status: "installed",
+      createdAt: "2026-05-12T00:00:00.000Z",
+      updatedAt: "2026-05-12T00:00:00.000Z",
+    },
+    data: {
+      kind: "storeSnapshot",
+      snapshot: {
+        kind: "formless.storeSnapshot",
+        version: 1,
+        schemaKey: "tasks",
+        exportedAt: "2026-05-12T00:00:00.000Z",
+        schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+        sourceCursor: 1,
+        schema: taskSourceSchema,
+        records: [taskRecord()],
+      },
+    },
+    media: { objects: [] },
+  };
+}
+
 const mediaBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const installedMediaStorageKey = "app-installs/personal/site/images/installed.png";
 const installedMediaHref = `/api/app-installs/site/personal/media/${installedMediaStorageKey}`;
@@ -223,6 +299,19 @@ function siteRecord(): StoredRecord {
     values: {
       key: "personal",
       label: "Personal",
+    },
+  };
+}
+
+function taskRecord(): StoredRecord {
+  return {
+    id: "task-restored",
+    createdAt: "2026-05-12T00:00:00.000Z",
+    entity: "task",
+    values: {
+      title: "Restored task",
+      done: false,
+      priority: "normal",
     },
   };
 }
