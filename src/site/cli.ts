@@ -30,12 +30,14 @@ import {
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
   pullFormlessInstanceWorkspace as pullFormlessInstanceWorkspaceCommand,
+  pushFormlessInstanceWorkspace as pushFormlessInstanceWorkspaceCommand,
   rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
   type CheckFormlessInstanceWorkspaceResult,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
   type PullFormlessInstanceWorkspaceResult,
+  type PushFormlessInstanceWorkspaceResult,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
 } from "./instance-workspace.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
@@ -141,6 +143,9 @@ export {
   type PullFormlessInstanceWorkspaceDependencies,
   type PullFormlessInstanceWorkspaceInput,
   type PullFormlessInstanceWorkspaceResult,
+  type PushFormlessInstanceWorkspaceDependencies,
+  type PushFormlessInstanceWorkspaceInput,
+  type PushFormlessInstanceWorkspaceResult,
   type RotateFormlessInstanceWorkspaceAdminTokenDependencies,
   type RotateFormlessInstanceWorkspaceAdminTokenInput,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
@@ -436,6 +441,11 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceCheckResult(result, dependencies.cwd));
       return;
     }
+    case "instancePush": {
+      const result = await pushFormlessInstanceWorkspace(command, dependencies);
+      dependencies.log(formatInstanceWorkspacePushResult(result, dependencies.cwd));
+      return;
+    }
     case "instanceTokenAdopt": {
       const result = await adoptFormlessInstanceWorkspaceAdminToken(command, dependencies);
       dependencies.log(formatInstanceWorkspaceTokenAdoptResult(result, dependencies.cwd));
@@ -446,7 +456,6 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceTokenRotateResult(result, dependencies.cwd));
       return;
     }
-    case "instancePush":
     case "instanceDev":
     case "instanceResetLocal":
     case "instanceDeploy":
@@ -671,6 +680,23 @@ export async function checkFormlessInstanceWorkspace(
   return checkFormlessInstanceWorkspaceCommand(input, dependencies);
 }
 
+export async function pushFormlessInstanceWorkspace(
+  input: {
+    allowStale?: boolean;
+    apply?: boolean;
+    replace?: boolean;
+    replaceInstallSet?: boolean;
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<PushFormlessInstanceWorkspaceResult> {
+  return pushFormlessInstanceWorkspaceCommand(input, dependencies);
+}
+
 export async function adoptFormlessInstanceWorkspaceAdminToken(
   input: {
     adminToken?: string | null;
@@ -872,6 +898,49 @@ function formatInstanceWorkspaceCheckResult(
     `Changed media: ${formatList(drift.changedMedia)}.`,
     `Changed archive paths: ${formatList(drift.changedArchivePaths)}.`,
   ].join("\n");
+}
+
+function formatInstanceWorkspacePushResult(
+  result: PushFormlessInstanceWorkspaceResult,
+  cwd: string,
+): string {
+  const dryRunSummary = result.dryRun.remote.report?.summary ?? result.dryRun.remote.plan?.summary;
+  const applySummary =
+    result.applyResult?.remote.report?.summary ?? result.applyResult?.remote.plan?.summary;
+  const dryRunErrors = result.dryRun.remote.errors ?? [];
+  const applyErrors = result.applyResult?.remote.errors ?? [];
+
+  return [
+    `Instance workspace push ${result.mode === "apply" ? "applied" : "dry run"}.`,
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    "Source: declared workspace app archives.",
+    `Source apps: ${result.source.appCount}.`,
+    `Source records: ${result.source.recordCount}.`,
+    `Source media files: ${result.source.mediaCount}.`,
+    `Replace existing installs: ${result.replace ? "yes" : "no"}.`,
+    `Replace install set: ${result.replaceInstallSet ? "requested" : "no"}.`,
+    result.backup ? `Backup: ${formatCliPath(cwd, result.backup.archivePath)}.` : "Backup: none.",
+    `Drift: ${result.drift.status === "no-drift" ? "none" : "detected"}.`,
+    `Missing remote installs: ${formatList(result.drift.missingInstalls)}.`,
+    `Extra remote installs: ${formatList(result.drift.extraInstalls)}.`,
+    `Changed records: ${formatList(result.drift.changedRecords)}.`,
+    `Changed media: ${formatList(result.drift.changedMedia)}.`,
+    `Dry-run restore: ${result.dryRun.remote.ok ? "ok" : "failed"}.`,
+    dryRunSummary
+      ? `Dry-run created installs: ${formatList(dryRunSummary.createdInstalls)}.`
+      : null,
+    dryRunSummary
+      ? `Dry-run replaced installs: ${formatList(dryRunSummary.replacedInstalls)}.`
+      : null,
+    ...dryRunErrors.map((error) => `Dry-run error: ${error.message}`),
+    result.applyResult ? `Apply restore: ${result.applyResult.remote.ok ? "ok" : "failed"}.` : null,
+    applySummary ? `Apply created installs: ${formatList(applySummary.createdInstalls)}.` : null,
+    applySummary ? `Apply replaced installs: ${formatList(applySummary.replacedInstalls)}.` : null,
+    ...applyErrors.map((error) => `Apply error: ${error.message}`),
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 }
 
 function formatInstanceWorkspaceTokenAdoptResult(

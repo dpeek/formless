@@ -3,11 +3,13 @@ import path from "node:path";
 
 import {
   APP_ARCHIVE_KIND,
+  ARCHIVE_VERSION,
   INSTANCE_ARCHIVE_KIND,
   formatAppArchive,
   formatInstanceArchive,
   parsePortableArchive,
   type AppArchive,
+  type InstanceArchive,
   type PortableArchive,
 } from "../shared/archive.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
@@ -41,8 +43,10 @@ import {
   exportAppArchive,
   exportInstanceArchive,
   PORTABLE_ARCHIVE_MANIFEST_FILE,
+  restorePortableArchive,
   type ArchiveDiskMediaFile,
   type ArchiveDiskWriteResult,
+  type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
 import { packageExecCommand } from "./package-commands.ts";
 
@@ -148,6 +152,42 @@ export type FormlessInstanceWorkspaceDriftSummary = {
 export type CheckFormlessInstanceWorkspaceResult = {
   drift: FormlessInstanceWorkspaceDriftSummary;
   selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type PushFormlessInstanceWorkspaceInput = {
+  allowStale?: boolean;
+  apply?: boolean;
+  replace?: boolean;
+  replaceInstallSet?: boolean;
+  targetAlias?: string | null;
+  workspacePath?: string;
+};
+
+export type PushFormlessInstanceWorkspaceDependencies = {
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+  fetch: typeof fetch;
+  now: () => string;
+};
+
+export type PushFormlessInstanceWorkspaceSource = {
+  archivePath: string;
+  appCount: number;
+  mediaCount: number;
+  recordCount: number;
+};
+
+export type PushFormlessInstanceWorkspaceResult = {
+  applyResult?: RestorePortableArchiveResult;
+  backup?: ArchiveDiskWriteResult;
+  drift: FormlessInstanceWorkspaceDriftSummary;
+  dryRun: RestorePortableArchiveResult;
+  mode: "apply" | "dry-run";
+  replace: boolean;
+  replaceInstallSet: boolean;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  source: PushFormlessInstanceWorkspaceSource;
   workspaceRoot: string;
 };
 
@@ -363,6 +403,129 @@ export async function checkFormlessInstanceWorkspace(
         remoteArchive,
       }),
       selectedTarget,
+      workspaceRoot,
+    };
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+}
+
+export async function pushFormlessInstanceWorkspace(
+  input: PushFormlessInstanceWorkspaceInput,
+  dependencies: PushFormlessInstanceWorkspaceDependencies,
+): Promise<PushFormlessInstanceWorkspaceResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "push");
+  const tempRoot = await createWorkspaceTempRoot(workspaceRoot, "push");
+  const composedArchiveRoot = path.join(tempRoot, "archive");
+
+  try {
+    const backup = input.apply
+      ? await exportInstanceArchive(
+          {
+            outDir: workspacePushBackupPath(workspaceRoot, dependencies.now()),
+            target: selectedTarget.url,
+          },
+          dependencies,
+        )
+      : undefined;
+    const remoteArchiveRoot = backup
+      ? path.dirname(backup.archivePath)
+      : path.join(tempRoot, "remote-check");
+
+    if (!backup) {
+      await exportInstanceArchive(
+        {
+          outDir: remoteArchiveRoot,
+          target: selectedTarget.url,
+        },
+        dependencies,
+      );
+    }
+
+    const remoteArchive = await readArchiveDirectoryForCheck(remoteArchiveRoot);
+
+    if (!remoteArchive || remoteArchive.archive.kind !== INSTANCE_ARCHIVE_KIND) {
+      throw new Error("Formless instance push could not read remote archive state.");
+    }
+
+    const localAppArchives = await readWorkspaceAppArchivesForPush(workspaceRoot, manifest);
+    const localInstanceArchive = await readArchiveDirectoryForCheck(
+      path.join(workspaceRoot, manifest.archives.instance),
+    );
+    const source = await writeComposedWorkspacePushArchive({
+      archives: localAppArchives,
+      archiveRoot: composedArchiveRoot,
+      exportedAt: dependencies.now(),
+    });
+    const drift = compareWorkspaceArchives({
+      localAppArchives: new Map(
+        localAppArchives.map((archive) => [
+          archive.archive.kind === APP_ARCHIVE_KIND ? archive.archive.app.installId : "",
+          archive,
+        ]),
+      ),
+      localInstanceArchive,
+      manifest,
+      remoteArchive,
+    });
+
+    if (input.apply && drift.status === "drift" && !input.allowStale) {
+      throw new Error(
+        "Formless instance push apply refused because remote drift was detected; review `formless instance check` and retry with --allow-stale to acknowledge it.",
+      );
+    }
+
+    if (input.apply && input.replaceInstallSet && drift.extraInstalls.length > 0) {
+      throw new Error(
+        `Formless instance push cannot replace the remote install set yet; archive restore cannot prune extra remote installs: ${drift.extraInstalls.join(", ")}.`,
+      );
+    }
+
+    const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
+    const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+      env: dependencies.env,
+      secretState,
+    });
+    const dryRun = await restorePortableArchive(
+      {
+        adminToken,
+        apply: false,
+        archiveDir: composedArchiveRoot,
+        replace: input.replace ?? false,
+        target: selectedTarget.url,
+      },
+      dependencies,
+    );
+
+    if (input.apply && !dryRun.remote.ok) {
+      throw new Error("Formless instance push apply stopped because dry-run restore failed.");
+    }
+
+    const applyResult = input.apply
+      ? await restorePortableArchive(
+          {
+            adminToken,
+            apply: true,
+            archiveDir: composedArchiveRoot,
+            replace: input.replace ?? false,
+            target: selectedTarget.url,
+          },
+          dependencies,
+        )
+      : undefined;
+
+    return {
+      ...(applyResult === undefined ? {} : { applyResult }),
+      ...(backup === undefined ? {} : { backup }),
+      drift,
+      dryRun,
+      mode: input.apply ? "apply" : "dry-run",
+      replace: input.replace ?? false,
+      replaceInstallSet: input.replaceInstallSet ?? false,
+      selectedTarget,
+      source,
       workspaceRoot,
     };
   } finally {
@@ -846,7 +1009,7 @@ function appRecordCount(app: AppArchive): number {
 function requireWorkspaceTarget(
   manifest: FormlessInstanceWorkspaceManifest,
   targetAlias: string | null | undefined,
-  commandName: "check" | "pull",
+  commandName: "check" | "pull" | "push",
 ): FormlessInstanceWorkspaceTarget {
   const target = selectWorkspaceTarget(manifest, targetAlias);
 
@@ -855,6 +1018,97 @@ function requireWorkspaceTarget(
   }
 
   return target;
+}
+
+async function readWorkspaceAppArchivesForPush(
+  workspaceRoot: string,
+  manifest: FormlessInstanceWorkspaceManifest,
+): Promise<WorkspaceArchiveDirectory[]> {
+  const archives: WorkspaceArchiveDirectory[] = [];
+
+  for (const app of manifest.apps) {
+    const archiveRoot = path.join(workspaceRoot, app.archivePath);
+    const archive = await readArchiveDirectoryForCheck(archiveRoot);
+
+    if (!archive) {
+      throw new Error(`Formless instance push requires local app archive ${app.archivePath}.`);
+    }
+
+    if (archive.archive.kind !== APP_ARCHIVE_KIND) {
+      throw new Error(`Formless instance push requires ${app.archivePath} to be an app archive.`);
+    }
+
+    if (archive.archive.app.installId !== app.installId) {
+      throw new Error(
+        `Formless instance push app archive ${app.archivePath} has install id "${archive.archive.app.installId}", expected "${app.installId}".`,
+      );
+    }
+
+    if (archive.archive.app.packageAppKey !== app.packageAppKey) {
+      throw new Error(
+        `Formless instance push app archive ${app.archivePath} has package "${archive.archive.app.packageAppKey}", expected "${app.packageAppKey}".`,
+      );
+    }
+
+    archives.push(archive);
+  }
+
+  return archives.sort((left, right) => {
+    const leftInstall = left.archive.kind === APP_ARCHIVE_KIND ? left.archive.app.installId : "";
+    const rightInstall = right.archive.kind === APP_ARCHIVE_KIND ? right.archive.app.installId : "";
+
+    return leftInstall.localeCompare(rightInstall);
+  });
+}
+
+async function writeComposedWorkspacePushArchive(input: {
+  archives: readonly WorkspaceArchiveDirectory[];
+  archiveRoot: string;
+  exportedAt: string;
+}): Promise<PushFormlessInstanceWorkspaceSource> {
+  const appArchives = input.archives.map((archive) => {
+    if (archive.archive.kind !== APP_ARCHIVE_KIND) {
+      throw new Error("Formless instance push can compose only app archives.");
+    }
+
+    return archive.archive;
+  });
+  const instanceArchive: InstanceArchive = {
+    kind: INSTANCE_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: input.exportedAt,
+    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    restorePolicy: { dryRun: true, installCollisions: "reject" },
+    apps: appArchives,
+  };
+  const archivePath = path.join(input.archiveRoot, PORTABLE_ARCHIVE_MANIFEST_FILE);
+
+  await mkdir(input.archiveRoot, { recursive: true });
+  await writeFile(archivePath, formatInstanceArchive(instanceArchive));
+
+  for (const directory of input.archives) {
+    for (const file of directory.mediaFiles) {
+      const filePath = path.join(input.archiveRoot, file.archivePath);
+
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, file.bytes);
+    }
+  }
+
+  return {
+    appCount: appArchives.length,
+    archivePath,
+    mediaCount: appArchives.reduce((count, app) => count + app.media.objects.length, 0),
+    recordCount: appArchives.reduce((count, app) => count + appRecordCount(app), 0),
+  };
+}
+
+function workspacePushBackupPath(workspaceRoot: string, timestamp: string): string {
+  return path.join(workspaceRoot, ".formless/backups", `push-${safeTimestamp(timestamp)}`);
+}
+
+function safeTimestamp(timestamp: string): string {
+  return timestamp.replace(/[^0-9A-Za-z]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 async function createWorkspaceTempRoot(workspaceRoot: string, name: string): Promise<string> {

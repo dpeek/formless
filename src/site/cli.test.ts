@@ -98,7 +98,7 @@ describe("Formless Site CLI", () => {
       "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
       "  instance status|pull|check [--workspace <path>] [--target <alias>]",
       "  instance push [--workspace <path>] [--target <alias>]",
-      "       [--apply] [--replace] [--allow-stale]",
+      "       [--apply] [--replace] [--allow-stale] [--replace-install-set]",
       "  instance dev|reset-local [--workspace <path>]",
       "  instance deploy [--workspace <path>] [--target <alias>]",
       "       [--migration-policy <new|existing>]",
@@ -470,12 +470,14 @@ describe("Formless Site CLI", () => {
         "--apply",
         "--replace",
         "--allow-stale",
+        "--replace-install-set",
       ]),
     ).toEqual({
       allowStale: true,
       apply: true,
       kind: "instancePush",
       replace: true,
+      replaceInstallSet: true,
       targetAlias: "remote",
       workspacePath: ".",
     });
@@ -525,21 +527,7 @@ describe("Formless Site CLI", () => {
       workspacePath: ".",
     });
 
-    await runFormlessCli(
-      ["instance", "push", "--workspace", "../personal", "--target", "remote"],
-      cliDeps("/workspace/project", { logs }),
-    );
-
-    expect(logs).toEqual([
-      [
-        "Instance workspace command parsed: push.",
-        "Workspace: /workspace/personal.",
-        "Manifest: /workspace/personal/formless.instance-workspace.json.",
-        "Secret state: /workspace/personal/.formless/instance.env.",
-        "Target: remote.",
-        "No files changed: this command skeleton only validates arguments.",
-      ].join("\n"),
-    ]);
+    expect(logs).toEqual([]);
   });
 
   it("validates instance workspace command options", () => {
@@ -989,6 +977,234 @@ describe("Formless Site CLI", () => {
         "Changed archive paths: archives/apps/david, archives/apps/dom, archives/apps/james, archives/instance.",
       ].join("\n"),
     ]);
+  });
+
+  it("pushes workspace app archives as a dry-run by default", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localDavid = appArchive("david", "David Peek", {
+      mediaBytes: Buffer.from([4, 5, 6]),
+      records: mediaRecords(),
+    });
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek"), installedSite("extra", "Extra")],
+      {
+        david: { records: [] },
+        extra: { records: [] },
+      },
+      [
+        {
+          ok: false,
+          errors: [{ message: 'Installed app "david" already exists.' }],
+        },
+      ],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid, {
+      david: Buffer.from([4, 5, 6]),
+    });
+    await mkdir(path.join(workspaceRoot, ".formless"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".formless/instance.env"),
+      "FORMLESS_ADMIN_TOKEN=local-token\n",
+    );
+
+    await runFormlessCli(
+      ["instance", "push", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = JSON.parse(String(restoreRequest?.body)) as { archive: InstanceArchive };
+
+    expect(`${restoreRequest?.method} ${restoreRequest?.url}`).toBe(
+      "POST https://personal.dpeek.workers.dev/api/formless/archive/restore",
+    );
+    expect(restoreRequest?.headers.authorization).toBe("Bearer local-token");
+    expect(restoreBody.archive.restorePolicy).toEqual({
+      dryRun: true,
+      installCollisions: "reject",
+    });
+    expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.split("\n")).toEqual([
+      "Instance workspace push dry run.",
+      `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+      "Target: remote (https://personal.dpeek.workers.dev).",
+      "Source: declared workspace app archives.",
+      "Source apps: 1.",
+      `Source records: ${mediaRecords().length}.`,
+      "Source media files: 1.",
+      "Replace existing installs: no.",
+      "Replace install set: no.",
+      "Backup: none.",
+      "Drift: detected.",
+      "Missing remote installs: none.",
+      "Extra remote installs: extra.",
+      "Changed records: david.",
+      "Changed media: david.",
+      "Dry-run restore: failed.",
+      'Dry-run error: Installed app "david" already exists.',
+    ]);
+  });
+
+  it("backs up, dry-runs, and applies instance workspace push with explicit replace", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [
+        restorePlan({ replacedInstalls: ["david"] }),
+        restoreReport({ replacedInstalls: ["david"] }),
+      ],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+
+    await runFormlessCli(
+      ["instance", "push", "--workspace", workspaceRoot, "--apply", "--replace"],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    const restoreRequests = requests.filter((request) => request.method === "POST");
+
+    expect(restoreRequests).toHaveLength(2);
+    expect(
+      restoreRequests.map(
+        (request) =>
+          (JSON.parse(String(request.body)) as { archive: InstanceArchive }).archive.restorePolicy,
+      ),
+    ).toEqual([
+      { dryRun: true, installCollisions: "replace" },
+      { dryRun: false, installCollisions: "replace" },
+    ]);
+    await expect(
+      readFile(
+        path.join(workspaceRoot, ".formless/backups/push-2026-05-12T02-00-00-000Z/archive.json"),
+        "utf8",
+      ),
+    ).resolves.toContain('"kind": "formless.instanceArchive"');
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.split("\n")).toEqual([
+      "Instance workspace push applied.",
+      `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+      "Target: remote (https://personal.dpeek.workers.dev).",
+      "Source: declared workspace app archives.",
+      "Source apps: 1.",
+      "Source records: 0.",
+      "Source media files: 0.",
+      "Replace existing installs: yes.",
+      "Replace install set: no.",
+      `Backup: ${path.relative(
+        tempDir,
+        path.join(workspaceRoot, ".formless/backups/push-2026-05-12T02-00-00-000Z/archive.json"),
+      )}.`,
+      "Drift: none.",
+      "Missing remote installs: none.",
+      "Extra remote installs: none.",
+      "Changed records: none.",
+      "Changed media: none.",
+      "Dry-run restore: ok.",
+      "Dry-run created installs: none.",
+      "Dry-run replaced installs: david.",
+      "Apply restore: ok.",
+      "Apply created installs: none.",
+      "Apply replaced installs: david.",
+    ]);
+  });
+
+  it("guards apply when target drift is not acknowledged", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { mediaBytes: Buffer.from([9]), records: publishRecords() },
+      },
+      [restorePlan({ replacedInstalls: ["david"] })],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "push", "--workspace", workspaceRoot, "--apply", "--replace"],
+        cliDeps(tempDir, { fetch: fetcher }),
+      ),
+    ).rejects.toThrow("Formless instance push apply refused because remote drift was detected");
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    await expect(
+      readFile(
+        path.join(workspaceRoot, ".formless/backups/push-2026-05-12T02-00-00-000Z/archive.json"),
+        "utf8",
+      ),
+    ).resolves.toContain('"kind": "formless.instanceArchive"');
+  });
+
+  it("blocks unsupported install-set replacement when extra remote installs exist", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek"), installedSite("extra", "Extra")],
+      {
+        david: { records: [] },
+        extra: { records: [] },
+      },
+      [restorePlan({ replacedInstalls: ["david"] })],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+
+    await expect(
+      runFormlessCli(
+        [
+          "instance",
+          "push",
+          "--workspace",
+          workspaceRoot,
+          "--apply",
+          "--replace",
+          "--allow-stale",
+          "--replace-install-set",
+        ],
+        cliDeps(tempDir, { fetch: fetcher }),
+      ),
+    ).rejects.toThrow(
+      "Formless instance push cannot replace the remote install set yet; archive restore cannot prune extra remote installs: extra.",
+    );
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
   it("adopts and rotates instance workspace admin tokens explicitly", async () => {
@@ -2244,6 +2460,86 @@ function archiveFetch(
     }
 
     return Response.json({ error: "not found" }, { status: 404 });
+  };
+}
+
+function pushArchiveFetch(
+  requests: CapturedFetchRequest[],
+  installs: ReturnType<typeof installedApp>[],
+  dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
+  restoreResponses: unknown[],
+  extraPackages: ReturnType<typeof tasksPackage>[] = [],
+): typeof fetch {
+  const readFetch = archiveFetch(requests, installs, dataByInstall, extraPackages);
+
+  return async (url, init) => {
+    const requestUrl =
+      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const parsedUrl = new URL(requestUrl);
+    const method = init?.method ?? "GET";
+
+    if (method === "POST" && parsedUrl.pathname === "/api/formless/archive/restore") {
+      requests.push({
+        body: init?.body,
+        headers: normalizeHeaders(init?.headers),
+        method,
+        url: requestUrl,
+      });
+
+      const response = restoreResponses.shift();
+
+      if (!response) {
+        throw new Error(`Unexpected archive restore request: ${requestUrl}`);
+      }
+
+      return Response.json(response);
+    }
+
+    return readFetch(url, init);
+  };
+}
+
+function restorePlan(
+  summary: Partial<{
+    createdInstalls: string[];
+    replacedInstalls: string[];
+  }> = {},
+) {
+  return {
+    ok: true,
+    plan: {
+      summary: restoreSummary(summary),
+    },
+  };
+}
+
+function restoreReport(
+  summary: Partial<{
+    createdInstalls: string[];
+    replacedInstalls: string[];
+  }> = {},
+) {
+  return {
+    ok: true,
+    report: {
+      applied: true,
+      summary: restoreSummary(summary),
+    },
+  };
+}
+
+function restoreSummary(
+  summary: Partial<{
+    createdInstalls: string[];
+    replacedInstalls: string[];
+  }>,
+) {
+  return {
+    appCount: 1,
+    createdInstalls: summary.createdInstalls ?? [],
+    mediaCountsByApp: { david: 0 },
+    recordCountsByApp: { david: { total: 0 } },
+    replacedInstalls: summary.replacedInstalls ?? [],
   };
 }
 

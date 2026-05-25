@@ -57,6 +57,7 @@ export type FormlessCliCommand =
       apply: boolean;
       kind: "instancePush";
       replace: boolean;
+      replaceInstallSet: boolean;
       targetAlias: string | null;
       workspacePath: string;
     }
@@ -129,7 +130,7 @@ export function formlessCliUsage(): string {
     "       [--target-url <url>] [--target <alias>] [--from-remote | --from-archive <dir>]",
     "  instance status|pull|check [--workspace <path>] [--target <alias>]",
     "  instance push [--workspace <path>] [--target <alias>]",
-    "       [--apply] [--replace] [--allow-stale]",
+    "       [--apply] [--replace] [--allow-stale] [--replace-install-set]",
     "  instance dev|reset-local [--workspace <path>]",
     "  instance deploy [--workspace <path>] [--target <alias>]",
     "       [--migration-policy <new|existing>]",
@@ -662,6 +663,7 @@ function parseInstancePushArgs(args: string[]): FormlessCliCommand {
   let allowStale = false;
   let apply = false;
   let replace = false;
+  let replaceInstallSet = false;
 
   for (const arg of options.rest) {
     if (arg === "--apply") {
@@ -679,6 +681,11 @@ function parseInstancePushArgs(args: string[]): FormlessCliCommand {
       continue;
     }
 
+    if (arg === "--replace-install-set") {
+      replaceInstallSet = true;
+      continue;
+    }
+
     if (arg === "--allow-stale") {
       allowStale = true;
       continue;
@@ -692,6 +699,7 @@ function parseInstancePushArgs(args: string[]): FormlessCliCommand {
     apply,
     kind: "instancePush",
     replace,
+    replaceInstallSet,
     targetAlias: options.targetAlias,
     workspacePath: options.workspacePath,
   };
