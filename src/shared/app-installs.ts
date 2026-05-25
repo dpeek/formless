@@ -121,6 +121,16 @@ export const bundledAppPackages = [
     adminRouteBase: "/apps",
     publicRouteBase: "/sites",
   },
+  {
+    packageAppKey: "tasks",
+    label: schemaAppDefinitions.tasks.label,
+    description: "Task tracking app backed by the bundled Tasks schema and starter records.",
+    defaultInstallId: "tasks",
+    supportsMultipleInstalls: true,
+    sourceSchemaKey: "tasks",
+    seedRecordsKey: "tasks",
+    adminRouteBase: "/apps",
+  },
 ] as const satisfies readonly BundledAppPackage[];
 
 export function listBundledAppPackages(): BundledAppPackage[] {

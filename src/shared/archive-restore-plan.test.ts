@@ -140,13 +140,13 @@ describe("archive restore planner", () => {
         appArchive({
           app: {
             ...archivedInstall("tasks-copy", "Tasks Copy"),
-            packageAppKey: "tasks",
-            sourceSchemaKey: "tasks",
+            packageAppKey: "missing",
+            sourceSchemaKey: "missing",
           },
           data: {
             kind: "storeSnapshot",
             snapshot: storeSnapshot({
-              schemaKey: "tasks",
+              schemaKey: "missing",
               records: [siteRecord("rec_site_settings_tasks", "tasks")],
             }),
           },

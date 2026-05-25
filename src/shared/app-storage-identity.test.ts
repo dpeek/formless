@@ -76,6 +76,25 @@ describe("app storage identity", () => {
     });
   });
 
+  it("maps an installed Tasks app without Site media facts", () => {
+    expect(
+      installedAppStorageIdentity({
+        installId: "tasks",
+        packageAppKey: "tasks",
+      }),
+    ).toEqual({
+      apiRoutePrefix: "/api/app-installs/tasks/tasks",
+      authorityName: "app:tasks",
+      broadcastChannelName: "formless:app:tasks",
+      browserDatabaseName: "formless:app:tasks",
+      installId: "tasks",
+      kind: "appInstall",
+      packageAppKey: "tasks",
+      seedRecordsKey: "tasks",
+      sourceSchemaKey: "tasks",
+    });
+  });
+
   it("accepts default Site install identity and rejects invalid identities", () => {
     expect(installedAppStorageIdentity({ installId: "site", packageAppKey: "site" })).toMatchObject(
       {
@@ -89,7 +108,7 @@ describe("app storage identity", () => {
     expect(installedAppStorageIdentity({ installId: "Docs", packageAppKey: "site" })).toBe(
       undefined,
     );
-    expect(installedAppStorageIdentity({ installId: "tasks", packageAppKey: "tasks" })).toBe(
+    expect(installedAppStorageIdentity({ installId: "estii", packageAppKey: "estii" })).toBe(
       undefined,
     );
   });
@@ -145,6 +164,15 @@ describe("app storage identity", () => {
       },
       path: "/bootstrap",
     });
+    expect(parseAuthorityApiRoute("/api/app-installs/tasks/tasks/bootstrap")).toMatchObject({
+      identity: {
+        authorityName: "app:tasks",
+        installId: "tasks",
+        kind: "appInstall",
+        packageAppKey: "tasks",
+      },
+      path: "/bootstrap",
+    });
   });
 
   it("leaves unknown or incomplete API routes unclaimed", () => {
@@ -153,7 +181,7 @@ describe("app storage identity", () => {
       "/api/site",
       "/api/missing/bootstrap",
       "/api/app-installs/site/personal",
-      "/api/app-installs/tasks/tasks/bootstrap",
+      "/api/app-installs/estii/estii/bootstrap",
     ]) {
       expect(parseAuthorityApiRoute(pathname)).toBeUndefined();
     }

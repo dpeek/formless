@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
-import type { AppInstallsResponse, CreateAppInstallResponse } from "../shared/protocol.ts";
+import type {
+  AppInstallsResponse,
+  BootstrapResponse,
+  CreateAppInstallResponse,
+} from "../shared/protocol.ts";
+import { taskSeedRecords, taskSourceSchema } from "../test/schema-apps.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -46,6 +51,11 @@ describe("instance app install API routes", () => {
         label: "Site",
         packageAppKey: "site",
       }),
+      expect.objectContaining({
+        defaultInstallId: "tasks",
+        label: "Tasks",
+        packageAppKey: "tasks",
+      }),
     ]);
     expect(before.body.installs).toEqual([]);
     expect(created.response.status).toBe(201);
@@ -67,7 +77,39 @@ describe("instance app install API routes", () => {
     expect(after.body.installs).toEqual(created.body.installs);
   });
 
-  it("rejects duplicate and invalid Site installs without mutating existing installs", async () => {
+  it("persists Tasks installs and bootstraps from the bundled Tasks source", async () => {
+    const created = await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "tasks",
+      installId: "tasks",
+      label: "Tasks",
+    });
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/tasks/tasks/bootstrap");
+
+    expect(created.response.status).toBe(201);
+    expect(created.body.initialization).toEqual({
+      installId: "tasks",
+      packageAppKey: "tasks",
+      seedRecordsKey: "tasks",
+      sourceSchemaKey: "tasks",
+    });
+    expect(created.body.install).toEqual(
+      expect.objectContaining({
+        adminRoute: "/apps/tasks",
+        installId: "tasks",
+        label: "Tasks",
+        packageAppKey: "tasks",
+        schemaRoute: "/apps/tasks/schema",
+        status: "installed",
+      }),
+    );
+    expect(created.body.install).not.toHaveProperty("publicRoute");
+    expect(created.body.install).not.toHaveProperty("publicRoutePrefix");
+    expect(bootstrap.body.schema).toEqual(taskSourceSchema);
+    expect(bootstrap.body.records).toEqual(taskSeedRecords);
+    expect(bootstrap.body.cursor).toBe(taskSeedRecords.length);
+  });
+
+  it("rejects duplicate and invalid installs without mutating existing installs", async () => {
     await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
       packageAppKey: "site",
       installId: "personal",
@@ -75,9 +117,9 @@ describe("instance app install API routes", () => {
     });
 
     const duplicate = await postAdminJson<AppInstallFailureResponse>("/api/formless/app-installs", {
-      packageAppKey: "site",
+      packageAppKey: "tasks",
       installId: "personal",
-      label: "Other Site",
+      label: "Personal Tasks",
     });
     const invalid = await postAdminJson<AppInstallFailureResponse>("/api/formless/app-installs", {
       packageAppKey: "site",

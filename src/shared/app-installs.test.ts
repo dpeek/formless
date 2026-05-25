@@ -17,7 +17,7 @@ type CreateAppInstallSuccess = Extract<CreateAppInstallResult, { ok: true }>;
 type CreateAppInstallFailure = Extract<CreateAppInstallResult, { ok: false }>;
 
 describe("app install registry", () => {
-  it("declares Site as the first installable bundled app package", () => {
+  it("declares Site and Tasks as installable bundled app packages", () => {
     expect(listBundledAppPackages()).toEqual([
       expect.objectContaining({
         adminRouteBase: "/apps",
@@ -29,9 +29,18 @@ describe("app install registry", () => {
         sourceSchemaKey: "site",
         supportsMultipleInstalls: true,
       }),
+      expect.objectContaining({
+        adminRouteBase: "/apps",
+        defaultInstallId: "tasks",
+        label: "Tasks",
+        packageAppKey: "tasks",
+        seedRecordsKey: "tasks",
+        sourceSchemaKey: "tasks",
+        supportsMultipleInstalls: true,
+      }),
     ]);
     expect(findBundledAppPackage("site")?.label).toBe("Site");
-    expect(findBundledAppPackage("tasks")).toBeUndefined();
+    expect(findBundledAppPackage("tasks")?.label).toBe("Tasks");
     expect(findBundledAppPackage("estii")).toBeUndefined();
   });
 
@@ -107,6 +116,35 @@ describe("app install registry", () => {
     expect(result.installs).toEqual([result.install]);
   });
 
+  it("creates a flat Tasks install without Site public route metadata", () => {
+    const result = expectSuccess(
+      createAppInstall({
+        existingInstalls: [],
+        installId: "tasks",
+        label: " Tasks ",
+        now,
+        packageAppKey: "tasks",
+      }),
+    );
+
+    expect(result.install).toEqual({
+      adminRoute: "/apps/tasks",
+      createdAt: now,
+      installId: "tasks",
+      label: "Tasks",
+      packageAppKey: "tasks",
+      schemaRoute: "/apps/tasks/schema",
+      status: "installed",
+      updatedAt: now,
+    });
+    expect(result.initialization).toEqual({
+      installId: "tasks",
+      packageAppKey: "tasks",
+      seedRecordsKey: "tasks",
+      sourceSchemaKey: "tasks",
+    });
+  });
+
   it("lists and finds installed apps without mutating registry state", () => {
     const docs = siteInstallFixture({
       createdAt: "2026-05-22T08:02:00.000Z",
@@ -137,7 +175,7 @@ describe("app install registry", () => {
         installId: "tasks",
         label: "Tasks",
         now,
-        packageAppKey: "tasks",
+        packageAppKey: "missing",
       }),
     );
     const invalidLabel = expectFailure(
@@ -153,9 +191,9 @@ describe("app install registry", () => {
       createAppInstall({
         existingInstalls: existing,
         installId: "personal",
-        label: "Other Personal Site",
+        label: "Personal Tasks",
         now,
-        packageAppKey: "site",
+        packageAppKey: "tasks",
       }),
     );
 
