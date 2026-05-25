@@ -1,36 +1,49 @@
 # Generated UI
 
-Last updated: 2026-05-19
+Last updated: 2026-05-25
 
 ## Current Facts
 
 - App shell: `src/app.tsx`.
+- Active app surface: `src/app/app-surface.tsx`.
 - Runtime profile resolver: `src/app/runtime-profile.ts`.
-- Dev profile mounts Tasks, Estii, Site, schema editors, legacy Rates redirects, and public Site preview.
+- Runtime profile kinds: `instance`, `dev`, `app`, `siteAuthoring`, `publishedSite`.
+- Product instance profile mounts instance shell, installed app admin routes, and installed Site public routes.
+- Dev workbench profile mounts Tasks, Estii, Site, schema editors, public Site preview, instance shell, installed app admin routes, and installed Site public routes.
 - App profile mounts one selected schema app at `/`, app-relative screen subpaths, and `/schema`.
 - Site authoring profile mounts public Site preview at `/` and generated admin at `/admin`.
 - Published Site profile mounts public Site rendering at `/`.
-- Current dev browser routes include `/`, `/tasks`, `/estii`, `/site`, `/tasks/schema`, `/estii/schema`, `/site/schema`, `/pages`, `/pages/*`.
+- Current dev browser routes include `/`, `/tasks`, `/estii`, `/site`, `/tasks/schema`, `/estii/schema`, `/site/schema`, `/apps/:installId`, `/apps/:installId/schema`, `/sites/:installId`, `/sites/:installId/*`, `/pages`, `/pages/*`.
+- Product instance browser routes include `/`, `/setup`, `/apps/:installId`, `/sites/:installId`, and `/sites/:installId/*`.
 - Current dev screen subpaths include `/estii/setup` and `/site/settings`.
 - Legacy dev redirects map `/rates` to `/estii` and `/rates/schema` to `/estii/schema`.
 - Home route: `src/app/routes/home.tsx`.
 - Schema editor route: `src/app/routes/schema.tsx`.
-- Workbench action controls: `src/app/dev-actions.tsx`.
+- Source reset control: `src/app/dev-actions.tsx`.
 
 ## Workbench And App Frame
 
-- Dev profile wraps generated apps in workbench chrome.
-- Workbench toolbar source: `src/app.tsx`.
-- Workbench toolbar sits below generated app chrome.
-- Workbench app nav switches Tasks, Estii, and Site.
-- Workbench actions are Schema, Export, Restore, and Reset for the active world.
-- Schema route renders as a workbench tool outside the generated app frame.
-- Reset is one active-world control with destructive confirmation.
-- Snapshot Restore imports after JSON file selection.
+- Dev profile wraps generated apps in compact workbench chrome.
+- Workbench runtime shell source: `src/app.tsx`.
+- Workbench runtime shell sits below app content.
+- Workbench runtime shell switches App management, Tasks, Estii, Site, and supported installed apps.
+- Workbench runtime shell does not own app-local Schema, sync, reset, publish, archive, Export, or Restore controls.
+- Active app sidebar owns app screens, root/context navigation, and app settings.
+- App settings source: `src/app/app-surface.tsx`.
+- App settings include sync status, profile-exposed Schema link, source seed reset, and local Site publish when configured.
+- App settings do not expose legacy store snapshot Export or Restore.
+- App settings do not expose portable archive backup, restore, or import controls.
+- Portable archive backup/restore/import remains CLI/API-backed management-level work.
+- Schema route renders inside the active app frame when the route belongs to an app surface.
+- Schema route header title is `Schema` inside the active app frame.
+- Reset label is `Reset source seed data`.
+- Reset keeps destructive confirmation.
 - Sync status control source: `src/app/routes/status-line.tsx`.
 - Sync status details include world key, schema version, cursor, push sync state, and last sync time.
-- App profile renders generated app chrome without workbench app/actions toolbar.
+- App profile renders generated app chrome without workbench runtime shell.
 - Published Site profile renders without workbench chrome and without generated admin chrome.
+- Product instance installed app admin routes can show a Management sidebar section linking back to `/`.
+- Unknown dev routes render Not found without mounting the active app surface.
 
 ## Screen And Collection Rendering
 
@@ -49,6 +62,8 @@ Last updated: 2026-05-19
 - Collection rendering supports result ordering for list, table, and tree results.
 - Collection context rendering supports tab selection and list/detail presentation.
 - List/detail context rendering keeps selected context state and renders selected context fields plus related results.
+- Generated list results render through `@dpeek/formless-ui/object-list`.
+- Generated list result ObjectList keeps field editors, delete controls, readiness warnings, visible union fields, and ordering behavior in generated UI.
 - List result rendering can order records and use generated drag handles.
 - Generated app sidebar lists app screens from primary screen models.
 - Generated app sidebar title is the app label.
@@ -82,6 +97,14 @@ Last updated: 2026-05-19
 ## Generated Authoring
 
 - Generated create renderer: `src/app/generated/create.tsx`.
+- Schema route source: `src/app/routes/schema.tsx`.
+- Schema route draft source: `src/app/routes/schema-draft.ts`.
+- Schema route defaults to Builder mode.
+- Schema route keeps Source mode beside Builder mode.
+- Schema route supports Save schema, Revert draft, and Open app controls.
+- Schema Builder entity selector uses `@dpeek/formless-ui/object-list`.
+- Schema Builder field selector uses `@dpeek/formless-ui/object-list`.
+- Schema Builder field presentation preview derives generated control and renderer facts.
 - Generated actions consume selected `action.ui` facts in `src/app/generated/actions.tsx`.
 - Generated field UI adapters: `src/app/generated/field-ui-adapters.ts`.
 - Generated field display: `src/app/generated/record-field-display.tsx`.
@@ -93,6 +116,8 @@ Last updated: 2026-05-19
 - Generated authoring primitives: `src/client/generated-authoring.ts`.
 - Create default primitive: `src/shared/create-defaults.ts`.
 - Shared UI primitives live under `lib/ui/src/`.
+- Shared ObjectList primitive: `lib/ui/src/object-list.tsx`.
+- ObjectList supports controlled single selection, empty state, item/list actions, disabled reasons, modal-backed actions, and generic reorder intent.
 - Markdown editor uses shared UI markdown primitives.
 - Markdown read-only display can use the shared markdown renderer.
 - Color editor uses shared color input and swatch display.
@@ -140,6 +165,7 @@ Last updated: 2026-05-19
 
 - App tests: `src/app.test.tsx`.
 - Runtime profile tests: `src/app/runtime-profile.test.ts`.
+- App surface source: `src/app/app-surface.tsx`.
 - View model tests: `src/client/views.test.ts`.
 - Table model tests: `src/client/table-model.test.ts`.
 - Generated table tests: `src/app/generated/table.test.tsx`.
@@ -147,6 +173,9 @@ Last updated: 2026-05-19
 - Generated format tests: `src/app/generated/format.test.ts`.
 - Generated field UI adapter tests: `src/app/generated/field-ui-adapters.test.ts`.
 - Generated authoring tests: `src/client/generated-authoring.test.ts`.
+- Schema Builder tests: `src/client/schema-builder.test.ts`, `src/app/routes/schema-draft.test.ts`.
+- Shared ObjectList tests: `lib/ui/src/object-list.test.tsx`.
+- ObjectList browser smoke script: `scripts/object-list-smoke.ts`.
 - Shared SVG icon tests: `lib/ui/src/svg-icon.test.tsx`.
 - Client media upload tests: `src/client/media.test.ts`.
 - UI primitive package docs: `lib/ui/README.md`, `lib/ui/doc/browser-primitives.md`.

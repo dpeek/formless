@@ -1,6 +1,6 @@
 # Site Runtime
 
-Last updated: 2026-05-19
+Last updated: 2026-05-25
 
 ## Current Facts
 
@@ -14,7 +14,13 @@ Last updated: 2026-05-19
 - `/pages` redirects to `/pages/home`.
 - Site authoring profile uses generated admin at `/admin`.
 - Published Site profile renders public pages at top-level routes.
+- Installed Site admin route: `/apps/:installId`.
+- Installed Site dev schema route: `/apps/:installId/schema`.
+- Installed Site public routes: `/sites/:installId`, `/sites/:installId/*`.
+- Product default installed Site id: `site`.
+- Product default installed Site label: `Site`.
 - Public tree endpoint: `/api/site/tree/:slug`.
+- Installed Site public tree endpoint: `/api/app-installs/site/:installId/tree/:slug`.
 - Tree projection: `src/site/tree.ts`.
 - Tree response types: `src/shared/protocol.ts`.
 - Public route source: `src/app/routes/site-page.tsx`.
@@ -33,7 +39,8 @@ Last updated: 2026-05-19
 - Site settings create and delete are disabled; patch is enabled.
 - Site settings use a unique constraint over `key`.
 - Page, post, project, block, and placement records do not store a `site` reference.
-- Current Site schema instance is the implicit Site scope.
+- Schema-key Site uses the current Site schema instance as the implicit Site scope.
+- Installed Site uses app install id as Site scope.
 - Default Site seed is a neutral no-media starter.
 - Default starter pages are Home, About, Blog, Projects, and Resume.
 - Default starter includes one dated post and one dated project.
@@ -128,6 +135,7 @@ Last updated: 2026-05-19
 
 - Site media route code: `src/worker/media.ts`.
 - Site client media helper: `src/client/media.ts`.
+- Site media core helpers: `src/media/core.ts`.
 - Source media helpers: `src/site/source-media.ts`.
 - Shared SVG icon primitive: `lib/ui/src/svg-icon.tsx`.
 - Media records are `block` records.
@@ -141,7 +149,12 @@ Last updated: 2026-05-19
 - Site image upload rejects files above 5 MB.
 - Site image upload writes immutable R2 keys under `site/images/`.
 - Same-origin media hrefs use `/api/site/media/<key>`.
+- Installed Site image upload writes immutable R2 keys under `app-installs/<installId>/site/images/`.
+- Installed Site same-origin media hrefs use `/api/app-installs/site/<installId>/media/<key>`.
+- Installed Site media reads reject legacy Site media keys.
+- Legacy Site media reads reject installed app media keys.
 - Site media serving supports `GET` and `HEAD` for `/api/site/media/*`.
+- Installed Site media serving supports `GET` and `HEAD` for `/api/app-installs/site/:installId/media/*`.
 - Public image rendering uses the same Site tree and renderer path as authored image URLs.
 - Shared SVG icon rendering falls back to an empty outline for missing, invalid, or unsafe SVG.
 - Shared SVG icon rendering rejects scripts, event handlers, `javascript:` URLs, `foreignObject`, and external asset references.
@@ -162,10 +175,15 @@ Last updated: 2026-05-19
 
 - Public route resolution: `src/site/route-resolver.ts`.
 - Public page lookup uses live `block.href`, not a separate slug field.
+- Installed Site public route base is `/sites/<installId>`.
+- Installed Site public rendering uses install-scoped tree reads.
+- Installed Site public links keep their `/sites/<installId>` route base.
+- Installed Site public routes render outside generated admin chrome.
+- Duplicate public slugs can exist in different installed Sites.
 - Preview and authoring Site page routes start Site push sync and refetch the active tree after Site sync applies.
 - Preview and authoring Site page routes also refetch after same-profile Site record or schema events.
 - Published Site page routes use embedded initial tree data and do not start preview sync.
-- Site page tree fetches stay HTTP reads against `/api/site/tree/:slug`.
+- Schema-key Site page tree fetches stay HTTP reads against `/api/site/tree/:slug`.
 - Public page routes render child placements, not root page `label` or `body`.
 - Public post detail routes resolve under `/blog/*` from dated `post` blocks.
 - `/blog` is a page route; its `postList` block renders the post index.

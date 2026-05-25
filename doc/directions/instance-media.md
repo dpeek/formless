@@ -1,6 +1,6 @@
 # Instance Media Direction
 
-Last updated: 2026-05-21
+Last updated: 2026-05-25
 
 Purpose: product and architecture direction before media PRDs.
 
@@ -12,15 +12,17 @@ This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
 ## Current Anchors
 
 - Formless is a schema-as-data app runtime. See `CONTEXT.md`.
-- A Formless instance is planned as one runtime scope for apps, data, media,
-  auth, and deploy config. See `doc/directions/formless-instance.md`.
+- A Formless instance is one runtime scope for apps, data, media, auth, and
+  deploy config. See `doc/directions/formless-instance.md`.
 - Current source app schema keys are `tasks`, `estii`, and `site`. See
   `doc/topics/schema-runtime.md`.
-- Current Authority storage and browser replica are keyed by schema key. See
-  `doc/topics/authority-storage-sync.md`.
+- Current Authority storage and browser replica are keyed by app storage
+  identity. See `doc/topics/authority-storage-sync.md`.
 - Current Site media is Site-specific image upload and serving. See
   `doc/topics/site-runtime.md`.
 - Current Site image upload stores immutable R2 objects under `site/images/`.
+- Current installed Site image upload stores immutable R2 objects under
+  `app-installs/<installId>/site/images/`.
 - Current Site image records are `block` records with `block.type = image` and
   `block.href`.
 
@@ -36,9 +38,10 @@ Video should be the second adapter-backed media kind, not the first reason to
 reshape the runtime.
 
 Avoid making true cross-app references a prerequisite for first media work.
-Current app storage, sync, and browser replicas are schema-key scoped. A media
-field can store a stable media asset id before the runtime has general cross-app
-reference validation.
+Current installed app storage, sync, and browser replicas are install-scoped,
+but there is no core Media app or general cross-app reference validation yet. A
+media field can store a stable media asset id before the runtime has general
+cross-app reference validation.
 
 ## Draft Vocabulary
 
@@ -209,14 +212,19 @@ behavior, or branded playback UI.
 If custom playback is needed later, prefer a proven player over hand-rolled HLS
 or DASH logic.
 
-## First PRD Candidate
+## Shipped Site Image Spine
 
-First PRD: core media spine for Site images.
+- Site image upload and serving use shared media helpers.
+- Site schema-key media remains available at `/api/site/media/*`.
+- Installed Site media is scoped under `/api/app-installs/site/<installId>/media/*`.
+- Standalone Site save and publish preserve referenced same-origin media files.
+- Portable Site project import rewrites legacy same-origin media hrefs into
+  install-scoped media hrefs.
 
-The first chunk should:
+## Next PRD Candidate
 
-- preserve existing Site image upload behavior;
-- introduce the Media module shape;
+Core media app for images should:
+
 - introduce media asset records or metadata enough to prove the model;
 - add a common media editor path;
 - let Site image blocks use media assets while legacy `href` still renders;
@@ -229,7 +237,7 @@ Second PRD candidate: video assets with Cloudflare Stream playback.
 
 Defer:
 
-- video upload in the first PRD;
+- video upload in the next image/media-asset PRD;
 - captions and transcripts;
 - audio playback polish;
 - generic file manager polish;

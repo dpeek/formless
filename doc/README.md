@@ -1,6 +1,6 @@
 # Agent Docs Map
 
-Last updated: 2026-05-20
+Last updated: 2026-05-25
 
 Repo docs are project memory. Keep claims source-faithful: point to code, schema, tests, shipped behavior, or the owning GitHub issue.
 
@@ -29,10 +29,14 @@ Read only the topics needed for the work.
 ## Workstreams
 
 - New PRDs live in GitHub Issues for `dpeek/formless`.
+- GitHub PRD issue bodies are canonical for status, chunks, decisions, evidence, blockers, and promotion notes.
+- Per-chunk progress comments are not the normal workflow.
 - Existing `prd/*.md` files are legacy workstream records kept until their facts are promoted into topic docs and the files are retired.
 - Do not create new local PRD files.
 - Do not read every legacy PRD by default; read one only when assigned, retiring it, or chasing a specific historical decision.
 - Direction docs can shape PRDs but do not own implementation status.
+- PRD finalization is a separate after-review pass that rebases on local `main` and promotes issue-body promotion notes into topic docs before closing.
+- Run PRD finalization with `bun ralph finalize --issue <number>` or `bun ralph finalise --issue <number>`.
 
 ## Removed Homes
 

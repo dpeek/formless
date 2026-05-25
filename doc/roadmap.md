@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-20
+Last updated: 2026-05-25
 
 Purpose: possible directions for what to work on next.
 
@@ -12,6 +12,7 @@ This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
 ## Current Bias
 
 - Prefer work that proves Formless as a schema-as-data app runtime.
+- Treat installed app identity as the product app shape.
 - Keep Site polish small unless it unlocks real publishing use.
 - Keep data flat; compose in view/query layer.
 - Promote shipped facts to topic docs after a workstream lands.
@@ -85,10 +86,14 @@ Why:
 - Current runtime pieces work locally and in Workers.
 - Productization decides whether Formless can support real users and deployments.
 - The Formless instance direction names the deployment model before onboarding PRDs. See `doc/directions/formless-instance.md`.
+- Product instance profile, default installed Site, installed Site routes, launch fixtures, and portable archives now exist.
 
 Good next chunks:
 
-- First-run onboarding for one Cloudflare `workers.dev` Formless instance.
+- Claimable instance workspace lifecycle.
+- Generic bundled app installs beyond Site.
+- Browser management UI for portable app and instance archives.
+- Safer archive review and replacement UX.
 - Users and permissions.
 - Multi-tenant account routing.
 - Admin token and publish hardening.
@@ -134,6 +139,7 @@ Good next chunks:
 - Keep topic docs source-faithful and short.
 - Retire legacy PRDs after facts move into topic docs.
 - Add example-led docs from real source apps.
+- Keep direction docs clear when old PRD candidates have since shipped.
 
 Avoid:
 

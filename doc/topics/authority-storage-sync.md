@@ -1,11 +1,15 @@
 # Authority, Storage, And Sync
 
-Last updated: 2026-05-19
+Last updated: 2026-05-25
 
 ## Current Facts
 
 - Authority worker dispatch: `src/worker/index.ts`.
-- Authority instances: `FORMLESS_AUTHORITY.idFromName(schemaKey)`.
+- Authority storage identity policy: `src/shared/app-storage-identity.ts`.
+- Authority instances use `AppStorageIdentity.authorityName`.
+- Schema-key authority names stay `tasks`, `estii`, and `site`.
+- Installed app authority names use `app:<installId>`.
+- Instance metadata authority name: `__formless_instance__`.
 - Authority routes: `src/worker/authority.ts`.
 - Authority operation selection: `src/worker/authority-operations.ts`.
 - Authority validation: `src/worker/authority-validation.ts`.
@@ -15,9 +19,15 @@ Last updated: 2026-05-19
 - Storage code: `src/worker/storage.ts`.
 - Storage tables: `records`, `changes`, `app_schema`, `action_executions`.
 - HTTP remains the write path.
-- Current API paths: `/api/:schemaKey/bootstrap`, `/api/:schemaKey/schema`, `/api/:schemaKey/tree/:slug`, `/api/:schemaKey/sync`, `/api/:schemaKey/sync/ws`, `/api/:schemaKey/mutations`, `/api/:schemaKey/actions`, `/api/:schemaKey/reset/schema`, `/api/:schemaKey/reset/seed`.
+- Schema-key API prefix: `/api/:schemaKey`.
+- Installed app API prefix: `/api/app-installs/:packageAppKey/:installId`.
+- Current app API paths under either prefix: `/bootstrap`, `/schema`, `/tree/:slug`, `/sync`, `/sync/ws`, `/mutations`, `/actions`, `/reset/schema`, `/reset/seed`.
 - Snapshot API paths: `/api/:schemaKey/snapshot`, `/api/:schemaKey/snapshot/restore`.
+- Installed app snapshot API paths: `/api/app-installs/:packageAppKey/:installId/snapshot`, `/api/app-installs/:packageAppKey/:installId/snapshot/restore`.
+- Instance app installs API path: `/api/formless/app-installs`.
+- Instance archive restore API path: `/api/formless/archive/restore`.
 - Site media API paths include `/api/site/media/images` and `/api/site/media/*`.
+- Installed Site media API paths include `/api/app-installs/site/:installId/media/images` and `/api/app-installs/site/:installId/media/*`.
 - Site media route handling runs before Authority dispatch in `src/worker/index.ts`.
 - Site media upload and restore use the `FORMLESS_MEDIA` R2 binding, not Durable Object storage.
 - Site media upload and restore use the same admin bearer-token guard as authority writes.
@@ -37,6 +47,20 @@ Last updated: 2026-05-19
 - Snapshot restore validates the envelope, schema key, schema, records, references, timestamps, and unique constraints before commit.
 - Snapshot restore returns a bootstrap-shaped response.
 - Client snapshot restore saves the selected local replica through `src/client/sync.ts`.
+- Instance app install registry: `src/shared/app-installs.ts`.
+- Instance app install state: `src/worker/instance-app-installs-state.ts`.
+- Durable instance app install metadata is stored in `app_installs` on the instance authority.
+- Site is the only installable bundled package right now.
+- Installed Site app creation initializes from bundled Site source schema and seed records.
+- Default product Site bootstrap: `src/worker/default-app-installs.ts`.
+- Owner setup creates the default installed Site id `site` label `Site` idempotently.
+- Launch fixture registry: `src/shared/launch-fixtures.ts`.
+- Worker launch fixture wiring: `src/worker/launch-fixtures.ts`.
+- `FORMLESS_LAUNCH_FIXTURE` selects fixture initial installed apps and source seed choices.
+- Current launch fixtures: `empty`, `default-site`, `multi-site`.
+- Product instance runtime blocks schema-key API routes.
+- Dev, app, Site authoring, and published Site compatibility profiles allow schema-key API routes.
+- Installed app API routes stay available when product instance blocks schema-key API routes.
 - Write operations require `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when `FORMLESS_ADMIN_TOKEN` is configured.
 - Read operations stay public when the admin token is configured.
 - Unauthorized writes return `401` before JSON body parsing, storage setup, or operation execution.
@@ -60,12 +84,23 @@ Last updated: 2026-05-19
 - Snapshot restore is an authority write.
 - Snapshot restore preserves monotonic sync cursors.
 - Snapshot restore clears `action_executions`.
+- Portable archive codec: `src/shared/archive.ts`.
+- Portable archive restore planner: `src/shared/archive-restore-plan.ts`.
+- Portable archive restore executor: `src/worker/archive-restore.ts`.
+- Portable archive kinds: `formless.instanceArchive`, `formless.appArchive`.
+- Archive restore validates before mutation.
+- Archive restore supports dry-run and apply policy.
+- Archive restore creates or replaces app install registry rows by policy.
+- Archive restore restores app data through installed app storage identity.
+- Archive restore restores media before app data.
+- Archive restore is backup, restore, and import plumbing, not bidirectional instance sync.
 
 ## Push Sync
 
 - Push sync route: `/api/:schemaKey/sync/ws`.
-- Push sync client entrypoint: `startPushSync(schemaKey, options)` in `src/client/sync.ts`.
-- Pushed sync merge helper: `applySyncResponse(schemaKey, response)` in `src/client/sync.ts`.
+- Installed app push sync route: `/api/app-installs/:packageAppKey/:installId/sync/ws`.
+- Push sync client entrypoint: `startPushSync(target, options)` in `src/client/sync.ts`.
+- Pushed sync merge helper: `applySyncResponse(target, response)` in `src/client/sync.ts`.
 - Push sync protocol types: `SyncSocketClientMessage`, `SyncSocketServerMessage`, `SyncSocketAttachment`.
 - Authority accepts hibernatable Durable Object WebSockets.
 - Authority socket handles `hello` and `sync-requested`.
@@ -76,12 +111,15 @@ Last updated: 2026-05-19
 
 ## Browser Replica
 
-- Browser replica is a local IndexedDB copy keyed by schema key.
+- Browser replica is a local IndexedDB copy keyed by app storage identity.
 - Browser local DBs: `formless:tasks`, `formless:estii`, `formless:site`.
+- Installed app browser DBs use `formless:app:<installId>`.
 - Browser local stores: `meta`, `records`.
 - Browser DB code: `src/client/db.ts`.
 - Browser broadcast channels: `formless:tasks`, `formless:estii`, `formless:site`.
+- Installed app broadcast channels use `formless:app:<installId>`.
 - When `VITE_FORMLESS_SITE_PROJECT_ID` is set, browser DB and broadcast names include the project id: `formless:<projectId>:<schemaKey>`.
+- Client app target policy: `src/client/app-target.ts`.
 - Client store: `src/client/store.ts`.
 - Browser replica projection module: `src/client/projections.ts`.
 - Browser replica projection inputs use `BrowserReplicaProjectionSnapshot` from `src/client/projections.ts`.
@@ -94,6 +132,10 @@ Last updated: 2026-05-19
 ## Key Tests
 
 - Protocol tests: `src/shared/protocol.test.ts`.
+- App install registry tests: `src/shared/app-installs.test.ts`.
+- App storage identity tests: `src/shared/app-storage-identity.test.ts`.
+- Launch fixture tests: `src/shared/launch-fixtures.test.ts`, `src/worker/launch-fixtures.test.ts`, `src/worker/launch-fixture-startup.test.ts`.
+- Portable archive tests: `src/shared/archive.test.ts`, `src/shared/archive-restore-plan.test.ts`, `src/worker/archive-restore.test.ts`, `src/worker/archive-api.test.ts`.
 - Sync tests: `src/client/sync.test.ts`.
 - Local DB tests: `src/client/db.test.ts`.
 - Store tests: `src/client/store.test.ts`.
@@ -101,5 +143,7 @@ Last updated: 2026-05-19
 - Authority tests: `src/worker/authority.test.ts`.
 - Authority operation tests: `src/worker/authority-operations.test.ts`.
 - Authority admin guard tests: `src/worker/authority-admin-guard.test.ts`.
+- Instance app install tests: `src/worker/instance-app-installs.test.ts`.
+- Owner setup tests: `src/worker/owner-setup.test.ts`.
 - Storage tests: `src/worker/storage.test.ts`.
 - Worker routing tests: `src/worker/routing.test.ts`.

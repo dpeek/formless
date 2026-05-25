@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const rootDir = process.cwd();
 const githubRepo = "dpeek/formless";
@@ -15,6 +16,8 @@ const excludedPickLabels = new Set([
 
 class UsageError extends Error {}
 
+type LoopMode = "finalize" | "loop";
+
 type LoopOptions = {
   allowDirtyStart: boolean;
   baseRef: string;
@@ -24,6 +27,7 @@ type LoopOptions = {
   issueNumber: number | null;
   list: boolean;
   maxIterations: number | null;
+  mode: LoopMode;
   pick: boolean;
   prdPath: string;
   worktree: boolean;
@@ -92,14 +96,17 @@ type IssuePrdSource = {
 
 type PrdSource = FilePrdSource | IssuePrdSource;
 
-function usage(): string {
+export function usage(): string {
   return [
     "Usage: bun ralph <prd-path> [options]",
     "       bun ralph --issue <number> [options]",
     "       bun ralph --pick [options]",
     "       bun ralph --list",
+    "       bun ralph finalize --issue <number> [options]",
+    "       bun ralph finalise --issue <number> [options]",
     "",
-    "Runs Codex CLI repeatedly, one PRD chunk per invocation, until the assigned PRD is done or blocked.",
+    "Runs Codex CLI repeatedly, one PRD chunk per invocation, until implementation is ready for finalization or blocked.",
+    "Use finalize/finalise after review to promote docs and create the closing PRD commit.",
     "",
     "Options:",
     "  --issue <number>      Use a GitHub PRD issue as the assigned PRD.",
@@ -109,7 +116,7 @@ function usage(): string {
     "  --worktree            Create or reuse a sibling git worktree for the PRD loop.",
     "  --worktree-dir <dir>  Worktree directory. Default: ../formless-<branch-or-prd-slug>.",
     "  --branch <name>       Worktree branch. Default: PRD Branch name or codex/<prd-or-issue-slug>.",
-    "  --base <ref>          New worktree base ref. Default: main.",
+    "  --base <ref>          New worktree base ref. Default: local main.",
     "  --dangerous            Use Codex's no-approval, no-sandbox mode.",
     "  --allow-dirty-start    Skip clean-worktree guards.",
     "  --dry-run              Print the command and prompt without running Codex.",
@@ -119,10 +126,13 @@ function usage(): string {
     "  bun ralph ./prd/08-entity-action-module.md --worktree --max 6",
     "  bun ralph --issue 2 --worktree",
     "  bun ralph --pick --worktree",
+    "  bun ralph finalize --issue 24 --worktree",
   ].join("\n");
 }
 
-function parseArgs(args: string[]): LoopOptions | "help" {
+export function parseArgs(args: string[]): LoopOptions | "help" {
+  const mode: LoopMode = args[0] === "finalize" || args[0] === "finalise" ? "finalize" : "loop";
+  const parsedArgs = mode === "finalize" ? args.slice(1) : args;
   const options: LoopOptions = {
     allowDirtyStart: false,
     baseRef: "main",
@@ -132,14 +142,15 @@ function parseArgs(args: string[]): LoopOptions | "help" {
     issueNumber: null,
     list: false,
     maxIterations: null,
+    mode,
     pick: false,
     prdPath: "",
     worktree: false,
     worktreeDir: null,
   };
 
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
+  for (let index = 0; index < parsedArgs.length; index += 1) {
+    const arg = parsedArgs[index];
 
     if (arg === "-h" || arg === "--help") {
       return "help";
@@ -176,32 +187,32 @@ function parseArgs(args: string[]): LoopOptions | "help" {
     }
 
     if (arg === "--issue") {
-      options.issueNumber = parseIssueNumber(nextValue(args, index, arg), arg);
+      options.issueNumber = parseIssueNumber(nextValue(parsedArgs, index, arg), arg);
       index += 1;
       continue;
     }
 
     if (arg === "--base") {
-      options.baseRef = nextValue(args, index, arg);
+      options.baseRef = nextValue(parsedArgs, index, arg);
       index += 1;
       continue;
     }
 
     if (arg === "--branch") {
-      options.branch = nextValue(args, index, arg);
+      options.branch = nextValue(parsedArgs, index, arg);
       options.worktree = true;
       index += 1;
       continue;
     }
 
     if (arg === "--max") {
-      options.maxIterations = parsePositiveInteger(nextValue(args, index, arg), arg);
+      options.maxIterations = parsePositiveInteger(nextValue(parsedArgs, index, arg), arg);
       index += 1;
       continue;
     }
 
     if (arg === "--worktree-dir") {
-      options.worktreeDir = nextValue(args, index, arg);
+      options.worktreeDir = nextValue(parsedArgs, index, arg);
       options.worktree = true;
       index += 1;
       continue;
@@ -227,12 +238,26 @@ function parseArgs(args: string[]): LoopOptions | "help" {
 
   if (selectedSources === 0) {
     throw new UsageError(
-      "Missing PRD source. Pass <prd-path>, --issue <number>, --pick, or --list.",
+      mode === "finalize"
+        ? "Missing PRD source. Pass <prd-path> or --issue <number>."
+        : "Missing PRD source. Pass <prd-path>, --issue <number>, --pick, or --list.",
     );
   }
 
   if (selectedSources > 1) {
     throw new UsageError("Choose exactly one PRD source: <prd-path>, --issue, --pick, or --list.");
+  }
+
+  if (mode === "finalize") {
+    if (options.list || options.pick) {
+      throw new UsageError(
+        "finalize requires <prd-path> or --issue <number>; --list and --pick are loop commands.",
+      );
+    }
+
+    if (options.maxIterations !== null) {
+      throw new UsageError("finalize runs one Codex pass; --max is not supported.");
+    }
   }
 
   return options;
@@ -387,7 +412,7 @@ function makeIssuePrdSource(issue: GithubIssue): IssuePrdSource {
     kind: "issue",
     slug,
     textForCounting,
-    updateTarget: `GitHub issue #${issue.number} comments`,
+    updateTarget: `GitHub issue #${issue.number} body`,
   };
 }
 
@@ -396,7 +421,7 @@ function defaultMaxIterations(source: PrdSource): number {
   return Math.max(1, openChunks + 1);
 }
 
-function countOpenChunks(prd: string): number {
+export function countOpenChunks(prd: string): number {
   const lines = prd.split(/\r?\n/);
   const chunksIndex = lines.findIndex((line) => line.trim() === "## Chunks");
   if (chunksIndex === -1) {
@@ -836,9 +861,10 @@ function selectPrdSource(options: LoopOptions): PrdSource | null {
   throw new Error("Missing PRD source.");
 }
 
-function makeRunDir(source: PrdSource): string {
+function makeRunDir(source: PrdSource, mode: LoopMode = "loop"): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const runDir = path.join(rootDir, "tmp", "ralph-loop", `${timestamp}-${source.slug}`);
+  const runRoot = mode === "finalize" ? "ralph-finalize" : "ralph-loop";
+  const runDir = path.join(rootDir, "tmp", runRoot, `${timestamp}-${source.slug}`);
   mkdirSync(runDir, { recursive: true });
   return runDir;
 }
@@ -853,17 +879,13 @@ function assignedPrdDisplay(source: PrdSource, workspace: Workspace): string {
 
 function buildPrompt(source: PrdSource, workspace: Workspace): string {
   const assignedDisplay = assignedPrdDisplay(source, workspace);
-  const finalCommitInstruction =
-    source.kind === "issue"
-      ? ` If this commit completes the assigned PRD and your final response will use \`<plan-done/>\`, include \`Fixes #${source.issue.number}\` in the commit message.`
-      : "";
   const assignment =
     source.kind === "issue"
       ? [
           `Assigned PRD: GitHub issue #${source.issue.number} for ${githubRepo}.`,
           `Issue title: ${source.issue.title}`,
           `Read the issue body and comments with \`gh issue view #${source.issue.number} --repo ${githubRepo} --comments\`.`,
-          "Treat the issue body and comments as the PRD context.",
+          "Treat the issue body as the canonical PRD context. Use comments only for human discussion, review notes, or escalation.",
           `Update ${source.updateTarget} for status, decisions, blockers, evidence, and promotion notes.`,
           "Do not create or edit local PRD files for GitHub PRDs.",
         ]
@@ -889,13 +911,59 @@ function buildPrompt(source: PrdSource, workspace: Workspace): string {
     `5. Update only ${source.updateTarget} with status, decisions, blockers, evidence, and promotion notes.`,
     "6. Run `devstate check`, read `./.devstate/status.md`, and fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually; devstate owns those outputs.",
     "7. If app behavior changed, smoke it with `bun browser ...` (`agent-browser`). Do not block on Codex IAB Browser Use in CLI loops.",
-    "8. Rebase the current branch on local `main` before the final commit. Preserve your iteration changes with non-interactive git commands, and stop with `<blocked/>` on conflicts.",
-    `9. Commit the chunk with a concise message. Do not amend existing commits.${finalCommitInstruction}`,
+    "8. Rebase the current branch on local `main` before the final commit. Use `git rebase main`; do not use `origin/main` unless the user explicitly asks. Preserve your iteration changes with non-interactive git commands, and stop with `<blocked/>` on conflicts.",
+    "9. Commit the chunk with a concise message. Do not amend existing commits. Do not include `Fixes #...`; PRD finalization creates the closing commit.",
     "10. Final response must include changed files, checks, PRD status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.",
     "",
     "Loop contract:",
     "- Output `<task-done/>` when one chunk shipped and chunks remain.",
-    "- Output `<plan-done/>` when the assigned PRD is complete.",
+    "- Output `<plan-done/>` when implementation chunks are complete and the PRD is ready for finalization.",
+    "- Output `<blocked/>` when blocked; include the blocker evidence and likely next focus.",
+  ].join("\n");
+}
+
+function buildFinalizationPrompt(source: PrdSource, workspace: Workspace): string {
+  const assignedDisplay = assignedPrdDisplay(source, workspace);
+  const assignment =
+    source.kind === "issue"
+      ? [
+          `Assigned PRD: GitHub issue #${source.issue.number} for ${githubRepo}.`,
+          `Issue title: ${source.issue.title}`,
+          `Read the issue body and comments with \`gh issue view #${source.issue.number} --repo ${githubRepo} --comments\`.`,
+          "Treat the issue body as the canonical PRD record.",
+          `Update ${source.updateTarget} with finalization status, evidence, and any remaining promotion notes.`,
+          `Create the final commit with \`Fixes #${source.issue.number}\` in the commit message.`,
+          "Do not close the GitHub issue directly; let the fixing commit close it when merged.",
+        ]
+      : [
+          `Assigned PRD: local file \`${assignedDisplay}\`.`,
+          "Read the assigned PRD file for status, decisions, evidence, and promotion notes.",
+          `Update only ${source.updateTarget} with finalization status, evidence, and any remaining promotion notes.`,
+        ];
+
+  return [
+    `Finalize ${assignedDisplay}.`,
+    "",
+    "You are a PRD finalization agent inside Ralph. This is an after-review cleanup pass, not a normal implementation chunk.",
+    "",
+    ...assignment,
+    "",
+    "Workflow:",
+    "0. Confirm the command started you from a clean worktree. Stop with `<blocked/>` if it did not.",
+    "1. Run `devstate start`.",
+    "2. Read `doc/README.md`, `CONTEXT.md`, `doc/current.md`, `doc/roadmap.md`, relevant `doc/topics/*.md`, and the assigned PRD context.",
+    "3. Verify all required chunks are `shipped` or intentionally `closed`, and promotion notes are ready. Stop with `<blocked/>` if the PRD is not ready for finalization.",
+    "4. Rebase the current branch on local `main` before the docs/final commit. Use `git rebase main`; do not use `origin/main` unless the user explicitly asks. Preserve reviewed work with non-interactive git commands, and stop with `<blocked/>` on conflicts.",
+    "5. Promote PRD promotion notes into `doc/current.md`, `doc/roadmap.md`, and relevant `doc/topics/*.md`. Keep topic docs short, concrete, and source-faithful.",
+    `6. Update ${source.updateTarget} so status and finalization are complete, latest evidence is recorded, and consumed promotion notes are marked or removed.`,
+    "7. Run `devstate check`, read `./.devstate/status.md`, and fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually; devstate owns those outputs.",
+    "8. Run `devstate stop`.",
+    "9. Commit the finalization changes with a concise message. Do not amend existing commits.",
+    "10. Do not merge unless the user explicitly asked for a merge.",
+    "11. Final response must include changed files, checks, PRD status, and exactly one signal: `<plan-done/>` or `<blocked/>`.",
+    "",
+    "Finalization contract:",
+    "- Output `<plan-done/>` when PRD finalization is complete.",
     "- Output `<blocked/>` when blocked; include the blocker evidence and likely next focus.",
   ].join("\n");
 }
@@ -1084,7 +1152,7 @@ async function runLoop(options: LoopOptions): Promise<number> {
       }
 
       if (signal === "plan-done") {
-        process.stdout.write("[ralph-loop] PRD complete.\n");
+        process.stdout.write("[ralph-loop] PRD implementation ready for finalization.\n");
         return 0;
       }
     }
@@ -1100,6 +1168,97 @@ async function runLoop(options: LoopOptions): Promise<number> {
   }
 }
 
+async function runFinalization(options: LoopOptions): Promise<number> {
+  const source = selectPrdSource(options);
+  if (source === null) {
+    return 0;
+  }
+
+  const workspace = prepareWorkspace(options, source);
+  const runDir = makeRunDir(source, "finalize");
+  let issueClaimed = false;
+
+  if (
+    !options.dryRun &&
+    !assertCleanWorktree(workspace.rootDir, "before finalization", options.allowDirtyStart)
+  ) {
+    return 1;
+  }
+
+  process.stdout.write(
+    [
+      `Ralph finalization PRD ${source.displayName}`,
+      `Workspace ${workspace.rootDir}`,
+      ...(workspace.branch ? [`Branch ${workspace.branch}`] : []),
+      "Codex agent config from config.toml",
+      `Logs ${displayPath(runDir)}`,
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    if (source.kind === "issue") {
+      if (options.dryRun) {
+        process.stdout.write(
+          `[ralph-loop] dry run: would claim issue #${source.issue.number} with ${ralphRunningLabel}\n`,
+        );
+      } else {
+        claimIssue(source);
+        issueClaimed = true;
+      }
+    }
+
+    const outputPath = path.join(runDir, "finalization-final.md");
+    const logPath = path.join(runDir, "finalization.log");
+    const promptPath = path.join(runDir, "finalization-prompt.md");
+    const prompt = buildFinalizationPrompt(source, workspace);
+    const args = codexArgs(options, outputPath, prompt, workspace.rootDir);
+    writeFileSync(promptPath, `${prompt}\n`);
+
+    process.stdout.write("\n[ralph-loop] finalization\n");
+    if (options.dryRun) {
+      process.stdout.write(`${["codex", ...args].map(shellQuote).join(" ")}\n`);
+      process.stdout.write(`Prompt ${displayPath(promptPath)}\n`);
+      return 0;
+    }
+
+    const code = await runWithTee("codex", args, logPath, workspace.rootDir);
+    if (code !== 0) {
+      process.stderr.write(
+        `[ralph-loop] Codex exited with ${code}. Log: ${displayPath(logPath)}\n`,
+      );
+      return code;
+    }
+
+    const finalMessage = readFinalMessage(outputPath);
+    const signal = signalFromFinalMessage(finalMessage);
+    process.stdout.write(`[ralph-loop] signal ${signal}\n`);
+
+    if (signal === "blocked") {
+      process.stderr.write(`[ralph-loop] blocked. Final message: ${displayPath(outputPath)}\n`);
+      return 1;
+    }
+
+    if (signal !== "plan-done") {
+      process.stderr.write(
+        `[ralph-loop] finalization expected <plan-done/> or <blocked/>. Final message: ${displayPath(outputPath)}\n`,
+      );
+      return 1;
+    }
+
+    if (!assertCleanWorktree(workspace.rootDir, "after finalization", options.allowDirtyStart)) {
+      return 1;
+    }
+
+    process.stdout.write("[ralph-loop] PRD finalization complete.\n");
+    return 0;
+  } finally {
+    if (source.kind === "issue" && issueClaimed) {
+      releaseIssueClaim(source);
+    }
+  }
+}
+
 async function main(): Promise<number> {
   try {
     const options = parseArgs(process.argv.slice(2));
@@ -1108,7 +1267,7 @@ async function main(): Promise<number> {
       return 0;
     }
 
-    return await runLoop(options);
+    return options.mode === "finalize" ? await runFinalization(options) : await runLoop(options);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof UsageError) {
@@ -1120,4 +1279,7 @@ async function main(): Promise<number> {
   }
 }
 
-process.exitCode = await main();
+const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
+if (entryPath === fileURLToPath(import.meta.url)) {
+  process.exitCode = await main();
+}

@@ -1,6 +1,6 @@
 # Schema Runtime
 
-Last updated: 2026-05-19
+Last updated: 2026-05-25
 
 ## Current Facts
 
@@ -52,6 +52,27 @@ Last updated: 2026-05-19
 - Table action targets: row record and reference field target.
 - Table utility column types: `invokeAction`, `orderingHandle`.
 - Table ordering uses a numeric rank field, optional row-field scope, and `moveMenu` or `dragHandle` presentations.
+
+## Schema Builder
+
+- Schema Builder draft module: `src/client/schema-builder.ts`.
+- Schema route draft module: `src/app/routes/schema-draft.ts`.
+- Schema Builder emits normal app schema.
+- Schema Builder save path uses the existing schema parser and schema save endpoint.
+- Builder mode and Source mode edit the same local draft.
+- Source mode is the raw JSON escape hatch.
+- Invalid Source mode disables Builder and Save until JSON parses again.
+- Builder can create entities.
+- Builder-created entities get create and patch mutations enabled.
+- Builder-created entities get a simple generated surface.
+- Simple generated surface parts: all-records query, item view, create view, collection view, workspace screen.
+- Builder can add text, boolean, date, number, enum, and reference fields.
+- Builder can edit common field metadata.
+- Builder can edit builder-owned create and inline field presentation.
+- Builder editor options come from field behavior.
+- Builder preserves source-owned advanced schema sections.
+- Saved entity keys are locked in Builder.
+- Saved field keys, field types, and reference targets are locked in Builder.
 
 ## Relationships
 

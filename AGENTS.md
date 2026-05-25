@@ -20,8 +20,8 @@ Single-context repo: read root `CONTEXT.md` and relevant topic docs when a skill
 
 1. Run `devstate start` and read `./.devstate/status.md`
 1. Read `doc/README.md`, `CONTEXT.md`, `doc/current.md`, `doc/roadmap.md`, and relevant topic docs.
-1. Ship the next ready chunk from the assigned GitHub PRD issue or legacy local PRD.
-1. Update only the assigned workstream with status, decisions, blockers, and promotion notes.
+1. Ship exactly one ready chunk from the assigned GitHub PRD issue or legacy local PRD.
+1. Update only the assigned workstream body with chunk status, decisions, blockers, evidence, and promotion notes.
 1. Read `./.devstate/status.md` and fix issues
 1. Test app with `bun browser ...` if app behavior changed
 1. End turn with changed files, checks, and PRD status.
@@ -39,26 +39,35 @@ Single-context repo: read root `CONTEXT.md` and relevant topic docs when a skill
 - Existing `prd/*.md` files are legacy workstream records until retired.
 - Do not create new local PRD files.
 - A PRD issue or legacy PRD file owns its decisions, chunks, blockers, dependencies, acceptance checks, and status.
+- GitHub PRD issue bodies are canonical. Do not add one progress comment per chunk.
+- Normal chunk statuses are `ready`, `doing`, `shipped`, `blocked`, and `closed`.
+- Mark only one chunk `doing` at a time for your workstream.
 - A normal PRD agent does not edit `doc/current.md`, `doc/roadmap.md`, or `doc/topics/*.md`.
 - Put shipped facts for global docs under the PRD's promotion notes.
-- Update `doc/current.md`, `doc/roadmap.md`, and `doc/topics/*.md` only in a doc/steward pass or when the user asks.
+- Update `doc/current.md`, `doc/roadmap.md`, and `doc/topics/*.md` only in a PRD finalization/doc-steward pass or when the user asks.
+- PRD finalization happens after implementation review. It rebases on local `main`, promotes PRD promotion notes into topic docs, runs `devstate check`, updates the issue body, and creates the closing commit with `Fixes #<issue>`.
 
 ## Parallel Work
 
 - One agent owns one workstream chunk.
 - Two agents can work in parallel only when they own different workstreams or disjoint chunks with disjoint files.
 - Do not mark a chunk `doing` if another active agent owns it.
+- Do not split work into tiny follow-up chunks unless the PRD body already defines them or a blocker forces a new chunk.
 - Preserve user changes.
 
-## Done
+## Finalization
 
-When user says `done`:
+When user asks to finalize a PRD after review:
 
-- Update assigned PRD issue or legacy PRD file.
+- Use `bun ralph finalize --issue <issue>` or `bun ralph finalise --issue <issue>` for the automated finalization pass.
+- Verify all required chunks are `shipped` or intentionally `closed`.
+- Rebase on local `main` with `git rebase main`, not `origin/main`.
+- Promote PRD promotion notes into `doc/current.md`, `doc/roadmap.md`, and relevant `doc/topics/*.md`.
+- Update the assigned PRD issue body or legacy PRD file.
 - Run `devstate check` and fix issues.
 - Run `devstate stop`
-- Commit.
-- Rebase on main and merge.
+- Commit with `Fixes #<issue>` for GitHub PRDs.
+- Do not merge unless the user explicitly asks.
 
 ## Rules
 
