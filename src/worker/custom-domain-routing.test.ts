@@ -15,23 +15,7 @@ let assetRequests: string[];
 
 beforeEach(async () => {
   assetRequests = [];
-  harness = await createWorkerHarness(
-    "src/worker/index.ts",
-    {
-      FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
-    },
-    {
-      bindings: {
-        FORMLESS_ADMIN_TOKEN: adminToken,
-        FORMLESS_RUNTIME_PROFILE: "instance",
-      },
-      compatibilityDate: "2026-04-28",
-      r2Buckets: ["FORMLESS_MEDIA"],
-      serviceBindings: {
-        ASSETS: assetResponse,
-      },
-    },
-  );
+  harness = await createCustomDomainHarness("instance");
 });
 
 afterEach(async () => {
@@ -145,12 +129,60 @@ describe("installed Site custom-domain Worker routing", () => {
     const mappedSetup = await fetchMappedHost("/setup", {
       headers: { Accept: "text/html" },
     });
+    const mappedSchemaKeyApi = await fetchMappedHost("/api/site/bootstrap");
 
     expect(fallback.status).toBe(200);
     expect(await fallback.text()).toBe(`asset:/sites/${installId}`);
     expect(mappedAdmin.status).toBe(404);
     expect(mappedSetup.status).toBe(404);
+    expect(mappedSchemaKeyApi.status).toBe(404);
     expect(assetRequests).toEqual([`/sites/${installId}`]);
+  });
+
+  it("serves an instance profile custom host instead of public Site SSR", async () => {
+    await harness.dispose();
+    harness = await createCustomDomainHarness("publishedSite");
+    await postAdminJson("/api/formless/domain-mappings", {
+      host: "admin.example.com",
+      profile: "instance",
+    });
+    assetRequests = [];
+
+    const home = await fetchHost("admin.example.com", "/", {
+      headers: { Accept: "text/html" },
+    });
+    const publicSitePage = await fetchHost("admin.example.com", "/blog/starter-post", {
+      headers: { Accept: "text/html" },
+    });
+    const instanceApi = await fetchHost("admin.example.com", "/api/formless/domain-mappings");
+    const schemaKeyApi = await fetchHost("admin.example.com", "/api/site/bootstrap");
+    const homeText = await home.text();
+
+    expect(home.status).toBe(200);
+    expect(homeText).toBe("asset:/");
+    expect(homeText).not.toContain("formless-runtime-profile");
+    expect(publicSitePage.status).toBe(404);
+    expect(instanceApi.status).toBe(200);
+    expect(schemaKeyApi.status).toBe(404);
+    expect(assetRequests).toEqual(["/"]);
+  });
+
+  it("stops mapped public Site routing after desired mapping deletion", async () => {
+    await setupMappedSite();
+    await deleteAdminJson(`/api/formless/domain-mappings?host=${mappedHost}&profile=publicSite`);
+    assetRequests = [];
+
+    const home = await fetchMappedHost("/", {
+      headers: { Accept: "text/html" },
+    });
+    const nested = await fetchMappedHost("/blog/starter-post", {
+      headers: { Accept: "text/html" },
+    });
+
+    expect(home.status).toBe(200);
+    expect(await home.text()).toBe("asset:/");
+    expect(nested.status).toBe(404);
+    expect(assetRequests).toEqual(["/"]);
   });
 });
 
@@ -168,7 +200,11 @@ async function setupMappedSite() {
 }
 
 function fetchMappedHost(path: string, init?: DispatchFetchInit) {
-  return harness.mf.dispatchFetch(`http://${mappedHost}${path}`, init);
+  return fetchHost(mappedHost, path, init);
+}
+
+function fetchHost(host: string, path: string, init?: DispatchFetchInit) {
+  return harness.mf.dispatchFetch(`http://${host}${path}`, init);
 }
 
 async function postAdminJson(path: string, body: unknown) {
@@ -188,6 +224,17 @@ async function putAdminBytes(path: string, body: Uint8Array, contentType: string
     body,
     headers: adminHeaders({ "Content-Type": contentType }),
     method: "PUT",
+  });
+
+  expect(response.status).toBe(200);
+
+  return response;
+}
+
+async function deleteAdminJson(path: string) {
+  const response = await harness.fetch(path, {
+    headers: adminHeaders(),
+    method: "DELETE",
   });
 
   expect(response.status).toBe(200);
@@ -215,4 +262,24 @@ function assetResponse(request: Request): Response {
   return new Response(`asset:${pathname}`, {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
+}
+
+function createCustomDomainHarness(runtimeProfile: "instance" | "publishedSite") {
+  return createWorkerHarness(
+    "src/worker/index.ts",
+    {
+      FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+    },
+    {
+      bindings: {
+        FORMLESS_ADMIN_TOKEN: adminToken,
+        FORMLESS_RUNTIME_PROFILE: runtimeProfile,
+      },
+      compatibilityDate: "2026-04-28",
+      r2Buckets: ["FORMLESS_MEDIA"],
+      serviceBindings: {
+        ASSETS: assetResponse,
+      },
+    },
+  );
 }

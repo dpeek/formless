@@ -47,10 +47,28 @@ export async function lookupEnabledInstanceSiteDomainMappingForRequestHost(
   request: Request,
   env: InstanceDomainMappingsApiEnv,
 ): Promise<InstanceDomainMapping | undefined> {
+  return lookupEnabledInstanceDomainMappingForRequestHost(request, env, "publicSite");
+}
+
+export async function lookupEnabledInstanceRoutableDomainMappingForRequestHost(
+  request: Request,
+  env: InstanceDomainMappingsApiEnv,
+): Promise<InstanceDomainMapping | undefined> {
+  return (
+    (await lookupEnabledInstanceDomainMappingForRequestHost(request, env, "instance")) ??
+    (await lookupEnabledInstanceDomainMappingForRequestHost(request, env, "publicSite"))
+  );
+}
+
+async function lookupEnabledInstanceDomainMappingForRequestHost(
+  request: Request,
+  env: InstanceDomainMappingsApiEnv,
+  profile: "instance" | "publicSite",
+): Promise<InstanceDomainMapping | undefined> {
   const requestUrl = new URL(request.url);
   const lookupUrl = new URL(INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH, requestUrl.origin);
   lookupUrl.searchParams.set("host", requestUrl.host);
-  lookupUrl.searchParams.set("profile", "publicSite");
+  lookupUrl.searchParams.set("profile", profile);
 
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(

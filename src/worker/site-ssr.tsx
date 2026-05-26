@@ -18,6 +18,7 @@ import {
   shouldBlockMappedSiteHostBrowserRoute,
   shouldHandleMappedSiteHostDocument,
   shouldHandlePublishedSiteDocument,
+  type WorkerRuntimeProfileInput,
   workerRuntimeProfileInput,
 } from "./routing.ts";
 import {
@@ -97,7 +98,7 @@ type ClientDocumentAssets = {
 export async function handlePublishedSiteDocumentRequest(
   request: Request,
   env: Env,
-  options: { mappedSiteHost?: MappedSiteHost } = {},
+  options: { mappedSiteHost?: MappedSiteHost; runtimeProfile?: WorkerRuntimeProfileInput } = {},
 ): Promise<Response | undefined> {
   if (options.mappedSiteHost) {
     if (shouldBlockMappedSiteHostBrowserRoute(request)) {
@@ -111,7 +112,7 @@ export async function handlePublishedSiteDocumentRequest(
     if (
       !shouldHandlePublishedSiteDocument(
         request,
-        workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
+        options.runtimeProfile ?? workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
       )
     ) {
       return undefined;

@@ -5,7 +5,7 @@ import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
 import {
   handleInstanceDomainMappingsApiRequest,
-  lookupEnabledInstanceSiteDomainMappingForRequestHost,
+  lookupEnabledInstanceRoutableDomainMappingForRequestHost,
 } from "./instance-domain-mappings.ts";
 import { mappedSiteHostFromDomainMapping } from "./mapped-site-host.ts";
 import { handleMediaRequest } from "./media.ts";
@@ -16,7 +16,6 @@ import {
   mappedSiteHostRedirectForRequest,
   publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
-  shouldResolveInstanceSiteDomainMappingForRequest,
   workerRuntimeProfileInput,
 } from "./routing.ts";
 import { handleSiteIconRequest } from "./site-icons.ts";
@@ -37,18 +36,20 @@ export type Env = {
 
 export default {
   async fetch(request, env) {
-    const runtimeProfile = workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE);
-    const mediaResponse = await handleMediaRequest(request, env, runtimeProfile);
+    const domainMapping = await lookupEnabledInstanceRoutableDomainMappingForRequestHost(
+      request,
+      env,
+    );
+    const effectiveRuntimeProfile = workerRuntimeProfileInput(
+      domainMapping?.profile === "instance" ? "instance" : env.FORMLESS_RUNTIME_PROFILE,
+    );
+    const mediaResponse = await handleMediaRequest(request, env, effectiveRuntimeProfile);
 
     if (mediaResponse) {
       return mediaResponse;
     }
 
-    const mappedSiteHost = shouldResolveInstanceSiteDomainMappingForRequest(request, runtimeProfile)
-      ? mappedSiteHostFromDomainMapping(
-          await lookupEnabledInstanceSiteDomainMappingForRequestHost(request, env),
-        )
-      : undefined;
+    const mappedSiteHost = mappedSiteHostFromDomainMapping(domainMapping);
 
     const siteIconResponse = await handleSiteIconRequest(request, env, { mappedSiteHost });
 
@@ -58,7 +59,7 @@ export default {
 
     const publishedSiteRedirect = mappedSiteHost
       ? mappedSiteHostRedirectForRequest(request)
-      : publishedSiteRedirectForRequest(request, runtimeProfile);
+      : publishedSiteRedirectForRequest(request, effectiveRuntimeProfile);
 
     if (publishedSiteRedirect) {
       return redirectResponse(publishedSiteRedirect.location, publishedSiteRedirect.status);
@@ -66,6 +67,7 @@ export default {
 
     const publishedSiteIndexingResponse = await handlePublishedSiteIndexingRequest(request, env, {
       mappedSiteHost,
+      runtimeProfile: effectiveRuntimeProfile,
     });
 
     if (publishedSiteIndexingResponse) {
@@ -111,7 +113,7 @@ export default {
     if (authorityRoute) {
       if (
         authorityRoute.identity.kind === "schemaKey" &&
-        !areSchemaKeyApiRoutesEnabledForRequest(request, runtimeProfile)
+        !areSchemaKeyApiRoutesEnabledForRequest(request, effectiveRuntimeProfile)
       ) {
         return Response.json({ error: "Not found." }, { status: 404 });
       }
@@ -124,13 +126,14 @@ export default {
 
     const siteDocumentResponse = await handlePublishedSiteDocumentRequest(request, env, {
       mappedSiteHost,
+      runtimeProfile: effectiveRuntimeProfile,
     });
 
     if (siteDocumentResponse) {
       return siteDocumentResponse;
     }
 
-    if (env.ASSETS && shouldDeferToStaticAssets(request, runtimeProfile)) {
+    if (env.ASSETS && shouldDeferToStaticAssets(request, effectiveRuntimeProfile)) {
       return env.ASSETS.fetch(request);
     }
 
