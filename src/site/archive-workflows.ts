@@ -25,6 +25,7 @@ import {
 } from "../shared/app-installs.ts";
 import {
   installedAppStorageIdentity,
+  legacySiteMediaStorageIdentity,
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import {
@@ -381,7 +382,7 @@ function appMediaReferences(
   identity: InstalledAppStorageIdentity | undefined,
 ): AppArchiveMediaObject[] {
   const referencesByKey = new Map<string, AppArchiveMediaObject>();
-  const media = identity?.siteMedia;
+  const media = legacySiteMediaStorageIdentity(identity);
   const keyPrefix = media
     ? media.imageKeyPrefix.endsWith("/")
       ? media.imageKeyPrefix
@@ -655,23 +656,26 @@ function retargetMediaObject(
   previousIdentity: InstalledAppStorageIdentity,
   nextIdentity: InstalledAppStorageIdentity,
 ): AppArchiveMediaObject {
-  if (!previousIdentity.siteMedia || !nextIdentity.siteMedia) {
+  const previousMedia = legacySiteMediaStorageIdentity(previousIdentity);
+  const nextMedia = legacySiteMediaStorageIdentity(nextIdentity);
+
+  if (!previousMedia || !nextMedia) {
     return { ...object };
   }
 
-  if (!object.storageKey.startsWith(mediaKeyPrefix(previousIdentity.siteMedia.imageKeyPrefix))) {
+  if (!object.storageKey.startsWith(mediaKeyPrefix(previousMedia.imageKeyPrefix))) {
     return { ...object };
   }
 
   const storageKey = retargetMediaStorageKey(
     object.storageKey,
-    previousIdentity.siteMedia.imageKeyPrefix,
-    nextIdentity.siteMedia.imageKeyPrefix,
+    previousMedia.imageKeyPrefix,
+    nextMedia.imageKeyPrefix,
   );
 
   return {
     ...object,
-    deliveryHref: `${nextIdentity.siteMedia.routePrefix}/${storageKey}`,
+    deliveryHref: `${nextMedia.routePrefix}/${storageKey}`,
     storageKey,
   };
 }
@@ -728,12 +732,15 @@ function retargetRecordValues(
   previousIdentity: InstalledAppStorageIdentity,
   nextIdentity: InstalledAppStorageIdentity,
 ): StoredRecord["values"] {
-  if (!previousIdentity.siteMedia || !nextIdentity.siteMedia) {
+  const previousMedia = legacySiteMediaStorageIdentity(previousIdentity);
+  const nextMedia = legacySiteMediaStorageIdentity(nextIdentity);
+
+  if (!previousMedia || !nextMedia) {
     return { ...values };
   }
 
-  const previousRoutePrefix = `${previousIdentity.siteMedia.routePrefix}/`;
-  const nextRoutePrefix = `${nextIdentity.siteMedia.routePrefix}/`;
+  const previousRoutePrefix = `${previousMedia.routePrefix}/`;
+  const nextRoutePrefix = `${nextMedia.routePrefix}/`;
 
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => [
@@ -741,8 +748,8 @@ function retargetRecordValues(
       typeof value === "string" && value.startsWith(previousRoutePrefix)
         ? `${nextRoutePrefix}${retargetMediaStorageKey(
             value.slice(previousRoutePrefix.length),
-            previousIdentity.siteMedia!.imageKeyPrefix,
-            nextIdentity.siteMedia!.imageKeyPrefix,
+            previousMedia.imageKeyPrefix,
+            nextMedia.imageKeyPrefix,
           )}`
         : value,
     ]),

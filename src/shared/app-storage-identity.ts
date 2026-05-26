@@ -17,7 +17,6 @@ export type SchemaKeyStorageIdentity = {
   apiRoutePrefix: `/api/${SchemaKey}`;
   browserDatabaseName: string;
   broadcastChannelName: string;
-  siteMedia?: SiteMediaStorageIdentity;
 };
 
 export type InstalledAppStorageIdentity = {
@@ -30,7 +29,6 @@ export type InstalledAppStorageIdentity = {
   apiRoutePrefix: `/api/app-installs/${PackageAppKey}/${AppInstallId}`;
   browserDatabaseName: string;
   broadcastChannelName: string;
-  siteMedia?: SiteMediaStorageIdentity;
 };
 
 export type ImageMediaStorageIdentity = {
@@ -67,15 +65,6 @@ export function schemaKeyStorageIdentity(
     apiRoutePrefix: `/api/${app.key}`,
     browserDatabaseName: storageName,
     broadcastChannelName: storageName,
-    ...(app.key === "site"
-      ? {
-          siteMedia: {
-            imageKeyPrefix: legacySiteImageKeyPrefix,
-            imageUploadPath: "/api/site/media/images",
-            routePrefix: "/api/site/media",
-          },
-        }
-      : {}),
   };
 }
 
@@ -105,15 +94,28 @@ export function installedAppStorageIdentity(input: {
     apiRoutePrefix,
     browserDatabaseName: storageName,
     broadcastChannelName: storageName,
-    ...(packageApp.packageAppKey === "site"
-      ? {
-          siteMedia: {
-            imageKeyPrefix: `app-installs/${installId.installId}/site/images`,
-            imageUploadPath: `${apiRoutePrefix}/media/images`,
-            routePrefix: `${apiRoutePrefix}/media`,
-          },
-        }
-      : {}),
+  };
+}
+
+export function legacySiteMediaStorageIdentity(
+  identity: AppStorageIdentity | undefined,
+): SiteMediaStorageIdentity | undefined {
+  if (!identity || identity.packageAppKey !== "site") {
+    return undefined;
+  }
+
+  if (identity.kind === "schemaKey") {
+    return {
+      imageKeyPrefix: legacySiteImageKeyPrefix,
+      imageUploadPath: "/api/site/media/images",
+      routePrefix: "/api/site/media",
+    };
+  }
+
+  return {
+    imageKeyPrefix: `app-installs/${identity.installId}/site/images`,
+    imageUploadPath: `${identity.apiRoutePrefix}/media/images`,
+    routePrefix: `${identity.apiRoutePrefix}/media`,
   };
 }
 

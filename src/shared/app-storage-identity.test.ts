@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   installedAppStorageIdentity,
+  legacySiteMediaStorageIdentity,
   parseAuthorityApiRoute,
   schemaKeyStorageIdentity,
 } from "./app-storage-identity.ts";
@@ -25,13 +26,9 @@ describe("app storage identity", () => {
       kind: "schemaKey",
       packageAppKey: "site",
       seedRecordsKey: "site",
-      siteMedia: {
-        imageKeyPrefix: "site/images",
-        imageUploadPath: "/api/site/media/images",
-        routePrefix: "/api/site/media",
-      },
       sourceSchemaKey: "site",
     });
+    expect(schemaKeyStorageIdentity("site")).not.toHaveProperty("siteMedia");
     expect(schemaKeyStorageIdentity("site", { projectId: "project-123" })).toMatchObject({
       broadcastChannelName: "formless:project-123:site",
       browserDatabaseName: "formless:project-123:site",
@@ -57,13 +54,14 @@ describe("app storage identity", () => {
       kind: "appInstall",
       packageAppKey: "site",
       seedRecordsKey: "site",
-      siteMedia: {
-        imageKeyPrefix: "app-installs/personal/site/images",
-        imageUploadPath: "/api/app-installs/site/personal/media/images",
-        routePrefix: "/api/app-installs/site/personal/media",
-      },
       sourceSchemaKey: "site",
     });
+    expect(
+      installedAppStorageIdentity({
+        installId: "personal",
+        packageAppKey: "site",
+      }),
+    ).not.toHaveProperty("siteMedia");
     expect(
       installedAppStorageIdentity({
         installId: "personal",
@@ -148,7 +146,27 @@ describe("app storage identity", () => {
     expect(personal.authorityName).not.toBe(docs.authorityName);
     expect(personal.browserDatabaseName).not.toBe(docs.browserDatabaseName);
     expect(personal.broadcastChannelName).not.toBe(docs.broadcastChannelName);
-    expect(personal.siteMedia?.imageKeyPrefix).not.toBe(docs.siteMedia?.imageKeyPrefix);
+  });
+
+  it("keeps legacy Site media facts out of normal identities", () => {
+    const schemaSite = schemaKeyStorageIdentity("site");
+    const personal = installedAppStorageIdentity({
+      installId: "personal",
+      packageAppKey: "site",
+    });
+    const tasks = installedAppStorageIdentity({ installId: "tasks", packageAppKey: "tasks" });
+
+    expect(legacySiteMediaStorageIdentity(schemaSite)).toEqual({
+      imageKeyPrefix: "site/images",
+      imageUploadPath: "/api/site/media/images",
+      routePrefix: "/api/site/media",
+    });
+    expect(legacySiteMediaStorageIdentity(personal)).toEqual({
+      imageKeyPrefix: "app-installs/personal/site/images",
+      imageUploadPath: "/api/app-installs/site/personal/media/images",
+      routePrefix: "/api/app-installs/site/personal/media",
+    });
+    expect(legacySiteMediaStorageIdentity(tasks)).toBeUndefined();
   });
 
   it("parses legacy and installed app API route identities", () => {

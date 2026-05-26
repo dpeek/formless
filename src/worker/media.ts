@@ -1,12 +1,4 @@
-import {
-  SITE_IMAGE_KEY_PREFIX,
-  SITE_MEDIA_ROUTE_PREFIX,
-  siteMediaKeyFromPathname,
-} from "../site/source-media.ts";
-import {
-  parseAuthorityApiRoute,
-  type ImageMediaStorageIdentity,
-} from "../shared/app-storage-identity.ts";
+import { type ImageMediaStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_IMAGE_UPLOAD_PATH,
@@ -22,10 +14,7 @@ import {
 import { mediaObjectStoreFromR2Bucket } from "../media/r2.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { responseWithoutBodyForHead } from "./head-response.ts";
-import {
-  areSchemaKeyApiRoutesEnabledForRequest,
-  type WorkerRuntimeProfileInput,
-} from "./routing.ts";
+import { type WorkerRuntimeProfileInput } from "./routing.ts";
 
 export const SITE_IMAGE_UPLOAD_MAX_BYTES = MEDIA_IMAGE_UPLOAD_MAX_BYTES;
 export const SITE_MEDIA_CACHE_CONTROL = MEDIA_OBJECT_CACHE_CONTROL;
@@ -199,7 +188,7 @@ async function serveImage(
 
 function imageMediaRouteFromPathname(
   request: Request,
-  runtimeProfile: WorkerRuntimeProfileInput,
+  _runtimeProfile: WorkerRuntimeProfileInput,
 ): ImageMediaRoute | undefined {
   const pathname = new URL(request.url).pathname;
 
@@ -212,37 +201,7 @@ function imageMediaRouteFromPathname(
     };
   }
 
-  if (pathname.startsWith(SITE_MEDIA_ROUTE_PREFIX)) {
-    if (!areSchemaKeyApiRoutesEnabledForRequest(request, runtimeProfile)) {
-      return undefined;
-    }
-
-    const key = siteMediaKeyFromPathname(pathname);
-
-    return {
-      media: {
-        imageKeyPrefix: SITE_IMAGE_KEY_PREFIX.slice(0, -1),
-        imageUploadPath: "/api/site/media/images",
-        routePrefix: "/api/site/media",
-      },
-      path: key ? `/media/${key}` : "/media",
-    };
-  }
-
-  const route = parseAuthorityApiRoute(pathname);
-
-  if (!route?.identity.siteMedia || !route.path.startsWith("/media")) {
-    return undefined;
-  }
-
-  if (
-    route.identity.kind === "schemaKey" &&
-    !areSchemaKeyApiRoutesEnabledForRequest(request, runtimeProfile)
-  ) {
-    return undefined;
-  }
-
-  return { media: route.identity.siteMedia, path: route.path };
+  return undefined;
 }
 
 function mediaKeyFromRoutePath(route: ImageMediaRoute): string | undefined {

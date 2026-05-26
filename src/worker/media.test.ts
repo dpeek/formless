@@ -197,124 +197,7 @@ describe("media worker routes", () => {
     ]);
   });
 
-  it("rejects invalid core media image uploads before R2 writes", async () => {
-    const response = await uploadCoreImage(
-      harness,
-      imageFile("icon.svg", "image/svg+xml", textBytes("<svg />")),
-    );
-
-    expect(response.status).toBe(415);
-    expect((await response.json()) as { error: string }).toEqual({
-      error: "Unsupported image type.",
-    });
-    await expectMediaBucketKeys(harness, []);
-  });
-
-  it("uploads a raster image to R2 and serves it from the returned same-origin href", async () => {
-    const upload = await uploadImage(harness, imageFile("hero.png", "image/png", pngBytes));
-
-    await expectResponseStatus(upload, 200);
-
-    const body = (await upload.json()) as {
-      asset: {
-        byteSize: number;
-        contentType: string;
-        deliveryHref: string;
-        filename?: string;
-        id: string;
-        kind: string;
-        label: string;
-        provider: string;
-        status: string;
-        storageKey: string;
-      };
-      assetId: string;
-      contentType: string;
-      href: string;
-      key: string;
-      size: number;
-    };
-
-    expect(body).toEqual({
-      asset: {
-        byteSize: pngBytes.byteLength,
-        contentType: "image/png",
-        deliveryHref: body.href,
-        filename: "hero.png",
-        id: body.assetId,
-        kind: "image",
-        label: "hero.png",
-        provider: "r2",
-        status: "ready",
-        storageKey: body.key,
-      },
-      assetId: expect.stringMatching(/^[0-9a-f-]+\.png$/),
-      contentType: "image/png",
-      href: expect.stringMatching(/^\/api\/site\/media\/site\/images\/.+\.png$/),
-      key: expect.stringMatching(/^site\/images\/.+\.png$/),
-      size: pngBytes.byteLength,
-    });
-    expect(body.key).toBe(`site/images/${body.assetId}`);
-    await expectMediaObjectCustomMetadata(harness, body.key, {
-      "formless-media-asset-id": body.assetId,
-      "formless-media-byte-size": String(pngBytes.byteLength),
-      "formless-media-content-type": "image/png",
-      "formless-media-delivery-href": body.href,
-      "formless-media-filename": "hero.png",
-      "formless-media-kind": "image",
-      "formless-media-label": "hero.png",
-      "formless-media-provider": "r2",
-      "formless-media-status": "ready",
-      "formless-media-storage-key": body.key,
-    });
-
-    const served = await harness.fetch(body.href);
-
-    expect(served.status).toBe(200);
-    expect(served.headers.get("Content-Type")).toBe("image/png");
-    expect(served.headers.get("Cache-Control")).toBe(SITE_MEDIA_CACHE_CONTROL);
-    expect(served.headers.get("ETag")).toEqual(expect.stringContaining('"'));
-    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
-  });
-
-  it("uploads installed Site images under the install media namespace", async () => {
-    const upload = await uploadInstalledImage(
-      harness,
-      "personal",
-      imageFile("hero.png", "image/png", pngBytes),
-    );
-
-    await expectResponseStatus(upload, 200);
-
-    const body = (await upload.json()) as {
-      assetId: string;
-      href: string;
-      key: string;
-    };
-
-    expect(body).toMatchObject({
-      assetId: expect.stringMatching(/^[0-9a-f-]+\.png$/),
-      href: expect.stringMatching(
-        /^\/api\/app-installs\/site\/personal\/media\/app-installs\/personal\/site\/images\/.+\.png$/,
-      ),
-      key: expect.stringMatching(/^app-installs\/personal\/site\/images\/.+\.png$/),
-    });
-    expect(body.key).toBe(`app-installs/personal/site/images/${body.assetId}`);
-    await expectMediaBucketKeys(harness, [body.key]);
-
-    const served = await harness.fetch(body.href);
-    const crossInstall = await harness.fetch(
-      body.href.replace("/site/personal/media/", "/site/docs/media/"),
-    );
-    const legacy = await harness.fetch(`/api/site/media/${body.key}`);
-
-    expect(served.status).toBe(200);
-    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
-    expect(crossInstall.status).toBe(404);
-    expect(legacy.status).toBe(404);
-  });
-
-  it("rejects missing, repeated, unsupported, and oversized files before R2 writes", async () => {
+  it("rejects missing, repeated, unsupported, and oversized core image uploads before R2 writes", async () => {
     const cases = [
       await uploadForm(harness, multipartFormData([])),
       await uploadForm(
@@ -324,8 +207,8 @@ describe("media worker routes", () => {
           imageFile("second.png", "image/png", pngBytes),
         ]),
       ),
-      await uploadImage(harness, imageFile("icon.svg", "image/svg+xml", textBytes("<svg />"))),
-      await uploadImage(
+      await uploadCoreImage(harness, imageFile("icon.svg", "image/svg+xml", textBytes("<svg />"))),
+      await uploadCoreImage(
         harness,
         imageFile("huge.jpg", "image/jpeg", new Uint8Array(SITE_IMAGE_UPLOAD_MAX_BYTES + 1)),
       ),
@@ -335,38 +218,40 @@ describe("media worker routes", () => {
     await expectMediaBucketKeys(harness, []);
   });
 
-  it("guards uploads with the admin bearer token when configured", async () => {
-    const rejected = await uploadImage(
-      guardedHarness,
-      imageFile("hero.png", "image/png", pngBytes),
-    );
-    const accepted = await uploadImage(
-      guardedHarness,
-      imageFile("hero.png", "image/png", pngBytes),
-      {
-        Authorization: `Bearer ${adminToken}`,
-      },
-    );
+  it("restores core media to an exact guarded R2 key", async () => {
+    const key = "media/images/restored.png";
+    const rejected = await restoreCoreMedia(guardedHarness, key, "image/png", pngBytes);
+    const accepted = await restoreCoreMedia(guardedHarness, key, "image/png", pngBytes, {
+      Authorization: `Bearer ${adminToken}`,
+    });
 
     expect(rejected.status).toBe(401);
-    expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
-    expect((await rejected.json()) as { error: string }).toEqual({
-      error: "Owner session or admin authorization is required for this write endpoint.",
-    });
     expect(accepted.status).toBe(200);
-    await expectMediaBucketKeys(guardedHarness, [expect.stringMatching(/^site\/images\/.+\.png$/)]);
+    expect((await accepted.json()) as unknown).toEqual({
+      contentType: "image/png",
+      href: `${CORE_MEDIA_ROUTE_PREFIX}${key}`,
+      key,
+      size: pngBytes.byteLength,
+    });
+    await expectMediaBucketKeys(guardedHarness, [key]);
+
+    const served = await guardedHarness.fetch(`${CORE_MEDIA_ROUTE_PREFIX}${key}`);
+
+    expect(served.status).toBe(200);
+    expect(served.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
   });
 
-  it("accepts owner session cookies for media writes when configured", async () => {
+  it("accepts owner session cookies for core media writes when configured", async () => {
     const headers = await ownerSessionHeaders();
-    const upload = await uploadImage(
+    const upload = await uploadCoreImage(
       guardedHarness,
       imageFile("hero.png", "image/png", pngBytes),
       headers,
     );
-    const restore = await restoreMedia(
+    const restore = await restoreCoreMedia(
       guardedHarness,
-      "site/images/restored-by-owner.png",
+      "media/images/restored-by-owner.png",
       "image/png",
       pngBytes,
       headers,
@@ -375,40 +260,21 @@ describe("media worker routes", () => {
     expect(upload.status).toBe(200);
     expect(restore.status).toBe(200);
     await expectMediaBucketKeysUnordered(guardedHarness, [
-      expect.stringMatching(/^site\/images\/.+\.png$/),
-      "site/images/restored-by-owner.png",
+      expect.stringMatching(/^media\/images\/.+\.png$/),
+      "media/images/restored-by-owner.png",
     ]);
   });
 
-  it("restores source media to an exact guarded R2 key", async () => {
-    const key = "site/images/restored.png";
-    const rejected = await restoreMedia(guardedHarness, key, "image/png", pngBytes);
-    const accepted = await restoreMedia(guardedHarness, key, "image/png", pngBytes, {
-      Authorization: `Bearer ${adminToken}`,
-    });
-
-    expect(rejected.status).toBe(401);
-    expect(accepted.status).toBe(200);
-    expect((await accepted.json()) as unknown).toEqual({
-      contentType: "image/png",
-      href: `/api/site/media/${key}`,
-      key,
-      size: pngBytes.byteLength,
-    });
-    await expectMediaBucketKeys(guardedHarness, [key]);
-
-    const served = await guardedHarness.fetch(`/api/site/media/${key}`);
-
-    expect(served.status).toBe(200);
-    expect(served.headers.get("Content-Type")).toBe("image/png");
-    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
-  });
-
-  it("rejects invalid source media restore keys and mismatched content types", async () => {
-    const invalidKey = await restoreMedia(harness, "site/videos/clip.mp4", "video/mp4", pngBytes);
-    const mismatchedContentType = await restoreMedia(
+  it("rejects invalid core media restore keys and mismatched content types", async () => {
+    const invalidKey = await restoreCoreMedia(
       harness,
-      "site/images/restored.png",
+      "media/videos/clip.mp4",
+      "video/mp4",
+      pngBytes,
+    );
+    const mismatchedContentType = await restoreCoreMedia(
+      harness,
+      "media/images/restored.png",
       "image/jpeg",
       pngBytes,
     );
@@ -424,9 +290,9 @@ describe("media worker routes", () => {
     await expectMediaBucketKeys(harness, []);
   });
 
-  it("keeps public media reads open when the admin token is configured", async () => {
+  it("keeps core media reads open when the admin token is configured", async () => {
     const bucket = await guardedHarness.mf.getR2Bucket(mediaBinding);
-    const key = "site/images/public.png";
+    const key = "media/images/public.png";
 
     await bucket.put(key, pngBytes, {
       httpMetadata: {
@@ -435,16 +301,16 @@ describe("media worker routes", () => {
       },
     });
 
-    const response = await guardedHarness.fetch(`/api/site/media/${key}`);
+    const response = await guardedHarness.fetch(`${CORE_MEDIA_ROUTE_PREFIX}${key}`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("image/png");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(pngBytes);
   });
 
-  it("returns HEAD headers for public media without a response body", async () => {
+  it("returns core media HEAD headers without a response body", async () => {
     const bucket = await harness.mf.getR2Bucket(mediaBinding);
-    const key = "site/images/head.png";
+    const key = "media/images/head.png";
 
     await bucket.put(key, pngBytes, {
       httpMetadata: {
@@ -453,8 +319,10 @@ describe("media worker routes", () => {
       },
     });
 
-    const getResponse = await harness.fetch(`/api/site/media/${key}`);
-    const headResponse = await harness.fetch(`/api/site/media/${key}`, { method: "HEAD" });
+    const getResponse = await harness.fetch(`${CORE_MEDIA_ROUTE_PREFIX}${key}`);
+    const headResponse = await harness.fetch(`${CORE_MEDIA_ROUTE_PREFIX}${key}`, {
+      method: "HEAD",
+    });
 
     expect(headResponse.status).toBe(getResponse.status);
     expect(headResponse.headers.get("Content-Type")).toBe(getResponse.headers.get("Content-Type"));
@@ -465,44 +333,67 @@ describe("media worker routes", () => {
     expect((await headResponse.arrayBuffer()).byteLength).toBe(0);
   });
 
-  it("returns 404 for missing public media objects", async () => {
-    const response = await harness.fetch("/api/site/media/site/images/missing.png");
+  it("does not expose legacy schema-key or installed Site media routes", async () => {
+    const bucket = await harness.mf.getR2Bucket(mediaBinding);
 
-    expect(response.status).toBe(404);
-    expect((await response.json()) as { error: string }).toEqual({
-      error: "Media object not found.",
+    await bucket.put("site/images/public.png", pngBytes, {
+      httpMetadata: {
+        cacheControl: SITE_MEDIA_CACHE_CONTROL,
+        contentType: "image/png",
+      },
     });
-  });
 
-  it("returns HEAD missing-media headers without a response body", async () => {
-    const getResponse = await harness.fetch("/api/site/media/site/images/missing.png");
-    const headResponse = await harness.fetch("/api/site/media/site/images/missing.png", {
+    const schemaUpload = await uploadForm(
+      harness,
+      multipartFormData([imageFile("hero.png", "image/png", pngBytes)]),
+      {},
+      "/api/site/media/images",
+    );
+    const installedUpload = await uploadForm(
+      harness,
+      multipartFormData([imageFile("hero.png", "image/png", pngBytes)]),
+      {},
+      "/api/app-installs/site/personal/media/images",
+    );
+    const schemaList = await harness.fetch("/api/site/media/images");
+    const installedList = await harness.fetch("/api/app-installs/site/personal/media/images");
+    const schemaRead = await harness.fetch("/api/site/media/site/images/public.png");
+    const installedRead = await harness.fetch(
+      "/api/app-installs/site/personal/media/app-installs/personal/site/images/public.png",
+    );
+    const schemaRestore = await harness.fetch("/api/site/media/site/images/restored.png", {
+      body: pngBytes,
+      headers: { "Content-Type": "image/png" },
+      method: "PUT",
+    });
+    const installedRestore = await harness.fetch(
+      "/api/app-installs/site/personal/media/app-installs/personal/site/images/restored.png",
+      {
+        body: pngBytes,
+        headers: { "Content-Type": "image/png" },
+        method: "PUT",
+      },
+    );
+    const schemaHead = await harness.fetch("/api/site/media/site/images/public.png", {
       method: "HEAD",
     });
 
-    expect(headResponse.status).toBe(getResponse.status);
-    expect(headResponse.headers.get("Content-Type")).toBe(getResponse.headers.get("Content-Type"));
-    expect(await headResponse.text()).toBe("");
+    expect(
+      [
+        schemaUpload,
+        installedUpload,
+        schemaList,
+        installedList,
+        schemaRead,
+        installedRead,
+        schemaRestore,
+        installedRestore,
+        schemaHead,
+      ].map((response) => response.status),
+    ).toEqual([404, 404, 404, 404, 404, 404, 404, 404, 404]);
+    expect(await schemaHead.text()).toBe("");
   });
 });
-
-async function uploadImage(harness: Harness, file: TestFile, headers: Record<string, string> = {}) {
-  return uploadForm(harness, multipartFormData([file]), headers);
-}
-
-async function uploadInstalledImage(
-  harness: Harness,
-  installId: string,
-  file: TestFile,
-  headers: Record<string, string> = {},
-) {
-  return uploadForm(
-    harness,
-    multipartFormData([file]),
-    headers,
-    `/api/app-installs/site/${installId}/media/images`,
-  );
-}
 
 async function uploadCoreImage(
   harness: Harness,
@@ -516,7 +407,7 @@ async function uploadForm(
   harness: Harness,
   formData: ReturnType<typeof multipartFormData>,
   headers: Record<string, string> = {},
-  path = "/api/site/media/images",
+  path = "/api/formless/media/images",
 ) {
   return harness.fetch(path, {
     body: formData.body.buffer,
@@ -528,14 +419,14 @@ async function uploadForm(
   });
 }
 
-async function restoreMedia(
+async function restoreCoreMedia(
   harness: Harness,
   key: string,
   contentType: string,
   body: Uint8Array,
   headers: Record<string, string> = {},
 ) {
-  return harness.fetch(`/api/site/media/${key}`, {
+  return harness.fetch(`${CORE_MEDIA_ROUTE_PREFIX}${key}`, {
     body,
     headers: {
       ...headers,

@@ -4,7 +4,7 @@ import {
   coreImageMediaDeliveryFactsForAssetId,
   type MediaAsset,
 } from "../media/core.ts";
-import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
+import type { ClientAppTarget } from "./app-target.ts";
 
 export const IMAGE_UPLOAD_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 export const SITE_IMAGE_UPLOAD_ACCEPT = IMAGE_UPLOAD_ACCEPT;
@@ -59,11 +59,7 @@ export async function uploadSiteImageFile(
   file: File,
   options: UploadSiteImageFileOptions = {},
 ): Promise<UploadedSiteImage> {
-  return uploadImageMediaFile(
-    file,
-    siteImageUploadPathForTarget(options.target ?? "site"),
-    options,
-  );
+  return uploadCoreImageMediaFile(file, options);
 }
 
 async function uploadImageMediaFile(
@@ -96,16 +92,6 @@ async function uploadImageMediaFile(
   return dimensions === undefined ? upload : { ...upload, dimensions };
 }
 
-function siteImageUploadPathForTarget(target: ClientAppTarget): string {
-  const media = appStorageIdentityForClientTarget(target).siteMedia;
-
-  if (!media) {
-    throw new Error("Image upload is only available for Site records.");
-  }
-
-  return media.imageUploadPath;
-}
-
 export function siteImageUploadPatchValues({
   heightFieldName,
   hrefFieldName,
@@ -121,10 +107,6 @@ export function siteImageUploadPatchValues({
 }): Partial<RecordValues> {
   const values: Partial<RecordValues> = {};
 
-  if (hrefFieldName) {
-    values[hrefFieldName] = upload.href;
-  }
-
   if (upload.dimensions && widthFieldName && heightFieldName) {
     values[widthFieldName] = upload.dimensions.width;
     values[heightFieldName] = upload.dimensions.height;
@@ -134,6 +116,8 @@ export function siteImageUploadPatchValues({
 
   if (mediaAssetFieldName && mediaAssetId) {
     values[mediaAssetFieldName] = mediaAssetId;
+  } else if (hrefFieldName) {
+    values[hrefFieldName] = upload.href;
   }
 
   return values;

@@ -12,7 +12,10 @@ import {
   type PortableArchive,
 } from "./archive.ts";
 import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
-import { installedAppStorageIdentity } from "./app-storage-identity.ts";
+import {
+  installedAppStorageIdentity,
+  legacySiteMediaStorageIdentity,
+} from "./app-storage-identity.ts";
 import { isValidStoredFieldValue } from "./field-types.ts";
 import type { RecordValues, StoredRecord } from "./protocol.ts";
 import type { AppSchema, FieldSchema } from "./schema.ts";
@@ -636,7 +639,7 @@ function validateMedia(
   const seenArchivePaths = new Set<string>();
   const deliveryHrefs = new Set<string>();
 
-  const media = identity?.siteMedia;
+  const media = legacySiteMediaStorageIdentity(identity);
   const keyPrefix = media ? mediaKeyPrefix(media.imageKeyPrefix) : undefined;
   const deliveryPrefix = media ? `${media.routePrefix}/` : undefined;
   const coreKeyPrefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);

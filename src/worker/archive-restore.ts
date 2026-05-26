@@ -9,6 +9,7 @@ import {
 import type { AppInstall, BundledAppPackage } from "../shared/app-installs.ts";
 import {
   installedAppStorageIdentity,
+  legacySiteMediaStorageIdentity,
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import {
@@ -355,7 +356,7 @@ export async function restoreArchiveMediaObjectToStore(
   object: AppArchiveMediaObject,
   bytes: Uint8Array,
 ): Promise<MediaWriteResponse> {
-  const media = identity.siteMedia;
+  const media = legacySiteMediaStorageIdentity(identity);
   const coreKeyPrefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
 
   if (object.storageKey.startsWith(coreKeyPrefix)) {

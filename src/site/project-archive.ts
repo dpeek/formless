@@ -7,7 +7,10 @@ import {
   type SourceArchiveRecord,
 } from "../shared/archive.ts";
 import { validateAppInstallId } from "../shared/app-installs.ts";
-import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
+import {
+  installedAppStorageIdentity,
+  legacySiteMediaStorageIdentity,
+} from "../shared/app-storage-identity.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import type { ArchiveRestoreMediaFile } from "../shared/archive-restore-plan.ts";
@@ -103,8 +106,9 @@ export function buildSiteProjectAppArchiveEntry(
 ): SiteProjectAppArchiveEntry {
   const installId = parseTargetInstallId(input.installId);
   const identity = installedAppStorageIdentity({ installId, packageAppKey: "site" });
+  const legacySiteMedia = legacySiteMediaStorageIdentity(identity);
 
-  if (!identity?.siteMedia) {
+  if (!identity || !legacySiteMedia) {
     throw new Error(`Site project import target "${installId}" does not support Site media.`);
   }
 
@@ -125,16 +129,13 @@ export function buildSiteProjectAppArchiveEntry(
       );
     }
 
-    const storageKey = archiveStorageKeyForProjectMedia(
-      identity.siteMedia.imageKeyPrefix,
-      asset.key,
-    );
+    const storageKey = archiveStorageKeyForProjectMedia(legacySiteMedia.imageKeyPrefix, asset.key);
     const archivePath = archiveMediaPath(installId, asset.key);
     const contentType = asset.contentType;
     const byteSize = mediaFile.bytes.byteLength;
     const deliveryHref = isCoreMediaKey(asset.key)
       ? coreMediaHrefForKey(storageKey)
-      : installScopedDeliveryHref(identity.siteMedia.routePrefix, storageKey);
+      : installScopedDeliveryHref(legacySiteMedia.routePrefix, storageKey);
 
     if (!isCoreMediaKey(asset.key)) {
       storageKeyBySourceKey.set(asset.key, storageKey);
@@ -173,7 +174,7 @@ export function buildSiteProjectAppArchiveEntry(
   }
 
   const rewriteResult = rewriteSiteProjectMediaHrefs(records, {
-    routePrefix: identity.siteMedia.routePrefix,
+    routePrefix: legacySiteMedia.routePrefix,
     storageKeyBySourceKey,
   });
   const label = siteProjectArchiveLabel(input.label, rewriteResult.records, installId);

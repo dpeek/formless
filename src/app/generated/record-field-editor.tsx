@@ -4,7 +4,6 @@ import {
   listCoreImageMediaAssets,
   siteImageUploadPatchValues,
   uploadCoreImageMediaFile,
-  uploadSiteImageFile,
   type ImageMediaAssetOption,
 } from "../../client/media.ts";
 import { useRecord, useSchema } from "../../client/store.ts";
@@ -13,14 +12,13 @@ import { submitPatchMutation } from "../../client/sync.ts";
 import type { RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import type { AppSchema, FieldSchema } from "../../shared/schema.ts";
-import type { SchemaKey } from "../../shared/schema-apps.ts";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 import {
   encodeNumberEditorInputValue,
   fieldValueToInputValue,
   inputValueToFieldValue,
 } from "./format.ts";
-import { useSchemaAppTarget, useSchemaKey } from "./schema-app-context.tsx";
+import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
 export function RecordFieldEditor({
   canPatch,
@@ -39,7 +37,6 @@ export function RecordFieldEditor({
   recordId: string;
   showLabel?: boolean;
 }) {
-  const schemaKey = useSchemaKey();
   const appTarget = useSchemaAppTarget();
   const { field, fieldName } = fieldConfig;
   const schema = useSchema();
@@ -216,8 +213,8 @@ export function RecordFieldEditor({
       return;
     }
 
-    if (mediaEditorMode !== "asset" && schemaKey !== "site") {
-      const message = "Image upload is only available for Site records or media asset fields.";
+    if (mediaEditorMode !== "asset") {
+      const message = "Image upload is only available for media asset fields.";
 
       setError(message);
       setSyncStatus({ state: "error", message });
@@ -229,14 +226,8 @@ export function RecordFieldEditor({
     setSyncStatus({ state: "syncing", message: "Uploading image..." });
 
     try {
-      const upload =
-        mediaEditorMode === "asset"
-          ? await uploadCoreImageMediaFile(file)
-          : await uploadSiteImageFile(file, { target: appTarget });
-      const uploadFields =
-        mediaEditorMode === "asset"
-          ? selectMediaAssetUploadPatchFields(schema, entityName, fieldName)
-          : selectImageUploadPatchFields(schema, entityName, fieldName);
+      const upload = await uploadCoreImageMediaFile(file);
+      const uploadFields = selectMediaAssetUploadPatchFields(schema, entityName, fieldName);
       const saved = await commitPatch(
         siteImageUploadPatchValues({
           ...uploadFields,
@@ -320,49 +311,13 @@ export function RecordFieldEditor({
       mediaAssetOptions={mediaAssetOptions}
       mediaEditorMode={mediaEditorMode}
       mediaPreviewHref={mediaPreview?.href}
-      uploadEnabled={isImageUploadAvailable(schemaKey, mediaEditorMode)}
+      uploadEnabled={mediaEditorMode === "asset"}
     />
   );
 }
 
 function mediaEditorModeForField(fieldConfig: RecordFieldConfig): "asset" | "url" {
   return fieldConfig.editor === "media" && fieldConfig.fieldName !== "href" ? "asset" : "url";
-}
-
-function selectImageUploadPatchFields(
-  schema: AppSchema | null,
-  entityName: string,
-  fieldName: string,
-): {
-  heightFieldName?: string;
-  hrefFieldName?: string;
-  mediaAssetFieldName?: string;
-  widthFieldName?: string;
-} {
-  const fields = schema?.entities[entityName]?.fields;
-  const mediaAssetFieldName =
-    fields?.mediaAssetId?.type === "text"
-      ? "mediaAssetId"
-      : fields?.mediaAsset?.type === "text"
-        ? "mediaAsset"
-        : undefined;
-  const hrefFieldName =
-    fields?.href?.type === "text"
-      ? "href"
-      : mediaAssetFieldName === fieldName
-        ? undefined
-        : fieldName;
-
-  if (fields?.width?.type === "number" && fields.height?.type === "number") {
-    return {
-      heightFieldName: "height",
-      hrefFieldName,
-      mediaAssetFieldName,
-      widthFieldName: "width",
-    };
-  }
-
-  return { hrefFieldName, mediaAssetFieldName };
 }
 
 function selectMediaAssetUploadPatchFields(
@@ -385,10 +340,6 @@ function selectMediaAssetUploadPatchFields(
   }
 
   return { mediaAssetFieldName: fieldName };
-}
-
-function isImageUploadAvailable(schemaKey: SchemaKey, mediaEditorMode: "asset" | "url") {
-  return mediaEditorMode === "asset" || schemaKey === "site";
 }
 
 function upsertMediaAssetOption(

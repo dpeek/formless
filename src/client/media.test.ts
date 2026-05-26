@@ -7,9 +7,8 @@ import {
   uploadSiteImageFile,
   type ImageDimensions,
 } from "./media.ts";
-import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 
-describe("Site media client helper", () => {
+describe("media client helpers", () => {
   it("uploads core image media assets to the instance media route", async () => {
     const file = new File([new Uint8Array([1, 2, 3])], "hero.png", { type: "image/png" });
 
@@ -86,12 +85,12 @@ describe("Site media client helper", () => {
     expect(coreImageMediaAssetOptionForId("../cover.webp")).toBeUndefined();
   });
 
-  it("uploads one file as multipart form data and returns dimensions when available", async () => {
+  it("keeps the Site upload helper on the core image media route", async () => {
     const file = new File([new Uint8Array([1, 2, 3])], "hero.png", { type: "image/png" });
     const dimensions = { height: 630, width: 1200 } satisfies ImageDimensions;
     const result = await uploadSiteImageFile(file, {
       fetcher: async (input, init) => {
-        expect(input).toBe("/api/site/media/images");
+        expect(input).toBe("/api/formless/media/images");
         expect(init?.method).toBe("POST");
         expect(init?.headers).toEqual({ Accept: "application/json" });
         const body = init?.body;
@@ -108,19 +107,19 @@ describe("Site media client helper", () => {
           asset: {
             byteSize: 3,
             contentType: "image/png",
-            deliveryHref: "/api/site/media/site/images/uploaded.png",
+            deliveryHref: "/api/formless/media/media/images/uploaded.png",
             filename: "hero.png",
             id: "uploaded.png",
             kind: "image",
             label: "hero.png",
             provider: "r2",
             status: "ready",
-            storageKey: "site/images/uploaded.png",
+            storageKey: "media/images/uploaded.png",
           },
           assetId: "uploaded.png",
           contentType: "image/png",
-          href: "/api/site/media/site/images/uploaded.png",
-          key: "site/images/uploaded.png",
+          href: "/api/formless/media/media/images/uploaded.png",
+          key: "media/images/uploaded.png",
           size: 3,
         });
       },
@@ -135,20 +134,20 @@ describe("Site media client helper", () => {
       asset: {
         byteSize: 3,
         contentType: "image/png",
-        deliveryHref: "/api/site/media/site/images/uploaded.png",
+        deliveryHref: "/api/formless/media/media/images/uploaded.png",
         filename: "hero.png",
         id: "uploaded.png",
         kind: "image",
         label: "hero.png",
         provider: "r2",
         status: "ready",
-        storageKey: "site/images/uploaded.png",
+        storageKey: "media/images/uploaded.png",
       },
       assetId: "uploaded.png",
       contentType: "image/png",
       dimensions,
-      href: "/api/site/media/site/images/uploaded.png",
-      key: "site/images/uploaded.png",
+      href: "/api/formless/media/media/images/uploaded.png",
+      key: "media/images/uploaded.png",
       size: 3,
     });
   });
@@ -166,27 +165,7 @@ describe("Site media client helper", () => {
     ).rejects.toThrow("Unsupported image type.");
   });
 
-  it("uploads installed Site images to the install media route", async () => {
-    const file = new File([new Uint8Array([1, 2, 3])], "hero.png", { type: "image/png" });
-
-    await uploadSiteImageFile(file, {
-      fetcher: async (input) => {
-        expect(input).toBe("/api/app-installs/site/personal/media/images");
-
-        return Response.json({
-          assetId: "uploaded.png",
-          contentType: "image/png",
-          href: "/api/app-installs/site/personal/media/app-installs/personal/site/images/uploaded.png",
-          key: "app-installs/personal/site/images/uploaded.png",
-          size: 3,
-        });
-      },
-      readDimensions: async () => undefined,
-      target: installedSiteIdentity("personal"),
-    });
-  });
-
-  it("builds flat patch values for href and optional dimensions", () => {
+  it("builds flat patch values for media assets and optional dimensions", () => {
     expect(
       siteImageUploadPatchValues({
         heightFieldName: "height",
@@ -196,25 +175,24 @@ describe("Site media client helper", () => {
           asset: {
             byteSize: 10,
             contentType: "image/webp",
-            deliveryHref: "/api/site/media/site/images/uploaded.webp",
+            deliveryHref: "/api/formless/media/media/images/uploaded.webp",
             id: "uploaded.webp",
             kind: "image",
             label: "uploaded.webp",
             provider: "r2",
             status: "ready",
-            storageKey: "site/images/uploaded.webp",
+            storageKey: "media/images/uploaded.webp",
           },
           assetId: "uploaded.webp",
           contentType: "image/webp",
           dimensions: { height: 300, width: 400 },
-          href: "/api/site/media/site/images/uploaded.webp",
-          key: "site/images/uploaded.webp",
+          href: "/api/formless/media/media/images/uploaded.webp",
+          key: "media/images/uploaded.webp",
           size: 10,
         },
         widthFieldName: "width",
       }),
     ).toEqual({
-      href: "/api/site/media/site/images/uploaded.webp",
       mediaAsset: "uploaded.webp",
       width: 400,
       height: 300,
@@ -225,8 +203,8 @@ describe("Site media client helper", () => {
         upload: {
           assetId: "asset-only.webp",
           contentType: "image/webp",
-          href: "/api/site/media/site/images/asset-only.webp",
-          key: "site/images/asset-only.webp",
+          href: "/api/formless/media/media/images/asset-only.webp",
+          key: "media/images/asset-only.webp",
           size: 10,
         },
       }),
@@ -238,23 +216,13 @@ describe("Site media client helper", () => {
         hrefFieldName: "href",
         upload: {
           contentType: "image/webp",
-          href: "/api/site/media/site/images/uploaded.webp",
-          key: "site/images/uploaded.webp",
+          href: "/manual/uploaded.webp",
+          key: "media/images/uploaded.webp",
           size: 10,
         },
       }),
     ).toEqual({
-      href: "/api/site/media/site/images/uploaded.webp",
+      href: "/manual/uploaded.webp",
     });
   });
 });
-
-function installedSiteIdentity(installId: string) {
-  const identity = installedAppStorageIdentity({ installId, packageAppKey: "site" });
-
-  if (!identity) {
-    throw new Error(`Expected installed Site identity for ${installId}.`);
-  }
-
-  return identity;
-}
