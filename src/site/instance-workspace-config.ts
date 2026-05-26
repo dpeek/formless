@@ -1,4 +1,9 @@
 import { validateAppInstallId } from "../shared/app-installs.ts";
+import {
+  normalizeInstanceDomainHost,
+  resolveInstanceDomainMappingProfile,
+  type InstanceDomainMappingProfile,
+} from "../shared/instance-domain-mappings.ts";
 
 export const FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE = "formless.instance-workspace.json";
 export const FORMLESS_INSTANCE_WORKSPACE_VERSION = 1;
@@ -67,9 +72,10 @@ export type FormlessInstanceWorkspaceAppRoutes = {
 };
 
 export type FormlessInstanceWorkspaceDomainIntent = {
+  enabled: boolean;
   host: string;
-  installId: string;
-  surface: "site";
+  profile: InstanceDomainMappingProfile;
+  targetInstallId?: string;
 };
 
 const rootKeys = new Set([
@@ -97,7 +103,14 @@ const deployKeys = new Set([
 ]);
 const appKeys = new Set(["archivePath", "installId", "label", "packageAppKey", "routes"]);
 const appRouteKeys = new Set(["admin", "public", "schema"]);
-const domainKeys = new Set(["host", "installId", "surface"]);
+const domainKeys = new Set([
+  "enabled",
+  "host",
+  "installId",
+  "profile",
+  "surface",
+  "targetInstallId",
+]);
 const targetAliasPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const packageAppKeyPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const forbiddenSecretKeys = new Set([
@@ -271,9 +284,12 @@ export function formatFormlessInstanceWorkspaceManifest(
       ? {}
       : {
           domains: parsed.domains.map((domain) => ({
+            enabled: domain.enabled,
             host: domain.host,
-            installId: domain.installId,
-            surface: domain.surface,
+            profile: domain.profile,
+            ...(domain.targetInstallId === undefined
+              ? {}
+              : { targetInstallId: domain.targetInstallId }),
           })),
         }),
   };
@@ -512,11 +528,11 @@ function parseDomains(value: unknown): FormlessInstanceWorkspaceDomainIntent[] {
   const seen = new Set<string>();
 
   for (const domain of domains) {
-    const key = `${domain.host}:${domain.surface}`;
+    const key = domain.host;
 
     if (seen.has(key)) {
       throw new Error(
-        `${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE} domains include duplicate host "${domain.host}" for ${domain.surface}.`,
+        `${FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE} domains include duplicate host "${domain.host}".`,
       );
     }
 
@@ -525,8 +541,15 @@ function parseDomains(value: unknown): FormlessInstanceWorkspaceDomainIntent[] {
 
   return domains.sort((left, right) => {
     const hostOrder = left.host.localeCompare(right.host);
+    const profileOrder = left.profile.localeCompare(right.profile);
+    const leftTarget = left.targetInstallId ?? "";
+    const rightTarget = right.targetInstallId ?? "";
 
-    return hostOrder === 0 ? left.installId.localeCompare(right.installId) : hostOrder;
+    return hostOrder === 0
+      ? profileOrder === 0
+        ? leftTarget.localeCompare(rightTarget)
+        : profileOrder
+      : hostOrder;
   });
 }
 
@@ -539,15 +562,66 @@ function parseDomain(value: unknown, index: number): FormlessInstanceWorkspaceDo
 
   assertOnlyKeys(value, domainKeys, context);
 
-  if (value.surface !== "site") {
-    throw new Error(`${context} surface must be "site".`);
+  const profileResult = resolveInstanceDomainMappingProfile({
+    profile:
+      value.profile === undefined
+        ? undefined
+        : parseRequiredString(`${context} profile`, value.profile),
+    surface:
+      value.surface === undefined
+        ? undefined
+        : parseRequiredString(`${context} surface`, value.surface),
+  });
+
+  if (!profileResult.ok) {
+    throw new Error(
+      `${context} ${profileResult.error.field ?? "profile"} is invalid: ${profileResult.error.message}`,
+    );
   }
 
+  const targetInstallId = parseDomainTargetInstallId(context, value, profileResult.profile);
+
   return {
+    enabled: parseOptionalBoolean(`${context} enabled`, value.enabled) ?? true,
     host: parseHostname(`${context} host`, value.host),
-    installId: parseAppInstallId(`${context} installId`, value.installId),
-    surface: "site",
+    profile: profileResult.profile,
+    ...(targetInstallId === undefined ? {} : { targetInstallId }),
   };
+}
+
+function parseDomainTargetInstallId(
+  context: string,
+  value: Record<string, unknown>,
+  profile: InstanceDomainMappingProfile,
+): string | undefined {
+  const targetInstallId =
+    value.targetInstallId === undefined
+      ? undefined
+      : parseAppInstallId(`${context} targetInstallId`, value.targetInstallId);
+  const installId =
+    value.installId === undefined
+      ? undefined
+      : parseAppInstallId(`${context} installId`, value.installId);
+
+  if (targetInstallId !== undefined && installId !== undefined && targetInstallId !== installId) {
+    throw new Error(`${context} targetInstallId and installId must match.`);
+  }
+
+  const target = targetInstallId ?? installId;
+
+  if (profile === "instance") {
+    if (target !== undefined) {
+      throw new Error(`${context} instance profile must not include a target install id.`);
+    }
+
+    return undefined;
+  }
+
+  if (target === undefined) {
+    throw new Error(`${context} ${profile} profile requires a target install id.`);
+  }
+
+  return target;
 }
 
 function parseOptionalTargetAlias(context: string, value: unknown): string | undefined {
@@ -642,19 +716,13 @@ function parseRelativeWorkspacePath(context: string, value: unknown): string {
 }
 
 function parseHostname(context: string, value: unknown): string {
-  const host = parseRequiredString(context, value).toLowerCase();
+  const host = normalizeInstanceDomainHost(parseRequiredString(context, value));
 
-  try {
-    const url = new URL(`https://${host}`);
-
-    if (url.hostname !== host || url.pathname !== "/") {
-      throw new Error();
-    }
-
-    return host;
-  } catch {
+  if (!host.ok) {
     throw new Error(`${context} must be a hostname.`);
   }
+
+  return host.host;
 }
 
 function parseRequiredString(context: string, value: unknown): string {
@@ -663,6 +731,18 @@ function parseRequiredString(context: string, value: unknown): string {
   }
 
   return value.trim();
+}
+
+function parseOptionalBoolean(context: string, value: unknown): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`${context} must be a boolean.`);
+  }
+
+  return value;
 }
 
 function assertOnlyKeys(value: Record<string, unknown>, allowedKeys: Set<string>, context: string) {

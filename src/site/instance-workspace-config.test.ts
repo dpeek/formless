@@ -88,9 +88,21 @@ describe("Formless instance workspace manifest", () => {
       },
       domains: [
         {
+          enabled: true,
+          host: "admin.example.com",
+          profile: "instance",
+        },
+        {
+          enabled: true,
+          host: "tasks.example.com",
+          profile: "app",
+          targetInstallId: "tasks",
+        },
+        {
+          enabled: true,
           host: "www.example.com",
-          installId: "david",
-          surface: "site",
+          profile: "publicSite",
+          targetInstallId: "david",
         },
       ],
     });
@@ -101,6 +113,28 @@ describe("Formless instance workspace manifest", () => {
       `${JSON.stringify(manifest, null, 2)}\n`,
     );
     expect(parseFormlessInstanceWorkspaceManifestJson(JSON.stringify(manifest))).toEqual(manifest);
+  });
+
+  it("parses legacy Site domain intent into profile mapping intent", () => {
+    expect(
+      parseFormlessInstanceWorkspaceManifest({
+        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
+        domains: [
+          {
+            host: "WWW.EXAMPLE.COM.",
+            installId: "david",
+            surface: "site",
+          },
+        ],
+      }).domains,
+    ).toEqual([
+      {
+        enabled: true,
+        host: "www.example.com",
+        profile: "publicSite",
+        targetInstallId: "david",
+      },
+    ]);
   });
 
   it("rejects secrets and unsupported keys in reviewable workspace config", () => {

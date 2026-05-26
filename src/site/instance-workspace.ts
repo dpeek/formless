@@ -303,9 +303,8 @@ export type PlanFormlessInstanceWorkspaceDomainsDependencies = {
 
 export type FormlessInstanceWorkspaceDomainDesiredDrift = {
   host: string;
-  installId?: string;
-  liveInstallId?: string;
-  localInstallId?: string;
+  live?: FormlessInstanceWorkspaceDomainIntent;
+  local?: FormlessInstanceWorkspaceDomainIntent;
   status: "local-only" | "live-only" | "mismatch";
 };
 
@@ -497,7 +496,7 @@ export async function pullFormlessInstanceWorkspace(
     appArchives.push(archive);
   }
 
-  const domains = await readLiveEnabledWorkspaceDomainIntents(selectedTarget, dependencies);
+  const domains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
   await writeFile(
     manifestPath,
     formatFormlessInstanceWorkspaceManifest(withWorkspaceDomainIntents(manifest, domains)),
@@ -538,7 +537,7 @@ export async function checkFormlessInstanceWorkspace(
       throw new Error("Formless instance check did not write a remote instance archive.");
     }
 
-    const liveDomains = await readLiveEnabledWorkspaceDomainIntents(selectedTarget, dependencies);
+    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
     const localInstanceArchive = await readArchiveDirectoryForCheck(
       path.join(workspaceRoot, manifest.archives.instance),
     );
@@ -610,7 +609,7 @@ export async function pushFormlessInstanceWorkspace(
       throw new Error("Formless instance push could not read remote archive state.");
     }
 
-    const liveDomains = await readLiveEnabledWorkspaceDomainIntents(selectedTarget, dependencies);
+    const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
     const localAppArchives = await readWorkspaceAppArchivesForPush(workspaceRoot, manifest);
     const localInstanceArchive = await readArchiveDirectoryForCheck(
       path.join(workspaceRoot, manifest.archives.instance),
@@ -843,14 +842,14 @@ export async function planFormlessInstanceWorkspaceDomains(
   const accountId = requireWorkspaceDeployAccountId(manifest);
   const workerName = selectWorkspaceWorkerName(manifest, selectedTarget, "domains plan");
   const workspaceDomains = manifest.domains ?? [];
-  const liveEnabledDomains = await readLiveEnabledWorkspaceDomainIntents(
-    selectedTarget,
-    dependencies,
-  );
+  const liveDomains = await readLiveWorkspaceDomainIntents(selectedTarget, dependencies);
   const source = workspaceDomains.length > 0 ? "workspace" : "live";
+  const enabledSourceDomains = (source === "workspace" ? workspaceDomains : liveDomains).filter(
+    (domain) => domain.enabled,
+  );
   const intents = selectDomainIntentsForHost({
     host: input.host,
-    intents: source === "workspace" ? workspaceDomains : liveEnabledDomains,
+    intents: enabledSourceDomains,
   });
   const preflight = await planCloudflareWorkerDomainPreflight({
     accountId,
@@ -866,8 +865,8 @@ export async function planFormlessInstanceWorkspaceDomains(
       drift:
         workspaceDomains.length === 0
           ? []
-          : compareWorkspaceDomainIntentToLive(workspaceDomains, liveEnabledDomains),
-      liveEnabledCount: liveEnabledDomains.length,
+          : compareWorkspaceDomainIntentToLive(workspaceDomains, liveDomains),
+      liveEnabledCount: liveDomains.filter((domain) => domain.enabled).length,
       source,
       workspaceCount: workspaceDomains.length,
     },
@@ -924,8 +923,8 @@ export async function applyFormlessInstanceWorkspaceDomains(
         adminToken,
         evidence: {
           host: host.host,
-          surface: host.surface,
-          installId: host.installId,
+          profile: host.profile,
+          ...(host.targetInstallId === undefined ? {} : { targetInstallId: host.targetInstallId }),
           provider: "cloudflare-worker-custom-domain",
           accountId: planned.accountId,
           zoneId: host.domain.zoneId,
@@ -1914,7 +1913,7 @@ function selectWorkspaceWorkerName(
   return workerName;
 }
 
-async function readLiveEnabledWorkspaceDomainIntents(
+async function readLiveWorkspaceDomainIntents(
   target: FormlessInstanceWorkspaceTarget,
   dependencies: { fetch: typeof fetch },
 ): Promise<FormlessInstanceWorkspaceDomainIntent[]> {
@@ -1923,14 +1922,7 @@ async function readLiveEnabledWorkspaceDomainIntents(
     dependencies,
   );
 
-  return liveMappings.mappings
-    .filter(
-      (mapping) =>
-        mapping.enabled &&
-        (mapping.profile === "publicSite" || mapping.surface === "site") &&
-        liveMappingTargetInstallId(mapping) !== undefined,
-    )
-    .map(workspaceDomainIntentFromLiveMapping);
+  return liveMappings.mappings.map(workspaceDomainIntentFromLiveMapping);
 }
 
 function withWorkspaceDomainIntents(
@@ -1953,16 +1945,19 @@ function withWorkspaceDomainIntents(
 function workspaceDomainIntentFromLiveMapping(
   mapping: InstanceDomainMapping,
 ): FormlessInstanceWorkspaceDomainIntent {
-  const installId = liveMappingTargetInstallId(mapping);
+  const targetInstallId = liveMappingTargetInstallId(mapping);
 
-  if ((mapping.profile !== "publicSite" && mapping.surface !== "site") || installId === undefined) {
-    throw new Error(`Live domain mapping for host "${mapping.host}" is not a public Site mapping.`);
+  if (mapping.profile !== "instance" && targetInstallId === undefined) {
+    throw new Error(
+      `Live domain mapping for host "${mapping.host}" profile "${mapping.profile}" is missing a target install id.`,
+    );
   }
 
   return {
+    enabled: mapping.enabled,
     host: mapping.host,
-    installId,
-    surface: "site",
+    profile: mapping.profile,
+    ...(targetInstallId === undefined ? {} : { targetInstallId }),
   };
 }
 
@@ -1994,8 +1989,8 @@ function selectDomainIntentsForHost(input: {
 }
 
 function compareWorkspaceDomainIntentToLive(
-  workspaceDomains: readonly CloudflareDomainIntent[],
-  liveDomains: readonly CloudflareDomainIntent[],
+  workspaceDomains: readonly FormlessInstanceWorkspaceDomainIntent[],
+  liveDomains: readonly FormlessInstanceWorkspaceDomainIntent[],
 ): FormlessInstanceWorkspaceDomainDesiredDrift[] {
   const workspaceByHost = new Map(workspaceDomains.map((domain) => [domain.host, domain]));
   const liveByHost = new Map(liveDomains.map((domain) => [domain.host, domain]));
@@ -2009,7 +2004,7 @@ function compareWorkspaceDomainIntentToLive(
     if (local && !live) {
       drift.push({
         host,
-        installId: local.installId,
+        local,
         status: "local-only",
       });
       continue;
@@ -2018,23 +2013,35 @@ function compareWorkspaceDomainIntentToLive(
     if (!local && live) {
       drift.push({
         host,
-        installId: live.installId,
+        live,
         status: "live-only",
       });
       continue;
     }
 
-    if (local && live && local.installId !== live.installId) {
+    if (local && live && !workspaceDomainIntentsEqual(local, live)) {
       drift.push({
         host,
-        liveInstallId: live.installId,
-        localInstallId: local.installId,
+        live,
+        local,
         status: "mismatch",
       });
     }
   }
 
   return drift;
+}
+
+function workspaceDomainIntentsEqual(
+  left: FormlessInstanceWorkspaceDomainIntent,
+  right: FormlessInstanceWorkspaceDomainIntent,
+): boolean {
+  return (
+    left.enabled === right.enabled &&
+    left.host === right.host &&
+    left.profile === right.profile &&
+    left.targetInstallId === right.targetInstallId
+  );
 }
 
 function workspaceSecretStateLabel(

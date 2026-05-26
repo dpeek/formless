@@ -21,6 +21,7 @@ import {
   type CloudflareDnsRecord,
   type CloudflareDomainApplyHostResult,
   type CloudflareDomainClient,
+  type CloudflareDomainIntent,
   type CloudflareDomainPreflightHostPlan,
   type CloudflareDomainPreflightIssue,
   type CloudflareWorkerDomain,
@@ -1064,7 +1065,7 @@ function formatInstanceWorkspaceCheckResult(
     `Local apps: ${drift.localAppCount}. Remote apps: ${drift.remoteAppCount}.`,
     `Local records: ${drift.localRecordCount}. Remote records: ${drift.remoteRecordCount}.`,
     `Local media files: ${drift.localMediaCount}. Remote media files: ${drift.remoteMediaCount}.`,
-    `Local domains: ${drift.localDomainCount}. Remote enabled domains: ${drift.remoteDomainCount}.`,
+    `Local domains: ${drift.localDomainCount}. Remote domains: ${drift.remoteDomainCount}.`,
     `Missing remote installs: ${formatList(drift.missingInstalls)}.`,
     `Extra remote installs: ${formatList(drift.extraInstalls)}.`,
     `Package mismatches: ${formatPackageMismatches(drift.packageMismatches)}.`,
@@ -1250,7 +1251,9 @@ function formatWorkspaceDomainIntents(
     return "none";
   }
 
-  return domains.map((domain) => `${domain.host} -> ${domain.installId}`).join(", ");
+  return domains
+    .map((domain) => `${domain.host} -> ${formatDomainIntentTarget(domain)}`)
+    .join(", ");
 }
 
 function formatRemoteInstalls(
@@ -1297,7 +1300,7 @@ function formatDomainHostPlan(host: CloudflareDomainPreflightHostPlan): string {
 
   return [
     `${host.host}: ${host.status}`,
-    `install ${host.installId}`,
+    `profile ${formatDomainIntentTarget(host)}`,
     `zone ${host.zone ? `${host.zone.name} (${host.zone.id})` : "missing"}`,
     `apex ${host.apex ? "yes" : "no"}`,
     `custom domains ${formatWorkerDomains(host.workerDomains)}`,
@@ -1311,7 +1314,7 @@ function formatDomainHostPlan(host: CloudflareDomainPreflightHostPlan): string {
 function formatDomainAppliedHost(host: CloudflareDomainApplyHostResult): string {
   return [
     `${host.host}: ${host.action}`,
-    `install ${host.installId}`,
+    `profile ${formatDomainIntentTarget(host)}`,
     `custom domain ${host.domain.id}`,
     `worker ${host.domain.service}`,
     `zone ${host.domain.zoneName} (${host.domain.zoneId})`,
@@ -1329,14 +1332,27 @@ function formatDomainDesiredDrift(
     .map((entry) => {
       switch (entry.status) {
         case "local-only":
-          return `${entry.host} local-only (${entry.installId})`;
+          return `${entry.host} local-only (${entry.local ? formatDomainIntentTarget(entry.local) : "missing"})`;
         case "live-only":
-          return `${entry.host} live-only (${entry.installId})`;
+          return `${entry.host} live-only (${entry.live ? formatDomainIntentTarget(entry.live) : "missing"})`;
         case "mismatch":
-          return `${entry.host} mismatch (workspace ${entry.localInstallId}, live ${entry.liveInstallId})`;
+          return `${entry.host} mismatch (workspace ${entry.local ? formatDomainIntentTarget(entry.local) : "missing"}, live ${entry.live ? formatDomainIntentTarget(entry.live) : "missing"})`;
       }
     })
     .join(", ");
+}
+
+function formatDomainIntentTarget(
+  domain: Pick<CloudflareDomainIntent, "profile" | "targetInstallId"> & {
+    enabled?: boolean;
+  },
+): string {
+  const target =
+    domain.targetInstallId === undefined
+      ? domain.profile
+      : `${domain.profile}:${domain.targetInstallId}`;
+
+  return domain.enabled === false ? `${target}:disabled` : target;
 }
 
 function formatDomainIssues(issues: readonly CloudflareDomainPreflightIssue[]): string {

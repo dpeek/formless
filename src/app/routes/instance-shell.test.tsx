@@ -124,7 +124,11 @@ describe("instance shell route view", () => {
   it("renders desired custom domains and the add form", () => {
     const html = renderToStaticMarkup(
       <InstanceShellRouteView
-        domainDraft={{ host: "www.example.com", installId: "personal" }}
+        domainDraft={{
+          host: "www.example.com",
+          profile: "publicSite",
+          targetInstallId: "personal",
+        }}
         installDrafts={{
           site: { installId: "docs", label: "Docs Site" },
         }}
@@ -161,7 +165,10 @@ describe("instance shell route view", () => {
             },
           ],
           installing: false,
-          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+          installs: [
+            siteInstall({ installId: "personal", label: "Personal Site" }),
+            appInstall({ installId: "tasks", label: "Tasks", packageAppKey: "tasks" }),
+          ],
           packages: listBundledAppPackages(),
           status: "ready",
         }}
@@ -170,23 +177,78 @@ describe("instance shell route view", () => {
 
     expect(html).toContain("Custom domains");
     expect(html).toContain("dpeek.com");
+    expect(html).toContain("publicSite:personal");
     expect(html).toContain("Applied: personal");
     expect(html).toContain('value="www.example.com"');
     expect(html).toContain("<option");
     expect(html).toContain("Personal Site");
+    expect(html).toContain("Public Site");
+    expect(html).toContain("Remove");
     expect(html).toContain("Add");
+  });
+
+  it("renders app and instance domain profile options plus orphan applied state", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        domainDraft={{ host: "admin.example.com", profile: "instance", targetInstallId: "" }}
+        state={{
+          domainAppliedStates: [
+            {
+              accountId: "account-123",
+              action: "created",
+              appliedAt: "2026-05-26T00:00:00.000Z",
+              host: "admin.example.com",
+              profile: "instance",
+              provider: "cloudflare-worker-custom-domain",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              workerDomainId: "domain-1",
+              workerName: "personal",
+              zoneId: "zone-1",
+              zoneName: "example.com",
+            },
+          ],
+          domainMappingSubmitting: false,
+          domainMappings: [],
+          installing: false,
+          installs: [
+            siteInstall({ installId: "personal", label: "Personal Site" }),
+            appInstall({ installId: "tasks", label: "Tasks", packageAppKey: "tasks" }),
+          ],
+          packages: listBundledAppPackages(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Instance");
+    expect(html).toContain("App");
+    expect(html).toContain("Public Site");
+    expect(html).toContain("admin.example.com");
+    expect(html).toContain("applied without desired mapping");
   });
 });
 
 function siteInstall(input: { installId: string; label: string }): AppInstall {
+  return appInstall({ ...input, packageAppKey: "site" });
+}
+
+function appInstall(input: {
+  installId: string;
+  label: string;
+  packageAppKey: "site" | "tasks";
+}): AppInstall {
   return {
     adminRoute: `/apps/${input.installId}`,
     createdAt: "2026-05-22T08:00:00.000Z",
     installId: input.installId,
     label: input.label,
-    packageAppKey: "site",
-    publicRoute: `/sites/${input.installId}`,
-    publicRoutePrefix: `/sites/${input.installId}/`,
+    packageAppKey: input.packageAppKey,
+    ...(input.packageAppKey === "site"
+      ? {
+          publicRoute: `/sites/${input.installId}` as `/sites/${string}`,
+          publicRoutePrefix: `/sites/${input.installId}/` as `/sites/${string}/`,
+        }
+      : {}),
     schemaRoute: `/apps/${input.installId}/schema`,
     status: "installed",
     updatedAt: "2026-05-22T08:00:00.000Z",

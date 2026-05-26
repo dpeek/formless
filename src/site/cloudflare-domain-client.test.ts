@@ -183,8 +183,8 @@ describe("Cloudflare domain API client", () => {
       accountId: "account-123",
       client: fakeCloudflareDomainClient(),
       intents: [
-        { host: "dpeek.com", installId: "david", surface: "site" },
-        { host: "www.dpeek.com", installId: "david", surface: "site" },
+        { host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+        { host: "www.dpeek.com", profile: "publicSite", targetInstallId: "david" },
       ],
       policy: "create-only",
       workerName: "personal",
@@ -220,8 +220,8 @@ describe("Cloudflare domain API client", () => {
         listWorkerRoutes: async () => [],
       },
       intents: [
-        { host: "blog.dpeek.com", installId: "david", surface: "site" },
-        { host: "www.dpeek.com", installId: "david", surface: "site" },
+        { host: "blog.dpeek.com", profile: "publicSite", targetInstallId: "david" },
+        { host: "www.dpeek.com", profile: "publicSite", targetInstallId: "david" },
       ],
       policy: "adopt",
       workerName: "personal",
@@ -252,8 +252,8 @@ describe("Cloudflare domain API client", () => {
           zoneName: "dpeek.com",
         },
         host: "blog.dpeek.com",
-        installId: "david",
-        surface: "site",
+        profile: "publicSite",
+        targetInstallId: "david",
       },
       {
         action: "adopted",
@@ -265,8 +265,8 @@ describe("Cloudflare domain API client", () => {
           zoneName: "dpeek.com",
         },
         host: "www.dpeek.com",
-        installId: "david",
-        surface: "site",
+        profile: "publicSite",
+        targetInstallId: "david",
       },
     ]);
   });
@@ -288,7 +288,7 @@ describe("Cloudflare domain API client", () => {
         ],
         listWorkerRoutes: async () => [],
       },
-      intents: [{ host: "old.dpeek.com", installId: "david", surface: "site" }],
+      intents: [{ host: "old.dpeek.com", profile: "publicSite", targetInstallId: "david" }],
       policy: "override",
       workerName: "personal",
     });

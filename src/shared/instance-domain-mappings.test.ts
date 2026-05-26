@@ -354,8 +354,6 @@ describe("instance domain mappings", () => {
       appliedState: {
         host: "admin.example.com",
         profile: "instance",
-        targetInstallId: undefined,
-        installId: undefined,
       },
     });
   });

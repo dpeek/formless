@@ -14,7 +14,7 @@ import {
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
 import { TextField } from "@dpeek/formless-ui/text-field";
-import { AddIcon } from "@dpeek/formless-ui/icons";
+import { AddIcon, RemoveIcon } from "@dpeek/formless-ui/icons";
 import {
   AppInstallApiError,
   createInstanceAppInstall,
@@ -22,6 +22,7 @@ import {
 } from "../../client/app-installs.ts";
 import {
   createInstanceDomainMapping,
+  deleteInstanceDomainMapping,
   DomainMappingApiError,
   fetchInstanceDomainMappings,
 } from "../../client/domain-mappings.ts";
@@ -29,6 +30,7 @@ import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/
 import type {
   InstanceDomainMapping,
   InstanceDomainMappingAppliedState,
+  InstanceDomainMappingProfile,
 } from "../../shared/instance-domain-mappings.ts";
 
 export type PackageInstallDraft = {
@@ -40,7 +42,8 @@ export type PackageInstallDrafts = Partial<Record<PackageAppKey, PackageInstallD
 
 export type DomainMappingDraft = {
   host: string;
-  installId: string;
+  profile: InstanceDomainMappingProfile;
+  targetInstallId: string;
 };
 
 export type InstanceShellRouteState =
@@ -48,6 +51,7 @@ export type InstanceShellRouteState =
   | { status: "loading" }
   | {
       domainAppliedStates: InstanceDomainMappingAppliedState[];
+      domainMappingDeletingKey?: string;
       domainMappingError?: string;
       domainMappingSubmitting: boolean;
       domainMappings: InstanceDomainMapping[];
@@ -66,7 +70,8 @@ export function InstanceShellRoute() {
   const [installDrafts, setInstallDrafts] = useState<PackageInstallDrafts>({});
   const [domainDraft, setDomainDraft] = useState<DomainMappingDraft>({
     host: "",
-    installId: "",
+    profile: "publicSite",
+    targetInstallId: "",
   });
 
   useEffect(() => {
@@ -86,6 +91,7 @@ export function InstanceShellRoute() {
 
         setState({
           domainAppliedStates: domainResponse.appliedStates,
+          domainMappingDeletingKey: undefined,
           domainMappingSubmitting: false,
           domainMappings: domainResponse.mappings,
           installing: false,
@@ -160,6 +166,7 @@ export function InstanceShellRoute() {
 
       setState({
         domainAppliedStates: state.domainAppliedStates,
+        domainMappingDeletingKey: state.domainMappingDeletingKey,
         domainMappingError: state.domainMappingError,
         domainMappingSubmitting: false,
         domainMappings: state.domainMappings,
@@ -215,22 +222,30 @@ export function InstanceShellRoute() {
     });
 
     try {
+      const normalizedDraft = initializeDomainMappingDraft({
+        currentDraft: domainDraft,
+        installs: state.installs,
+      });
       const response = await createInstanceDomainMapping({
         enabled: true,
-        host: domainDraft.host,
-        installId: domainDraft.installId,
-        surface: "site",
+        host: normalizedDraft.host,
+        profile: normalizedDraft.profile,
+        ...(normalizedDraft.profile === "instance"
+          ? {}
+          : { targetInstallId: normalizedDraft.targetInstallId }),
       });
 
       setState({
         ...state,
+        domainMappingDeletingKey: undefined,
         domainMappingError: undefined,
         domainMappingSubmitting: false,
         domainMappings: response.mappings,
       });
       setDomainDraft((current) => ({
         host: "",
-        installId: current.installId,
+        profile: current.profile,
+        targetInstallId: current.targetInstallId,
       }));
     } catch (error) {
       const message =
@@ -246,11 +261,60 @@ export function InstanceShellRoute() {
     }
   }
 
+  async function submitDeleteDomainMapping(mapping: InstanceDomainMapping) {
+    if (
+      state.status !== "ready" ||
+      state.domainMappingSubmitting ||
+      state.domainMappingDeletingKey
+    ) {
+      return;
+    }
+
+    if (!window.confirm(`Remove desired mapping for ${mapping.host}?`)) {
+      return;
+    }
+
+    const key = domainMappingKey(mapping);
+
+    setState({
+      ...state,
+      domainMappingDeletingKey: key,
+      domainMappingError: undefined,
+    });
+
+    try {
+      const response = await deleteInstanceDomainMapping({
+        host: mapping.host,
+        profile: mapping.profile,
+      });
+
+      setState({
+        ...state,
+        domainMappingDeletingKey: undefined,
+        domainMappingError: undefined,
+        domainMappingSubmitting: false,
+        domainMappings: response.mappings,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainMappingApiError || error instanceof Error
+          ? error.message
+          : "Domain mapping delete failed.";
+
+      setState({
+        ...state,
+        domainMappingDeletingKey: undefined,
+        domainMappingError: message,
+      });
+    }
+  }
+
   return (
     <InstanceShellRouteView
       domainDraft={domainDraft}
       installDrafts={installDrafts}
       onDomainDraftChange={setDomainDraft}
+      onDeleteDomainMapping={submitDeleteDomainMapping}
       onSubmitDomainMapping={submitDomainMapping}
       onInstallDraftChange={(packageAppKey, draft) =>
         setInstallDrafts((current) => ({
@@ -268,6 +332,7 @@ export function InstanceShellRouteView({
   domainDraft,
   installDrafts = {},
   onDomainDraftChange,
+  onDeleteDomainMapping,
   onSubmitDomainMapping,
   onInstallDraftChange,
   onSubmitInstall,
@@ -276,6 +341,7 @@ export function InstanceShellRouteView({
   domainDraft?: DomainMappingDraft;
   installDrafts?: PackageInstallDrafts;
   onDomainDraftChange?: (draft: DomainMappingDraft) => void;
+  onDeleteDomainMapping?: (mapping: InstanceDomainMapping) => void;
   onSubmitDomainMapping?: (event: React.FormEvent<HTMLFormElement>) => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
@@ -341,11 +407,12 @@ export function InstanceShellRouteView({
         draft={
           domainDraft ??
           initializeDomainMappingDraft({
-            currentDraft: { host: "", installId: "" },
+            currentDraft: { host: "", profile: "publicSite", targetInstallId: "" },
             installs: state.installs,
           })
         }
         onDraftChange={onDomainDraftChange}
+        onDelete={onDeleteDomainMapping}
         onSubmit={onSubmitDomainMapping}
         state={state}
       />
@@ -364,21 +431,34 @@ export function InstanceShellRouteView({
 function CustomDomainsSection({
   draft,
   onDraftChange,
+  onDelete,
   onSubmit,
   state,
 }: {
   draft: DomainMappingDraft;
   onDraftChange?: (draft: DomainMappingDraft) => void;
+  onDelete?: (mapping: InstanceDomainMapping) => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   state: Extract<InstanceShellRouteState, { status: "ready" }>;
 }) {
   const hostInputId = useMemo(() => "domain-mapping-host", []);
-  const siteSelectId = useMemo(() => "domain-mapping-site", []);
-  const siteInstalls = state.installs.filter((install) => install.packageAppKey === "site");
-  const selectedInstallId = siteInstalls.some((install) => install.installId === draft.installId)
-    ? draft.installId
-    : (siteInstalls[0]?.installId ?? "");
-  const isDisabled = state.domainMappingSubmitting || siteInstalls.length === 0;
+  const profileSelectId = useMemo(() => "domain-mapping-profile", []);
+  const targetSelectId = useMemo(() => "domain-mapping-target", []);
+  const normalizedDraft = initializeDomainMappingDraft({
+    currentDraft: draft,
+    installs: state.installs,
+  });
+  const targetInstalls = domainTargetInstalls(normalizedDraft.profile, state.installs);
+  const isDisabled =
+    state.domainMappingSubmitting ||
+    state.domainMappingDeletingKey !== undefined ||
+    (normalizedDraft.profile !== "instance" && targetInstalls.length === 0);
+  const orphanAppliedStates = state.domainAppliedStates.filter(
+    (appliedState) =>
+      !state.domainMappings.some(
+        (mapping) => mapping.host === appliedState.host && mapping.profile === appliedState.profile,
+      ),
+  );
 
   return (
     <section className="space-y-3" aria-labelledby="custom-domains-heading">
@@ -391,36 +471,75 @@ function CustomDomainsSection({
         </div>
       </div>
       <form
-        className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)_auto]"
+        className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_minmax(12rem,16rem)_auto]"
         onSubmit={onSubmit}
       >
         <TextField
           isDisabled={state.domainMappingSubmitting}
           isRequired
-          onChange={(host) => onDraftChange?.({ ...draft, host })}
-          value={draft.host}
+          onChange={(host) => onDraftChange?.({ ...normalizedDraft, host })}
+          value={normalizedDraft.host}
         >
           <Label htmlFor={hostInputId}>Hostname</Label>
           <Input id={hostInputId} placeholder="www.example.com" />
         </TextField>
         <div className="space-y-1">
-          <Label htmlFor={siteSelectId}>Site</Label>
+          <Label htmlFor={profileSelectId}>Profile</Label>
           <NativeSelect>
             <NativeSelectContent
-              disabled={isDisabled}
-              id={siteSelectId}
-              onChange={(event) => onDraftChange?.({ ...draft, installId: event.target.value })}
+              disabled={state.domainMappingSubmitting}
+              id={profileSelectId}
+              onChange={(event) =>
+                onDraftChange?.(
+                  initializeDomainMappingDraft({
+                    currentDraft: {
+                      ...normalizedDraft,
+                      profile: event.target.value as InstanceDomainMappingProfile,
+                    },
+                    installs: state.installs,
+                  }),
+                )
+              }
               required
-              value={selectedInstallId}
+              value={normalizedDraft.profile}
             >
-              {siteInstalls.map((install) => (
-                <option key={install.installId} value={install.installId}>
-                  {install.label}
+              {DOMAIN_PROFILE_OPTIONS.map((option) => (
+                <option key={option.profile} value={option.profile}>
+                  {option.label}
                 </option>
               ))}
             </NativeSelectContent>
           </NativeSelect>
         </div>
+        {normalizedDraft.profile === "instance" ? (
+          <div className="space-y-1">
+            <Label>Target</Label>
+            <div className="flex min-h-9 items-center rounded-md border border-border bg-muted px-3 text-sm text-muted-fg">
+              Instance
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <Label htmlFor={targetSelectId}>{domainTargetLabel(normalizedDraft.profile)}</Label>
+            <NativeSelect>
+              <NativeSelectContent
+                disabled={isDisabled}
+                id={targetSelectId}
+                onChange={(event) =>
+                  onDraftChange?.({ ...normalizedDraft, targetInstallId: event.target.value })
+                }
+                required
+                value={normalizedDraft.targetInstallId}
+              >
+                {targetInstalls.map((install) => (
+                  <option key={install.installId} value={install.installId}>
+                    {install.label}
+                  </option>
+                ))}
+              </NativeSelectContent>
+            </NativeSelect>
+          </div>
+        )}
         <div className="flex items-end">
           <Button isDisabled={isDisabled} type="submit">
             <AddIcon />
@@ -428,12 +547,12 @@ function CustomDomainsSection({
           </Button>
         </div>
         {state.domainMappingError ? (
-          <p className={`${fieldErrorStyles()} sm:col-span-3`} data-slot="field-error" role="alert">
+          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
             {state.domainMappingError}
           </p>
         ) : null}
       </form>
-      {state.domainMappings.length === 0 ? (
+      {state.domainMappings.length === 0 && orphanAppliedStates.length === 0 ? (
         <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
           No custom domains.
         </div>
@@ -442,11 +561,22 @@ function CustomDomainsSection({
           {state.domainMappings.map((mapping) => (
             <DomainMappingRow
               appliedState={appliedStateForMapping(mapping, state.domainAppliedStates)}
+              deleting={state.domainMappingDeletingKey === domainMappingKey(mapping)}
               install={state.installs.find(
                 (install) => install.installId === mapping.targetInstallId,
               )}
-              key={`${mapping.profile}:${mapping.host}`}
+              key={domainMappingKey(mapping)}
               mapping={mapping}
+              onDelete={onDelete}
+            />
+          ))}
+          {orphanAppliedStates.map((appliedState) => (
+            <AppliedDomainStateRow
+              appliedState={appliedState}
+              install={state.installs.find(
+                (install) => install.installId === appliedState.targetInstallId,
+              )}
+              key={`applied:${appliedState.profile}:${appliedState.host}`}
             />
           ))}
         </div>
@@ -457,12 +587,16 @@ function CustomDomainsSection({
 
 function DomainMappingRow({
   appliedState,
+  deleting,
   install,
   mapping,
+  onDelete,
 }: {
   appliedState: InstanceDomainMappingAppliedState | undefined;
+  deleting: boolean;
   install: AppInstall | undefined;
   mapping: InstanceDomainMapping;
+  onDelete?: (mapping: InstanceDomainMapping) => void;
 }) {
   return (
     <article className="rounded-md border border-border bg-overlay p-4">
@@ -470,13 +604,52 @@ function DomainMappingRow({
         <div className="min-w-0 space-y-1">
           <h3 className="truncate text-sm font-semibold">{mapping.host}</h3>
           <p className="text-xs text-muted-fg">
-            <code>{mapping.targetInstallId ?? mapping.profile}</code>
+            <code>{domainProfileTargetLabel(mapping.profile, mapping.targetInstallId)}</code>
             {install ? ` · ${install.label}` : ""} · {mapping.enabled ? "enabled" : "disabled"}
           </p>
         </div>
-        <p className="text-xs text-muted-fg">
-          {appliedState ? `Applied: ${appliedState.workerName}` : "Applied: none"}
-        </p>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <p className="text-xs text-muted-fg">
+            {appliedState ? `Applied: ${appliedState.workerName}` : "Applied: none"}
+          </p>
+          {mapping.enabled ? (
+            <Button
+              intent="outline"
+              isDisabled={deleting}
+              onPress={() => onDelete?.(mapping)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {deleting ? "Removing..." : "Remove"}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function AppliedDomainStateRow({
+  appliedState,
+  install,
+}: {
+  appliedState: InstanceDomainMappingAppliedState;
+  install: AppInstall | undefined;
+}) {
+  return (
+    <article className="rounded-md border border-dashed border-border bg-overlay p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h3 className="truncate text-sm font-semibold">{appliedState.host}</h3>
+          <p className="text-xs text-muted-fg">
+            <code>
+              {domainProfileTargetLabel(appliedState.profile, appliedState.targetInstallId)}
+            </code>
+            {install ? ` · ${install.label}` : ""} · applied without desired mapping
+          </p>
+        </div>
+        <p className="text-xs text-muted-fg">Applied: {appliedState.workerName}</p>
       </div>
     </article>
   );
@@ -797,14 +970,21 @@ function initializeDomainMappingDraft({
   currentDraft: DomainMappingDraft;
   installs: readonly AppInstall[];
 }): DomainMappingDraft {
-  const siteInstalls = installs.filter((install) => install.packageAppKey === "site");
-  const installId = siteInstalls.some((install) => install.installId === currentDraft.installId)
-    ? currentDraft.installId
-    : (siteInstalls[0]?.installId ?? "");
+  const profile = DOMAIN_PROFILE_OPTIONS.some((option) => option.profile === currentDraft.profile)
+    ? currentDraft.profile
+    : defaultDomainProfile(installs);
+  const targetInstalls = domainTargetInstalls(profile, installs);
+  const targetInstallId =
+    profile === "instance"
+      ? ""
+      : targetInstalls.some((install) => install.installId === currentDraft.targetInstallId)
+        ? currentDraft.targetInstallId
+        : (targetInstalls[0]?.installId ?? "");
 
   return {
     host: currentDraft.host,
-    installId,
+    profile,
+    targetInstallId,
   };
 }
 
@@ -815,6 +995,50 @@ function appliedStateForMapping(
   return appliedStates.find(
     (state) => state.host === mapping.host && state.profile === mapping.profile,
   );
+}
+
+const DOMAIN_PROFILE_OPTIONS: Array<{ label: string; profile: InstanceDomainMappingProfile }> = [
+  { label: "Instance", profile: "instance" },
+  { label: "App", profile: "app" },
+  { label: "Public Site", profile: "publicSite" },
+];
+
+function defaultDomainProfile(installs: readonly AppInstall[]): InstanceDomainMappingProfile {
+  if (installs.some((install) => install.packageAppKey === "site")) {
+    return "publicSite";
+  }
+
+  return installs.length > 0 ? "app" : "instance";
+}
+
+function domainTargetInstalls(
+  profile: InstanceDomainMappingProfile,
+  installs: readonly AppInstall[],
+): AppInstall[] {
+  if (profile === "instance") {
+    return [];
+  }
+
+  if (profile === "publicSite") {
+    return installs.filter((install) => install.packageAppKey === "site");
+  }
+
+  return [...installs];
+}
+
+function domainTargetLabel(profile: InstanceDomainMappingProfile): string {
+  return profile === "publicSite" ? "Site" : "App";
+}
+
+function domainProfileTargetLabel(
+  profile: InstanceDomainMappingProfile,
+  targetInstallId: string | undefined,
+): string {
+  return targetInstallId === undefined ? profile : `${profile}:${targetInstallId}`;
+}
+
+function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">): string {
+  return `${mapping.profile}:${mapping.host}`;
 }
 
 function shellLinkButtonClassName(intent: "solid" | "outline" = "solid") {

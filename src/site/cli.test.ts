@@ -900,8 +900,13 @@ describe("Formless Site CLI", () => {
 
     expect(pulledInstance.apps.map((app) => app.app.installId)).toEqual(["david", "james"]);
     expect(pulledManifest.domains).toEqual([
-      { host: "dpeek.com", installId: "david", surface: "site" },
-      { host: "www.dpeek.com", installId: "david", surface: "site" },
+      { enabled: true, host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+      {
+        enabled: true,
+        host: "www.dpeek.com",
+        profile: "publicSite",
+        targetInstallId: "david",
+      },
     ]);
     await expect(
       readFile(path.join(workspaceRoot, "archives/apps/david/media/david/media/images/cover.png")),
@@ -934,7 +939,7 @@ describe("Formless Site CLI", () => {
         `Records: ${mediaRecords().length}.`,
         "Media files: 1.",
         `App archives: david (${mediaRecords().length} records, 1 media), james (0 records, 0 media).`,
-        "Domain mappings: dpeek.com -> david, www.dpeek.com -> david.",
+        "Domain mappings: dpeek.com -> publicSite:david, www.dpeek.com -> publicSite:david.",
       ].join("\n"),
     ]);
   });
@@ -970,7 +975,7 @@ describe("Formless Site CLI", () => {
         "Local apps: 1. Remote apps: 1.",
         "Local records: 0. Remote records: 0.",
         "Local media files: 0. Remote media files: 0.",
-        "Local domains: 0. Remote enabled domains: 0.",
+        "Local domains: 0. Remote domains: 0.",
         "Missing remote installs: none.",
         "Extra remote installs: none.",
         "Package mismatches: none.",
@@ -1038,7 +1043,7 @@ describe("Formless Site CLI", () => {
         "Local apps: 3. Remote apps: 3.",
         `Local records: ${mediaRecords().length}. Remote records: ${publishRecords().length}.`,
         "Local media files: 1. Remote media files: 1.",
-        "Local domains: 0. Remote enabled domains: 0.",
+        "Local domains: 0. Remote domains: 0.",
         "Missing remote installs: dom.",
         "Extra remote installs: extra.",
         "Package mismatches: james (local site, remote tasks).",
@@ -1075,8 +1080,13 @@ describe("Formless Site CLI", () => {
     await writeWorkspaceManifest(workspaceRoot, {
       apps: [workspaceApp("david", "David Peek"), workspaceApp("james", "James Peek")],
       domains: [
-        { host: "dpeek.com", installId: "david", surface: "site" },
-        { host: "local.dpeek.com", installId: "david", surface: "site" },
+        { enabled: true, host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+        {
+          enabled: true,
+          host: "local.dpeek.com",
+          profile: "publicSite",
+          targetInstallId: "david",
+        },
       ],
     });
     await writeArchiveDirectory(
@@ -1101,13 +1111,13 @@ describe("Formless Site CLI", () => {
         "Local apps: 2. Remote apps: 2.",
         "Local records: 0. Remote records: 0.",
         "Local media files: 0. Remote media files: 0.",
-        "Local domains: 2. Remote enabled domains: 2.",
+        "Local domains: 2. Remote domains: 3.",
         "Missing remote installs: none.",
         "Extra remote installs: none.",
         "Package mismatches: none.",
         "Changed records: none.",
         "Changed media: none.",
-        "Changed domain mappings: dpeek.com mismatch (workspace david, live james), local.dpeek.com local-only (david), www.dpeek.com live-only (david).",
+        "Changed domain mappings: disabled.dpeek.com live-only (publicSite:david:disabled), dpeek.com mismatch (workspace publicSite:david, live publicSite:james), local.dpeek.com local-only (publicSite:david), www.dpeek.com live-only (publicSite:david).",
         "Changed archive paths: none.",
       ].join("\n"),
     ]);
@@ -1121,8 +1131,19 @@ describe("Formless Site CLI", () => {
 
     await writeWorkspaceManifest(workspaceRoot, {
       domains: [
-        { host: "dpeek.com", installId: "david", surface: "site" },
-        { host: "www.dpeek.com", installId: "david", surface: "site" },
+        {
+          enabled: false,
+          host: "disabled.dpeek.com",
+          profile: "publicSite",
+          targetInstallId: "david",
+        },
+        { enabled: true, host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+        {
+          enabled: true,
+          host: "www.dpeek.com",
+          profile: "publicSite",
+          targetInstallId: "david",
+        },
       ],
     });
 
@@ -1184,11 +1205,11 @@ describe("Formless Site CLI", () => {
         "Account: account-123.",
         "Worker: personal.",
         "Policy: adopt.",
-        "Desired source: workspace (2 workspace, 2 live enabled).",
+        "Desired source: workspace (3 workspace, 2 live enabled).",
         "Desired drift: none.",
         "Domains: dpeek.com, www.dpeek.com.",
-        "dpeek.com: blocked; install david; zone dpeek.com (zone-1); apex yes; custom domains none; routes dpeek.com/* -> old-worker; dns A 192.0.2.10; actions none; issues worker-route-conflict, dns-record-conflict, apex-domain",
-        "www.dpeek.com: ready; install david; zone dpeek.com (zone-1); apex no; custom domains www.dpeek.com -> personal; routes none; dns none; actions adopt-existing-worker-custom-domain; issues none",
+        "dpeek.com: blocked; profile publicSite:david; zone dpeek.com (zone-1); apex yes; custom domains none; routes dpeek.com/* -> old-worker; dns A 192.0.2.10; actions none; issues worker-route-conflict, dns-record-conflict, apex-domain",
+        "www.dpeek.com: ready; profile publicSite:david; zone dpeek.com (zone-1); apex no; custom domains www.dpeek.com -> personal; routes none; dns none; actions adopt-existing-worker-custom-domain; issues none",
       ].join("\n"),
     ]);
   });
@@ -1201,8 +1222,20 @@ describe("Formless Site CLI", () => {
 
     await writeWorkspaceManifest(workspaceRoot, {
       domains: [
-        { host: "dpeek.com", installId: "david", surface: "site" },
-        { host: "www.dpeek.com", installId: "david", surface: "site" },
+        { enabled: true, host: "admin.dpeek.com", profile: "instance" },
+        {
+          enabled: false,
+          host: "disabled.dpeek.com",
+          profile: "publicSite",
+          targetInstallId: "david",
+        },
+        { enabled: true, host: "dpeek.com", profile: "publicSite", targetInstallId: "david" },
+        {
+          enabled: true,
+          host: "www.dpeek.com",
+          profile: "publicSite",
+          targetInstallId: "david",
+        },
       ],
     });
 
@@ -1227,7 +1260,12 @@ describe("Formless Site CLI", () => {
             "dpeek.com": [{ id: "zone-1", name: "dpeek.com", status: "active" }],
           },
         }),
-        fetch: domainMappingFetch(requests),
+        fetch: domainMappingFetch(requests, [
+          instanceDomainMapping("admin.dpeek.com"),
+          domainMapping("dpeek.com", "david"),
+          domainMapping("www.dpeek.com", "david"),
+          { ...domainMapping("disabled.dpeek.com", "david"), enabled: false },
+        ]),
         logs,
       }),
     );
@@ -1236,14 +1274,21 @@ describe("Formless Site CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/formless/domain-mappings",
       "POST https://personal.dpeek.workers.dev/api/formless/domain-mappings/apply-evidence",
       "POST https://personal.dpeek.workers.dev/api/formless/domain-mappings/apply-evidence",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-mappings/apply-evidence",
     ]);
     expect(requests[1]?.headers.authorization).toBe("Bearer admin-token");
     expect(
-      capturedRequestJson<{ action: string; host: string; workerDomainId: string }>(requests[1]),
+      capturedRequestJson<{
+        action: string;
+        host: string;
+        profile: string;
+        workerDomainId: string;
+      }>(requests[1]),
     ).toMatchObject({
       action: "created",
-      host: "dpeek.com",
-      workerDomainId: "domain-dpeek.com",
+      host: "admin.dpeek.com",
+      profile: "instance",
+      workerDomainId: "domain-admin.dpeek.com",
     });
     expect(logs).toEqual([
       [
@@ -1253,10 +1298,11 @@ describe("Formless Site CLI", () => {
         "Account: account-123.",
         "Worker: personal.",
         "Policy: create-only.",
-        "Domains: dpeek.com, www.dpeek.com.",
-        "Evidence writes: 2.",
-        "dpeek.com: created; install david; custom domain domain-dpeek.com; worker personal; zone dpeek.com (zone-1)",
-        "www.dpeek.com: created; install david; custom domain domain-www.dpeek.com; worker personal; zone dpeek.com (zone-1)",
+        "Domains: admin.dpeek.com, dpeek.com, www.dpeek.com.",
+        "Evidence writes: 3.",
+        "admin.dpeek.com: created; profile instance; custom domain domain-admin.dpeek.com; worker personal; zone dpeek.com (zone-1)",
+        "dpeek.com: created; profile publicSite:david; custom domain domain-dpeek.com; worker personal; zone dpeek.com (zone-1)",
+        "www.dpeek.com: created; profile publicSite:david; custom domain domain-www.dpeek.com; worker personal; zone dpeek.com (zone-1)",
       ].join("\n"),
     ]);
   });
@@ -1266,7 +1312,9 @@ describe("Formless Site CLI", () => {
     const workspaceRoot = path.join(tempDir, "personal-sites");
 
     await writeWorkspaceManifest(workspaceRoot, {
-      domains: [{ host: "www.dpeek.com", installId: "david", surface: "site" }],
+      domains: [
+        { enabled: true, host: "www.dpeek.com", profile: "publicSite", targetInstallId: "david" },
+      ],
     });
 
     await expect(
@@ -2944,7 +2992,12 @@ async function writeWorkspaceManifest(
   workspaceRoot: string,
   options: {
     apps?: ReturnType<typeof workspaceApp>[];
-    domains?: Array<{ host: string; installId: string; surface: "site" }>;
+    domains?: Array<{
+      enabled: boolean;
+      host: string;
+      profile: "app" | "instance" | "publicSite";
+      targetInstallId?: string;
+    }>;
   } = {},
 ) {
   await mkdir(workspaceRoot, { recursive: true });
@@ -3176,7 +3229,16 @@ function archiveFetch(
   };
 }
 
-function domainMappingFetch(requests: CapturedFetchRequest[]): typeof fetch {
+function domainMappingFetch(
+  requests: CapturedFetchRequest[],
+  domainMappings: Array<
+    ReturnType<typeof domainMapping> | ReturnType<typeof instanceDomainMapping>
+  > = [
+    domainMapping("dpeek.com", "david"),
+    domainMapping("www.dpeek.com", "david"),
+    { ...domainMapping("disabled.dpeek.com", "david"), enabled: false },
+  ],
+): typeof fetch {
   return async (url, init) => {
     const requestUrl =
       typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
@@ -3193,11 +3255,7 @@ function domainMappingFetch(requests: CapturedFetchRequest[]): typeof fetch {
       return Response.json({
         appliedStates: [],
         auditEvents: [],
-        mappings: [
-          domainMapping("dpeek.com", "david"),
-          domainMapping("www.dpeek.com", "david"),
-          { ...domainMapping("disabled.dpeek.com", "david"), enabled: false },
-        ],
+        mappings: domainMappings,
       });
     }
 
@@ -3229,7 +3287,19 @@ function domainMapping(host: string, installId: string) {
     enabled: true,
     host,
     installId,
+    profile: "publicSite",
     surface: "site",
+    targetInstallId: installId,
+    updatedAt: "2026-05-26T00:00:00.000Z",
+  };
+}
+
+function instanceDomainMapping(host: string) {
+  return {
+    createdAt: "2026-05-26T00:00:00.000Z",
+    enabled: true,
+    host,
+    profile: "instance",
     updatedAt: "2026-05-26T00:00:00.000Z",
   };
 }

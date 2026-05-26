@@ -1,4 +1,7 @@
-import { normalizeInstanceDomainHost } from "../shared/instance-domain-mappings.ts";
+import {
+  normalizeInstanceDomainHost,
+  type InstanceDomainMappingProfile,
+} from "../shared/instance-domain-mappings.ts";
 
 export const CLOUDFLARE_API_TOKEN_ENV_NAME = "CLOUDFLARE_API_TOKEN";
 export const CF_API_TOKEN_ENV_NAME = "CF_API_TOKEN";
@@ -7,8 +10,8 @@ export type CloudflareDomainPreflightPolicy = "adopt" | "create-only" | "overrid
 
 export type CloudflareDomainIntent = {
   host: string;
-  installId: string;
-  surface: "site";
+  profile: InstanceDomainMappingProfile;
+  targetInstallId?: string;
 };
 
 export type CloudflareZone = {
@@ -72,9 +75,9 @@ export type CloudflareDomainPreflightHostPlan = {
   blockers: CloudflareDomainPreflightIssue[];
   dnsRecords: CloudflareDnsRecord[];
   host: string;
-  installId: string;
+  profile: InstanceDomainMappingProfile;
   status: "blocked" | "ready" | "warning";
-  surface: "site";
+  targetInstallId?: string;
   warnings: CloudflareDomainPreflightIssue[];
   workerDomains: CloudflareWorkerDomain[];
   workerRoutes: CloudflareWorkerRoute[];
@@ -94,8 +97,8 @@ export type CloudflareDomainApplyHostResult = {
   action: CloudflareDomainAppliedAction;
   domain: CloudflareWorkerDomain;
   host: string;
-  installId: string;
-  surface: "site";
+  profile: InstanceDomainMappingProfile;
+  targetInstallId?: string;
 };
 
 export type CloudflareDomainApplyResult = {
@@ -287,8 +290,8 @@ export async function applyCloudflareWorkerDomainPreflightPlan(input: {
         action: "adopted",
         domain: requiredSameWorkerDomain(host, input.plan.workerName),
         host: host.host,
-        installId: host.installId,
-        surface: host.surface,
+        profile: host.profile,
+        ...(host.targetInstallId === undefined ? {} : { targetInstallId: host.targetInstallId }),
       });
       continue;
     }
@@ -315,8 +318,8 @@ export async function applyCloudflareWorkerDomainPreflightPlan(input: {
       action: action === "create-worker-custom-domain" ? "created" : "overridden",
       domain,
       host: host.host,
-      installId: host.installId,
-      surface: host.surface,
+      profile: host.profile,
+      ...(host.targetInstallId === undefined ? {} : { targetInstallId: host.targetInstallId }),
     });
   }
 
@@ -405,9 +408,11 @@ function buildHostPlan(input: {
     blockers,
     dnsRecords: input.dnsRecords,
     host: input.intent.host,
-    installId: input.intent.installId,
+    profile: input.intent.profile,
     status: blockers.length > 0 ? "blocked" : warnings.length > 0 ? "warning" : "ready",
-    surface: input.intent.surface,
+    ...(input.intent.targetInstallId === undefined
+      ? {}
+      : { targetInstallId: input.intent.targetInstallId }),
     warnings,
     workerDomains: input.workerDomains,
     workerRoutes: input.workerRoutes,
@@ -491,15 +496,23 @@ function normalizeDomainIntents(
 
     return {
       host: host.host,
-      installId: intent.installId,
-      surface: intent.surface,
+      profile: intent.profile,
+      ...(intent.targetInstallId === undefined ? {} : { targetInstallId: intent.targetInstallId }),
     };
   });
 
   return normalized.sort((left, right) => {
     const hostOrder = left.host.localeCompare(right.host);
 
-    return hostOrder === 0 ? left.installId.localeCompare(right.installId) : hostOrder;
+    const profileOrder = left.profile.localeCompare(right.profile);
+    const leftTarget = left.targetInstallId ?? "";
+    const rightTarget = right.targetInstallId ?? "";
+
+    return hostOrder === 0
+      ? profileOrder === 0
+        ? leftTarget.localeCompare(rightTarget)
+        : profileOrder
+      : hostOrder;
   });
 }
 
