@@ -128,6 +128,7 @@ Last updated: 2026-05-26
 - Generated actions consume selected `action.ui` facts in `src/app/generated/actions.tsx`.
 - Generated field UI adapters: `src/app/generated/field-ui-adapters.ts`.
 - Generated field presentation resolver: `src/app/generated/field-presentation.tsx`.
+- Generated field presentation icons resolve through `src/shared/icon-catalog.ts`.
 - Generated field display: `src/app/generated/record-field-display.tsx`.
 - Generated inline editor: `src/app/generated/record-field-editor.tsx`.
 - Generated delete control: `src/app/generated/record-delete.tsx`.
@@ -137,6 +138,8 @@ Last updated: 2026-05-26
 - Generated authoring primitives: `src/client/generated-authoring.ts`.
 - Create default primitive: `src/shared/create-defaults.ts`.
 - Shared UI primitives live under `lib/ui/src/`.
+- Shared UI icon aliases source: `lib/ui/src/icons.ts`.
+- Shared UI icon exports include purpose-first aliases and compatibility aliases.
 - Shared ObjectList primitive: `lib/ui/src/object-list.tsx`.
 - ObjectList supports controlled single selection, empty state, item/list actions, disabled reasons, modal-backed actions, and generic reorder intent.
 - Markdown editor uses shared UI markdown primitives.
@@ -145,7 +148,12 @@ Last updated: 2026-05-26
 - Icon display uses `SvgIcon` from `@dpeek/formless-ui/svg-icon`.
 - Generated icon fields show a compact SVG preview or empty well instead of raw SVG text.
 - Generated inline icon editing uses the icon preview or empty well as the edit trigger.
-- Generated icon editing uses a textarea dialog and patches one flat text field.
+- Generated icon picker source: `src/app/generated/field-control-primitives.tsx`.
+- Generated icon editing opens a catalog-first picker.
+- Generated icon picker includes search, grouped catalog options, a No icon option, and custom SVG mode.
+- Catalog icon selection writes SVG source into the existing flat text field.
+- Custom SVG mode uses the SVG source textarea and safe SVG preview fallback.
+- Generated create icon fields use the same picker and submit the existing text-backed field name.
 - Image upload editing is selected by text field `editor: "image"`.
 - Generated image fields show the current image preview or empty well.
 - Generated image preview and empty well open file selection.
@@ -159,6 +167,7 @@ Last updated: 2026-05-26
 - Missing media asset ids render a broken state instead of crashing.
 - Legacy `href` fields remain manual URL fields.
 - Generated enum icon-only presentation uses enum option icon/color tokens.
+- Known generated enum icon-only tokens render catalog SVG icons.
 - Generated enum icon-only controls expose labels like `Field: Option`.
 - Unknown icon tokens fall back to visible option text.
 - Unknown color tokens fall back to neutral styling.
@@ -208,12 +217,14 @@ Last updated: 2026-05-26
 - Generated ordering tests: `src/app/generated/ordering-ui.test.ts`.
 - Generated format tests: `src/app/generated/format.test.ts`.
 - Generated field UI adapter tests: `src/app/generated/field-ui-adapters.test.ts`.
+- Generated field presentation tests: `src/app/generated/field-presentation.test.ts`.
 - Generated record field control tests: `src/app/generated/record-field-control.test.tsx`.
 - Generated record field renderer model tests: `src/app/generated/record-field-renderer-model.test.ts`.
 - Generated authoring tests: `src/client/generated-authoring.test.ts`.
 - Schema Builder tests: `src/client/schema-builder.test.ts`, `src/app/routes/schema-draft.test.ts`.
 - Shared ObjectList tests: `lib/ui/src/object-list.test.tsx`.
 - ObjectList browser smoke script: `scripts/object-list-smoke.ts`.
+- Shared icon alias tests: `lib/ui/src/icons.test.tsx`.
 - Shared SVG icon tests: `lib/ui/src/svg-icon.test.tsx`.
 - Client media upload tests: `src/client/media.test.ts`.
 - UI primitive package docs: `lib/ui/README.md`, `lib/ui/doc/browser-primitives.md`.

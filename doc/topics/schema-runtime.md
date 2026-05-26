@@ -21,6 +21,7 @@ Last updated: 2026-05-26
 - Schema types: `src/shared/schema-types.ts`.
 - Schema parse helpers: `src/shared/schema-parse-helpers.ts`.
 - Field parser: `src/shared/schema-fields.ts`.
+- Icon catalog source: `src/shared/icon-catalog.ts`.
 - Relationship parser: `src/shared/schema-relationships.ts`.
 - View parser: `src/shared/schema-views.ts`.
 - View field parser: `src/shared/schema-view-fields.ts`.
@@ -152,6 +153,9 @@ Last updated: 2026-05-26
 - Field behavior module: `src/shared/field-types.ts`.
 - Create default resolver: `src/shared/create-defaults.ts`.
 - Field behavior owns scalar validation, defaults, conversion, display, and editor metadata.
+- Icon catalog entries are grouped as Interface, Social, and Providers.
+- Icon catalog helpers list entries, list groups, find entries by key, and resolve SVG source.
+- Icon catalog aliases keep `flag`, `priority-flag`, `check`, and `twitter` compatible.
 - Field behavior exports create input conversion, inline input conversion, input attributes, display helpers, and editor controls.
 - Generated field UI adapters consume field behavior control, default, required, and input-attribute facts in `src/app/generated/field-ui-adapters.ts`.
 - Create views can declare hidden literal defaults for scalar fields.
@@ -164,6 +168,8 @@ Last updated: 2026-05-26
 - Text field `editor: "media"` selects the generated media asset control.
 - Icon, image, and media editor values stay text-backed field values.
 - Enum values can carry `presentation.icon` and `presentation.color` token metadata.
+- Known enum presentation icon tokens resolve through the icon catalog.
+- Unknown enum presentation icon tokens stay unresolved for visible text fallback.
 - View fields can carry `presentation` metadata.
 - Create view fields can carry `presentation` metadata.
 - Field and reference table columns can carry `presentation` metadata.
@@ -210,3 +216,4 @@ Last updated: 2026-05-26
 - View model tests: `src/client/views.test.ts`.
 - Table model tests: `src/client/table-model.test.ts`.
 - Schema Builder tests: `src/client/schema-builder.test.ts`.
+- Icon catalog tests: `src/shared/icon-catalog.test.ts`.

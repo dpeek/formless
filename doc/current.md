@@ -15,6 +15,8 @@ Current shipped behavior lives in topic docs.
 
 Installed Site custom-domain shipped facts live across Site runtime, Site CLI and publish, Authority
 storage, and Generated UI topic docs.
+Icon catalog and picker shipped facts live across Generated UI, Schema runtime, and Site runtime
+topic docs.
 
 ## Docs
 

@@ -171,6 +171,8 @@ Last updated: 2026-05-26
 - Public image rendering uses the same Site tree and renderer path as authored image URLs.
 - Shared SVG icon rendering falls back to an empty outline for missing, invalid, or unsafe SVG.
 - Shared SVG icon rendering rejects scripts, event handlers, `javascript:` URLs, `foreignObject`, and external asset references.
+- Site starter social links store catalog SVG sources for GitHub, LinkedIn, and X.
+- Public Site link rendering consumes stored `block.icon` SVG values.
 - Public footer/social links render `block.icon` SVG before the label.
 - Public header navigation suppresses link icons.
 - Site icon source helpers: `src/site/site-icon-source.ts`.
