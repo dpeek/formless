@@ -13,6 +13,8 @@ Last updated: 2026-05-26
 - App profile mounts one selected schema app at `/`, app-relative screen subpaths, and `/schema`.
 - Site authoring profile mounts public Site preview at `/` and generated admin at `/admin`.
 - Published Site profile mounts public Site rendering at `/`.
+- App custom-domain hosts use the app profile to mount an installed app at `/`.
+- App custom-domain hosts expose the mapped install schema editor at `/schema`.
 - Current dev browser routes include `/`, `/tasks`, `/estii`, `/site`, `/tasks/schema`, `/estii/schema`, `/site/schema`, `/apps/:installId`, `/apps/:installId/schema`, `/sites/:installId`, `/sites/:installId/*`, `/pages`, `/pages/*`.
 - Product instance browser routes include `/`, `/setup`, `/login`, `/apps/:installId`, `/sites/:installId`, and `/sites/:installId/*`.
 - Owner setup and owner login routes render outside workbench chrome.
@@ -32,9 +34,11 @@ Last updated: 2026-05-26
 - Bundled install controls support Site, Tasks, and Estii.
 - Instance shell renders a Custom domains surface.
 - Custom domains surface lists desired domain mappings and applied provider state.
-- Custom domains surface creates desired Site mappings through `/api/formless/domain-mappings`.
+- Custom domains surface creates desired `instance`, `app`, and `publicSite` profile mappings through `/api/formless/domain-mappings`.
+- Custom domains surface disables desired mappings through `DELETE /api/formless/domain-mappings`.
 - Custom domains surface does not mutate Cloudflare provider state.
-- Custom domains surface only targets installed Site apps.
+- Custom domains surface only lets `publicSite` mappings target installed Site apps.
+- Custom domains surface leaves disabled desired mappings visible with applied provider state.
 - Workbench runtime shell does not own app-local Schema, sync, reset, publish, archive, Export, or Restore controls.
 - Active app sidebar owns app screens, root/context navigation, and app settings.
 - App settings source: `src/app/app-surface.tsx`.
@@ -49,6 +53,9 @@ Last updated: 2026-05-26
 - Sync status control source: `src/app/routes/status-line.tsx`.
 - Sync status details include world key, schema version, cursor, push sync state, and last sync time.
 - App profile renders generated app chrome without workbench runtime shell.
+- Mapped app hosts inject runtime profile, package app key, and install id document hints into the client shell.
+- Mapped app hosts use `app:<installId>` browser storage, sync, reset, and write routes.
+- Mapped app hosts do not expose the instance shell.
 - Published Site profile renders without workbench chrome and without generated admin chrome.
 - Product instance installed app admin routes can show a Management sidebar section linking back to `/`.
 - Installed admin routes under `/apps/<installId>` resolve package metadata from app install records.

@@ -33,6 +33,7 @@ Last updated: 2026-05-26
 - Published Site cache source: `src/worker/site-cache.ts`.
 - Published document route classifier: `src/worker/routing.ts`.
 - Installed Site custom-host mapping source: `src/worker/mapped-site-host.ts`.
+- Installed app custom-host mapping source: `src/worker/mapped-app-host.ts`.
 
 ## Records And Tree
 
@@ -189,12 +190,15 @@ Last updated: 2026-05-26
 - Installed Site public rendering uses install-scoped tree reads.
 - Installed Site public links keep their `/sites/<installId>` route base.
 - Installed Site public routes render outside generated admin chrome.
-- Enabled exact-host domain mappings can serve installed Site public documents at top-level routes.
+- Enabled exact-host `publicSite` profile mappings can serve installed Site public documents at top-level routes.
+- Mapped Site host resolution requires `profile = "publicSite"`, `surface = "site"`, a target install id, and an enabled mapping.
+- Disabled desired mappings do not create mapped Site hosts.
 - Mapped Site hosts render `/` as the installed Site home route.
 - Mapped Site hosts render nested page and post routes from install-scoped storage.
 - Mapped Site host public links use top-level paths instead of `/sites/<installId>` paths.
 - Mapped Site hosts serve `/robots.txt`, `/sitemap.xml`, root icons, and touch icons from the mapped install.
 - Mapped Site hosts block generated app/admin browser shell routes.
+- `instance` and `app` profile mappings do not invoke public Site SSR.
 - Mapped Site hosts use core media delivery for owned Site images.
 - Path-based `/sites/<installId>` remains available as fallback on the instance host.
 - Duplicate public slugs can exist in different installed Sites.

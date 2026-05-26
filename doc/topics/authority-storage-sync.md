@@ -29,6 +29,8 @@ Last updated: 2026-05-26
 - Instance domain mapping API path: `/api/formless/domain-mappings`.
 - Instance domain mapping lookup API path: `/api/formless/domain-mappings/lookup`.
 - Instance domain mapping apply evidence API path: `/api/formless/domain-mappings/apply-evidence`.
+- Instance domain mapping shared model: `src/shared/instance-domain-mappings.ts`.
+- Instance domain mapping Durable Object state: `src/worker/instance-domain-mappings-state.ts`.
 - Core image media API paths include `/api/formless/media/images` and `/api/formless/media/*`.
 - Legacy Site media API paths `/api/site/media/*` and `/api/app-installs/site/:installId/media/*` are not active media routes.
 - Media route handling runs before Authority dispatch in `src/worker/index.ts`.
@@ -114,15 +116,22 @@ Last updated: 2026-05-26
 - Archive restore restores media before app data.
 - Archive restore validates core media asset metadata and referenced media files before mutation.
 - Archive restore is backup, restore, and import plumbing, not bidirectional instance sync.
-- Instance domain mappings are desired host mappings stored on the instance authority.
+- Instance domain mappings are desired exact-host profile mappings stored on the instance authority.
 - Instance domain mappings normalize hostnames.
-- Instance domain mappings currently support only `surface = "site"`.
-- Instance domain mappings target installed Site apps only.
-- Duplicate domain mapping host/surface pairs are rejected.
+- Instance domain mapping profiles are `instance`, `app`, and `publicSite`.
+- `publicSite` mappings require an installed Site target install id.
+- `app` mappings require an installed app target install id.
+- `instance` mappings store no target install id.
+- Existing `surface = "site"` mapping input reads as `profile = "publicSite"` compatibility.
+- Duplicate domain mapping host/profile pairs are rejected.
+- One host can have only one enabled profile mapping at a time.
 - Domain mapping create writes use the owner/admin write guard.
+- Domain mapping delete writes use the owner/admin write guard.
+- Domain mapping delete disables the desired row instead of deleting applied provider state or audit events.
 - Domain mapping apply-evidence writes use the owner/admin write guard.
 - Domain mapping reads and enabled-host lookup are public.
 - Domain mapping applied state is stored separately from desired mappings.
+- Domain mapping applied state is keyed by host/profile and optional target install id.
 - Domain mapping audit events are append-only provider apply evidence.
 
 ## Push Sync

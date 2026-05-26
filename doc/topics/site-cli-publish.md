@@ -135,16 +135,19 @@ Last updated: 2026-05-26
 
 - Instance workspace manifest file: `formless.instance-workspace.json`.
 - Instance workspace manifests store reviewable target, archive, deploy, local state, app, default app policy, and domain intent.
-- Instance workspace `domains` entries are reviewable exact-host Site mapping intent.
+- Instance workspace `domains` entries are reviewable exact-host profile mapping intent.
+- Workspace domain intent stores `enabled`, `profile`, and optional `targetInstallId`.
+- Workspace domain intent supports `instance`, `app`, and `publicSite` profiles.
+- Workspace domain intent parses old Site-only `surface` and `installId` entries as `publicSite`.
 - Instance workspace manifests reject secret-looking fields.
 - Instance workspace ignored secret state file: `.formless/instance.env`.
 - Instance workspace secret state can store the automation admin token.
 - Environment variable `FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN` can provide the automation admin token.
 - Cloudflare Worker secrets cannot be read back by workspace status.
 - Workspace pull exports the selected target to `archives/instance` and app archives under `archives/apps/<installId>`.
-- Workspace pull refreshes manifest `domains` from live enabled domain mappings.
+- Workspace pull refreshes manifest `domains` from live desired domain mappings.
 - Workspace check exports target archive state to ignored temporary state and reports drift after generated archive timestamp normalization.
-- Workspace check reports domain desired-mapping drift.
+- Workspace check reports domain desired-mapping drift across host, profile, target install id, and enabled state.
 - Workspace push composes declared app archives into a temporary instance archive.
 - Workspace push defaults to dry-run.
 - Workspace push apply requires `--apply`, takes a fresh whole-instance backup, dry-runs, then applies in one process.
@@ -164,6 +167,7 @@ Last updated: 2026-05-26
 - Instance workspace archive movement is explicit backup, restore, and import movement, not bidirectional instance sync.
 - Workspace deploy does not write live domain mappings or provider apply state.
 - Domain plan uses workspace domain intent when present and live enabled mappings when workspace intent is empty.
+- Domain plan filters provider intents to enabled profile mappings.
 - Domain plan uses CLI-side Cloudflare API reads for active zones, Worker Custom Domains, Worker Routes, and DNS records.
 - Domain plan reports apex-host risk, DNS conflicts, Worker Route conflicts, and existing Worker Custom Domains.
 - Domain plan does not mutate Cloudflare provider state.
@@ -172,7 +176,8 @@ Last updated: 2026-05-26
 - Domain apply `override` policy requires one explicit `--host`.
 - Domain apply creates exact-host Cloudflare Worker Custom Domains.
 - Domain apply can adopt equivalent same-worker Custom Domain bindings.
-- Domain apply records applied Cloudflare state and audit evidence in instance domain metadata.
+- Domain apply records applied Cloudflare state and audit evidence with profile vocabulary in instance domain metadata.
+- Domain apply evidence for `instance` hosts stores no target install id.
 - Domain apply refuses when workspace and live desired domain mappings drift.
 - CLI domain plan/apply read Cloudflare credentials from `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`.
 - Product Workers do not need broad Cloudflare API credentials for domain apply.

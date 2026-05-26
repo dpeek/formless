@@ -86,7 +86,7 @@ Why:
 - Current runtime pieces work locally and in Workers.
 - Productization decides whether Formless can support real users and deployments.
 - The Formless instance direction names the deployment model before onboarding PRDs. See `doc/directions/formless-instance.md`.
-- Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, and claimable instance workspaces now exist.
+- Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, claimable instance workspaces, and profile-based custom domains now exist.
 
 Good next chunks:
 
@@ -94,8 +94,8 @@ Good next chunks:
 - Safer archive review and replacement UX.
 - Browser management UI for core media assets.
 - Video media assets on the core image asset spine.
-- Domain control-plane apply after exact-host CLI domain apply is proven.
-- Apex/www redirects, wildcard domains, and non-Site domain modes when a concrete deployment needs them.
+- Browser domain control-plane apply after exact-host CLI domain apply is proven.
+- Apex/www redirects, wildcard domains, and provider detach/delete when a concrete deployment needs them.
 - Users and permissions.
 - Multi-tenant account routing.
 - Admin token and publish hardening.
