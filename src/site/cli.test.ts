@@ -861,10 +861,16 @@ describe("Formless Site CLI", () => {
     const requests: CapturedFetchRequest[] = [];
     const logs: string[] = [];
     const installs = [installedSite("david", "David Peek"), installedSite("james", "James Peek")];
-    const fetcher = archiveFetch(requests, installs, {
-      david: { mediaBytes: Buffer.from([4, 5, 6]), records: mediaRecords() },
-      james: { records: [] },
-    });
+    const fetcher = archiveFetch(
+      requests,
+      installs,
+      {
+        david: { mediaBytes: Buffer.from([4, 5, 6]), records: mediaRecords() },
+        james: { records: [] },
+      },
+      [],
+      [domainMapping("dpeek.com", "david"), domainMapping("www.dpeek.com", "david")],
+    );
 
     await writeWorkspaceManifest(workspaceRoot, {
       apps: [workspaceApp("david", "David Peek"), workspaceApp("james", "James Peek")],
@@ -888,7 +894,15 @@ describe("Formless Site CLI", () => {
       throw new Error("Expected instance archive.");
     }
 
+    const pulledManifest = parseFormlessInstanceWorkspaceManifestJson(
+      await readFile(path.join(workspaceRoot, FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE), "utf8"),
+    );
+
     expect(pulledInstance.apps.map((app) => app.app.installId)).toEqual(["david", "james"]);
+    expect(pulledManifest.domains).toEqual([
+      { host: "dpeek.com", installId: "david", surface: "site" },
+      { host: "www.dpeek.com", installId: "david", surface: "site" },
+    ]);
     await expect(
       readFile(path.join(workspaceRoot, "archives/apps/david/media/david/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
@@ -908,6 +922,7 @@ describe("Formless Site CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/formless/media/media/images/cover.png",
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
+      "GET https://personal.dpeek.workers.dev/api/formless/domain-mappings",
     ]);
     expect(logs).toEqual([
       [
@@ -919,6 +934,7 @@ describe("Formless Site CLI", () => {
         `Records: ${mediaRecords().length}.`,
         "Media files: 1.",
         `App archives: david (${mediaRecords().length} records, 1 media), james (0 records, 0 media).`,
+        "Domain mappings: dpeek.com -> david, www.dpeek.com -> david.",
       ].join("\n"),
     ]);
   });
@@ -954,11 +970,13 @@ describe("Formless Site CLI", () => {
         "Local apps: 1. Remote apps: 1.",
         "Local records: 0. Remote records: 0.",
         "Local media files: 0. Remote media files: 0.",
+        "Local domains: 0. Remote enabled domains: 0.",
         "Missing remote installs: none.",
         "Extra remote installs: none.",
         "Package mismatches: none.",
         "Changed records: none.",
         "Changed media: none.",
+        "Changed domain mappings: none.",
         "Changed archive paths: none.",
       ].join("\n"),
     ]);
@@ -1020,12 +1038,77 @@ describe("Formless Site CLI", () => {
         "Local apps: 3. Remote apps: 3.",
         `Local records: ${mediaRecords().length}. Remote records: ${publishRecords().length}.`,
         "Local media files: 1. Remote media files: 1.",
+        "Local domains: 0. Remote enabled domains: 0.",
         "Missing remote installs: dom.",
         "Extra remote installs: extra.",
         "Package mismatches: james (local site, remote tasks).",
         "Changed records: david.",
         "Changed media: david.",
+        "Changed domain mappings: none.",
         "Changed archive paths: archives/apps/david, archives/apps/dom, archives/apps/james, archives/instance.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("reports workspace desired domain mapping drift without provider mutation", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const localJames = appArchive("james", "James Peek");
+    const fetcher = archiveFetch(
+      requests,
+      [installedSite("david", "David Peek"), installedSite("james", "James Peek")],
+      {
+        david: { records: [] },
+        james: { records: [] },
+      },
+      [],
+      [
+        domainMapping("dpeek.com", "james"),
+        domainMapping("www.dpeek.com", "david"),
+        { ...domainMapping("disabled.dpeek.com", "david"), enabled: false },
+      ],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      apps: [workspaceApp("david", "David Peek"), workspaceApp("james", "James Peek")],
+      domains: [
+        { host: "dpeek.com", installId: "david", surface: "site" },
+        { host: "local.dpeek.com", installId: "david", surface: "site" },
+      ],
+    });
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid, localJames]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/james"), localJames);
+
+    await runFormlessCli(
+      ["instance", "check", "--workspace", workspaceRoot],
+      cliDeps(tempDir, { fetch: fetcher, logs }),
+    );
+
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
+    expect(logs).toEqual([
+      [
+        "Instance workspace check.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Drift: detected.",
+        "Local apps: 2. Remote apps: 2.",
+        "Local records: 0. Remote records: 0.",
+        "Local media files: 0. Remote media files: 0.",
+        "Local domains: 2. Remote enabled domains: 2.",
+        "Missing remote installs: none.",
+        "Extra remote installs: none.",
+        "Package mismatches: none.",
+        "Changed records: none.",
+        "Changed media: none.",
+        "Changed domain mappings: dpeek.com mismatch (workspace david, live james), local.dpeek.com local-only (david), www.dpeek.com live-only (david).",
+        "Changed archive paths: none.",
       ].join("\n"),
     ]);
   });
@@ -1270,6 +1353,7 @@ describe("Formless Site CLI", () => {
       "Extra remote installs: extra.",
       "Changed records: david.",
       "Changed media: david.",
+      "Changed domain mappings: none.",
       "Dry-run restore: failed.",
       'Dry-run error: Installed app "david" already exists.',
     ]);
@@ -1343,6 +1427,7 @@ describe("Formless Site CLI", () => {
       "Extra remote installs: none.",
       "Changed records: none.",
       "Changed media: none.",
+      "Changed domain mappings: none.",
       "Dry-run restore: ok.",
       "Dry-run created installs: none.",
       "Dry-run replaced installs: david.",
@@ -1386,6 +1471,38 @@ describe("Formless Site CLI", () => {
         "utf8",
       ),
     ).resolves.toContain('"kind": "formless.instanceArchive"');
+  });
+
+  it("guards push apply when live desired domain mappings drift", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const localDavid = appArchive("david", "David Peek");
+    const fetcher = pushArchiveFetch(
+      requests,
+      [installedSite("david", "David Peek")],
+      {
+        david: { records: [] },
+      },
+      [restorePlan({ replacedInstalls: ["david"] })],
+      [],
+      [domainMapping("dpeek.com", "david")],
+    );
+
+    await writeWorkspaceManifest(workspaceRoot);
+    await writeArchiveDirectory(
+      path.join(workspaceRoot, "archives/instance"),
+      instanceArchive([localDavid]),
+    );
+    await writeArchiveDirectory(path.join(workspaceRoot, "archives/apps/david"), localDavid);
+
+    await expect(
+      runFormlessCli(
+        ["instance", "push", "--workspace", workspaceRoot, "--apply", "--replace"],
+        cliDeps(tempDir, { fetch: fetcher }),
+      ),
+    ).rejects.toThrow("Formless instance push apply refused because remote drift was detected");
+    expect(requests.some((request) => request.method === "POST")).toBe(false);
   });
 
   it("blocks unsupported install-set replacement when extra remote installs exist", async () => {
@@ -2991,6 +3108,7 @@ function archiveFetch(
   installs: ReturnType<typeof installedApp>[],
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
   extraPackages: BundledAppPackage[] = [],
+  domainMappings: ReturnType<typeof domainMapping>[] = [],
 ): typeof fetch {
   return async (url, init) => {
     const requestUrl =
@@ -3008,6 +3126,14 @@ function archiveFetch(
       return Response.json({
         packages: [...listBundledAppPackages(), ...extraPackages],
         installs,
+      });
+    }
+
+    if (parsedUrl.pathname === "/api/formless/domain-mappings") {
+      return Response.json({
+        appliedStates: [],
+        auditEvents: [],
+        mappings: domainMappings,
       });
     }
 
@@ -3115,8 +3241,9 @@ function pushArchiveFetch(
   dataByInstall: Record<string, { mediaBytes?: Uint8Array; records: StoredRecord[] }>,
   restoreResponses: unknown[],
   extraPackages: BundledAppPackage[] = [],
+  domainMappings: ReturnType<typeof domainMapping>[] = [],
 ): typeof fetch {
-  const readFetch = archiveFetch(requests, installs, dataByInstall, extraPackages);
+  const readFetch = archiveFetch(requests, installs, dataByInstall, extraPackages, domainMappings);
 
   return async (url, init) => {
     const requestUrl =

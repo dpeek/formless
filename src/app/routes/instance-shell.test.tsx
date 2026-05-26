@@ -13,6 +13,9 @@ describe("instance shell route view", () => {
           estii: { installId: "rates", label: "Rates" },
         }}
         state={{
+          domainAppliedStates: [],
+          domainMappingSubmitting: false,
+          domainMappings: [],
           installing: false,
           installs: [
             siteInstall({
@@ -31,6 +34,8 @@ describe("instance shell route view", () => {
     expect(html).toContain("<code>personal</code>");
     expect(html).toContain('href="/apps/personal"');
     expect(html).toContain('href="/sites/personal"');
+    expect(html).toContain("Custom domains");
+    expect(html).toContain("No custom domains.");
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain("Install");
     expect(html).not.toContain("Bundled apps");
@@ -48,6 +53,9 @@ describe("instance shell route view", () => {
           estii: { installId: "rates", label: "Rates" },
         }}
         state={{
+          domainAppliedStates: [],
+          domainMappingSubmitting: false,
+          domainMappings: [],
           installing: false,
           installs: [],
           packages: listBundledAppPackages(),
@@ -77,6 +85,9 @@ describe("instance shell route view", () => {
           site: { installId: "personal", label: "Other Site" },
         }}
         state={{
+          domainAppliedStates: [],
+          domainMappingSubmitting: false,
+          domainMappings: [],
           installError: 'Install id "personal" is already installed.',
           installErrorPackageAppKey: "site",
           installing: false,
@@ -92,6 +103,9 @@ describe("instance shell route view", () => {
           site: { installId: "personal", label: "Other Site" },
         }}
         state={{
+          domainAppliedStates: [],
+          domainMappingSubmitting: false,
+          domainMappings: [],
           installError: 'Install id "personal" is already installed.',
           installErrorPackageAppKey: "site",
           installing: false,
@@ -105,6 +119,58 @@ describe("instance shell route view", () => {
     expect(viewHtml).toContain("Personal Site");
     expect(dialogHtml).toContain('role="alert"');
     expect(dialogHtml).toContain("already installed");
+  });
+
+  it("renders desired custom domains and the add form", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        domainDraft={{ host: "www.example.com", installId: "personal" }}
+        installDrafts={{
+          site: { installId: "docs", label: "Docs Site" },
+        }}
+        state={{
+          domainAppliedStates: [
+            {
+              accountId: "account-123",
+              action: "created",
+              appliedAt: "2026-05-26T00:00:00.000Z",
+              host: "dpeek.com",
+              installId: "personal",
+              provider: "cloudflare-worker-custom-domain",
+              surface: "site",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+              workerDomainId: "domain-1",
+              workerName: "personal",
+              zoneId: "zone-1",
+              zoneName: "dpeek.com",
+            },
+          ],
+          domainMappingSubmitting: false,
+          domainMappings: [
+            {
+              createdAt: "2026-05-26T00:00:00.000Z",
+              enabled: true,
+              host: "dpeek.com",
+              installId: "personal",
+              surface: "site",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+            },
+          ],
+          installing: false,
+          installs: [siteInstall({ installId: "personal", label: "Personal Site" })],
+          packages: listBundledAppPackages(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Custom domains");
+    expect(html).toContain("dpeek.com");
+    expect(html).toContain("Applied: personal");
+    expect(html).toContain('value="www.example.com"');
+    expect(html).toContain("<option");
+    expect(html).toContain("Personal Site");
+    expect(html).toContain("Add");
   });
 });
 

@@ -1048,6 +1048,7 @@ function formatInstanceWorkspacePullResult(
     `Records: ${result.instanceArchive.recordCount}.`,
     `Media files: ${result.instanceArchive.mediaCount}.`,
     `App archives: ${formatPulledAppArchives(result.appArchives)}.`,
+    `Domain mappings: ${formatWorkspaceDomainIntents(result.domains)}.`,
   ].join("\n");
 }
 
@@ -1065,11 +1066,13 @@ function formatInstanceWorkspaceCheckResult(
     `Local apps: ${drift.localAppCount}. Remote apps: ${drift.remoteAppCount}.`,
     `Local records: ${drift.localRecordCount}. Remote records: ${drift.remoteRecordCount}.`,
     `Local media files: ${drift.localMediaCount}. Remote media files: ${drift.remoteMediaCount}.`,
+    `Local domains: ${drift.localDomainCount}. Remote enabled domains: ${drift.remoteDomainCount}.`,
     `Missing remote installs: ${formatList(drift.missingInstalls)}.`,
     `Extra remote installs: ${formatList(drift.extraInstalls)}.`,
     `Package mismatches: ${formatPackageMismatches(drift.packageMismatches)}.`,
     `Changed records: ${formatList(drift.changedRecords)}.`,
     `Changed media: ${formatList(drift.changedMedia)}.`,
+    `Changed domain mappings: ${formatDomainDesiredDrift(drift.domainDesiredDrift)}.`,
     `Changed archive paths: ${formatList(drift.changedArchivePaths)}.`,
   ].join("\n");
 }
@@ -1100,6 +1103,7 @@ function formatInstanceWorkspacePushResult(
     `Extra remote installs: ${formatList(result.drift.extraInstalls)}.`,
     `Changed records: ${formatList(result.drift.changedRecords)}.`,
     `Changed media: ${formatList(result.drift.changedMedia)}.`,
+    `Changed domain mappings: ${formatDomainDesiredDrift(result.drift.domainDesiredDrift)}.`,
     `Dry-run restore: ${result.dryRun.remote.ok ? "ok" : "failed"}.`,
     dryRunSummary
       ? `Dry-run created installs: ${formatList(dryRunSummary.createdInstalls)}.`
@@ -1239,6 +1243,16 @@ function formatPulledAppArchives(
   return apps
     .map((app) => `${app.installId} (${app.recordCount} records, ${app.mediaCount} media)`)
     .join(", ");
+}
+
+function formatWorkspaceDomainIntents(
+  domains: readonly PullFormlessInstanceWorkspaceResult["domains"][number][],
+): string {
+  if (domains.length === 0) {
+    return "none";
+  }
+
+  return domains.map((domain) => `${domain.host} -> ${domain.installId}`).join(", ");
 }
 
 function formatRemoteInstalls(

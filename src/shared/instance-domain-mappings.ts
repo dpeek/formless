@@ -46,6 +46,11 @@ export type CreateInstanceDomainMappingRequest = {
   enabled?: boolean;
 };
 
+export type CreateInstanceDomainMappingResponse = {
+  mapping: InstanceDomainMapping;
+  mappings: InstanceDomainMapping[];
+};
+
 export type RecordInstanceDomainMappingApplyEvidenceRequest = {
   host: string;
   surface: string;
