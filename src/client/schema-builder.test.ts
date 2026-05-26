@@ -8,8 +8,6 @@ import {
 import {
   applySchemaBuilderIntent,
   createSchemaBuilderDraft,
-  findSchemaBuilderGeneratedSurface,
-  projectSchemaBuilderDraft,
   serializeSchemaBuilderDraft,
   validateSchemaBuilderDraft,
   type SchemaBuilderDraft,
@@ -31,7 +29,6 @@ describe("schema builder draft intents", () => {
     );
 
     const schema = serializeSchemaBuilderDraft(draft);
-    const surface = findSchemaBuilderGeneratedSurface(schema, "project");
 
     expect(schema.entities.project).toEqual({
       label: "Project",
@@ -48,60 +45,11 @@ describe("schema builder draft intents", () => {
         delete: { enabled: false },
       },
     });
-    expect(surface).toEqual({
-      queryKey: "projectAll",
-      itemViewKey: "projectItem",
-      createViewKey: "projectCreate",
-      collectionViewKey: "projectHome",
-      screenKey: "projectScreen",
-    });
-    expect(schema.queries.projectAll).toEqual({
-      label: "All",
-      entity: "project",
-      expression: { kind: "all" },
-    });
-    expect(schema.itemViews.projectItem?.fields.name).toEqual({
-      editor: "text",
-      commit: "field-commit",
-    });
-    expect(schema.views.projectCreate).toMatchObject({
-      type: "create",
-      entity: "project",
-      fields: { name: { editor: "text" } },
-    });
-    expect(schema.views.projectHome).toMatchObject({
-      type: "collection",
-      label: "Projects",
-      entity: "project",
-      defaultQuery: "projectAll",
-      result: { type: "list", itemView: "projectItem" },
-      actions: [{ type: "create", createView: "projectCreate" }],
-    });
-    expect(schema.screens?.projectScreen).toMatchObject({
-      type: "workspace",
-      label: "Projects",
-      path: "/project",
-      navigation: { primary: true },
-    });
-  });
-
-  it("creates a collision-safe generated surface for an existing source-owned entity", () => {
-    const draft = applyIntents(createSchemaBuilderDraft(sourceLikeTaskSchema()), {
-      type: "createGeneratedSurface",
-      entityKey: "task",
-    });
-    const schema = serializeSchemaBuilderDraft(draft);
-    const surface = findSchemaBuilderGeneratedSurface(schema, "task");
-
-    expect(surface).toEqual({
-      queryKey: "taskAll2",
-      itemViewKey: "taskItem",
-      createViewKey: "taskCreate2",
-      collectionViewKey: "taskHome2",
-      screenKey: "taskScreen",
-    });
-    expect(schema.screens?.taskScreen?.path).toBe("/task");
-    expect(schema.views.taskHome).toEqual(sourceLikeTaskSchema().views.taskHome);
+    expect(schema.queries.projectAll).toBeUndefined();
+    expect(schema.itemViews.projectItem).toBeUndefined();
+    expect(schema.views.projectCreate).toBeUndefined();
+    expect(schema.views.projectHome).toBeUndefined();
+    expect(schema.screens?.projectScreen).toBeUndefined();
   });
 
   it("adds optional fields to source-owned entities without rewriting source-owned views", () => {
@@ -165,51 +113,7 @@ describe("schema builder draft intents", () => {
     expect(schema.entities.site?.constraints).toEqual(originalConstraints);
   });
 
-  it("updates builder-owned field presentation with valid editors and derived commit policy", () => {
-    const draft = applyIntents(
-      createSchemaBuilderDraft(sourceLikeTaskSchema()),
-      { type: "createEntity", key: "article", label: "Article" },
-      {
-        type: "addField",
-        entityKey: "article",
-        fieldKey: "body",
-        fieldType: "text",
-        metadata: { format: "markdown" },
-      },
-      {
-        type: "updateFieldPresentation",
-        entityKey: "article",
-        fieldKey: "body",
-        createEditor: "textarea",
-        inlineEditor: "markdown",
-      },
-    );
-    const schema = serializeSchemaBuilderDraft(draft);
-    const surface = findSchemaBuilderGeneratedSurface(schema, "article");
-    const projection = projectSchemaBuilderDraft(draft);
-    const bodyProjection = projection.entities
-      .find((entity) => entity.key === "article")
-      ?.fields.find((field) => field.key === "body");
-
-    expect(surface).toBeDefined();
-    expect(schema.views[surface?.createViewKey ?? ""]).toMatchObject({
-      type: "create",
-      fields: { body: { editor: "textarea" } },
-    });
-    expect(schema.itemViews[surface?.itemViewKey ?? ""]?.fields.body).toEqual({
-      editor: "markdown",
-      commit: "field-commit",
-    });
-    expect(bodyProjection?.presentation).toMatchObject({
-      createEditor: "textarea",
-      inlineEditor: "markdown",
-      defaultCommit: "field-commit",
-      rendererKind: "markdown",
-    });
-    expect(bodyProjection?.presentation.validEditors).toContain("media");
-  });
-
-  it("resets builder-owned surface editors when a draft field type changes", () => {
+  it("updates a draft field type without creating generated surface editors", () => {
     const draft = applyIntents(
       createSchemaBuilderDraft(sourceLikeTaskSchema()),
       { type: "createEntity", key: "project", label: "Project" },
@@ -227,29 +131,13 @@ describe("schema builder draft intents", () => {
       },
     );
     const schema = serializeSchemaBuilderDraft(draft);
-    const surface = findSchemaBuilderGeneratedSurface(schema, "project");
-    const projection = projectSchemaBuilderDraft(draft);
-    const estimateProjection = projection.entities
-      .find((entity) => entity.key === "project")
-      ?.fields.find((field) => field.key === "estimate");
 
     expect(schema.entities.project?.fields.estimate).toMatchObject({
       type: "number",
       default: 1,
     });
-    expect(schema.views[surface?.createViewKey ?? ""]).toMatchObject({
-      type: "create",
-      fields: { estimate: { editor: "number" } },
-    });
-    expect(schema.itemViews[surface?.itemViewKey ?? ""]?.fields.estimate).toEqual({
-      editor: "number",
-      commit: "field-commit",
-    });
-    expect(estimateProjection?.presentation).toMatchObject({
-      createEditor: "number",
-      inlineEditor: "number",
-      rendererKind: "number",
-    });
+    expect(schema.views.projectCreate).toBeUndefined();
+    expect(schema.itemViews.projectItem).toBeUndefined();
   });
 
   it("reports field-scoped validation issues for invalid builder drafts", () => {

@@ -877,7 +877,19 @@ function assignedPrdDisplay(source: PrdSource, workspace: Workspace): string {
   return source.identity;
 }
 
-function buildPrompt(source: PrdSource, workspace: Workspace): string {
+function workflowStartInstruction(action: "command" | "loop", allowDirtyStart: boolean): string {
+  if (allowDirtyStart) {
+    return "Dirty start was explicitly allowed by Ralph. Inspect `git status` before editing, preserve existing changes, and do not stop solely because the worktree started dirty.";
+  }
+
+  return `Confirm the ${action} started you from a clean worktree. Stop with \`<blocked/>\` if it did not.`;
+}
+
+export function buildPrompt(
+  source: PrdSource,
+  workspace: Workspace,
+  allowDirtyStart: boolean,
+): string {
   const assignedDisplay = assignedPrdDisplay(source, workspace);
   const assignment =
     source.kind === "issue"
@@ -903,7 +915,7 @@ function buildPrompt(source: PrdSource, workspace: Workspace): string {
     ...assignment,
     "",
     "Workflow:",
-    "0. Confirm the loop started you from a clean worktree. Stop with `<blocked/>` if it did not.",
+    `0. ${workflowStartInstruction("loop", allowDirtyStart)}`,
     "1. Run `devstate start`.",
     "2. Read `doc/README.md`, `CONTEXT.md`, `doc/current.md`, `doc/roadmap.md`, relevant `doc/topics/*.md`, and the assigned PRD context.",
     "3. Select the next ready chunk from the assigned PRD. Do not take chunks marked doing by another active agent.",
@@ -922,7 +934,11 @@ function buildPrompt(source: PrdSource, workspace: Workspace): string {
   ].join("\n");
 }
 
-function buildFinalizationPrompt(source: PrdSource, workspace: Workspace): string {
+export function buildFinalizationPrompt(
+  source: PrdSource,
+  workspace: Workspace,
+  allowDirtyStart: boolean,
+): string {
   const assignedDisplay = assignedPrdDisplay(source, workspace);
   const assignment =
     source.kind === "issue"
@@ -949,7 +965,7 @@ function buildFinalizationPrompt(source: PrdSource, workspace: Workspace): strin
     ...assignment,
     "",
     "Workflow:",
-    "0. Confirm the command started you from a clean worktree. Stop with `<blocked/>` if it did not.",
+    `0. ${workflowStartInstruction("command", allowDirtyStart)}`,
     "1. Run `devstate start`.",
     "2. Read `doc/README.md`, `CONTEXT.md`, `doc/current.md`, `doc/roadmap.md`, relevant `doc/topics/*.md`, and the assigned PRD context.",
     "3. Verify all required chunks are `shipped` or intentionally `closed`, and promotion notes are ready. Stop with `<blocked/>` if the PRD is not ready for finalization.",
@@ -1106,7 +1122,7 @@ async function runLoop(options: LoopOptions): Promise<number> {
       const outputPath = path.join(runDir, `iteration-${padded}-final.md`);
       const logPath = path.join(runDir, `iteration-${padded}.log`);
       const promptPath = path.join(runDir, `iteration-${padded}-prompt.md`);
-      const prompt = buildPrompt(source, workspace);
+      const prompt = buildPrompt(source, workspace, options.allowDirtyStart);
       const args = codexArgs(options, outputPath, prompt, workspace.rootDir);
       writeFileSync(promptPath, `${prompt}\n`);
 
@@ -1211,7 +1227,7 @@ async function runFinalization(options: LoopOptions): Promise<number> {
     const outputPath = path.join(runDir, "finalization-final.md");
     const logPath = path.join(runDir, "finalization.log");
     const promptPath = path.join(runDir, "finalization-prompt.md");
-    const prompt = buildFinalizationPrompt(source, workspace);
+    const prompt = buildFinalizationPrompt(source, workspace, options.allowDirtyStart);
     const args = codexArgs(options, outputPath, prompt, workspace.rootDir);
     writeFileSync(promptPath, `${prompt}\n`);
 

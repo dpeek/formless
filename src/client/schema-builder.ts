@@ -1,35 +1,15 @@
 import {
-  fieldEditorControl,
-  getFieldTypeBehavior,
-  type FieldEditorControl,
-} from "../shared/field-types.ts";
-import {
   parseAppSchema,
   stringifySchema,
   type AppSchema,
-  type CollectionViewSchema,
-  type CreateViewSchema,
   type EnumValueSchema,
-  type FieldCommitPolicy,
-  type FieldEditor,
   type FieldSchema,
-  type ItemViewSchema,
-  type ScreenSchema,
   type TextFieldFormat,
-  type ViewSchema,
 } from "../shared/schema.ts";
 
 export type SchemaBuilderDraft = {
   savedSchema: AppSchema;
   schema: AppSchema;
-};
-
-export type SchemaBuilderGeneratedSurface = {
-  queryKey: string;
-  itemViewKey: string;
-  createViewKey: string;
-  collectionViewKey: string;
-  screenKey: string;
 };
 
 export type SchemaBuilderProjection = {
@@ -41,7 +21,6 @@ export type SchemaBuilderEntityProjection = {
   label: string;
   saved: boolean;
   fields: SchemaBuilderFieldProjection[];
-  generatedSurface?: SchemaBuilderGeneratedSurface;
 };
 
 export type SchemaBuilderFieldProjection = {
@@ -53,30 +32,7 @@ export type SchemaBuilderFieldProjection = {
   keyLocked: boolean;
   referenceTargetLocked: boolean;
   typeLocked: boolean;
-  presentation: SchemaBuilderFieldPresentation;
 };
-
-export type SchemaBuilderFieldPresentation = {
-  createEditor: FieldEditor;
-  defaultCommit: FieldCommitPolicy;
-  inlineEditor: FieldEditor;
-  rendererKind: SchemaBuilderRendererKind;
-  validEditors: FieldEditor[];
-};
-
-export type SchemaBuilderRendererKind =
-  | "checkbox"
-  | "color"
-  | "date"
-  | "icon"
-  | "image"
-  | "markdown"
-  | "media"
-  | "number"
-  | "reference"
-  | "select"
-  | "text"
-  | "textarea";
 
 export type SchemaBuilderIntent =
   | {
@@ -90,10 +46,6 @@ export type SchemaBuilderIntent =
       label: string;
     }
   | {
-      type: "createGeneratedSurface";
-      entityKey: string;
-    }
-  | {
       type: "addField";
       entityKey: string;
       fieldKey: string;
@@ -105,13 +57,6 @@ export type SchemaBuilderIntent =
       entityKey: string;
       fieldKey: string;
       metadata: SchemaBuilderFieldMetadataUpdate;
-    }
-  | {
-      type: "updateFieldPresentation";
-      entityKey: string;
-      fieldKey: string;
-      createEditor?: FieldEditor;
-      inlineEditor?: FieldEditor;
     };
 
 export type SchemaBuilderFieldMetadataUpdate = {
@@ -203,7 +148,6 @@ export function projectSchemaBuilderDraft(draft: SchemaBuilderDraft): SchemaBuil
   return {
     entities: Object.entries(draft.schema.entities).map(([entityKey, entity]) => {
       const savedEntity = draft.savedSchema.entities[entityKey];
-      const generatedSurface = findSchemaBuilderGeneratedSurface(draft.schema, entityKey);
 
       return {
         key: entityKey,
@@ -221,16 +165,8 @@ export function projectSchemaBuilderDraft(draft: SchemaBuilderDraft): SchemaBuil
             keyLocked: savedField !== undefined,
             referenceTargetLocked: savedField?.type === "reference",
             typeLocked: savedField !== undefined,
-            presentation: selectSchemaBuilderFieldPresentation({
-              entityKey,
-              field,
-              fieldKey,
-              schema: draft.schema,
-              surface: generatedSurface,
-            }),
           };
         }),
-        ...(generatedSurface === undefined ? {} : { generatedSurface }),
       };
     }),
   };
@@ -251,11 +187,6 @@ export function applySchemaBuilderIntent(
       return;
     }
 
-    if (intent.type === "createGeneratedSurface") {
-      createGeneratedSurface(schema, intent.entityKey);
-      return;
-    }
-
     if (intent.type === "addField") {
       addField(schema, intent);
       return;
@@ -263,79 +194,8 @@ export function applySchemaBuilderIntent(
 
     if (intent.type === "updateFieldMetadata") {
       updateFieldMetadata(schema, savedSchema, intent.entityKey, intent.fieldKey, intent.metadata);
-      return;
     }
-
-    updateFieldPresentation(schema, intent);
   });
-}
-
-export function findSchemaBuilderGeneratedSurface(
-  schema: AppSchema,
-  entityKey: string,
-): SchemaBuilderGeneratedSurface | undefined {
-  for (const [collectionViewKey, view] of Object.entries(schema.views)) {
-    if (!isBuilderCollectionView(schema, entityKey, view)) {
-      continue;
-    }
-
-    const queryKey = view.defaultQuery;
-    const itemViewKey = view.result.itemView;
-    const createViewKey = view.actions[0].createView;
-    const screenKey = findBuilderScreenKey(schema, collectionViewKey);
-
-    if (screenKey === undefined) {
-      continue;
-    }
-
-    return {
-      queryKey,
-      itemViewKey,
-      createViewKey,
-      collectionViewKey,
-      screenKey,
-    };
-  }
-
-  return undefined;
-}
-
-export function selectSchemaBuilderFieldPresentation({
-  entityKey,
-  field,
-  fieldKey,
-  schema,
-  surface,
-}: {
-  entityKey: string;
-  field: FieldSchema;
-  fieldKey: string;
-  schema: AppSchema;
-  surface?: SchemaBuilderGeneratedSurface;
-}): SchemaBuilderFieldPresentation {
-  const behavior = getFieldTypeBehavior(field);
-  const createEditor = selectCreateEditor(
-    schema,
-    entityKey,
-    fieldKey,
-    behavior.defaultEditor,
-    surface,
-  );
-  const inlineEditor = selectInlineEditor(
-    schema,
-    entityKey,
-    fieldKey,
-    behavior.defaultEditor,
-    surface,
-  );
-
-  return {
-    createEditor,
-    defaultCommit: behavior.defaultCommit,
-    inlineEditor,
-    rendererKind: selectRendererKind(field, inlineEditor),
-    validEditors: [...behavior.editors],
-  };
 }
 
 function updateSchemaBuilderDraft(
@@ -366,77 +226,11 @@ function createEntity(
     fields: {},
     mutations: defaultMutationPolicy(),
   };
-
-  createGeneratedSurface(schema, entityKey);
 }
 
 function updateEntityLabel(schema: AppSchema, entityKey: string, label: string) {
   const entity = getEntity(schema, entityKey);
   entity.label = cleanLabel(label, `Entity "${entityKey}" label`);
-}
-
-function createGeneratedSurface(
-  schema: AppSchema,
-  entityKey: string,
-): SchemaBuilderGeneratedSurface {
-  const existingSurface = findSchemaBuilderGeneratedSurface(schema, entityKey);
-  if (existingSurface !== undefined) {
-    return existingSurface;
-  }
-
-  const entity = getEntity(schema, entityKey);
-  const queryKey = uniqueName(`${entityKey}All`, schema.queries);
-  const itemViewKey = uniqueName(`${entityKey}Item`, schema.itemViews);
-  const createViewKey = uniqueName(`${entityKey}Create`, schema.views);
-  const collectionViewKey = uniqueName(`${entityKey}Home`, schema.views);
-  const screenKey = uniqueName(`${entityKey}Screen`, schema.screens ?? {});
-  const fields = builderViewFieldsForEntity(entity.fields);
-  const path = uniqueScreenPath(schema, `/${pathSegmentFromKey(entityKey)}`);
-
-  schema.queries[queryKey] = {
-    label: "All",
-    entity: entityKey,
-    expression: { kind: "all" },
-  };
-  schema.itemViews[itemViewKey] = {
-    entity: entityKey,
-    fields: fields.itemFields,
-  };
-  schema.views[createViewKey] = {
-    type: "create",
-    entity: entityKey,
-    fields: fields.createFields,
-  };
-  schema.views[collectionViewKey] = {
-    type: "collection",
-    label: pluralLabel(entity.label),
-    entity: entityKey,
-    queries: [{ query: queryKey }],
-    defaultQuery: queryKey,
-    result: { type: "list", itemView: itemViewKey },
-    actions: [{ type: "create", createView: createViewKey }],
-  };
-  schema.screens = {
-    ...schema.screens,
-    [screenKey]: {
-      type: "workspace",
-      label: pluralLabel(entity.label),
-      path,
-      navigation: { primary: true },
-      layout: {
-        type: "stack",
-        sections: [{ id: `${entityKey}List`, type: "collection", view: collectionViewKey }],
-      },
-    },
-  };
-
-  return {
-    queryKey,
-    itemViewKey,
-    createViewKey,
-    collectionViewKey,
-    screenKey,
-  };
 }
 
 function addField(schema: AppSchema, input: Extract<SchemaBuilderIntent, { type: "addField" }>) {
@@ -449,11 +243,6 @@ function addField(schema: AppSchema, input: Extract<SchemaBuilderIntent, { type:
 
   const field = createField(schema, fieldKey, input.fieldType, input.metadata ?? {});
   entity.fields[fieldKey] = field;
-
-  const surface = findSchemaBuilderGeneratedSurface(schema, input.entityKey);
-  if (surface !== undefined) {
-    addFieldToGeneratedSurface(schema, surface, fieldKey, field);
-  }
 }
 
 function updateFieldMetadata(
@@ -479,43 +268,11 @@ function updateFieldMetadata(
       required: metadata.required ?? field.required,
     });
     entity.fields[fieldKey] = nextField;
-
-    const surface = findSchemaBuilderGeneratedSurface(schema, entityKey);
-    if (surface !== undefined) {
-      setGeneratedSurfaceFieldDefaults(schema, surface, fieldKey, nextField);
-    }
     return;
   }
 
   applyCommonFieldMetadata(field, metadata, fieldKey);
   applyTypedFieldMetadata(schema, savedField, entityKey, fieldKey, field, metadata);
-}
-
-function updateFieldPresentation(
-  schema: AppSchema,
-  input: Extract<SchemaBuilderIntent, { type: "updateFieldPresentation" }>,
-) {
-  const field = getField(schema, input.entityKey, input.fieldKey);
-  const surface = findSchemaBuilderGeneratedSurface(schema, input.entityKey);
-
-  if (surface === undefined) {
-    throw new Error(`Entity "${input.entityKey}" does not have a builder generated surface.`);
-  }
-
-  if (input.createEditor !== undefined) {
-    assertEditorMatchesField(field, input.createEditor);
-    const createView = getCreateView(schema, surface.createViewKey);
-    createView.fields[input.fieldKey] = { editor: input.createEditor };
-  }
-
-  if (input.inlineEditor !== undefined) {
-    assertEditorMatchesField(field, input.inlineEditor);
-    const itemView = getItemView(schema, surface.itemViewKey);
-    itemView.fields[input.fieldKey] = {
-      editor: input.inlineEditor,
-      commit: getFieldTypeBehavior(field).defaultCommit,
-    };
-  }
 }
 
 function createField(
@@ -756,229 +513,6 @@ function applyReferenceMetadata(
   field.displayField = metadata.displayField;
 }
 
-function addFieldToGeneratedSurface(
-  schema: AppSchema,
-  surface: SchemaBuilderGeneratedSurface,
-  fieldKey: string,
-  field: FieldSchema,
-) {
-  setGeneratedSurfaceFieldDefaults(schema, surface, fieldKey, field);
-}
-
-function setGeneratedSurfaceFieldDefaults(
-  schema: AppSchema,
-  surface: SchemaBuilderGeneratedSurface,
-  fieldKey: string,
-  field: FieldSchema,
-) {
-  const createView = getCreateView(schema, surface.createViewKey);
-  const itemView = getItemView(schema, surface.itemViewKey);
-  const behavior = getFieldTypeBehavior(field);
-
-  createView.fields[fieldKey] = { editor: behavior.defaultEditor };
-  itemView.fields[fieldKey] = {
-    editor: behavior.defaultEditor,
-    commit: behavior.defaultCommit,
-  };
-}
-
-function builderViewFieldsForEntity(fields: Record<string, FieldSchema>) {
-  return Object.entries(fields).reduce(
-    (viewFields, [fieldKey, field]) => {
-      const behavior = getFieldTypeBehavior(field);
-
-      viewFields.createFields[fieldKey] = { editor: behavior.defaultEditor };
-      viewFields.itemFields[fieldKey] = {
-        editor: behavior.defaultEditor,
-        commit: behavior.defaultCommit,
-      };
-      return viewFields;
-    },
-    {
-      createFields: {} as CreateViewSchema["fields"],
-      itemFields: {} as ItemViewSchema["fields"],
-    },
-  );
-}
-
-function isBuilderCollectionView(
-  schema: AppSchema,
-  entityKey: string,
-  view: ViewSchema,
-): view is CollectionViewSchema & {
-  actions: [{ type: "create"; createView: string; label?: string }];
-  result: { type: "list"; itemView: string };
-} {
-  if (
-    view.type !== "collection" ||
-    view.entity !== entityKey ||
-    view.context !== undefined ||
-    view.summary !== undefined ||
-    view.queries.length !== 1 ||
-    view.defaultQuery !== view.queries[0].query ||
-    view.result.type !== "list" ||
-    view.actions?.length !== 1 ||
-    view.actions[0].type !== "create"
-  ) {
-    return false;
-  }
-
-  const query = schema.queries[view.defaultQuery];
-  const itemView = schema.itemViews[view.result.itemView];
-  const createView = schema.views[view.actions[0].createView];
-
-  return (
-    query?.entity === entityKey &&
-    query.expression.kind === "all" &&
-    itemView !== undefined &&
-    isBuilderItemView(itemView, entityKey) &&
-    createView !== undefined &&
-    isBuilderCreateView(createView, entityKey)
-  );
-}
-
-function isBuilderItemView(itemView: ItemViewSchema, entityKey: string): boolean {
-  return (
-    itemView.entity === entityKey &&
-    itemView.union === undefined &&
-    Object.values(itemView.fields).every((field) => field.visibleWhen === undefined)
-  );
-}
-
-function isBuilderCreateView(view: ViewSchema, entityKey: string): view is CreateViewSchema {
-  return (
-    view.type === "create" &&
-    view.entity === entityKey &&
-    view.defaults === undefined &&
-    view.union === undefined &&
-    Object.values(view.fields).every((field) => field.visibleWhen === undefined)
-  );
-}
-
-function findBuilderScreenKey(schema: AppSchema, collectionViewKey: string): string | undefined {
-  return Object.entries(schema.screens ?? {}).find(([, screen]) =>
-    isBuilderScreen(screen, collectionViewKey),
-  )?.[0];
-}
-
-function isBuilderScreen(screen: ScreenSchema, collectionViewKey: string): boolean {
-  return (
-    screen.type === "workspace" &&
-    screen.layout.type === "stack" &&
-    screen.layout.sections.length === 1 &&
-    screen.layout.sections[0].type === "collection" &&
-    screen.layout.sections[0].view === collectionViewKey
-  );
-}
-
-function selectCreateEditor(
-  schema: AppSchema,
-  entityKey: string,
-  fieldKey: string,
-  defaultEditor: FieldEditor,
-  surface?: SchemaBuilderGeneratedSurface,
-): FieldEditor {
-  if (surface === undefined) {
-    return defaultEditor;
-  }
-
-  const createView = schema.views[surface.createViewKey];
-
-  if (createView?.type !== "create" || createView.entity !== entityKey) {
-    return defaultEditor;
-  }
-
-  return createView.fields[fieldKey]?.editor ?? defaultEditor;
-}
-
-function selectInlineEditor(
-  schema: AppSchema,
-  entityKey: string,
-  fieldKey: string,
-  defaultEditor: FieldEditor,
-  surface?: SchemaBuilderGeneratedSurface,
-): FieldEditor {
-  if (surface === undefined) {
-    return defaultEditor;
-  }
-
-  const itemView = schema.itemViews[surface.itemViewKey];
-
-  if (itemView?.entity !== entityKey) {
-    return defaultEditor;
-  }
-
-  return itemView.fields[fieldKey]?.editor ?? defaultEditor;
-}
-
-function selectRendererKind(field: FieldSchema, editor: FieldEditor): SchemaBuilderRendererKind {
-  const control = fieldEditorControl(field, editor);
-
-  if (editor === "markdown") {
-    return "markdown";
-  }
-
-  if (editor === "color") {
-    return "color";
-  }
-
-  if (control.kind === "checkbox") {
-    return "checkbox";
-  }
-
-  if (control.kind === "textarea") {
-    return "textarea";
-  }
-
-  if (control.kind === "select") {
-    return "select";
-  }
-
-  if (control.kind === "reference") {
-    return "reference";
-  }
-
-  if (control.kind === "formattedNumber") {
-    return "number";
-  }
-
-  if (control.kind === "icon") {
-    return "icon";
-  }
-
-  if (control.kind === "imageUpload") {
-    return "image";
-  }
-
-  if (control.kind === "mediaUpload") {
-    return "media";
-  }
-
-  if (control.kind === "input") {
-    return controlKindFromInput(control);
-  }
-
-  return "text";
-}
-
-function controlKindFromInput(control: Extract<FieldEditorControl, { kind: "input" }>) {
-  if (control.inputType === "date") {
-    return "date";
-  }
-
-  if (control.inputType === "number") {
-    return "number";
-  }
-
-  return "text";
-}
-
-function assertEditorMatchesField(field: FieldSchema, editor: FieldEditor) {
-  if (!getFieldTypeBehavior(field).editors.includes(editor)) {
-    throw new Error(`Editor "${editor}" is not valid for field type "${field.type}".`);
-  }
-}
-
 function schemaBuilderIssueFromError(error: unknown): SchemaBuilderValidationIssue {
   const message = error instanceof Error ? error.message : "Schema is invalid.";
   const fieldMatch = /^Field "([^".]+)\.([^"]+)"/.exec(message);
@@ -1026,26 +560,6 @@ function getField(schema: AppSchema, entityKey: string, fieldKey: string) {
   return field;
 }
 
-function getCreateView(schema: AppSchema, viewKey: string): CreateViewSchema {
-  const view = schema.views[viewKey];
-
-  if (view?.type !== "create") {
-    throw new Error(`Builder create view "${viewKey}" is missing.`);
-  }
-
-  return view;
-}
-
-function getItemView(schema: AppSchema, itemViewKey: string): ItemViewSchema {
-  const itemView = schema.itemViews[itemViewKey];
-
-  if (itemView === undefined) {
-    throw new Error(`Builder item view "${itemViewKey}" is missing.`);
-  }
-
-  return itemView;
-}
-
 function validateReferenceTarget(schema: AppSchema, context: string, target: string) {
   if (schema.entities[target] === undefined) {
     throw new Error(`Reference field "${context}" target must be an existing entity.`);
@@ -1066,51 +580,6 @@ function validateReferenceDisplayField(
 
   if (targetField.type !== "text") {
     throw new Error(`Reference field "${context}" display field must be a text field.`);
-  }
-}
-
-function uniqueName(base: string, existing: Record<string, unknown>): string {
-  if (existing[base] === undefined) {
-    return base;
-  }
-
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${base}${suffix}`;
-
-    if (existing[candidate] === undefined) {
-      return candidate;
-    }
-  }
-}
-
-function uniqueScreenPath(schema: AppSchema, basePath: string): string {
-  const usedPaths = new Set<string>();
-  const screens = schema.screens ?? {};
-
-  for (const screen of Object.values(screens)) {
-    if (screen.path !== undefined) {
-      usedPaths.add(screen.path);
-    }
-  }
-
-  const pathlessPrimaryScreen = Object.values(screens).find(
-    (screen) => (screen.navigation?.primary ?? true) && screen.path === undefined,
-  );
-
-  if (pathlessPrimaryScreen !== undefined) {
-    usedPaths.add("/");
-  }
-
-  if (!usedPaths.has(basePath)) {
-    return basePath;
-  }
-
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${basePath}-${suffix}`;
-
-    if (!usedPaths.has(candidate)) {
-      return candidate;
-    }
   }
 }
 
@@ -1154,25 +623,6 @@ function labelFromKey(key: string): string {
     .trim();
 
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-function pluralLabel(label: string): string {
-  if (label.endsWith("s")) {
-    return label;
-  }
-
-  if (label.endsWith("y")) {
-    return `${label.slice(0, -1)}ies`;
-  }
-
-  return `${label}s`;
-}
-
-function pathSegmentFromKey(key: string): string {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
-    .toLowerCase();
 }
 
 function capitalize(value: string): string {

@@ -28,11 +28,6 @@ import {
   resetClientStore,
 } from "./client/store.ts";
 import type { ClientAppTarget } from "./client/app-target.ts";
-import {
-  applySchemaBuilderIntent,
-  createSchemaBuilderDraft,
-  serializeSchemaBuilderDraft,
-} from "./client/schema-builder.ts";
 import { resetSyncStatus, setSyncStatus } from "./client/sync-status.ts";
 import {
   HomeRoute,
@@ -1266,26 +1261,38 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-controls="schema-builder-panel"');
     expect(html).toContain('aria-controls="schema-source-panel"');
     expect(html).toContain('aria-selected="true"');
-    expect(html).toContain('aria-label="Builder schema tree"');
-    expect(html).toContain('aria-label="Schema entities and fields"');
-    expect(html).toContain('role="tree"');
-    expect(html).toContain('role="treeitem"');
+    expect(html).toContain('aria-label="Schema builder"');
+    expect(html).toContain('aria-label="Schema entities"');
+    expect(html).not.toContain('aria-label="Builder schema tree"');
+    expect(html).not.toContain("Schema tree");
+    expect(html).not.toContain("1 entities");
+    expect(html).not.toContain('role="tree"');
+    expect(html).not.toContain('role="treeitem"');
     expect(html).toContain('data-entity-key="task"');
     expect(html).toContain('data-field-key="title"');
-    expect(html).toContain('aria-label="Collapse Task"');
+    expect(html).not.toContain('aria-label="Collapse Task"');
     expect(html).toContain('aria-label="Entity label for task"');
     expect(html).toContain('aria-label="Field label for task.title"');
+    expect(html).not.toContain(">Entity label</span>");
+    expect(html).not.toContain(">Field label</span>");
     expect(html).toContain('data-slot="entity-key-badge"');
     expect(html).toContain('data-slot="field-key-badge"');
     expect(html).toContain('data-slot="field-type-badge"');
-    expect(html).toContain('aria-selected="true"');
+    expect(html).toContain("Text format");
+    expect(html).toContain("Required");
+    expect(html).not.toContain(">Type</span>");
     expect(html).toContain('aria-label="Create entity"');
     expect(html).toContain('aria-label="Create field for Task"');
-    expect(html).toContain('aria-label="Field details"');
+    expect(html).toContain(">Field</span>");
+    expect(html).not.toContain(">Add field</span>");
+    expect(html).not.toContain('aria-label="Field details"');
+    expect(html).not.toContain("Create generated surface");
+    expect(html).not.toContain("Source-owned app surfaces.");
+    expect(html).not.toContain('aria-label="Field presentation preview"');
     expect(html).toContain('aria-label="Schema source"');
     expect(html).toContain('aria-label="Schema saved"');
-    expect(html).toContain('aria-label="Task entity saved"');
-    expect(html).toContain('aria-label="Title field saved"');
+    expect(html).not.toContain('aria-label="Task entity saved"');
+    expect(html).not.toContain('aria-label="Title field saved"');
     expect(html).toContain("Save schema");
     expect(html).toContain("Revert draft");
     expect(html).not.toContain("Open app");
@@ -1299,34 +1306,6 @@ describe("App smoke routes", () => {
     expect(html).toContain("&quot;task&quot;");
     expect(html).not.toContain("<code>rates</code>");
     expect(html).not.toContain("<code>estii</code>");
-  });
-
-  it("renders schema builder field presentation controls for builder-owned surfaces", () => {
-    const surfaceDraft = applySchemaBuilderIntent(createSchemaBuilderDraft(appSchema), {
-      type: "createGeneratedSurface",
-      entityKey: "task",
-    });
-    const presentationDraft = applySchemaBuilderIntent(surfaceDraft, {
-      type: "updateFieldPresentation",
-      entityKey: "task",
-      fieldKey: "title",
-      createEditor: "textarea",
-      inlineEditor: "markdown",
-    });
-    const schema = serializeSchemaBuilderDraft(presentationDraft);
-
-    applyBootstrapResponse(bootstrap([], schema), "tasks");
-    const html = renderRoute("/tasks/schema");
-
-    expect(html).toContain('aria-label="Title presentation"');
-    expect(html).toContain("Generated surface is builder-owned.");
-    expect(html).toContain("Create editor");
-    expect(html).toContain("Inline editor");
-    expect(html).toContain('aria-label="Field presentation preview"');
-    expect(html).toContain("Long text");
-    expect(html).toContain("Markdown");
-    expect(html).toContain("Field commit");
-    expect(html).toContain("Renderer");
   });
 
   it('renders the "/estii/schema" route', () => {
@@ -1350,9 +1329,10 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Estii route reset controls"');
     expect(html).not.toContain('aria-label="Estii source reset controls"');
     expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-label="Builder schema tree"');
-    expect(html).toContain('aria-label="Schema entities and fields"');
-    expect(html).toContain('role="tree"');
+    expect(html).toContain('aria-label="Schema builder"');
+    expect(html).toContain('aria-label="Schema entities"');
+    expect(html).not.toContain('aria-label="Builder schema tree"');
+    expect(html).not.toContain('role="tree"');
     expect(html).toContain('data-entity-key="resource"');
     expect(html).toContain('data-field-key="name"');
     expect(html).toContain('aria-label="Entity label for resource"');
@@ -1395,9 +1375,10 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('aria-label="Site route reset controls"');
     expect(html).not.toContain('aria-label="Site source reset controls"');
     expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-label="Builder schema tree"');
-    expect(html).toContain('aria-label="Schema entities and fields"');
-    expect(html).toContain('role="tree"');
+    expect(html).toContain('aria-label="Schema builder"');
+    expect(html).toContain('aria-label="Schema entities"');
+    expect(html).not.toContain('aria-label="Builder schema tree"');
+    expect(html).not.toContain('role="tree"');
     expect(html).toContain('aria-label="Schema saved"');
     expect(html).toContain("Save schema");
     expect(html).not.toContain("Open app");

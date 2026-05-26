@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { countOpenChunks, parseArgs, usage } from "./ralph-loop.ts";
+import {
+  buildFinalizationPrompt,
+  buildPrompt,
+  countOpenChunks,
+  parseArgs,
+  usage,
+} from "./ralph-loop.ts";
 
 describe("Ralph CLI", () => {
   it("documents the finalization command", () => {
@@ -59,5 +65,59 @@ describe("Ralph CLI", () => {
     ].join("\n");
 
     expect(countOpenChunks(prd)).toBe(3);
+  });
+
+  it("does not make dirty-start loop agents block on the initial dirty worktree", () => {
+    const source = {
+      defaultBranch: "codex/test-prd",
+      defaultWorktreeDir: "../formless-test-prd",
+      displayName: "./tmp/test-prd.md",
+      identity: "./tmp/test-prd.md",
+      kind: "file" as const,
+      relativePrdPath: "tmp/test-prd.md",
+      slug: "test-prd",
+      sourcePrdPath: "/repo/tmp/test-prd.md",
+      textForCounting: "",
+      updateTarget: "the assigned PRD file",
+    };
+    const workspace = {
+      branch: null,
+      prdPath: "/repo/tmp/test-prd.md",
+      rootDir: "/repo",
+      worktreeDir: null,
+    };
+
+    const prompt = buildPrompt(source, workspace, true);
+
+    expect(prompt).toContain("Dirty start was explicitly allowed by Ralph.");
+    expect(prompt).toContain("do not stop solely because the worktree started dirty");
+    expect(prompt).not.toContain("Confirm the loop started you from a clean worktree.");
+  });
+
+  it("does not make dirty-start finalization agents block on the initial dirty worktree", () => {
+    const source = {
+      defaultBranch: "codex/test-prd",
+      defaultWorktreeDir: "../formless-test-prd",
+      displayName: "./tmp/test-prd.md",
+      identity: "./tmp/test-prd.md",
+      kind: "file" as const,
+      relativePrdPath: "tmp/test-prd.md",
+      slug: "test-prd",
+      sourcePrdPath: "/repo/tmp/test-prd.md",
+      textForCounting: "",
+      updateTarget: "the assigned PRD file",
+    };
+    const workspace = {
+      branch: null,
+      prdPath: "/repo/tmp/test-prd.md",
+      rootDir: "/repo",
+      worktreeDir: null,
+    };
+
+    const prompt = buildFinalizationPrompt(source, workspace, true);
+
+    expect(prompt).toContain("Dirty start was explicitly allowed by Ralph.");
+    expect(prompt).toContain("do not stop solely because the worktree started dirty");
+    expect(prompt).not.toContain("Confirm the command started you from a clean worktree.");
   });
 });

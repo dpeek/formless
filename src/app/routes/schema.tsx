@@ -5,7 +5,6 @@ import {
   ControlAddIcon,
   ControlCheckIcon,
   ControlCloseIcon,
-  ControlDisclosureIcon,
   ControlIndeterminateIcon,
   ControlLoadingIcon,
 } from "@dpeek/formless-ui/icons";
@@ -17,12 +16,6 @@ import {
   ModalHeader,
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
-import type { GeneratedFieldControlKind } from "../generated/field-controls.ts";
-import { selectGeneratedFieldEditorAdapter } from "../generated/field-ui-adapters.ts";
-import {
-  selectGeneratedRecordFieldRendererKind,
-  type GeneratedRecordFieldRendererKind,
-} from "../generated/record-field-renderer-model.ts";
 import {
   connectBroadcastToClientStore,
   hydrateClientStore,
@@ -46,13 +39,7 @@ import {
   type SchemaBuilderIntent,
 } from "../../client/schema-builder.ts";
 import { getSchemaAppDefinition, type SchemaKey } from "../../shared/schema-apps.ts";
-import type {
-  EnumValueSchema,
-  FieldCommitPolicy,
-  FieldEditor,
-  FieldSchema,
-  TextFieldFormat,
-} from "../../shared/schema.ts";
+import type { EnumValueSchema, FieldSchema, TextFieldFormat } from "../../shared/schema.ts";
 import {
   applySchemaRouteBuilderIntent,
   commitSchemaRouteDraftState,
@@ -386,8 +373,6 @@ function SchemaBuilderWorkspace({
   onApplyIntent: (intent: SchemaBuilderIntent) => boolean;
   sourceError: string | null;
 }) {
-  const [selectedEntityKeyState, setSelectedEntityKey] = useState<string | null>(null);
-  const [selectedFieldKeyState, setSelectedFieldKey] = useState<string | null>(null);
   const [newEntityKey, setNewEntityKey] = useState("");
   const [newEntityLabel, setNewEntityLabel] = useState("");
   const [entityFormError, setEntityFormError] = useState<string | null>(null);
@@ -395,7 +380,6 @@ function SchemaBuilderWorkspace({
   const [newFieldType, setNewFieldType] = useState<FieldSchema["type"]>("text");
   const [newReferenceTarget, setNewReferenceTarget] = useState("");
   const [fieldFormError, setFieldFormError] = useState<string | null>(null);
-  const [collapsedEntityKeys, setCollapsedEntityKeys] = useState<Set<string>>(() => new Set());
   const [isCreateEntityDialogOpen, setIsCreateEntityDialogOpen] = useState(false);
   const [createFieldEntityKey, setCreateFieldEntityKey] = useState<string | null>(null);
   const projection = useMemo(
@@ -421,27 +405,6 @@ function SchemaBuilderWorkspace({
 
   const entities = projection?.entities ?? [];
   const schema = draftState.draft.schema;
-  const selectedEntityKey =
-    selectedEntityKeyState && entities.some((entity) => entity.key === selectedEntityKeyState)
-      ? selectedEntityKeyState
-      : (entities[0]?.key ?? null);
-  const selectedEntity =
-    selectedEntityKey === null
-      ? undefined
-      : entities.find((entity) => entity.key === selectedEntityKey);
-  const selectedFieldKey =
-    selectedFieldKeyState &&
-    selectedEntity?.fields.some((field) => field.key === selectedFieldKeyState)
-      ? selectedFieldKeyState
-      : (selectedEntity?.fields[0]?.key ?? null);
-  const selectedFieldProjection =
-    selectedEntity && selectedFieldKey
-      ? selectedEntity.fields.find((field) => field.key === selectedFieldKey)
-      : undefined;
-  const selectedField =
-    selectedEntity && selectedFieldProjection
-      ? schema.entities[selectedEntity.key]?.fields[selectedFieldProjection.key]
-      : undefined;
   const createFieldEntity =
     createFieldEntityKey === null
       ? undefined
@@ -449,21 +412,7 @@ function SchemaBuilderWorkspace({
   const referenceTargetForNewField =
     newReferenceTarget && schema.entities[newReferenceTarget] !== undefined
       ? newReferenceTarget
-      : (createFieldEntity?.key ?? selectedEntity?.key ?? entities[0]?.key ?? "");
-
-  function toggleEntityExpanded(entityKey: string) {
-    setCollapsedEntityKeys((current) => {
-      const next = new Set(current);
-
-      if (next.has(entityKey)) {
-        next.delete(entityKey);
-      } else {
-        next.add(entityKey);
-      }
-
-      return next;
-    });
-  }
+      : (createFieldEntity?.key ?? entities[0]?.key ?? "");
 
   function openCreateEntityDialog() {
     setEntityFormError(null);
@@ -471,14 +420,8 @@ function SchemaBuilderWorkspace({
   }
 
   function openCreateFieldDialog(entityKey: string) {
-    setSelectedEntityKey(entityKey);
     setFieldFormError(null);
     setCreateFieldEntityKey(entityKey);
-    setCollapsedEntityKeys((current) => {
-      const next = new Set(current);
-      next.delete(entityKey);
-      return next;
-    });
   }
 
   function createEntity() {
@@ -502,13 +445,6 @@ function SchemaBuilderWorkspace({
     });
 
     if (created) {
-      setSelectedEntityKey(key);
-      setSelectedFieldKey(null);
-      setCollapsedEntityKeys((current) => {
-        const next = new Set(current);
-        next.delete(key);
-        return next;
-      });
       setNewEntityKey("");
       setNewEntityLabel("");
       setEntityFormError(null);
@@ -545,13 +481,6 @@ function SchemaBuilderWorkspace({
     });
 
     if (added) {
-      setSelectedEntityKey(createFieldEntity.key);
-      setSelectedFieldKey(fieldKey);
-      setCollapsedEntityKeys((current) => {
-        const next = new Set(current);
-        next.delete(createFieldEntity.key);
-        return next;
-      });
       setNewFieldKey("");
       setFieldFormError(null);
       setCreateFieldEntityKey(null);
@@ -572,147 +501,37 @@ function SchemaBuilderWorkspace({
     });
   }
 
-  function updateFieldLabel(entityKey: string, fieldKey: string, label: string) {
+  function updateFieldMetadata(
+    entityKey: string,
+    fieldKey: string,
+    metadata: SchemaBuilderFieldMetadataUpdate,
+  ) {
     const entity = entities.find((candidate) => candidate.key === entityKey);
     const field = entity?.fields.find((candidate) => candidate.key === fieldKey);
 
-    if (!field || label === field.label) {
-      return;
+    if (!field) {
+      return false;
     }
 
-    onApplyIntent({
+    return onApplyIntent({
       type: "updateFieldMetadata",
       entityKey,
       fieldKey,
-      metadata: { label },
-    });
-  }
-
-  function updateSelectedEntityLabel(label: string) {
-    if (!selectedEntity || label === selectedEntity.label) {
-      return;
-    }
-
-    onApplyIntent({
-      type: "updateEntityLabel",
-      entityKey: selectedEntity.key,
-      label,
-    });
-  }
-
-  function createSelectedEntitySurface() {
-    if (!selectedEntity) {
-      return;
-    }
-
-    onApplyIntent({
-      type: "createGeneratedSurface",
-      entityKey: selectedEntity.key,
-    });
-  }
-
-  function updateSelectedFieldMetadata(metadata: SchemaBuilderFieldMetadataUpdate) {
-    if (!selectedEntity || !selectedFieldProjection) {
-      return false;
-    }
-
-    return onApplyIntent({
-      type: "updateFieldMetadata",
-      entityKey: selectedEntity.key,
-      fieldKey: selectedFieldProjection.key,
       metadata,
-    });
-  }
-
-  function updateSelectedFieldPresentation(presentation: {
-    createEditor?: FieldEditor;
-    inlineEditor?: FieldEditor;
-  }) {
-    if (!selectedEntity || !selectedFieldProjection) {
-      return false;
-    }
-
-    return onApplyIntent({
-      type: "updateFieldPresentation",
-      entityKey: selectedEntity.key,
-      fieldKey: selectedFieldProjection.key,
-      ...presentation,
     });
   }
 
   return (
     <>
-      <div className="grid min-h-[32rem] grid-cols-1 overflow-hidden rounded border border-slate-200 bg-white lg:grid-cols-[30rem_minmax(0,1fr)]">
-        <aside
-          aria-label="Builder schema tree"
-          className="flex min-h-0 flex-col border-b border-slate-200 bg-slate-50 lg:border-r lg:border-b-0"
-        >
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-slate-900">Schema tree</h2>
-              <p className="text-xs text-slate-500">{entities.length} entities</p>
-            </div>
-            <Button
-              aria-label="Create entity"
-              intent="outline"
-              onClick={openCreateEntityDialog}
-              size="sm"
-              type="button"
-            >
-              <ControlAddIcon aria-hidden />
-              <span>Create entity</span>
-            </Button>
-          </div>
-
-          <SchemaBuilderTree
-            collapsedEntityKeys={collapsedEntityKeys}
-            entities={entities}
-            onAddField={openCreateFieldDialog}
-            onSelectEntity={(entityKey) => {
-              setSelectedEntityKey(entityKey);
-              setSelectedFieldKey(null);
-            }}
-            onSelectField={(entityKey, fieldKey) => {
-              setSelectedEntityKey(entityKey);
-              setSelectedFieldKey(fieldKey);
-            }}
-            onToggleEntity={toggleEntityExpanded}
-            onUpdateEntityLabel={updateEntityLabel}
-            onUpdateFieldLabel={updateFieldLabel}
-            selectedEntityKey={selectedEntityKey}
-            selectedFieldKey={selectedFieldKey}
-          />
-        </aside>
-
-        <section aria-label="Field details" className="min-w-0 p-4">
-          {selectedEntity ? (
-            <div className="space-y-5">
-              <EntityDetails
-                entity={selectedEntity}
-                onCreateSurface={createSelectedEntitySurface}
-                onUpdateLabel={updateSelectedEntityLabel}
-              />
-
-              {selectedField && selectedFieldProjection ? (
-                <FieldDetails
-                  entities={entities}
-                  entity={selectedEntity}
-                  field={selectedField}
-                  fieldProjection={selectedFieldProjection}
-                  onUpdateMetadata={updateSelectedFieldMetadata}
-                  onUpdatePresentation={updateSelectedFieldPresentation}
-                  schema={schema}
-                />
-              ) : (
-                <div className="rounded border border-slate-200 px-3 py-4 text-sm text-slate-600">
-                  Add a field to configure this entity.
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-sm text-slate-600">No entity selected.</div>
-          )}
-        </section>
+      <div aria-label="Schema builder" className="max-w-5xl">
+        <SchemaBuilderEntityList
+          entities={entities}
+          onAddEntity={openCreateEntityDialog}
+          onAddField={openCreateFieldDialog}
+          onUpdateEntityLabel={updateEntityLabel}
+          onUpdateFieldMetadata={updateFieldMetadata}
+          schema={schema}
+        />
       </div>
 
       <CreateEntityDialog
@@ -756,205 +575,141 @@ function SchemaBuilderWorkspace({
   );
 }
 
-function SchemaBuilderTree({
-  collapsedEntityKeys,
+function SchemaBuilderEntityList({
   entities,
+  onAddEntity,
   onAddField,
-  onSelectEntity,
-  onSelectField,
-  onToggleEntity,
   onUpdateEntityLabel,
-  onUpdateFieldLabel,
-  selectedEntityKey,
-  selectedFieldKey,
+  onUpdateFieldMetadata,
+  schema,
 }: {
-  collapsedEntityKeys: Set<string>;
   entities: SchemaBuilderEntityProjection[];
+  onAddEntity: () => void;
   onAddField: (entityKey: string) => void;
-  onSelectEntity: (entityKey: string) => void;
-  onSelectField: (entityKey: string, fieldKey: string) => void;
-  onToggleEntity: (entityKey: string) => void;
   onUpdateEntityLabel: (entityKey: string, label: string) => void;
-  onUpdateFieldLabel: (entityKey: string, fieldKey: string, label: string) => void;
-  selectedEntityKey: string | null;
-  selectedFieldKey: string | null;
+  onUpdateFieldMetadata: (
+    entityKey: string,
+    fieldKey: string,
+    metadata: SchemaBuilderFieldMetadataUpdate,
+  ) => boolean;
+  schema: SchemaRouteDraftState["draft"]["schema"];
 }) {
   return (
-    <div
-      className="min-h-0 flex-1 overflow-auto p-3"
-      role="tree"
-      aria-label="Schema entities and fields"
-    >
+    <div aria-label="Schema entities" className="space-y-5">
       {entities.length === 0 ? (
         <div className="rounded border border-dashed border-slate-300 bg-white px-3 py-6 text-sm text-slate-600">
           No entities are currently defined.
         </div>
       ) : (
-        <div className="space-y-2">
-          {entities.map((entity) => {
-            const isExpanded = !collapsedEntityKeys.has(entity.key);
-            const entityIsSelected = selectedEntityKey === entity.key && selectedFieldKey === null;
+        entities.map((entity) => (
+          <SchemaBuilderEntityEditor
+            entities={entities}
+            entity={entity}
+            key={entity.key}
+            onAddField={onAddField}
+            onUpdateEntityLabel={onUpdateEntityLabel}
+            onUpdateFieldMetadata={onUpdateFieldMetadata}
+            schema={schema}
+          />
+        ))
+      )}
+
+      <Button
+        aria-label="Create entity"
+        intent="outline"
+        onClick={onAddEntity}
+        size="sm"
+        type="button"
+      >
+        <ControlAddIcon aria-hidden />
+        <span>Entity</span>
+      </Button>
+    </div>
+  );
+}
+
+function SchemaBuilderEntityEditor({
+  entities,
+  entity,
+  onAddField,
+  onUpdateEntityLabel,
+  onUpdateFieldMetadata,
+  schema,
+}: {
+  entities: SchemaBuilderEntityProjection[];
+  entity: SchemaBuilderEntityProjection;
+  onAddField: (entityKey: string) => void;
+  onUpdateEntityLabel: (entityKey: string, label: string) => void;
+  onUpdateFieldMetadata: (
+    entityKey: string,
+    fieldKey: string,
+    metadata: SchemaBuilderFieldMetadataUpdate,
+  ) => boolean;
+  schema: SchemaRouteDraftState["draft"]["schema"];
+}) {
+  const entitySchema = schema.entities[entity.key];
+
+  return (
+    <section
+      aria-label={`${entity.label} entity`}
+      className="space-y-4 rounded border border-slate-200 bg-slate-50 p-4"
+      data-entity-key={entity.key}
+    >
+      <div className="flex flex-wrap items-start gap-3">
+        <label className="min-w-[14rem] flex-1">
+          <input
+            aria-label={`Entity label for ${entity.key}`}
+            className="h-9 w-full rounded border border-slate-300 px-2 text-sm font-medium text-slate-900"
+            defaultValue={entity.label}
+            key={`${entity.key}:${entity.label}`}
+            onBlur={(event) => onUpdateEntityLabel(entity.key, event.currentTarget.value)}
+            onKeyDown={blurInputOnEnter}
+          />
+        </label>
+        <div className="flex h-9 items-center gap-2">
+          <Badge data-slot="entity-key-badge" intent="outline" isCircle={false}>
+            {entity.key}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {entity.fields.length === 0 ? (
+          <p className="text-sm text-slate-600">No fields are currently defined.</p>
+        ) : (
+          entity.fields.map((fieldProjection) => {
+            const field = entitySchema?.fields[fieldProjection.key];
+
+            if (!field) {
+              return null;
+            }
 
             return (
-              <section
-                aria-label={`${entity.label} entity`}
-                className="rounded border border-slate-200 bg-white"
-                data-entity-key={entity.key}
-                key={entity.key}
-                role="none"
-              >
-                <div
-                  className={`flex min-w-0 items-center gap-2 rounded-t px-2 py-2 ${
-                    entityIsSelected ? "bg-slate-100" : ""
-                  }`}
-                  onClick={() => onSelectEntity(entity.key)}
-                  role="treeitem"
-                  aria-expanded={isExpanded}
-                  aria-selected={entityIsSelected}
-                >
-                  <Button
-                    aria-controls={`schema-builder-fields-${entity.key}`}
-                    aria-expanded={isExpanded}
-                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${entity.label}`}
-                    className="shrink-0"
-                    intent="plain"
-                    isCircle
-                    onPress={() => onToggleEntity(entity.key)}
-                    size="sq-xs"
-                    type="button"
-                  >
-                    <ControlDisclosureIcon
-                      aria-hidden
-                      className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                    />
-                  </Button>
-                  <input
-                    aria-label={`Entity label for ${entity.key}`}
-                    className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-slate-900 hover:border-slate-200 focus:border-slate-400 focus:bg-white focus:outline-none"
-                    defaultValue={entity.label}
-                    key={`${entity.key}:${entity.label}`}
-                    onBlur={(event) => onUpdateEntityLabel(entity.key, event.currentTarget.value)}
-                    onFocus={() => onSelectEntity(entity.key)}
-                    onKeyDown={blurInputOnEnter}
-                  />
-                  <Badge data-slot="entity-key-badge" intent="outline" isCircle={false}>
-                    {entity.key}
-                  </Badge>
-                  <BuilderSavedStatus
-                    isSaved={entity.saved}
-                    label={`${entity.label} entity ${entity.saved ? "saved" : "draft"}`}
-                  />
-                </div>
-
-                <div
-                  className={isExpanded ? "border-t border-slate-100 px-2 py-2" : "hidden"}
-                  id={`schema-builder-fields-${entity.key}`}
-                  role="group"
-                >
-                  {entity.fields.length === 0 ? (
-                    <p className="px-8 py-2 text-sm text-slate-600">
-                      No fields are currently defined.
-                    </p>
-                  ) : (
-                    <div className="space-y-1">
-                      {entity.fields.map((field) => (
-                        <SchemaBuilderFieldTreeRow
-                          entity={entity}
-                          field={field}
-                          isSelected={
-                            selectedEntityKey === entity.key && selectedFieldKey === field.key
-                          }
-                          key={field.key}
-                          onSelectField={onSelectField}
-                          onUpdateFieldLabel={onUpdateFieldLabel}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-2 pl-8">
-                    <Button
-                      aria-label={`Create field for ${entity.label}`}
-                      intent="outline"
-                      onClick={() => onAddField(entity.key)}
-                      size="sm"
-                      type="button"
-                    >
-                      <ControlAddIcon aria-hidden />
-                      <span>Add field</span>
-                    </Button>
-                  </div>
-                </div>
-              </section>
+              <SchemaBuilderFieldEditor
+                entities={entities}
+                entity={entity}
+                field={field}
+                fieldProjection={fieldProjection}
+                key={fieldProjection.key}
+                onUpdateMetadata={onUpdateFieldMetadata}
+                schema={schema}
+              />
             );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+          })
+        )}
 
-function SchemaBuilderFieldTreeRow({
-  entity,
-  field,
-  isSelected,
-  onSelectField,
-  onUpdateFieldLabel,
-}: {
-  entity: SchemaBuilderEntityProjection;
-  field: SchemaBuilderFieldProjection;
-  isSelected: boolean;
-  onSelectField: (entityKey: string, fieldKey: string) => void;
-  onUpdateFieldLabel: (entityKey: string, fieldKey: string, label: string) => void;
-}) {
-  return (
-    <div
-      aria-selected={isSelected}
-      className={`flex min-w-0 items-center gap-2 rounded px-2 py-1.5 pl-8 ${
-        isSelected ? "bg-slate-100" : "hover:bg-slate-50"
-      }`}
-      data-field-key={field.key}
-      onClick={() => onSelectField(entity.key, field.key)}
-      role="treeitem"
-    >
-      <input
-        aria-label={`Field label for ${entity.key}.${field.key}`}
-        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-1 text-sm text-slate-900 hover:border-slate-200 focus:border-slate-400 focus:bg-white focus:outline-none"
-        defaultValue={field.label}
-        key={`${entity.key}.${field.key}:${field.label}`}
-        onBlur={(event) => onUpdateFieldLabel(entity.key, field.key, event.currentTarget.value)}
-        onFocus={() => onSelectField(entity.key, field.key)}
-        onKeyDown={blurInputOnEnter}
-      />
-      <Badge data-slot="field-key-badge" intent="outline" isCircle={false}>
-        {field.key}
-      </Badge>
-      <Badge data-slot="field-type-badge" intent="secondary" isCircle={false}>
-        {field.type}
-      </Badge>
-      <BuilderSavedStatus
-        isSaved={field.saved}
-        label={`${field.label} field ${field.saved ? "saved" : "draft"}`}
-      />
-    </div>
-  );
-}
-
-function BuilderSavedStatus({ isSaved, label }: { isSaved: boolean; label: string }) {
-  const Icon = isSaved ? ControlCheckIcon : ControlIndeterminateIcon;
-
-  return (
-    <span
-      aria-label={label}
-      className={`inline-flex size-6 shrink-0 items-center justify-center rounded border ${
-        isSaved
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-amber-200 bg-amber-50 text-amber-800"
-      }`}
-      role="status"
-      title={label}
-    >
-      <Icon aria-hidden className="size-3" />
-    </span>
+        <Button
+          aria-label={`Create field for ${entity.label}`}
+          intent="outline"
+          onClick={() => onAddField(entity.key)}
+          size="sm"
+          type="button"
+        >
+          <ControlAddIcon aria-hidden />
+          <span>Field</span>
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -1117,72 +872,29 @@ function CreateFieldDialog({
   );
 }
 
-function EntityDetails({
-  entity,
-  onCreateSurface,
-  onUpdateLabel,
-}: {
-  entity: SchemaBuilderEntityProjection;
-  onCreateSurface: () => void;
-  onUpdateLabel: (label: string) => void;
-}) {
-  return (
-    <section className="space-y-3" aria-label={`${entity.label} details`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">Entity</h2>
-        <Badge data-slot="entity-key-badge" intent="outline" isCircle={false}>
-          {entity.key}
-        </Badge>
-        <BuilderSavedStatus
-          isSaved={entity.saved}
-          label={`${entity.label} entity ${entity.saved ? "saved" : "draft"}`}
-        />
-      </div>
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600">Label</span>
-        <input
-          className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
-          defaultValue={entity.label}
-          key={`${entity.key}-label`}
-          onBlur={(event) => onUpdateLabel(event.currentTarget.value)}
-        />
-      </label>
-      {entity.generatedSurface ? (
-        <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          Generated surface is builder-owned.
-        </div>
-      ) : (
-        <div className="space-y-2 rounded border border-slate-200 px-3 py-2 text-xs text-slate-600">
-          <p>This entity is using source-owned app surfaces.</p>
-          <Button intent="outline" onPress={onCreateSurface} type="button">
-            Create generated surface
-          </Button>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function FieldDetails({
+function SchemaBuilderFieldEditor({
   entities,
   entity,
   field,
   fieldProjection,
   onUpdateMetadata,
-  onUpdatePresentation,
   schema,
 }: {
   entities: SchemaBuilderEntityProjection[];
   entity: SchemaBuilderEntityProjection;
   field: FieldSchema;
   fieldProjection: SchemaBuilderFieldProjection;
-  onUpdateMetadata: (metadata: SchemaBuilderFieldMetadataUpdate) => boolean;
-  onUpdatePresentation: (presentation: {
-    createEditor?: FieldEditor;
-    inlineEditor?: FieldEditor;
-  }) => boolean;
+  onUpdateMetadata: (
+    entityKey: string,
+    fieldKey: string,
+    metadata: SchemaBuilderFieldMetadataUpdate,
+  ) => boolean;
   schema: SchemaRouteDraftState["draft"]["schema"];
 }) {
+  function updateMetadata(metadata: SchemaBuilderFieldMetadataUpdate) {
+    return onUpdateMetadata(entity.key, fieldProjection.key, metadata);
+  }
+
   function updateFieldType(fieldType: FieldSchema["type"]) {
     const metadata: SchemaBuilderFieldMetadataUpdate = { type: fieldType };
 
@@ -1191,449 +903,68 @@ function FieldDetails({
       metadata.displayField = null;
     }
 
-    onUpdateMetadata(metadata);
+    updateMetadata(metadata);
   }
 
   return (
-    <section className="space-y-4" aria-label={`${fieldProjection.label} field details`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">Field</h2>
-        <Badge data-slot="field-key-badge" intent="outline" isCircle={false}>
-          {fieldProjection.key}
-        </Badge>
-        <Badge data-slot="field-type-badge" intent="secondary" isCircle={false}>
-          {fieldProjection.type}
-        </Badge>
-        <BuilderSavedStatus
-          isSaved={fieldProjection.saved}
-          label={`${fieldProjection.label} field ${fieldProjection.saved ? "saved" : "draft"}`}
-        />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600">Type</span>
-          <FieldTypeSelect
-            disabled={fieldProjection.typeLocked}
-            onChange={updateFieldType}
-            value={field.type}
+    <section
+      aria-label={`${fieldProjection.label} field`}
+      className="space-y-3 rounded border border-slate-200 bg-white p-3"
+      data-field-key={fieldProjection.key}
+    >
+      <div className="flex flex-wrap items-start gap-3">
+        <label className="min-w-[14rem] flex-1">
+          <input
+            aria-label={`Field label for ${entity.key}.${fieldProjection.key}`}
+            className="h-9 w-full rounded border border-slate-300 px-2 text-sm text-slate-900"
+            defaultValue={fieldProjection.label}
+            key={`${entity.key}.${fieldProjection.key}.label`}
+            onBlur={(event) => updateMetadata({ label: event.currentTarget.value })}
+            onKeyDown={blurInputOnEnter}
           />
         </label>
+        <div className="flex h-9 items-center gap-2">
+          <Badge data-slot="field-key-badge" intent="outline" isCircle={false}>
+            {fieldProjection.key}
+          </Badge>
+          <Badge data-slot="field-type-badge" intent="secondary" isCircle={false}>
+            {fieldProjection.type}
+          </Badge>
+        </div>
       </div>
 
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-slate-600">Label</span>
-        <input
-          className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
-          defaultValue={fieldProjection.label}
-          key={`${entity.key}.${fieldProjection.key}.label`}
-          onBlur={(event) => onUpdateMetadata({ label: event.currentTarget.value })}
-        />
-      </label>
+      <div className={`grid gap-3 ${fieldProjection.typeLocked ? "" : "sm:grid-cols-2"}`}>
+        {fieldProjection.typeLocked ? null : (
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Type</span>
+            <FieldTypeSelect onChange={updateFieldType} value={field.type} />
+          </label>
+        )}
 
-      <label className="flex items-center gap-2 text-sm text-slate-800">
-        <input
-          checked={field.required}
-          className="h-4 w-4 rounded border-slate-300"
-          onChange={(event) => onUpdateMetadata({ required: event.currentTarget.checked })}
-          type="checkbox"
-        />
-        Required
-      </label>
+        <label
+          className={`flex items-center gap-2 text-sm text-slate-800 ${
+            fieldProjection.typeLocked ? "" : "pt-6"
+          }`}
+        >
+          <input
+            checked={field.required}
+            className="h-4 w-4 rounded border-slate-300"
+            onChange={(event) => updateMetadata({ required: event.currentTarget.checked })}
+            type="checkbox"
+          />
+          Required
+        </label>
+      </div>
 
       <TypedFieldMetadataControls
         entities={entities}
         field={field}
         fieldProjection={fieldProjection}
-        onUpdateMetadata={onUpdateMetadata}
+        onUpdateMetadata={updateMetadata}
         schema={schema}
       />
-
-      <FieldPresentationControls
-        entity={entity}
-        field={field}
-        fieldProjection={fieldProjection}
-        onUpdatePresentation={onUpdatePresentation}
-      />
     </section>
   );
-}
-
-function FieldPresentationControls({
-  entity,
-  field,
-  fieldProjection,
-  onUpdatePresentation,
-}: {
-  entity: SchemaBuilderEntityProjection;
-  field: FieldSchema;
-  fieldProjection: SchemaBuilderFieldProjection;
-  onUpdatePresentation: (presentation: {
-    createEditor?: FieldEditor;
-    inlineEditor?: FieldEditor;
-  }) => boolean;
-}) {
-  const presentation = fieldProjection.presentation;
-
-  if (entity.generatedSurface === undefined) {
-    return (
-      <section
-        aria-label={`${fieldProjection.label} presentation`}
-        className="space-y-2 border-t border-slate-200 pt-4"
-      >
-        <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Presentation
-        </h3>
-        <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Presentation is source-owned.
-        </div>
-      </section>
-    );
-  }
-
-  const createControl = selectGeneratedFieldEditorAdapter(field, presentation.createEditor);
-  const inlineControl = selectGeneratedFieldEditorAdapter(field, presentation.inlineEditor);
-  const rendererKind = selectGeneratedRecordFieldRendererKind({
-    fieldConfig: {
-      fieldName: fieldProjection.key,
-      field,
-      editor: presentation.inlineEditor,
-      commit: presentation.defaultCommit,
-      label: fieldProjection.label,
-    },
-    fieldControl: inlineControl,
-    showLabel: false,
-  });
-
-  return (
-    <section
-      aria-label={`${fieldProjection.label} presentation`}
-      className="space-y-3 border-t border-slate-200 pt-4"
-    >
-      <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Presentation</h3>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldEditorSelect
-          label="Create editor"
-          onChange={(createEditor) => onUpdatePresentation({ createEditor })}
-          value={presentation.createEditor}
-          validEditors={presentation.validEditors}
-        />
-        <FieldEditorSelect
-          label="Inline editor"
-          onChange={(inlineEditor) => onUpdatePresentation({ inlineEditor })}
-          value={presentation.inlineEditor}
-          validEditors={presentation.validEditors}
-        />
-      </div>
-
-      <FieldPresentationPreview
-        createControlKind={createControl.controlKind}
-        createEditor={presentation.createEditor}
-        inlineControlKind={inlineControl.controlKind}
-        inlineEditor={presentation.inlineEditor}
-        rendererKind={rendererKind}
-        commit={presentation.defaultCommit}
-      />
-    </section>
-  );
-}
-
-function FieldEditorSelect({
-  label,
-  onChange,
-  validEditors,
-  value,
-}: {
-  label: string;
-  onChange: (editor: FieldEditor) => void;
-  validEditors: FieldEditor[];
-  value: FieldEditor;
-}) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
-      <select
-        className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
-        onChange={(event) => onChange(event.currentTarget.value as FieldEditor)}
-        value={value}
-      >
-        {validEditors.map((editor) => (
-          <option key={editor} value={editor}>
-            {fieldEditorLabel(editor)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function FieldPresentationPreview({
-  commit,
-  createControlKind,
-  createEditor,
-  inlineControlKind,
-  inlineEditor,
-  rendererKind,
-}: {
-  commit: FieldCommitPolicy;
-  createControlKind: GeneratedFieldControlKind;
-  createEditor: FieldEditor;
-  inlineControlKind: GeneratedFieldControlKind;
-  inlineEditor: FieldEditor;
-  rendererKind: GeneratedRecordFieldRendererKind;
-}) {
-  return (
-    <dl
-      aria-label="Field presentation preview"
-      className="grid gap-2 rounded border border-slate-200 bg-slate-50 p-2 sm:grid-cols-3"
-    >
-      <FieldPresentationPreviewItem
-        label="Create"
-        meta={fieldEditorLabel(createEditor)}
-        previewKind={createControlKind}
-      />
-      <FieldPresentationPreviewItem
-        label="Inline"
-        meta={`${fieldEditorLabel(inlineEditor)} · ${commitPolicyLabel(commit)}`}
-        previewKind={inlineControlKind}
-      />
-      <div className="rounded border border-slate-200 bg-white p-2">
-        <dt className="text-xs font-medium text-slate-500">Renderer</dt>
-        <dd className="mt-2 text-sm font-medium text-slate-900">
-          {rendererKindLabel(rendererKind)}
-        </dd>
-        <dd className="mt-2">
-          <RendererPreview rendererKind={rendererKind} />
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
-function FieldPresentationPreviewItem({
-  label,
-  meta,
-  previewKind,
-}: {
-  label: string;
-  meta: string;
-  previewKind: GeneratedFieldControlKind;
-}) {
-  return (
-    <div className="rounded border border-slate-200 bg-white p-2">
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
-      <dd className="mt-2 text-sm font-medium text-slate-900">{meta}</dd>
-      <dd className="mt-2">
-        <EditorControlPreview controlKind={previewKind} />
-      </dd>
-    </div>
-  );
-}
-
-function EditorControlPreview({ controlKind }: { controlKind: GeneratedFieldControlKind }) {
-  if (controlKind === "checkbox") {
-    return <input checked className="h-4 w-4 rounded border-slate-300" readOnly type="checkbox" />;
-  }
-
-  if (controlKind === "select" || controlKind === "reference") {
-    return (
-      <select
-        aria-label={`${controlKindLabel(controlKind)} preview`}
-        className="h-8 w-full rounded border border-slate-300 bg-white px-2 text-xs text-slate-700"
-        disabled
-      >
-        <option>{controlKind === "reference" ? "Record" : "Option"}</option>
-      </select>
-    );
-  }
-
-  if (controlKind === "textarea" || controlKind === "markdown") {
-    return (
-      <textarea
-        aria-label={`${controlKindLabel(controlKind)} preview`}
-        className="min-h-14 w-full resize-none rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-        defaultValue={controlKind === "markdown" ? "# Heading" : "Long text"}
-        disabled
-      />
-    );
-  }
-
-  if (controlKind === "color") {
-    return (
-      <div className="flex h-8 items-center gap-2 rounded border border-slate-300 bg-white px-2">
-        <span className="h-4 w-4 rounded-sm bg-sky-600" />
-        <span className="text-xs text-slate-700">#2563eb</span>
-      </div>
-    );
-  }
-
-  if (controlKind === "icon" || controlKind === "image" || controlKind === "media") {
-    return (
-      <div className="flex h-14 items-center justify-center rounded border border-dashed border-slate-300 bg-white text-xs text-slate-500">
-        {controlKindLabel(controlKind)}
-      </div>
-    );
-  }
-
-  return (
-    <input
-      aria-label={`${controlKindLabel(controlKind)} preview`}
-      className="h-8 w-full rounded border border-slate-300 bg-white px-2 text-xs text-slate-700"
-      disabled
-      readOnly
-      type={controlKind === "date" ? "date" : controlKind === "number" ? "number" : "text"}
-      value={controlKind === "date" ? "2026-05-22" : controlKind === "number" ? "42" : "Sample"}
-    />
-  );
-}
-
-function RendererPreview({ rendererKind }: { rendererKind: GeneratedRecordFieldRendererKind }) {
-  if (rendererKind === "checkbox") {
-    return <input checked className="h-4 w-4 rounded border-slate-300" readOnly type="checkbox" />;
-  }
-
-  if (rendererKind === "color") {
-    return (
-      <div className="flex items-center gap-2 text-sm text-slate-800">
-        <span className="h-4 w-4 rounded-sm bg-sky-600" />
-        #2563eb
-      </div>
-    );
-  }
-
-  if (rendererKind === "icon" || rendererKind === "image" || rendererKind === "media") {
-    return (
-      <div className="flex h-14 items-center justify-center rounded border border-slate-200 bg-slate-50 text-xs text-slate-500">
-        {rendererKindLabel(rendererKind)}
-      </div>
-    );
-  }
-
-  if (rendererKind === "markdown") {
-    return <p className="text-sm font-semibold text-slate-900">Heading</p>;
-  }
-
-  if (rendererKind === "textarea") {
-    return <p className="text-sm text-slate-700">Long text</p>;
-  }
-
-  if (rendererKind === "date") {
-    return <p className="text-sm text-slate-900">2026-05-22</p>;
-  }
-
-  if (rendererKind === "number" || rendererKind === "value-unit") {
-    return <p className="text-sm text-slate-900">42</p>;
-  }
-
-  if (rendererKind === "enum") {
-    return <p className="text-sm text-slate-900">Option</p>;
-  }
-
-  if (rendererKind === "reference") {
-    return <p className="text-sm text-slate-900">Record</p>;
-  }
-
-  return <p className="text-sm text-slate-900">Sample</p>;
-}
-
-function fieldEditorLabel(editor: FieldEditor) {
-  switch (editor) {
-    case "boolean":
-      return "Checkbox";
-    case "color":
-      return "Color";
-    case "date":
-      return "Date";
-    case "enum":
-      return "Select";
-    case "href":
-      return "Link";
-    case "icon":
-      return "Icon";
-    case "image":
-      return "Image";
-    case "markdown":
-      return "Markdown";
-    case "media":
-      return "Media";
-    case "number":
-      return "Number";
-    case "reference":
-      return "Reference";
-    case "slug":
-      return "Slug";
-    case "textarea":
-      return "Long text";
-    case "text":
-      return "Text";
-  }
-}
-
-function controlKindLabel(controlKind: GeneratedFieldControlKind) {
-  switch (controlKind) {
-    case "checkbox":
-      return "Checkbox";
-    case "color":
-      return "Color";
-    case "date":
-      return "Date";
-    case "icon":
-      return "Icon";
-    case "image":
-      return "Image";
-    case "markdown":
-      return "Markdown";
-    case "media":
-      return "Media";
-    case "number":
-      return "Number";
-    case "reference":
-      return "Reference";
-    case "select":
-      return "Select";
-    case "textarea":
-      return "Long text";
-    case "text":
-      return "Text";
-  }
-}
-
-function commitPolicyLabel(commit: FieldCommitPolicy) {
-  return commit === "immediate" ? "Immediate" : "Field commit";
-}
-
-function rendererKindLabel(rendererKind: GeneratedRecordFieldRendererKind) {
-  switch (rendererKind) {
-    case "autosize-text":
-      return "Autosize text";
-    case "checkbox":
-      return "Checkbox";
-    case "color":
-      return "Color";
-    case "date":
-      return "Date";
-    case "enum":
-      return "Enum";
-    case "icon":
-      return "Icon";
-    case "image":
-      return "Image";
-    case "markdown":
-      return "Markdown";
-    case "media":
-      return "Media";
-    case "number":
-      return "Number";
-    case "reference":
-      return "Reference";
-    case "textarea":
-      return "Long text";
-    case "value-unit":
-      return "Value/unit";
-    case "text":
-      return "Text";
-  }
 }
 
 function TypedFieldMetadataControls({
