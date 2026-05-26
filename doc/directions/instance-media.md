@@ -18,13 +18,15 @@ This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
   `doc/topics/schema-runtime.md`.
 - Current Authority storage and browser replica are keyed by app storage
   identity. See `doc/topics/authority-storage-sync.md`.
-- Current Site media is Site-specific image upload and serving. See
-  `doc/topics/site-runtime.md`.
-- Current Site image upload stores immutable R2 objects under `site/images/`.
-- Current installed Site image upload stores immutable R2 objects under
-  `app-installs/<installId>/site/images/`.
-- Current Site image records are `block` records with `block.type = image` and
-  `block.href`.
+- Current core image media upload, listing, restore, and delivery routes exist.
+  See `doc/topics/authority-storage-sync.md`.
+- Current core image media uploads store immutable R2 objects under
+  `media/images/`.
+- Current core image media delivery uses `/api/formless/media/<storageKey>`.
+- Current Site media routes remain available for legacy Site-scoped image
+  media. See `doc/topics/site-runtime.md`.
+- Current Site image records are `block` records with `block.type = image`,
+  optional `block.mediaAssetId`, and legacy/manual `block.href`.
 
 ## Direction
 
@@ -49,7 +51,8 @@ cross-app reference validation.
   processing status, delivery facts, and provider adapters.
 - Media app: bundled app or schema surface for browsing and managing media
   assets.
-- Media asset: flat record for one uploaded, imported, or external asset.
+- Media asset: flat runtime asset identity for one uploaded, imported, or
+  external asset.
 - Media kind: coarse asset type such as `image`, `video`, `audio`, or `file`.
 - Media rendition: derived asset output such as thumbnail, poster, transformed
   image, MP4 download, waveform, transcript, or audio extraction.
@@ -131,19 +134,24 @@ Usage metadata belongs to the consuming app record:
 - Estii attachment purpose;
 - future app-specific display rules.
 
-For Site, image and video blocks should eventually store `mediaAssetId` and
-usage fields. Legacy `href` should keep rendering while migration exists.
+For Site, image blocks now store optional `mediaAssetId`. Video blocks should
+follow the same usage-metadata split later. Legacy `href` should keep rendering
+while migration exists.
 
 ## Schema Shape
 
 Do not start with schema composition as the primary mechanism.
 
+The first shipped image slice uses R2 object metadata as media asset metadata.
+A future media app can still make assets normal schema records when browsing,
+deletion, ownership, or richer lifecycle needs force it.
+
 Near term:
 
-- add a core media app or media schema key;
-- add generated `editor: "media"` support for scalar text fields;
+- keep generated `editor: "media"` support for scalar text fields;
 - let app records store `mediaAssetId` as a flat text value;
-- let the Media module resolve `mediaAssetId` to playback or delivery facts.
+- let the Media module resolve `mediaAssetId` to playback or delivery facts;
+- add browser media management only after the asset lifecycle is clearer.
 
 Later:
 
@@ -212,9 +220,24 @@ behavior, or branded playback UI.
 If custom playback is needed later, prefer a proven player over hand-rolled HLS
 or DASH logic.
 
-## Shipped Site Image Spine
+## Shipped Image Media Spine
 
-- Site image upload and serving use shared media helpers.
+- Core image upload and serving use shared media helpers.
+- Core image uploads create asset metadata and R2 objects under `media/images/`.
+- Core image writes use existing owner-session or admin-token authorization when
+  configured.
+- Core image reads stay public through `/api/formless/media/<storageKey>`.
+- Generated media editors can upload, select, and preview scalar image media
+  asset ids.
+- Site image blocks can use `mediaAssetId` while legacy `href` still renders.
+- Public Site tree resolves valid media asset ids through core media delivery
+  facts.
+- Portable archives declare `core-media-assets` and include referenced core
+  image media objects plus asset metadata.
+- Archive restore validates core media files before mutation and restores media
+  before records.
+- Standalone Site save, dev restore, and publish keep core media files explicit
+  under project/source media roots.
 - Site schema-key media remains available at `/api/site/media/*`.
 - Installed Site media is scoped under `/api/app-installs/site/<installId>/media/*`.
 - Standalone Site save and publish preserve referenced same-origin media files.
@@ -223,15 +246,7 @@ or DASH logic.
 
 ## PRD
 
-Core media app for images is GitHub issue #28.
-
-The PRD should:
-
-- introduce media asset records or metadata enough to prove the model;
-- add a common media editor path;
-- let Site image blocks use media assets while legacy `href` still renders;
-- keep publish and save behavior explicit;
-- avoid video, captions, transformations, and true cross-app references.
+Core media app for images shipped in GitHub issue #28.
 
 Second PRD candidate: video assets with Cloudflare Stream playback.
 
@@ -239,7 +254,7 @@ Second PRD candidate: video assets with Cloudflare Stream playback.
 
 Defer:
 
-- video upload in the next image/media-asset PRD;
+- video upload;
 - captions and transcripts;
 - audio playback polish;
 - generic file manager polish;
@@ -255,15 +270,11 @@ Defer:
 
 ## Open Questions
 
-- Is `media` a normal schema key, an instance-private core store, or both?
-- Does first media asset identity use record id, provider id, or both?
-- How should Site project save and publish represent media assets after the
-  media spine exists?
+- What browser media asset management UI is enough before a full media library?
+- Is future `media` a normal schema key, an instance-private core store, or both?
 - Does a local instance own R2-like media files, or does local media stay a
   project folder until instance sync exists?
 - When should deletion remove provider objects versus only tombstone media
   records?
-- What minimum media picker is enough before a full media library UI exists?
-- Should media upload create records immediately, or only after the provider
-  upload succeeds?
-- How much legacy `block.href` compatibility is required before migration?
+- What video asset fields are required before Cloudflare Stream support?
+- When should true cross-app references replace scalar `mediaAssetId` fields?

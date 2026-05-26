@@ -1,6 +1,6 @@
 # Current
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Current shipped behavior lives in topic docs.
 

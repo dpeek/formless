@@ -109,12 +109,20 @@ Last updated: 2026-05-26
 - Schema route draft source: `src/app/routes/schema-draft.ts`.
 - Schema route defaults to Builder mode.
 - Schema route keeps Source mode beside Builder mode.
-- Schema route supports Save schema, Revert draft, and Open app controls.
-- Schema Builder entity selector uses `@dpeek/formless-ui/object-list`.
-- Schema Builder field selector uses `@dpeek/formless-ui/object-list`.
+- Schema route supports Save schema and Revert draft.
+- Schema route does not render a route-local Open app control.
+- Schema route header shows the schema key as a badge.
+- Schema route hides schema status until a draft is loaded.
+- Schema route uses accessible icon status for saved, dirty, invalid, and saving draft states.
+- Schema Builder renders entities and nested fields in one inline Builder structure.
+- Schema Builder renders entity keys, field keys, and field types as badges.
+- Schema Builder edits entity and field labels inline with accessible names.
+- Schema Builder opens create entity and create field dialogs from compact add controls.
 - Schema Builder field presentation preview derives generated control and renderer facts.
+- Schema Builder preserves enum option presentation metadata when enum labels change.
 - Generated actions consume selected `action.ui` facts in `src/app/generated/actions.tsx`.
 - Generated field UI adapters: `src/app/generated/field-ui-adapters.ts`.
+- Generated field presentation resolver: `src/app/generated/field-presentation.tsx`.
 - Generated field display: `src/app/generated/record-field-display.tsx`.
 - Generated inline editor: `src/app/generated/record-field-editor.tsx`.
 - Generated delete control: `src/app/generated/record-delete.tsx`.
@@ -138,6 +146,19 @@ Last updated: 2026-05-26
 - Generated image preview and empty well open file selection.
 - Successful generated image upload patches `href` and, when schema fields exist, numeric `width` and `height`.
 - Generated image fields keep manual URL editing as a fallback.
+- Generated media fields use text field `editor: "media"`.
+- Generated media asset editing applies to media editor fields whose field name is not `href`.
+- Generated media uploads write through `/api/formless/media/images`.
+- Generated media selectors list existing core image media assets.
+- Generated media previews resolve through core media delivery facts.
+- Missing media asset ids render a broken state instead of crashing.
+- Legacy `href` fields remain manual URL fields.
+- Generated enum icon-only presentation uses enum option icon/color tokens.
+- Generated enum icon-only controls expose labels like `Field: Option`.
+- Unknown icon tokens fall back to visible option text.
+- Unknown color tokens fall back to neutral styling.
+- Generated boolean completion presentation renders through the shared checkbox primitive.
+- Generated optional date `valueOrInteraction` presentation keeps empty date controls quiet until hover or focus.
 - Text editors can render title-like autosizing editable text.
 - Number editors can use formatted number input and still store numbers.
 - Value/unit table editing patches multiple flat scalar fields.
@@ -182,6 +203,8 @@ Last updated: 2026-05-26
 - Generated ordering tests: `src/app/generated/ordering-ui.test.ts`.
 - Generated format tests: `src/app/generated/format.test.ts`.
 - Generated field UI adapter tests: `src/app/generated/field-ui-adapters.test.ts`.
+- Generated record field control tests: `src/app/generated/record-field-control.test.tsx`.
+- Generated record field renderer model tests: `src/app/generated/record-field-renderer-model.test.ts`.
 - Generated authoring tests: `src/client/generated-authoring.test.ts`.
 - Schema Builder tests: `src/client/schema-builder.test.ts`, `src/app/routes/schema-draft.test.ts`.
 - Shared ObjectList tests: `lib/ui/src/object-list.test.tsx`.

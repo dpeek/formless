@@ -1,6 +1,6 @@
 # Schema Runtime
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Current Facts
 
@@ -23,6 +23,7 @@ Last updated: 2026-05-25
 - Field parser: `src/shared/schema-fields.ts`.
 - Relationship parser: `src/shared/schema-relationships.ts`.
 - View parser: `src/shared/schema-views.ts`.
+- View field parser: `src/shared/schema-view-fields.ts`.
 - Table view parser: `src/shared/schema-table-views.ts`.
 - Union parser: `src/shared/schema-unions.ts`.
 - Screen parser: `src/shared/schema-screens.ts`.
@@ -69,6 +70,7 @@ Last updated: 2026-05-25
 - Builder can add text, boolean, date, number, enum, and reference fields.
 - Builder can edit common field metadata.
 - Builder can edit builder-owned create and inline field presentation.
+- Builder preserves enum option presentation metadata when enum labels change.
 - Builder editor options come from field behavior.
 - Builder preserves source-owned advanced schema sections.
 - Saved entity keys are locked in Builder.
@@ -159,7 +161,17 @@ Last updated: 2026-05-25
 - Icon fields store SVG source as flat text values.
 - Text field `editor: "icon"` selects the generated icon control.
 - Text field `editor: "image"` selects the generated image upload control.
-- Icon and image editor values stay text-backed field values.
+- Text field `editor: "media"` selects the generated media asset control.
+- Icon, image, and media editor values stay text-backed field values.
+- Enum values can carry `presentation.icon` and `presentation.color` token metadata.
+- View fields can carry `presentation` metadata.
+- Create view fields can carry `presentation` metadata.
+- Field and reference table columns can carry `presentation` metadata.
+- `presentation.mode = "iconOnly"` requires an enum field.
+- `presentation.mode = "completion"` requires a boolean field.
+- `presentation.visibility = "valueOrInteraction"` requires an optional date field.
+- Task source priority values declare flag/color presentation tokens.
+- Task item view renders priority with `iconOnly`, done with `completion`, and due date with `valueOrInteraction`.
 
 ## Mutations
 
@@ -195,3 +207,6 @@ Last updated: 2026-05-25
 - Create defaults tests: `src/shared/create-defaults.test.ts`.
 - Result ordering tests: `src/shared/result-ordering.test.ts`.
 - Table schema tests: `src/shared/schema-table-views.test.ts`.
+- View model tests: `src/client/views.test.ts`.
+- Table model tests: `src/client/table-model.test.ts`.
+- Schema Builder tests: `src/client/schema-builder.test.ts`.

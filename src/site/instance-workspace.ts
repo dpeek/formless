@@ -1605,7 +1605,12 @@ async function writeComposedWorkspacePushArchive(input: {
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: input.exportedAt,
-    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    capabilities: [
+      "installed-app-registry",
+      "app-store-snapshots",
+      "app-scoped-media",
+      "core-media-assets",
+    ],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps: appArchives,
   };

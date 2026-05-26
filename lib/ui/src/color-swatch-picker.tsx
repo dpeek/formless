@@ -21,12 +21,14 @@ export function ColorSwatchPickerItem({
   className,
   ...props
 }: ColorSwatchPickerItemProps) {
+  const ringColor = typeof props.color === "string" ? props.color : props.color?.toString("css");
+
   return (
     <PrimitiveColorSwatchPickerItem
       style={({ defaultStyle }) => ({
         ...defaultStyle,
-        "--tw-ring-color": props.color
-          ? `color-mix(in oklab, ${props.color} 40%, transparent)`
+        "--tw-ring-color": ringColor
+          ? `color-mix(in oklab, ${ringColor} 40%, transparent)`
           : undefined,
       })}
       className={cx(

@@ -26,12 +26,16 @@ Last updated: 2026-05-26
 - Installed app snapshot API paths: `/api/app-installs/:packageAppKey/:installId/snapshot`, `/api/app-installs/:packageAppKey/:installId/snapshot/restore`.
 - Instance app installs API path: `/api/formless/app-installs`.
 - Instance archive restore API path: `/api/formless/archive/restore`.
+- Core image media API paths include `/api/formless/media/images` and `/api/formless/media/*`.
 - Site media API paths include `/api/site/media/images` and `/api/site/media/*`.
 - Installed Site media API paths include `/api/app-installs/site/:installId/media/images` and `/api/app-installs/site/:installId/media/*`.
-- Site media route handling runs before Authority dispatch in `src/worker/index.ts`.
-- Site media upload and restore use the `FORMLESS_MEDIA` R2 binding, not Durable Object storage.
-- Site media upload and restore use the same instance write guard as authority writes.
-- Site media reads are public and do not touch the Authority Durable Object.
+- Media route handling runs before Authority dispatch in `src/worker/index.ts`.
+- Core image media upload writes immutable R2 keys under `media/images/`.
+- Media upload and restore use the `FORMLESS_MEDIA` R2 binding, not Durable Object storage.
+- Media upload and restore use the same instance write guard as authority writes.
+- Media reads are public and do not touch the Authority Durable Object.
+- Core image media reads support `GET` and `HEAD` for `/api/formless/media/*`.
+- Core image media listing uses `Cache-Control: no-store`.
 - Authority responses default to `Cache-Control: no-store` when an operation does not set cache headers.
 - Public Site tree API reads use `Cache-Control: no-store`.
 - Reset code: `src/worker/authority.ts`, `src/worker/storage.ts`, `src/client/sync.ts`.
@@ -97,11 +101,13 @@ Last updated: 2026-05-26
 - Portable archive restore planner: `src/shared/archive-restore-plan.ts`.
 - Portable archive restore executor: `src/worker/archive-restore.ts`.
 - Portable archive kinds: `formless.instanceArchive`, `formless.appArchive`.
+- Portable archive capabilities include `core-media-assets`.
 - Archive restore validates before mutation.
 - Archive restore supports dry-run and apply policy.
 - Archive restore creates or replaces app install registry rows by policy.
 - Archive restore restores app data through installed app storage identity.
 - Archive restore restores media before app data.
+- Archive restore validates core media asset metadata and referenced media files before mutation.
 - Archive restore is backup, restore, and import plumbing, not bidirectional instance sync.
 
 ## Push Sync
@@ -145,6 +151,8 @@ Last updated: 2026-05-26
 - App storage identity tests: `src/shared/app-storage-identity.test.ts`.
 - Launch fixture tests: `src/shared/launch-fixtures.test.ts`, `src/worker/launch-fixtures.test.ts`, `src/worker/launch-fixture-startup.test.ts`.
 - Portable archive tests: `src/shared/archive.test.ts`, `src/shared/archive-restore-plan.test.ts`, `src/worker/archive-restore.test.ts`, `src/worker/archive-api.test.ts`.
+- Core media tests: `src/media/core.test.ts`.
+- Worker media tests: `src/worker/media.test.ts`.
 - Sync tests: `src/client/sync.test.ts`.
 - Local DB tests: `src/client/db.test.ts`.
 - Store tests: `src/client/store.test.ts`.

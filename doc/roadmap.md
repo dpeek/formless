@@ -90,10 +90,10 @@ Why:
 
 Good next chunks:
 
-- Core media app for image assets. GitHub issue #28 owns this PRD.
-- Common generated media editor path for app records.
 - Browser management UI for portable app and instance archives.
 - Safer archive review and replacement UX.
+- Browser management UI for core media assets.
+- Video media assets after the image asset spine proves the provider boundary.
 - Users and permissions.
 - Multi-tenant account routing.
 - Admin token and publish hardening.
@@ -119,7 +119,7 @@ Good next chunks:
 - Plugin view registry.
 - Custom result presentations backed by schema-declared views.
 - App marketplace shape after source app packaging is stable.
-- General media library after Site image upload limits are understood.
+- General media library after core image asset ownership rules are clearer.
 
 Avoid:
 

@@ -98,6 +98,8 @@ function renderRecordControl(
       iconDialogDraft=""
       iconDialogOpen={false}
       isPending={false}
+      mediaAssetOptions={[]}
+      mediaEditorMode="url"
       numberFormat="plain"
       onDraftChange={() => undefined}
       onDraftRevert={() => undefined}
@@ -107,6 +109,7 @@ function renderRecordControl(
       onIconOpenChange={() => undefined}
       onIconSave={() => Promise.resolve()}
       onImageFileSelect={() => undefined}
+      onMediaAssetSelect={() => undefined}
       onPatchValues={(_values: Partial<RecordValues>) => undefined}
       onUnitDraftChange={() => undefined}
       onUnitDraftRevert={() => undefined}

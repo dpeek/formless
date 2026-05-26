@@ -1010,7 +1010,7 @@ describe("Formless Site CLI", () => {
     );
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = JSON.parse(String(restoreRequest?.body)) as { archive: InstanceArchive };
+    const restoreBody = parseCapturedJsonBody<{ archive: InstanceArchive }>(restoreRequest);
 
     expect(`${restoreRequest?.method} ${restoreRequest?.url}`).toBe(
       "POST https://personal.dpeek.workers.dev/api/formless/archive/restore",
@@ -1020,6 +1020,12 @@ describe("Formless Site CLI", () => {
       dryRun: true,
       installCollisions: "reject",
     });
+    expect(restoreBody.archive.capabilities).toEqual([
+      "installed-app-registry",
+      "app-store-snapshots",
+      "app-scoped-media",
+      "core-media-assets",
+    ]);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
     expect(logs).toHaveLength(1);
     expect(logs[0]?.split("\n")).toEqual([
@@ -1079,7 +1085,7 @@ describe("Formless Site CLI", () => {
     expect(
       restoreRequests.map(
         (request) =>
-          (JSON.parse(String(request.body)) as { archive: InstanceArchive }).archive.restorePolicy,
+          parseCapturedJsonBody<{ archive: InstanceArchive }>(request).archive.restorePolicy,
       ),
     ).toEqual([
       { dryRun: true, installCollisions: "replace" },
@@ -1329,10 +1335,10 @@ describe("Formless Site CLI", () => {
     ]);
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = JSON.parse(String(restoreRequest?.body)) as {
+    const restoreBody = parseCapturedJsonBody<{
       archive: InstanceArchive;
       mediaFiles: { bytesBase64: string }[];
-    };
+    }>(restoreRequest);
 
     expect(restoreRequest?.headers.authorization).toBeUndefined();
     expect(restoreBody.archive.restorePolicy).toEqual({
@@ -1904,10 +1910,10 @@ describe("Formless Site CLI", () => {
     );
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = JSON.parse(String(restoreRequest?.body)) as {
+    const restoreBody = parseCapturedJsonBody<{
       archive: AppArchive;
       mediaFiles: { bytesBase64: string }[];
-    };
+    }>(restoreRequest);
 
     expect(`${restoreRequest?.method} ${restoreRequest?.url}`).toBe(
       "POST https://instance.example/api/formless/archive/restore",
@@ -2126,10 +2132,10 @@ describe("Formless Site CLI", () => {
     );
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = JSON.parse(String(restoreRequest?.body)) as {
+    const restoreBody = parseCapturedJsonBody<{
       archive: InstanceArchive;
       mediaFiles: { bytesBase64: string }[];
-    };
+    }>(restoreRequest);
 
     expect(`${restoreRequest?.method} ${restoreRequest?.url}`).toBe(
       "POST https://instance.example/api/formless/archive/restore",
@@ -2551,6 +2557,16 @@ type CapturedFetchRequest = {
   method: string;
   url: string;
 };
+
+function parseCapturedJsonBody<T>(request: CapturedFetchRequest | undefined): T {
+  const body = request?.body;
+
+  if (typeof body !== "string") {
+    throw new Error("Expected captured fetch body to be a string.");
+  }
+
+  return JSON.parse(body) as T;
+}
 
 class FakeCliDevChild extends EventEmitter {
   exitCode: number | null = null;

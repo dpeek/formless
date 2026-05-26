@@ -137,18 +137,25 @@ Last updated: 2026-05-26
 
 - Site media route code: `src/worker/media.ts`.
 - Site client media helper: `src/client/media.ts`.
-- Site media core helpers: `src/media/core.ts`.
+- Core media helpers: `src/media/core.ts`.
 - Source media helpers: `src/site/source-media.ts`.
 - Shared SVG icon primitive: `lib/ui/src/svg-icon.tsx`.
-- Media records are `block` records.
-- Image blocks store the served media URL in `block.href`.
+- Site media usage records are `block` records.
+- Image blocks can store a core media asset id in `block.mediaAssetId`.
+- Image blocks can store a legacy or manual served URL in `block.href`.
 - Image blocks keep optional flat `width` and `height` fields.
 - Image blocks can be created before `href` exists.
-- Site image authoring uses text field `editor: "image"` for `block.href`.
+- Site image authoring uses text field `editor: "href"` for `block.href`.
+- Site image authoring uses text field `editor: "media"` for `block.mediaAssetId`.
 - Site image variant authoring hides `width` and `height`.
-- Site image upload accepts one raster image file field named `file`.
-- Site image upload accepts JPEG, PNG, WebP, and GIF.
-- Site image upload rejects files above 5 MB.
+- Site image edit, tree, and table authoring surfaces include `mediaAssetId`.
+- Image media upload accepts one raster image file field named `file`.
+- Image media upload accepts JPEG, PNG, WebP, and GIF.
+- Image media upload rejects files above 5 MB.
+- Core image media upload uses `/api/formless/media/images`.
+- Core image media objects use storage keys under `media/images/`.
+- Core image media delivery uses `/api/formless/media/<storageKey>`.
+- Core image media assets store id, kind, label, filename, content type, byte size, status, provider, storage key, and optional dimensions.
 - Site image upload writes immutable R2 keys under `site/images/`.
 - Same-origin media hrefs use `/api/site/media/<key>`.
 - Installed Site image upload writes immutable R2 keys under `app-installs/<installId>/site/images/`.
@@ -157,6 +164,9 @@ Last updated: 2026-05-26
 - Legacy Site media reads reject installed app media keys.
 - Site media serving supports `GET` and `HEAD` for `/api/site/media/*`.
 - Installed Site media serving supports `GET` and `HEAD` for `/api/app-installs/site/:installId/media/*`.
+- Public Site tree resolves valid `mediaAssetId` values through core media delivery facts.
+- Public image rendering prefers resolved core media asset hrefs when present.
+- Public image rendering falls back to legacy or manual `href` values.
 - Public image rendering uses the same Site tree and renderer path as authored image URLs.
 - Shared SVG icon rendering falls back to an empty outline for missing, invalid, or unsafe SVG.
 - Shared SVG icon rendering rejects scripts, event handlers, `javascript:` URLs, `foreignObject`, and external asset references.
@@ -247,7 +257,9 @@ Last updated: 2026-05-26
 - Worker SSR tests: `src/worker/site-ssr.test.ts`.
 - Static asset and dynamic icon tests: `src/worker/static-assets.test.ts`.
 - Site media tests: `src/worker/media.test.ts`, `src/client/media.test.ts`.
+- Core media tests: `src/media/core.test.ts`.
 - Source media tests: `src/site/source-media.test.ts`.
+- Public renderer media tests: `src/app/site-renderer/renderer.test.tsx`.
 - Site link target tests: `src/site/link-targets.test.ts`.
 - Public indexing tests: `src/site/public-indexing.test.ts`, `src/worker/public-indexing.test.ts`.
 - Public document metadata tests: `src/site/public-document-metadata.test.ts`.

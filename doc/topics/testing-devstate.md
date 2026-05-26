@@ -43,10 +43,15 @@ Last updated: 2026-05-26
 - Storage tests: `src/worker/storage.test.ts`.
 - Site tree tests: `src/site/tree.test.ts`.
 - Site media tests: `src/worker/media.test.ts`, `src/client/media.test.ts`.
+- Core media tests: `src/media/core.test.ts`.
 - Site source media tests: `src/site/source-media.test.ts`.
+- Site project source media tests: `src/site/project-source.test.ts`.
 - Site project archive import tests: `src/site/project-archive.test.ts`.
+- Archive API tests: `src/worker/archive-api.test.ts`.
 - Generated format tests: `src/app/generated/format.test.ts`.
 - Generated field UI adapter tests: `src/app/generated/field-ui-adapters.test.ts`.
+- Generated record field control tests: `src/app/generated/record-field-control.test.tsx`.
+- Generated record field renderer model tests: `src/app/generated/record-field-renderer-model.test.ts`.
 - Generated authoring tests: `src/client/generated-authoring.test.ts`.
 - Schema Builder tests: `src/client/schema-builder.test.ts`, `src/app/routes/schema-draft.test.ts`.
 - Shared ObjectList tests: `lib/ui/src/object-list.test.tsx`.

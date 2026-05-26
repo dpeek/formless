@@ -11,6 +11,7 @@ Last updated: 2026-05-26
 - CLI parser source: `src/site/cli-command.ts`.
 - Site project config source: `src/site/project-config.ts`.
 - Site project source helpers: `src/site/project-source.ts`.
+- Core media helpers: `src/media/core.ts`.
 - Site source snapshot helpers: `src/site/source-snapshot.ts`.
 - Site seed promotion helpers: `src/site/seed-promotion.ts`.
 - Site seed promotion script: `scripts/site-pull-seed.ts`.
@@ -72,6 +73,9 @@ Last updated: 2026-05-26
 - Site seed promotion writes deterministic record order and JSON formatting.
 - Site seed promotion writes referenced same-origin media files beside source records.
 - Site seed promotion maps `/api/site/media/site/images/example.png` to `schema/apps/site/media/site/images/example.png`.
+- Site seed promotion writes referenced core media files beside source records.
+- Site seed promotion maps `/api/formless/media/media/images/example.png` to `schema/apps/site/media/media/images/example.png`.
+- Site seed promotion includes media referenced by `mediaAssetId`.
 - `bun run site:pull-seed --check` fails when source Site records or referenced source media files are stale.
 - Site source snapshots are built from source schema plus source seed records.
 - Source snapshot envelopes use `schemaKey: "site"` and `sourceCursor: 0`.
@@ -82,6 +86,7 @@ Last updated: 2026-05-26
 - Publish backups default under `tmp/site-publish-backups/`.
 - Publish validates referenced source media files before mutation.
 - Publish restores media before records.
+- Publish preserves legacy Site media href files and core media asset files.
 - Publish uses guarded snapshot restore.
 - Publish sends `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when the token is configured.
 - Local Site admin publish is brokered by the CLI dev server.
@@ -99,8 +104,9 @@ Last updated: 2026-05-26
 - Onboard local state root: `.formless/instances/`.
 - Instance archives and app archives are portable archive directories.
 - Portable archive directory manifest file: `archive.json`.
+- Portable archive capabilities include `core-media-assets`.
 - Portable archive media files live at manifest `archivePath` values.
-- Archive export reads installed app registry state, app snapshots, and referenced installed Site media over HTTP.
+- Archive export reads installed app registry state, app snapshots, referenced installed Site media, and referenced core image media over HTTP.
 - Archive restore posts archive JSON and media payloads to `/api/formless/archive/restore`.
 - Archive restore is dry-run by default.
 - Mutating archive restore requires `--apply`.
@@ -109,6 +115,12 @@ Last updated: 2026-05-26
 - App archive restore can retarget a Site app archive to a new install id.
 - Site project import rewrites legacy same-origin Site media hrefs to install-scoped media hrefs.
 - Site project import preserves external URLs.
+- Portable archives include core image media objects and asset metadata for `mediaAssetId` references.
+- Portable archives include core image media objects referenced by core media hrefs.
+- Archive restore validates core media object keys, content types, byte sizes, asset metadata, and media files before mutation.
+- Archive restore writes core media objects before app records.
+- Standalone Site save, dev restore, and publish keep core media files explicit under project/source media roots.
+- Standalone Site save, dev restore, and publish preserve legacy `/api/site/media/...` href file movement.
 - Portable archives are backup, restore, and import workflows, not bidirectional instance sync.
 
 ## Instance Workspaces
@@ -146,8 +158,11 @@ Last updated: 2026-05-26
 - Project source tests: `src/site/project-source.test.ts`.
 - Source snapshot tests: `src/site/source-snapshot.test.ts`.
 - Seed promotion tests: `src/site/seed-promotion.test.ts`.
+- Site source media tests: `src/site/source-media.test.ts`.
+- Site project source media tests: `src/site/project-source.test.ts`.
 - Project archive import tests: `src/site/project-archive.test.ts`.
 - Portable archive CLI workflow tests: `src/site/cli.test.ts`.
+- Archive API tests: `src/worker/archive-api.test.ts`.
 - Instance workspace CLI workflow tests: `src/site/cli.test.ts`.
 - Instance workspace manifest tests: `src/site/instance-workspace-config.test.ts`.
 - Instance workspace secret tests: `src/site/instance-workspace-secrets.test.ts`.
