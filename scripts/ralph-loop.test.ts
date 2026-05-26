@@ -118,6 +118,9 @@ describe("Ralph CLI", () => {
 
     expect(prompt).toContain("Dirty start was explicitly allowed by Ralph.");
     expect(prompt).toContain("do not stop solely because the worktree started dirty");
+    expect(prompt).toContain("Resolve rebase conflicts when the resolution is clear");
+    expect(prompt).toContain("stop with `<blocked/>` only when unsure");
     expect(prompt).not.toContain("Confirm the command started you from a clean worktree.");
+    expect(prompt).not.toContain("stop with `<blocked/>` on conflicts.");
   });
 });

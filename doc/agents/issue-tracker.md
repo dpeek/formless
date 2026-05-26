@@ -45,8 +45,9 @@ Use the `gh` CLI for issue operations from this repo.
 - Keep a `## Promotion Notes` section for shipped facts that must later move to topic docs.
 - Normal PRD agents add promotion notes but do not edit `doc/current.md`, `doc/roadmap.md`, or `doc/topics/*.md`.
 - A PRD is implementation-complete only when required chunks are `shipped` or `closed` and promotion notes are ready for finalization.
-- PRD finalization is a separate after-review pass. It rebases on local `main`, promotes notes into docs, runs `devstate check`, updates the issue body, and commits with `Fixes #<issue>`.
+- PRD finalization is a separate after-review pass. It rebases on local `main`, resolves clear conflicts, promotes notes into docs, runs `devstate check`, updates the issue body, and commits with `Fixes #<issue>`.
 - Run finalization with `bun ralph finalize --issue <number>` or `bun ralph finalise --issue <number>`.
+- During finalization, resolve rebase conflicts when the resolution is clear; stop and ask when unsure.
 - Finalization does not merge unless explicitly requested.
 - Existing `prd/*.md` files are legacy workstream records kept until retired.
 - Do not create new local PRD files.

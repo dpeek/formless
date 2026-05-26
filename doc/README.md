@@ -36,7 +36,7 @@ Read only the topics needed for the work.
 - Do not create new local PRD files.
 - Do not read every legacy PRD by default; read one only when assigned, retiring it, or chasing a specific historical decision.
 - Direction docs can shape PRDs but do not own implementation status.
-- PRD finalization is a separate after-review pass that rebases on local `main` and promotes issue-body promotion notes into topic docs before closing.
+- PRD finalization is a separate after-review pass that rebases on local `main`, resolves clear conflicts, and promotes issue-body promotion notes into topic docs before closing.
 - Run PRD finalization with `bun ralph finalize --issue <number>` or `bun ralph finalise --issue <number>`.
 
 ## Removed Homes

@@ -45,7 +45,7 @@ Single-context repo: read root `CONTEXT.md` and relevant topic docs when a skill
 - A normal PRD agent does not edit `doc/current.md`, `doc/roadmap.md`, or `doc/topics/*.md`.
 - Put shipped facts for global docs under the PRD's promotion notes.
 - Update `doc/current.md`, `doc/roadmap.md`, and `doc/topics/*.md` only in a PRD finalization/doc-steward pass or when the user asks.
-- PRD finalization happens after implementation review. It rebases on local `main`, promotes PRD promotion notes into topic docs, runs `devstate check`, updates the issue body, and creates the closing commit with `Fixes #<issue>`.
+- PRD finalization happens after implementation review. It rebases on local `main`, resolves clear conflicts, promotes PRD promotion notes into topic docs, runs `devstate check`, updates the issue body, and creates the closing commit with `Fixes #<issue>`.
 
 ## Parallel Work
 
@@ -62,6 +62,7 @@ When user asks to finalize a PRD after review:
 - Use `bun ralph finalize --issue <issue>` or `bun ralph finalise --issue <issue>` for the automated finalization pass.
 - Verify all required chunks are `shipped` or intentionally `closed`.
 - Rebase on local `main` with `git rebase main`, not `origin/main`.
+- Resolve rebase conflicts when the resolution is clear; stop and ask when unsure.
 - Promote PRD promotion notes into `doc/current.md`, `doc/roadmap.md`, and relevant `doc/topics/*.md`.
 - Update the assigned PRD issue body or legacy PRD file.
 - Run `devstate check` and fix issues.

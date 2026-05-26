@@ -969,7 +969,7 @@ export function buildFinalizationPrompt(
     "1. Run `devstate start`.",
     "2. Read `doc/README.md`, `CONTEXT.md`, `doc/current.md`, `doc/roadmap.md`, relevant `doc/topics/*.md`, and the assigned PRD context.",
     "3. Verify all required chunks are `shipped` or intentionally `closed`, and promotion notes are ready. Stop with `<blocked/>` if the PRD is not ready for finalization.",
-    "4. Rebase the current branch on local `main` before the docs/final commit. Use `git rebase main`; do not use `origin/main` unless the user explicitly asks. Preserve reviewed work with non-interactive git commands, and stop with `<blocked/>` on conflicts.",
+    "4. Rebase the current branch on local `main` before the docs/final commit. Use `git rebase main`; do not use `origin/main` unless the user explicitly asks. Preserve reviewed work with non-interactive git commands. Resolve rebase conflicts when the resolution is clear; stop with `<blocked/>` only when unsure how to resolve them.",
     "5. Promote PRD promotion notes into `doc/current.md`, `doc/roadmap.md`, and relevant `doc/topics/*.md`. Keep topic docs short, concrete, and source-faithful.",
     `6. Update ${source.updateTarget} so status and finalization are complete, latest evidence is recorded, and consumed promotion notes are marked or removed.`,
     "7. Run `devstate check`, read `./.devstate/status.md`, and fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually; devstate owns those outputs.",
