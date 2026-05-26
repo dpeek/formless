@@ -13,14 +13,20 @@ export type MappedSiteHost = {
 export function mappedSiteHostFromDomainMapping(
   mapping: InstanceDomainMapping | undefined,
 ): MappedSiteHost | undefined {
-  if (!mapping || mapping.surface !== "site" || !mapping.enabled) {
+  if (
+    !mapping ||
+    mapping.profile !== "publicSite" ||
+    mapping.surface !== "site" ||
+    !mapping.targetInstallId ||
+    !mapping.enabled
+  ) {
     return undefined;
   }
 
   const target = installedAppStorageIdentity({
-    installId: mapping.installId,
+    installId: mapping.targetInstallId,
     packageAppKey: "site",
   });
 
-  return target ? { host: mapping.host, installId: mapping.installId, target } : undefined;
+  return target ? { host: mapping.host, installId: mapping.targetInstallId, target } : undefined;
 }

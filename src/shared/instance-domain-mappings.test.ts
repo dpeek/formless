@@ -3,6 +3,7 @@ import type { AppInstall } from "./app-installs.ts";
 import {
   buildInstanceDomainMappingAppliedState,
   buildInstanceDomainMapping,
+  disableInstanceDomainMapping,
   normalizeInstanceDomainHost,
   parseCreateInstanceDomainMappingRequest,
   parseRecordInstanceDomainMappingApplyEvidenceRequest,
@@ -33,13 +34,13 @@ describe("instance domain mappings", () => {
     });
   });
 
-  it("builds enabled Site mappings and sorts them by host", () => {
+  it("builds enabled profile mappings and keeps legacy Site aliases", () => {
     const first = buildInstanceDomainMapping({
       existingMappings: [],
       installs: [siteInstall("personal")],
       host: "WWW.Example.COM.",
-      surface: "site",
-      installId: "personal",
+      profile: "publicSite",
+      targetInstallId: "personal",
       now,
     });
 
@@ -47,7 +48,9 @@ describe("instance domain mappings", () => {
       ok: true,
       mapping: {
         host: "www.example.com",
+        profile: "publicSite",
         surface: "site",
+        targetInstallId: "personal",
         installId: "personal",
         enabled: true,
       },
@@ -60,9 +63,8 @@ describe("instance domain mappings", () => {
     const second = buildInstanceDomainMapping({
       existingMappings: first.mappings,
       installs: [siteInstall("personal")],
-      host: "example.com",
-      surface: "site",
-      installId: "personal",
+      host: "admin.example.com",
+      profile: "instance",
       enabled: false,
       now,
     });
@@ -70,17 +72,41 @@ describe("instance domain mappings", () => {
     expect(second).toMatchObject({
       ok: true,
       mappings: [
-        { host: "example.com", enabled: false },
-        { host: "www.example.com", enabled: true },
+        { host: "admin.example.com", profile: "instance", enabled: false },
+        { host: "www.example.com", profile: "publicSite", enabled: true },
       ],
     });
   });
 
-  it("rejects duplicate host and surface mappings", () => {
+  it("reads legacy surface input as a publicSite profile mapping", () => {
+    const result = buildInstanceDomainMapping({
+      existingMappings: [],
+      installs: [siteInstall("personal")],
+      host: "example.com",
+      surface: "site",
+      installId: "personal",
+      now,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      mapping: {
+        host: "example.com",
+        profile: "publicSite",
+        surface: "site",
+        targetInstallId: "personal",
+        installId: "personal",
+      },
+    });
+  });
+
+  it("rejects duplicate host/profile mappings and enabled cross-profile host conflicts", () => {
     const existing = [
       {
         host: "example.com",
+        profile: "publicSite",
         surface: "site",
+        targetInstallId: "personal",
         installId: "personal",
         enabled: true,
         createdAt: now,
@@ -93,8 +119,8 @@ describe("instance domain mappings", () => {
         existingMappings: existing,
         installs: [siteInstall("personal")],
         host: "EXAMPLE.COM.",
-        surface: "site",
-        installId: "personal",
+        profile: "publicSite",
+        targetInstallId: "personal",
         now,
       }),
     ).toMatchObject({
@@ -102,21 +128,33 @@ describe("instance domain mappings", () => {
       error: { code: "duplicate-domain-mapping", field: "host" },
       mappings: existing,
     });
+
+    expect(
+      buildInstanceDomainMapping({
+        existingMappings: existing,
+        installs: [],
+        host: "example.com",
+        profile: "instance",
+        now,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "duplicate-domain-mapping", field: "host" },
+    });
   });
 
-  it("rejects unsupported surfaces and non-Site installs", () => {
+  it("validates profile targets", () => {
     expect(
       buildInstanceDomainMapping({
         existingMappings: [],
         installs: [siteInstall("personal")],
         host: "example.com",
-        surface: "admin",
-        installId: "personal",
+        profile: "admin",
         now,
       }),
     ).toMatchObject({
       ok: false,
-      error: { code: "invalid-surface", field: "surface" },
+      error: { code: "invalid-profile", field: "profile" },
     });
 
     expect(
@@ -124,13 +162,74 @@ describe("instance domain mappings", () => {
         existingMappings: [],
         installs: [tasksInstall("tasks")],
         host: "example.com",
-        surface: "site",
-        installId: "tasks",
+        profile: "publicSite",
+        targetInstallId: "tasks",
         now,
       }),
     ).toMatchObject({
       ok: false,
-      error: { code: "unsupported-install-package", field: "installId" },
+      error: { code: "unsupported-install-package", field: "targetInstallId" },
+    });
+
+    expect(
+      buildInstanceDomainMapping({
+        existingMappings: [],
+        installs: [tasksInstall("tasks")],
+        host: "tasks.example.com",
+        profile: "app",
+        targetInstallId: "tasks",
+        now,
+      }),
+    ).toMatchObject({
+      ok: true,
+      mapping: { profile: "app", targetInstallId: "tasks", installId: "tasks" },
+    });
+
+    expect(
+      buildInstanceDomainMapping({
+        existingMappings: [],
+        installs: [siteInstall("personal")],
+        host: "admin.example.com",
+        profile: "instance",
+        targetInstallId: "personal",
+        now,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid-install-id", field: "targetInstallId" },
+    });
+  });
+
+  it("disables desired mappings without removing them", () => {
+    const existing = [
+      {
+        host: "example.com",
+        profile: "publicSite",
+        surface: "site",
+        targetInstallId: "personal",
+        installId: "personal",
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ] as const;
+
+    expect(
+      disableInstanceDomainMapping({
+        existingMappings: existing,
+        host: "EXAMPLE.COM.",
+        profile: "publicSite",
+        now: "2026-05-26T02:00:00.000Z",
+      }),
+    ).toMatchObject({
+      ok: true,
+      mapping: {
+        host: "example.com",
+        profile: "publicSite",
+        enabled: false,
+        updatedAt: "2026-05-26T02:00:00.000Z",
+      },
+      mappings: [{ host: "example.com", enabled: false }],
     });
   });
 
@@ -138,22 +237,22 @@ describe("instance domain mappings", () => {
     expect(
       parseCreateInstanceDomainMappingRequest({
         host: "example.com",
-        surface: "site",
-        installId: "personal",
+        profile: "publicSite",
+        targetInstallId: "personal",
         enabled: false,
       }),
     ).toEqual({
       host: "example.com",
-      surface: "site",
-      installId: "personal",
+      profile: "publicSite",
+      targetInstallId: "personal",
       enabled: false,
     });
 
     expect(() =>
       parseCreateInstanceDomainMappingRequest({
         host: "example.com",
-        surface: "site",
-        installId: "personal",
+        profile: "publicSite",
+        targetInstallId: "personal",
         extra: true,
       }),
     ).toThrow('Domain mapping request has unsupported key "extra".');
@@ -164,7 +263,9 @@ describe("instance domain mappings", () => {
       existingMappings: [
         {
           host: "www.example.com",
+          profile: "publicSite",
           surface: "site",
+          targetInstallId: "personal",
           installId: "personal",
           enabled: true,
           createdAt: now,
@@ -172,8 +273,8 @@ describe("instance domain mappings", () => {
         },
       ],
       host: "WWW.Example.COM.",
-      surface: "site",
-      installId: "personal",
+      profile: "publicSite",
+      targetInstallId: "personal",
       provider: "cloudflare-worker-custom-domain",
       accountId: "account-123",
       zoneId: "zone-1",
@@ -188,7 +289,9 @@ describe("instance domain mappings", () => {
       ok: true,
       appliedState: {
         host: "www.example.com",
+        profile: "publicSite",
         surface: "site",
+        targetInstallId: "personal",
         installId: "personal",
         provider: "cloudflare-worker-custom-domain",
         accountId: "account-123",
@@ -223,6 +326,40 @@ describe("instance domain mappings", () => {
     });
   });
 
+  it("records instance profile applied evidence without a fake install id", () => {
+    const result = buildInstanceDomainMappingAppliedState({
+      existingMappings: [
+        {
+          host: "admin.example.com",
+          profile: "instance",
+          enabled: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      host: "admin.example.com",
+      profile: "instance",
+      provider: "cloudflare-worker-custom-domain",
+      accountId: "account-123",
+      zoneId: "zone-1",
+      zoneName: "example.com",
+      workerName: "personal-worker",
+      workerDomainId: "domain-1",
+      action: "created",
+      now,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      appliedState: {
+        host: "admin.example.com",
+        profile: "instance",
+        targetInstallId: undefined,
+        installId: undefined,
+      },
+    });
+  });
+
   it("parses the apply evidence request shape", () => {
     expect(
       parseRecordInstanceDomainMappingApplyEvidenceRequest({
@@ -254,7 +391,7 @@ describe("instance domain mappings", () => {
       parseRecordInstanceDomainMappingApplyEvidenceRequest({
         host: "example.com",
       }),
-    ).toThrow('Domain mapping apply evidence request must include "surface".');
+    ).toThrow('Domain mapping apply evidence request must include "provider".');
   });
 });
 

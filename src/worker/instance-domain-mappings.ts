@@ -1,6 +1,9 @@
 import {
   parseCreateInstanceDomainMappingRequest,
+  parseDeleteInstanceDomainMappingRequest,
   parseRecordInstanceDomainMappingApplyEvidenceRequest,
+  resolveInstanceDomainMappingProfile,
+  type DeleteInstanceDomainMappingResponse,
   type InstanceDomainMapping,
   type InstanceDomainMappingLookupResponse,
   type InstanceDomainMappingsResponse,
@@ -11,6 +14,7 @@ import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   createInstanceDomainMapping,
+  disableStoredInstanceDomainMapping,
   readInstanceDomainMappingAppliedStates,
   readInstanceDomainMappingAuditEvents,
   readEnabledInstanceDomainMappingForHost,
@@ -46,7 +50,7 @@ export async function lookupEnabledInstanceSiteDomainMappingForRequestHost(
   const requestUrl = new URL(request.url);
   const lookupUrl = new URL(INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH, requestUrl.origin);
   lookupUrl.searchParams.set("host", requestUrl.host);
-  lookupUrl.searchParams.set("surface", "site");
+  lookupUrl.searchParams.set("profile", "publicSite");
 
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
   const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
@@ -131,7 +135,49 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
       );
     }
 
-    return methodNotAllowedResponse("GET, POST");
+    if (request.method === "DELETE") {
+      const authorization = await authorizeInstanceWrite(request, env);
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
+      const body = parseDeleteInstanceDomainMappingRequest({
+        host: url.searchParams.get("host") ?? "",
+        profile: url.searchParams.get("profile") ?? undefined,
+        surface:
+          url.searchParams.get("surface") ?? (url.searchParams.has("profile") ? undefined : "site"),
+      });
+      const result = disableStoredInstanceDomainMapping(storage, {
+        ...body,
+        now: nowIsoString(),
+      });
+
+      if (!result.ok) {
+        return jsonResponse(
+          {
+            error: result.error.message,
+            code: result.error.code,
+            ...(result.error.field === undefined ? {} : { field: result.error.field }),
+            mappings: result.mappings,
+          },
+          domainMappingFailureStatus(result.error.code),
+        );
+      }
+
+      const response: DeleteInstanceDomainMappingResponse = {
+        mapping: result.mapping,
+        mappings: result.mappings,
+      };
+
+      return jsonResponse(response);
+    }
+
+    return methodNotAllowedResponse("GET, POST, DELETE");
   } catch (error) {
     return jsonResponse({ error: errorMessage(error) }, 400);
   }
@@ -189,18 +235,35 @@ function handleLookupRequest(request: Request, storage: DurableObjectStorage, ur
   }
 
   const host = url.searchParams.get("host");
-  const surface = url.searchParams.get("surface") ?? "site";
+  const profile = url.searchParams.get("profile") ?? undefined;
+  const surface = url.searchParams.get("surface") ?? (profile === undefined ? "site" : undefined);
 
   if (host === null || host.trim() === "") {
     return jsonResponse({ error: "Domain mapping lookup requires host." }, 400);
   }
 
-  if (surface !== "site") {
-    return jsonResponse({ error: 'Domain mapping surface must be "site".' }, 400);
+  const profileResult = resolveInstanceDomainMappingProfile(
+    { profile, surface },
+    { defaultProfile: "publicSite" },
+  );
+
+  if (!profileResult.ok) {
+    return jsonResponse(
+      {
+        error: profileResult.error.message,
+        code: profileResult.error.code,
+        ...(profileResult.error.field === undefined ? {} : { field: profileResult.error.field }),
+      },
+      400,
+    );
   }
 
   const response: InstanceDomainMappingLookupResponse = {
-    mapping: readEnabledInstanceDomainMappingForHost(storage, { host, surface }) ?? null,
+    mapping:
+      readEnabledInstanceDomainMappingForHost(storage, {
+        host,
+        profile: profileResult.profile,
+      }) ?? null,
   };
 
   return jsonResponse(response);

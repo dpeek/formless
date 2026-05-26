@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   createInstanceDomainMapping,
+  deleteInstanceDomainMapping,
   DomainMappingApiError,
   fetchInstanceDomainMappings,
   INSTANCE_DOMAIN_MAPPINGS_API_PATH,
@@ -24,8 +25,8 @@ describe("client domain mapping API helpers", () => {
       {
         enabled: true,
         host: "www.example.com",
-        installId: "site",
-        surface: "site",
+        profile: "publicSite",
+        targetInstallId: "site",
       },
       {
         fetcher: jsonFetcher(
@@ -45,8 +46,8 @@ describe("client domain mapping API helpers", () => {
       createInstanceDomainMapping(
         {
           host: "www.example.com",
-          installId: "site",
-          surface: "site",
+          profile: "publicSite",
+          targetInstallId: "site",
         },
         {
           fetcher: jsonFetcher(
@@ -69,6 +70,60 @@ describe("client domain mapping API helpers", () => {
       message: 'Domain mapping for host "www.example.com" and surface "site" already exists.',
       name: "DomainMappingApiError",
       status: 409,
+    } satisfies Partial<DomainMappingApiError>);
+  });
+
+  it("deletes a desired domain mapping and surfaces API errors", async () => {
+    const deleted = await deleteInstanceDomainMapping(
+      {
+        host: "www.example.com",
+        profile: "publicSite",
+      },
+      {
+        fetcher: jsonFetcher(
+          `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}?host=www.example.com&profile=publicSite`,
+          {
+            mapping: { enabled: false, host: "www.example.com", profile: "publicSite" },
+            mappings: [{ enabled: false, host: "www.example.com", profile: "publicSite" }],
+          },
+          { expectedMethod: "DELETE" },
+        ),
+      },
+    );
+
+    expect(deleted.mapping).toEqual({
+      enabled: false,
+      host: "www.example.com",
+      profile: "publicSite",
+    });
+
+    await expect(
+      deleteInstanceDomainMapping(
+        {
+          host: "missing.example.com",
+          profile: "publicSite",
+        },
+        {
+          fetcher: jsonFetcher(
+            `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}?host=missing.example.com&profile=publicSite`,
+            {
+              code: "domain-mapping-not-found",
+              error:
+                'Domain mapping for host "missing.example.com" and profile "publicSite" does not exist.',
+              field: "host",
+            },
+            { expectedMethod: "DELETE", status: 404 },
+          ),
+        },
+      ),
+    ).rejects.toMatchObject({
+      body: {
+        code: "domain-mapping-not-found",
+        error:
+          'Domain mapping for host "missing.example.com" and profile "publicSite" does not exist.',
+        field: "host",
+      },
+      status: 404,
     } satisfies Partial<DomainMappingApiError>);
   });
 });

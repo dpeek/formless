@@ -1924,7 +1924,12 @@ async function readLiveEnabledWorkspaceDomainIntents(
   );
 
   return liveMappings.mappings
-    .filter((mapping) => mapping.enabled && mapping.surface === "site")
+    .filter(
+      (mapping) =>
+        mapping.enabled &&
+        (mapping.profile === "publicSite" || mapping.surface === "site") &&
+        liveMappingTargetInstallId(mapping) !== undefined,
+    )
     .map(workspaceDomainIntentFromLiveMapping);
 }
 
@@ -1948,11 +1953,21 @@ function withWorkspaceDomainIntents(
 function workspaceDomainIntentFromLiveMapping(
   mapping: InstanceDomainMapping,
 ): FormlessInstanceWorkspaceDomainIntent {
+  const installId = liveMappingTargetInstallId(mapping);
+
+  if ((mapping.profile !== "publicSite" && mapping.surface !== "site") || installId === undefined) {
+    throw new Error(`Live domain mapping for host "${mapping.host}" is not a public Site mapping.`);
+  }
+
   return {
     host: mapping.host,
-    installId: mapping.installId,
-    surface: mapping.surface,
+    installId,
+    surface: "site",
   };
+}
+
+function liveMappingTargetInstallId(mapping: InstanceDomainMapping): string | undefined {
+  return mapping.targetInstallId ?? mapping.installId;
 }
 
 function selectDomainIntentsForHost(input: {

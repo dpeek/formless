@@ -1,6 +1,8 @@
 import type {
   CreateInstanceDomainMappingRequest,
   CreateInstanceDomainMappingResponse,
+  DeleteInstanceDomainMappingRequest,
+  DeleteInstanceDomainMappingResponse,
   InstanceDomainMappingsResponse,
 } from "../shared/instance-domain-mappings.ts";
 
@@ -62,6 +64,37 @@ export async function createInstanceDomainMapping(
   });
 
   return readJsonResponse<CreateInstanceDomainMappingResponse>(response);
+}
+
+export async function deleteInstanceDomainMapping(
+  input: DeleteInstanceDomainMappingRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<DeleteInstanceDomainMappingResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("host", input.host);
+
+  if (input.profile !== undefined) {
+    searchParams.set("profile", input.profile);
+  }
+
+  if (input.surface !== undefined) {
+    searchParams.set("surface", input.surface);
+  }
+
+  const response = await fetcher(`${INSTANCE_DOMAIN_MAPPINGS_API_PATH}?${searchParams}`, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    method: "DELETE",
+    signal,
+  });
+
+  return readJsonResponse<DeleteInstanceDomainMappingResponse>(response);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

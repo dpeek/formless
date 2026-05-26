@@ -442,8 +442,10 @@ function CustomDomainsSection({
           {state.domainMappings.map((mapping) => (
             <DomainMappingRow
               appliedState={appliedStateForMapping(mapping, state.domainAppliedStates)}
-              install={state.installs.find((install) => install.installId === mapping.installId)}
-              key={`${mapping.surface}:${mapping.host}`}
+              install={state.installs.find(
+                (install) => install.installId === mapping.targetInstallId,
+              )}
+              key={`${mapping.profile}:${mapping.host}`}
               mapping={mapping}
             />
           ))}
@@ -468,7 +470,7 @@ function DomainMappingRow({
         <div className="min-w-0 space-y-1">
           <h3 className="truncate text-sm font-semibold">{mapping.host}</h3>
           <p className="text-xs text-muted-fg">
-            <code>{mapping.installId}</code>
+            <code>{mapping.targetInstallId ?? mapping.profile}</code>
             {install ? ` · ${install.label}` : ""} · {mapping.enabled ? "enabled" : "disabled"}
           </p>
         </div>
@@ -811,7 +813,7 @@ function appliedStateForMapping(
   appliedStates: readonly InstanceDomainMappingAppliedState[],
 ): InstanceDomainMappingAppliedState | undefined {
   return appliedStates.find(
-    (state) => state.host === mapping.host && state.surface === mapping.surface,
+    (state) => state.host === mapping.host && state.profile === mapping.profile,
   );
 }
 

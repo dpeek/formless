@@ -5,12 +5,16 @@ import {
   type AppInstallId,
 } from "./app-installs.ts";
 
+export type InstanceDomainMappingProfile = "instance" | "app" | "publicSite";
+
 export type InstanceDomainMappingSurface = "site";
 
 export type InstanceDomainMapping = {
   host: string;
-  surface: InstanceDomainMappingSurface;
-  installId: AppInstallId;
+  profile: InstanceDomainMappingProfile;
+  surface?: InstanceDomainMappingSurface;
+  targetInstallId?: AppInstallId;
+  installId?: AppInstallId;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -22,8 +26,10 @@ export type InstanceDomainMappingAppliedProvider = "cloudflare-worker-custom-dom
 
 export type InstanceDomainMappingAppliedState = {
   host: string;
-  surface: InstanceDomainMappingSurface;
-  installId: AppInstallId;
+  profile: InstanceDomainMappingProfile;
+  surface?: InstanceDomainMappingSurface;
+  targetInstallId?: AppInstallId;
+  installId?: AppInstallId;
   provider: InstanceDomainMappingAppliedProvider;
   accountId: string;
   zoneId: string;
@@ -41,8 +47,10 @@ export type InstanceDomainMappingAuditEvent = InstanceDomainMappingAppliedState 
 
 export type CreateInstanceDomainMappingRequest = {
   host: string;
-  surface: string;
-  installId: string;
+  profile?: string;
+  surface?: string;
+  targetInstallId?: string;
+  installId?: string;
   enabled?: boolean;
 };
 
@@ -51,10 +59,23 @@ export type CreateInstanceDomainMappingResponse = {
   mappings: InstanceDomainMapping[];
 };
 
+export type DeleteInstanceDomainMappingRequest = {
+  host: string;
+  profile?: string;
+  surface?: string;
+};
+
+export type DeleteInstanceDomainMappingResponse = {
+  mapping: InstanceDomainMapping;
+  mappings: InstanceDomainMapping[];
+};
+
 export type RecordInstanceDomainMappingApplyEvidenceRequest = {
   host: string;
-  surface: string;
-  installId: string;
+  profile?: string;
+  surface?: string;
+  targetInstallId?: string;
+  installId?: string;
   provider: string;
   accountId: string;
   zoneId: string;
@@ -90,6 +111,7 @@ export type InstanceDomainMappingRegistryErrorCode =
   | "invalid-enabled"
   | "invalid-host"
   | "invalid-install-id"
+  | "invalid-profile"
   | "invalid-provider"
   | "invalid-surface"
   | "unsupported-install-package";
@@ -102,8 +124,10 @@ export type InstanceDomainMappingRegistryError = {
     | "enabled"
     | "host"
     | "installId"
+    | "profile"
     | "provider"
     | "surface"
+    | "targetInstallId"
     | "workerDomainId"
     | "workerName"
     | "zoneId"
@@ -115,13 +139,35 @@ export type CreateInstanceDomainMappingInput = {
   existingMappings: readonly InstanceDomainMapping[];
   installs: readonly AppInstall[];
   host: string;
-  surface: string;
-  installId: string;
+  profile?: string;
+  surface?: string;
+  targetInstallId?: string;
+  installId?: string;
   enabled?: boolean;
   now: string;
 };
 
 export type CreateInstanceDomainMappingResult =
+  | {
+      ok: true;
+      mapping: InstanceDomainMapping;
+      mappings: InstanceDomainMapping[];
+    }
+  | {
+      ok: false;
+      error: InstanceDomainMappingRegistryError;
+      mappings: readonly InstanceDomainMapping[];
+    };
+
+export type DisableInstanceDomainMappingInput = {
+  existingMappings: readonly InstanceDomainMapping[];
+  host: string;
+  profile?: string;
+  surface?: string;
+  now: string;
+};
+
+export type DisableInstanceDomainMappingResult =
   | {
       ok: true;
       mapping: InstanceDomainMapping;
@@ -159,6 +205,16 @@ export type InstanceDomainHostValidationResult =
       error: InstanceDomainMappingRegistryError;
     };
 
+export type InstanceDomainMappingProfileResolutionResult =
+  | {
+      ok: true;
+      profile: InstanceDomainMappingProfile;
+    }
+  | {
+      ok: false;
+      error: InstanceDomainMappingRegistryError;
+    };
+
 const hostnameLabelPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 export function parseCreateInstanceDomainMappingRequest(
@@ -172,11 +228,33 @@ export function parseCreateInstanceDomainMappingRequest(
 
   return {
     host: parseTrimmedNonEmptyString("Domain mapping host", value.host),
-    surface: parseTrimmedNonEmptyString("Domain mapping surface", value.surface),
-    installId: parseTrimmedNonEmptyString("Domain mapping install id", value.installId),
+    ...optionalStringProperty("profile", "Domain mapping profile", value.profile),
+    ...optionalStringProperty("surface", "Domain mapping surface", value.surface),
+    ...optionalStringProperty(
+      "targetInstallId",
+      "Domain mapping target install id",
+      value.targetInstallId,
+    ),
+    ...optionalStringProperty("installId", "Domain mapping install id", value.installId),
     ...(value.enabled === undefined
       ? {}
       : { enabled: parseBoolean("Domain mapping enabled", value.enabled) }),
+  };
+}
+
+export function parseDeleteInstanceDomainMappingRequest(
+  value: unknown,
+): DeleteInstanceDomainMappingRequest {
+  if (!isRecord(value)) {
+    throw new Error("Domain mapping delete request must be an object.");
+  }
+
+  assertDeleteInstanceDomainMappingRequestKeys(value);
+
+  return {
+    host: parseTrimmedNonEmptyString("Domain mapping host", value.host),
+    ...optionalStringProperty("profile", "Domain mapping profile", value.profile),
+    ...optionalStringProperty("surface", "Domain mapping surface", value.surface),
   };
 }
 
@@ -191,8 +269,14 @@ export function parseRecordInstanceDomainMappingApplyEvidenceRequest(
 
   return {
     host: parseTrimmedNonEmptyString("Domain mapping host", value.host),
-    surface: parseTrimmedNonEmptyString("Domain mapping surface", value.surface),
-    installId: parseTrimmedNonEmptyString("Domain mapping install id", value.installId),
+    ...optionalStringProperty("profile", "Domain mapping profile", value.profile),
+    ...optionalStringProperty("surface", "Domain mapping surface", value.surface),
+    ...optionalStringProperty(
+      "targetInstallId",
+      "Domain mapping target install id",
+      value.targetInstallId,
+    ),
+    ...optionalStringProperty("installId", "Domain mapping install id", value.installId),
     provider: parseTrimmedNonEmptyString("Domain mapping applied provider", value.provider),
     accountId: parseTrimmedNonEmptyString("Domain mapping Cloudflare account id", value.accountId),
     zoneId: parseTrimmedNonEmptyString("Domain mapping Cloudflare zone id", value.zoneId),
@@ -219,33 +303,31 @@ export function buildInstanceDomainMapping(
     };
   }
 
-  const surfaceResult = parseInstanceDomainMappingSurface(input.surface);
+  const profileResult = resolveInstanceDomainMappingProfile(input);
 
-  if (!surfaceResult.ok) {
+  if (!profileResult.ok) {
     return {
       ok: false,
-      error: surfaceResult.error,
+      error: profileResult.error,
       mappings: input.existingMappings,
     };
   }
 
-  const installIdResult = validateAppInstallId(input.installId);
+  const targetResult = resolveDomainMappingTargetInstallId(input, profileResult.profile);
 
-  if (!installIdResult.ok) {
+  if (!targetResult.ok) {
     return {
       ok: false,
-      error: {
-        code: "invalid-install-id",
-        field: "installId",
-        message: installIdResult.error.message,
-      },
+      error: targetResult.error,
       mappings: input.existingMappings,
     };
   }
+
+  const requestedEnabled = input.enabled ?? true;
 
   if (
     input.existingMappings.some(
-      (mapping) => mapping.host === hostResult.host && mapping.surface === surfaceResult.surface,
+      (mapping) => mapping.host === hostResult.host && mapping.profile === profileResult.profile,
     )
   ) {
     return {
@@ -253,46 +335,63 @@ export function buildInstanceDomainMapping(
       error: domainMappingError(
         "duplicate-domain-mapping",
         "host",
-        `Domain mapping for host "${hostResult.host}" and surface "${surfaceResult.surface}" already exists.`,
+        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" already exists.`,
       ),
       mappings: input.existingMappings,
     };
   }
 
-  const install = findAppInstall(input.installs, installIdResult.installId);
+  const enabledHostMapping = input.existingMappings.find(
+    (mapping) => mapping.host === hostResult.host && mapping.enabled && requestedEnabled,
+  );
 
-  if (!install) {
+  if (enabledHostMapping) {
     return {
       ok: false,
       error: domainMappingError(
-        "install-not-found",
-        "installId",
-        `Install id "${installIdResult.installId}" is not installed.`,
+        "duplicate-domain-mapping",
+        "host",
+        `Domain mapping for host "${hostResult.host}" already has enabled profile "${enabledHostMapping.profile}".`,
       ),
       mappings: input.existingMappings,
     };
   }
 
-  if (install.packageAppKey !== "site") {
-    return {
-      ok: false,
-      error: domainMappingError(
-        "unsupported-install-package",
-        "installId",
-        `Install id "${install.installId}" uses package "${install.packageAppKey}", not "site".`,
-      ),
-      mappings: input.existingMappings,
-    };
+  if (targetResult.targetInstallId !== undefined) {
+    const install = findAppInstall(input.installs, targetResult.targetInstallId);
+
+    if (!install) {
+      return {
+        ok: false,
+        error: domainMappingError(
+          "install-not-found",
+          "targetInstallId",
+          `Install id "${targetResult.targetInstallId}" is not installed.`,
+        ),
+        mappings: input.existingMappings,
+      };
+    }
+
+    if (profileResult.profile === "publicSite" && install.packageAppKey !== "site") {
+      return {
+        ok: false,
+        error: domainMappingError(
+          "unsupported-install-package",
+          "targetInstallId",
+          `Install id "${install.installId}" uses package "${install.packageAppKey}", not "site".`,
+        ),
+        mappings: input.existingMappings,
+      };
+    }
   }
 
-  const mapping: InstanceDomainMapping = {
+  const mapping = instanceDomainMappingFromParts({
+    enabled: requestedEnabled,
     host: hostResult.host,
-    surface: surfaceResult.surface,
-    installId: install.installId,
-    enabled: input.enabled ?? true,
-    createdAt: input.now,
-    updatedAt: input.now,
-  };
+    now: input.now,
+    profile: profileResult.profile,
+    targetInstallId: targetResult.targetInstallId,
+  });
 
   return {
     ok: true,
@@ -301,17 +400,77 @@ export function buildInstanceDomainMapping(
   };
 }
 
+export function disableInstanceDomainMapping(
+  input: DisableInstanceDomainMappingInput,
+): DisableInstanceDomainMappingResult {
+  const hostResult = normalizeInstanceDomainHost(input.host);
+
+  if (!hostResult.ok) {
+    return {
+      ok: false,
+      error: hostResult.error,
+      mappings: input.existingMappings,
+    };
+  }
+
+  const profileResult = resolveInstanceDomainMappingProfile(input);
+
+  if (!profileResult.ok) {
+    return {
+      ok: false,
+      error: profileResult.error,
+      mappings: input.existingMappings,
+    };
+  }
+
+  const existing = input.existingMappings.find(
+    (mapping) => mapping.host === hostResult.host && mapping.profile === profileResult.profile,
+  );
+
+  if (!existing) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "domain-mapping-not-found",
+        "host",
+        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" does not exist.`,
+      ),
+      mappings: input.existingMappings,
+    };
+  }
+
+  const mapping = {
+    ...existing,
+    enabled: false,
+    updatedAt: input.now,
+  };
+
+  return {
+    ok: true,
+    mapping,
+    mappings: listInstanceDomainMappings(
+      input.existingMappings.map((candidate) =>
+        candidate.host === mapping.host && candidate.profile === mapping.profile
+          ? mapping
+          : candidate,
+      ),
+    ),
+  };
+}
+
 export function listInstanceDomainMappings(
   mappings: readonly InstanceDomainMapping[],
 ): InstanceDomainMapping[] {
   return [...mappings].sort((left, right) => {
     const hostOrder = left.host.localeCompare(right.host);
-    const surfaceOrder = left.surface.localeCompare(right.surface);
+    const profileOrder = left.profile.localeCompare(right.profile);
+    const leftTarget = left.targetInstallId ?? "";
+    const rightTarget = right.targetInstallId ?? "";
 
     return hostOrder === 0
-      ? surfaceOrder === 0
-        ? left.installId.localeCompare(right.installId)
-        : surfaceOrder
+      ? profileOrder === 0
+        ? leftTarget.localeCompare(rightTarget)
+        : profileOrder
       : hostOrder;
   });
 }
@@ -325,23 +484,16 @@ export function buildInstanceDomainMappingAppliedState(
     return { ok: false, error: hostResult.error };
   }
 
-  const surfaceResult = parseInstanceDomainMappingSurface(input.surface);
+  const profileResult = resolveInstanceDomainMappingProfile(input);
 
-  if (!surfaceResult.ok) {
-    return { ok: false, error: surfaceResult.error };
+  if (!profileResult.ok) {
+    return { ok: false, error: profileResult.error };
   }
 
-  const installIdResult = validateAppInstallId(input.installId);
+  const targetResult = resolveDomainMappingTargetInstallId(input, profileResult.profile);
 
-  if (!installIdResult.ok) {
-    return {
-      ok: false,
-      error: {
-        code: "invalid-install-id",
-        field: "installId",
-        message: installIdResult.error.message,
-      },
-    };
+  if (!targetResult.ok) {
+    return { ok: false, error: targetResult.error };
   }
 
   const providerResult = parseInstanceDomainMappingAppliedProvider(input.provider);
@@ -358,7 +510,7 @@ export function buildInstanceDomainMappingAppliedState(
 
   const mapping = input.existingMappings.find(
     (candidate) =>
-      candidate.host === hostResult.host && candidate.surface === surfaceResult.surface,
+      candidate.host === hostResult.host && candidate.profile === profileResult.profile,
   );
 
   if (!mapping) {
@@ -367,38 +519,37 @@ export function buildInstanceDomainMappingAppliedState(
       error: domainMappingError(
         "domain-mapping-not-found",
         "host",
-        `Domain mapping for host "${hostResult.host}" and surface "${surfaceResult.surface}" does not exist.`,
+        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" does not exist.`,
       ),
     };
   }
 
-  if (mapping.installId !== installIdResult.installId) {
+  if (mapping.targetInstallId !== targetResult.targetInstallId) {
     return {
       ok: false,
       error: domainMappingError(
         "domain-mapping-install-mismatch",
-        "installId",
-        `Domain mapping for host "${hostResult.host}" targets install "${mapping.installId}", not "${installIdResult.installId}".`,
+        "targetInstallId",
+        `Domain mapping for host "${hostResult.host}" targets install "${mapping.targetInstallId ?? "none"}", not "${targetResult.targetInstallId ?? "none"}".`,
       ),
     };
   }
 
   return {
     ok: true,
-    appliedState: {
-      host: hostResult.host,
-      surface: surfaceResult.surface,
-      installId: installIdResult.installId,
-      provider: providerResult.provider,
+    appliedState: instanceDomainMappingAppliedStateFromParts({
       accountId: input.accountId,
+      action: actionResult.action,
+      host: hostResult.host,
+      now: input.now,
+      profile: profileResult.profile,
+      provider: providerResult.provider,
+      targetInstallId: targetResult.targetInstallId,
+      workerDomainId: input.workerDomainId,
+      workerName: input.workerName,
       zoneId: input.zoneId,
       zoneName: input.zoneName,
-      workerName: input.workerName,
-      workerDomainId: input.workerDomainId,
-      action: actionResult.action,
-      appliedAt: input.now,
-      updatedAt: input.now,
-    },
+    }),
   };
 }
 
@@ -435,6 +586,219 @@ export function normalizeInstanceDomainHost(value: string): InstanceDomainHostVa
   } catch {
     return invalidHost();
   }
+}
+
+export function resolveInstanceDomainMappingProfile(
+  input: {
+    profile?: string;
+    surface?: string;
+  },
+  options: { defaultProfile?: InstanceDomainMappingProfile } = {},
+): InstanceDomainMappingProfileResolutionResult {
+  const profile = input.profile;
+  const surface = input.surface;
+  const profileResult =
+    profile === undefined ? undefined : parseInstanceDomainMappingProfile(profile);
+
+  if (profileResult && !profileResult.ok) {
+    return profileResult;
+  }
+
+  const surfaceResult =
+    surface === undefined ? undefined : parseInstanceDomainMappingSurface(surface);
+
+  if (surfaceResult && !surfaceResult.ok) {
+    return surfaceResult;
+  }
+
+  if (surfaceResult?.ok && profileResult?.ok && profileResult.profile !== "publicSite") {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "invalid-surface",
+        "surface",
+        'Domain mapping surface compatibility is only valid with profile "publicSite".',
+      ),
+    };
+  }
+
+  if (profileResult?.ok) {
+    return profileResult;
+  }
+
+  if (surfaceResult?.ok) {
+    return { ok: true, profile: "publicSite" };
+  }
+
+  if (options.defaultProfile !== undefined) {
+    return { ok: true, profile: options.defaultProfile };
+  }
+
+  return {
+    ok: false,
+    error: domainMappingError(
+      "invalid-profile",
+      "profile",
+      'Domain mapping profile must be "instance", "app", or "publicSite".',
+    ),
+  };
+}
+
+function resolveDomainMappingTargetInstallId(
+  input: {
+    installId?: string;
+    targetInstallId?: string;
+  },
+  profile: InstanceDomainMappingProfile,
+):
+  | {
+      ok: true;
+      targetInstallId?: AppInstallId;
+    }
+  | {
+      ok: false;
+      error: InstanceDomainMappingRegistryError;
+    } {
+  const targetInstallId = input.targetInstallId;
+  const installId = input.installId;
+
+  if (targetInstallId !== undefined && installId !== undefined && targetInstallId !== installId) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "invalid-install-id",
+        "targetInstallId",
+        "Domain mapping targetInstallId and installId must match.",
+      ),
+    };
+  }
+
+  const target = targetInstallId ?? installId;
+  const targetField = targetInstallId === undefined ? "installId" : "targetInstallId";
+
+  if (profile === "instance") {
+    if (target !== undefined) {
+      return {
+        ok: false,
+        error: domainMappingError(
+          "invalid-install-id",
+          targetField,
+          "Instance domain mappings must not include an install id.",
+        ),
+      };
+    }
+
+    return { ok: true };
+  }
+
+  if (target === undefined) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "invalid-install-id",
+        "targetInstallId",
+        `Domain mapping profile "${profile}" requires a target install id.`,
+      ),
+    };
+  }
+
+  const installIdResult = validateAppInstallId(target);
+
+  if (!installIdResult.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid-install-id",
+        field: targetField,
+        message: installIdResult.error.message,
+      },
+    };
+  }
+
+  return { ok: true, targetInstallId: installIdResult.installId };
+}
+
+function instanceDomainMappingFromParts(input: {
+  enabled: boolean;
+  host: string;
+  now: string;
+  profile: InstanceDomainMappingProfile;
+  targetInstallId?: AppInstallId;
+}): InstanceDomainMapping {
+  return {
+    host: input.host,
+    profile: input.profile,
+    ...compatibilitySurfaceForProfile(input.profile),
+    ...compatibilityTargetForInstallId(input.targetInstallId),
+    enabled: input.enabled,
+    createdAt: input.now,
+    updatedAt: input.now,
+  };
+}
+
+function instanceDomainMappingAppliedStateFromParts(input: {
+  accountId: string;
+  action: InstanceDomainMappingAppliedAction;
+  host: string;
+  now: string;
+  profile: InstanceDomainMappingProfile;
+  provider: InstanceDomainMappingAppliedProvider;
+  targetInstallId?: AppInstallId;
+  workerDomainId: string;
+  workerName: string;
+  zoneId: string;
+  zoneName: string;
+}): InstanceDomainMappingAppliedState {
+  return {
+    host: input.host,
+    profile: input.profile,
+    ...compatibilitySurfaceForProfile(input.profile),
+    ...compatibilityTargetForInstallId(input.targetInstallId),
+    provider: input.provider,
+    accountId: input.accountId,
+    zoneId: input.zoneId,
+    zoneName: input.zoneName,
+    workerName: input.workerName,
+    workerDomainId: input.workerDomainId,
+    action: input.action,
+    appliedAt: input.now,
+    updatedAt: input.now,
+  };
+}
+
+function compatibilitySurfaceForProfile(profile: InstanceDomainMappingProfile): {
+  surface?: InstanceDomainMappingSurface;
+} {
+  return profile === "publicSite" ? { surface: "site" } : {};
+}
+
+function compatibilityTargetForInstallId(targetInstallId: AppInstallId | undefined): {
+  targetInstallId?: AppInstallId;
+  installId?: AppInstallId;
+} {
+  return targetInstallId === undefined
+    ? {}
+    : {
+        installId: targetInstallId,
+        targetInstallId,
+      };
+}
+
+function parseInstanceDomainMappingProfile(
+  value: string,
+): InstanceDomainMappingProfileResolutionResult {
+  if (value === "instance" || value === "app" || value === "publicSite") {
+    return { ok: true, profile: value };
+  }
+
+  return {
+    ok: false,
+    error: domainMappingError(
+      "invalid-profile",
+      "profile",
+      'Domain mapping profile must be "instance", "app", or "publicSite".',
+    ),
+  };
 }
 
 function parseInstanceDomainMappingSurface(value: string):
@@ -535,6 +899,18 @@ function parseTrimmedNonEmptyString(context: string, value: unknown): string {
   return value.trim();
 }
 
+function optionalStringProperty<K extends string>(
+  key: K,
+  context: string,
+  value: unknown,
+): { [P in K]?: string } {
+  if (value === undefined) {
+    return {};
+  }
+
+  return { [key]: parseTrimmedNonEmptyString(context, value) } as { [P in K]?: string };
+}
+
 function parseBoolean(context: string, value: unknown): boolean {
   if (typeof value !== "boolean") {
     throw new Error(`${context} must be a boolean.`);
@@ -544,27 +920,31 @@ function parseBoolean(context: string, value: unknown): boolean {
 }
 
 function assertCreateInstanceDomainMappingRequestKeys(value: Record<string, unknown>) {
-  const requiredKeys = ["host", "surface", "installId"];
-  const allowedKeys = new Set([...requiredKeys, "enabled"]);
+  const requiredKeys = ["host"];
+  const allowedKeys = new Set([
+    ...requiredKeys,
+    "enabled",
+    "installId",
+    "profile",
+    "surface",
+    "targetInstallId",
+  ]);
 
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`Domain mapping request has unsupported key "${key}".`);
-    }
-  }
+  assertOnlyKeys(value, allowedKeys, "Domain mapping request");
+  assertRequiredKeys(value, requiredKeys, "Domain mapping request");
+}
 
-  for (const key of requiredKeys) {
-    if (!(key in value)) {
-      throw new Error(`Domain mapping request must include "${key}".`);
-    }
-  }
+function assertDeleteInstanceDomainMappingRequestKeys(value: Record<string, unknown>) {
+  const requiredKeys = ["host"];
+  const allowedKeys = new Set([...requiredKeys, "profile", "surface"]);
+
+  assertOnlyKeys(value, allowedKeys, "Domain mapping delete request");
+  assertRequiredKeys(value, requiredKeys, "Domain mapping delete request");
 }
 
 function assertRecordInstanceDomainMappingApplyEvidenceRequestKeys(value: Record<string, unknown>) {
   const requiredKeys = [
     "host",
-    "surface",
-    "installId",
     "provider",
     "accountId",
     "zoneId",
@@ -573,17 +953,34 @@ function assertRecordInstanceDomainMappingApplyEvidenceRequestKeys(value: Record
     "workerDomainId",
     "action",
   ];
-  const allowedKeys = new Set(requiredKeys);
+  const allowedKeys = new Set([
+    ...requiredKeys,
+    "installId",
+    "profile",
+    "surface",
+    "targetInstallId",
+  ]);
 
+  assertOnlyKeys(value, allowedKeys, "Domain mapping apply evidence request");
+  assertRequiredKeys(value, requiredKeys, "Domain mapping apply evidence request");
+}
+
+function assertOnlyKeys(value: Record<string, unknown>, allowedKeys: Set<string>, context: string) {
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
-      throw new Error(`Domain mapping apply evidence request has unsupported key "${key}".`);
+      throw new Error(`${context} has unsupported key "${key}".`);
     }
   }
+}
 
+function assertRequiredKeys(
+  value: Record<string, unknown>,
+  requiredKeys: readonly string[],
+  context: string,
+) {
   for (const key of requiredKeys) {
     if (!(key in value)) {
-      throw new Error(`Domain mapping apply evidence request must include "${key}".`);
+      throw new Error(`${context} must include "${key}".`);
     }
   }
 }
