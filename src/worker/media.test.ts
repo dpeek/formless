@@ -2,7 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus
 
 import type { OwnerIdentity } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
-import { SITE_IMAGE_UPLOAD_MAX_BYTES, SITE_MEDIA_CACHE_CONTROL } from "./media.ts";
+import {
+  CORE_IMAGE_KEY_PREFIX,
+  CORE_MEDIA_ROUTE_PREFIX,
+  SITE_IMAGE_UPLOAD_MAX_BYTES,
+  SITE_MEDIA_CACHE_CONTROL,
+} from "./media.ts";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -64,7 +69,121 @@ afterAll(async () => {
   await guardedHarness.dispose();
 });
 
-describe("site media worker routes", () => {
+describe("media worker routes", () => {
+  it("uploads a core image media asset and serves it from the instance media route", async () => {
+    const upload = await uploadCoreImage(harness, imageFile("hero.png", "image/png", pngBytes));
+
+    await expectResponseStatus(upload, 200);
+
+    const body = (await upload.json()) as {
+      asset: {
+        byteSize: number;
+        contentType: string;
+        deliveryHref: string;
+        filename?: string;
+        id: string;
+        kind: string;
+        label: string;
+        provider: string;
+        status: string;
+        storageKey: string;
+      };
+      assetId: string;
+      contentType: string;
+      href: string;
+      key: string;
+      size: number;
+    };
+
+    expect(body).toEqual({
+      asset: {
+        byteSize: pngBytes.byteLength,
+        contentType: "image/png",
+        deliveryHref: body.href,
+        filename: "hero.png",
+        id: body.assetId,
+        kind: "image",
+        label: "hero.png",
+        provider: "r2",
+        status: "ready",
+        storageKey: body.key,
+      },
+      assetId: expect.stringMatching(/^[0-9a-f-]+\.png$/),
+      contentType: "image/png",
+      href: expect.stringMatching(/^\/api\/formless\/media\/media\/images\/.+\.png$/),
+      key: expect.stringMatching(/^media\/images\/.+\.png$/),
+      size: pngBytes.byteLength,
+    });
+    expect(body.href).toBe(`${CORE_MEDIA_ROUTE_PREFIX}${body.key}`);
+    expect(body.key).toBe(`${CORE_IMAGE_KEY_PREFIX}/${body.assetId}`);
+    await expectMediaObjectCustomMetadata(harness, body.key, {
+      "formless-media-asset-id": body.assetId,
+      "formless-media-byte-size": String(pngBytes.byteLength),
+      "formless-media-content-type": "image/png",
+      "formless-media-delivery-href": body.href,
+      "formless-media-filename": "hero.png",
+      "formless-media-kind": "image",
+      "formless-media-label": "hero.png",
+      "formless-media-provider": "r2",
+      "formless-media-status": "ready",
+      "formless-media-storage-key": body.key,
+    });
+
+    const served = await harness.fetch(body.href);
+
+    expect(served.status).toBe(200);
+    expect(served.headers.get("Content-Type")).toBe("image/png");
+    expect(served.headers.get("Cache-Control")).toBe(SITE_MEDIA_CACHE_CONTROL);
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
+  });
+
+  it("uses the same write authorization boundaries for core media assets", async () => {
+    const rejected = await uploadCoreImage(
+      guardedHarness,
+      imageFile("rejected.png", "image/png", pngBytes),
+    );
+    const adminAccepted = await uploadCoreImage(
+      guardedHarness,
+      imageFile("admin.png", "image/png", pngBytes),
+      {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    );
+    const ownerAccepted = await uploadCoreImage(
+      guardedHarness,
+      imageFile("owner.png", "image/png", pngBytes),
+      await ownerSessionHeaders(),
+    );
+
+    expect(rejected.status).toBe(401);
+    expect(adminAccepted.status).toBe(200);
+    expect(ownerAccepted.status).toBe(200);
+
+    const body = (await adminAccepted.json()) as { href: string; key: string };
+    const served = await guardedHarness.fetch(body.href);
+
+    expect(body.key).toMatch(/^media\/images\/.+\.png$/);
+    expect(served.status).toBe(200);
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
+    await expectMediaBucketKeysUnordered(guardedHarness, [
+      expect.stringMatching(/^media\/images\/.+\.png$/),
+      expect.stringMatching(/^media\/images\/.+\.png$/),
+    ]);
+  });
+
+  it("rejects invalid core media image uploads before R2 writes", async () => {
+    const response = await uploadCoreImage(
+      harness,
+      imageFile("icon.svg", "image/svg+xml", textBytes("<svg />")),
+    );
+
+    expect(response.status).toBe(415);
+    expect((await response.json()) as { error: string }).toEqual({
+      error: "Unsupported image type.",
+    });
+    await expectMediaBucketKeys(harness, []);
+  });
+
   it("uploads a raster image to R2 and serves it from the returned same-origin href", async () => {
     const upload = await uploadImage(harness, imageFile("hero.png", "image/png", pngBytes));
 
@@ -357,6 +476,14 @@ async function uploadInstalledImage(
     headers,
     `/api/app-installs/site/${installId}/media/images`,
   );
+}
+
+async function uploadCoreImage(
+  harness: Harness,
+  file: TestFile,
+  headers: Record<string, string> = {},
+) {
+  return uploadForm(harness, multipartFormData([file]), headers, "/api/formless/media/images");
 }
 
 async function uploadForm(

@@ -3,7 +3,7 @@ import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
-import { handleSiteMediaRequest } from "./media.ts";
+import { handleMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
@@ -31,7 +31,7 @@ export type Env = {
 export default {
   async fetch(request, env) {
     const runtimeProfile = workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE);
-    const mediaResponse = await handleSiteMediaRequest(request, env, runtimeProfile);
+    const mediaResponse = await handleMediaRequest(request, env, runtimeProfile);
 
     if (mediaResponse) {
       return mediaResponse;

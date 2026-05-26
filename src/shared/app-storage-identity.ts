@@ -33,11 +33,13 @@ export type InstalledAppStorageIdentity = {
   siteMedia?: SiteMediaStorageIdentity;
 };
 
-export type SiteMediaStorageIdentity = {
+export type ImageMediaStorageIdentity = {
   imageKeyPrefix: string;
   imageUploadPath: `/api/${string}/media/images`;
   routePrefix: `/api/${string}/media`;
 };
+
+export type SiteMediaStorageIdentity = ImageMediaStorageIdentity;
 
 export type AuthorityApiRoute = {
   identity: AppStorageIdentity;
