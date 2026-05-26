@@ -4,6 +4,7 @@ import type {
   InstanceDomainMapping,
   InstanceDomainMappingLookupResponse,
   InstanceDomainMappingsResponse,
+  RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -155,6 +156,87 @@ describe("instance domain mapping API routes", () => {
 
     expect(rejected.status).toBe(401);
     expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await rejected.json()).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+  });
+
+  it("records applied Cloudflare state and appends audit evidence", async () => {
+    await createAppInstall({ packageAppKey: "site", installId: "personal", label: "Personal" });
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "example.com",
+      surface: "site",
+      installId: "personal",
+    });
+
+    const first = await postAdminJson<RecordInstanceDomainMappingApplyEvidenceResponse>(
+      "/api/formless/domain-mappings/apply-evidence",
+      {
+        host: "Example.COM.",
+        surface: "site",
+        installId: "personal",
+        provider: "cloudflare-worker-custom-domain",
+        accountId: "account-123",
+        zoneId: "zone-1",
+        zoneName: "example.com",
+        workerName: "personal-worker",
+        workerDomainId: "domain-1",
+        action: "created",
+      },
+    );
+    const second = await postAdminJson<RecordInstanceDomainMappingApplyEvidenceResponse>(
+      "/api/formless/domain-mappings/apply-evidence",
+      {
+        host: "example.com",
+        surface: "site",
+        installId: "personal",
+        provider: "cloudflare-worker-custom-domain",
+        accountId: "account-123",
+        zoneId: "zone-1",
+        zoneName: "example.com",
+        workerName: "personal-worker",
+        workerDomainId: "domain-1",
+        action: "adopted",
+      },
+    );
+    const after = await getJson<InstanceDomainMappingsResponse>("/api/formless/domain-mappings");
+
+    expect(first.response.status).toBe(200);
+    expect(first.body.appliedState).toMatchObject({
+      host: "example.com",
+      installId: "personal",
+      provider: "cloudflare-worker-custom-domain",
+      action: "created",
+      workerDomainId: "domain-1",
+    });
+    expect(second.body.appliedState).toMatchObject({
+      host: "example.com",
+      action: "adopted",
+    });
+    expect(second.body.auditEvents.map((event) => event.action)).toEqual(["created", "adopted"]);
+    expect(after.body.appliedStates).toEqual(second.body.appliedStates);
+    expect(after.body.auditEvents).toEqual(second.body.auditEvents);
+  });
+
+  it("requires instance write authorization for apply evidence", async () => {
+    const rejected = await harness.fetch("/api/formless/domain-mappings/apply-evidence", {
+      body: JSON.stringify({
+        host: "example.com",
+        surface: "site",
+        installId: "personal",
+        provider: "cloudflare-worker-custom-domain",
+        accountId: "account-123",
+        zoneId: "zone-1",
+        zoneName: "example.com",
+        workerName: "personal-worker",
+        workerDomainId: "domain-1",
+        action: "created",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    expect(rejected.status).toBe(401);
     expect(await rejected.json()).toEqual({
       error: "Owner session or admin authorization is required for this write endpoint.",
     });

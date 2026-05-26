@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { AppInstall } from "./app-installs.ts";
 import {
+  buildInstanceDomainMappingAppliedState,
   buildInstanceDomainMapping,
   normalizeInstanceDomainHost,
   parseCreateInstanceDomainMappingRequest,
+  parseRecordInstanceDomainMappingApplyEvidenceRequest,
 } from "./instance-domain-mappings.ts";
 
 const now = "2026-05-26T01:00:00.000Z";
@@ -155,6 +157,104 @@ describe("instance domain mappings", () => {
         extra: true,
       }),
     ).toThrow('Domain mapping request has unsupported key "extra".');
+  });
+
+  it("builds Cloudflare applied state only for an existing desired mapping", () => {
+    const result = buildInstanceDomainMappingAppliedState({
+      existingMappings: [
+        {
+          host: "www.example.com",
+          surface: "site",
+          installId: "personal",
+          enabled: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      host: "WWW.Example.COM.",
+      surface: "site",
+      installId: "personal",
+      provider: "cloudflare-worker-custom-domain",
+      accountId: "account-123",
+      zoneId: "zone-1",
+      zoneName: "example.com",
+      workerName: "personal-worker",
+      workerDomainId: "domain-1",
+      action: "created",
+      now,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      appliedState: {
+        host: "www.example.com",
+        surface: "site",
+        installId: "personal",
+        provider: "cloudflare-worker-custom-domain",
+        accountId: "account-123",
+        zoneId: "zone-1",
+        zoneName: "example.com",
+        workerName: "personal-worker",
+        workerDomainId: "domain-1",
+        action: "created",
+        appliedAt: now,
+        updatedAt: now,
+      },
+    });
+
+    expect(
+      buildInstanceDomainMappingAppliedState({
+        existingMappings: [],
+        host: "missing.example.com",
+        surface: "site",
+        installId: "personal",
+        provider: "cloudflare-worker-custom-domain",
+        accountId: "account-123",
+        zoneId: "zone-1",
+        zoneName: "example.com",
+        workerName: "personal-worker",
+        workerDomainId: "domain-1",
+        action: "created",
+        now,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "domain-mapping-not-found", field: "host" },
+    });
+  });
+
+  it("parses the apply evidence request shape", () => {
+    expect(
+      parseRecordInstanceDomainMappingApplyEvidenceRequest({
+        host: "example.com",
+        surface: "site",
+        installId: "personal",
+        provider: "cloudflare-worker-custom-domain",
+        accountId: "account-123",
+        zoneId: "zone-1",
+        zoneName: "example.com",
+        workerName: "personal-worker",
+        workerDomainId: "domain-1",
+        action: "adopted",
+      }),
+    ).toEqual({
+      host: "example.com",
+      surface: "site",
+      installId: "personal",
+      provider: "cloudflare-worker-custom-domain",
+      accountId: "account-123",
+      zoneId: "zone-1",
+      zoneName: "example.com",
+      workerName: "personal-worker",
+      workerDomainId: "domain-1",
+      action: "adopted",
+    });
+
+    expect(() =>
+      parseRecordInstanceDomainMappingApplyEvidenceRequest({
+        host: "example.com",
+      }),
+    ).toThrow('Domain mapping apply evidence request must include "surface".');
   });
 });
 

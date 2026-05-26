@@ -19,6 +19,7 @@ import {
 import {
   cloudflareDomainClientFromEnv,
   type CloudflareDnsRecord,
+  type CloudflareDomainApplyHostResult,
   type CloudflareDomainClient,
   type CloudflareDomainPreflightHostPlan,
   type CloudflareDomainPreflightIssue,
@@ -34,6 +35,7 @@ import {
 import { FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH } from "./instance-workspace-secrets.ts";
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
+  applyFormlessInstanceWorkspaceDomains as applyFormlessInstanceWorkspaceDomainsCommand,
   checkFormlessInstanceWorkspace as checkFormlessInstanceWorkspaceCommand,
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
@@ -45,6 +47,8 @@ import {
   pushFormlessInstanceWorkspace as pushFormlessInstanceWorkspaceCommand,
   rotateFormlessInstanceWorkspaceAdminToken as rotateFormlessInstanceWorkspaceAdminTokenCommand,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
+  type ApplyFormlessInstanceWorkspaceDomainsInput,
+  type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceResult,
   type DeployFormlessInstanceWorkspaceInput,
   type DeployFormlessInstanceWorkspaceResult,
@@ -108,6 +112,7 @@ export {
   planCloudflareWorkerDomainPreflight,
   workerRoutePatternMatchesHost,
   type CloudflareDnsRecord,
+  type CloudflareDomainApplyHostResult,
   type CloudflareDomainClient,
   type CloudflareDomainIntent,
   type CloudflareDomainPreflightHostPlan,
@@ -167,6 +172,9 @@ export {
   type AdoptFormlessInstanceWorkspaceAdminTokenDependencies,
   type AdoptFormlessInstanceWorkspaceAdminTokenInput,
   type AdoptFormlessInstanceWorkspaceAdminTokenResult,
+  type ApplyFormlessInstanceWorkspaceDomainsDependencies,
+  type ApplyFormlessInstanceWorkspaceDomainsInput,
+  type ApplyFormlessInstanceWorkspaceDomainsResult,
   type CheckFormlessInstanceWorkspaceDependencies,
   type CheckFormlessInstanceWorkspaceInput,
   type CheckFormlessInstanceWorkspaceResult,
@@ -529,6 +537,11 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceDomainPlanResult(result, dependencies.cwd));
       return;
     }
+    case "instanceDomainsApply": {
+      const result = await applyFormlessInstanceWorkspaceDomains(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceDomainApplyResult(result, dependencies.cwd));
+      return;
+    }
     case "save": {
       const result = await saveSiteProject(command, dependencies);
       dependencies.log(
@@ -819,6 +832,7 @@ export async function deployFormlessInstanceWorkspace(
 
 export async function planFormlessInstanceWorkspaceDomains(
   input: {
+    host?: string | null;
     policy?: PlanFormlessInstanceWorkspaceDomainsInput["policy"];
     targetAlias?: string | null;
     workspacePath?: string;
@@ -832,6 +846,28 @@ export async function planFormlessInstanceWorkspaceDomains(
     cloudflareDomainClient: dependencies.cloudflareDomainClient(),
     cwd: dependencies.cwd,
     fetch: dependencies.fetch,
+  });
+}
+
+export async function applyFormlessInstanceWorkspaceDomains(
+  input: {
+    adminToken?: string | null;
+    host?: string | null;
+    policy?: ApplyFormlessInstanceWorkspaceDomainsInput["policy"];
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cloudflareDomainClient" | "cwd" | "env" | "fetch" | "now"
+  > = nodeFormlessCliDependencies(),
+): Promise<ApplyFormlessInstanceWorkspaceDomainsResult> {
+  return applyFormlessInstanceWorkspaceDomainsCommand(input, {
+    cloudflareDomainClient: dependencies.cloudflareDomainClient(),
+    cwd: dependencies.cwd,
+    env: dependencies.env,
+    fetch: dependencies.fetch,
+    now: dependencies.now,
   });
 }
 
@@ -1156,6 +1192,23 @@ function formatInstanceWorkspaceDomainPlanResult(
   ].join("\n");
 }
 
+function formatInstanceWorkspaceDomainApplyResult(
+  result: ApplyFormlessInstanceWorkspaceDomainsResult,
+  cwd: string,
+): string {
+  return [
+    "Instance domain apply complete.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Account: ${result.accountId}.`,
+    `Worker: ${result.workerName}.`,
+    `Policy: ${result.preflight.policy}.`,
+    `Domains: ${formatList(result.applied.hosts.map((host) => host.host))}.`,
+    `Evidence writes: ${result.evidenceCount}.`,
+    ...result.applied.hosts.map(formatDomainAppliedHost),
+  ].join("\n");
+}
+
 function formatWorkspaceTargets(manifest: FormlessInstanceWorkspaceManifest): string {
   if (manifest.targets.length === 0) {
     return "none";
@@ -1240,6 +1293,16 @@ function formatDomainHostPlan(host: CloudflareDomainPreflightHostPlan): string {
     `dns ${formatDnsRecords(host.dnsRecords)}`,
     `actions ${formatList(host.actions)}`,
     `issues ${formatDomainIssues(issues)}`,
+  ].join("; ");
+}
+
+function formatDomainAppliedHost(host: CloudflareDomainApplyHostResult): string {
+  return [
+    `${host.host}: ${host.action}`,
+    `install ${host.installId}`,
+    `custom domain ${host.domain.id}`,
+    `worker ${host.domain.service}`,
+    `zone ${host.domain.zoneName} (${host.domain.zoneId})`,
   ].join("; ");
 }
 

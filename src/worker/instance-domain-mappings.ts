@@ -1,20 +1,26 @@
 import {
   parseCreateInstanceDomainMappingRequest,
+  parseRecordInstanceDomainMappingApplyEvidenceRequest,
   type InstanceDomainMapping,
   type InstanceDomainMappingLookupResponse,
   type InstanceDomainMappingsResponse,
+  type RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   createInstanceDomainMapping,
+  readInstanceDomainMappingAppliedStates,
+  readInstanceDomainMappingAuditEvents,
   readEnabledInstanceDomainMappingForHost,
   readInstanceDomainMappings,
+  recordInstanceDomainMappingApplyEvidence,
 } from "./instance-domain-mappings-state.ts";
 
 export const INSTANCE_DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/lookup`;
+const INSTANCE_DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
 
 type InstanceDomainMappingsApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
@@ -71,6 +77,10 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
   }
 
   try {
+    if (url.pathname === INSTANCE_DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH) {
+      return handleApplyEvidenceRequest(request, storage, env);
+    }
+
     if (url.pathname === INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH) {
       return handleLookupRequest(request, storage, url);
     }
@@ -127,6 +137,52 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
   }
 }
 
+async function handleApplyEvidenceRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  const authorization = await authorizeInstanceWrite(request, env);
+
+  if (!authorization.authorized) {
+    return jsonResponse(
+      { error: authorization.error },
+      authorization.status,
+      authorization.headers,
+    );
+  }
+
+  const body = parseRecordInstanceDomainMappingApplyEvidenceRequest(await readJson(request));
+  const result = recordInstanceDomainMappingApplyEvidence(storage, {
+    ...body,
+    now: nowIsoString(),
+  });
+
+  if (!result.ok) {
+    return jsonResponse(
+      {
+        error: result.error.message,
+        code: result.error.code,
+        ...(result.error.field === undefined ? {} : { field: result.error.field }),
+      },
+      domainMappingFailureStatus(result.error.code),
+    );
+  }
+
+  const response: RecordInstanceDomainMappingApplyEvidenceResponse = {
+    appliedState: result.appliedState,
+    appliedStates: result.appliedStates,
+    auditEvent: result.auditEvent,
+    auditEvents: result.auditEvents,
+  };
+
+  return jsonResponse(response);
+}
+
 function handleLookupRequest(request: Request, storage: DurableObjectStorage, url: URL): Response {
   if (request.method !== "GET") {
     return methodNotAllowedResponse("GET");
@@ -159,12 +215,22 @@ function isInstanceDomainMappingsApiPath(pathname: string) {
 
 function domainMappingsResponse(storage: DurableObjectStorage): InstanceDomainMappingsResponse {
   return {
+    appliedStates: readInstanceDomainMappingAppliedStates(storage),
+    auditEvents: readInstanceDomainMappingAuditEvents(storage),
     mappings: readInstanceDomainMappings(storage),
   };
 }
 
 function domainMappingFailureStatus(code: string) {
-  return code === "duplicate-domain-mapping" ? 409 : 400;
+  if (code === "duplicate-domain-mapping") {
+    return 409;
+  }
+
+  if (code === "domain-mapping-not-found") {
+    return 404;
+  }
+
+  return 400;
 }
 
 async function readJson(request: Request): Promise<unknown> {

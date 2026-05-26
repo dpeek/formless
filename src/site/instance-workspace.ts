@@ -14,10 +14,15 @@ import {
   type PortableArchive,
 } from "../shared/archive.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
-import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
+import {
+  normalizeInstanceDomainHost,
+  type InstanceDomainMapping,
+} from "../shared/instance-domain-mappings.ts";
 import type { AppInstallsResponse } from "../shared/protocol.ts";
 import {
+  applyCloudflareWorkerDomainPreflightPlan,
   planCloudflareWorkerDomainPreflight,
+  type CloudflareDomainApplyResult,
   type CloudflareDomainClient,
   type CloudflareDomainIntent,
   type CloudflareDomainPreflightPlan,
@@ -47,6 +52,7 @@ import {
   type FormlessInstanceWorkspaceSecretState,
 } from "./instance-workspace-secrets.ts";
 import {
+  recordFormlessInstanceDomainMappingApplyEvidence,
   readFormlessInstanceDomainMappings,
   readFormlessInstanceTargetStatus,
   type FormlessInstanceTargetStatus,
@@ -278,6 +284,7 @@ export type DeployFormlessInstanceWorkspaceResult = {
 };
 
 export type PlanFormlessInstanceWorkspaceDomainsInput = {
+  host?: string | null;
   policy?: CloudflareDomainPreflightPolicy;
   targetAlias?: string | null;
   workspacePath?: string;
@@ -310,6 +317,23 @@ export type PlanFormlessInstanceWorkspaceDomainsResult = {
   workerName: string;
   workspaceRoot: string;
 };
+
+export type ApplyFormlessInstanceWorkspaceDomainsInput =
+  PlanFormlessInstanceWorkspaceDomainsInput & {
+    adminToken?: string | null;
+  };
+
+export type ApplyFormlessInstanceWorkspaceDomainsDependencies =
+  PlanFormlessInstanceWorkspaceDomainsDependencies & {
+    env?: NodeJS.ProcessEnv;
+    now: () => string;
+  };
+
+export type ApplyFormlessInstanceWorkspaceDomainsResult =
+  PlanFormlessInstanceWorkspaceDomainsResult & {
+    applied: CloudflareDomainApplyResult;
+    evidenceCount: number;
+  };
 
 export type AdoptFormlessInstanceWorkspaceAdminTokenInput = {
   adminToken?: string | null;
@@ -807,7 +831,10 @@ export async function planFormlessInstanceWorkspaceDomains(
     .filter((mapping) => mapping.enabled && mapping.surface === "site")
     .map(domainIntentFromLiveMapping);
   const source = workspaceDomains.length > 0 ? "workspace" : "live";
-  const intents = source === "workspace" ? workspaceDomains : liveEnabledDomains;
+  const intents = selectDomainIntentsForHost({
+    host: input.host,
+    intents: source === "workspace" ? workspaceDomains : liveEnabledDomains,
+  });
   const preflight = await planCloudflareWorkerDomainPreflight({
     accountId,
     client: dependencies.cloudflareDomainClient,
@@ -831,6 +858,75 @@ export async function planFormlessInstanceWorkspaceDomains(
     selectedTarget,
     workerName,
     workspaceRoot,
+  };
+}
+
+export async function applyFormlessInstanceWorkspaceDomains(
+  input: ApplyFormlessInstanceWorkspaceDomainsInput,
+  dependencies: ApplyFormlessInstanceWorkspaceDomainsDependencies,
+): Promise<ApplyFormlessInstanceWorkspaceDomainsResult> {
+  if ((input.policy ?? "create-only") === "override" && !input.host?.trim()) {
+    throw new Error("Formless instance domains apply override requires a single host.");
+  }
+
+  const planned = await planFormlessInstanceWorkspaceDomains(input, dependencies);
+
+  if (planned.desired.drift.length > 0) {
+    throw new Error(
+      "Formless instance domains apply refused because workspace and live desired mappings differ; run `formless instance domains plan` and reconcile desired mappings before applying provider state.",
+    );
+  }
+
+  const blockedHosts = planned.preflight.hosts.filter((host) => host.blockers.length > 0);
+
+  if (blockedHosts.length > 0) {
+    throw new Error(
+      `Formless instance domains apply stopped because preflight found blockers: ${blockedHosts
+        .map(
+          (host) =>
+            `${host.host} (${host.blockers.map((issue) => issue.code).join(", ") || "blocked"})`,
+        )
+        .join("; ")}.`,
+    );
+  }
+
+  const applied = await applyCloudflareWorkerDomainPreflightPlan({
+    client: dependencies.cloudflareDomainClient,
+    plan: planned.preflight,
+  });
+  const secretState = await readFormlessInstanceWorkspaceSecretState(planned.workspaceRoot);
+  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    explicitAdminToken: input.adminToken,
+    secretState,
+  });
+
+  for (const host of applied.hosts) {
+    await recordFormlessInstanceDomainMappingApplyEvidence(
+      {
+        adminToken,
+        evidence: {
+          host: host.host,
+          surface: host.surface,
+          installId: host.installId,
+          provider: "cloudflare-worker-custom-domain",
+          accountId: planned.accountId,
+          zoneId: host.domain.zoneId,
+          zoneName: host.domain.zoneName,
+          workerName: planned.workerName,
+          workerDomainId: host.domain.id,
+          action: host.action,
+        },
+        targetUrl: planned.selectedTarget.url,
+      },
+      dependencies,
+    );
+  }
+
+  return {
+    ...planned,
+    applied,
+    evidenceCount: applied.hosts.length,
   };
 }
 
@@ -1805,6 +1901,29 @@ function domainIntentFromLiveMapping(mapping: InstanceDomainMapping): Cloudflare
     installId: mapping.installId,
     surface: mapping.surface,
   };
+}
+
+function selectDomainIntentsForHost(input: {
+  host?: string | null;
+  intents: readonly CloudflareDomainIntent[];
+}): CloudflareDomainIntent[] {
+  if (input.host === undefined || input.host === null || input.host.trim() === "") {
+    return [...input.intents];
+  }
+
+  const host = normalizeInstanceDomainHost(input.host);
+
+  if (!host.ok) {
+    throw new Error(host.error.message);
+  }
+
+  const intents = input.intents.filter((intent) => intent.host === host.host);
+
+  if (intents.length === 0) {
+    throw new Error(`No desired domain mapping found for host "${host.host}".`);
+  }
+
+  return intents;
 }
 
 function compareWorkspaceDomainIntentToLive(

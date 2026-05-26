@@ -40,6 +40,12 @@ export type CloudflareDnsRecord = {
 };
 
 export type CloudflareDomainClient = {
+  attachWorkerDomain: (input: {
+    accountId: string;
+    hostname: string;
+    service: string;
+    zoneId: string;
+  }) => Promise<CloudflareWorkerDomain>;
   listActiveZonesForName: (input: { accountId: string; name: string }) => Promise<CloudflareZone[]>;
   listDnsRecords: (input: { name: string; zoneId: string }) => Promise<CloudflareDnsRecord[]>;
   listWorkerDomains: (input: { accountId: string }) => Promise<CloudflareWorkerDomain[]>;
@@ -82,6 +88,23 @@ export type CloudflareDomainPreflightPlan = {
   workerName: string;
 };
 
+export type CloudflareDomainAppliedAction = "adopted" | "created" | "overridden";
+
+export type CloudflareDomainApplyHostResult = {
+  action: CloudflareDomainAppliedAction;
+  domain: CloudflareWorkerDomain;
+  host: string;
+  installId: string;
+  surface: "site";
+};
+
+export type CloudflareDomainApplyResult = {
+  accountId: string;
+  hosts: CloudflareDomainApplyHostResult[];
+  policy: CloudflareDomainPreflightPolicy;
+  workerName: string;
+};
+
 export type CreateFetchCloudflareDomainClientInput = {
   apiToken: string;
   baseUrl?: string;
@@ -117,6 +140,20 @@ export function createFetchCloudflareDomainClient(
   const baseUrl = input.baseUrl ?? "https://api.cloudflare.com/client/v4";
 
   return {
+    attachWorkerDomain: ({ accountId, hostname, service, zoneId }) =>
+      fetchCloudflareValue(
+        input.fetch,
+        baseUrl,
+        input.apiToken,
+        "PUT",
+        `/accounts/${accountId}/workers/domains`,
+        {},
+        {
+          hostname,
+          service,
+          zone_id: zoneId,
+        },
+      ).then(parseCloudflareWorkerDomain),
     listActiveZonesForName: ({ accountId, name }) =>
       fetchCloudflareList(input.fetch, baseUrl, input.apiToken, "/zones", {
         "account.id": accountId,
@@ -224,6 +261,73 @@ export function workerRoutePatternMatchesHost(pattern: string, host: string): bo
   return matcher.test(normalizedHost);
 }
 
+export async function applyCloudflareWorkerDomainPreflightPlan(input: {
+  client: CloudflareDomainClient;
+  plan: CloudflareDomainPreflightPlan;
+}): Promise<CloudflareDomainApplyResult> {
+  const hosts: CloudflareDomainApplyHostResult[] = [];
+
+  for (const host of input.plan.hosts) {
+    if (host.blockers.length > 0) {
+      throw new Error(
+        `Cloudflare domain apply cannot continue while ${host.host} has blockers: ${host.blockers
+          .map((issue) => issue.code)
+          .join(", ")}.`,
+      );
+    }
+
+    const action = host.actions[0];
+
+    if (!action) {
+      continue;
+    }
+
+    if (action === "adopt-existing-worker-custom-domain") {
+      hosts.push({
+        action: "adopted",
+        domain: requiredSameWorkerDomain(host, input.plan.workerName),
+        host: host.host,
+        installId: host.installId,
+        surface: host.surface,
+      });
+      continue;
+    }
+
+    if (!host.zone) {
+      throw new Error(`Cloudflare domain apply cannot attach ${host.host} without a zone.`);
+    }
+
+    if (
+      action !== "create-worker-custom-domain" &&
+      action !== "override-existing-worker-custom-domain"
+    ) {
+      throw new Error(`Cloudflare domain apply does not support action "${action}".`);
+    }
+
+    const domain = await input.client.attachWorkerDomain({
+      accountId: input.plan.accountId,
+      hostname: host.host,
+      service: input.plan.workerName,
+      zoneId: host.zone.id,
+    });
+
+    hosts.push({
+      action: action === "create-worker-custom-domain" ? "created" : "overridden",
+      domain,
+      host: host.host,
+      installId: host.installId,
+      surface: host.surface,
+    });
+  }
+
+  return {
+    accountId: input.plan.accountId,
+    hosts,
+    policy: input.plan.policy,
+    workerName: input.plan.workerName,
+  };
+}
+
 async function discoverActiveZoneForHost(input: {
   accountId: string;
   client: CloudflareDomainClient;
@@ -327,6 +431,11 @@ function addWorkerDomainPolicy(input: {
   const sameWorker = input.workerDomains.filter((domain) => domain.service === input.workerName);
   const otherWorker = input.workerDomains.filter((domain) => domain.service !== input.workerName);
 
+  if (sameWorker.length > 0 && otherWorker.length === 0) {
+    input.actions.push("adopt-existing-worker-custom-domain");
+    return;
+  }
+
   if (input.policy === "create-only") {
     input.blockers.push({
       code: "existing-worker-domain",
@@ -355,6 +464,19 @@ function addWorkerDomainPolicy(input: {
   if (sameWorker.length > 0) {
     input.actions.push("adopt-existing-worker-custom-domain");
   }
+}
+
+function requiredSameWorkerDomain(
+  host: CloudflareDomainPreflightHostPlan,
+  workerName: string,
+): CloudflareWorkerDomain {
+  const domain = host.workerDomains.find((candidate) => candidate.service === workerName);
+
+  if (!domain) {
+    throw new Error(`Cloudflare domain apply cannot adopt ${host.host}; no same-worker domain.`);
+  }
+
+  return domain;
 }
 
 function normalizeDomainIntents(
@@ -422,28 +544,49 @@ async function fetchCloudflareList(
   pathname: string,
   params: Record<string, string> = {},
 ): Promise<unknown[]> {
-  const url = new URL(pathname.replace(/^\/+/, ""), normalizedBaseUrl(baseUrl));
+  const result = await fetchCloudflareValue(fetcher, baseUrl, apiToken, "GET", pathname, {
+    per_page: "100",
+    ...params,
+  });
 
-  url.searchParams.set("per_page", "100");
+  if (!Array.isArray(result)) {
+    throw new Error(`Cloudflare API GET ${pathname} failed: result must be an array.`);
+  }
+
+  return result;
+}
+
+async function fetchCloudflareValue(
+  fetcher: typeof fetch,
+  baseUrl: string,
+  apiToken: string,
+  method: "GET" | "PUT",
+  pathname: string,
+  params: Record<string, string> = {},
+  body?: Record<string, unknown>,
+): Promise<unknown> {
+  const url = new URL(pathname.replace(/^\/+/, ""), normalizedBaseUrl(baseUrl));
 
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
 
-  const response = await fetcher(url.toString(), {
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${apiToken}`,
-    },
-    method: "GET",
-  });
-  const result = await readCloudflareResult(response, `GET ${url.pathname}`);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    authorization: `Bearer ${apiToken}`,
+  };
 
-  if (!Array.isArray(result)) {
-    throw new Error(`Cloudflare API GET ${url.pathname} failed: result must be an array.`);
+  if (body !== undefined) {
+    headers["content-type"] = "application/json";
   }
 
-  return result;
+  const response = await fetcher(url.toString(), {
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    headers,
+    method,
+  });
+
+  return readCloudflareResult(response, `${method} ${url.pathname}`);
 }
 
 async function readCloudflareResult(response: Response, context: string): Promise<unknown> {

@@ -2,13 +2,18 @@ import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
-import type { InstanceDomainMappingsResponse } from "../shared/instance-domain-mappings.ts";
+import type {
+  InstanceDomainMappingsResponse,
+  RecordInstanceDomainMappingApplyEvidenceRequest,
+  RecordInstanceDomainMappingApplyEvidenceResponse,
+} from "../shared/instance-domain-mappings.ts";
 import type { AppInstallsResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
 const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 const DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
+const DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
 
 export type FormlessInstanceTargetStatus = {
   appRegistry: AppInstallsResponse;
@@ -106,10 +111,45 @@ export async function readFormlessInstanceDomainMappings(
   );
 }
 
+export async function recordFormlessInstanceDomainMappingApplyEvidence(
+  input: {
+    adminToken?: string | null;
+    evidence: RecordInstanceDomainMappingApplyEvidenceRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<RecordInstanceDomainMappingApplyEvidenceResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const evidenceUrl = apiUrl(targetUrl, DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseApplyEvidenceResponse(
+    await postJson(dependencies.fetch, evidenceUrl, {
+      body: JSON.stringify(input.evidence),
+      headers,
+      method: "POST",
+    }),
+    evidenceUrl,
+  );
+}
+
 async function fetchJson(fetcher: typeof fetch, url: string, init: RequestInit): Promise<unknown> {
   const response = await fetcher(url, init);
 
   return readJsonResponse(response, `GET ${url}`);
+}
+
+async function postJson(fetcher: typeof fetch, url: string, init: RequestInit): Promise<unknown> {
+  const response = await fetcher(url, init);
+
+  return readJsonResponse(response, `POST ${url}`);
 }
 
 async function readJsonResponse(response: Response, context: string): Promise<unknown> {
@@ -168,8 +208,31 @@ function parseDomainMappings(value: unknown, context: string): InstanceDomainMap
   }
 
   return {
+    appliedStates: Array.isArray(value.appliedStates)
+      ? (value.appliedStates as InstanceDomainMappingsResponse["appliedStates"])
+      : [],
+    auditEvents: Array.isArray(value.auditEvents)
+      ? (value.auditEvents as InstanceDomainMappingsResponse["auditEvents"])
+      : [],
     mappings: value.mappings as InstanceDomainMappingsResponse["mappings"],
   };
+}
+
+function parseApplyEvidenceResponse(
+  value: unknown,
+  context: string,
+): RecordInstanceDomainMappingApplyEvidenceResponse {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.appliedState) ||
+    !Array.isArray(value.appliedStates) ||
+    !isRecord(value.auditEvent) ||
+    !Array.isArray(value.auditEvents)
+  ) {
+    throw new Error(`${context} failed: apply evidence response is invalid.`);
+  }
+
+  return value as RecordInstanceDomainMappingApplyEvidenceResponse;
 }
 
 function apiUrl(targetUrl: string, apiPath: string): string {

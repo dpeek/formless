@@ -16,6 +16,29 @@ export type InstanceDomainMapping = {
   updatedAt: string;
 };
 
+export type InstanceDomainMappingAppliedAction = "adopted" | "created" | "overridden";
+
+export type InstanceDomainMappingAppliedProvider = "cloudflare-worker-custom-domain";
+
+export type InstanceDomainMappingAppliedState = {
+  host: string;
+  surface: InstanceDomainMappingSurface;
+  installId: AppInstallId;
+  provider: InstanceDomainMappingAppliedProvider;
+  accountId: string;
+  zoneId: string;
+  zoneName: string;
+  workerName: string;
+  workerDomainId: string;
+  action: InstanceDomainMappingAppliedAction;
+  appliedAt: string;
+  updatedAt: string;
+};
+
+export type InstanceDomainMappingAuditEvent = InstanceDomainMappingAppliedState & {
+  eventId: number;
+};
+
 export type CreateInstanceDomainMappingRequest = {
   host: string;
   surface: string;
@@ -23,7 +46,22 @@ export type CreateInstanceDomainMappingRequest = {
   enabled?: boolean;
 };
 
+export type RecordInstanceDomainMappingApplyEvidenceRequest = {
+  host: string;
+  surface: string;
+  installId: string;
+  provider: string;
+  accountId: string;
+  zoneId: string;
+  zoneName: string;
+  workerName: string;
+  workerDomainId: string;
+  action: string;
+};
+
 export type InstanceDomainMappingsResponse = {
+  appliedStates: InstanceDomainMappingAppliedState[];
+  auditEvents: InstanceDomainMappingAuditEvent[];
   mappings: InstanceDomainMapping[];
 };
 
@@ -31,18 +69,40 @@ export type InstanceDomainMappingLookupResponse = {
   mapping: InstanceDomainMapping | null;
 };
 
+export type RecordInstanceDomainMappingApplyEvidenceResponse = {
+  appliedState: InstanceDomainMappingAppliedState;
+  appliedStates: InstanceDomainMappingAppliedState[];
+  auditEvent: InstanceDomainMappingAuditEvent;
+  auditEvents: InstanceDomainMappingAuditEvent[];
+};
+
 export type InstanceDomainMappingRegistryErrorCode =
+  | "domain-mapping-install-mismatch"
+  | "domain-mapping-not-found"
   | "duplicate-domain-mapping"
+  | "invalid-applied-action"
   | "install-not-found"
   | "invalid-enabled"
   | "invalid-host"
   | "invalid-install-id"
+  | "invalid-provider"
   | "invalid-surface"
   | "unsupported-install-package";
 
 export type InstanceDomainMappingRegistryError = {
   code: InstanceDomainMappingRegistryErrorCode;
-  field?: "enabled" | "host" | "installId" | "surface";
+  field?:
+    | "accountId"
+    | "action"
+    | "enabled"
+    | "host"
+    | "installId"
+    | "provider"
+    | "surface"
+    | "workerDomainId"
+    | "workerName"
+    | "zoneId"
+    | "zoneName";
   message: string;
 };
 
@@ -66,6 +126,22 @@ export type CreateInstanceDomainMappingResult =
       ok: false;
       error: InstanceDomainMappingRegistryError;
       mappings: readonly InstanceDomainMapping[];
+    };
+
+export type BuildInstanceDomainMappingAppliedStateInput =
+  RecordInstanceDomainMappingApplyEvidenceRequest & {
+    existingMappings: readonly InstanceDomainMapping[];
+    now: string;
+  };
+
+export type BuildInstanceDomainMappingAppliedStateResult =
+  | {
+      ok: true;
+      appliedState: InstanceDomainMappingAppliedState;
+    }
+  | {
+      ok: false;
+      error: InstanceDomainMappingRegistryError;
     };
 
 export type InstanceDomainHostValidationResult =
@@ -96,6 +172,32 @@ export function parseCreateInstanceDomainMappingRequest(
     ...(value.enabled === undefined
       ? {}
       : { enabled: parseBoolean("Domain mapping enabled", value.enabled) }),
+  };
+}
+
+export function parseRecordInstanceDomainMappingApplyEvidenceRequest(
+  value: unknown,
+): RecordInstanceDomainMappingApplyEvidenceRequest {
+  if (!isRecord(value)) {
+    throw new Error("Domain mapping apply evidence request must be an object.");
+  }
+
+  assertRecordInstanceDomainMappingApplyEvidenceRequestKeys(value);
+
+  return {
+    host: parseTrimmedNonEmptyString("Domain mapping host", value.host),
+    surface: parseTrimmedNonEmptyString("Domain mapping surface", value.surface),
+    installId: parseTrimmedNonEmptyString("Domain mapping install id", value.installId),
+    provider: parseTrimmedNonEmptyString("Domain mapping applied provider", value.provider),
+    accountId: parseTrimmedNonEmptyString("Domain mapping Cloudflare account id", value.accountId),
+    zoneId: parseTrimmedNonEmptyString("Domain mapping Cloudflare zone id", value.zoneId),
+    zoneName: parseTrimmedNonEmptyString("Domain mapping Cloudflare zone name", value.zoneName),
+    workerName: parseTrimmedNonEmptyString("Domain mapping Worker name", value.workerName),
+    workerDomainId: parseTrimmedNonEmptyString(
+      "Domain mapping Worker Custom Domain id",
+      value.workerDomainId,
+    ),
+    action: parseTrimmedNonEmptyString("Domain mapping applied action", value.action),
   };
 }
 
@@ -209,6 +311,92 @@ export function listInstanceDomainMappings(
   });
 }
 
+export function buildInstanceDomainMappingAppliedState(
+  input: BuildInstanceDomainMappingAppliedStateInput,
+): BuildInstanceDomainMappingAppliedStateResult {
+  const hostResult = normalizeInstanceDomainHost(input.host);
+
+  if (!hostResult.ok) {
+    return { ok: false, error: hostResult.error };
+  }
+
+  const surfaceResult = parseInstanceDomainMappingSurface(input.surface);
+
+  if (!surfaceResult.ok) {
+    return { ok: false, error: surfaceResult.error };
+  }
+
+  const installIdResult = validateAppInstallId(input.installId);
+
+  if (!installIdResult.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid-install-id",
+        field: "installId",
+        message: installIdResult.error.message,
+      },
+    };
+  }
+
+  const providerResult = parseInstanceDomainMappingAppliedProvider(input.provider);
+
+  if (!providerResult.ok) {
+    return { ok: false, error: providerResult.error };
+  }
+
+  const actionResult = parseInstanceDomainMappingAppliedAction(input.action);
+
+  if (!actionResult.ok) {
+    return { ok: false, error: actionResult.error };
+  }
+
+  const mapping = input.existingMappings.find(
+    (candidate) =>
+      candidate.host === hostResult.host && candidate.surface === surfaceResult.surface,
+  );
+
+  if (!mapping) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "domain-mapping-not-found",
+        "host",
+        `Domain mapping for host "${hostResult.host}" and surface "${surfaceResult.surface}" does not exist.`,
+      ),
+    };
+  }
+
+  if (mapping.installId !== installIdResult.installId) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "domain-mapping-install-mismatch",
+        "installId",
+        `Domain mapping for host "${hostResult.host}" targets install "${mapping.installId}", not "${installIdResult.installId}".`,
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    appliedState: {
+      host: hostResult.host,
+      surface: surfaceResult.surface,
+      installId: installIdResult.installId,
+      provider: providerResult.provider,
+      accountId: input.accountId,
+      zoneId: input.zoneId,
+      zoneName: input.zoneName,
+      workerName: input.workerName,
+      workerDomainId: input.workerDomainId,
+      action: actionResult.action,
+      appliedAt: input.now,
+      updatedAt: input.now,
+    },
+  };
+}
+
 export function normalizeInstanceDomainHost(value: string): InstanceDomainHostValidationResult {
   const raw = value.trim().toLowerCase();
 
@@ -267,6 +455,52 @@ function parseInstanceDomainMappingSurface(value: string):
   };
 }
 
+function parseInstanceDomainMappingAppliedProvider(value: string):
+  | {
+      ok: true;
+      provider: InstanceDomainMappingAppliedProvider;
+    }
+  | {
+      ok: false;
+      error: InstanceDomainMappingRegistryError;
+    } {
+  if (value === "cloudflare-worker-custom-domain") {
+    return { ok: true, provider: value };
+  }
+
+  return {
+    ok: false,
+    error: domainMappingError(
+      "invalid-provider",
+      "provider",
+      'Domain mapping applied provider must be "cloudflare-worker-custom-domain".',
+    ),
+  };
+}
+
+function parseInstanceDomainMappingAppliedAction(value: string):
+  | {
+      ok: true;
+      action: InstanceDomainMappingAppliedAction;
+    }
+  | {
+      ok: false;
+      error: InstanceDomainMappingRegistryError;
+    } {
+  if (value === "adopted" || value === "created" || value === "overridden") {
+    return { ok: true, action: value };
+  }
+
+  return {
+    ok: false,
+    error: domainMappingError(
+      "invalid-applied-action",
+      "action",
+      'Domain mapping applied action must be "adopted", "created", or "overridden".',
+    ),
+  };
+}
+
 function stripTrailingDots(value: string): string {
   return value.replaceAll(/\.+$/g, "");
 }
@@ -317,6 +551,34 @@ function assertCreateInstanceDomainMappingRequestKeys(value: Record<string, unkn
   for (const key of requiredKeys) {
     if (!(key in value)) {
       throw new Error(`Domain mapping request must include "${key}".`);
+    }
+  }
+}
+
+function assertRecordInstanceDomainMappingApplyEvidenceRequestKeys(value: Record<string, unknown>) {
+  const requiredKeys = [
+    "host",
+    "surface",
+    "installId",
+    "provider",
+    "accountId",
+    "zoneId",
+    "zoneName",
+    "workerName",
+    "workerDomainId",
+    "action",
+  ];
+  const allowedKeys = new Set(requiredKeys);
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Domain mapping apply evidence request has unsupported key "${key}".`);
+    }
+  }
+
+  for (const key of requiredKeys) {
+    if (!(key in value)) {
+      throw new Error(`Domain mapping apply evidence request must include "${key}".`);
     }
   }
 }
