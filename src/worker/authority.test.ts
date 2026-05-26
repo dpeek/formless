@@ -284,7 +284,7 @@ describe("authority", () => {
     expect(legacy.records).not.toContainEqual(createdRate);
   });
 
-  it("projects installed Site tree media hrefs through the selected install route", async () => {
+  it("projects installed Site tree media asset ids through core delivery with legacy href fallback", async () => {
     await postInstalledAppJson<BootstrapResponse>(
       "site",
       "personal",
@@ -299,6 +299,7 @@ describe("authority", () => {
               type: "image",
               label: "Installed image",
               mediaAssetId: "installed.webp",
+              href: "/api/app-installs/site/personal/media/app-installs/personal/site/images/installed-legacy.webp",
             },
             createdAt: "2026-05-22T00:00:00.000Z",
           },
@@ -318,8 +319,9 @@ describe("authority", () => {
 
     const body = await getInstalledAppJson<SitePageTreeResponse>("site", "personal", "/tree/home");
 
+    expect(JSON.stringify(body)).toContain("/api/formless/media/media/images/installed.webp");
     expect(JSON.stringify(body)).toContain(
-      "/api/app-installs/site/personal/media/app-installs/personal/site/images/installed.webp",
+      "/api/app-installs/site/personal/media/app-installs/personal/site/images/installed-legacy.webp",
     );
     expect(JSON.stringify(body)).not.toContain("/api/site/media/site/images/installed.webp");
   });
