@@ -3,14 +3,20 @@ import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
-import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappings.ts";
+import {
+  handleInstanceDomainMappingsApiRequest,
+  lookupEnabledInstanceSiteDomainMappingForRequestHost,
+} from "./instance-domain-mappings.ts";
+import { mappedSiteHostFromDomainMapping } from "./mapped-site-host.ts";
 import { handleMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
   areSchemaKeyApiRoutesEnabledForRequest,
+  mappedSiteHostRedirectForRequest,
   publishedSiteRedirectForRequest,
   shouldDeferToStaticAssets,
+  shouldResolveInstanceSiteDomainMappingForRequest,
   workerRuntimeProfileInput,
 } from "./routing.ts";
 import { handleSiteIconRequest } from "./site-icons.ts";
@@ -38,19 +44,29 @@ export default {
       return mediaResponse;
     }
 
-    const siteIconResponse = await handleSiteIconRequest(request, env);
+    const mappedSiteHost = shouldResolveInstanceSiteDomainMappingForRequest(request, runtimeProfile)
+      ? mappedSiteHostFromDomainMapping(
+          await lookupEnabledInstanceSiteDomainMappingForRequestHost(request, env),
+        )
+      : undefined;
+
+    const siteIconResponse = await handleSiteIconRequest(request, env, { mappedSiteHost });
 
     if (siteIconResponse) {
       return siteIconResponse;
     }
 
-    const publishedSiteRedirect = publishedSiteRedirectForRequest(request, runtimeProfile);
+    const publishedSiteRedirect = mappedSiteHost
+      ? mappedSiteHostRedirectForRequest(request)
+      : publishedSiteRedirectForRequest(request, runtimeProfile);
 
     if (publishedSiteRedirect) {
       return redirectResponse(publishedSiteRedirect.location, publishedSiteRedirect.status);
     }
 
-    const publishedSiteIndexingResponse = await handlePublishedSiteIndexingRequest(request, env);
+    const publishedSiteIndexingResponse = await handlePublishedSiteIndexingRequest(request, env, {
+      mappedSiteHost,
+    });
 
     if (publishedSiteIndexingResponse) {
       return publishedSiteIndexingResponse;
@@ -106,7 +122,9 @@ export default {
       return authority.fetch(request);
     }
 
-    const siteDocumentResponse = await handlePublishedSiteDocumentRequest(request, env);
+    const siteDocumentResponse = await handlePublishedSiteDocumentRequest(request, env, {
+      mappedSiteHost,
+    });
 
     if (siteDocumentResponse) {
       return siteDocumentResponse;

@@ -10,9 +10,16 @@ import {
   type PublicDocumentMetadata,
 } from "../site/public-document-metadata.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
+import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
-import { shouldHandlePublishedSiteDocument, workerRuntimeProfileInput } from "./routing.ts";
+import type { MappedSiteHost } from "./mapped-site-host.ts";
+import {
+  shouldBlockMappedSiteHostBrowserRoute,
+  shouldHandleMappedSiteHostDocument,
+  shouldHandlePublishedSiteDocument,
+  workerRuntimeProfileInput,
+} from "./routing.ts";
 import {
   publishedSiteDocumentCacheControl,
   type PublishedSiteDocumentCacheKind,
@@ -90,28 +97,45 @@ type ClientDocumentAssets = {
 export async function handlePublishedSiteDocumentRequest(
   request: Request,
   env: Env,
+  options: { mappedSiteHost?: MappedSiteHost } = {},
 ): Promise<Response | undefined> {
-  if (
-    !shouldHandlePublishedSiteDocument(
-      request,
-      workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
-    )
-  ) {
-    return undefined;
+  if (options.mappedSiteHost) {
+    if (shouldBlockMappedSiteHostBrowserRoute(request)) {
+      return responseWithoutBodyForHead(request, new Response(null, { status: 404 }));
+    }
+
+    if (!shouldHandleMappedSiteHostDocument(request)) {
+      return undefined;
+    }
+  } else {
+    if (
+      !shouldHandlePublishedSiteDocument(
+        request,
+        workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
+      )
+    ) {
+      return undefined;
+    }
   }
 
-  const response = await renderPublishedSiteDocument(getEquivalentRequestForHead(request), env);
+  const response = await renderPublishedSiteDocument(getEquivalentRequestForHead(request), env, {
+    target: options.mappedSiteHost?.target,
+  });
 
   return responseWithoutBodyForHead(request, response);
 }
 
-async function renderPublishedSiteDocument(request: Request, env: Env): Promise<Response> {
+async function renderPublishedSiteDocument(
+  request: Request,
+  env: Env,
+  options: { target?: InstalledAppStorageIdentity } = {},
+): Promise<Response> {
   const slug = publishedSiteSlugFromUrl(new URL(request.url));
   const requestUrl = new URL(request.url);
   const clientAssets = await loadClientDocumentAssets(request, env);
 
   try {
-    const treeResponse = await fetchSitePageTree(request, env, slug);
+    const treeResponse = await fetchSitePageTree(request, env, slug, options.target);
 
     if (treeResponse.status === 404) {
       return htmlResponse(await renderNotFoundDocument(slug, requestUrl, clientAssets), {
@@ -154,10 +178,18 @@ async function renderPublishedSiteDocument(request: Request, env: Env): Promise<
   }
 }
 
-async function fetchSitePageTree(request: Request, env: Env, slug: string): Promise<Response> {
-  const authorityId = env.FORMLESS_AUTHORITY.idFromName(SITE_SCHEMA_KEY);
+async function fetchSitePageTree(
+  request: Request,
+  env: Env,
+  slug: string,
+  target?: InstalledAppStorageIdentity,
+): Promise<Response> {
+  const authorityId = env.FORMLESS_AUTHORITY.idFromName(target?.authorityName ?? SITE_SCHEMA_KEY);
   const authority = env.FORMLESS_AUTHORITY.get(authorityId);
-  const treeUrl = new URL(`/api/${SITE_SCHEMA_KEY}/tree/${encodeURIComponent(slug)}`, request.url);
+  const treeUrl = new URL(
+    `${target?.apiRoutePrefix ?? `/api/${SITE_SCHEMA_KEY}`}/tree/${encodeURIComponent(slug)}`,
+    request.url,
+  );
 
   return authority.fetch(
     new Request(treeUrl, {

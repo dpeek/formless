@@ -1,5 +1,6 @@
 import {
   parseCreateInstanceDomainMappingRequest,
+  type InstanceDomainMapping,
   type InstanceDomainMappingLookupResponse,
   type InstanceDomainMappingsResponse,
 } from "../shared/instance-domain-mappings.ts";
@@ -30,6 +31,32 @@ export async function handleInstanceDomainMappingsApiRequest(
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
 
   return env.FORMLESS_AUTHORITY.get(id).fetch(request);
+}
+
+export async function lookupEnabledInstanceSiteDomainMappingForRequestHost(
+  request: Request,
+  env: InstanceDomainMappingsApiEnv,
+): Promise<InstanceDomainMapping | undefined> {
+  const requestUrl = new URL(request.url);
+  const lookupUrl = new URL(INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH, requestUrl.origin);
+  lookupUrl.searchParams.set("host", requestUrl.host);
+  lookupUrl.searchParams.set("surface", "site");
+
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(lookupUrl, {
+      headers: { Accept: "application/json" },
+      method: "GET",
+    }),
+  );
+
+  if (!response.ok) {
+    return undefined;
+  }
+
+  const body = (await response.json()) as InstanceDomainMappingLookupResponse;
+
+  return body.mapping ?? undefined;
 }
 
 export async function handleInstanceDomainMappingsDurableObjectRequest(

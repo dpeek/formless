@@ -3,8 +3,10 @@ import { Resvg, initResvg } from "@cf-wasm/resvg/workerd";
 import { encodeIcoFromPngs } from "../site/ico.ts";
 import { DEFAULT_SITE_ICON_SVG, resolveSiteIconSvgSource } from "../site/site-icon-source.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
+import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
+import type { MappedSiteHost } from "./mapped-site-host.ts";
 import { isDynamicSiteIconPath } from "./routing.ts";
 import { PUBLIC_SITE_ICON_CACHE_CONTROL } from "./site-cache.ts";
 
@@ -46,6 +48,7 @@ const siteIconRoutes = new Map<string, SiteIconRoute>([
 export async function handleSiteIconRequest(
   request: Request,
   env: Env,
+  options: { mappedSiteHost?: MappedSiteHost } = {},
 ): Promise<Response | undefined> {
   const route = siteIconRouteForRequest(request);
 
@@ -53,7 +56,9 @@ export async function handleSiteIconRequest(
     return undefined;
   }
 
-  const response = await buildSiteIconResponse(getEquivalentRequestForHead(request), env, route);
+  const response = await buildSiteIconResponse(getEquivalentRequestForHead(request), env, route, {
+    target: options.mappedSiteHost?.target,
+  });
 
   return responseWithoutBodyForHead(request, response);
 }
@@ -74,8 +79,11 @@ async function buildSiteIconResponse(
   request: Request,
   env: Env,
   route: SiteIconRoute,
+  options: { target?: InstalledAppStorageIdentity } = {},
 ): Promise<Response> {
-  const svg = resolveSiteIconSvgSource(await fetchAuthoredSiteIconSource(request, env));
+  const svg = resolveSiteIconSvgSource(
+    await fetchAuthoredSiteIconSource(request, env, options.target),
+  );
 
   return buildCachedSiteIconResponse(request, route, svg);
 }
@@ -159,10 +167,14 @@ async function renderSvgToPng(svg: string, size: number): Promise<Uint8Array> {
 async function fetchAuthoredSiteIconSource(
   request: Request,
   env: Env,
+  target?: InstalledAppStorageIdentity,
 ): Promise<string | undefined> {
-  const authorityId = env.FORMLESS_AUTHORITY.idFromName(SITE_SCHEMA_KEY);
+  const authorityId = env.FORMLESS_AUTHORITY.idFromName(target?.authorityName ?? SITE_SCHEMA_KEY);
   const authority = env.FORMLESS_AUTHORITY.get(authorityId);
-  const bootstrapUrl = new URL(`/api/${SITE_SCHEMA_KEY}/bootstrap`, request.url);
+  const bootstrapUrl = new URL(
+    `${target?.apiRoutePrefix ?? `/api/${SITE_SCHEMA_KEY}`}/bootstrap`,
+    request.url,
+  );
 
   try {
     const response = await authority.fetch(

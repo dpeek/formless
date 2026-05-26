@@ -100,6 +100,68 @@ export function shouldHandlePublishedSiteIndexingResource(
   );
 }
 
+export function shouldResolveInstanceSiteDomainMappingForRequest(
+  request: Request,
+  input: WorkerRuntimeProfileInput = {},
+): boolean {
+  if (!isReadRequestMethod(request.method)) {
+    return false;
+  }
+
+  const url = new URL(request.url);
+
+  if (isApiPath(url.pathname)) {
+    return false;
+  }
+
+  const profileKind = resolveWorkerRuntimeProfileKind({ ...input, hostname: url.hostname });
+
+  return profileKind === "instance";
+}
+
+export function shouldHandleMappedSiteHostDocument(request: Request): boolean {
+  if (!isReadRequestMethod(request.method)) {
+    return false;
+  }
+
+  const url = new URL(request.url);
+
+  if (
+    isApiPath(url.pathname) ||
+    mappedSiteHostRedirectForRequest(request) ||
+    isClientShellRoute(url.pathname) ||
+    looksLikeStaticAssetPath(url.pathname)
+  ) {
+    return false;
+  }
+
+  return acceptsHtml(request.headers.get("Accept"));
+}
+
+export function shouldBlockMappedSiteHostBrowserRoute(request: Request): boolean {
+  if (!isReadRequestMethod(request.method)) {
+    return false;
+  }
+
+  const url = new URL(request.url);
+
+  return (
+    !isApiPath(url.pathname) &&
+    !looksLikeStaticAssetPath(url.pathname) &&
+    isClientShellRoute(url.pathname)
+  );
+}
+
+export function shouldHandleMappedSiteHostIndexingResource(request: Request): boolean {
+  if (!isReadRequestMethod(request.method)) {
+    return false;
+  }
+
+  const url = new URL(request.url);
+
+  return url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml";
+}
+
 export function shouldDeferToStaticAssets(
   request: Request,
   input: WorkerRuntimeProfileInput = {},
@@ -147,6 +209,24 @@ export function publishedSiteRedirectForRequest(
     isApiPath(url.pathname) ||
     looksLikeStaticAssetPath(url.pathname)
   ) {
+    return undefined;
+  }
+
+  const location = publishedSiteRedirectLocation(url.pathname, url.search);
+
+  return location ? { location, status: PUBLISHED_SITE_REDIRECT_STATUS } : undefined;
+}
+
+export function mappedSiteHostRedirectForRequest(
+  request: Request,
+): PublishedSiteRedirect | undefined {
+  if (!isReadRequestMethod(request.method)) {
+    return undefined;
+  }
+
+  const url = new URL(request.url);
+
+  if (isApiPath(url.pathname) || looksLikeStaticAssetPath(url.pathname)) {
     return undefined;
   }
 
