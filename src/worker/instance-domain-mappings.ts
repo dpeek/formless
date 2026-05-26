@@ -56,6 +56,7 @@ export async function lookupEnabledInstanceRoutableDomainMappingForRequestHost(
 ): Promise<InstanceDomainMapping | undefined> {
   return (
     (await lookupEnabledInstanceDomainMappingForRequestHost(request, env, "instance")) ??
+    (await lookupEnabledInstanceDomainMappingForRequestHost(request, env, "app")) ??
     (await lookupEnabledInstanceDomainMappingForRequestHost(request, env, "publicSite"))
   );
 }
@@ -63,7 +64,7 @@ export async function lookupEnabledInstanceRoutableDomainMappingForRequestHost(
 async function lookupEnabledInstanceDomainMappingForRequestHost(
   request: Request,
   env: InstanceDomainMappingsApiEnv,
-  profile: "instance" | "publicSite",
+  profile: "instance" | "app" | "publicSite",
 ): Promise<InstanceDomainMapping | undefined> {
   const requestUrl = new URL(request.url);
   const lookupUrl = new URL(INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH, requestUrl.origin);

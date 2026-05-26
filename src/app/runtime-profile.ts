@@ -87,9 +87,15 @@ export type RuntimeRoutePolicy = {
 };
 
 export type RuntimeProfileResolverInput = {
+  appInstallId?: string | undefined;
+  packageAppKey?: string | undefined;
   profile?: string | undefined;
   schemaKey?: string | undefined;
   hostname?: string | undefined;
+};
+
+export type AppRuntimeProfileOptions = {
+  target?: AppStorageIdentity;
 };
 
 export type SiteAuthoringRuntimeProfileOptions = {
@@ -97,10 +103,18 @@ export type SiteAuthoringRuntimeProfileOptions = {
   localPublish?: RuntimeLocalPublishBroker;
 };
 
+export const FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME = "formless-runtime-app-install-id";
+export const FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME = "formless-runtime-package-app-key";
 export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
 
 type RuntimeProfileHintDocument = {
   querySelector(selector: string): { getAttribute(name: string): string | null } | null;
+};
+
+export type RuntimeProfileDocumentHints = {
+  appInstallId?: string;
+  packageAppKey?: string;
+  profile?: string;
 };
 
 export function resolveRuntimeProfile(
@@ -114,7 +128,12 @@ export function resolveRuntimeProfile(
     case "instance":
       return createInstanceRuntimeProfile();
     case "app":
-      return createAppRuntimeProfile(schemaKey);
+      return (
+        createInstalledAppRuntimeProfile({
+          installId: input.appInstallId,
+          packageAppKey: input.packageAppKey,
+        }) ?? createAppRuntimeProfile(schemaKey)
+      );
     case "siteAuthoring":
       return createSiteAuthoringRuntimeProfile({
         localPublish: browserLocalPublishBrokerConfig(),
@@ -187,7 +206,10 @@ export function runtimeRoutePolicy(profile: RuntimeProfile): RuntimeRoutePolicy 
   };
 }
 
-export function createAppRuntimeProfile(schemaKey: SchemaKey = defaultSchemaKey): RuntimeProfile {
+export function createAppRuntimeProfile(
+  schemaKey: SchemaKey = defaultSchemaKey,
+  options: AppRuntimeProfileOptions = {},
+): RuntimeProfile {
   const app = getSchemaAppDefinition(schemaKey);
 
   return {
@@ -199,9 +221,32 @@ export function createAppRuntimeProfile(schemaKey: SchemaKey = defaultSchemaKey)
         generatedRoutes: true,
         route: "/",
         schemaRoute: "/schema",
+        ...(options.target ? { target: options.target } : {}),
       },
     ],
   };
+}
+
+export function createInstalledAppRuntimeProfile(input: {
+  installId?: string | undefined;
+  packageAppKey?: string | undefined;
+}): RuntimeProfile | undefined {
+  if (!input.installId || !input.packageAppKey) {
+    return undefined;
+  }
+
+  const target = installedAppStorageIdentity({
+    installId: input.installId,
+    packageAppKey: input.packageAppKey,
+  });
+
+  if (!target) {
+    return undefined;
+  }
+
+  const app = findSchemaAppDefinition(target.sourceSchemaKey);
+
+  return app ? createAppRuntimeProfile(app.key, { target }) : undefined;
 }
 
 export function createSiteAuthoringRuntimeProfile(
@@ -451,11 +496,15 @@ function findInstalledAppByInstallId(
 }
 
 function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {
+  const documentHints = readRuntimeProfileDocumentHints();
+
   return {
     profile: selectBrowserRuntimeProfileHint({
-      documentProfile: readRuntimeProfileDocumentHint(),
+      documentProfile: documentHints.profile,
       envProfile: import.meta.env.VITE_FORMLESS_RUNTIME_PROFILE,
     }),
+    appInstallId: documentHints.appInstallId,
+    packageAppKey: documentHints.packageAppKey,
     schemaKey: stringConfigValue(import.meta.env.VITE_FORMLESS_SCHEMA_KEY),
     hostname: typeof window === "undefined" ? undefined : window.location.hostname,
   };
@@ -481,11 +530,17 @@ function browserLocalPublishBrokerConfig(): RuntimeLocalPublishBroker | undefine
 export function readRuntimeProfileDocumentHint(
   doc: RuntimeProfileHintDocument | undefined = browserDocument(),
 ): string | undefined {
-  const profile = doc
-    ?.querySelector(`meta[name="${FORMLESS_RUNTIME_PROFILE_META_NAME}"]`)
-    ?.getAttribute("content");
+  return readRuntimeProfileDocumentHints(doc).profile;
+}
 
-  return stringConfigValue(profile);
+export function readRuntimeProfileDocumentHints(
+  doc: RuntimeProfileHintDocument | undefined = browserDocument(),
+): RuntimeProfileDocumentHints {
+  return {
+    profile: readRuntimeProfileMetaContent(doc, FORMLESS_RUNTIME_PROFILE_META_NAME),
+    appInstallId: readRuntimeProfileMetaContent(doc, FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME),
+    packageAppKey: readRuntimeProfileMetaContent(doc, FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME),
+  };
 }
 
 export function selectBrowserRuntimeProfileHint(input: {
@@ -548,6 +603,15 @@ function stringConfigValue(value: unknown): string | undefined {
 
 function browserDocument(): RuntimeProfileHintDocument | undefined {
   return typeof document === "undefined" ? undefined : document;
+}
+
+function readRuntimeProfileMetaContent(
+  doc: RuntimeProfileHintDocument | undefined,
+  name: string,
+): string | undefined {
+  const value = doc?.querySelector(`meta[name="${name}"]`)?.getAttribute("content");
+
+  return stringConfigValue(value);
 }
 
 function isWorkersDevHost(hostname: string): boolean {

@@ -3,15 +3,19 @@ import {
   createAppRuntimeProfile,
   createDevWorkbenchRuntimeProfile,
   createDevRuntimeProfile,
+  createInstalledAppRuntimeProfile,
   createInstanceRuntimeProfile,
   createPublishedSiteRuntimeProfile,
   createSiteAuthoringRuntimeProfile,
+  FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
+  FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
   findRuntimeWorldMountByRoute,
   installedAppWorldMountFromInstallId,
   installedSitePublicSurfaceFromRoute,
   isRuntimePublicSiteRoute,
   readRuntimeProfileDocumentHint,
+  readRuntimeProfileDocumentHints,
   resolveRuntimeProfile,
   runtimeRoutePolicy,
   runtimeScreenPathFromRoute,
@@ -274,6 +278,31 @@ describe("runtime profile resolver", () => {
     expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
   });
 
+  it("resolves an installed app profile with install-scoped root paths", () => {
+    const profile = createInstalledAppRuntimeProfile({
+      installId: "task-workspace",
+      packageAppKey: "tasks",
+    });
+    const world = profile?.worlds[0];
+
+    if (!profile || !world?.target || world.target.kind !== "appInstall") {
+      throw new Error("Missing installed app profile world mount.");
+    }
+
+    expect(profile.kind).toBe("app");
+    expect(profile.shell).toBe("app");
+    expect(world.app.key).toBe("tasks");
+    expect(world.route).toBe("/");
+    expect(world.schemaRoute).toBe("/schema");
+    expect(world.target.installId).toBe("task-workspace");
+    expect(world.target.apiRoutePrefix).toBe("/api/app-installs/tasks/task-workspace");
+    expect(world.target.browserDatabaseName).toBe("formless:app:task-workspace");
+    expect(findRuntimeWorldMountByRoute(profile, "/")?.target).toEqual(world.target);
+    expect(findRuntimeWorldMountByRoute(profile, "/schema")?.target).toEqual(world.target);
+    expect(runtimeScreenRoute(world, "/")).toBe("/");
+    expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
+  });
+
   it("resolves the Site authoring profile with top-level preview and admin routes", () => {
     const profile = createSiteAuthoringRuntimeProfile();
     const world = profile.worlds[0];
@@ -387,6 +416,42 @@ describe("runtime profile resolver", () => {
     });
 
     expect(profile.kind).toBe("publishedSite");
+  });
+
+  it("uses document app target hints for mapped installed app hosts", () => {
+    const doc = {
+      querySelector: (selector: string) => {
+        const values = {
+          [`meta[name="${FORMLESS_RUNTIME_PROFILE_META_NAME}"]`]: "app",
+          [`meta[name="${FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME}"]`]: "task-workspace",
+          [`meta[name="${FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME}"]`]: "tasks",
+        };
+        const value = values[selector as keyof typeof values];
+
+        return value
+          ? {
+              getAttribute: (name: string) => (name === "content" ? value : null),
+            }
+          : null;
+      },
+    };
+    const hints = readRuntimeProfileDocumentHints(doc);
+    const profile = resolveRuntimeProfile({
+      hostname: "tasks.example.com",
+      ...hints,
+    });
+    const world = profile.worlds[0];
+
+    if (!world?.target || world.target.kind !== "appInstall") {
+      throw new Error("Missing installed app target.");
+    }
+
+    expect(readRuntimeProfileDocumentHint(doc)).toBe("app");
+    expect(profile.kind).toBe("app");
+    expect(world.app.key).toBe("tasks");
+    expect(world.route).toBe("/");
+    expect(world.schemaRoute).toBe("/schema");
+    expect(world.target.installId).toBe("task-workspace");
   });
 
   it("lets SSR document profile hints override the baked browser env profile", () => {

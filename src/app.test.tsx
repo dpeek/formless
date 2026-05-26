@@ -44,6 +44,7 @@ import { buildSitePageTree } from "./site/tree.ts";
 import {
   createDevRuntimeProfile,
   createAppRuntimeProfile,
+  createInstalledAppRuntimeProfile,
   createInstanceRuntimeProfile,
   createPublishedSiteRuntimeProfile,
   createSiteAuthoringRuntimeProfile,
@@ -1585,6 +1586,36 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('href="/estii/schema"');
   });
 
+  it('renders an installed app profile home at "/" from the install-scoped target', () => {
+    const profile = createInstalledAppRuntimeProfile({
+      installId: "task-workspace",
+      packageAppKey: "tasks",
+    });
+    const world = profile?.worlds[0];
+
+    if (!profile || !world?.target) {
+      throw new Error("Missing installed app profile.");
+    }
+
+    applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema), world.target);
+    const html = renderRoute("/", profile);
+
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Tasks" });
+    expectAppSettings(html, {
+      appLabel: "Tasks",
+      resetScopeLabel: "Tasks app install task-workspace",
+      schemaKey: "tasks",
+      schemaRoute: "/schema",
+      syncWorldKey: "app:task-workspace",
+    });
+    expect(html).toContain("Create Task");
+    expect(html).not.toContain("Loading Tasks...");
+    expect(html).not.toContain('href="/apps/task-workspace"');
+    expect(html).not.toContain('href="/tasks"');
+  });
+
   it("renders an app profile screen path without the schema key prefix", () => {
     applyBootstrapResponse(bootstrap(rateCardSeedRecords, rateCardSchema), "estii");
     const html = renderRoute("/setup", createAppRuntimeProfile("estii"));
@@ -1602,6 +1633,36 @@ describe("App smoke routes", () => {
     expect(html).toContain(">Rate cards</h2>");
     expect(html).toContain(">Resources</h2>");
     expect(html).not.toContain('href="/estii/setup"');
+  });
+
+  it('renders an installed app profile schema editor at "/schema" from the install-scoped target', () => {
+    const profile = createInstalledAppRuntimeProfile({
+      installId: "task-workspace",
+      packageAppKey: "tasks",
+    });
+    const world = profile?.worlds[0];
+
+    if (!profile || !world?.target) {
+      throw new Error("Missing installed app profile.");
+    }
+
+    applyBootstrapResponse(bootstrap(taskSeedRecords, appSchema), world.target);
+    const html = renderRoute("/schema", profile);
+
+    expect(html).not.toContain('data-frame="workbench"');
+    expect(html).toContain('data-frame="generated-app"');
+    expectGeneratedAppChromeLabels(html, { appTitle: "Tasks", screenTitle: "Schema" });
+    expectAppSettings(html, {
+      appLabel: "Tasks",
+      resetScopeLabel: "Tasks app install task-workspace",
+      schemaKey: "tasks",
+      schemaRoute: "/schema",
+      syncWorldKey: "app:task-workspace",
+    });
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">tasks</span>");
+    expect(html).toContain('aria-label="Schema saved"');
+    expect(html).not.toContain('href="/apps/task-workspace/schema"');
   });
 
   it("renders app profile Site publish when the profile exposes a local broker", () => {

@@ -1,12 +1,17 @@
 import { FormlessAuthority } from "./authority.ts";
 import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
+import { handleClientAssetRequest } from "./client-shell.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
-import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
+import {
+  handleInstanceAppInstallsApiRequest,
+  lookupInstanceAppInstallForRequest,
+} from "./instance-app-installs.ts";
 import {
   handleInstanceDomainMappingsApiRequest,
   lookupEnabledInstanceRoutableDomainMappingForRequestHost,
 } from "./instance-domain-mappings.ts";
+import { mappedAppHostFromDomainMapping } from "./mapped-app-host.ts";
 import { mappedSiteHostFromDomainMapping } from "./mapped-site-host.ts";
 import { handleMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
@@ -40,8 +45,21 @@ export default {
       request,
       env,
     );
+    const mappedAppInstall =
+      domainMapping?.profile === "app" && domainMapping.targetInstallId
+        ? await lookupInstanceAppInstallForRequest(request, env, domainMapping.targetInstallId)
+        : undefined;
+    const mappedAppHost = mappedAppHostFromDomainMapping(
+      domainMapping,
+      mappedAppInstall ? [mappedAppInstall] : [],
+    );
+    const isMappedAppProfileHost = domainMapping?.profile === "app";
     const effectiveRuntimeProfile = workerRuntimeProfileInput(
-      domainMapping?.profile === "instance" ? "instance" : env.FORMLESS_RUNTIME_PROFILE,
+      domainMapping?.profile === "instance"
+        ? "instance"
+        : isMappedAppProfileHost
+          ? "app"
+          : env.FORMLESS_RUNTIME_PROFILE,
     );
     const mediaResponse = await handleMediaRequest(request, env, effectiveRuntimeProfile);
 
@@ -113,7 +131,8 @@ export default {
     if (authorityRoute) {
       if (
         authorityRoute.identity.kind === "schemaKey" &&
-        !areSchemaKeyApiRoutesEnabledForRequest(request, effectiveRuntimeProfile)
+        (isMappedAppProfileHost ||
+          !areSchemaKeyApiRoutesEnabledForRequest(request, effectiveRuntimeProfile))
       ) {
         return Response.json({ error: "Not found." }, { status: 404 });
       }
@@ -134,7 +153,11 @@ export default {
     }
 
     if (env.ASSETS && shouldDeferToStaticAssets(request, effectiveRuntimeProfile)) {
-      return env.ASSETS.fetch(request);
+      const clientAssetResponse = await handleClientAssetRequest(request, env, { mappedAppHost });
+
+      if (clientAssetResponse) {
+        return clientAssetResponse;
+      }
     }
 
     return new Response(null, { status: 404 });

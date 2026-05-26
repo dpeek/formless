@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import {
+  FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
+  FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
+  FORMLESS_RUNTIME_PROFILE_META_NAME,
+} from "../app/runtime-profile.ts";
 import { PUBLIC_SITE_INDEXING_CACHE_CONTROL } from "./site-cache.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
@@ -8,7 +13,9 @@ type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
 
 const adminToken = "test-admin-token";
 const mappedHost = "www.example.com";
+const mappedAppHost = "tasks.example.com";
 const installId = "personal";
+const taskInstallId = "task-workspace";
 
 let harness: Harness;
 let assetRequests: string[];
@@ -167,6 +174,44 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(assetRequests).toEqual(["/"]);
   });
 
+  it("serves an app profile custom host with installed app document hints", async () => {
+    await setupMappedApp();
+    assetRequests = [];
+
+    const home = await fetchHost(mappedAppHost, "/", {
+      headers: { Accept: "text/html" },
+    });
+    const schema = await fetchHost(mappedAppHost, "/schema", {
+      headers: { Accept: "text/html" },
+    });
+    const schemaKeyApi = await fetchHost(mappedAppHost, "/api/tasks/bootstrap");
+    const installApi = await fetchHost(
+      mappedAppHost,
+      `/api/app-installs/tasks/${taskInstallId}/bootstrap`,
+    );
+    const homeHtml = await home.text();
+    const schemaHtml = await schema.text();
+
+    expect(home.status).toBe(200);
+    expect(homeHtml).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="app" />`,
+    );
+    expect(homeHtml).toContain(
+      `<meta name="${FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME}" content="${taskInstallId}" />`,
+    );
+    expect(homeHtml).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME}" content="tasks" />`,
+    );
+    expect(homeHtml).not.toContain("Personal custom-domain home");
+    expect(schema.status).toBe(200);
+    expect(schemaHtml).toContain(
+      `<meta name="${FORMLESS_RUNTIME_PROFILE_META_NAME}" content="app" />`,
+    );
+    expect(schemaKeyApi.status).toBe(404);
+    expect(installApi.status).toBe(200);
+    expect(assetRequests).toEqual(["/index.html", "/index.html"]);
+  });
+
   it("stops mapped public Site routing after desired mapping deletion", async () => {
     await setupMappedSite();
     await deleteAdminJson(`/api/formless/domain-mappings?host=${mappedHost}&profile=publicSite`);
@@ -196,6 +241,19 @@ async function setupMappedSite() {
     host: mappedHost,
     surface: "site",
     installId,
+  });
+}
+
+async function setupMappedApp() {
+  await postAdminJson("/api/formless/app-installs", {
+    packageAppKey: "tasks",
+    installId: taskInstallId,
+    label: "Task Workspace",
+  });
+  await postAdminJson("/api/formless/domain-mappings", {
+    host: mappedAppHost,
+    profile: "app",
+    targetInstallId: taskInstallId,
   });
 }
 

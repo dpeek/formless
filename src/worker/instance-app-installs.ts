@@ -1,4 +1,4 @@
-import { listBundledAppPackages } from "../shared/app-installs.ts";
+import { findAppInstall, listBundledAppPackages, type AppInstall } from "../shared/app-installs.ts";
 import {
   parseCreateAppInstallRequest,
   type AppInstallsResponse,
@@ -29,6 +29,30 @@ export async function handleInstanceAppInstallsApiRequest(
   const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
 
   return env.FORMLESS_AUTHORITY.get(id).fetch(request);
+}
+
+export async function lookupInstanceAppInstallForRequest(
+  request: Request,
+  env: InstanceAppInstallsApiEnv,
+  installId: string,
+): Promise<AppInstall | undefined> {
+  const requestUrl = new URL(request.url);
+  const lookupUrl = new URL(INSTANCE_APP_INSTALLS_API_PATH, requestUrl.origin);
+  const id = env.FORMLESS_AUTHORITY.idFromName(FORMLESS_INSTANCE_AUTHORITY_NAME);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(lookupUrl, {
+      headers: { Accept: "application/json" },
+      method: "GET",
+    }),
+  );
+
+  if (!response.ok) {
+    return undefined;
+  }
+
+  const body = (await response.json()) as AppInstallsResponse;
+
+  return findAppInstall(body.installs, installId);
 }
 
 export async function handleInstanceAppInstallsDurableObjectRequest(
