@@ -1,4 +1,4 @@
-import { FieldFlagIcon } from "@dpeek/formless-ui/icons";
+import { PriorityMarkerIcon } from "@dpeek/formless-ui/icons";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import type { ComponentType, SVGProps } from "react";
 import type { EnumValueSchema } from "../../shared/schema.ts";
@@ -22,7 +22,7 @@ export type ResolvedFieldPresentationColor = {
 };
 
 const iconRegistry: Record<string, ResolvedFieldPresentationIcon> = {
-  flag: { kind: "component", Component: FieldFlagIcon },
+  flag: { kind: "component", Component: PriorityMarkerIcon },
 };
 
 const colorTokenRegistry: Record<string, Exclude<FieldPresentationColorIntent, "neutral">> = {
