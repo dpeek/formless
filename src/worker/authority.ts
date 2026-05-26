@@ -31,6 +31,7 @@ import {
   launchFixtureStorageSourceForIdentity,
 } from "./launch-fixtures.ts";
 import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
+import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
@@ -66,6 +67,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceDomainMappingsResponse) {
       return instanceDomainMappingsResponse;
+    }
+
+    const instanceDomainProviderResponse = await handleInstanceDomainProviderDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (instanceDomainProviderResponse) {
+      return instanceDomainProviderResponse;
     }
 
     const instanceAppInstallsResponse = await handleInstanceAppInstallsDurableObjectRequest(

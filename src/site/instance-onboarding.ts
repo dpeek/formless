@@ -97,18 +97,25 @@ export type FormlessInstanceDeploymentPlan = {
   };
   runtimeVars: {
     FORMLESS_DEPLOY_VERSION: string;
+    FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: string;
+    FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: string;
+    FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: string;
     FORMLESS_RUNTIME_PROFILE: "instance";
     VITE_FORMLESS_RUNTIME_PROFILE: "instance";
   };
   secretRequirements: Array<{
-    envName: "FORMLESS_ADMIN_TOKEN";
-    purpose: "protect-authority-and-media-writes";
+    envName: "ALCHEMY_PASSWORD" | "CLOUDFLARE_API_TOKEN" | "FORMLESS_ADMIN_TOKEN";
+    purpose:
+      | "apply-cloudflare-domain-provider-resources"
+      | "encrypt-domain-provider-alchemy-state"
+      | "protect-authority-and-media-writes";
     storage: "cloudflare-worker-secret";
   }>;
 };
 
 export type FormlessInstanceDeploymentSecrets = {
   ALCHEMY_PASSWORD: string;
+  CLOUDFLARE_API_TOKEN?: string;
   FORMLESS_ADMIN_TOKEN: string;
 };
 
@@ -424,10 +431,23 @@ export function planFormlessInstanceDeployment(
     },
     runtimeVars: {
       FORMLESS_DEPLOY_VERSION: packageVersion,
+      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: account.id,
+      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: instanceName,
+      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: workerName,
       FORMLESS_RUNTIME_PROFILE: "instance",
       VITE_FORMLESS_RUNTIME_PROFILE: "instance",
     },
     secretRequirements: [
+      {
+        envName: "ALCHEMY_PASSWORD",
+        purpose: "encrypt-domain-provider-alchemy-state",
+        storage: "cloudflare-worker-secret",
+      },
+      {
+        envName: "CLOUDFLARE_API_TOKEN",
+        purpose: "apply-cloudflare-domain-provider-resources",
+        storage: "cloudflare-worker-secret",
+      },
       {
         envName: "FORMLESS_ADMIN_TOKEN",
         purpose: "protect-authority-and-media-writes",
@@ -631,6 +651,10 @@ export async function deployFormlessInstanceWithAlchemy(
     "Alchemy encryption password",
     input.secrets.ALCHEMY_PASSWORD,
   );
+  const cloudflareApiToken = parseOptionalString(
+    "Cloudflare API token",
+    input.secrets.CLOUDFLARE_API_TOKEN,
+  );
   const profileOptions = credentialProfile ? { profile: credentialProfile } : {};
   const adoptExistingDeployment = plan.migrationPolicy === "existing";
   const app = await resolvedDependencies.createApp(FORMLESS_ALCHEMY_APP_NAME, {
@@ -657,8 +681,16 @@ export async function deployFormlessInstanceWithAlchemy(
     bindings: {
       [plan.resources.authority.bindingName]: authorityNamespace,
       [plan.resources.mediaBucket.bindingName]: mediaBucket,
+      ALCHEMY_PASSWORD: resolvedDependencies.createSecret(alchemyPassword),
+      ...(cloudflareApiToken === undefined
+        ? {}
+        : { CLOUDFLARE_API_TOKEN: resolvedDependencies.createSecret(cloudflareApiToken) }),
       FORMLESS_ADMIN_TOKEN: resolvedDependencies.createSecret(adminToken),
       FORMLESS_DEPLOY_VERSION: plan.runtimeVars.FORMLESS_DEPLOY_VERSION,
+      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID:
+        plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID,
+      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID,
+      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: plan.runtimeVars.FORMLESS_DOMAIN_PROVIDER_WORKER_NAME,
       FORMLESS_RUNTIME_PROFILE: plan.runtimeVars.FORMLESS_RUNTIME_PROFILE,
     },
     build: {

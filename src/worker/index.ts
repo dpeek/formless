@@ -3,6 +3,7 @@ import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { handleClientAssetRequest } from "./client-shell.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
+import { handleInstanceDomainProviderApiRequest } from "./domain-provider-api.ts";
 import {
   handleInstanceAppInstallsApiRequest,
   lookupInstanceAppInstallForRequest,
@@ -29,10 +30,20 @@ import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
 export { FormlessAuthority } from "./authority.ts";
 
 export type Env = {
+  ALCHEMY_PASSWORD?: string;
   ASSETS?: Fetcher;
+  CF_API_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
   FORMLESS_ADMIN_TOKEN?: string;
   FORMLESS_AUTHORITY: DurableObjectNamespace<FormlessAuthority>;
   FORMLESS_DEPLOY_VERSION?: string;
+  FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID?: string;
+  FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID?: string;
+  FORMLESS_DOMAIN_PROVIDER_WORKER_NAME?: string;
+  FORMLESS_DOMAIN_PROVIDER_ZONE_ID?: string;
+  FORMLESS_DOMAIN_PROVIDER_ZONE_NAME?: string;
+  FORMLESS_DOMAIN_PROVIDER_ZONES?: string;
   FORMLESS_LAUNCH_FIXTURE?: string;
   FORMLESS_MEDIA: R2Bucket;
   FORMLESS_OWNER_SESSION_SECRET?: string;
@@ -114,6 +125,15 @@ export default {
 
     if (instanceAppInstallsResponse) {
       return instanceAppInstallsResponse;
+    }
+
+    const instanceDomainProviderResponse = await handleInstanceDomainProviderApiRequest(
+      request,
+      env,
+    );
+
+    if (instanceDomainProviderResponse) {
+      return instanceDomainProviderResponse;
     }
 
     const instanceDomainMappingsResponse = await handleInstanceDomainMappingsApiRequest(

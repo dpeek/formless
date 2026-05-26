@@ -82,10 +82,23 @@ describe("Formless instance onboarding planner", () => {
       },
       runtimeVars: {
         FORMLESS_DEPLOY_VERSION: "0.1.8",
+        FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+        FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brothers-remote-instance",
+        FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brothers-remote-instance",
         FORMLESS_RUNTIME_PROFILE: "instance",
         VITE_FORMLESS_RUNTIME_PROFILE: "instance",
       },
       secretRequirements: [
+        {
+          envName: "ALCHEMY_PASSWORD",
+          purpose: "encrypt-domain-provider-alchemy-state",
+          storage: "cloudflare-worker-secret",
+        },
+        {
+          envName: "CLOUDFLARE_API_TOKEN",
+          purpose: "apply-cloudflare-domain-provider-resources",
+          storage: "cloudflare-worker-secret",
+        },
         {
           envName: "FORMLESS_ADMIN_TOKEN",
           purpose: "protect-authority-and-media-writes",
@@ -848,7 +861,7 @@ describe("Alchemy Formless instance deployment", () => {
         },
       },
     ]);
-    expect(secrets).toEqual(["admin-secret"]);
+    expect(secrets).toEqual(["alchemy-password", "admin-secret"]);
     expect(workers).toEqual([
       {
         id: "worker",
@@ -861,9 +874,13 @@ describe("Alchemy Formless instance deployment", () => {
             run_worker_first: ["/*", "!/assets/*", "!/src/*", "!/@vite/*", "!/@react-refresh"],
           },
           bindings: {
+            ALCHEMY_PASSWORD: adminSecret,
             FORMLESS_ADMIN_TOKEN: adminSecret,
             FORMLESS_AUTHORITY: authorityNamespace,
             FORMLESS_DEPLOY_VERSION: "0.1.8",
+            FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+            FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brother-instance",
+            FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
             FORMLESS_MEDIA: mediaBucket,
             FORMLESS_RUNTIME_PROFILE: "instance",
           },
@@ -871,6 +888,9 @@ describe("Alchemy Formless instance deployment", () => {
             command: "bun run build",
             env: {
               FORMLESS_DEPLOY_VERSION: "0.1.8",
+              FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+              FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brother-instance",
+              FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
               FORMLESS_RUNTIME_PROFILE: "instance",
               VITE_FORMLESS_RUNTIME_PROFILE: "instance",
             },
@@ -939,6 +959,9 @@ describe("Alchemy Formless instance deployment", () => {
         },
       },
       runtimeVars: {
+        FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+        FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "brother-instance",
+        FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "brother-instance",
         FORMLESS_RUNTIME_PROFILE: "instance",
         VITE_FORMLESS_RUNTIME_PROFILE: "instance",
       },

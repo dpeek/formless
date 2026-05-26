@@ -49,7 +49,7 @@ describe("Alchemy domain provider adapter", () => {
           ruleId: "rule-output",
           rulesetId: "ruleset-output",
           statusCode: props.statusCode ?? 301,
-          zoneId: String(props.zone),
+          zoneId: typeof props.zone === "string" ? props.zone : JSON.stringify(props.zone),
         };
       },
     };

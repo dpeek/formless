@@ -2,6 +2,10 @@ import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
+import {
+  INSTANCE_DOMAIN_PROVIDER_API_PATH,
+  type InstanceDomainProviderPlanResponse,
+} from "../shared/domain-provider-api.ts";
 import type {
   InstanceDomainMappingsResponse,
   RecordInstanceDomainMappingApplyEvidenceRequest,
@@ -111,6 +115,19 @@ export async function readFormlessInstanceDomainMappings(
   );
 }
 
+export async function readFormlessInstanceDomainProviderPlan(
+  input: { targetUrl: string },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDomainProviderPlanResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const providerUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_API_PATH);
+
+  return parseDomainProviderPlan(
+    await fetchJson(dependencies.fetch, providerUrl, { headers: { accept: "application/json" } }),
+    providerUrl,
+  );
+}
+
 export async function recordFormlessInstanceDomainMappingApplyEvidence(
   input: {
     adminToken?: string | null;
@@ -216,6 +233,17 @@ function parseDomainMappings(value: unknown, context: string): InstanceDomainMap
       : [],
     mappings: value.mappings as InstanceDomainMappingsResponse["mappings"],
   };
+}
+
+function parseDomainProviderPlan(
+  value: unknown,
+  context: string,
+): InstanceDomainProviderPlanResponse {
+  if (!isRecord(value) || !isRecord(value.config) || !isRecord(value.plan)) {
+    throw new Error(`${context} failed: domain provider plan response is invalid.`);
+  }
+
+  return value as InstanceDomainProviderPlanResponse;
 }
 
 function parseApplyEvidenceResponse(

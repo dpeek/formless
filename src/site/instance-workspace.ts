@@ -20,6 +20,8 @@ import {
 } from "../shared/instance-domain-mappings.ts";
 import type { AppInstallsResponse } from "../shared/protocol.ts";
 import {
+  CF_API_TOKEN_ENV_NAME,
+  CLOUDFLARE_API_TOKEN_ENV_NAME,
   applyCloudflareWorkerDomainPreflightPlan,
   planCloudflareWorkerDomainPreflight,
   type CloudflareDomainApplyResult,
@@ -800,6 +802,7 @@ export async function deployFormlessInstanceWorkspace(
     plan,
     secrets: {
       ALCHEMY_PASSWORD: localSecretEnv.secrets.ALCHEMY_PASSWORD,
+      ...optionalCloudflareApiTokenSecret(dependencies.env),
       FORMLESS_ADMIN_TOKEN: adminToken,
     },
     stateRoot: deploymentStateRoot,
@@ -2065,6 +2068,15 @@ function rotateCommandEnv(
       ? {}
       : { CLOUDFLARE_ACCOUNT_ID: manifest.deploy.accountId }),
   };
+}
+
+function optionalCloudflareApiTokenSecret(
+  env: NodeJS.ProcessEnv | undefined,
+): { CLOUDFLARE_API_TOKEN: string } | {} {
+  const token =
+    env?.[CLOUDFLARE_API_TOKEN_ENV_NAME]?.trim() ?? env?.[CF_API_TOKEN_ENV_NAME]?.trim();
+
+  return token ? { CLOUDFLARE_API_TOKEN: token } : {};
 }
 
 function requiredGeneratedToken(value: string): string {
