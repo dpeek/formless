@@ -43,8 +43,15 @@ const EyeDropper = () => {
       size="sq-md"
       intent="outline"
       onPress={() => {
-        const eyeDropper = window.EyeDropper ? new window.EyeDropper() : null;
-        void eyeDropper?.open().then((result) => state.setColor(parseColor(result.sRGBHex)));
+        const EyeDropperConstructor = window.EyeDropper;
+
+        if (!EyeDropperConstructor) {
+          return;
+        }
+
+        const eyeDropper = new EyeDropperConstructor();
+
+        void eyeDropper.open().then((result) => state.setColor(parseColor(result.sRGBHex)));
       }}
     >
       <ControlColorPickIcon />

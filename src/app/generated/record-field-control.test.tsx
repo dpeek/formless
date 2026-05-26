@@ -116,6 +116,8 @@ function renderRecordControl(
       onValueCommit={() => undefined}
       recordValue={options.recordValue}
       unitDraft=""
+      mediaAssetOptions={[]}
+      mediaEditorMode="url"
       uploadEnabled={false}
     />,
   );

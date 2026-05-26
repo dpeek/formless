@@ -3,6 +3,7 @@ import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
 import { handleInstanceAppInstallsApiRequest } from "./instance-app-installs.ts";
+import { handleInstanceDomainMappingsApiRequest } from "./instance-domain-mappings.ts";
 import { handleMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
@@ -77,6 +78,15 @@ export default {
 
     if (instanceAppInstallsResponse) {
       return instanceAppInstallsResponse;
+    }
+
+    const instanceDomainMappingsResponse = await handleInstanceDomainMappingsApiRequest(
+      request,
+      env,
+    );
+
+    if (instanceDomainMappingsResponse) {
+      return instanceDomainMappingsResponse;
     }
 
     const url = new URL(request.url);

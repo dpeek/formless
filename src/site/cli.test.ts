@@ -1010,7 +1010,7 @@ describe("Formless Site CLI", () => {
     );
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = parseCapturedJsonBody<{ archive: InstanceArchive }>(restoreRequest);
+    const restoreBody = capturedRequestJson<{ archive: InstanceArchive }>(restoreRequest);
 
     expect(`${restoreRequest?.method} ${restoreRequest?.url}`).toBe(
       "POST https://personal.dpeek.workers.dev/api/formless/archive/restore",
@@ -1085,7 +1085,7 @@ describe("Formless Site CLI", () => {
     expect(
       restoreRequests.map(
         (request) =>
-          parseCapturedJsonBody<{ archive: InstanceArchive }>(request).archive.restorePolicy,
+          capturedRequestJson<{ archive: InstanceArchive }>(request).archive.restorePolicy,
       ),
     ).toEqual([
       { dryRun: true, installCollisions: "replace" },
@@ -1335,7 +1335,7 @@ describe("Formless Site CLI", () => {
     ]);
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = parseCapturedJsonBody<{
+    const restoreBody = capturedRequestJson<{
       archive: InstanceArchive;
       mediaFiles: { bytesBase64: string }[];
     }>(restoreRequest);
@@ -1910,7 +1910,7 @@ describe("Formless Site CLI", () => {
     );
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = parseCapturedJsonBody<{
+    const restoreBody = capturedRequestJson<{
       archive: AppArchive;
       mediaFiles: { bytesBase64: string }[];
     }>(restoreRequest);
@@ -2132,7 +2132,7 @@ describe("Formless Site CLI", () => {
     );
 
     const restoreRequest = requests.at(-1);
-    const restoreBody = parseCapturedJsonBody<{
+    const restoreBody = capturedRequestJson<{
       archive: InstanceArchive;
       mediaFiles: { bytesBase64: string }[];
     }>(restoreRequest);
@@ -2558,14 +2558,12 @@ type CapturedFetchRequest = {
   url: string;
 };
 
-function parseCapturedJsonBody<T>(request: CapturedFetchRequest | undefined): T {
-  const body = request?.body;
-
-  if (typeof body !== "string") {
-    throw new Error("Expected captured fetch body to be a string.");
+function capturedRequestJson<T>(request: CapturedFetchRequest | undefined): T {
+  if (!request || typeof request.body !== "string") {
+    throw new Error("Expected captured request body to be a JSON string.");
   }
 
-  return JSON.parse(body) as T;
+  return JSON.parse(request.body) as T;
 }
 
 class FakeCliDevChild extends EventEmitter {
