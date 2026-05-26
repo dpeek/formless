@@ -16,6 +16,7 @@ import {
   runtimeRoutePolicy,
   runtimeScreenPathFromRoute,
   runtimeScreenRoute,
+  selectBrowserRuntimeProfileHint,
 } from "./runtime-profile.ts";
 import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
 
@@ -386,5 +387,20 @@ describe("runtime profile resolver", () => {
     });
 
     expect(profile.kind).toBe("publishedSite");
+  });
+
+  it("lets SSR document profile hints override the baked browser env profile", () => {
+    expect(
+      selectBrowserRuntimeProfileHint({
+        documentProfile: "publishedSite",
+        envProfile: "instance",
+      }),
+    ).toBe("publishedSite");
+    expect(
+      selectBrowserRuntimeProfileHint({
+        documentProfile: undefined,
+        envProfile: "instance",
+      }),
+    ).toBe("instance");
   });
 });

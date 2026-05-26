@@ -452,9 +452,10 @@ function findInstalledAppByInstallId(
 
 function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {
   return {
-    profile:
-      stringConfigValue(import.meta.env.VITE_FORMLESS_RUNTIME_PROFILE) ??
-      readRuntimeProfileDocumentHint(),
+    profile: selectBrowserRuntimeProfileHint({
+      documentProfile: readRuntimeProfileDocumentHint(),
+      envProfile: import.meta.env.VITE_FORMLESS_RUNTIME_PROFILE,
+    }),
     schemaKey: stringConfigValue(import.meta.env.VITE_FORMLESS_SCHEMA_KEY),
     hostname: typeof window === "undefined" ? undefined : window.location.hostname,
   };
@@ -485,6 +486,13 @@ export function readRuntimeProfileDocumentHint(
     ?.getAttribute("content");
 
   return stringConfigValue(profile);
+}
+
+export function selectBrowserRuntimeProfileHint(input: {
+  documentProfile?: string | undefined;
+  envProfile?: string | undefined;
+}): string | undefined {
+  return stringConfigValue(input.documentProfile) ?? stringConfigValue(input.envProfile);
 }
 
 function parseRuntimeProfileKind(value: string | undefined): RuntimeProfileKind | undefined {
