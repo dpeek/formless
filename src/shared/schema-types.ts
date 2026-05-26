@@ -40,8 +40,16 @@ export type NumberFieldSchema = {
   integer?: boolean;
 };
 
+export type PresentationToken = string;
+
+export type EnumValuePresentationSchema = {
+  icon?: PresentationToken;
+  color?: PresentationToken;
+};
+
 export type EnumValueSchema = {
   label: string;
+  presentation?: EnumValuePresentationSchema;
 };
 
 export type EnumFieldSchema = {
@@ -93,15 +101,25 @@ export type FieldVisibilityConditionSchema = {
   values: FieldVisibilityValue[];
 };
 
+export type FieldPresentationMode = "iconOnly" | "completion";
+export type FieldPresentationVisibility = "valueOrInteraction";
+
+export type FieldPresentationSchema = {
+  mode?: FieldPresentationMode;
+  visibility?: FieldPresentationVisibility;
+};
+
 export type ViewFieldSchema = {
   editor: FieldEditor;
   commit: FieldCommitPolicy;
   visibleWhen?: FieldVisibilityConditionSchema;
+  presentation?: FieldPresentationSchema;
 };
 
 export type CreateViewFieldSchema = {
   editor: FieldEditor;
   visibleWhen?: FieldVisibilityConditionSchema;
+  presentation?: FieldPresentationSchema;
 };
 
 export type TableColumnAlign = "start" | "center" | "end";
@@ -179,6 +197,7 @@ export type FieldTableColumnSchema = {
   format?: TableColumnFormat;
   referenceItemView?: string;
   valueUnit?: ValueUnitEditorSchema;
+  presentation?: FieldPresentationSchema;
 };
 
 export type ReferenceFieldTableColumnSchema = {
@@ -193,6 +212,7 @@ export type ReferenceFieldTableColumnSchema = {
   display?: TableColumnDisplay;
   suffix?: string;
   format?: TableColumnFormat;
+  presentation?: FieldPresentationSchema;
 };
 
 export type ComputedTableColumnSchema = {

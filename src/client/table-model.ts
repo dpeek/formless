@@ -104,6 +104,7 @@ function selectTableColumns(
         display: column.display ?? "editor",
         ...(column.suffix === undefined ? {} : { suffix: column.suffix }),
         format: column.format ?? "plain",
+        ...(column.presentation === undefined ? {} : { presentation: column.presentation }),
       };
     }
 
@@ -165,6 +166,7 @@ function selectTableColumns(
       format: column.format ?? "plain",
       ...(referenceItem === undefined ? {} : { referenceItem }),
       ...(valueUnit === undefined ? {} : { valueUnit }),
+      ...(column.presentation === undefined ? {} : { presentation: column.presentation }),
     };
   });
 
@@ -325,6 +327,7 @@ function selectEditFields(view: EditViewSchema, entity: EntitySchema): RecordFie
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
     commit: viewField.commit,
+    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }
 
@@ -334,6 +337,7 @@ function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordF
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
     commit: viewField.commit,
+    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }
 

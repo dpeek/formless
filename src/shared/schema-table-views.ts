@@ -26,6 +26,7 @@ import type {
   ViewSchema,
 } from "./schema-types.ts";
 import { parseFieldCommitPolicy, parseFieldEditor } from "./schema-view-field-parser.ts";
+import { parseOptionalFieldPresentation } from "./schema-view-fields.ts";
 
 export function parseTableViews(
   value: unknown,
@@ -316,6 +317,7 @@ function parseFieldTableColumn(
       "format",
       "referenceItemView",
       "valueUnit",
+      "presentation",
     ],
   );
 
@@ -358,6 +360,11 @@ function parseFieldTableColumn(
     field,
     entity,
   );
+  const presentation = parseOptionalFieldPresentation(
+    `${context} field "${fieldName}"`,
+    value.presentation,
+    field,
+  );
 
   return {
     type: "field",
@@ -372,6 +379,7 @@ function parseFieldTableColumn(
     ...(format === undefined ? {} : { format }),
     ...(referenceItemView === undefined ? {} : { referenceItemView }),
     ...(valueUnit === undefined ? {} : { valueUnit }),
+    ...(presentation === undefined ? {} : { presentation }),
   };
 }
 
@@ -386,7 +394,7 @@ function parseReferenceFieldTableColumn(
     context,
     value,
     ["type", "referenceField", "field"],
-    ["label", "editor", "commit", "align", "width", "display", "suffix", "format"],
+    ["label", "editor", "commit", "align", "width", "display", "suffix", "format", "presentation"],
   );
 
   const referenceFieldName = parseRequiredNonEmptyString(
@@ -439,6 +447,11 @@ function parseReferenceFieldTableColumn(
   const display = parseOptionalTableColumnDisplay(`${context} display`, value.display);
   const suffix = parseOptionalNonEmptyString(`${context} suffix`, value.suffix);
   const format = parseOptionalTableColumnFormat(`${context} format`, value.format);
+  const presentation = parseOptionalFieldPresentation(
+    `${context} field "${sourceField.to}.${fieldName}"`,
+    value.presentation,
+    field,
+  );
 
   return {
     type: "referenceField",
@@ -452,6 +465,7 @@ function parseReferenceFieldTableColumn(
     ...(display === undefined ? {} : { display }),
     ...(suffix === undefined ? {} : { suffix }),
     ...(format === undefined ? {} : { format }),
+    ...(presentation === undefined ? {} : { presentation }),
   };
 }
 

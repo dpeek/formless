@@ -16,6 +16,7 @@ import type {
   EntityUnionVariantSchema,
   FieldCommitPolicy,
   FieldEditor,
+  FieldPresentationSchema,
   FieldVisibilityConditionSchema,
   FieldVisibilityValue,
   FieldSchema,
@@ -56,6 +57,7 @@ export type RecordFieldConfig = {
   label?: string;
   format?: TableColumnFormat;
   visibleWhen?: FieldVisibilityConditionSchema;
+  presentation?: FieldPresentationSchema;
   valueUnit?: ValueUnitFieldConfig;
 };
 
@@ -173,6 +175,7 @@ export type CreateFieldConfig = {
   field: FieldSchema;
   editor: FieldEditor;
   visibleWhen?: FieldVisibilityConditionSchema;
+  presentation?: FieldPresentationSchema;
 };
 
 export type CreateDefaultConfig = {
@@ -1261,6 +1264,7 @@ function selectCreateFields(view: CreateViewSchema, entity: EntitySchema): Creat
     fieldName,
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
+    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }
 
@@ -1278,6 +1282,7 @@ function selectRecordFields(view: ItemViewSchema, entity: EntitySchema): RecordF
     field: entity.fields[fieldName] as FieldSchema,
     editor: viewField.editor,
     commit: viewField.commit,
+    ...(viewField.presentation === undefined ? {} : { presentation: viewField.presentation }),
   }));
 }
 

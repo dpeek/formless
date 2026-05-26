@@ -3,6 +3,7 @@ import { parseFieldCommitPolicy, parseFieldEditor } from "./schema-view-field-pa
 import type {
   CreateViewFieldSchema,
   EntitySchema,
+  FieldPresentationSchema,
   FieldSchema,
   FieldVisibilityConditionSchema,
   FieldVisibilityValue,
@@ -38,7 +39,7 @@ function parseListViewField(
     throw new Error(`View field "${viewName}.${fieldName}" must be an object.`);
   }
 
-  const allowedKeys = new Set(["editor", "commit", "visibleWhen"]);
+  const allowedKeys = new Set(["editor", "commit", "visibleWhen", "presentation"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`View field "${viewName}.${fieldName}" has unsupported key "${key}".`);
@@ -54,11 +55,13 @@ function parseListViewField(
   const editor = parseFieldEditor(context, value.editor, field);
   const commit = parseFieldCommitPolicy(context, value.commit, field);
   const visibleWhen = parseFieldVisibilityCondition(context, value.visibleWhen, entity);
+  const presentation = parseOptionalFieldPresentation(context, value.presentation, field);
 
   return {
     editor,
     commit,
     ...(visibleWhen === undefined ? {} : { visibleWhen }),
+    ...(presentation === undefined ? {} : { presentation }),
   };
 }
 
@@ -91,7 +94,7 @@ function parseCreateViewField(
     throw new Error(`View field "${viewName}.${fieldName}" must be an object.`);
   }
 
-  const allowedKeys = new Set(["editor", "visibleWhen"]);
+  const allowedKeys = new Set(["editor", "visibleWhen", "presentation"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`View field "${viewName}.${fieldName}" has unsupported key "${key}".`);
@@ -106,11 +109,85 @@ function parseCreateViewField(
   const context = `View field "${viewName}.${fieldName}"`;
   const editor = parseFieldEditor(context, value.editor, field);
   const visibleWhen = parseFieldVisibilityCondition(context, value.visibleWhen, entity);
+  const presentation = parseOptionalFieldPresentation(context, value.presentation, field);
 
   return {
     editor,
     ...(visibleWhen === undefined ? {} : { visibleWhen }),
+    ...(presentation === undefined ? {} : { presentation }),
   };
+}
+
+export function parseOptionalFieldPresentation(
+  context: string,
+  value: unknown,
+  field: FieldSchema,
+): FieldPresentationSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} presentation must be an object.`);
+  }
+
+  assertExactKeys(`${context} presentation`, value, [], ["mode", "visibility"]);
+
+  const mode = parseOptionalFieldPresentationMode(context, value.mode, field);
+  const visibility = parseOptionalFieldPresentationVisibility(context, value.visibility, field);
+
+  if (mode === undefined && visibility === undefined) {
+    throw new Error(`${context} presentation must include "mode" or "visibility".`);
+  }
+
+  return {
+    ...(mode === undefined ? {} : { mode }),
+    ...(visibility === undefined ? {} : { visibility }),
+  };
+}
+
+function parseOptionalFieldPresentationMode(
+  context: string,
+  value: unknown,
+  field: FieldSchema,
+): FieldPresentationSchema["mode"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "iconOnly" && value !== "completion") {
+    throw new Error(`${context} presentation mode must be "iconOnly" or "completion".`);
+  }
+
+  if (value === "iconOnly" && field.type !== "enum") {
+    throw new Error(`${context} iconOnly presentation requires an enum field.`);
+  }
+
+  if (value === "completion" && field.type !== "boolean") {
+    throw new Error(`${context} completion presentation requires a boolean field.`);
+  }
+
+  return value;
+}
+
+function parseOptionalFieldPresentationVisibility(
+  context: string,
+  value: unknown,
+  field: FieldSchema,
+): FieldPresentationSchema["visibility"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "valueOrInteraction") {
+    throw new Error(`${context} presentation visibility must be "valueOrInteraction".`);
+  }
+
+  if (field.type !== "date" || field.required) {
+    throw new Error(`${context} valueOrInteraction visibility requires an optional date field.`);
+  }
+
+  return value;
 }
 
 function parseFieldVisibilityCondition(

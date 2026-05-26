@@ -57,6 +57,40 @@ describe("home view model collections", () => {
     ).toEqual(["title", "dueDate", "priority", "done"]);
   });
 
+  it("propagates generated field presentation metadata into collection models", () => {
+    const schema = taskSchemaWithFieldPresentations();
+    const model = selectPrimaryCollectionModels(schema)[0];
+    const fields = model?.result.type === "list" ? model.result.recordFields : [];
+    const createAction = model?.actions.find((action) => action.type === "create");
+    const createFields = createAction?.type === "create" ? createAction.fields : [];
+    const priority = fields.find((field) => field.fieldName === "priority");
+
+    expect(
+      priority?.field.type === "enum" ? priority.field.values.high.presentation : undefined,
+    ).toEqual({
+      icon: "flag",
+      color: "priority.high",
+    });
+    expect(
+      fields.map((field) => ({ fieldName: field.fieldName, presentation: field.presentation })),
+    ).toEqual([
+      { fieldName: "title", presentation: undefined },
+      { fieldName: "dueDate", presentation: { visibility: "valueOrInteraction" } },
+      { fieldName: "priority", presentation: { mode: "iconOnly" } },
+      { fieldName: "done", presentation: { mode: "completion" } },
+    ]);
+    expect(
+      createFields.map((field) => ({
+        fieldName: field.fieldName,
+        presentation: field.presentation,
+      })),
+    ).toEqual([
+      { fieldName: "title", presentation: undefined },
+      { fieldName: "dueDate", presentation: { visibility: "valueOrInteraction" } },
+      { fieldName: "priority", presentation: { mode: "iconOnly" } },
+    ]);
+  });
+
   it("exposes render-ready union variant facts for item, create, and edit views", () => {
     const schema = discriminatedTaskSchema();
     const listModel = requiredCollectionModel(schema, "taskHome");
@@ -2438,6 +2472,44 @@ function discriminatedTaskSchema(
       },
     },
   });
+}
+
+function taskSchemaWithFieldPresentations(): AppSchema {
+  const rawSchema = structuredClone(appSchema);
+  const taskEntity = rawSchema.entities.task;
+  const priority = taskEntity?.fields.priority;
+  const itemView = rawSchema.itemViews.taskListItem;
+  const createView = rawSchema.views.taskCreate;
+
+  if (!taskEntity || priority?.type !== "enum" || !itemView || createView?.type !== "create") {
+    throw new Error("Missing task presentation fixture shape.");
+  }
+
+  priority.values.low.presentation = { icon: "flag", color: "priority.low" };
+  priority.values.normal.presentation = { icon: "flag", color: "priority.normal" };
+  priority.values.high.presentation = { icon: "flag", color: "priority.high" };
+  itemView.fields.dueDate = {
+    ...itemView.fields.dueDate,
+    presentation: { visibility: "valueOrInteraction" as const },
+  };
+  itemView.fields.priority = {
+    ...itemView.fields.priority,
+    presentation: { mode: "iconOnly" as const },
+  };
+  itemView.fields.done = {
+    ...itemView.fields.done,
+    presentation: { mode: "completion" as const },
+  };
+  createView.fields.dueDate = {
+    ...createView.fields.dueDate,
+    presentation: { visibility: "valueOrInteraction" as const },
+  };
+  createView.fields.priority = {
+    ...createView.fields.priority,
+    presentation: { mode: "iconOnly" as const },
+  };
+
+  return parseAppSchema(rawSchema);
 }
 
 function summarizeHomeModel(model: HomeViewModel) {

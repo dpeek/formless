@@ -274,6 +274,209 @@ describe("schema enum fields", () => {
   });
 });
 
+describe("schema field presentation metadata", () => {
+  it("parses enum option and view field presentation metadata", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          task: taskEntityWithKindEnum({
+            values: {
+              role: {
+                label: "Role",
+                presentation: { icon: "flag", color: "priority.high" },
+              },
+              stream: {
+                label: "Stream",
+                presentation: { icon: "flag", color: "priority.low" },
+              },
+            },
+          }),
+        },
+        itemViews: {
+          taskListItem: {
+            entity: "task",
+            fields: {
+              kind: {
+                editor: "enum",
+                commit: "immediate",
+                presentation: { mode: "iconOnly" },
+              },
+              done: {
+                editor: "boolean",
+                commit: "immediate",
+                presentation: { mode: "completion" },
+              },
+              dueDate: {
+                editor: "date",
+                commit: "field-commit",
+                presentation: { visibility: "valueOrInteraction" },
+              },
+            },
+          },
+        },
+        tableViews: {
+          taskTable: {
+            entity: "task",
+            columns: [
+              { type: "field", field: "kind", presentation: { mode: "iconOnly" } },
+              { type: "field", field: "done", presentation: { mode: "completion" } },
+              {
+                type: "field",
+                field: "dueDate",
+                presentation: { visibility: "valueOrInteraction" },
+              },
+            ],
+          },
+        },
+        views: {
+          taskHome: defaultCollectionView(),
+          taskCreate: {
+            type: "create",
+            entity: "task",
+            fields: {
+              title: { editor: "text" },
+              kind: { editor: "enum", presentation: { mode: "iconOnly" } },
+              dueDate: { editor: "date", presentation: { visibility: "valueOrInteraction" } },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(schema.entities.task?.fields.kind).toMatchObject({
+      type: "enum",
+      values: {
+        role: { presentation: { icon: "flag", color: "priority.high" } },
+        stream: { presentation: { icon: "flag", color: "priority.low" } },
+      },
+    });
+    expect(schema.itemViews.taskListItem?.fields).toMatchObject({
+      kind: { presentation: { mode: "iconOnly" } },
+      done: { presentation: { mode: "completion" } },
+      dueDate: { presentation: { visibility: "valueOrInteraction" } },
+    });
+    expect(schema.tableViews.taskTable?.columns).toMatchObject([
+      { type: "field", field: "kind", presentation: { mode: "iconOnly" } },
+      { type: "field", field: "done", presentation: { mode: "completion" } },
+      { type: "field", field: "dueDate", presentation: { visibility: "valueOrInteraction" } },
+    ]);
+    expect(schema.views.taskCreate).toMatchObject({
+      type: "create",
+      fields: {
+        kind: { presentation: { mode: "iconOnly" } },
+        dueDate: { presentation: { visibility: "valueOrInteraction" } },
+      },
+    });
+    expect(parseAppSchema(JSON.parse(stringifySchema(schema)))).toEqual(schema);
+  });
+
+  it("rejects malformed presentation metadata", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum({
+              values: {
+                role: { label: "Role", presentation: "flag" },
+              },
+            }),
+          },
+        }),
+      ),
+    ).toThrow('enum value "role" presentation must be an object');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum({
+              values: {
+                role: { label: "Role", presentation: { icon: "" } },
+              },
+            }),
+          },
+        }),
+      ),
+    ).toThrow('enum value "role" presentation icon must be a non-empty string');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                title: {
+                  editor: "text",
+                  commit: "field-commit",
+                  presentation: { mode: "iconOnly" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("iconOnly presentation requires an enum field");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                done: {
+                  editor: "boolean",
+                  commit: "immediate",
+                  presentation: { visibility: "valueOrInteraction" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("valueOrInteraction visibility requires an optional date field");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                dueDate: {
+                  editor: "date",
+                  commit: "field-commit",
+                  presentation: {},
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('presentation must include "mode" or "visibility"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                dueDate: {
+                  editor: "date",
+                  commit: "field-commit",
+                  presentation: { mode: "iconOnly", color: "priority.high" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('presentation has unsupported key "color"');
+  });
+});
+
 describe("schema entity unions", () => {
   it("parses top-level unions and preserves them through stringify", () => {
     const schema = parseAppSchema(

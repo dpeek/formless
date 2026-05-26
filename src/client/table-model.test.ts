@@ -21,6 +21,32 @@ describe("table model", () => {
     ]);
   });
 
+  it("propagates field presentation metadata into table columns", () => {
+    const rateSourceSchema = sourceLikeRateSchema();
+    const rateTable = rateSourceSchema.tableViews.rateTable;
+
+    rateTable.columns = rateTable.columns.map((column) =>
+      column.type === "field" && column.field === "costUnit"
+        ? { ...column, presentation: { mode: "iconOnly" as const } }
+        : column,
+    );
+
+    const result = selectTableResultModel(
+      rateSourceSchema,
+      rateTable,
+      rateSourceSchema.entities.rate,
+    );
+    const costUnitColumn = result.columns.find(
+      (column) => column.type === "field" && column.fieldName === "costUnit",
+    );
+
+    expect(costUnitColumn).toMatchObject({
+      type: "field",
+      fieldName: "costUnit",
+      presentation: { mode: "iconOnly" },
+    });
+  });
+
   it("selects table ordering, row actions, and edit-dialog facts", () => {
     const siteSourceSchema = sourceLikeSiteSchema();
     const result = selectTableResultModel(

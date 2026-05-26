@@ -12,6 +12,7 @@ import type {
   EntityConstraintSchema,
   EntitySchema,
   EnumFieldSchema,
+  EnumValuePresentationSchema,
   EnumValueSchema,
   FieldSchema,
   NumberFieldSchema,
@@ -493,7 +494,12 @@ function parseEnumValue(
     );
   }
 
-  assertExactKeys(`Field "${entityName}.${fieldName}" enum value "${enumValue}"`, value, ["label"]);
+  assertExactKeys(
+    `Field "${entityName}.${fieldName}" enum value "${enumValue}"`,
+    value,
+    ["label"],
+    ["presentation"],
+  );
 
   if (typeof value.label !== "string" || value.label.trim() === "") {
     throw new Error(
@@ -501,7 +507,42 @@ function parseEnumValue(
     );
   }
 
-  return { label: value.label };
+  const presentation = parseEnumValuePresentation(
+    `Field "${entityName}.${fieldName}" enum value "${enumValue}" presentation`,
+    value.presentation,
+  );
+
+  return {
+    label: value.label,
+    ...(presentation === undefined ? {} : { presentation }),
+  };
+}
+
+function parseEnumValuePresentation(
+  context: string,
+  value: unknown,
+): EnumValuePresentationSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, [], ["icon", "color"]);
+
+  const icon = parseOptionalNonEmptyString(`${context} icon`, value.icon);
+  const color = parseOptionalNonEmptyString(`${context} color`, value.color);
+
+  if (icon === undefined && color === undefined) {
+    throw new Error(`${context} must include "icon" or "color".`);
+  }
+
+  return {
+    ...(icon === undefined ? {} : { icon }),
+    ...(color === undefined ? {} : { color }),
+  };
 }
 
 function parseFieldLabel(
