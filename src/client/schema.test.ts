@@ -58,7 +58,11 @@ describe("task source schema", () => {
         commit: "field-commit",
         presentation: { visibility: "valueOrInteraction" },
       },
-      priority: { editor: "enum", commit: "immediate", presentation: { mode: "iconOnly" } },
+      priority: {
+        editor: "enum",
+        commit: "immediate",
+        presentation: { list: "both", mode: "iconOnly", trigger: "icon" },
+      },
     });
     expect(taskSourceSchema.views.taskHome).toMatchObject({
       type: "collection",

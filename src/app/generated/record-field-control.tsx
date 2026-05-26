@@ -1,9 +1,16 @@
-import { Button } from "@dpeek/formless-ui/button";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
 import { DatePicker, DatePickerTrigger } from "@dpeek/formless-ui/date-picker";
 import { FieldError, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
+import { SelectIcon } from "@dpeek/formless-ui/icons";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+} from "@dpeek/formless-ui/select";
 import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
@@ -16,7 +23,12 @@ import type { ImageMediaAssetOption } from "../../client/media.ts";
 import { useReferenceOptions } from "../../client/store.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
-import type { FieldSchema, TableColumnFormat } from "../../shared/schema.ts";
+import type {
+  FieldPresentationEnumContent,
+  FieldPresentationSchema,
+  FieldSchema,
+  TableColumnFormat,
+} from "../../shared/schema.ts";
 import {
   GeneratedColorFieldControl,
   GeneratedIconPickerFieldControl,
@@ -34,6 +46,7 @@ import {
   completionCheckboxClassName,
   enumValuePresentation,
   fieldPresentationIconButtonClassName,
+  fieldPresentationTextColorClassName,
   GeneratedFieldPresentationIcon,
   quietValueOrInteractionClassName,
 } from "./field-presentation.tsx";
@@ -159,6 +172,7 @@ export function GeneratedRecordFieldControl({
         draft={draft}
         error={error}
         fieldControl={fieldControl}
+        fieldPresentation={fieldConfig.presentation}
         iconOnly={rendererKind === "enum-icon"}
         isPending={isPending}
         labelClass={labelClass}
@@ -459,6 +473,7 @@ function RecordEnumFieldRenderer({
   draft,
   error,
   fieldControl,
+  fieldPresentation,
   iconOnly,
   isPending,
   labelClass,
@@ -470,6 +485,7 @@ function RecordEnumFieldRenderer({
   draft: string;
   error: string | null;
   fieldControl: Extract<GeneratedFieldControl, { kind: "enum" }>;
+  fieldPresentation: FieldPresentationSchema | undefined;
   iconOnly: boolean;
   isPending: boolean;
   labelClass: string;
@@ -487,6 +503,7 @@ function RecordEnumFieldRenderer({
         draft={draft}
         error={error}
         fieldControl={fieldControl}
+        fieldPresentation={fieldPresentation}
         isPending={isPending}
         onDraftChange={onDraftChange}
         onValueCommit={onValueCommit}
@@ -536,6 +553,7 @@ function RecordEnumIconOnlyFieldRenderer({
   draft,
   error,
   fieldControl,
+  fieldPresentation,
   isPending,
   onDraftChange,
   onValueCommit,
@@ -545,60 +563,180 @@ function RecordEnumIconOnlyFieldRenderer({
   draft: string;
   error: string | null;
   fieldControl: Extract<GeneratedFieldControl, { kind: "enum" }>;
+  fieldPresentation: FieldPresentationSchema | undefined;
   isPending: boolean;
   onDraftChange: (value: string) => void;
   onValueCommit: (value: FieldValue) => void;
 }) {
-  const option = fieldControl.field.values[draft];
-  const presentation = enumValuePresentation({ option, value: draft });
-  const label = draft === "" ? "None" : presentation.label;
-  const accessibleLabel = `${fieldControl.label}: ${label}`;
-  const iconSizeClassName = density === "compact" ? "size-3.5" : "size-4.5";
-  const nextValue = nextEnumIconOnlyValue(fieldControl.field, draft);
+  const triggerContent = fieldPresentation?.trigger ?? "icon";
+  const listContent = fieldPresentation?.list ?? "both";
+  const options = enumPresentationSelectOptions(fieldControl, draft);
+  const selectedOption = options.find((option) => option.value === draft);
+  const selectedPresentation = enumValuePresentation({
+    option: fieldControl.field.values[draft],
+    value: draft,
+  });
+  const selectedLabel = draft === "" ? "None" : selectedPresentation.label;
+  const accessibleLabel = `${fieldControl.label}: ${selectedLabel}`;
 
   return (
     <div
       className={
-        density === "compact" ? "flex h-6 shrink-0 items-center" : "flex h-8 shrink-0 items-center"
+        density === "compact" ? "flex h-6 shrink-0 items-center" : "flex h-9 shrink-0 items-center"
       }
     >
-      <Button
+      <Select
         aria-label={accessibleLabel}
-        className={fieldPresentationIconButtonClassName(presentation.color.intent)}
-        data-formless-field-presentation-color={presentation.color.intent}
-        data-formless-field-presentation-color-token={presentation.color.token}
-        data-formless-field-presentation-icon={option?.presentation?.icon}
+        data-formless-field-presentation-color={selectedPresentation.color.intent}
+        data-formless-field-presentation-color-token={selectedPresentation.color.token}
+        data-formless-field-presentation-icon={fieldControl.field.values[draft]?.presentation?.icon}
+        data-formless-field-presentation-list={listContent}
         data-formless-field-presentation-mode="iconOnly"
+        data-formless-field-presentation-trigger={triggerContent}
         isDisabled={!canPatch || isPending}
-        onPress={() => {
-          onDraftChange(nextValue);
-          onValueCommit(inputValueToFieldValue(fieldControl.field, nextValue));
+        isInvalid={error !== null}
+        onSelectionChange={(key) => {
+          if (key === null) {
+            return;
+          }
+
+          const value = String(key);
+          onDraftChange(value);
+          onValueCommit(inputValueToFieldValue(fieldControl.field, value));
         }}
-        size={density === "compact" ? "sq-xs" : "sq-sm"}
-        type="button"
-        intent="plain"
+        selectedKey={draft}
       >
-        {presentation.icon ? (
-          <GeneratedFieldPresentationIcon className={iconSizeClassName} icon={presentation.icon} />
-        ) : (
-          <span className="px-1 text-xs">{label}</span>
-        )}
-      </Button>
+        <SelectTrigger
+          aria-label={accessibleLabel}
+          className={enumPresentationSelectTriggerClassName(
+            selectedPresentation.color.intent,
+            density,
+            triggerContent,
+          )}
+        >
+          <EnumPresentationSelectValue
+            content={triggerContent}
+            density={density}
+            label={selectedOption?.label ?? selectedLabel}
+            presentation={selectedPresentation}
+            scope="trigger"
+          />
+          <SelectIcon
+            aria-hidden="true"
+            className={enumPresentationSelectChevronClassName(density)}
+          />
+        </SelectTrigger>
+        <SelectContent popover={{ placement: "bottom start", className: "min-w-32" }}>
+          {options.map((option) => (
+            <SelectItem id={option.value} key={option.value} textValue={option.label}>
+              <EnumPresentationSelectValue
+                content={listContent}
+                density="default"
+                label={option.label}
+                presentation={option.presentation}
+                scope="list"
+              />
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {error ? <StaticFieldError>{error}</StaticFieldError> : null}
     </div>
   );
 }
 
-function nextEnumIconOnlyValue(
-  field: Extract<FieldSchema, { type: "enum" }>,
-  currentValue: string,
+function enumPresentationSelectOptions(
+  fieldControl: Extract<GeneratedFieldControl, { kind: "enum" }>,
+  draft: string,
 ) {
-  const values = Object.keys(field.values);
-  const candidates = field.required ? values : ["", ...values];
-  const currentIndex = candidates.indexOf(currentValue);
-  const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % candidates.length;
+  const unknownValue =
+    draft !== "" && !Object.hasOwn(fieldControl.field.values, draft) ? draft : null;
+  const emptyOptions =
+    !fieldControl.required || draft === "" ? [{ label: "None", option: undefined, value: "" }] : [];
+  const unknownOptions = unknownValue
+    ? [{ label: unknownValue, option: undefined, value: unknownValue }]
+    : [];
+  const enumOptions = Object.entries(fieldControl.field.values).map(([value, option]) => ({
+    label: option.label,
+    option,
+    value,
+  }));
 
-  return candidates[nextIndex] ?? "";
+  return [...emptyOptions, ...unknownOptions, ...enumOptions].map((option) => ({
+    ...option,
+    presentation: enumValuePresentation({ option: option.option, value: option.value }),
+  }));
+}
+
+function EnumPresentationSelectValue({
+  content,
+  density,
+  label,
+  presentation,
+  scope,
+}: {
+  content: FieldPresentationEnumContent;
+  density: GeneratedRecordFieldControlDensity;
+  label: string;
+  presentation: ReturnType<typeof enumValuePresentation>;
+  scope: "list" | "trigger";
+}) {
+  const iconSizeClassName = density === "compact" ? "size-3.5" : "size-4";
+  const icon = presentation.icon;
+  const showIcon = content !== "label" && icon !== undefined;
+  const showLabel = content !== "icon" || icon === undefined;
+  const labelClassName =
+    scope === "trigger"
+      ? "min-w-0 truncate text-xs font-medium"
+      : `min-w-0 truncate ${fieldPresentationTextColorClassName(presentation.color.intent)}`;
+
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {showIcon ? (
+        <GeneratedFieldPresentationIcon
+          className={`${iconSizeClassName} shrink-0 ${fieldPresentationTextColorClassName(
+            presentation.color.intent,
+          )}`}
+          icon={icon}
+        />
+      ) : null}
+      {showLabel ? (
+        scope === "trigger" ? (
+          <span className={labelClassName}>{label}</span>
+        ) : (
+          <SelectLabel className={labelClassName}>{label}</SelectLabel>
+        )
+      ) : null}
+    </span>
+  );
+}
+
+function enumPresentationSelectTriggerClassName(
+  intent: ReturnType<typeof enumValuePresentation>["color"]["intent"],
+  density: GeneratedRecordFieldControlDensity,
+  content: FieldPresentationEnumContent,
+) {
+  const contentSizing =
+    content === "icon"
+      ? density === "compact"
+        ? "h-6 w-10 px-1.5 py-0 text-xs/4 sm:px-1.5 sm:py-0 sm:text-xs/4"
+        : "h-9 w-12 px-1.5 py-0 text-xs/4 sm:px-1.5 sm:py-0 sm:text-xs/4"
+      : density === "compact"
+        ? "h-6 min-w-28 px-2 py-0 text-xs/4 sm:px-2 sm:py-0 sm:text-xs/4"
+        : "h-9 min-w-32 px-2 py-0 text-sm/5 sm:px-2 sm:py-0 sm:text-sm/5";
+
+  return [
+    fieldPresentationIconButtonClassName(intent),
+    "border-(--btn-border) bg-(--btn-bg) text-(--btn-fg) hover:bg-(--btn-overlay)",
+    "focus:border-(--btn-border) focus:ring-(--btn-ring)",
+    contentSizing,
+  ].join(" ");
+}
+
+function enumPresentationSelectChevronClassName(density: GeneratedRecordFieldControlDensity) {
+  return ["ms-auto shrink-0 text-current/60", density === "compact" ? "size-3.5" : "size-4"].join(
+    " ",
+  );
 }
 
 function RecordTextFieldRenderer({

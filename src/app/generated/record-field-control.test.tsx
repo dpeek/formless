@@ -9,20 +9,38 @@ import { GeneratedIconPickerEditor } from "./field-control-primitives.tsx";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 
 describe("generated record field presentation rendering", () => {
-  it("renders enum icon-only controls with resolved icon, color, and accessible value label", () => {
+  it("renders enum icon presentation as a select with resolved icon, color, and accessible value label", () => {
     const html = renderRecordControl(priorityFieldConfig, {
       draft: "high",
       recordValue: "high",
     });
 
     expect(html).toContain('aria-label="Priority: High"');
+    expect(html).toContain('aria-haspopup="listbox"');
     expect(html).toContain('data-formless-field-presentation-mode="iconOnly"');
+    expect(html).toContain('data-formless-field-presentation-trigger="icon"');
+    expect(html).toContain('data-formless-field-presentation-list="both"');
     expect(html).toContain('data-formless-field-presentation-color="danger"');
     expect(html).toContain('data-formless-field-presentation-color-token="priority.high"');
     expect(html).toContain('data-formless-field-presentation-icon="flag"');
+    expect(html).toContain("h-9 w-12");
     expect(html).toContain('data-web-svg-icon="svg"');
     expect(html).toContain('d="M4 15s1-1 4-1');
-    expect(html).not.toContain("<select");
+  });
+
+  it("can render enum icon presentation labels in the select trigger", () => {
+    const html = renderRecordControl(
+      {
+        ...priorityFieldConfig,
+        presentation: { list: "label", mode: "iconOnly", trigger: "both" },
+      },
+      { draft: "high", recordValue: "high" },
+    );
+
+    expect(html).toContain('data-formless-field-presentation-trigger="both"');
+    expect(html).toContain('data-formless-field-presentation-list="label"');
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain(">High</span>");
   });
 
   it("renders enum icon-only controls from non-compat catalog presentation tokens", () => {

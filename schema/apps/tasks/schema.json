@@ -155,7 +155,9 @@
           "editor": "enum",
           "commit": "immediate",
           "presentation": {
-            "mode": "iconOnly"
+            "list": "both",
+            "mode": "iconOnly",
+            "trigger": "icon"
           }
         },
         "done": {

@@ -173,6 +173,10 @@ describe("media worker routes", () => {
         Authorization: `Bearer ${adminToken}`,
       },
     );
+
+    expect(adminAccepted.status).toBe(200);
+    const body = (await adminAccepted.json()) as { href: string; key: string };
+
     const ownerAccepted = await uploadCoreImage(
       guardedHarness,
       imageFile("owner.png", "image/png", pngBytes),
@@ -180,10 +184,8 @@ describe("media worker routes", () => {
     );
 
     expect(rejected.status).toBe(401);
-    expect(adminAccepted.status).toBe(200);
     expect(ownerAccepted.status).toBe(200);
 
-    const body = (await adminAccepted.json()) as { href: string; key: string };
     const served = await guardedHarness.fetch(body.href);
 
     expect(body.key).toMatch(/^media\/images\/.+\.png$/);

@@ -28,7 +28,16 @@ describe("icon catalog", () => {
     expect(findIconCatalogEntry("publish")?.label).toBe("Publish");
     expect(findIconCatalogEntry("github")?.label).toBe("GitHub");
     expect(findIconCatalogEntry("linkedin")?.label).toBe("LinkedIn");
+    expect(findIconCatalogEntry("bluesky")?.label).toBe("Bluesky");
+    expect(findIconCatalogEntry("threads")?.label).toBe("Threads");
+    expect(findIconCatalogEntry("mastodon")?.label).toBe("Mastodon");
     expect(findIconCatalogEntry("x")?.label).toBe("X");
+    expect(findIconCatalogEntry("facebook")?.label).toBe("Facebook");
+    expect(findIconCatalogEntry("instagram")?.label).toBe("Instagram");
+    expect(findIconCatalogEntry("youtube")?.label).toBe("YouTube");
+    expect(findIconCatalogEntry("vimeo")?.label).toBe("Vimeo");
+    expect(findIconCatalogEntry("gravatar")?.label).toBe("Gravatar");
+    expect(findIconCatalogEntry("movember")?.label).toBe("Movember");
     expect(findIconCatalogEntry("google")?.label).toBe("Google");
     expect(findIconCatalogEntry("apple")?.label).toBe("Apple");
     expect(findIconCatalogEntry("microsoft")?.label).toBe("Microsoft");

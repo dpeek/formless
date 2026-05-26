@@ -76,7 +76,7 @@ describe("home view model collections", () => {
     ).toEqual([
       { fieldName: "title", presentation: undefined },
       { fieldName: "dueDate", presentation: { visibility: "valueOrInteraction" } },
-      { fieldName: "priority", presentation: { mode: "iconOnly" } },
+      { fieldName: "priority", presentation: { list: "both", mode: "iconOnly", trigger: "icon" } },
       { fieldName: "done", presentation: { mode: "completion" } },
     ]);
     expect(
@@ -87,7 +87,7 @@ describe("home view model collections", () => {
     ).toEqual([
       { fieldName: "title", presentation: undefined },
       { fieldName: "dueDate", presentation: { visibility: "valueOrInteraction" } },
-      { fieldName: "priority", presentation: { mode: "iconOnly" } },
+      { fieldName: "priority", presentation: { list: "label", mode: "iconOnly", trigger: "both" } },
     ]);
   });
 
@@ -2495,7 +2495,7 @@ function taskSchemaWithFieldPresentations(): AppSchema {
   };
   itemView.fields.priority = {
     ...itemView.fields.priority,
-    presentation: { mode: "iconOnly" as const },
+    presentation: { list: "both" as const, mode: "iconOnly" as const, trigger: "icon" as const },
   };
   itemView.fields.done = {
     ...itemView.fields.done,
@@ -2507,7 +2507,7 @@ function taskSchemaWithFieldPresentations(): AppSchema {
   };
   createView.fields.priority = {
     ...createView.fields.priority,
-    presentation: { mode: "iconOnly" as const },
+    presentation: { list: "label" as const, mode: "iconOnly" as const, trigger: "both" as const },
   };
 
   return parseAppSchema(rawSchema);

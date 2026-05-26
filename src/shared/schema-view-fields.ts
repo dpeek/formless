@@ -131,19 +131,56 @@ export function parseOptionalFieldPresentation(
     throw new Error(`${context} presentation must be an object.`);
   }
 
-  assertExactKeys(`${context} presentation`, value, [], ["mode", "visibility"]);
+  assertExactKeys(`${context} presentation`, value, [], ["list", "mode", "trigger", "visibility"]);
 
+  const list = parseOptionalFieldPresentationEnumContent(context, "list", value.list, field);
   const mode = parseOptionalFieldPresentationMode(context, value.mode, field);
+  const trigger = parseOptionalFieldPresentationEnumContent(
+    context,
+    "trigger",
+    value.trigger,
+    field,
+  );
   const visibility = parseOptionalFieldPresentationVisibility(context, value.visibility, field);
 
-  if (mode === undefined && visibility === undefined) {
-    throw new Error(`${context} presentation must include "mode" or "visibility".`);
+  if (
+    list === undefined &&
+    mode === undefined &&
+    trigger === undefined &&
+    visibility === undefined
+  ) {
+    throw new Error(
+      `${context} presentation must include "list", "mode", "trigger", or "visibility".`,
+    );
   }
 
   return {
+    ...(list === undefined ? {} : { list }),
     ...(mode === undefined ? {} : { mode }),
+    ...(trigger === undefined ? {} : { trigger }),
     ...(visibility === undefined ? {} : { visibility }),
   };
+}
+
+function parseOptionalFieldPresentationEnumContent(
+  context: string,
+  key: "list" | "trigger",
+  value: unknown,
+  field: FieldSchema,
+): FieldPresentationSchema["list"] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value !== "icon" && value !== "label" && value !== "both") {
+    throw new Error(`${context} presentation ${key} must be "icon", "label", or "both".`);
+  }
+
+  if (field.type !== "enum") {
+    throw new Error(`${context} presentation ${key} requires an enum field.`);
+  }
+
+  return value;
 }
 
 function parseOptionalFieldPresentationMode(

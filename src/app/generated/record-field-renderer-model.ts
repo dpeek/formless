@@ -45,7 +45,11 @@ export function selectGeneratedRecordFieldRendererKind({
   }
 
   if (fieldControl.kind === "enum") {
-    if (fieldConfig.presentation?.mode === "iconOnly") {
+    if (
+      fieldConfig.presentation?.mode === "iconOnly" ||
+      fieldConfig.presentation?.trigger !== undefined ||
+      fieldConfig.presentation?.list !== undefined
+    ) {
       return "enum-icon";
     }
 

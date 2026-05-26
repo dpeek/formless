@@ -105,6 +105,9 @@ describe("schema text fields", () => {
     expect(() =>
       parseAppSchema(
         baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
           itemViews: {
             taskListItem: {
               entity: "task",
@@ -299,7 +302,7 @@ describe("schema field presentation metadata", () => {
               kind: {
                 editor: "enum",
                 commit: "immediate",
-                presentation: { mode: "iconOnly" },
+                presentation: { list: "both", mode: "iconOnly", trigger: "icon" },
               },
               done: {
                 editor: "boolean",
@@ -318,7 +321,11 @@ describe("schema field presentation metadata", () => {
           taskTable: {
             entity: "task",
             columns: [
-              { type: "field", field: "kind", presentation: { mode: "iconOnly" } },
+              {
+                type: "field",
+                field: "kind",
+                presentation: { list: "both", mode: "iconOnly", trigger: "icon" },
+              },
               { type: "field", field: "done", presentation: { mode: "completion" } },
               {
                 type: "field",
@@ -335,7 +342,10 @@ describe("schema field presentation metadata", () => {
             entity: "task",
             fields: {
               title: { editor: "text" },
-              kind: { editor: "enum", presentation: { mode: "iconOnly" } },
+              kind: {
+                editor: "enum",
+                presentation: { list: "label", mode: "iconOnly", trigger: "both" },
+              },
               dueDate: { editor: "date", presentation: { visibility: "valueOrInteraction" } },
             },
           },
@@ -351,19 +361,23 @@ describe("schema field presentation metadata", () => {
       },
     });
     expect(schema.itemViews.taskListItem?.fields).toMatchObject({
-      kind: { presentation: { mode: "iconOnly" } },
+      kind: { presentation: { list: "both", mode: "iconOnly", trigger: "icon" } },
       done: { presentation: { mode: "completion" } },
       dueDate: { presentation: { visibility: "valueOrInteraction" } },
     });
     expect(schema.tableViews.taskTable?.columns).toMatchObject([
-      { type: "field", field: "kind", presentation: { mode: "iconOnly" } },
+      {
+        type: "field",
+        field: "kind",
+        presentation: { list: "both", mode: "iconOnly", trigger: "icon" },
+      },
       { type: "field", field: "done", presentation: { mode: "completion" } },
       { type: "field", field: "dueDate", presentation: { visibility: "valueOrInteraction" } },
     ]);
     expect(schema.views.taskCreate).toMatchObject({
       type: "create",
       fields: {
-        kind: { presentation: { mode: "iconOnly" } },
+        kind: { presentation: { list: "label", mode: "iconOnly", trigger: "both" } },
         dueDate: { presentation: { visibility: "valueOrInteraction" } },
       },
     });
@@ -402,6 +416,9 @@ describe("schema field presentation metadata", () => {
     expect(() =>
       parseAppSchema(
         baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
           itemViews: {
             taskListItem: {
               entity: "task",
@@ -417,6 +434,47 @@ describe("schema field presentation metadata", () => {
         }),
       ),
     ).toThrow("iconOnly presentation requires an enum field");
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: taskEntityWithKindEnum(),
+          },
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                kind: {
+                  editor: "enum",
+                  commit: "immediate",
+                  presentation: { trigger: "summary" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('presentation trigger must be "icon", "label", or "both"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          itemViews: {
+            taskListItem: {
+              entity: "task",
+              fields: {
+                title: {
+                  editor: "text",
+                  commit: "field-commit",
+                  presentation: { list: "both" },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow("presentation list requires an enum field");
 
     expect(() =>
       parseAppSchema(
@@ -454,7 +512,7 @@ describe("schema field presentation metadata", () => {
           },
         }),
       ),
-    ).toThrow('presentation must include "mode" or "visibility"');
+    ).toThrow('presentation must include "list", "mode", "trigger", or "visibility"');
 
     expect(() =>
       parseAppSchema(

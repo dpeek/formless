@@ -103,9 +103,12 @@ export type FieldVisibilityConditionSchema = {
 
 export type FieldPresentationMode = "iconOnly" | "completion";
 export type FieldPresentationVisibility = "valueOrInteraction";
+export type FieldPresentationEnumContent = "icon" | "label" | "both";
 
 export type FieldPresentationSchema = {
+  list?: FieldPresentationEnumContent;
   mode?: FieldPresentationMode;
+  trigger?: FieldPresentationEnumContent;
   visibility?: FieldPresentationVisibility;
 };
 
