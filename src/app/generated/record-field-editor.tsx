@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { siteImageUploadPatchValues, uploadSiteImageFile } from "../../client/media.ts";
+import {
+  coreImageMediaAssetOptionForId,
+  listCoreImageMediaAssets,
+  siteImageUploadPatchValues,
+  uploadCoreImageMediaFile,
+  uploadSiteImageFile,
+  type ImageMediaAssetOption,
+} from "../../client/media.ts";
 import { useRecord, useSchema } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
@@ -52,8 +59,15 @@ export function RecordFieldEditor({
   const [unitDraft, setUnitDraft] = useState(() =>
     valueUnitConfig ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue) : "",
   );
+  const [mediaAssetOptions, setMediaAssetOptions] = useState<ImageMediaAssetOption[]>([]);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mediaEditorMode = mediaEditorModeForField(fieldConfig);
+  const mediaPreview =
+    mediaEditorMode === "asset" && draft !== ""
+      ? (mediaAssetOptions.find((asset) => asset.id === draft) ??
+        coreImageMediaAssetOptionForId(draft))
+      : undefined;
 
   useEffect(() => {
     const nextDraft = fieldValueToEditorInputValue(field, recordValue, numberFormat);
@@ -70,6 +84,31 @@ export function RecordFieldEditor({
       valueUnitConfig ? fieldValueToInputValue(valueUnitConfig.unitField, unitRecordValue) : "",
     );
   }, [unitRecordValue, valueUnitConfig]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (mediaEditorMode !== "asset") {
+      setMediaAssetOptions([]);
+      return;
+    }
+
+    void listCoreImageMediaAssets()
+      .then((assets) => {
+        if (!cancelled) {
+          setMediaAssetOptions(assets);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMediaAssetOptions([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaEditorMode]);
 
   async function commitPatch(
     values: Partial<RecordValues>,
@@ -177,8 +216,8 @@ export function RecordFieldEditor({
       return;
     }
 
-    if (schemaKey !== "site") {
-      const message = "Image upload is only available for Site records.";
+    if (mediaEditorMode !== "asset" && schemaKey !== "site") {
+      const message = "Image upload is only available for Site records or media asset fields.";
 
       setError(message);
       setSyncStatus({ state: "error", message });
@@ -190,8 +229,14 @@ export function RecordFieldEditor({
     setSyncStatus({ state: "syncing", message: "Uploading image..." });
 
     try {
-      const upload = await uploadSiteImageFile(file, { target: appTarget });
-      const uploadFields = selectImageUploadPatchFields(schema, entityName, fieldName);
+      const upload =
+        mediaEditorMode === "asset"
+          ? await uploadCoreImageMediaFile(file)
+          : await uploadSiteImageFile(file, { target: appTarget });
+      const uploadFields =
+        mediaEditorMode === "asset"
+          ? selectMediaAssetUploadPatchFields(schema, entityName, fieldName)
+          : selectImageUploadPatchFields(schema, entityName, fieldName);
       const saved = await commitPatch(
         siteImageUploadPatchValues({
           ...uploadFields,
@@ -201,7 +246,25 @@ export function RecordFieldEditor({
       );
 
       if (saved) {
-        setDraft(upload.href);
+        const mediaAssetId = upload.assetId ?? upload.asset?.id;
+
+        if (mediaEditorMode === "asset" && mediaAssetId) {
+          const uploadedHeight = upload.asset?.height ?? upload.dimensions?.height;
+          const uploadedWidth = upload.asset?.width ?? upload.dimensions?.width;
+
+          setDraft(mediaAssetId);
+          setMediaAssetOptions((current) =>
+            upsertMediaAssetOption(current, {
+              ...(uploadedHeight === undefined ? {} : { height: uploadedHeight }),
+              href: upload.asset?.deliveryHref ?? upload.href,
+              id: mediaAssetId,
+              label: upload.asset?.label ?? mediaAssetId,
+              ...(uploadedWidth === undefined ? {} : { width: uploadedWidth }),
+            }),
+          );
+        } else {
+          setDraft(upload.href);
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Image upload failed.";
@@ -211,6 +274,15 @@ export function RecordFieldEditor({
     } finally {
       setIsPending(false);
     }
+  }
+
+  async function handleMediaAssetSelect(assetId: string) {
+    if (mediaEditorMode !== "asset") {
+      return;
+    }
+
+    setDraft(assetId);
+    await commit(assetId);
   }
 
   return (
@@ -232,6 +304,7 @@ export function RecordFieldEditor({
       onIconOpenChange={handleIconOpenChange}
       onIconSave={handleIconSave}
       onImageFileSelect={(file) => void handleImageUpload(file)}
+      onMediaAssetSelect={(assetId) => void handleMediaAssetSelect(assetId)}
       onPatchValues={(values) => {
         void commitPatch(values);
       }}
@@ -244,9 +317,16 @@ export function RecordFieldEditor({
       recordValue={recordValue}
       showLabel={showLabel}
       unitDraft={unitDraft}
-      uploadEnabled={isSiteImageUploadAvailable(schemaKey)}
+      mediaAssetOptions={mediaAssetOptions}
+      mediaEditorMode={mediaEditorMode}
+      mediaPreviewHref={mediaPreview?.href}
+      uploadEnabled={isImageUploadAvailable(schemaKey, mediaEditorMode)}
     />
   );
+}
+
+function mediaEditorModeForField(fieldConfig: RecordFieldConfig): "asset" | "url" {
+  return fieldConfig.editor === "media" && fieldConfig.fieldName !== "href" ? "asset" : "url";
 }
 
 function selectImageUploadPatchFields(
@@ -285,8 +365,39 @@ function selectImageUploadPatchFields(
   return { hrefFieldName, mediaAssetFieldName };
 }
 
-function isSiteImageUploadAvailable(schemaKey: SchemaKey) {
-  return schemaKey === "site";
+function selectMediaAssetUploadPatchFields(
+  schema: AppSchema | null,
+  entityName: string,
+  fieldName: string,
+): {
+  heightFieldName?: string;
+  mediaAssetFieldName?: string;
+  widthFieldName?: string;
+} {
+  const fields = schema?.entities[entityName]?.fields;
+
+  if (fields?.width?.type === "number" && fields.height?.type === "number") {
+    return {
+      heightFieldName: "height",
+      mediaAssetFieldName: fieldName,
+      widthFieldName: "width",
+    };
+  }
+
+  return { mediaAssetFieldName: fieldName };
+}
+
+function isImageUploadAvailable(schemaKey: SchemaKey, mediaEditorMode: "asset" | "url") {
+  return mediaEditorMode === "asset" || schemaKey === "site";
+}
+
+function upsertMediaAssetOption(
+  options: ImageMediaAssetOption[],
+  option: ImageMediaAssetOption,
+): ImageMediaAssetOption[] {
+  return [option, ...options.filter((candidate) => candidate.id !== option.id)].sort(
+    (left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id),
+  );
 }
 
 function fieldValueToEditorInputValue(

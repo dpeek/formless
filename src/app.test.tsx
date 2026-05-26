@@ -5816,6 +5816,72 @@ describe("generated forms and records", () => {
     expect(emptyHtml).not.toContain("No image");
   });
 
+  it("renders scalar media asset id editors with core media previews and selectors", () => {
+    const entity: EntitySchema = {
+      label: "Media asset case",
+      fields: {
+        mediaAssetId: { type: "text", required: false, label: "Image asset" },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    };
+
+    applyBootstrapResponse(
+      bootstrap([
+        {
+          id: "media-asset-case-1",
+          entity: "mediaAssetCase",
+          values: { mediaAssetId: "cover.webp" },
+          createdAt: "2026-05-26T00:00:00.000Z",
+        },
+        {
+          id: "media-asset-case-2",
+          entity: "mediaAssetCase",
+          values: { mediaAssetId: "../bad.webp" },
+          createdAt: "2026-05-26T00:00:01.000Z",
+        },
+      ]),
+    );
+
+    const validHtml = renderToStaticMarkup(
+      <SchemaAppProvider schemaKey="tasks">
+        <RecordFieldEditor
+          canPatch
+          entityName="mediaAssetCase"
+          fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
+          recordId="media-asset-case-1"
+          showLabel
+        />
+      </SchemaAppProvider>,
+    );
+    const brokenHtml = renderToStaticMarkup(
+      <SchemaAppProvider schemaKey="tasks">
+        <RecordFieldEditor
+          canPatch
+          entityName="mediaAssetCase"
+          fieldConfig={recordFieldConfig(entity, "mediaAssetId", "media", "field-commit")}
+          recordId="media-asset-case-2"
+          showLabel
+        />
+      </SchemaAppProvider>,
+    );
+
+    expect(validHtml).toContain('data-web-field-kind="media"');
+    expect(validHtml).toContain('data-web-media-field-mode="asset"');
+    expect(validHtml).toContain('data-web-media-field-preview="image"');
+    expect(validHtml).toContain('src="/api/formless/media/media/images/cover.webp"');
+    expect(validHtml).toContain('aria-label="Upload Image asset"');
+    expect(validHtml).toContain('aria-label="Image asset"');
+    expect(validHtml).toMatch(inputWithAriaLabelAndType("Image asset id", "text"));
+    expect(validHtml).toContain('value="cover.webp"');
+    expect(validHtml).toMatch(/<input(?=[^>]*type="file")(?![^>]*disabled="")[^>]*>/);
+    expect(brokenHtml).toContain('data-web-media-field-preview="broken"');
+    expect(brokenHtml).toContain("Missing image");
+  });
+
   it("keeps media create controls as URL inputs and upload affordances edit-only", () => {
     const entity: EntitySchema = {
       label: "Media",

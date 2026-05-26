@@ -1,8 +1,91 @@
 import { describe, expect, it } from "vite-plus/test";
-import { siteImageUploadPatchValues, uploadSiteImageFile, type ImageDimensions } from "./media.ts";
+import {
+  coreImageMediaAssetOptionForId,
+  listCoreImageMediaAssets,
+  siteImageUploadPatchValues,
+  uploadCoreImageMediaFile,
+  uploadSiteImageFile,
+  type ImageDimensions,
+} from "./media.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 
 describe("Site media client helper", () => {
+  it("uploads core image media assets to the instance media route", async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], "hero.png", { type: "image/png" });
+
+    const result = await uploadCoreImageMediaFile(file, {
+      fetcher: async (input, init) => {
+        expect(input).toBe("/api/formless/media/images");
+        expect(init?.method).toBe("POST");
+        expect(init?.headers).toEqual({ Accept: "application/json" });
+
+        return Response.json({
+          asset: {
+            byteSize: 3,
+            contentType: "image/png",
+            deliveryHref: "/api/formless/media/media/images/uploaded.png",
+            filename: "hero.png",
+            id: "uploaded.png",
+            kind: "image",
+            label: "hero.png",
+            provider: "r2",
+            status: "ready",
+            storageKey: "media/images/uploaded.png",
+          },
+          assetId: "uploaded.png",
+          contentType: "image/png",
+          href: "/api/formless/media/media/images/uploaded.png",
+          key: "media/images/uploaded.png",
+          size: 3,
+        });
+      },
+      readDimensions: async () => undefined,
+    });
+
+    expect(result.assetId).toBe("uploaded.png");
+    expect(result.href).toBe("/api/formless/media/media/images/uploaded.png");
+  });
+
+  it("lists and resolves core image media assets", async () => {
+    await expect(
+      listCoreImageMediaAssets({
+        fetcher: async (input, init) => {
+          expect(input).toBe("/api/formless/media/images");
+          expect(init?.headers).toEqual({ Accept: "application/json" });
+
+          return Response.json({
+            assets: [
+              {
+                byteSize: 3,
+                contentType: "image/webp",
+                deliveryHref: "/api/formless/media/media/images/cover.webp",
+                filename: "cover.webp",
+                id: "cover.webp",
+                kind: "image",
+                label: "cover.webp",
+                provider: "r2",
+                status: "ready",
+                storageKey: "media/images/cover.webp",
+              },
+            ],
+          });
+        },
+      }),
+    ).resolves.toEqual([
+      {
+        href: "/api/formless/media/media/images/cover.webp",
+        id: "cover.webp",
+        label: "cover.webp",
+      },
+    ]);
+    expect(coreImageMediaAssetOptionForId("cover.webp")).toEqual({
+      href: "/api/formless/media/media/images/cover.webp",
+      id: "cover.webp",
+      label: "cover.webp",
+    });
+    expect(coreImageMediaAssetOptionForId("../cover.webp")).toBeUndefined();
+  });
+
   it("uploads one file as multipart form data and returns dimensions when available", async () => {
     const file = new File([new Uint8Array([1, 2, 3])], "hero.png", { type: "image/png" });
     const dimensions = { height: 630, width: 1200 } satisfies ImageDimensions;

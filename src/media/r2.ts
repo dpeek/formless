@@ -18,6 +18,31 @@ export function mediaObjectStoreFromR2Bucket(bucket: R2Bucket): MediaObjectStore
         },
       };
     },
+    async listObjects(options) {
+      const listing = await bucket.list({
+        limit: options.limit,
+        prefix: options.prefix,
+      });
+      const objects = await Promise.all(
+        listing.objects.map(async (object) => {
+          const metadataObject =
+            object.customMetadata === undefined || object.httpMetadata === undefined
+              ? await bucket.head(object.key)
+              : object;
+
+          return {
+            contentType: metadataObject?.httpMetadata?.contentType,
+            customMetadata: metadataObject?.customMetadata,
+            key: object.key,
+            size: object.size,
+          };
+        }),
+      );
+
+      return {
+        objects,
+      };
+    },
     async putObject(write) {
       await bucket.put(write.key, write.bytes, {
         httpMetadata: {

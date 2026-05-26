@@ -1,10 +1,15 @@
 import type { RecordValues } from "../shared/protocol.ts";
-import type { MediaAsset } from "../media/core.ts";
+import {
+  CORE_IMAGE_UPLOAD_PATH,
+  coreImageMediaDeliveryFactsForAssetId,
+  type MediaAsset,
+} from "../media/core.ts";
 import { appStorageIdentityForClientTarget, type ClientAppTarget } from "./app-target.ts";
 
-export const SITE_IMAGE_UPLOAD_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+export const IMAGE_UPLOAD_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+export const SITE_IMAGE_UPLOAD_ACCEPT = IMAGE_UPLOAD_ACCEPT;
 
-export type SiteImageUploadResponse = {
+export type ImageMediaUploadResponse = {
   asset?: MediaAsset;
   assetId?: string;
   contentType: string;
@@ -13,27 +18,60 @@ export type SiteImageUploadResponse = {
   size: number;
 };
 
+export type SiteImageUploadResponse = ImageMediaUploadResponse;
+
 export type ImageDimensions = {
   height: number;
   width: number;
 };
 
-export type UploadedSiteImage = SiteImageUploadResponse & {
+export type UploadedImageMedia = ImageMediaUploadResponse & {
   dimensions?: ImageDimensions;
 };
 
-type UploadSiteImageFileOptions = {
+export type UploadedSiteImage = UploadedImageMedia;
+
+export type ImageMediaAssetOption = {
+  height?: number;
+  href: string;
+  id: string;
+  label: string;
+  width?: number;
+};
+
+type UploadImageMediaFileOptions = {
   fetcher?: typeof fetch;
   readDimensions?: (file: File) => Promise<ImageDimensions | undefined>;
+};
+
+type UploadSiteImageFileOptions = UploadImageMediaFileOptions & {
   target?: ClientAppTarget;
 };
+
+export async function uploadCoreImageMediaFile(
+  file: File,
+  options: UploadImageMediaFileOptions = {},
+): Promise<UploadedImageMedia> {
+  return uploadImageMediaFile(file, CORE_IMAGE_UPLOAD_PATH, options);
+}
 
 export async function uploadSiteImageFile(
   file: File,
   options: UploadSiteImageFileOptions = {},
 ): Promise<UploadedSiteImage> {
+  return uploadImageMediaFile(
+    file,
+    siteImageUploadPathForTarget(options.target ?? "site"),
+    options,
+  );
+}
+
+async function uploadImageMediaFile(
+  file: File,
+  uploadPath: string,
+  options: UploadImageMediaFileOptions,
+): Promise<UploadedImageMedia> {
   const fetcher = options.fetcher ?? fetch;
-  const uploadPath = siteImageUploadPathForTarget(options.target ?? "site");
   const formData = new FormData();
 
   formData.set("file", file);
@@ -45,7 +83,7 @@ export async function uploadSiteImageFile(
     },
     body: formData,
   });
-  const upload = await parseSiteImageUploadResponse(response);
+  const upload = await parseImageMediaUploadResponse(response);
   const readDimensions = options.readDimensions ?? readImageDimensions;
   let dimensions: ImageDimensions | undefined;
 
@@ -101,6 +139,46 @@ export function siteImageUploadPatchValues({
   return values;
 }
 
+export function coreImageMediaAssetOptionForId(assetId: string): ImageMediaAssetOption | undefined {
+  const delivery = coreImageMediaDeliveryFactsForAssetId(assetId);
+
+  if (!delivery) {
+    return undefined;
+  }
+
+  return {
+    href: delivery.href,
+    id: delivery.assetId,
+    label: delivery.assetId,
+  };
+}
+
+export async function listCoreImageMediaAssets(
+  options: { fetcher?: typeof fetch } = {},
+): Promise<ImageMediaAssetOption[]> {
+  const fetcher = options.fetcher ?? fetch;
+  const response = await fetcher(CORE_IMAGE_UPLOAD_PATH, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  const body = (await response.json()) as unknown;
+
+  if (!response.ok) {
+    const message = isErrorResponse(body)
+      ? body.error
+      : `Media asset list failed with status ${response.status}.`;
+
+    throw new Error(message);
+  }
+
+  if (!isImageMediaAssetListResponse(body)) {
+    throw new Error("Media asset list returned an invalid response.");
+  }
+
+  return body.assets.map(mediaAssetOptionFromAsset);
+}
+
 export async function readImageDimensions(file: File): Promise<ImageDimensions | undefined> {
   if (
     typeof Image === "undefined" ||
@@ -135,7 +213,9 @@ export async function readImageDimensions(file: File): Promise<ImageDimensions |
   }
 }
 
-async function parseSiteImageUploadResponse(response: Response): Promise<SiteImageUploadResponse> {
+async function parseImageMediaUploadResponse(
+  response: Response,
+): Promise<ImageMediaUploadResponse> {
   const body = (await response.json()) as unknown;
 
   if (!response.ok) {
@@ -146,14 +226,14 @@ async function parseSiteImageUploadResponse(response: Response): Promise<SiteIma
     throw new Error(message);
   }
 
-  if (!isSiteImageUploadResponse(body)) {
+  if (!isImageMediaUploadResponse(body)) {
     throw new Error("Image upload returned an invalid response.");
   }
 
   return body;
 }
 
-function isSiteImageUploadResponse(value: unknown): value is SiteImageUploadResponse {
+function isImageMediaUploadResponse(value: unknown): value is ImageMediaUploadResponse {
   return (
     isRecord(value) &&
     typeof value.contentType === "string" &&
@@ -163,6 +243,24 @@ function isSiteImageUploadResponse(value: unknown): value is SiteImageUploadResp
     (!("assetId" in value) || typeof value.assetId === "string") &&
     (!("asset" in value) || isMediaAsset(value.asset))
   );
+}
+
+function isImageMediaAssetListResponse(value: unknown): value is { assets: MediaAsset[] } {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.assets) &&
+    value.assets.every((asset) => isMediaAsset(asset))
+  );
+}
+
+function mediaAssetOptionFromAsset(asset: MediaAsset): ImageMediaAssetOption {
+  return {
+    ...(asset.height === undefined ? {} : { height: asset.height }),
+    href: asset.deliveryHref,
+    id: asset.id,
+    label: asset.label,
+    ...(asset.width === undefined ? {} : { width: asset.width }),
+  };
 }
 
 function isMediaAsset(value: unknown): value is MediaAsset {

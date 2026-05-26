@@ -137,6 +137,30 @@ describe("media worker routes", () => {
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
   });
 
+  it("lists core image media assets for generated media selectors", async () => {
+    const upload = await uploadCoreImage(harness, imageFile("hero.png", "image/png", pngBytes));
+    const uploaded = (await upload.json()) as {
+      assetId: string;
+      href: string;
+      key: string;
+    };
+    const list = await harness.fetch("/api/formless/media/images");
+
+    expect(list.status).toBe(200);
+    expect(list.headers.get("Cache-Control")).toBe("no-store");
+    expect((await list.json()) as unknown).toEqual({
+      assets: [
+        expect.objectContaining({
+          deliveryHref: uploaded.href,
+          id: uploaded.assetId,
+          kind: "image",
+          label: "hero.png",
+          storageKey: uploaded.key,
+        }),
+      ],
+    });
+  });
+
   it("uses the same write authorization boundaries for core media assets", async () => {
     const rejected = await uploadCoreImage(
       guardedHarness,

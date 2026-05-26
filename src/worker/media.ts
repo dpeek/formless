@@ -8,10 +8,14 @@ import {
   type ImageMediaStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import {
+  CORE_IMAGE_KEY_PREFIX,
+  CORE_IMAGE_UPLOAD_PATH,
+  CORE_MEDIA_ROUTE_PREFIX,
   MEDIA_IMAGE_UPLOAD_MAX_BYTES,
   MEDIA_OBJECT_CACHE_CONTROL,
   deliveryFactsForMediaObject,
   isValidMediaStorageKey,
+  listImageMediaAssets,
   restoreImageMedia,
   uploadImageMedia,
 } from "../media/core.ts";
@@ -25,8 +29,7 @@ import {
 
 export const SITE_IMAGE_UPLOAD_MAX_BYTES = MEDIA_IMAGE_UPLOAD_MAX_BYTES;
 export const SITE_MEDIA_CACHE_CONTROL = MEDIA_OBJECT_CACHE_CONTROL;
-export const CORE_IMAGE_KEY_PREFIX = "media/images";
-export const CORE_MEDIA_ROUTE_PREFIX = "/api/formless/media/";
+export { CORE_IMAGE_KEY_PREFIX, CORE_MEDIA_ROUTE_PREFIX } from "../media/core.ts";
 
 type MediaEnv = AuthorityAdminGuardEnv & {
   FORMLESS_MEDIA: R2Bucket;
@@ -39,7 +42,7 @@ type ImageMediaRoute = {
 
 const coreMediaStorageIdentity = {
   imageKeyPrefix: CORE_IMAGE_KEY_PREFIX,
-  imageUploadPath: "/api/formless/media/images",
+  imageUploadPath: CORE_IMAGE_UPLOAD_PATH,
   routePrefix: "/api/formless/media",
 } satisfies ImageMediaStorageIdentity;
 
@@ -70,6 +73,10 @@ export async function handleMediaRequest(
 
   if (request.method === "POST" && route.path === "/media/images") {
     return uploadImage(request, env, route.media);
+  }
+
+  if (request.method === "GET" && route.path === "/media/images") {
+    return listImages(env, route.media);
   }
 
   if (request.method === "PUT") {
@@ -117,6 +124,19 @@ async function uploadImage(request: Request, env: MediaEnv, media: ImageMediaSto
   }
 
   return jsonResponse(upload.upload);
+}
+
+async function listImages(env: MediaEnv, media: ImageMediaStorageIdentity) {
+  const assets = await listImageMediaAssets({
+    hrefForKey: (key) => mediaHrefForStorageKey(key, media),
+    keyPrefix: mediaImageKeyPrefix(media),
+    provider: "r2",
+    store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
+  });
+
+  return jsonResponse({ assets }, 200, {
+    "Cache-Control": "no-store",
+  });
 }
 
 async function restoreImage(request: Request, env: MediaEnv, route: ImageMediaRoute) {

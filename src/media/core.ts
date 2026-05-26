@@ -1,5 +1,8 @@
 export const MEDIA_IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 export const MEDIA_OBJECT_CACHE_CONTROL = "public, max-age=31536000, immutable";
+export const CORE_IMAGE_KEY_PREFIX = "media/images";
+export const CORE_IMAGE_UPLOAD_PATH = "/api/formless/media/images";
+export const CORE_MEDIA_ROUTE_PREFIX = "/api/formless/media/";
 
 export type MediaImageFile = {
   bytes: Uint8Array;
@@ -23,8 +26,20 @@ export type MediaStoredObject = {
   writeHttpMetadata: (headers: Headers) => void;
 };
 
+export type MediaStoredObjectListing = {
+  contentType?: string;
+  customMetadata?: Record<string, string>;
+  key: string;
+  size?: number;
+};
+
+export type MediaObjectList = {
+  objects: MediaStoredObjectListing[];
+};
+
 export type MediaObjectStore = {
   getObject: (key: string) => Promise<MediaStoredObject | undefined>;
+  listObjects?: (options: { limit?: number; prefix: string }) => Promise<MediaObjectList>;
   putObject: (write: MediaObjectWrite) => Promise<void>;
 };
 
@@ -198,6 +213,101 @@ export function imageMediaDeliveryFactsForAssetId(
     href: options.hrefForKey(storageKey),
     kind: "image",
     storageKey,
+  };
+}
+
+export function coreImageMediaDeliveryFactsForAssetId(
+  assetId: string,
+): MediaAssetDeliveryFacts | undefined {
+  return imageMediaDeliveryFactsForAssetId(assetId, {
+    hrefForKey: coreMediaHrefForKey,
+    keyPrefix: `${CORE_IMAGE_KEY_PREFIX}/`,
+  });
+}
+
+export function coreMediaHrefForKey(key: string): string {
+  return `${CORE_MEDIA_ROUTE_PREFIX}${key}`;
+}
+
+export async function listImageMediaAssets({
+  hrefForKey,
+  keyPrefix,
+  limit = 50,
+  provider,
+  store,
+}: {
+  hrefForKey?: (key: string) => string;
+  keyPrefix: string;
+  limit?: number;
+  provider?: string;
+  store: MediaObjectStore;
+}): Promise<MediaAsset[]> {
+  if (!store.listObjects) {
+    return [];
+  }
+
+  const listing = await store.listObjects({ limit, prefix: keyPrefix });
+
+  return listing.objects
+    .map((object) => ({
+      asset:
+        mediaAssetFromObjectMetadata(object.customMetadata) ??
+        mediaAssetFromListingObject(object, { hrefForKey, keyPrefix, provider }),
+      key: object.key,
+    }))
+    .filter(
+      (entry): entry is { asset: MediaAsset; key: string } =>
+        entry.asset !== undefined &&
+        entry.asset.kind === "image" &&
+        entry.asset.storageKey === entry.key &&
+        entry.asset.storageKey.startsWith(keyPrefix),
+    )
+    .map((entry) => entry.asset)
+    .sort(
+      (left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id),
+    );
+}
+
+function mediaAssetFromListingObject(
+  object: MediaStoredObjectListing,
+  options: {
+    hrefForKey?: (key: string) => string;
+    keyPrefix: string;
+    provider?: string;
+  },
+): MediaAsset | undefined {
+  if (!options.hrefForKey || !options.provider) {
+    return undefined;
+  }
+
+  if (!isRestorableImageMediaKey(object.key, { keyPrefix: options.keyPrefix })) {
+    return undefined;
+  }
+
+  const assetId = object.key.slice(options.keyPrefix.length);
+  const contentType =
+    normalizeMediaContentType(object.contentType ?? "") || imageMediaContentTypeForKey(object.key);
+
+  if (
+    !isValidImageMediaAssetId(assetId) ||
+    !contentType ||
+    imageMediaExtensionForContentType(contentType) === undefined ||
+    object.size === undefined ||
+    object.size < 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    byteSize: object.size,
+    contentType,
+    deliveryHref: options.hrefForKey(object.key),
+    id: assetId,
+    kind: "image",
+    label: assetId,
+    provider: options.provider,
+    status: "ready",
+    storageKey: object.key,
   };
 }
 

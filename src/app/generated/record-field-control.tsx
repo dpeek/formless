@@ -19,8 +19,9 @@ import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
 import { ValueUnitInput } from "@dpeek/formless-ui/value-unit-input";
 import type { DateValue } from "@internationalized/date";
 import type { FocusEvent, KeyboardEvent } from "react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SITE_IMAGE_UPLOAD_ACCEPT } from "../../client/media.ts";
+import type { ImageMediaAssetOption } from "../../client/media.ts";
 import { useReferenceOptions } from "../../client/store.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
@@ -83,6 +84,7 @@ export function GeneratedRecordFieldControl({
   onIconOpenChange,
   onIconSave,
   onImageFileSelect,
+  onMediaAssetSelect,
   onPatchValues,
   onUnitDraftChange,
   onUnitDraftRevert,
@@ -91,6 +93,9 @@ export function GeneratedRecordFieldControl({
   recordValue,
   showLabel = false,
   unitDraft,
+  mediaAssetOptions,
+  mediaEditorMode,
+  mediaPreviewHref,
   uploadEnabled,
 }: {
   canPatch: boolean;
@@ -110,6 +115,7 @@ export function GeneratedRecordFieldControl({
   onIconOpenChange: (open: boolean) => void;
   onIconSave: () => Promise<void>;
   onImageFileSelect: (file: File | undefined) => void;
+  onMediaAssetSelect: (assetId: string) => void;
   onPatchValues: (values: Partial<RecordValues>) => void;
   onUnitDraftChange: (value: string) => void;
   onUnitDraftRevert: () => void;
@@ -118,6 +124,9 @@ export function GeneratedRecordFieldControl({
   recordValue: FieldValue | undefined;
   showLabel?: boolean;
   unitDraft: string;
+  mediaAssetOptions: ImageMediaAssetOption[];
+  mediaEditorMode: "asset" | "url";
+  mediaPreviewHref?: string;
   uploadEnabled: boolean;
 }) {
   const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
@@ -354,11 +363,15 @@ export function GeneratedRecordFieldControl({
         field={field}
         fieldControl={fieldControl}
         fieldKind={rendererKind}
+        mediaAssetOptions={mediaAssetOptions}
+        mediaEditorMode={mediaEditorMode}
+        mediaPreviewHref={mediaPreviewHref}
         isPending={isPending}
         labelClass={labelClass}
         onDraftChange={onDraftChange}
         onDraftRevert={onDraftRevert}
         onImageFileSelect={onImageFileSelect}
+        onMediaAssetSelect={onMediaAssetSelect}
         onValueCommit={onValueCommit}
         uploadEnabled={uploadEnabled}
       />
@@ -1247,11 +1260,15 @@ function RecordMediaFieldRenderer({
   field,
   fieldControl,
   fieldKind,
+  mediaAssetOptions,
+  mediaEditorMode,
+  mediaPreviewHref,
   isPending,
   labelClass,
   onDraftChange,
   onDraftRevert,
   onImageFileSelect,
+  onMediaAssetSelect,
   onValueCommit,
   uploadEnabled,
 }: {
@@ -1262,11 +1279,15 @@ function RecordMediaFieldRenderer({
   field: FieldSchema;
   fieldControl: GeneratedFieldControl;
   fieldKind: "image" | "media";
+  mediaAssetOptions: ImageMediaAssetOption[];
+  mediaEditorMode: "asset" | "url";
+  mediaPreviewHref?: string;
   isPending: boolean;
   labelClass: string;
   onDraftChange: (value: string) => void;
   onDraftRevert: () => void;
   onImageFileSelect: (file: File | undefined) => void;
+  onMediaAssetSelect: (assetId: string) => void;
   onValueCommit: (value: FieldValue) => void;
   uploadEnabled: boolean;
 }) {
@@ -1279,10 +1300,14 @@ function RecordMediaFieldRenderer({
         draft={draft}
         error={error}
         fieldKind={fieldKind}
+        mediaAssetOptions={mediaAssetOptions}
+        mediaEditorMode={mediaEditorMode}
+        mediaPreviewHref={mediaPreviewHref}
         isPending={isPending}
         label={fieldControl.label}
         onDraftChange={onDraftChange}
         onFileSelect={onImageFileSelect}
+        onMediaAssetSelect={onMediaAssetSelect}
         onUrlCommit={(value) => {
           onValueCommit(inputValueToFieldValue(field, value));
         }}
@@ -1497,10 +1522,14 @@ function MediaFieldControl({
   draft,
   error,
   fieldKind,
+  mediaAssetOptions,
+  mediaEditorMode,
+  mediaPreviewHref,
   isPending,
   label,
   onDraftChange,
   onFileSelect,
+  onMediaAssetSelect,
   onUrlCommit,
   onUrlRevert,
   required,
@@ -1511,16 +1540,30 @@ function MediaFieldControl({
   draft: string;
   error: string | null;
   fieldKind: "image" | "media";
+  mediaAssetOptions: ImageMediaAssetOption[];
+  mediaEditorMode: "asset" | "url";
+  mediaPreviewHref?: string;
   isPending: boolean;
   label: string;
   onDraftChange: (value: string) => void;
   onFileSelect: (file: File | undefined) => void;
+  onMediaAssetSelect: (assetId: string) => void;
   onUrlCommit: (value: string) => void;
   onUrlRevert: () => void;
   required: boolean;
   uploadEnabled: boolean;
 }) {
   const uploadDisabled = !canPatch || isPending || !uploadEnabled;
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const previewHref = mediaEditorMode === "asset" ? mediaPreviewHref : draft;
+  const previewState =
+    draft === "" ? "empty" : previewHref === undefined || previewFailed ? "broken" : "image";
+  const assetLabel = mediaEditorMode === "asset" ? mediaAssetLabel(label) : label;
+  const inputLabel = mediaEditorMode === "asset" ? `${assetLabel} id` : `${label} URL`;
+  const unknownAssetSelected =
+    mediaEditorMode === "asset" &&
+    draft !== "" &&
+    !mediaAssetOptions.some((asset) => asset.id === draft);
   const previewClassName =
     density === "compact"
       ? `relative flex h-16 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 ${
@@ -1533,6 +1576,10 @@ function MediaFieldControl({
             ? "cursor-not-allowed opacity-70"
             : "cursor-pointer hover:border-slate-300 hover:bg-slate-100"
         }`;
+
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [previewHref]);
 
   function handleUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
@@ -1551,27 +1598,29 @@ function MediaFieldControl({
     <div
       className={density === "compact" ? "w-full min-w-0 space-y-2" : "w-full min-w-0 space-y-3"}
       data-web-field-kind={fieldKind}
+      data-web-media-field-mode={fieldKind === "media" ? mediaEditorMode : undefined}
     >
       <label
         className={previewClassName}
-        data-web-image-field-preview={draft === "" ? "empty" : "image"}
+        data-web-image-field-preview={previewState}
         data-web-image-field-upload="trigger"
-        data-web-media-field-preview={
-          fieldKind === "media" ? (draft === "" ? "empty" : "image") : undefined
-        }
+        data-web-media-field-preview={fieldKind === "media" ? previewState : undefined}
         data-web-media-field-upload={fieldKind === "media" ? "trigger" : undefined}
         title={`Upload ${label}`}
       >
-        {draft === "" ? (
+        {previewState === "empty" ? (
           <span aria-hidden="true" className="text-2xl leading-none text-slate-500">
             +
           </span>
+        ) : previewState === "broken" ? (
+          <span className="px-3 text-center text-xs font-medium text-slate-500">Missing image</span>
         ) : (
           <img
             alt={`${label} preview`}
             className="h-full w-full object-contain"
             loading="lazy"
-            src={draft}
+            onError={() => setPreviewFailed(true)}
+            src={previewHref ?? ""}
           />
         )}
         <input
@@ -1588,15 +1637,40 @@ function MediaFieldControl({
           type="file"
         />
       </label>
+      {mediaEditorMode === "asset" ? (
+        <NativeSelect>
+          <Label className="sr-only">{assetLabel}</Label>
+          <NativeSelectContent
+            aria-label={assetLabel}
+            className={density === "compact" ? compactNativeSelectClassName : undefined}
+            disabled={!canPatch || isPending}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+
+              onDraftChange(value);
+              onMediaAssetSelect(value);
+            }}
+            value={draft}
+          >
+            {!required || draft === "" ? <option value="" /> : null}
+            {unknownAssetSelected ? <option value={draft}>Current asset: {draft}</option> : null}
+            {mediaAssetOptions.map((asset) => (
+              <option key={asset.id} value={asset.id}>
+                {asset.label}
+              </option>
+            ))}
+          </NativeSelectContent>
+        </NativeSelect>
+      ) : null}
       <TextField
         isDisabled={!canPatch || isPending}
         isInvalid={error !== null}
         isRequired={required}
       >
-        <Label className="sr-only">{label} URL</Label>
+        <Label className="sr-only">{inputLabel}</Label>
         <Input
           aria-invalid={error !== null ? true : undefined}
-          aria-label={`${label} URL`}
+          aria-label={inputLabel}
           className={
             density === "compact"
               ? compactNativeInputClassName
@@ -1606,7 +1680,7 @@ function MediaFieldControl({
           onBlur={(event) => onUrlCommit(event.currentTarget.value)}
           onChange={(event) => onDraftChange(event.currentTarget.value)}
           onKeyDown={handleUrlKeyDown}
-          placeholder={label}
+          placeholder={inputLabel}
           required={required}
           type="text"
           value={draft}
@@ -1615,6 +1689,10 @@ function MediaFieldControl({
       </TextField>
     </div>
   );
+}
+
+function mediaAssetLabel(label: string) {
+  return label.toLowerCase().includes("asset") ? label : `${label} asset`;
 }
 
 function valueUnitPatch(

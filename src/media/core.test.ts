@@ -2,11 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   MEDIA_OBJECT_CACHE_CONTROL,
+  coreImageMediaDeliveryFactsForAssetId,
   deliveryFactsForMediaObject,
   imageMediaContentTypeForKey,
   imageMediaDeliveryFactsForAssetId,
   imageMediaExtensionForContentType,
   isRestorableImageMediaKey,
+  listImageMediaAssets,
   mediaAssetFromObjectMetadata,
   type MediaObjectStore,
   restoreImageMedia,
@@ -181,6 +183,88 @@ describe("core media", () => {
         keyPrefix: "site/images/",
       }),
     ).toBeUndefined();
+    expect(coreImageMediaDeliveryFactsForAssetId("asset-1.webp")).toEqual({
+      assetId: "asset-1.webp",
+      href: "/api/formless/media/media/images/asset-1.webp",
+      kind: "image",
+      storageKey: "media/images/asset-1.webp",
+    });
+  });
+
+  it("lists image media assets from object metadata", async () => {
+    const store = memoryMediaObjectStore();
+
+    await uploadImageMedia({
+      file: {
+        bytes: pngBytes,
+        contentType: "image/png",
+        filename: "z-cover.png",
+        size: pngBytes.byteLength,
+      },
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      keyPrefix: "media/images/",
+      provider: "r2",
+      randomId: () => "z-cover",
+      store,
+    });
+    await uploadImageMedia({
+      file: {
+        bytes: pngBytes,
+        contentType: "image/webp",
+        filename: "a-hero.webp",
+        size: pngBytes.byteLength,
+      },
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      keyPrefix: "media/images/",
+      provider: "r2",
+      randomId: () => "a-hero",
+      store,
+    });
+    await restoreImageMedia({
+      bytes: pngBytes,
+      contentType: "image/png",
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      key: "media/images/restored.png",
+      keyPrefix: "media/images/",
+      store,
+    });
+
+    expect(await listImageMediaAssets({ keyPrefix: "media/images/", store })).toMatchObject([
+      { id: "a-hero.webp", label: "a-hero.webp" },
+      { id: "z-cover.png", label: "z-cover.png" },
+    ]);
+  });
+
+  it("lists image media assets from image object facts when metadata is unavailable", async () => {
+    const store = memoryMediaObjectStore();
+
+    await store.putObject({
+      bytes: pngBytes,
+      cacheControl: MEDIA_OBJECT_CACHE_CONTROL,
+      contentType: "image/png",
+      key: "media/images/fallback.png",
+    });
+
+    expect(
+      await listImageMediaAssets({
+        hrefForKey: (key) => `/api/formless/media/${key}`,
+        keyPrefix: "media/images/",
+        provider: "r2",
+        store,
+      }),
+    ).toEqual([
+      {
+        byteSize: pngBytes.byteLength,
+        contentType: "image/png",
+        deliveryHref: "/api/formless/media/media/images/fallback.png",
+        id: "fallback.png",
+        kind: "image",
+        label: "fallback.png",
+        provider: "r2",
+        status: "ready",
+        storageKey: "media/images/fallback.png",
+      },
+    ]);
   });
 
   it("normalizes uploaded filenames into media asset labels", async () => {
@@ -232,6 +316,19 @@ function memoryMediaObjectStore(): MediaObjectStore & {
           headers.set("Content-Type", object.contentType);
           headers.set("Cache-Control", object.cacheControl);
         },
+      };
+    },
+    async listObjects(options) {
+      return {
+        objects: [...objects.values()]
+          .filter((object) => object.key.startsWith(options.prefix))
+          .slice(0, options.limit)
+          .map((object) => ({
+            customMetadata: object.customMetadata,
+            key: object.key,
+            contentType: object.contentType,
+            size: object.bytes.byteLength,
+          })),
       };
     },
     async putObject(write) {
