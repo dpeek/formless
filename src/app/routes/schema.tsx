@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
+import { Badge } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
-import { ObjectList } from "@dpeek/formless-ui/object-list";
-import { Link, useLocation } from "wouter";
+import {
+  ControlAddIcon,
+  ControlCheckIcon,
+  ControlCloseIcon,
+  ControlDisclosureIcon,
+  ControlIndeterminateIcon,
+  ControlLoadingIcon,
+} from "@dpeek/formless-ui/icons";
+import {
+  ModalBody,
+  ModalClose,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "@dpeek/formless-ui/modal";
 import type { GeneratedFieldControlKind } from "../generated/field-controls.ts";
 import { selectGeneratedFieldEditorAdapter } from "../generated/field-ui-adapters.ts";
 import {
@@ -61,7 +76,6 @@ export function SchemaRoute({
   const appTarget = target ?? schemaKey;
   const appTargetIdentity = appStorageIdentityForClientTarget(appTarget);
   const app = getSchemaAppDefinition(schemaKey);
-  const [location] = useLocation();
   const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
   const activeSchema = useSchema();
@@ -82,7 +96,6 @@ export function SchemaRoute({
   const isDirty = routeDraftState ? isSchemaRouteDraftDirty(routeDraftState) : false;
   const sourceError = routeDraftState?.sourceError ?? null;
   const [isSaving, setIsSaving] = useState(false);
-  const appRoute = appRouteFromSchemaRoute(location);
 
   useEffect(() => {
     selectClientStoreTarget(appTarget);
@@ -203,18 +216,17 @@ export function SchemaRoute({
     <section className="mx-auto w-full max-w-[112rem] space-y-4">
       <form className="space-y-4" onSubmit={submitSchema}>
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-          <div className="min-w-0 space-y-1">
-            <h1 className="text-2xl font-semibold">{app.label} Schema</h1>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              <span>
-                Key <code>{app.key}</code>
-              </span>
-              <SchemaDraftStatus
-                isDirty={isDirty}
-                isLoaded={routeDraftState !== null}
-                sourceError={sourceError}
-              />
-            </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-600">Schema</span>
+            <Badge data-slot="schema-key-badge" intent="outline" isCircle={false}>
+              {app.key}
+            </Badge>
+            <SchemaDraftStatus
+              isDirty={isDirty}
+              isLoaded={routeDraftState !== null}
+              isSaving={isSaving}
+              sourceError={sourceError}
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -232,12 +244,6 @@ export function SchemaRoute({
             >
               {isSaving ? "Saving..." : "Save schema"}
             </Button>
-            <Link
-              className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-900 hover:bg-slate-50 hover:no-underline"
-              href={appRoute}
-            >
-              Open app
-            </Link>
           </div>
         </header>
 
@@ -278,28 +284,48 @@ export function SchemaRoute({
 function SchemaDraftStatus({
   isDirty,
   isLoaded,
+  isSaving,
   sourceError,
 }: {
   isDirty: boolean;
   isLoaded: boolean;
+  isSaving: boolean;
   sourceError: string | null;
 }) {
-  const label = !isLoaded
-    ? "Loading draft"
+  if (!isLoaded) {
+    return null;
+  }
+
+  const label = isSaving
+    ? "Schema saving"
     : sourceError
-      ? "Source invalid"
+      ? "Schema source invalid"
       : isDirty
-        ? "Unsaved draft"
-        : "Saved draft";
-  const tone = sourceError
-    ? "border-red-200 bg-red-50 text-red-700"
-    : isDirty
-      ? "border-amber-200 bg-amber-50 text-amber-800"
-      : "border-emerald-200 bg-emerald-50 text-emerald-700";
+        ? "Schema has unsaved changes"
+        : "Schema saved";
+  const tone = isSaving
+    ? "border-sky-200 bg-sky-50 text-sky-700"
+    : sourceError
+      ? "border-red-200 bg-red-50 text-red-700"
+      : isDirty
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const Icon = isSaving
+    ? ControlLoadingIcon
+    : sourceError
+      ? ControlCloseIcon
+      : isDirty
+        ? ControlIndeterminateIcon
+        : ControlCheckIcon;
 
   return (
-    <span className={`rounded border px-2 py-0.5 text-xs font-medium ${tone}`} role="status">
-      {label}
+    <span
+      aria-label={label}
+      className={`inline-flex size-7 items-center justify-center rounded border ${tone}`}
+      role="status"
+      title={label}
+    >
+      <Icon aria-hidden className={`size-3.5 ${isSaving ? "animate-spin" : ""}`} />
     </span>
   );
 }
@@ -369,6 +395,9 @@ function SchemaBuilderWorkspace({
   const [newFieldType, setNewFieldType] = useState<FieldSchema["type"]>("text");
   const [newReferenceTarget, setNewReferenceTarget] = useState("");
   const [fieldFormError, setFieldFormError] = useState<string | null>(null);
+  const [collapsedEntityKeys, setCollapsedEntityKeys] = useState<Set<string>>(() => new Set());
+  const [isCreateEntityDialogOpen, setIsCreateEntityDialogOpen] = useState(false);
+  const [createFieldEntityKey, setCreateFieldEntityKey] = useState<string | null>(null);
   const projection = useMemo(
     () => (draftState ? projectSchemaBuilderDraft(draftState.draft) : null),
     [draftState],
@@ -413,10 +442,44 @@ function SchemaBuilderWorkspace({
     selectedEntity && selectedFieldProjection
       ? schema.entities[selectedEntity.key]?.fields[selectedFieldProjection.key]
       : undefined;
+  const createFieldEntity =
+    createFieldEntityKey === null
+      ? undefined
+      : entities.find((entity) => entity.key === createFieldEntityKey);
   const referenceTargetForNewField =
     newReferenceTarget && schema.entities[newReferenceTarget] !== undefined
       ? newReferenceTarget
-      : (selectedEntity?.key ?? entities[0]?.key ?? "");
+      : (createFieldEntity?.key ?? selectedEntity?.key ?? entities[0]?.key ?? "");
+
+  function toggleEntityExpanded(entityKey: string) {
+    setCollapsedEntityKeys((current) => {
+      const next = new Set(current);
+
+      if (next.has(entityKey)) {
+        next.delete(entityKey);
+      } else {
+        next.add(entityKey);
+      }
+
+      return next;
+    });
+  }
+
+  function openCreateEntityDialog() {
+    setEntityFormError(null);
+    setIsCreateEntityDialogOpen(true);
+  }
+
+  function openCreateFieldDialog(entityKey: string) {
+    setSelectedEntityKey(entityKey);
+    setFieldFormError(null);
+    setCreateFieldEntityKey(entityKey);
+    setCollapsedEntityKeys((current) => {
+      const next = new Set(current);
+      next.delete(entityKey);
+      return next;
+    });
+  }
 
   function createEntity() {
     const key = newEntityKey.trim();
@@ -441,14 +504,20 @@ function SchemaBuilderWorkspace({
     if (created) {
       setSelectedEntityKey(key);
       setSelectedFieldKey(null);
+      setCollapsedEntityKeys((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
       setNewEntityKey("");
       setNewEntityLabel("");
       setEntityFormError(null);
+      setIsCreateEntityDialogOpen(false);
     }
   }
 
   function addField() {
-    if (!selectedEntity) {
+    if (!createFieldEntity) {
       return;
     }
 
@@ -460,8 +529,8 @@ function SchemaBuilderWorkspace({
       return;
     }
 
-    if (schema.entities[selectedEntity.key]?.fields[fieldKey] !== undefined) {
-      setFieldFormError(`Field key "${selectedEntity.key}.${fieldKey}" already exists.`);
+    if (schema.entities[createFieldEntity.key]?.fields[fieldKey] !== undefined) {
+      setFieldFormError(`Field key "${createFieldEntity.key}.${fieldKey}" already exists.`);
       return;
     }
 
@@ -469,17 +538,54 @@ function SchemaBuilderWorkspace({
       newFieldType === "reference" ? { to: referenceTargetForNewField } : {};
     const added = onApplyIntent({
       type: "addField",
-      entityKey: selectedEntity.key,
+      entityKey: createFieldEntity.key,
       fieldKey,
       fieldType: newFieldType,
       metadata,
     });
 
     if (added) {
+      setSelectedEntityKey(createFieldEntity.key);
       setSelectedFieldKey(fieldKey);
+      setCollapsedEntityKeys((current) => {
+        const next = new Set(current);
+        next.delete(createFieldEntity.key);
+        return next;
+      });
       setNewFieldKey("");
       setFieldFormError(null);
+      setCreateFieldEntityKey(null);
     }
+  }
+
+  function updateEntityLabel(entityKey: string, label: string) {
+    const entity = entities.find((candidate) => candidate.key === entityKey);
+
+    if (!entity || label === entity.label) {
+      return;
+    }
+
+    onApplyIntent({
+      type: "updateEntityLabel",
+      entityKey,
+      label,
+    });
+  }
+
+  function updateFieldLabel(entityKey: string, fieldKey: string, label: string) {
+    const entity = entities.find((candidate) => candidate.key === entityKey);
+    const field = entity?.fields.find((candidate) => candidate.key === fieldKey);
+
+    if (!field || label === field.label) {
+      return;
+    }
+
+    onApplyIntent({
+      type: "updateFieldMetadata",
+      entityKey,
+      fieldKey,
+      metadata: { label },
+    });
   }
 
   function updateSelectedEntityLabel(label: string) {
@@ -535,223 +641,479 @@ function SchemaBuilderWorkspace({
   }
 
   return (
-    <div className="grid min-h-[32rem] grid-cols-1 overflow-hidden rounded border border-slate-200 bg-white lg:grid-cols-[18rem_22rem_minmax(0,1fr)]">
-      <aside
-        aria-label="Builder entities"
-        className="flex min-h-0 flex-col border-b border-slate-200 bg-slate-50 lg:border-r lg:border-b-0"
-      >
-        <SchemaBuilderEntityList
-          entities={entities}
-          onSelectEntity={(entityKey) => {
-            setSelectedEntityKey(entityKey);
-            setSelectedFieldKey(null);
-          }}
-          selectedEntityKey={selectedEntityKey}
-        />
-
-        <div className="border-t border-slate-200">
-          <div aria-label="Create entity" className="space-y-2 p-3" role="form">
-            <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-              New entity
+    <>
+      <div className="grid min-h-[32rem] grid-cols-1 overflow-hidden rounded border border-slate-200 bg-white lg:grid-cols-[30rem_minmax(0,1fr)]">
+        <aside
+          aria-label="Builder schema tree"
+          className="flex min-h-0 flex-col border-b border-slate-200 bg-slate-50 lg:border-r lg:border-b-0"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-slate-900">Schema tree</h2>
+              <p className="text-xs text-slate-500">{entities.length} entities</p>
             </div>
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-slate-600">Key</span>
-              <input
-                className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
-                onChange={(event) => setNewEntityKey(event.currentTarget.value)}
-                placeholder="project"
-                value={newEntityKey}
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-slate-600">Label</span>
-              <input
-                className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
-                onChange={(event) => setNewEntityLabel(event.currentTarget.value)}
-                placeholder="Project"
-                value={newEntityLabel}
-              />
-            </label>
-            {entityFormError && <BuilderInlineError>{entityFormError}</BuilderInlineError>}
-            <Button onPress={createEntity} type="button">
-              Create entity
+            <Button
+              aria-label="Create entity"
+              intent="outline"
+              onClick={openCreateEntityDialog}
+              size="sm"
+              type="button"
+            >
+              <ControlAddIcon aria-hidden />
+              <span>Create entity</span>
             </Button>
           </div>
-        </div>
-      </aside>
-      <section
-        aria-label={selectedEntity ? `${selectedEntity.label} fields` : "Builder fields"}
-        className="border-b border-slate-200 lg:border-r lg:border-b-0"
-      >
-        {selectedEntity ? (
-          <div className="flex h-full min-h-0 flex-col">
-            <SchemaBuilderFieldList
-              entity={selectedEntity}
-              onSelectField={setSelectedFieldKey}
-              selectedFieldKey={selectedFieldKey}
-            />
 
-            <div
-              aria-label="Add field"
-              className="space-y-2 border-t border-slate-200 p-4"
-              role="form"
-            >
-              <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                New field
-              </div>
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600">Key</span>
-                <input
-                  className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
-                  onChange={(event) => setNewFieldKey(event.currentTarget.value)}
-                  placeholder="title"
-                  value={newFieldKey}
-                />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600">Type</span>
-                <FieldTypeSelect
-                  onChange={(fieldType) => setNewFieldType(fieldType)}
-                  value={newFieldType}
-                />
-              </label>
-              {newFieldType === "reference" && (
-                <label className="block space-y-1">
-                  <span className="text-xs font-medium text-slate-600">Reference target</span>
-                  <EntitySelect
-                    entities={entities}
-                    onChange={setNewReferenceTarget}
-                    value={referenceTargetForNewField}
-                  />
-                </label>
-              )}
-              {fieldFormError && <BuilderInlineError>{fieldFormError}</BuilderInlineError>}
-              <Button onPress={addField} type="button">
-                Add field
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 text-sm text-slate-600">Create an entity to start building.</div>
-        )}
-      </section>
-      <section aria-label="Field details" className="min-w-0 p-4">
-        {selectedEntity ? (
-          <div className="space-y-5">
-            <EntityDetails
-              entity={selectedEntity}
-              onCreateSurface={createSelectedEntitySurface}
-              onUpdateLabel={updateSelectedEntityLabel}
-            />
+          <SchemaBuilderTree
+            collapsedEntityKeys={collapsedEntityKeys}
+            entities={entities}
+            onAddField={openCreateFieldDialog}
+            onSelectEntity={(entityKey) => {
+              setSelectedEntityKey(entityKey);
+              setSelectedFieldKey(null);
+            }}
+            onSelectField={(entityKey, fieldKey) => {
+              setSelectedEntityKey(entityKey);
+              setSelectedFieldKey(fieldKey);
+            }}
+            onToggleEntity={toggleEntityExpanded}
+            onUpdateEntityLabel={updateEntityLabel}
+            onUpdateFieldLabel={updateFieldLabel}
+            selectedEntityKey={selectedEntityKey}
+            selectedFieldKey={selectedFieldKey}
+          />
+        </aside>
 
-            {selectedField && selectedFieldProjection ? (
-              <FieldDetails
-                entities={entities}
+        <section aria-label="Field details" className="min-w-0 p-4">
+          {selectedEntity ? (
+            <div className="space-y-5">
+              <EntityDetails
                 entity={selectedEntity}
-                field={selectedField}
-                fieldProjection={selectedFieldProjection}
-                onUpdateMetadata={updateSelectedFieldMetadata}
-                onUpdatePresentation={updateSelectedFieldPresentation}
-                schema={schema}
+                onCreateSurface={createSelectedEntitySurface}
+                onUpdateLabel={updateSelectedEntityLabel}
               />
-            ) : (
-              <div className="rounded border border-slate-200 px-3 py-4 text-sm text-slate-600">
-                Add a field to configure this entity.
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-sm text-slate-600">No entity selected.</div>
-        )}
-      </section>
+
+              {selectedField && selectedFieldProjection ? (
+                <FieldDetails
+                  entities={entities}
+                  entity={selectedEntity}
+                  field={selectedField}
+                  fieldProjection={selectedFieldProjection}
+                  onUpdateMetadata={updateSelectedFieldMetadata}
+                  onUpdatePresentation={updateSelectedFieldPresentation}
+                  schema={schema}
+                />
+              ) : (
+                <div className="rounded border border-slate-200 px-3 py-4 text-sm text-slate-600">
+                  Add a field to configure this entity.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-600">No entity selected.</div>
+          )}
+        </section>
+      </div>
+
+      <CreateEntityDialog
+        error={entityFormError}
+        labelValue={newEntityLabel}
+        keyValue={newEntityKey}
+        onCreate={createEntity}
+        onKeyChange={setNewEntityKey}
+        onLabelChange={setNewEntityLabel}
+        onOpenChange={(open) => {
+          setIsCreateEntityDialogOpen(open);
+          if (!open) {
+            setEntityFormError(null);
+          }
+        }}
+        open={isCreateEntityDialogOpen}
+      />
+
+      {createFieldEntity ? (
+        <CreateFieldDialog
+          entities={entities}
+          error={fieldFormError}
+          fieldType={newFieldType}
+          keyValue={newFieldKey}
+          onCreate={addField}
+          onFieldTypeChange={setNewFieldType}
+          onKeyChange={setNewFieldKey}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCreateFieldEntityKey(null);
+              setFieldFormError(null);
+            }
+          }}
+          onReferenceTargetChange={setNewReferenceTarget}
+          open={true}
+          referenceTarget={referenceTargetForNewField}
+          targetEntity={createFieldEntity}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function SchemaBuilderTree({
+  collapsedEntityKeys,
+  entities,
+  onAddField,
+  onSelectEntity,
+  onSelectField,
+  onToggleEntity,
+  onUpdateEntityLabel,
+  onUpdateFieldLabel,
+  selectedEntityKey,
+  selectedFieldKey,
+}: {
+  collapsedEntityKeys: Set<string>;
+  entities: SchemaBuilderEntityProjection[];
+  onAddField: (entityKey: string) => void;
+  onSelectEntity: (entityKey: string) => void;
+  onSelectField: (entityKey: string, fieldKey: string) => void;
+  onToggleEntity: (entityKey: string) => void;
+  onUpdateEntityLabel: (entityKey: string, label: string) => void;
+  onUpdateFieldLabel: (entityKey: string, fieldKey: string, label: string) => void;
+  selectedEntityKey: string | null;
+  selectedFieldKey: string | null;
+}) {
+  return (
+    <div
+      className="min-h-0 flex-1 overflow-auto p-3"
+      role="tree"
+      aria-label="Schema entities and fields"
+    >
+      {entities.length === 0 ? (
+        <div className="rounded border border-dashed border-slate-300 bg-white px-3 py-6 text-sm text-slate-600">
+          No entities are currently defined.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {entities.map((entity) => {
+            const isExpanded = !collapsedEntityKeys.has(entity.key);
+            const entityIsSelected = selectedEntityKey === entity.key && selectedFieldKey === null;
+
+            return (
+              <section
+                aria-label={`${entity.label} entity`}
+                className="rounded border border-slate-200 bg-white"
+                data-entity-key={entity.key}
+                key={entity.key}
+                role="none"
+              >
+                <div
+                  className={`flex min-w-0 items-center gap-2 rounded-t px-2 py-2 ${
+                    entityIsSelected ? "bg-slate-100" : ""
+                  }`}
+                  onClick={() => onSelectEntity(entity.key)}
+                  role="treeitem"
+                  aria-expanded={isExpanded}
+                  aria-selected={entityIsSelected}
+                >
+                  <Button
+                    aria-controls={`schema-builder-fields-${entity.key}`}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${entity.label}`}
+                    className="shrink-0"
+                    intent="plain"
+                    isCircle
+                    onPress={() => onToggleEntity(entity.key)}
+                    size="sq-xs"
+                    type="button"
+                  >
+                    <ControlDisclosureIcon
+                      aria-hidden
+                      className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                    />
+                  </Button>
+                  <input
+                    aria-label={`Entity label for ${entity.key}`}
+                    className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-slate-900 hover:border-slate-200 focus:border-slate-400 focus:bg-white focus:outline-none"
+                    defaultValue={entity.label}
+                    key={`${entity.key}:${entity.label}`}
+                    onBlur={(event) => onUpdateEntityLabel(entity.key, event.currentTarget.value)}
+                    onFocus={() => onSelectEntity(entity.key)}
+                    onKeyDown={blurInputOnEnter}
+                  />
+                  <Badge data-slot="entity-key-badge" intent="outline" isCircle={false}>
+                    {entity.key}
+                  </Badge>
+                  <BuilderSavedStatus
+                    isSaved={entity.saved}
+                    label={`${entity.label} entity ${entity.saved ? "saved" : "draft"}`}
+                  />
+                </div>
+
+                <div
+                  className={isExpanded ? "border-t border-slate-100 px-2 py-2" : "hidden"}
+                  id={`schema-builder-fields-${entity.key}`}
+                  role="group"
+                >
+                  {entity.fields.length === 0 ? (
+                    <p className="px-8 py-2 text-sm text-slate-600">
+                      No fields are currently defined.
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {entity.fields.map((field) => (
+                        <SchemaBuilderFieldTreeRow
+                          entity={entity}
+                          field={field}
+                          isSelected={
+                            selectedEntityKey === entity.key && selectedFieldKey === field.key
+                          }
+                          key={field.key}
+                          onSelectField={onSelectField}
+                          onUpdateFieldLabel={onUpdateFieldLabel}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 pl-8">
+                    <Button
+                      aria-label={`Create field for ${entity.label}`}
+                      intent="outline"
+                      onClick={() => onAddField(entity.key)}
+                      size="sm"
+                      type="button"
+                    >
+                      <ControlAddIcon aria-hidden />
+                      <span>Add field</span>
+                    </Button>
+                  </div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function SchemaBuilderEntityList({
-  entities,
-  onSelectEntity,
-  selectedEntityKey,
+function SchemaBuilderFieldTreeRow({
+  entity,
+  field,
+  isSelected,
+  onSelectField,
+  onUpdateFieldLabel,
 }: {
-  entities: SchemaBuilderEntityProjection[];
-  onSelectEntity: (entityKey: string) => void;
-  selectedEntityKey: string | null;
+  entity: SchemaBuilderEntityProjection;
+  field: SchemaBuilderFieldProjection;
+  isSelected: boolean;
+  onSelectField: (entityKey: string, fieldKey: string) => void;
+  onUpdateFieldLabel: (entityKey: string, fieldKey: string, label: string) => void;
 }) {
   return (
-    <ObjectList
-      className="flex min-h-0 flex-1 flex-col p-3"
-      emptyState="No entities are currently defined."
-      getKey={(entity) => entity.key}
-      getTextValue={(entity) => entity.label}
-      gridClassName="min-h-0 flex-1 overflow-auto bg-white"
-      itemClassName="px-2 py-2"
-      items={entities}
-      label="Entities"
-      onSelectionChange={(key) => {
-        if (key !== null) {
-          onSelectEntity(String(key));
-        }
-      }}
-      renderItem={({ item: entity, isSelected }) => (
-        <div className="min-w-0">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-sm font-medium text-slate-900">{entity.label}</span>
-            <code className="shrink-0 text-xs text-slate-500">{entity.key}</code>
-          </div>
-          <div className="mt-1 text-xs text-slate-500">
-            {entity.fields.length} {entity.fields.length === 1 ? "field" : "fields"}
-          </div>
-          {isSelected && <span className="sr-only">Selected entity</span>}
-        </div>
-      )}
-      selectedKey={selectedEntityKey}
-    />
+    <div
+      aria-selected={isSelected}
+      className={`flex min-w-0 items-center gap-2 rounded px-2 py-1.5 pl-8 ${
+        isSelected ? "bg-slate-100" : "hover:bg-slate-50"
+      }`}
+      data-field-key={field.key}
+      onClick={() => onSelectField(entity.key, field.key)}
+      role="treeitem"
+    >
+      <input
+        aria-label={`Field label for ${entity.key}.${field.key}`}
+        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-1 text-sm text-slate-900 hover:border-slate-200 focus:border-slate-400 focus:bg-white focus:outline-none"
+        defaultValue={field.label}
+        key={`${entity.key}.${field.key}:${field.label}`}
+        onBlur={(event) => onUpdateFieldLabel(entity.key, field.key, event.currentTarget.value)}
+        onFocus={() => onSelectField(entity.key, field.key)}
+        onKeyDown={blurInputOnEnter}
+      />
+      <Badge data-slot="field-key-badge" intent="outline" isCircle={false}>
+        {field.key}
+      </Badge>
+      <Badge data-slot="field-type-badge" intent="secondary" isCircle={false}>
+        {field.type}
+      </Badge>
+      <BuilderSavedStatus
+        isSaved={field.saved}
+        label={`${field.label} field ${field.saved ? "saved" : "draft"}`}
+      />
+    </div>
   );
 }
 
-function SchemaBuilderFieldList({
-  entity,
-  onSelectField,
-  selectedFieldKey,
-}: {
-  entity: SchemaBuilderEntityProjection;
-  onSelectField: (fieldKey: string) => void;
-  selectedFieldKey: string | null;
-}) {
-  const surfaceDescription = entity.generatedSurface ? "Builder surface" : "Source-owned surface";
+function BuilderSavedStatus({ isSaved, label }: { isSaved: boolean; label: string }) {
+  const Icon = isSaved ? ControlCheckIcon : ControlIndeterminateIcon;
 
   return (
-    <ObjectList
-      className="flex min-h-0 flex-1 flex-col p-4"
-      description={`${entity.key} - ${surfaceDescription}`}
-      emptyState="No fields are currently defined."
-      getKey={(field) => field.key}
-      getTextValue={(field) => field.label}
-      gridClassName="min-h-0 flex-1 overflow-auto"
-      itemClassName="px-2 py-2"
-      items={entity.fields}
-      label={`${entity.label} fields`}
-      onSelectionChange={(key) => {
-        if (key !== null) {
-          onSelectField(String(key));
-        }
-      }}
-      renderItem={({ item: field, isSelected }) => (
-        <div className="min-w-0">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="truncate text-sm font-medium text-slate-900">{field.label}</span>
-            <code className="shrink-0 text-xs text-slate-500">{field.key}</code>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>{field.type}</span>
-            {field.required && <span>Required</span>}
-            {field.saved ? <span>Saved</span> : <span>Draft</span>}
-          </div>
-          {isSelected && <span className="sr-only">Selected field</span>}
+    <span
+      aria-label={label}
+      className={`inline-flex size-6 shrink-0 items-center justify-center rounded border ${
+        isSaved
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-amber-200 bg-amber-50 text-amber-800"
+      }`}
+      role="status"
+      title={label}
+    >
+      <Icon aria-hidden className="size-3" />
+    </span>
+  );
+}
+
+function blurInputOnEnter(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  event.currentTarget.blur();
+}
+
+function submitDialogOnEnter(
+  event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
+  onSubmit: () => void,
+) {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  onSubmit();
+}
+
+function CreateEntityDialog({
+  error,
+  keyValue,
+  labelValue,
+  onCreate,
+  onKeyChange,
+  onLabelChange,
+  onOpenChange,
+  open,
+}: {
+  error: string | null;
+  keyValue: string;
+  labelValue: string;
+  onCreate: () => void;
+  onKeyChange: (value: string) => void;
+  onLabelChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}) {
+  return (
+    <ModalContent isOpen={open} onOpenChange={onOpenChange} size="sm">
+      <ModalHeader>
+        <ModalTitle>Create entity</ModalTitle>
+      </ModalHeader>
+      <ModalBody>
+        <div aria-label="Create entity dialog" className="space-y-3" role="form">
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Key</span>
+            <input
+              className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
+              onChange={(event) => onKeyChange(event.currentTarget.value)}
+              onKeyDown={(event) => submitDialogOnEnter(event, onCreate)}
+              placeholder="project"
+              value={keyValue}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Label</span>
+            <input
+              className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
+              onChange={(event) => onLabelChange(event.currentTarget.value)}
+              onKeyDown={(event) => submitDialogOnEnter(event, onCreate)}
+              placeholder="Project"
+              value={labelValue}
+            />
+          </label>
+          {error && <BuilderInlineError>{error}</BuilderInlineError>}
         </div>
-      )}
-      selectedKey={selectedFieldKey}
-    />
+      </ModalBody>
+      <ModalFooter>
+        <ModalClose intent="outline" type="button">
+          Cancel
+        </ModalClose>
+        <Button onPress={onCreate} type="button">
+          Create entity
+        </Button>
+      </ModalFooter>
+    </ModalContent>
+  );
+}
+
+function CreateFieldDialog({
+  entities,
+  error,
+  fieldType,
+  keyValue,
+  onCreate,
+  onFieldTypeChange,
+  onKeyChange,
+  onOpenChange,
+  onReferenceTargetChange,
+  open,
+  referenceTarget,
+  targetEntity,
+}: {
+  entities: SchemaBuilderEntityProjection[];
+  error: string | null;
+  fieldType: FieldSchema["type"];
+  keyValue: string;
+  onCreate: () => void;
+  onFieldTypeChange: (fieldType: FieldSchema["type"]) => void;
+  onKeyChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onReferenceTargetChange: (entityKey: string) => void;
+  open: boolean;
+  referenceTarget: string;
+  targetEntity: SchemaBuilderEntityProjection;
+}) {
+  return (
+    <ModalContent isOpen={open} onOpenChange={onOpenChange} size="sm">
+      <ModalHeader>
+        <ModalTitle>Create field</ModalTitle>
+      </ModalHeader>
+      <ModalBody>
+        <div
+          aria-label={`Create field dialog for ${targetEntity.label}`}
+          className="space-y-3"
+          role="form"
+        >
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Key</span>
+            <input
+              className="h-9 w-full rounded border border-slate-300 px-2 text-sm"
+              onChange={(event) => onKeyChange(event.currentTarget.value)}
+              onKeyDown={(event) => submitDialogOnEnter(event, onCreate)}
+              placeholder="title"
+              value={keyValue}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Type</span>
+            <FieldTypeSelect onChange={onFieldTypeChange} value={fieldType} />
+          </label>
+          {fieldType === "reference" && (
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-slate-600">Reference target</span>
+              <EntitySelect
+                entities={entities}
+                onChange={onReferenceTargetChange}
+                value={referenceTarget}
+              />
+            </label>
+          )}
+          {error && <BuilderInlineError>{error}</BuilderInlineError>}
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <ModalClose intent="outline" type="button">
+          Cancel
+        </ModalClose>
+        <Button onPress={onCreate} type="button">
+          Add field
+        </Button>
+      </ModalFooter>
+    </ModalContent>
   );
 }
 
@@ -766,11 +1128,15 @@ function EntityDetails({
 }) {
   return (
     <section className="space-y-3" aria-label={`${entity.label} details`}>
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-sm font-semibold text-slate-900">Entity</h2>
-        <p className="text-xs text-slate-500">
-          <code>{entity.key}</code> {entity.saved ? "saved" : "draft"}
-        </p>
+        <Badge data-slot="entity-key-badge" intent="outline" isCircle={false}>
+          {entity.key}
+        </Badge>
+        <BuilderSavedStatus
+          isSaved={entity.saved}
+          label={`${entity.label} entity ${entity.saved ? "saved" : "draft"}`}
+        />
       </div>
       <label className="block space-y-1">
         <span className="text-xs font-medium text-slate-600">Label</span>
@@ -830,25 +1196,21 @@ function FieldDetails({
 
   return (
     <section className="space-y-4" aria-label={`${fieldProjection.label} field details`}>
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-sm font-semibold text-slate-900">Field</h2>
-        <p className="text-xs text-slate-500">
-          <code>
-            {entity.key}.{fieldProjection.key}
-          </code>{" "}
-          {fieldProjection.saved ? "saved" : "draft"}
-        </p>
+        <Badge data-slot="field-key-badge" intent="outline" isCircle={false}>
+          {fieldProjection.key}
+        </Badge>
+        <Badge data-slot="field-type-badge" intent="secondary" isCircle={false}>
+          {fieldProjection.type}
+        </Badge>
+        <BuilderSavedStatus
+          isSaved={fieldProjection.saved}
+          label={`${fieldProjection.label} field ${fieldProjection.saved ? "saved" : "draft"}`}
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600">Key</span>
-          <input
-            className="h-9 w-full rounded border border-slate-300 bg-slate-50 px-2 text-sm text-slate-600"
-            disabled
-            value={fieldProjection.key}
-          />
-        </label>
         <label className="block space-y-1">
           <span className="text-xs font-medium text-slate-600">Type</span>
           <FieldTypeSelect
@@ -1677,17 +2039,4 @@ function enumValuesFromText(
   }
 
   return { ok: true, values };
-}
-
-function appRouteFromSchemaRoute(location: string): `/${string}` {
-  if (location === "/schema") {
-    return "/";
-  }
-
-  if (location.endsWith("/schema")) {
-    const appRoute = location.slice(0, -"/schema".length);
-    return (appRoute === "" ? "/" : appRoute) as `/${string}`;
-  }
-
-  return "/";
 }

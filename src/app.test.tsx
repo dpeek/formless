@@ -1083,10 +1083,10 @@ describe("App smoke routes", () => {
       schemaRoute: "/apps/personal/schema",
       syncWorldKey: "app:personal",
     });
-    expect(loadingHtml).toContain("Site Schema");
-    expect(loadingHtml).toContain("Loading draft");
-    expect(loadingHtml).toContain('href="/apps/personal"');
-    expect(loadingHtml).toContain("Open app");
+    expect(loadingHtml).not.toContain("Site Schema");
+    expect(loadingHtml).not.toContain("Loading draft");
+    expect(loadingHtml).not.toContain("Open app");
+    expect(loadingHtml).not.toContain('aria-label="Schema saved"');
     expect(loadingHtml).toContain("Schema</dt><dd>Loading</dd>");
     expect(loadingHtml).not.toContain("Saved draft");
     expect(loadingHtml).not.toContain("&quot;siteSettingsHome&quot;");
@@ -1106,7 +1106,7 @@ describe("App smoke routes", () => {
     applyBootstrapResponse(bootstrap(testSiteSeedRecords, siteSourceSchema), installedWorld.target);
     const activeHtml = renderRoute("/apps/personal/schema", undefined, appInstalls);
 
-    expect(activeHtml).toContain("Saved draft");
+    expect(activeHtml).toContain('aria-label="Schema saved"');
     expect(activeHtml).toContain("&quot;siteSettingsHome&quot;");
     expect(activeHtml).toContain("Schema</dt><dd>v1</dd>");
   });
@@ -1257,34 +1257,38 @@ describe("App smoke routes", () => {
       schemaRoute: "/tasks/schema",
     });
     expect(html).toContain('aria-label="Tasks screens"');
-    expect(html).toContain("Tasks Schema");
-    expect(html).toContain("<code>tasks</code>");
+    expect(html).not.toContain("Tasks Schema");
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">tasks</span>");
     expect(html).not.toContain('aria-label="Tasks route reset controls"');
     expect(html).not.toContain('aria-label="Tasks source reset controls"');
     expect(html).toContain('aria-label="Schema editor mode"');
     expect(html).toContain('aria-controls="schema-builder-panel"');
     expect(html).toContain('aria-controls="schema-source-panel"');
     expect(html).toContain('aria-selected="true"');
-    expect(html).toContain('aria-label="Builder entities"');
-    expect(countOccurrences(html, 'data-slot="object-list"')).toBe(2);
-    expect(countOccurrences(html, 'data-slot="object-list-grid"')).toBe(2);
-    expect(html).toContain('role="grid"');
-    expect(html).toContain('aria-label="Entities"');
-    expect(html).toContain('aria-label="Task fields"');
-    expect(html).toContain('data-key="task"');
-    expect(html).toContain('data-key="title"');
+    expect(html).toContain('aria-label="Builder schema tree"');
+    expect(html).toContain('aria-label="Schema entities and fields"');
+    expect(html).toContain('role="tree"');
+    expect(html).toContain('role="treeitem"');
+    expect(html).toContain('data-entity-key="task"');
+    expect(html).toContain('data-field-key="title"');
+    expect(html).toContain('aria-label="Collapse Task"');
+    expect(html).toContain('aria-label="Entity label for task"');
+    expect(html).toContain('aria-label="Field label for task.title"');
+    expect(html).toContain('data-slot="entity-key-badge"');
+    expect(html).toContain('data-slot="field-key-badge"');
+    expect(html).toContain('data-slot="field-type-badge"');
     expect(html).toContain('aria-selected="true"');
-    expect(html).toContain("Selected entity");
-    expect(html).toContain("Selected field");
     expect(html).toContain('aria-label="Create entity"');
-    expect(html).toContain('aria-label="Add field"');
+    expect(html).toContain('aria-label="Create field for Task"');
     expect(html).toContain('aria-label="Field details"');
     expect(html).toContain('aria-label="Schema source"');
-    expect(html).toContain("Saved draft");
+    expect(html).toContain('aria-label="Schema saved"');
+    expect(html).toContain('aria-label="Task entity saved"');
+    expect(html).toContain('aria-label="Title field saved"');
     expect(html).toContain("Save schema");
     expect(html).toContain("Revert draft");
-    expect(html).toContain("Open app");
-    expect(html).toContain('href="/tasks"');
+    expect(html).not.toContain("Open app");
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('aria-label="Tasks store snapshot controls"');
     expect(html).not.toContain("Export store snapshot");
@@ -1340,25 +1344,22 @@ describe("App smoke routes", () => {
     });
     expect(html).toContain('aria-label="Estii screens"');
     expect(html).toContain('href="/estii/setup"');
-    expect(html).toContain("Estii Schema");
-    expect(html).toContain("<code>estii</code>");
+    expect(html).not.toContain("Estii Schema");
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">estii</span>");
     expect(html).not.toContain('aria-label="Estii route reset controls"');
     expect(html).not.toContain('aria-label="Estii source reset controls"');
     expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-label="Builder entities"');
-    expect(countOccurrences(html, 'data-slot="object-list"')).toBe(2);
-    expect(countOccurrences(html, 'data-slot="object-list-grid"')).toBe(2);
-    expect(html).toContain('role="grid"');
-    expect(html).toContain('aria-label="Entities"');
-    expect(html).toContain('aria-label="Resource fields"');
-    expect(html).toContain('data-key="resource"');
-    expect(html).toContain('data-key="name"');
-    expect(html).toContain("Selected entity");
-    expect(html).toContain("Selected field");
-    expect(html).toContain("Saved draft");
+    expect(html).toContain('aria-label="Builder schema tree"');
+    expect(html).toContain('aria-label="Schema entities and fields"');
+    expect(html).toContain('role="tree"');
+    expect(html).toContain('data-entity-key="resource"');
+    expect(html).toContain('data-field-key="name"');
+    expect(html).toContain('aria-label="Entity label for resource"');
+    expect(html).toContain('aria-label="Field label for resource.name"');
+    expect(html).toContain('aria-label="Schema saved"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Open app");
-    expect(html).toContain('href="/estii"');
+    expect(html).not.toContain("Open app");
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('aria-label="Estii store snapshot controls"');
     expect(html).not.toContain("Export store snapshot");
@@ -1388,16 +1389,18 @@ describe("App smoke routes", () => {
     expect(html).toContain('aria-label="Site screens"');
     expect(html).not.toContain('href="/site/header"');
     expect(html).not.toContain('href="/site/footer"');
-    expect(html).toContain("Site Schema");
-    expect(html).toContain("<code>site</code>");
+    expect(html).not.toContain("Site Schema");
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">site</span>");
     expect(html).not.toContain('aria-label="Site route reset controls"');
     expect(html).not.toContain('aria-label="Site source reset controls"');
     expect(html).toContain('aria-label="Schema editor mode"');
-    expect(html).toContain('aria-label="Builder entities"');
-    expect(html).toContain("Saved draft");
+    expect(html).toContain('aria-label="Builder schema tree"');
+    expect(html).toContain('aria-label="Schema entities and fields"');
+    expect(html).toContain('role="tree"');
+    expect(html).toContain('aria-label="Schema saved"');
     expect(html).toContain("Save schema");
-    expect(html).toContain("Open app");
-    expect(html).toContain('href="/site"');
+    expect(html).not.toContain("Open app");
     expect(html).not.toContain("Reset schema and seed data");
     expect(html).not.toContain('aria-label="Site store snapshot controls"');
     expect(html).not.toContain("Export store snapshot");
@@ -1544,11 +1547,11 @@ describe("App smoke routes", () => {
       schemaKey: "site",
       schemaRoute: "/admin/schema",
     });
-    expect(html).toContain("Site Schema");
-    expect(html).toContain("<code>site</code>");
+    expect(html).not.toContain("Site Schema");
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">site</span>");
     expect(html).toContain("Save schema");
-    expect(html).toContain("Open app");
-    expect(html).toContain('href="/admin"');
+    expect(html).not.toContain("Open app");
   });
 
   it("renders a published Site profile slug path outside generated admin navigation", () => {
@@ -1663,8 +1666,9 @@ describe("App smoke routes", () => {
     expect(html).not.toContain('data-frame="workbench"');
     expect(html).toContain('data-frame="generated-app"');
     expectGeneratedAppChromeLabels(html, { appTitle: "Estii", screenTitle: "Schema" });
-    expect(html).toContain("Estii Schema");
-    expect(html).toContain("<code>estii</code>");
+    expect(html).not.toContain("Estii Schema");
+    expect(html).toContain('data-slot="schema-key-badge"');
+    expect(html).toContain(">estii</span>");
     expect(html).toContain('href="/setup"');
     expectAppSettings(html, {
       appLabel: "Estii",
