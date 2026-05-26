@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { resetClientStore } from "../../client/store.ts";
 import type { TableColumnConfig, TableOrderingConfig } from "../../client/views.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
+import type { AppSchema } from "../../shared/schema.ts";
 import { rateSeedRecords, rateSourceSchema, siteSourceSchema } from "../../test/schema-apps.ts";
 import { renderRecordTableHtml, renderTableViewHtml } from "../../test/generated-table.tsx";
 import { testSiteSeedRecords } from "../../test/site-records.ts";
@@ -37,6 +38,38 @@ describe("RecordTable", () => {
     expect(html).toContain('aria-label="Average cost"');
     expect(html).toContain('aria-label="Average price"');
     expect(html).toContain('aria-label="Average margin"');
+  });
+
+  it("renders read-only enum icon and color presentation in table display cells", () => {
+    const entity = presentationTaskSchema.entities.task;
+    const columns: TableColumnConfig[] = [
+      {
+        type: "field",
+        key: "field:priority",
+        fieldName: "priority",
+        field: entity.fields.priority,
+        editor: "enum",
+        commit: "immediate",
+        label: "Priority",
+        align: "start",
+        width: "xs",
+        display: "readOnly",
+        format: "plain",
+        presentation: { mode: "iconOnly" },
+      },
+    ];
+    const html = renderRecordTableHtml({
+      columns,
+      entity,
+      entityName: "task",
+      records: [presentationTaskRecord("task-1", "high")],
+      schema: presentationTaskSchema,
+    });
+
+    expect(html).toContain('aria-label="Priority: High"');
+    expect(html).toContain('data-formless-field-presentation-mode="iconOnly"');
+    expect(html).toContain('data-formless-field-presentation-color="danger"');
+    expect(html).toContain("lucide-flag");
   });
 
   it("uses icon-sized utility columns for placement reordering and row actions", () => {
@@ -132,5 +165,43 @@ function rateRecord(id: string, cost: number): StoredRecord {
       price: cost + 100,
     },
     createdAt: "2026-05-22T00:00:00.000Z",
+  };
+}
+
+const presentationTaskSchema = {
+  version: 1,
+  entities: {
+    task: {
+      label: "Task",
+      fields: {
+        priority: {
+          type: "enum",
+          required: true,
+          values: {
+            low: { label: "Low", presentation: { color: "priority.low", icon: "flag" } },
+            normal: { label: "Normal", presentation: { color: "priority.normal", icon: "flag" } },
+            high: { label: "High", presentation: { color: "priority.high", icon: "flag" } },
+          },
+        },
+      },
+      mutations: {
+        create: { enabled: true },
+        patch: { enabled: true },
+        delete: { enabled: false },
+      },
+    },
+  },
+  queries: {},
+  itemViews: {},
+  tableViews: {},
+  views: {},
+} satisfies AppSchema;
+
+function presentationTaskRecord(id: string, priority: string): StoredRecord {
+  return {
+    id,
+    entity: "task",
+    values: { priority },
+    createdAt: "2026-05-26T00:00:00.000Z",
   };
 }

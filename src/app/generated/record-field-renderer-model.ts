@@ -7,9 +7,11 @@ export type GeneratedRecordFieldControlPresentation = "default" | "heading";
 export type GeneratedRecordFieldRendererKind =
   | "autosize-text"
   | "checkbox"
+  | "completion-checkbox"
   | "color"
   | "date"
   | "enum"
+  | "enum-icon"
   | "icon"
   | "image"
   | "markdown"
@@ -18,6 +20,7 @@ export type GeneratedRecordFieldRendererKind =
   | "reference"
   | "text"
   | "textarea"
+  | "quiet-date"
   | "value-unit";
 
 export function selectGeneratedRecordFieldRendererKind({
@@ -34,10 +37,18 @@ export function selectGeneratedRecordFieldRendererKind({
   showLabel?: boolean;
 }): GeneratedRecordFieldRendererKind {
   if (fieldControl.controlKind === "checkbox") {
+    if (fieldConfig.presentation?.mode === "completion") {
+      return "completion-checkbox";
+    }
+
     return "checkbox";
   }
 
   if (fieldControl.kind === "enum") {
+    if (fieldConfig.presentation?.mode === "iconOnly") {
+      return "enum-icon";
+    }
+
     return "enum";
   }
 
@@ -82,6 +93,10 @@ export function selectGeneratedRecordFieldRendererKind({
   }
 
   if (fieldControl.controlKind === "date") {
+    if (fieldConfig.presentation?.visibility === "valueOrInteraction") {
+      return "quiet-date";
+    }
+
     return "date";
   }
 

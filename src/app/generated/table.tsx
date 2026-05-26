@@ -264,6 +264,7 @@ function StaticRecordTableRows({
   return (
     <Fragment>
       <TableRow
+        className="group/record-row"
         data-formless-record-row={recordRow.recordId}
         id={recordRow.id}
         textValue={recordRow.recordId}
@@ -329,14 +330,18 @@ function SortableRecordTableRows({
     disabled,
     transition: { idle: true },
   });
-  const rowStateClass = [isDragSource ? "opacity-60" : "", isDropTarget ? "bg-muted/40" : ""]
+  const rowStateClass = [
+    "group/record-row",
+    isDragSource ? "opacity-60" : "",
+    isDropTarget ? "bg-muted/40" : "",
+  ]
     .filter(Boolean)
     .join(" ");
 
   return (
     <Fragment>
       <TableRow
-        className={rowStateClass || undefined}
+        className={rowStateClass}
         data-formless-record-row={recordRow.recordId}
         data-formless-sortable-row={recordRow.recordId}
         id={recordRow.id}

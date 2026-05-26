@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { RecordFieldConfig } from "../../client/views.ts";
-import type { FieldEditor, FieldSchema } from "../../shared/schema.ts";
+import type { FieldEditor, FieldPresentationSchema, FieldSchema } from "../../shared/schema.ts";
 import { selectGeneratedFieldControl } from "./field-controls.ts";
 import { selectGeneratedRecordFieldRendererKind } from "./record-field-renderer-model.ts";
 
@@ -12,10 +12,21 @@ describe("generated record field renderer model", () => {
     expect(recordRenderer("body", "markdown")).toBe("markdown");
     expect(recordRenderer("body", "markdown", { density: "compact" })).toBe("textarea");
     expect(recordRenderer("done", "boolean")).toBe("checkbox");
+    expect(recordRenderer("done", "boolean", { fieldPresentation: { mode: "completion" } })).toBe(
+      "completion-checkbox",
+    );
     expect(recordRenderer("dueDate", "date")).toBe("date");
+    expect(
+      recordRenderer("dueDate", "date", {
+        fieldPresentation: { visibility: "valueOrInteraction" },
+      }),
+    ).toBe("quiet-date");
     expect(recordRenderer("estimate", "number")).toBe("number");
     expect(recordRenderer("cost", "number")).toBe("value-unit");
     expect(recordRenderer("priority", "enum")).toBe("enum");
+    expect(recordRenderer("priority", "enum", { fieldPresentation: { mode: "iconOnly" } })).toBe(
+      "enum-icon",
+    );
     expect(recordRenderer("resource", "reference")).toBe("reference");
     expect(recordRenderer("color", "color")).toBe("color");
     expect(recordRenderer("icon", "icon")).toBe("icon");
@@ -30,6 +41,7 @@ function recordRenderer(
   editor: FieldEditor,
   options: {
     density?: "default" | "compact";
+    fieldPresentation?: FieldPresentationSchema;
     presentation?: "default" | "heading";
     showLabel?: boolean;
   } = {},
@@ -40,6 +52,7 @@ function recordRenderer(
     field,
     editor,
     commit: "field-commit",
+    ...(options.fieldPresentation === undefined ? {} : { presentation: options.fieldPresentation }),
     valueUnit:
       fieldName === "cost"
         ? {

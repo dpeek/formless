@@ -19,6 +19,7 @@ import {
 } from "./field-control-primitives.tsx";
 import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-value.ts";
 import { selectGeneratedFieldControl, type GeneratedFieldControl } from "./field-controls.ts";
+import { completionCheckboxClassName } from "./field-presentation.tsx";
 import { encodeNumberEditorInputValue, numberInputValueToFieldValue } from "./format.ts";
 
 export function GeneratedCreateFieldControl({
@@ -33,8 +34,12 @@ export function GeneratedCreateFieldControl({
   const fieldControl = selectGeneratedFieldControl({ editor, field, label });
 
   if (fieldControl.controlKind === "checkbox") {
+    const completionMode = fieldConfig.presentation?.mode === "completion";
+
     return (
       <Checkbox
+        className={completionMode ? completionCheckboxClassName() : undefined}
+        data-formless-field-presentation-mode={completionMode ? "completion" : undefined}
         defaultSelected={fieldControl.createDefaultChecked}
         isRequired={fieldControl.required}
         name={fieldName}

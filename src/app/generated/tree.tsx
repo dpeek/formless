@@ -741,7 +741,7 @@ function PlacementRecordFields({
   }
 
   return (
-    <div className="grid min-w-0 gap-2">
+    <div className="group/record-row grid min-w-0 gap-2">
       {recordFields.map((fieldConfig) => (
         <RecordFieldEditor
           canPatch={canPatch}
@@ -796,7 +796,7 @@ function ChildRecordEditor({
   const renderAsInlineStack = isInlineLinkFieldStack(recordFields);
 
   return (
-    <div className="grid min-w-0 gap-3">
+    <div className="group/record-row grid min-w-0 gap-3">
       {recordFields.map((fieldConfig) => {
         const isHeading = !renderAsInlineStack && isHeadingRecordField(fieldConfig);
 

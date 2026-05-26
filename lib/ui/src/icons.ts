@@ -8,6 +8,7 @@ import {
   ChevronsUpDownIcon as LucideChevronsUpDownIcon,
   Code2Icon as LucideCodeIcon,
   CopyIcon as LucideCopyIcon,
+  FlagIcon as LucideFlagIcon,
   Heading2Icon as LucideHeading2Icon,
   Heading3Icon as LucideHeading3Icon,
   GripVerticalIcon as LucideGripVerticalIcon,
@@ -41,6 +42,7 @@ export const ControlMenuIcon = LucideMenuIcon;
 export const ControlRemoveIcon = LucideXIcon;
 export const ControlSelectDownIcon = LucideChevronDownIcon;
 export const ControlSelectIcon = LucideChevronsUpDownIcon;
+export const FieldFlagIcon = LucideFlagIcon;
 export const CalendarCaptionDropdownIcon = LucideChevronDownIcon;
 export const CalendarNextIcon = LucideChevronRightIcon;
 export const CalendarPreviousIcon = LucideChevronLeftIcon;

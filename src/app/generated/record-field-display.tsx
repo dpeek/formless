@@ -9,6 +9,11 @@ import type {
 import type { FieldValue } from "../../shared/protocol.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { expandHexColor, isHexColor } from "./color-utils.ts";
+import {
+  enumValuePresentation,
+  fieldPresentationTextColorClassName,
+  GeneratedFieldPresentationIcon,
+} from "./field-presentation.tsx";
 import { formatFieldDisplayValue } from "./format.ts";
 
 type DisplayTableColumnConfig = FieldTableColumnConfig | ReferenceFieldTableColumnConfig;
@@ -40,6 +45,10 @@ export function RecordFieldDisplay({
     return <RecordIconDisplay column={column} recordValue={recordValue} />;
   }
 
+  if (isEnumIconDisplayColumn(column)) {
+    return <RecordEnumIconDisplay column={column} recordValue={recordValue} />;
+  }
+
   if (isMarkdownDisplayColumn(column)) {
     return <RecordMarkdownDisplay column={column} recordValue={recordValue} />;
   }
@@ -47,6 +56,57 @@ export function RecordFieldDisplay({
   return (
     <>
       <span>{formatFieldDisplayValue(column, recordValue)}</span>
+      {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+    </>
+  );
+}
+
+function RecordEnumIconDisplay({
+  column,
+  recordValue,
+}: {
+  column: DisplayTableColumnConfig;
+  recordValue: FieldValue | undefined;
+}) {
+  if (column.field.type !== "enum") {
+    return null;
+  }
+
+  const value = typeof recordValue === "string" ? recordValue : "";
+  const option = column.field.values[value];
+  const presentation = enumValuePresentation({ option, value });
+  const label = value === "" ? "" : presentation.label;
+
+  if (label === "") {
+    return (
+      <>
+        <span />
+        {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <span
+        aria-label={`${column.label}: ${label}`}
+        className={`inline-flex min-h-5 items-center gap-1 ${fieldPresentationTextColorClassName(
+          presentation.color.intent,
+        )}`}
+        data-formless-field-presentation-color={presentation.color.intent}
+        data-formless-field-presentation-color-token={presentation.color.token}
+        data-formless-field-presentation-icon={option?.presentation?.icon}
+        data-formless-field-presentation-mode="iconOnly"
+      >
+        {presentation.icon ? (
+          <>
+            <span className="sr-only">{`${column.label}: ${label}`}</span>
+            <GeneratedFieldPresentationIcon className="size-4" icon={presentation.icon} />
+          </>
+        ) : (
+          <span>{label}</span>
+        )}
+      </span>
       {column.suffix ? <span className="text-slate-500">{column.suffix}</span> : null}
     </>
   );
@@ -140,6 +200,10 @@ function isIconDisplayColumn(column: DisplayTableColumnConfig) {
   return (
     column.field.type === "text" && (column.editor === "icon" || column.field.format === "icon")
   );
+}
+
+function isEnumIconDisplayColumn(column: DisplayTableColumnConfig) {
+  return column.field.type === "enum" && column.presentation?.mode === "iconOnly";
 }
 
 function isMarkdownDisplayColumn(column: DisplayTableColumnConfig) {

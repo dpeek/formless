@@ -627,7 +627,9 @@ function ContextRecordEditor({
   return (
     <div
       className={
-        density === "compact" ? "grid min-w-0 gap-3 pt-1" : "flex flex-wrap items-end gap-3 pt-1"
+        density === "compact"
+          ? "group/record-row grid min-w-0 gap-3 pt-1"
+          : "group/record-row flex flex-wrap items-end gap-3 pt-1"
       }
     >
       {visibleFields.map((fieldConfig) => {
@@ -1137,7 +1139,7 @@ function RecordRow({
 
   return (
     <div
-      className="p-3"
+      className="group/record-row p-3"
       data-formless-sortable-list-item={showOrderingHandle ? recordId : undefined}
     >
       <div className="flex items-center gap-2">

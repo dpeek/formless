@@ -38,6 +38,13 @@ import {
   encodeNumberEditorInputValue,
   inputValueToFieldValue,
 } from "./format.ts";
+import {
+  completionCheckboxClassName,
+  enumValuePresentation,
+  fieldPresentationIconButtonClassName,
+  GeneratedFieldPresentationIcon,
+  quietValueOrInteractionClassName,
+} from "./field-presentation.tsx";
 import type { GeneratedFieldControl } from "./field-controls.ts";
 import {
   selectGeneratedRecordFieldRendererKind,
@@ -127,7 +134,7 @@ export function GeneratedRecordFieldControl({
     showLabel,
   });
 
-  if (rendererKind === "checkbox") {
+  if (rendererKind === "checkbox" || rendererKind === "completion-checkbox") {
     return (
       <RecordCheckboxFieldRenderer
         canPatch={canPatch}
@@ -136,6 +143,7 @@ export function GeneratedRecordFieldControl({
         error={error}
         fieldControl={fieldControl}
         isPending={isPending}
+        presentationMode={rendererKind === "completion-checkbox" ? "completion" : undefined}
         onValueCommit={onValueCommit}
         recordValue={recordValue}
         showLabel={showLabel}
@@ -143,7 +151,7 @@ export function GeneratedRecordFieldControl({
     );
   }
 
-  if (rendererKind === "enum" && fieldControl.kind === "enum") {
+  if ((rendererKind === "enum" || rendererKind === "enum-icon") && fieldControl.kind === "enum") {
     return (
       <RecordEnumFieldRenderer
         canPatch={canPatch}
@@ -151,6 +159,7 @@ export function GeneratedRecordFieldControl({
         draft={draft}
         error={error}
         fieldControl={fieldControl}
+        iconOnly={rendererKind === "enum-icon"}
         isPending={isPending}
         labelClass={labelClass}
         onDraftChange={onDraftChange}
@@ -295,7 +304,7 @@ export function GeneratedRecordFieldControl({
     );
   }
 
-  if (rendererKind === "date") {
+  if (rendererKind === "date" || rendererKind === "quiet-date") {
     return (
       <RecordDateFieldRenderer
         canPatch={canPatch}
@@ -310,6 +319,7 @@ export function GeneratedRecordFieldControl({
         onDraftChange={onDraftChange}
         onDraftRevert={onDraftRevert}
         onValueCommit={onValueCommit}
+        quietVisibility={rendererKind === "quiet-date"}
       />
     );
   }
@@ -385,6 +395,7 @@ function RecordCheckboxFieldRenderer({
   error,
   fieldControl,
   isPending,
+  presentationMode,
   onValueCommit,
   recordValue,
   showLabel,
@@ -395,13 +406,17 @@ function RecordCheckboxFieldRenderer({
   error: string | null;
   fieldControl: GeneratedFieldControl;
   isPending: boolean;
+  presentationMode?: "completion";
   onValueCommit: (value: FieldValue) => void;
   recordValue: FieldValue | undefined;
   showLabel: boolean;
 }) {
+  const completionMode = presentationMode === "completion";
   const checkbox = (
     <Checkbox
       aria-label={fieldControl.label}
+      className={completionMode ? completionCheckboxClassName() : undefined}
+      data-formless-field-presentation-mode={completionMode ? "completion" : undefined}
       isDisabled={!canPatch || isPending}
       isInvalid={error !== null}
       isSelected={recordValue === true}
@@ -425,7 +440,9 @@ function RecordCheckboxFieldRenderer({
   }
 
   return (
-    <div className={`${density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}>
+    <div
+      className={`${completionMode ? "h-8" : density === "compact" ? "h-6" : "h-7"} flex shrink-0 items-center`}
+    >
       {checkbox}
       {error ? <StaticFieldError>{error}</StaticFieldError> : null}
     </div>
@@ -438,6 +455,7 @@ function RecordEnumFieldRenderer({
   draft,
   error,
   fieldControl,
+  iconOnly,
   isPending,
   labelClass,
   onDraftChange,
@@ -448,6 +466,7 @@ function RecordEnumFieldRenderer({
   draft: string;
   error: string | null;
   fieldControl: Extract<GeneratedFieldControl, { kind: "enum" }>;
+  iconOnly: boolean;
   isPending: boolean;
   labelClass: string;
   onDraftChange: (value: string) => void;
@@ -455,6 +474,21 @@ function RecordEnumFieldRenderer({
 }) {
   const unknownValue =
     draft !== "" && !Object.hasOwn(fieldControl.field.values, draft) ? draft : null;
+
+  if (iconOnly) {
+    return (
+      <RecordEnumIconOnlyFieldRenderer
+        canPatch={canPatch}
+        density={density}
+        draft={draft}
+        error={error}
+        fieldControl={fieldControl}
+        isPending={isPending}
+        onDraftChange={onDraftChange}
+        onValueCommit={onValueCommit}
+      />
+    );
+  }
 
   return (
     <div
@@ -490,6 +524,77 @@ function RecordEnumFieldRenderer({
       </NativeSelect>
     </div>
   );
+}
+
+function RecordEnumIconOnlyFieldRenderer({
+  canPatch,
+  density,
+  draft,
+  error,
+  fieldControl,
+  isPending,
+  onDraftChange,
+  onValueCommit,
+}: {
+  canPatch: boolean;
+  density: GeneratedRecordFieldControlDensity;
+  draft: string;
+  error: string | null;
+  fieldControl: Extract<GeneratedFieldControl, { kind: "enum" }>;
+  isPending: boolean;
+  onDraftChange: (value: string) => void;
+  onValueCommit: (value: FieldValue) => void;
+}) {
+  const option = fieldControl.field.values[draft];
+  const presentation = enumValuePresentation({ option, value: draft });
+  const label = draft === "" ? "None" : presentation.label;
+  const accessibleLabel = `${fieldControl.label}: ${label}`;
+  const iconSizeClassName = density === "compact" ? "size-3.5" : "size-4.5";
+  const nextValue = nextEnumIconOnlyValue(fieldControl.field, draft);
+
+  return (
+    <div
+      className={
+        density === "compact" ? "flex h-6 shrink-0 items-center" : "flex h-8 shrink-0 items-center"
+      }
+    >
+      <Button
+        aria-label={accessibleLabel}
+        className={fieldPresentationIconButtonClassName(presentation.color.intent)}
+        data-formless-field-presentation-color={presentation.color.intent}
+        data-formless-field-presentation-color-token={presentation.color.token}
+        data-formless-field-presentation-icon={option?.presentation?.icon}
+        data-formless-field-presentation-mode="iconOnly"
+        isDisabled={!canPatch || isPending}
+        onPress={() => {
+          onDraftChange(nextValue);
+          onValueCommit(inputValueToFieldValue(fieldControl.field, nextValue));
+        }}
+        size={density === "compact" ? "sq-xs" : "sq-sm"}
+        type="button"
+        intent="plain"
+      >
+        {presentation.icon ? (
+          <GeneratedFieldPresentationIcon className={iconSizeClassName} icon={presentation.icon} />
+        ) : (
+          <span className="px-1 text-xs">{label}</span>
+        )}
+      </Button>
+      {error ? <StaticFieldError>{error}</StaticFieldError> : null}
+    </div>
+  );
+}
+
+function nextEnumIconOnlyValue(
+  field: Extract<FieldSchema, { type: "enum" }>,
+  currentValue: string,
+) {
+  const values = Object.keys(field.values);
+  const candidates = field.required ? values : ["", ...values];
+  const currentIndex = candidates.indexOf(currentValue);
+  const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % candidates.length;
+
+  return candidates[nextIndex] ?? "";
 }
 
 function RecordTextFieldRenderer({
@@ -933,6 +1038,7 @@ function RecordDateFieldRenderer({
   onDraftChange,
   onDraftRevert,
   onValueCommit,
+  quietVisibility,
 }: {
   canPatch: boolean;
   commitPolicy: RecordFieldConfig["commit"];
@@ -946,12 +1052,14 @@ function RecordDateFieldRenderer({
   onDraftChange: (value: string) => void;
   onDraftRevert: () => void;
   onValueCommit: (value: FieldValue) => void;
+  quietVisibility: boolean;
 }) {
   const dateResult = storedDateValueToDateValue(draft);
   const errorMessage = error ?? (dateResult.kind === "invalid" ? dateResult.message : null);
   const latestStoredValueRef = useRef(draft);
   const pickerOpenRef = useRef(false);
   const pickerCommittedStoredValueRef = useRef<string | null>(null);
+  const quiet = quietVisibility && draft === "" && errorMessage === null;
 
   latestStoredValueRef.current = draft;
 
@@ -1020,7 +1128,17 @@ function RecordDateFieldRenderer({
   }
 
   return (
-    <div className={recordSpecializedFieldContainerClassName(density, "date")}>
+    <div
+      className={[
+        recordSpecializedFieldContainerClassName(density, "date"),
+        quietValueOrInteractionClassName(quiet),
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-formless-field-presentation-visibility={
+        quietVisibility ? "valueOrInteraction" : undefined
+      }
+    >
       <DatePicker
         className="w-full"
         isDisabled={!canPatch || isPending}
