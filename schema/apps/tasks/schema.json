@@ -27,13 +27,25 @@
           "default": "normal",
           "values": {
             "low": {
-              "label": "Low"
+              "label": "Low",
+              "presentation": {
+                "icon": "flag",
+                "color": "priority.low"
+              }
             },
             "normal": {
-              "label": "Normal"
+              "label": "Normal",
+              "presentation": {
+                "icon": "flag",
+                "color": "priority.normal"
+              }
             },
             "high": {
-              "label": "High"
+              "label": "High",
+              "presentation": {
+                "icon": "flag",
+                "color": "priority.high"
+              }
             }
           }
         }
@@ -134,15 +146,24 @@
         },
         "dueDate": {
           "editor": "date",
-          "commit": "field-commit"
+          "commit": "field-commit",
+          "presentation": {
+            "visibility": "valueOrInteraction"
+          }
         },
         "priority": {
           "editor": "enum",
-          "commit": "immediate"
+          "commit": "immediate",
+          "presentation": {
+            "mode": "iconOnly"
+          }
         },
         "done": {
           "editor": "boolean",
-          "commit": "immediate"
+          "commit": "immediate",
+          "presentation": {
+            "mode": "completion"
+          }
         }
       }
     }

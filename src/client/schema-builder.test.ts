@@ -140,6 +140,50 @@ describe("schema builder draft intents", () => {
     expect(schema.itemViews.projectItem).toBeUndefined();
   });
 
+  it("preserves enum option presentation metadata when labels change", () => {
+    const original = sourceLikeTaskSchema();
+    const priority = original.entities.task?.fields.priority;
+
+    if (priority?.type !== "enum") {
+      throw new Error("Missing task priority field.");
+    }
+
+    priority.values.high.presentation = { color: "priority.high", icon: "flag" };
+    priority.values.normal.presentation = { color: "priority.normal", icon: "flag" };
+
+    const draft = applyIntents(createSchemaBuilderDraft(original), {
+      type: "updateFieldMetadata",
+      entityKey: "task",
+      fieldKey: "priority",
+      metadata: {
+        values: {
+          low: { label: "Low" },
+          normal: { label: "Normal" },
+          high: { label: "Urgent" },
+        },
+      },
+    });
+    const schema = serializeSchemaBuilderDraft(draft);
+    const updatedPriority = schema.entities.task?.fields.priority;
+
+    if (updatedPriority?.type !== "enum") {
+      throw new Error("Missing updated task priority field.");
+    }
+
+    expect(updatedPriority.values.high).toEqual({
+      label: "Urgent",
+      presentation: { color: "priority.high", icon: "flag" },
+    });
+    expect(updatedPriority.values.normal).toEqual({
+      label: "Normal",
+      presentation: { color: "priority.normal", icon: "flag" },
+    });
+    expect(updatedPriority.values.low).toEqual({
+      label: "Low",
+      presentation: { color: "priority.low", icon: "flag" },
+    });
+  });
+
   it("reports field-scoped validation issues for invalid builder drafts", () => {
     const draft = applyIntents(createSchemaBuilderDraft(sourceLikeTaskSchema()), {
       type: "addField",

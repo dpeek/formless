@@ -464,7 +464,7 @@ function applyEnumMetadata(
   metadata: SchemaBuilderFieldMetadataUpdate,
 ) {
   if (metadata.values !== undefined) {
-    field.values = metadata.values;
+    field.values = mergeEnumValues(field.values, metadata.values);
   }
 
   if (!("default" in metadata)) {
@@ -511,6 +511,27 @@ function applyReferenceMetadata(
 
   validateReferenceDisplayField(schema, context, field.to, metadata.displayField);
   field.displayField = metadata.displayField;
+}
+
+function mergeEnumValues(
+  currentValues: Record<string, EnumValueSchema>,
+  nextValues: Record<string, EnumValueSchema>,
+) {
+  return Object.fromEntries(
+    Object.entries(nextValues).map(([valueKey, nextValue]) => {
+      const currentValue = currentValues[valueKey];
+
+      return [
+        valueKey,
+        {
+          ...nextValue,
+          ...(nextValue.presentation === undefined && currentValue?.presentation !== undefined
+            ? { presentation: currentValue.presentation }
+            : {}),
+        },
+      ];
+    }),
+  );
 }
 
 function schemaBuilderIssueFromError(error: unknown): SchemaBuilderValidationIssue {

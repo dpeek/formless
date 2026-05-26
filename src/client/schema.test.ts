@@ -43,11 +43,22 @@ describe("task source schema", () => {
   });
 
   it("contains the task collection, item view, and clear-completed query target", () => {
+    const priority = taskSourceSchema.entities.task?.fields.priority;
+
+    expect(priority?.type === "enum" ? priority.values : undefined).toMatchObject({
+      low: { label: "Low", presentation: { icon: "flag", color: "priority.low" } },
+      normal: { label: "Normal", presentation: { icon: "flag", color: "priority.normal" } },
+      high: { label: "High", presentation: { icon: "flag", color: "priority.high" } },
+    });
     expect(taskSourceSchema.itemViews.taskListItem?.fields).toEqual({
       title: { editor: "text", commit: "field-commit" },
-      done: { editor: "boolean", commit: "immediate" },
-      dueDate: { editor: "date", commit: "field-commit" },
-      priority: { editor: "enum", commit: "immediate" },
+      done: { editor: "boolean", commit: "immediate", presentation: { mode: "completion" } },
+      dueDate: {
+        editor: "date",
+        commit: "field-commit",
+        presentation: { visibility: "valueOrInteraction" },
+      },
+      priority: { editor: "enum", commit: "immediate", presentation: { mode: "iconOnly" } },
     });
     expect(taskSourceSchema.views.taskHome).toMatchObject({
       type: "collection",

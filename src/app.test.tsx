@@ -3229,7 +3229,15 @@ describe("generated collection home", () => {
   it("renders the selected list through the shared task item view", () => {
     const task = appSchema.entities.task;
     const model = selectPrimaryCollectionModels(appSchema)[0];
-    const record: StoredRecord = taskRecord("record-1", "First", true, "2026-05-01");
+    const record: StoredRecord = {
+      ...taskRecord("record-1", "First", true, "2026-05-01"),
+      values: {
+        title: "First",
+        done: true,
+        dueDate: "2026-05-01",
+        priority: "high",
+      },
+    };
 
     applyBootstrapResponse(bootstrap([record]));
     const html = renderToStaticMarkup(
@@ -3248,8 +3256,14 @@ describe("generated collection home", () => {
     expect(html).toContain('type="text"');
     expect(html).toContain('type="checkbox"');
     expect(html).toContain("checked");
+    expect(html).toContain('data-formless-field-presentation-mode="completion"');
+    expect(html).toContain('aria-label="Priority: High"');
+    expect(html).toContain('data-formless-field-presentation-mode="iconOnly"');
+    expect(html).toContain('data-formless-field-presentation-color-token="priority.high"');
+    expect(html).toContain("lucide-flag");
     expect(html).toContain("2026-05-01");
     expect(html).toContain('data-slot="date-picker-trigger"');
+    expect(html).toContain('data-formless-field-presentation-visibility="valueOrInteraction"');
     expect(html).toContain('role="spinbutton"');
     expect(html).not.toContain('aria-label="Estimate"');
     expect(html).not.toContain(record.createdAt);
