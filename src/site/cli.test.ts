@@ -1332,7 +1332,6 @@ describe("Formless Site CLI", () => {
     expect(restoreBody.archive.capabilities).toEqual([
       "installed-app-registry",
       "app-store-snapshots",
-      "app-scoped-media",
       "core-media-assets",
     ]);
     expect(restoreBody.archive.apps.map((app) => app.app.installId)).toEqual(["david"]);
@@ -2202,6 +2201,7 @@ describe("Formless Site CLI", () => {
     }
 
     expect(archive.app.installId).toBe("personal");
+    expect(archive.capabilities).toEqual(["app-store-snapshots", "core-media-assets"]);
     expect(archive.media.objects).toEqual([
       expect.objectContaining({
         archivePath: "media/personal/media/images/cover.png",
@@ -2417,6 +2417,11 @@ describe("Formless Site CLI", () => {
       ["personal", "site"],
       ["rates", "estii"],
       ["work", "tasks"],
+    ]);
+    expect(archive.capabilities).toEqual([
+      "installed-app-registry",
+      "app-store-snapshots",
+      "core-media-assets",
     ]);
     expect(personal?.media.objects).toEqual([
       expect.objectContaining({
@@ -3003,12 +3008,7 @@ function instanceArchive(apps: AppArchive[]): InstanceArchive {
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: [
-      "installed-app-registry",
-      "app-store-snapshots",
-      "app-scoped-media",
-      "core-media-assets",
-    ],
+    capabilities: ["installed-app-registry", "app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps,
   };
@@ -3027,7 +3027,7 @@ function appArchive(
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
+    capabilities: ["app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: {
       installId,

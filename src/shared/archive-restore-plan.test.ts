@@ -35,7 +35,7 @@ import {
 const now = "2026-05-23T00:00:00.000Z";
 
 describe("archive restore planner", () => {
-  it("plans deterministic instance archive restore steps for new installs", () => {
+  it("normalizes old app-scoped Site media before planning restore steps", () => {
     const archive = instanceArchive({
       apps: [
         appArchive({
@@ -105,7 +105,7 @@ describe("archive restore planner", () => {
     ]);
     expect(
       plan.steps.filter((step) => step.kind === "restoreMedia").map((step) => step.storageKey),
-    ).toEqual(["app-installs/personal/site/images/hero.png"]);
+    ).toEqual([legacyCoreStorageKey("personal", "hero")]);
   });
 
   it("plans mixed Site, Tasks, and Estii instance archive restores without non-Site media", () => {
@@ -173,6 +173,9 @@ describe("archive restore planner", () => {
     expect(
       plan.steps.filter((step) => step.kind === "restoreMedia").map((step) => step.appInstallId),
     ).toEqual(["site"]);
+    expect(
+      plan.steps.filter((step) => step.kind === "restoreMedia").map((step) => step.storageKey),
+    ).toEqual([legacyCoreStorageKey("site", "hero")]);
   });
 
   it("rejects install collisions unless replacement is explicit", () => {
@@ -293,7 +296,7 @@ describe("archive restore planner", () => {
     ]);
   });
 
-  it("validates media manifests, media files, and app-scoped media references", () => {
+  it("rejects unresolved legacy Site media references before restore", () => {
     const errors = expectFailure(
       planAppArchiveRestore(
         appArchive({
@@ -306,15 +309,39 @@ describe("archive restore planner", () => {
               ],
             }),
           },
+          media: { objects: [] },
+        }),
+        {
+          mediaFiles: [],
+          sourceSchemas: { site: siteSourceSchema },
+        },
+      ),
+    );
+
+    expect(errors).toEqual([
+      expect.objectContaining({
+        code: "missing-media-object",
+        field: "block.href",
+        recordId: "rec_block_missing",
+      }),
+    ]);
+  });
+
+  it("validates normalized legacy media manifests and media files", () => {
+    const errors = expectFailure(
+      planAppArchiveRestore(
+        appArchive({
+          data: {
+            kind: "storeSnapshot",
+            snapshot: storeSnapshot({
+              records: [
+                siteRecord("rec_site_settings_media", "media"),
+                imageBlock("personal", "hero"),
+              ],
+            }),
+          },
           media: {
-            objects: [
-              mediaObject("personal", "hero", { contentType: "image/jpeg" }),
-              mediaObject("personal", "bad-key", {
-                deliveryHref:
-                  "/api/app-installs/site/personal/media/app-installs/docs/site/images/bad-key.png",
-                storageKey: "app-installs/docs/site/images/bad-key.png",
-              }),
-            ],
+            objects: [mediaObject("personal", "hero", { contentType: "image/jpeg" })],
           },
         }),
         {
@@ -324,19 +351,10 @@ describe("archive restore planner", () => {
       ),
     );
 
-    expect(errors.map((error) => error.code)).toEqual([
-      "invalid-media",
-      "missing-media-object",
-      "invalid-media",
-      "missing-media-object",
-      "missing-media-object",
-    ]);
-    expect(errors.map((error) => error.storageKey ?? error.recordId)).toEqual([
-      "app-installs/docs/site/images/bad-key.png",
-      "app-installs/docs/site/images/bad-key.png",
-      "app-installs/personal/site/images/hero.png",
-      "app-installs/personal/site/images/hero.png",
-      "rec_block_missing",
+    expect(errors.map((error) => error.code)).toEqual(["invalid-media", "missing-media-object"]);
+    expect(errors.map((error) => error.storageKey)).toEqual([
+      legacyCoreStorageKey("personal", "hero"),
+      legacyCoreStorageKey("personal", "hero"),
     ]);
   });
 
@@ -590,6 +608,10 @@ function coreMediaFile(name: string): ArchiveRestoreMediaFile {
     byteSize: 8,
     contentType: "image/png",
   };
+}
+
+function legacyCoreStorageKey(installId: string, name: string): string {
+  return `media/images/legacy-site-app-installs__${installId}__site__images__${name}.png`;
 }
 
 function siteInstall(installId: string): AppInstall {

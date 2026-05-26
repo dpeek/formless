@@ -6,10 +6,10 @@ import {
   type PortableArchive,
   type SourceArchiveRecord,
 } from "../shared/archive.ts";
+import { normalizePortableArchiveLegacySiteMedia } from "../shared/archive-compat.ts";
 import type { AppInstall, BundledAppPackage } from "../shared/app-installs.ts";
 import {
   installedAppStorageIdentity,
-  legacySiteMediaStorageIdentity,
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import {
@@ -356,7 +356,6 @@ export async function restoreArchiveMediaObjectToStore(
   object: AppArchiveMediaObject,
   bytes: Uint8Array,
 ): Promise<MediaWriteResponse> {
-  const media = legacySiteMediaStorageIdentity(identity);
   const coreKeyPrefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
 
   if (object.storageKey.startsWith(coreKeyPrefix)) {
@@ -381,32 +380,9 @@ export async function restoreArchiveMediaObjectToStore(
     return result.upload;
   }
 
-  if (!media) {
-    throw new Error(`Installed app "${identity.installId}" does not support app-scoped media.`);
-  }
-
-  const keyPrefix = media.imageKeyPrefix.endsWith("/")
-    ? media.imageKeyPrefix
-    : `${media.imageKeyPrefix}/`;
-  const result = await restoreImageMedia({
-    asset: object.asset,
-    bytes,
-    contentType: object.contentType,
-    hrefForKey: (key) => `${media.routePrefix}/${key}`,
-    key: object.storageKey,
-    keyPrefix,
-    store,
-  });
-
-  if (!result.ok) {
-    throw new Error(result.error);
-  }
-
-  if (result.upload.href !== object.deliveryHref) {
-    throw new Error(`Restored media href for "${object.storageKey}" did not match the archive.`);
-  }
-
-  return result.upload;
+  throw new Error(
+    `Archive media key "${object.storageKey}" must be normalized to core media before restore for "${identity.installId}".`,
+  );
 }
 
 function coreMediaAssetForObject(object: AppArchiveMediaObject) {
@@ -457,6 +433,17 @@ async function parseAndPlanArchiveRestore(
       ok: false,
     };
   }
+
+  const normalized = normalizePortableArchiveLegacySiteMedia(archive);
+
+  if (!normalized.ok) {
+    return {
+      errors: normalized.errors.map((error) => ({ ...error })),
+      ok: false,
+    };
+  }
+
+  archive = normalized.archive;
 
   const planResult = planPortableArchiveRestore(archive, {
     installedApps: await target.listInstalledApps(),

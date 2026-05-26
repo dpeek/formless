@@ -92,7 +92,7 @@ describe("archive restore execution", () => {
       "install:create:docs",
       "app-data:app:docs:docs:storeSnapshot",
       "install:create:personal",
-      "media:app:personal:app-installs/personal/site/images/hero.png",
+      `media:app:personal:${legacyCoreStorageKey("personal", "hero")}`,
       "app-data:app:personal:personal:storeSnapshot",
     ]);
     expect(result.report.applied).toBe(true);
@@ -147,7 +147,7 @@ describe("archive restore execution", () => {
     expect(result.errors.map((error) => error.code)).toEqual(["install-collision"]);
   });
 
-  it("restores app media objects through the media core", async () => {
+  it("restores core media archive objects through the media core", async () => {
     const identity = installedAppStorageIdentity({
       installId: "personal",
       packageAppKey: "site",
@@ -166,23 +166,48 @@ describe("archive restore execution", () => {
         },
       },
       identity,
-      mediaObject("personal", "hero"),
+      coreMediaObject("hero"),
       pngBytes,
     );
 
     expect(response).toEqual({
       contentType: "image/png",
-      href: "/api/app-installs/site/personal/media/app-installs/personal/site/images/hero.png",
-      key: "app-installs/personal/site/images/hero.png",
+      href: "/api/formless/media/media/images/hero.png",
+      key: "media/images/hero.png",
       size: pngBytes.byteLength,
     });
     expect(writes).toEqual([
       expect.objectContaining({
         bytes: pngBytes,
         contentType: "image/png",
-        key: "app-installs/personal/site/images/hero.png",
+        key: "media/images/hero.png",
       }),
     ]);
+  });
+
+  it("rejects direct legacy Site media restore without compatibility normalization", async () => {
+    const identity = installedAppStorageIdentity({
+      installId: "personal",
+      packageAppKey: "site",
+    });
+
+    if (!identity) {
+      throw new Error("Expected installed app identity.");
+    }
+
+    await expect(
+      restoreArchiveMediaObjectToStore(
+        {
+          getObject: async () => undefined,
+          putObject: async () => undefined,
+        },
+        identity,
+        mediaObject("personal", "hero"),
+        pngBytes,
+      ),
+    ).rejects.toThrow(
+      'Archive media key "app-installs/personal/site/images/hero.png" must be normalized to core media before restore for "personal".',
+    );
   });
 });
 
@@ -313,6 +338,29 @@ function mediaObject(installId: string, name: string): AppArchiveMediaObject {
   };
 }
 
+function coreMediaObject(name: string): AppArchiveMediaObject {
+  const storageKey = `media/images/${name}.png`;
+
+  return {
+    storageKey,
+    archivePath: `media/personal/media/images/${name}.png`,
+    asset: {
+      byteSize: pngBytes.byteLength,
+      contentType: "image/png",
+      deliveryHref: `/api/formless/media/${storageKey}`,
+      id: `${name}.png`,
+      kind: "image",
+      label: `${name}.png`,
+      provider: "r2",
+      status: "ready",
+      storageKey,
+    },
+    contentType: "image/png",
+    byteSize: pngBytes.byteLength,
+    deliveryHref: `/api/formless/media/${storageKey}`,
+  };
+}
+
 function mediaFile(installId: string, name: string): ArchiveRestoreMediaRead {
   return {
     archivePath: `media/${installId}/${name}.png`,
@@ -320,6 +368,10 @@ function mediaFile(installId: string, name: string): ArchiveRestoreMediaRead {
     bytes: pngBytes,
     contentType: "image/png",
   };
+}
+
+function legacyCoreStorageKey(installId: string, name: string): string {
+  return `media/images/legacy-site-app-installs__${installId}__site__images__${name}.png`;
 }
 
 function siteInstall(installId: string): AppInstall {

@@ -43,6 +43,7 @@ import {
   type SiteProjectAppArchiveEntry,
   type SiteProjectAppArchiveMediaFile,
 } from "./project-archive.ts";
+import { isLegacySiteMediaHref, legacySiteMediaMigrationMessage } from "./source-media.ts";
 
 export const PORTABLE_ARCHIVE_MANIFEST_FILE = "archive.json";
 
@@ -123,12 +124,7 @@ export async function exportInstanceArchive(
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt,
-    capabilities: [
-      "installed-app-registry",
-      "app-store-snapshots",
-      "app-scoped-media",
-      "core-media-assets",
-    ],
+    capabilities: ["installed-app-registry", "app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps: entries.map((entry) => entry.archive),
   };
@@ -299,7 +295,7 @@ async function buildRemoteAppArchiveEntry(input: {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: input.exportedAt,
-    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
+    capabilities: ["app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: {
       installId: input.install.installId,
@@ -331,12 +327,7 @@ async function exportRemoteAppMedia(input: {
   records: readonly StoredRecord[];
   target: string;
 }): Promise<{ files: ArchiveDiskMediaFile[]; objects: AppArchiveMediaObject[] }> {
-  const identity = installedAppStorageIdentity({
-    installId: input.install.installId,
-    packageAppKey: input.install.packageAppKey,
-  });
-
-  const references = appMediaReferences(input.records, identity);
+  const references = appMediaReferences(input.records);
   const files: ArchiveDiskMediaFile[] = [];
   const objects: AppArchiveMediaObject[] = [];
 
@@ -377,17 +368,8 @@ async function exportRemoteAppMedia(input: {
   return { files, objects };
 }
 
-function appMediaReferences(
-  records: readonly StoredRecord[],
-  identity: InstalledAppStorageIdentity | undefined,
-): AppArchiveMediaObject[] {
+function appMediaReferences(records: readonly StoredRecord[]): AppArchiveMediaObject[] {
   const referencesByKey = new Map<string, AppArchiveMediaObject>();
-  const media = legacySiteMediaStorageIdentity(identity);
-  const keyPrefix = media
-    ? media.imageKeyPrefix.endsWith("/")
-      ? media.imageKeyPrefix
-      : `${media.imageKeyPrefix}/`
-    : undefined;
 
   for (const record of records) {
     if (record.deletedAt !== undefined) {
@@ -420,18 +402,8 @@ function appMediaReferences(
           continue;
         }
 
-        if (!media || !keyPrefix) {
-          continue;
-        }
-
-        const storageKey = storageKeyFromDeliveryHref(value, media.routePrefix);
-
-        if (
-          storageKey &&
-          isRestorableImageMediaKey(storageKey, { keyPrefix }) &&
-          !referencesByKey.has(storageKey)
-        ) {
-          referencesByKey.set(storageKey, mediaReference(storageKey, value));
+        if (isLegacySiteMediaHref(value)) {
+          throw new Error(legacySiteMediaMigrationMessage(value, "archive export"));
         }
       }
     }
@@ -465,22 +437,6 @@ function coreMediaReference(storageKey: string, deliveryHref: string): AppArchiv
       status: "ready",
       storageKey,
     },
-    byteSize: 0,
-    contentType,
-    deliveryHref,
-    storageKey,
-  };
-}
-
-function mediaReference(storageKey: string, deliveryHref: string): AppArchiveMediaObject {
-  const contentType = imageMediaContentTypeForKey(storageKey);
-
-  if (!contentType) {
-    throw new Error(`Media key "${storageKey}" has unsupported content type.`);
-  }
-
-  return {
-    archivePath: "",
     byteSize: 0,
     contentType,
     deliveryHref,

@@ -212,7 +212,7 @@ describe("instance archive restore API", () => {
     expect(estii.body.records).toEqual(estiiRecords());
   });
 
-  it("restores installed Site media before public tree reads reference it", async () => {
+  it("restores core Site media before public tree reads reference it", async () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
     const served = await harness.fetch(coreMediaHref);
@@ -231,6 +231,38 @@ describe("instance archive restore API", () => {
     });
     expect(JSON.stringify(tree.body)).toContain(coreMediaHref);
     expect(tree.body.page.label).toBe("Home");
+    expect(served.status).toBe(200);
+    expect(served.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(mediaBytes);
+  });
+
+  it("normalizes old app-scoped Site media archives into core media on restore", async () => {
+    const applied = await postArchiveRestore(appArchiveWithLegacyMedia({ dryRun: false }), [
+      legacyMediaFile(),
+    ]);
+    const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
+    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/site/personal/bootstrap");
+    const served = await harness.fetch(legacyCoreMediaHref);
+    const mediaRecord = bootstrap.body.records.find(
+      (record) => record.id === "rec_site_media_avatar",
+    );
+
+    expect(applied.response.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["personal"],
+          mediaCountsByApp: { personal: 1 },
+        },
+      },
+    });
+    expect(mediaRecord?.values).toMatchObject({ mediaAssetId: legacyCoreAssetId });
+    expect(mediaRecord?.values).not.toHaveProperty("href");
+    expect(JSON.stringify(tree.body)).toContain(legacyCoreMediaHref);
+    expect(JSON.stringify(tree.body)).not.toContain("/api/app-installs/site/personal/media/");
     expect(served.status).toBe(200);
     expect(served.headers.get("Content-Type")).toBe("image/png");
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(mediaBytes);
@@ -288,12 +320,7 @@ function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: [
-      "installed-app-registry",
-      "app-store-snapshots",
-      "app-scoped-media",
-      "core-media-assets",
-    ],
+    capabilities: ["installed-app-registry", "app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     apps: [appArchive(input), tasksAppArchive(input), estiiAppArchive(input)],
   };
@@ -304,7 +331,7 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["source-records", "app-scoped-media", "core-media-assets"],
+    capabilities: ["source-records", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "personal",
@@ -331,7 +358,7 @@ function tasksAppArchive(input: { dryRun: boolean }): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
+    capabilities: ["app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "work",
@@ -364,7 +391,7 @@ function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
+    capabilities: ["app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "rates",
@@ -395,6 +422,11 @@ function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
 const mediaBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const coreMediaStorageKey = "media/images/installed.png";
 const coreMediaHref = `/api/formless/media/${coreMediaStorageKey}`;
+const legacyStorageKey = "app-installs/personal/site/images/installed.png";
+const legacyMediaHref = `/api/app-installs/site/personal/media/${legacyStorageKey}`;
+const legacyCoreAssetId = "legacy-site-app-installs__personal__site__images__installed.png";
+const legacyCoreMediaStorageKey = `media/images/${legacyCoreAssetId}`;
+const legacyCoreMediaHref = `/api/formless/media/${legacyCoreMediaStorageKey}`;
 
 function appArchiveWithMedia(input: { dryRun: boolean }): AppArchive {
   return {
@@ -447,7 +479,57 @@ function imageAssetRecord(record: StoredRecord): StoredRecord {
   };
 }
 
+function appArchiveWithLegacyMedia(input: { dryRun: boolean }): AppArchive {
+  return {
+    ...appArchive(input),
+    capabilities: ["source-records", "app-scoped-media"],
+    data: {
+      kind: "sourceRecords",
+      schemaKey: "site",
+      schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      schema: siteSourceSchema,
+      records: testSiteSeedRecords.map((record) =>
+        record.id === "rec_site_media_avatar" ? legacyImageHrefRecord(record) : record,
+      ),
+    },
+    media: {
+      objects: [
+        {
+          archivePath: "media/personal/installed.png",
+          byteSize: mediaBytes.byteLength,
+          contentType: "image/png",
+          deliveryHref: legacyMediaHref,
+          storageKey: legacyStorageKey,
+        },
+      ],
+    },
+  };
+}
+
+function legacyImageHrefRecord(record: StoredRecord): StoredRecord {
+  const values = { ...record.values };
+
+  delete values.mediaAssetId;
+
+  return {
+    ...record,
+    values: {
+      ...values,
+      href: legacyMediaHref,
+    },
+  };
+}
+
 function mediaFile() {
+  return {
+    archivePath: "media/personal/installed.png",
+    byteSize: mediaBytes.byteLength,
+    bytesBase64: Buffer.from(mediaBytes).toString("base64"),
+    contentType: "image/png",
+  };
+}
+
+function legacyMediaFile() {
   return {
     archivePath: "media/personal/installed.png",
     byteSize: mediaBytes.byteLength,

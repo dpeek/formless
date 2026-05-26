@@ -11,11 +11,11 @@ import {
   type InstanceArchive,
   type PortableArchive,
 } from "./archive.ts";
-import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
 import {
-  installedAppStorageIdentity,
-  legacySiteMediaStorageIdentity,
-} from "./app-storage-identity.ts";
+  normalizePortableArchiveLegacySiteMedia,
+  type ArchiveCompatibilityError,
+} from "./archive-compat.ts";
+import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
 import { isValidStoredFieldValue } from "./field-types.ts";
 import type { RecordValues, StoredRecord } from "./protocol.ts";
 import type { AppSchema, FieldSchema } from "./schema.ts";
@@ -160,7 +160,9 @@ export function planPortableArchiveRestore(
     return invalidArchiveResult(error);
   }
 
-  return planParsedPortableArchiveRestore(archive, target);
+  const normalized = normalizeArchiveForPlanning(archive);
+
+  return normalized.ok ? planParsedPortableArchiveRestore(normalized.archive, target) : normalized;
 }
 
 export function planInstanceArchiveRestore(
@@ -175,7 +177,15 @@ export function planInstanceArchiveRestore(
     return invalidArchiveResult(error);
   }
 
-  return planParsedInstanceArchiveRestore(archive, target);
+  const normalized = normalizeArchiveForPlanning(archive);
+
+  if (!normalized.ok) {
+    return normalized;
+  }
+
+  return normalized.archive.kind === INSTANCE_ARCHIVE_KIND
+    ? planParsedInstanceArchiveRestore(normalized.archive, target)
+    : planParsedAppArchiveRestore(normalized.archive, target);
 }
 
 export function planAppArchiveRestore(
@@ -190,7 +200,33 @@ export function planAppArchiveRestore(
     return invalidArchiveResult(error);
   }
 
-  return planParsedAppArchiveRestore(archive, target);
+  const normalized = normalizeArchiveForPlanning(archive);
+
+  if (!normalized.ok) {
+    return normalized;
+  }
+
+  return normalized.archive.kind === INSTANCE_ARCHIVE_KIND
+    ? planParsedInstanceArchiveRestore(normalized.archive, target)
+    : planParsedAppArchiveRestore(normalized.archive, target);
+}
+
+function normalizeArchiveForPlanning(archive: PortableArchive):
+  | {
+      archive: PortableArchive;
+      ok: true;
+    }
+  | {
+      errors: ArchiveRestorePlanError[];
+      ok: false;
+    } {
+  const normalized = normalizePortableArchiveLegacySiteMedia(archive);
+
+  if (!normalized.ok) {
+    return compatibilityErrorResult(normalized.errors);
+  }
+
+  return normalized;
 }
 
 function planParsedPortableArchiveRestore(
@@ -631,25 +667,16 @@ function validateMedia(
   context: PlannerContext,
   errors: ArchiveRestorePlanError[],
 ) {
-  const identity = installedAppStorageIdentity({
-    installId: app.installId,
-    packageAppKey: app.packageAppKey,
-  });
   const seenStorageKeys = new Set<string>();
   const seenArchivePaths = new Set<string>();
   const deliveryHrefs = new Set<string>();
 
-  const media = legacySiteMediaStorageIdentity(identity);
-  const keyPrefix = media ? mediaKeyPrefix(media.imageKeyPrefix) : undefined;
-  const deliveryPrefix = media ? `${media.routePrefix}/` : undefined;
   const coreKeyPrefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
 
   for (const object of sortedMediaObjects(mediaObjects)) {
     const isCoreMedia = isRestorableImageMediaKey(object.storageKey, {
       keyPrefix: coreKeyPrefix,
     });
-    const isAppScopedMedia =
-      keyPrefix !== undefined && isRestorableImageMediaKey(object.storageKey, { keyPrefix });
 
     if (seenStorageKeys.has(object.storageKey)) {
       errors.push(
@@ -675,7 +702,7 @@ function validateMedia(
     seenArchivePaths.add(object.archivePath);
     deliveryHrefs.add(object.deliveryHref);
 
-    if (!isCoreMedia && !isAppScopedMedia) {
+    if (!isCoreMedia) {
       errors.push(
         planError("invalid-media", {
           appInstallId: app.installId,
@@ -717,11 +744,7 @@ function validateMedia(
       );
     }
 
-    const expectedDeliveryHref = isCoreMedia
-      ? coreMediaHrefForKey(object.storageKey)
-      : deliveryPrefix
-        ? `${deliveryPrefix}${object.storageKey}`
-        : undefined;
+    const expectedDeliveryHref = isCoreMedia ? coreMediaHrefForKey(object.storageKey) : undefined;
 
     if (expectedDeliveryHref && object.deliveryHref !== expectedDeliveryHref) {
       errors.push(
@@ -738,10 +761,6 @@ function validateMedia(
   }
 
   validateCoreMediaReferences(app.installId, records, deliveryHrefs, errors);
-
-  if (deliveryPrefix) {
-    validateMediaReferences(app.installId, records, deliveryPrefix, deliveryHrefs, errors);
-  }
 }
 
 function validateMediaAsset(
@@ -812,34 +831,6 @@ function validateMediaFile(
         storageKey: object.storageKey,
       }),
     );
-  }
-}
-
-function validateMediaReferences(
-  appInstallId: string,
-  records: StoredRecord[],
-  deliveryPrefix: string,
-  deliveryHrefs: Set<string>,
-  errors: ArchiveRestorePlanError[],
-) {
-  for (const record of records) {
-    for (const [fieldName, value] of Object.entries(record.values)) {
-      if (typeof value !== "string" || !value.startsWith(deliveryPrefix)) {
-        continue;
-      }
-
-      if (!deliveryHrefs.has(value)) {
-        errors.push(
-          planError("missing-media-object", {
-            appInstallId,
-            entity: record.entity,
-            field: `${record.entity}.${fieldName}`,
-            message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" references media missing from the archive manifest.`,
-            recordId: record.id,
-          }),
-        );
-      }
-    }
   }
 }
 
@@ -1039,6 +1030,15 @@ function invalidArchiveResult(error: unknown): ArchiveRestorePlanResult {
         message: error instanceof Error ? error.message : "Archive is invalid.",
       }),
     ],
+    ok: false,
+  };
+}
+
+function compatibilityErrorResult(
+  errors: readonly ArchiveCompatibilityError[],
+): Extract<ArchiveRestorePlanResult, { ok: false }> {
+  return {
+    errors: errorsByLocation(errors.map(({ code, ...details }) => planError(code, { ...details }))),
     ok: false,
   };
 }
