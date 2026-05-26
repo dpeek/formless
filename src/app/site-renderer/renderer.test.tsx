@@ -7,6 +7,7 @@ import type {
   SitePageTree,
   SitePlacementNode,
 } from "../../shared/protocol.ts";
+import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import { PUBLIC_SITE_THEME_STORAGE_KEY, SitePageRenderer } from "./renderer.tsx";
 
 describe("public Site renderer characterization", () => {
@@ -122,6 +123,43 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain('aria-label="Pending upload"');
     expect(html).toContain(">Pending upload</span>");
     expect(html).not.toContain("Unsupported block");
+  });
+
+  it("keeps public Site link icons stored-SVG backed outside header navigation", () => {
+    const icon = requiredIconCatalogSvg("github");
+    const headerLink = linkNode("header-icon-link", "Header GitHub", "https://example.com/header", {
+      icon,
+    });
+    const footerLink = linkNode("footer-icon-link", "Footer GitHub", "https://example.com/footer", {
+      icon,
+    });
+    const frame: SitePageFrame = {
+      header: blockNode("header", "header", "Header", {
+        placements: [
+          placement(
+            "header-primary",
+            blockNode("header-primary-block", "headerPrimary", "Primary", {
+              placements: [placement("header-icon", headerLink)],
+            }),
+          ),
+        ],
+      }),
+      footer: blockNode("footer", "footer", "Footer", {
+        placements: [
+          placement(
+            "footer-social",
+            blockNode("footer-social-block", "footerSocial", "Social", {
+              placements: [placement("footer-icon", footerLink)],
+            }),
+          ),
+        ],
+      }),
+    };
+    const html = renderSite(pageNode("home", []), { frame });
+
+    expect(linkHtml(html, "https://example.com/header")).not.toContain('data-web-svg-icon="svg"');
+    expect(linkHtml(html, "https://example.com/footer")).toContain('data-web-svg-icon="svg"');
+    expect(linkHtml(html, "https://example.com/footer")).toContain('d="M12 .5C5.65 .5.5 5.65.5 12');
   });
 
   it("characterizes content lists, summary cards, published links, dates, and primary images", () => {
@@ -271,7 +309,7 @@ function defaultFrame(): SitePageFrame {
   const home = linkNode("home-link", "Home", "/");
   const blog = linkNode("blog-link", "Blog", "/blog");
   const github = linkNode("github-link", "GitHub", "https://github.com/dpeek", {
-    icon: '<svg viewBox="0 0 24 24"><path d="M12 2h1v1h-1z"/></svg>',
+    icon: requiredIconCatalogSvg("github"),
   });
 
   return {
@@ -410,4 +448,14 @@ function mainHtml(html: string): string {
 
 function countOccurrences(text: string, search: string): number {
   return text.split(search).length - 1;
+}
+
+function requiredIconCatalogSvg(key: string): string {
+  const source = resolveIconCatalogSvg(key);
+
+  if (!source) {
+    throw new Error(`Missing icon catalog entry "${key}".`);
+  }
+
+  return source;
 }

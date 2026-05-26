@@ -69,7 +69,8 @@ describe("RecordTable", () => {
     expect(html).toContain('aria-label="Priority: High"');
     expect(html).toContain('data-formless-field-presentation-mode="iconOnly"');
     expect(html).toContain('data-formless-field-presentation-color="danger"');
-    expect(html).toContain("lucide-flag");
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain('d="M4 15s1-1 4-1');
   });
 
   it("uses icon-sized utility columns for placement reordering and row actions", () => {

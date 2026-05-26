@@ -3262,7 +3262,8 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Priority: High"');
     expect(html).toContain('data-formless-field-presentation-mode="iconOnly"');
     expect(html).toContain('data-formless-field-presentation-color-token="priority.high"');
-    expect(html).toContain("lucide-flag");
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain('d="M4 15s1-1 4-1');
     expect(html).toContain("2026-05-01");
     expect(html).toContain('data-slot="date-picker-trigger"');
     expect(html).toContain('data-formless-field-presentation-visibility="valueOrInteraction"');

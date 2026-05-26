@@ -1,17 +1,11 @@
-import { PriorityMarkerIcon } from "@dpeek/formless-ui/icons";
 import { SvgIcon } from "@dpeek/formless-ui/svg-icon";
-import type { ComponentType, SVGProps } from "react";
+import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import type { EnumValueSchema } from "../../shared/schema.ts";
 
-export type ResolvedFieldPresentationIcon =
-  | {
-      kind: "component";
-      Component: ComponentType<SVGProps<SVGSVGElement>>;
-    }
-  | {
-      kind: "svg";
-      source: string;
-    };
+export type ResolvedFieldPresentationIcon = {
+  kind: "svg";
+  source: string;
+};
 
 export type FieldPresentationColorIntent = "neutral" | "success" | "warning" | "danger";
 
@@ -19,10 +13,6 @@ export type ResolvedFieldPresentationColor = {
   intent: FieldPresentationColorIntent;
   token?: string;
   known: boolean;
-};
-
-const iconRegistry: Record<string, ResolvedFieldPresentationIcon> = {
-  flag: { kind: "component", Component: PriorityMarkerIcon },
 };
 
 const colorTokenRegistry: Record<string, Exclude<FieldPresentationColorIntent, "neutral">> = {
@@ -38,11 +28,13 @@ const colorTokenRegistry: Record<string, Exclude<FieldPresentationColorIntent, "
 export function resolveFieldPresentationIcon(
   token: string | undefined,
 ): ResolvedFieldPresentationIcon | undefined {
-  if (!token) {
+  const source = resolveIconCatalogSvg(token);
+
+  if (!source) {
     return undefined;
   }
 
-  return iconRegistry[token];
+  return { kind: "svg", source };
 }
 
 export function resolveFieldPresentationColor(
@@ -82,13 +74,7 @@ export function GeneratedFieldPresentationIcon({
   className?: string;
   icon: ResolvedFieldPresentationIcon;
 }) {
-  if (icon.kind === "svg") {
-    return <SvgIcon className={className} source={icon.source} />;
-  }
-
-  const Icon = icon.Component;
-
-  return <Icon aria-hidden="true" className={className} />;
+  return <SvgIcon className={className} source={icon.source} />;
 }
 
 export function fieldPresentationIconButtonClassName(intent: FieldPresentationColorIntent) {

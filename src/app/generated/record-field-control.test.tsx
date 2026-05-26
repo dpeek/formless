@@ -20,8 +20,33 @@ describe("generated record field presentation rendering", () => {
     expect(html).toContain('data-formless-field-presentation-color="danger"');
     expect(html).toContain('data-formless-field-presentation-color-token="priority.high"');
     expect(html).toContain('data-formless-field-presentation-icon="flag"');
-    expect(html).toContain("lucide-flag");
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain('d="M4 15s1-1 4-1');
     expect(html).not.toContain("<select");
+  });
+
+  it("renders enum icon-only controls from non-compat catalog presentation tokens", () => {
+    const html = renderRecordControl(
+      {
+        ...priorityFieldConfig,
+        field: {
+          ...priorityField,
+          values: {
+            high: {
+              label: "High",
+              presentation: { color: "priority.high", icon: "github" },
+            },
+          },
+        },
+      },
+      { draft: "high", recordValue: "high" },
+    );
+
+    expect(html).toContain('aria-label="Priority: High"');
+    expect(html).toContain('data-formless-field-presentation-icon="github"');
+    expect(html).toContain('data-web-svg-icon="svg"');
+    expect(html).toContain('d="M12 .5C5.65 .5.5 5.65.5 12');
+    expect(html).not.toContain(">High</span>");
   });
 
   it("falls back to neutral visible enum text for unknown icon and color tokens", () => {
@@ -46,7 +71,7 @@ describe("generated record field presentation rendering", () => {
     expect(html).toContain('data-formless-field-presentation-color-token="priority.unknown"');
     expect(html).toContain('data-formless-field-presentation-icon="missing"');
     expect(html).toContain(">High</span>");
-    expect(html).not.toContain("lucide-flag");
+    expect(html).not.toContain('data-web-svg-icon="svg"');
   });
 
   it("renders boolean completion mode as the larger generated completion control", () => {

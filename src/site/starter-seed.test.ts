@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { resolveIconCatalogSvg } from "../shared/icon-catalog.ts";
 import type { FieldValue, StoredRecord } from "../shared/protocol.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 import { buildSiteSourceSnapshot } from "./source-snapshot.ts";
@@ -112,16 +113,19 @@ describe("Site starter seed", () => {
     expect(childBlocks(footerSocial.id).map((record) => record.values)).toEqual([
       expect.objectContaining({
         href: "https://github.com/your-handle",
+        icon: requiredIconCatalogSvg("github"),
         label: "GitHub",
         linkTargetMode: "external",
       }),
       expect.objectContaining({
         href: "https://www.linkedin.com/in/your-handle",
+        icon: requiredIconCatalogSvg("linkedin"),
         label: "LinkedIn",
         linkTargetMode: "external",
       }),
       expect.objectContaining({
         href: "https://x.com/your-handle",
+        icon: requiredIconCatalogSvg("x"),
         label: "X",
         linkTargetMode: "external",
       }),
@@ -198,4 +202,14 @@ function numberField(record: StoredRecord, field: string): number {
   const value: FieldValue | undefined = record.values[field];
 
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function requiredIconCatalogSvg(key: string): string {
+  const source = resolveIconCatalogSvg(key);
+
+  if (!source) {
+    throw new Error(`Missing icon catalog entry "${key}".`);
+  }
+
+  return source;
 }
