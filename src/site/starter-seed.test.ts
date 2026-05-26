@@ -14,7 +14,7 @@ describe("Site starter seed", () => {
     ).not.toThrow();
 
     expect(blocksOfType("image")).toEqual([]);
-    expect(mediaLikeHrefs()).toEqual([]);
+    expect(ownedOrInlineImageHrefs()).toEqual([]);
     expect(serializedSeed()).not.toContain("David Peek");
     expect(serializedSeed()).not.toContain("dpeek");
     expect(serializedSeed()).not.toContain("Estii");
@@ -179,12 +179,16 @@ function childTypes(parentId: string): string[] {
   return childBlocks(parentId).map((record) => stringField(record, "type") ?? "");
 }
 
-function mediaLikeHrefs(): string[] {
+function ownedOrInlineImageHrefs(): string[] {
   return siteSeedRecords
     .map((record) => stringField(record, "href"))
     .filter(
       (href): href is string =>
-        href !== undefined && (href.startsWith("/api/site/media/") || href.startsWith("data:")),
+        href !== undefined &&
+        (href.startsWith("/api/formless/media/") ||
+          href.startsWith("/api/site/media/") ||
+          /^\/api\/app-installs\/site\/[^/]+\/media\//.test(href) ||
+          href.startsWith("data:")),
     );
 }
 

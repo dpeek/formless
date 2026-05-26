@@ -27,8 +27,8 @@ describe("core media", () => {
         filename: "hero.png",
         size: pngBytes.byteLength,
       },
-      hrefForKey: (key) => `/api/site/media/${key}`,
-      keyPrefix: "site/images/",
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      keyPrefix: "media/images/",
       provider: "r2",
       randomId: () => "asset-1",
       store,
@@ -40,19 +40,19 @@ describe("core media", () => {
         asset: {
           byteSize: pngBytes.byteLength,
           contentType: "image/png",
-          deliveryHref: "/api/site/media/site/images/asset-1.png",
+          deliveryHref: "/api/formless/media/media/images/asset-1.png",
           filename: "hero.png",
           id: "asset-1.png",
           kind: "image",
           label: "hero.png",
           provider: "r2",
           status: "ready",
-          storageKey: "site/images/asset-1.png",
+          storageKey: "media/images/asset-1.png",
         },
         assetId: "asset-1.png",
         contentType: "image/png",
-        href: "/api/site/media/site/images/asset-1.png",
-        key: "site/images/asset-1.png",
+        href: "/api/formless/media/media/images/asset-1.png",
+        key: "media/images/asset-1.png",
         size: pngBytes.byteLength,
       },
     });
@@ -65,15 +65,15 @@ describe("core media", () => {
           "formless-media-asset-id": "asset-1.png",
           "formless-media-byte-size": String(pngBytes.byteLength),
           "formless-media-content-type": "image/png",
-          "formless-media-delivery-href": "/api/site/media/site/images/asset-1.png",
+          "formless-media-delivery-href": "/api/formless/media/media/images/asset-1.png",
           "formless-media-filename": "hero.png",
           "formless-media-kind": "image",
           "formless-media-label": "hero.png",
           "formless-media-provider": "r2",
           "formless-media-status": "ready",
-          "formless-media-storage-key": "site/images/asset-1.png",
+          "formless-media-storage-key": "media/images/asset-1.png",
         },
-        key: "site/images/asset-1.png",
+        key: "media/images/asset-1.png",
       },
     ]);
     expect(mediaAssetFromObjectMetadata(store.writes[0]?.customMetadata)).toEqual(
@@ -82,14 +82,14 @@ describe("core media", () => {
 
     const delivery = await deliveryFactsForMediaObject({
       includeBody: false,
-      key: "site/images/asset-1.png",
+      key: "media/images/asset-1.png",
       store,
     });
 
     expect(delivery?.body).toBeNull();
     expect(delivery?.headers.get("Content-Type")).toBe("image/png");
     expect(delivery?.headers.get("Cache-Control")).toBe(MEDIA_OBJECT_CACHE_CONTROL);
-    expect(delivery?.headers.get("ETag")).toBe('"site/images/asset-1.png"');
+    expect(delivery?.headers.get("ETag")).toBe('"media/images/asset-1.png"');
   });
 
   it("restores images to exact keys and rejects unsupported restore inputs", async () => {
@@ -97,25 +97,25 @@ describe("core media", () => {
     const restored = await restoreImageMedia({
       bytes: pngBytes,
       contentType: "image/png",
-      hrefForKey: (key) => `/api/site/media/${key}`,
-      key: "site/images/restored.png",
-      keyPrefix: "site/images/",
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      key: "media/images/restored.png",
+      keyPrefix: "media/images/",
       store,
     });
     const mismatched = await restoreImageMedia({
       bytes: pngBytes,
       contentType: "image/jpeg",
-      hrefForKey: (key) => `/api/site/media/${key}`,
-      key: "site/images/restored.png",
-      keyPrefix: "site/images/",
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      key: "media/images/restored.png",
+      keyPrefix: "media/images/",
       store,
     });
     const unsupported = await restoreImageMedia({
       bytes: pngBytes,
       contentType: "image/png",
-      hrefForKey: (key) => `/api/site/media/${key}`,
-      key: "site/videos/clip.png",
-      keyPrefix: "site/images/",
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      key: "media/videos/clip.png",
+      keyPrefix: "media/images/",
       store,
     });
 
@@ -123,8 +123,8 @@ describe("core media", () => {
       ok: true,
       upload: {
         contentType: "image/png",
-        href: "/api/site/media/site/images/restored.png",
-        key: "site/images/restored.png",
+        href: "/api/formless/media/media/images/restored.png",
+        key: "media/images/restored.png",
         size: pngBytes.byteLength,
       },
     });
@@ -142,45 +142,45 @@ describe("core media", () => {
 
   it("owns image content type and restorable storage key conventions", () => {
     expect(imageMediaExtensionForContentType("image/jpeg; charset=binary")).toBe("jpg");
-    expect(imageMediaContentTypeForKey("site/images/photo.jpeg")).toBe("image/jpeg");
-    expect(isRestorableImageMediaKey("site/images/photo.webp", { keyPrefix: "site/images/" })).toBe(
-      true,
-    );
+    expect(imageMediaContentTypeForKey("media/images/photo.jpeg")).toBe("image/jpeg");
     expect(
-      isRestorableImageMediaKey("site/images/../photo.webp", { keyPrefix: "site/images/" }),
+      isRestorableImageMediaKey("media/images/photo.webp", { keyPrefix: "media/images/" }),
+    ).toBe(true);
+    expect(
+      isRestorableImageMediaKey("media/images/../photo.webp", { keyPrefix: "media/images/" }),
     ).toBe(false);
   });
 
   it("resolves render-ready delivery facts from image media asset ids", () => {
-    const hrefForKey = (key: string) => `/api/site/media/${key}`;
+    const hrefForKey = (key: string) => `/api/formless/media/${key}`;
 
     expect(
       imageMediaDeliveryFactsForAssetId("asset-1.webp", {
         hrefForKey,
-        keyPrefix: "site/images/",
+        keyPrefix: "media/images/",
       }),
     ).toEqual({
       assetId: "asset-1.webp",
-      href: "/api/site/media/site/images/asset-1.webp",
+      href: "/api/formless/media/media/images/asset-1.webp",
       kind: "image",
-      storageKey: "site/images/asset-1.webp",
+      storageKey: "media/images/asset-1.webp",
     });
     expect(
-      imageMediaDeliveryFactsForAssetId("site/images/asset-1.webp", {
+      imageMediaDeliveryFactsForAssetId("media/images/asset-1.webp", {
         hrefForKey,
-        keyPrefix: "site/images/",
+        keyPrefix: "media/images/",
       }),
     ).toBeUndefined();
     expect(
       imageMediaDeliveryFactsForAssetId("../asset-1.webp", {
         hrefForKey,
-        keyPrefix: "site/images/",
+        keyPrefix: "media/images/",
       }),
     ).toBeUndefined();
     expect(
       imageMediaDeliveryFactsForAssetId("asset-1.txt", {
         hrefForKey,
-        keyPrefix: "site/images/",
+        keyPrefix: "media/images/",
       }),
     ).toBeUndefined();
     expect(coreImageMediaDeliveryFactsForAssetId("asset-1.webp")).toEqual({
@@ -275,8 +275,8 @@ describe("core media", () => {
         filename: "../nested/\u0000",
         size: pngBytes.byteLength,
       },
-      hrefForKey: (key) => `/api/site/media/${key}`,
-      keyPrefix: "site/images/",
+      hrefForKey: (key) => `/api/formless/media/${key}`,
+      keyPrefix: "media/images/",
       provider: "r2",
       randomId: () => "asset-2",
       store: memoryMediaObjectStore(),

@@ -341,21 +341,21 @@ function recordsWithPrimaryImages(records: StoredRecord[] = testSiteSeedRecords)
     siteBlockRecord("rec_site_media_post_primary_first", {
       type: "image",
       label: "Shipping primary first",
-      href: "/api/site/media/site/images/post-primary-first.webp",
+      href: "https://cdn.example.com/post-primary-first.webp",
       width: 1600,
       height: 900,
     }),
     siteBlockRecord("rec_site_media_post_primary_second", {
       type: "image",
       label: "Shipping primary second",
-      href: "/api/site/media/site/images/post-primary-second.webp",
+      href: "data:image/png;base64,cG9zdC1wcmltYXJ5LXNlY29uZA==",
       width: 1600,
       height: 900,
     }),
     siteBlockRecord("rec_site_media_project_primary", {
       type: "image",
       label: "OpenSurf primary",
-      href: "/api/site/media/site/images/project-primary.webp",
+      href: "/manual/images/project-primary.webp",
       width: 1200,
       height: 900,
     }),
@@ -2093,11 +2093,11 @@ describe("public site renderer", () => {
     const projectsHtml = renderSitePage("projects", records);
 
     expect(blogHtml).toContain('data-site-primary-image="summary"');
-    expect(blogHtml).toContain("/api/site/media/site/images/post-primary-first.webp");
+    expect(blogHtml).toContain("https://cdn.example.com/post-primary-first.webp");
     expect(blogHtml).toContain("Shipping primary first");
-    expect(blogHtml).not.toContain("/api/site/media/site/images/post-primary-second.webp");
+    expect(blogHtml).not.toContain("data:image/png;base64,cG9zdC1wcmltYXJ5LXNlY29uZA==");
     expect(projectsHtml).toContain('data-site-primary-image="summary"');
-    expect(projectsHtml).toContain("/api/site/media/site/images/project-primary.webp");
+    expect(projectsHtml).toContain("/manual/images/project-primary.webp");
     expect(projectsHtml).toContain("OpenSurf primary");
     expect(projectsHtml).toContain('href="/pages/projects/opensurf"');
   });
@@ -2159,12 +2159,10 @@ describe("public site renderer", () => {
     const html = renderSitePage("blog/shipping-schema-backed-authoring", records);
 
     expect(html).toContain('data-site-primary-image="post-detail"');
-    expect(html).toContain("/api/site/media/site/images/post-primary-first.webp");
+    expect(html).toContain("https://cdn.example.com/post-primary-first.webp");
     expect(html).toContain("Shipping primary first");
-    expect(
-      countOccurrences(html, 'src="/api/site/media/site/images/post-primary-first.webp"'),
-    ).toBe(1);
-    expect(html).not.toContain("/api/site/media/site/images/post-primary-second.webp");
+    expect(countOccurrences(html, 'src="https://cdn.example.com/post-primary-first.webp"')).toBe(1);
+    expect(html).not.toContain("data:image/png;base64,cG9zdC1wcmltYXJ5LXNlY29uZA==");
     expect(html).toContain(
       "The first useful content app should keep records flat and move composition into relationships and views.",
     );
@@ -2182,7 +2180,7 @@ describe("public site renderer", () => {
       siteBlockRecord("rec_site_media_feature_right", {
         type: "image",
         label: "Feature media right",
-        href: "/api/site/media/site/images/feature-right.webp",
+        href: "https://cdn.example.com/feature-right.webp",
         width: 1200,
         height: 800,
       }),
@@ -2211,7 +2209,7 @@ describe("public site renderer", () => {
       siteBlockRecord("rec_site_media_feature_left", {
         type: "image",
         label: "Feature media left",
-        href: "/api/site/media/site/images/feature-left.webp",
+        href: "/manual/images/feature-left.webp",
         width: 1000,
         height: 750,
       }),
@@ -2278,12 +2276,12 @@ describe("public site renderer", () => {
     expect(html).not.toContain("**slotted media**");
     expect(actionHtml).toContain("Read the guide");
     expect(actionHtml).toContain("underline");
-    expect(html).toContain("/api/site/media/site/images/feature-right.webp");
-    expect(html).toContain("/api/site/media/site/images/feature-left.webp");
+    expect(html).toContain("https://cdn.example.com/feature-right.webp");
+    expect(html).toContain("/manual/images/feature-left.webp");
     expect(html.indexOf("Ship composable blocks")).toBeLessThan(
-      html.indexOf('src="/api/site/media/site/images/feature-right.webp"'),
+      html.indexOf('src="https://cdn.example.com/feature-right.webp"'),
     );
-    expect(html.indexOf('src="/api/site/media/site/images/feature-left.webp"')).toBeLessThan(
+    expect(html.indexOf('src="/manual/images/feature-left.webp"')).toBeLessThan(
       html.indexOf("Media first feature"),
     );
     expect(html).toContain("Default child copy.");
@@ -2363,7 +2361,7 @@ describe("public site renderer", () => {
     expect(html).toContain("Formless");
   });
 
-  it("renders image media blocks from uploaded and external href metadata", () => {
+  it("renders image media blocks from manual, external, and core-backed references", () => {
     const tree = sitePageTree("home");
     const html = renderToStaticMarkup(
       <SitePageRenderer
@@ -2379,7 +2377,7 @@ describe("public site renderer", () => {
                   id: "rec_site_media_avatar",
                   type: "image",
                   label: "Site owner portrait",
-                  href: "/api/site/media/site/images/cover.webp",
+                  href: "data:image/png;base64,Y292ZXI=",
                   width: 1200,
                   height: 1200,
                   placements: [],
@@ -2403,7 +2401,7 @@ describe("public site renderer", () => {
                   id: "rec_site_media_asset",
                   type: "image",
                   label: "Media asset reference",
-                  href: "/api/site/media/site/images/stale-asset-backed.webp",
+                  href: "https://cdn.example.com/stale-asset-backed.webp",
                   media: {
                     assetId: "asset-backed.webp",
                     href: "/api/formless/media/media/images/asset-backed.webp",
@@ -2420,12 +2418,12 @@ describe("public site renderer", () => {
 
     expect(html).toContain("Site owner portrait");
     expect(html).toContain('alt="Site owner portrait"');
-    expect(html).toContain('src="/api/site/media/site/images/cover.webp"');
+    expect(html).toContain('src="data:image/png;base64,Y292ZXI="');
     expect(html).toContain('alt="External reference"');
     expect(html).toContain('src="https://example.com/manual.png"');
     expect(html).toContain('alt="Media asset reference"');
     expect(html).toContain('src="/api/formless/media/media/images/asset-backed.webp"');
-    expect(html).not.toContain('src="/api/site/media/site/images/stale-asset-backed.webp"');
+    expect(html).not.toContain('src="https://cdn.example.com/stale-asset-backed.webp"');
     expect(html).not.toContain("data-asset-key");
   });
 
@@ -5780,7 +5778,7 @@ describe("generated forms and records", () => {
         type: "image",
         label: "Cover image",
         mediaAssetId: "cover.webp",
-        href: "/api/site/media/site/images/legacy-cover.webp",
+        href: "https://cdn.example.com/manual-cover.webp",
         width: 1200,
         height: 630,
       }),
@@ -5831,7 +5829,7 @@ describe("generated forms and records", () => {
     expect(imageHtml).toContain('data-web-image-field-preview="image"');
     expect(imageHtml).toContain('data-web-image-field-upload="trigger"');
     expect(imageHtml).toContain('src="/api/formless/media/media/images/cover.webp"');
-    expect(imageHtml).not.toContain('src="/api/site/media/site/images/legacy-cover.webp"');
+    expect(imageHtml).not.toContain('src="https://cdn.example.com/manual-cover.webp"');
     expect(imageHtml).toContain('type="file"');
     expect(imageHtml).toContain('accept="image/jpeg,image/png,image/webp,image/gif"');
     expect(imageHtml).toContain('aria-label="Upload Media asset"');
@@ -5841,7 +5839,7 @@ describe("generated forms and records", () => {
     expect(imageHtml).toMatch(/data-web-image-field-upload="trigger"[\s\S]*type="file"/);
     expect(imageHtml).toMatch(/<input(?=[^>]*type="file")(?=[^>]*class="sr-only")[^>]*>/);
     expect(hrefHtml).toMatch(inputWithAriaLabelAndType("Link", "text"));
-    expect(hrefHtml).toContain('value="/api/site/media/site/images/legacy-cover.webp"');
+    expect(hrefHtml).toContain('value="https://cdn.example.com/manual-cover.webp"');
     expect(hrefHtml).not.toContain('type="file"');
     expect(emptyHtml).toContain('data-web-image-field-preview="empty"');
     expect(emptyHtml).toContain('data-web-media-field-preview="empty"');

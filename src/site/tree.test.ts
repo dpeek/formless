@@ -141,14 +141,14 @@ describe("site page tree projection", () => {
     ]);
   });
 
-  it("projects uploaded-style image hrefs through the existing block shape", () => {
+  it("projects manual image hrefs through the existing block shape", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_media_avatar"
         ? {
             ...record,
             values: {
               ...record.values,
-              href: "/api/site/media/site/images/avatar.webp",
+              href: "https://cdn.example.com/avatar.webp",
             },
           }
         : record,
@@ -161,7 +161,7 @@ describe("site page tree projection", () => {
       id: "rec_site_media_avatar",
       type: "image",
       label: "Site owner portrait",
-      href: "/api/site/media/site/images/avatar.webp",
+      href: "https://cdn.example.com/avatar.webp",
       width: 1200,
       height: 1200,
       placements: [],
@@ -203,14 +203,14 @@ describe("site page tree projection", () => {
     });
   });
 
-  it("keeps legacy image href fallback when media asset ids are present", () => {
+  it("keeps manual image href fallback alongside media asset ids", () => {
     const records = baseTreeRecords().map((record) =>
       record.id === "rec_site_media_avatar"
         ? {
             ...record,
             values: {
               ...record.values,
-              href: "/api/site/media/site/images/legacy-avatar.webp",
+              href: "https://cdn.example.com/manual-avatar.webp",
               mediaAssetId: "avatar.webp",
             },
           }
@@ -220,7 +220,7 @@ describe("site page tree projection", () => {
     const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
     const heroImage = childForPlacement(hero, "rec_site_place_home_hero_image");
 
-    expect(heroImage.href).toBe("/api/site/media/site/images/legacy-avatar.webp");
+    expect(heroImage.href).toBe("https://cdn.example.com/manual-avatar.webp");
     expect(heroImage.media).toEqual({
       assetId: "avatar.webp",
       href: "/api/formless/media/media/images/avatar.webp",
@@ -240,7 +240,7 @@ describe("site page tree projection", () => {
       blockRecord("rec_site_media_feature", {
         type: "image",
         label: "Feature image",
-        href: "/api/site/media/site/images/feature.webp",
+        href: "/manual/images/feature.webp",
         width: 1600,
         height: 900,
       }),
@@ -743,21 +743,21 @@ describe("site page tree projection", () => {
       blockRecord("rec_site_media_post_first", {
         type: "image",
         label: "Post primary first",
-        href: "/api/site/media/site/images/post-first.webp",
+        href: "https://cdn.example.com/post-first.webp",
         width: 1600,
         height: 900,
       }),
       blockRecord("rec_site_media_post_second", {
         type: "image",
         label: "Post primary second",
-        href: "/api/site/media/site/images/post-second.webp",
+        href: "data:image/png;base64,cG9zdC1zZWNvbmQ=",
         width: 1600,
         height: 900,
       }),
       blockRecord("rec_site_media_project_first", {
         type: "image",
         label: "Project primary first",
-        href: "/api/site/media/site/images/project-first.webp",
+        href: "/manual/images/project-first.webp",
         width: 1200,
         height: 900,
       }),
@@ -840,7 +840,7 @@ describe("site page tree projection", () => {
       ["rec_site_place_project_primary_first", "primaryImage"],
     ]);
     expect(project?.placements.map((placement) => placement.block.href)).toEqual([
-      "/api/site/media/site/images/project-first.webp",
+      "/manual/images/project-first.webp",
     ]);
   });
 

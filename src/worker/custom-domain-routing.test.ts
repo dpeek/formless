@@ -73,7 +73,7 @@ describe("installed Site custom-domain Worker routing", () => {
     expect(nestedHtml).not.toContain("Loading site page...");
   });
 
-  it("serves mapped host indexing, icons, and installed media from the mapped install", async () => {
+  it("serves mapped host indexing, icons, and core media from the instance", async () => {
     await setupMappedSite();
     await postAdminJson(`/api/app-installs/site/${installId}/mutations`, {
       mutationId: "mutation-custom-domain-sitemap-page",
@@ -95,7 +95,7 @@ describe("installed Site custom-domain Worker routing", () => {
       },
     });
     await putAdminBytes(
-      `/api/app-installs/site/${installId}/media/app-installs/${installId}/site/images/custom-domain.png`,
+      "/api/formless/media/media/images/custom-domain.png",
       new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
       "image/png",
     );
@@ -109,9 +109,7 @@ describe("installed Site custom-domain Worker routing", () => {
     const favicon = await fetchMappedHost("/favicon.svg", {
       headers: { Accept: "text/html" },
     });
-    const media = await fetchMappedHost(
-      `/api/app-installs/site/${installId}/media/app-installs/${installId}/site/images/custom-domain.png`,
-    );
+    const media = await fetchMappedHost("/api/formless/media/media/images/custom-domain.png");
 
     expect(robots.status).toBe(200);
     expect(robots.headers.get("Cache-Control")).toBe(PUBLIC_SITE_INDEXING_CACHE_CONTROL);

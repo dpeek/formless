@@ -284,7 +284,7 @@ describe("authority", () => {
     expect(legacy.records).not.toContainEqual(createdRate);
   });
 
-  it("projects installed Site tree media asset ids through core delivery with legacy href fallback", async () => {
+  it("projects installed Site tree media asset ids through core delivery with manual href fallback", async () => {
     await postInstalledAppJson<BootstrapResponse>(
       "site",
       "personal",
@@ -299,7 +299,7 @@ describe("authority", () => {
               type: "image",
               label: "Installed image",
               mediaAssetId: "installed.webp",
-              href: "/api/app-installs/site/personal/media/app-installs/personal/site/images/installed-legacy.webp",
+              href: "https://cdn.example.com/installed-manual.webp",
             },
             createdAt: "2026-05-22T00:00:00.000Z",
           },
@@ -320,10 +320,9 @@ describe("authority", () => {
     const body = await getInstalledAppJson<SitePageTreeResponse>("site", "personal", "/tree/home");
 
     expect(JSON.stringify(body)).toContain("/api/formless/media/media/images/installed.webp");
-    expect(JSON.stringify(body)).toContain(
-      "/api/app-installs/site/personal/media/app-installs/personal/site/images/installed-legacy.webp",
-    );
+    expect(JSON.stringify(body)).toContain("https://cdn.example.com/installed-manual.webp");
     expect(JSON.stringify(body)).not.toContain("/api/site/media/site/images/installed.webp");
+    expect(JSON.stringify(body)).not.toContain("/api/app-installs/site/personal/media/");
   });
 
   it("renders duplicate installed Site public slugs from the selected install storage", async () => {
@@ -1260,7 +1259,7 @@ describe("authority", () => {
         childValues: {
           type: "image",
           label: "Primary image",
-          href: "/api/site/media/site/images/primary.webp",
+          href: "https://cdn.example.com/primary.webp",
         },
         placementValues: {
           slot: "primaryImage",
@@ -1293,7 +1292,7 @@ describe("authority", () => {
     expect(child.values).toEqual({
       type: "image",
       label: "Primary image",
-      href: "/api/site/media/site/images/primary.webp",
+      href: "https://cdn.example.com/primary.webp",
     });
     expect(placement.values).toEqual({
       parent: parent.record.id,

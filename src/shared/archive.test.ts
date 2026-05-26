@@ -46,7 +46,7 @@ describe("portable archive protocol", () => {
 
   it("parses source-record app archives and rejects tombstones there", () => {
     const sourceArchive = appArchive({
-      capabilities: ["source-records", "app-scoped-media"],
+      capabilities: ["source-records", "core-media-assets"],
       data: {
         kind: "sourceRecords",
         schemaKey: "site",
@@ -138,7 +138,7 @@ describe("portable archive protocol", () => {
 
   it("formats app archives deterministically", () => {
     const archive = appArchive({
-      capabilities: ["app-scoped-media", "app-store-snapshots"],
+      capabilities: ["core-media-assets", "app-store-snapshots"],
       data: {
         kind: "storeSnapshot",
         snapshot: storeSnapshot({
@@ -163,10 +163,10 @@ describe("portable archive protocol", () => {
 
     expect(formatAppArchive(reparsed)).toBe(formatted);
     expect(formatted.endsWith("\n")).toBe(true);
-    expect(reparsed.capabilities).toEqual(["app-store-snapshots", "app-scoped-media"]);
+    expect(reparsed.capabilities).toEqual(["app-store-snapshots", "core-media-assets"]);
     expect(reparsed.media.objects.map((object) => object.storageKey)).toEqual([
-      "app-installs/personal/site/images/alpha.png",
-      "app-installs/personal/site/images/zeta.png",
+      "media/images/alpha.png",
+      "media/images/zeta.png",
     ]);
     expect(
       reparsed.data.kind === "storeSnapshot"
@@ -177,7 +177,7 @@ describe("portable archive protocol", () => {
 
   it("formats instance archives deterministically by install id", () => {
     const archive = instanceArchive({
-      capabilities: ["app-scoped-media", "installed-app-registry"],
+      capabilities: ["core-media-assets", "installed-app-registry"],
       apps: [
         appArchive({ app: archivedInstall("zeta", "Zeta") }),
         appArchive({ app: archivedInstall("alpha", "Alpha") }),
@@ -187,8 +187,17 @@ describe("portable archive protocol", () => {
     const reparsed = parseInstanceArchive(JSON.parse(formatted));
 
     expect(formatInstanceArchive(reparsed)).toBe(formatted);
-    expect(reparsed.capabilities).toEqual(["installed-app-registry", "app-scoped-media"]);
+    expect(reparsed.capabilities).toEqual(["installed-app-registry", "core-media-assets"]);
     expect(reparsed.apps.map((app) => app.app.installId)).toEqual(["alpha", "zeta"]);
+  });
+
+  it("parses old app-scoped media capability as restore compatibility input", () => {
+    const archive = appArchive({
+      capabilities: ["app-scoped-media"],
+      media: { objects: [legacySiteMediaObject("hero")] },
+    });
+
+    expect(parseAppArchive(archive)).toEqual(archive);
   });
 });
 
@@ -197,7 +206,7 @@ function instanceArchive(overrides: Partial<InstanceArchive> = {}): InstanceArch
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: now,
-    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    capabilities: ["installed-app-registry", "app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps: [appArchive()],
     ...overrides,
@@ -209,7 +218,7 @@ function appArchive(overrides: Partial<AppArchive> = {}): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: now,
-    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    capabilities: ["app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: archivedInstall("personal", "Personal"),
     data: { kind: "storeSnapshot", snapshot: storeSnapshot() },
@@ -259,11 +268,35 @@ function activeSiteRecord(id: string, values: StoredRecord["values"] = {}): Stor
 }
 
 function mediaObject(name: string): AppArchiveMediaObject {
+  const storageKey = `media/images/${name}.png`;
+  const deliveryHref = `/api/formless/media/${storageKey}`;
+
   return {
-    storageKey: `app-installs/personal/site/images/${name}.png`,
-    archivePath: `media/site/images/${name}.png`,
+    storageKey,
+    archivePath: `media/personal/media/images/${name}.png`,
+    asset: {
+      byteSize: name.length,
+      contentType: "image/png",
+      deliveryHref,
+      id: `${name}.png`,
+      kind: "image",
+      label: `${name}.png`,
+      provider: "r2",
+      status: "ready",
+      storageKey,
+    },
     contentType: "image/png",
     byteSize: name.length,
-    deliveryHref: `/api/app-installs/site/personal/media/images/${name}.png`,
+    deliveryHref,
+  };
+}
+
+function legacySiteMediaObject(name: string): AppArchiveMediaObject {
+  return {
+    storageKey: `app-installs/personal/site/images/${name}.png`,
+    archivePath: `compat/legacy-site-media/${name}.png`,
+    contentType: "image/png",
+    byteSize: name.length,
+    deliveryHref: `/api/app-installs/site/personal/media/app-installs/personal/site/images/${name}.png`,
   };
 }
