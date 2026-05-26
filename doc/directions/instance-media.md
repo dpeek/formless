@@ -23,10 +23,9 @@ This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
 - Current core image media uploads store immutable R2 objects under
   `media/images/`.
 - Current core image media delivery uses `/api/formless/media/<storageKey>`.
-- Current Site media routes remain available for legacy Site-scoped image
-  media. See `doc/topics/site-runtime.md`.
+- Current Site-owned media routes are retired. See `doc/topics/site-runtime.md`.
 - Current Site image records are `block` records with `block.type = image`,
-  optional `block.mediaAssetId`, and legacy/manual `block.href`.
+  optional `block.mediaAssetId`, and manual/external/data `block.href`.
 
 ## Direction
 
@@ -135,8 +134,8 @@ Usage metadata belongs to the consuming app record:
 - future app-specific display rules.
 
 For Site, image blocks now store optional `mediaAssetId`. Video blocks should
-follow the same usage-metadata split later. Legacy `href` should keep rendering
-while migration exists.
+follow the same usage-metadata split later. Manual, external, and data `href`
+fallback should keep rendering.
 
 ## Schema Shape
 
@@ -174,7 +173,7 @@ R2 adapter:
 - audio files until streaming needs say otherwise;
 - public immutable assets;
 - private objects when auth exists;
-- restore and publish compatibility with current Site media.
+- restore and publish compatibility with core media archives.
 
 Cloudflare Stream adapter:
 
@@ -229,7 +228,8 @@ or DASH logic.
 - Core image reads stay public through `/api/formless/media/<storageKey>`.
 - Generated media editors can upload, select, and preview scalar image media
   asset ids.
-- Site image blocks can use `mediaAssetId` while legacy `href` still renders.
+- Site image blocks can use `mediaAssetId` while manual, external, and data
+  `href` fallback still renders.
 - Public Site tree resolves valid media asset ids through core media delivery
   facts.
 - Portable archives declare `core-media-assets` and include referenced core
@@ -238,15 +238,19 @@ or DASH logic.
   before records.
 - Standalone Site save, dev restore, and publish keep core media files explicit
   under project/source media roots.
-- Site schema-key media remains available at `/api/site/media/*`.
-- Installed Site media is scoped under `/api/app-installs/site/<installId>/media/*`.
-- Standalone Site save and publish preserve referenced same-origin media files.
-- Portable Site project import rewrites legacy same-origin media hrefs into
-  install-scoped media hrefs.
+- Generated Site image authoring uploads owned images through core media.
+- Site-owned media routes under `/api/site/media/*` and
+  `/api/app-installs/site/<installId>/media/*` are retired.
+- Standalone Site save, dev restore, publish, and import-site reject legacy
+  same-origin Site media hrefs with a migration error.
+- Old app-scoped Site media archives restore only through a compatibility
+  normalizer that converts matching objects into core media.
 
 ## PRD
 
 Core media app for images shipped in GitHub issue #28.
+
+Legacy Site-owned media path retired in GitHub issue #32.
 
 Second PRD candidate: video assets with Cloudflare Stream playback.
 

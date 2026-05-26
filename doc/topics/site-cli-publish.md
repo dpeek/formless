@@ -74,11 +74,10 @@ Last updated: 2026-05-26
 - Site seed promotion preserves record IDs and `createdAt`.
 - Site seed promotion validates schema key, source schema compatibility, record shape, references, and unique constraints.
 - Site seed promotion writes deterministic record order and JSON formatting.
-- Site seed promotion writes referenced same-origin media files beside source records.
-- Site seed promotion maps `/api/site/media/site/images/example.png` to `schema/apps/site/media/site/images/example.png`.
 - Site seed promotion writes referenced core media files beside source records.
 - Site seed promotion maps `/api/formless/media/media/images/example.png` to `schema/apps/site/media/media/images/example.png`.
 - Site seed promotion includes media referenced by `mediaAssetId`.
+- Site seed promotion rejects legacy same-origin Site media hrefs with a migration error.
 - `bun run site:pull-seed --check` fails when source Site records or referenced source media files are stale.
 - Site source snapshots are built from source schema plus source seed records.
 - Source snapshot envelopes use `schemaKey: "site"` and `sourceCursor: 0`.
@@ -89,7 +88,8 @@ Last updated: 2026-05-26
 - Publish backups default under `tmp/site-publish-backups/`.
 - Publish validates referenced source media files before mutation.
 - Publish restores media before records.
-- Publish preserves legacy Site media href files and core media asset files.
+- Publish restores core media asset files before records.
+- Publish rejects legacy same-origin Site media hrefs with a migration error.
 - Publish uses guarded snapshot restore.
 - Publish sends `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when the token is configured.
 - Local Site admin publish is brokered by the CLI dev server.
@@ -109,21 +109,26 @@ Last updated: 2026-05-26
 - Portable archive directory manifest file: `archive.json`.
 - Portable archive capabilities include `core-media-assets`.
 - Portable archive media files live at manifest `archivePath` values.
-- Archive export reads installed app registry state, app snapshots, referenced installed Site media, and referenced core image media over HTTP.
+- Archive export reads installed app registry state, app snapshots, and referenced core image media over HTTP.
 - Archive restore posts archive JSON and media payloads to `/api/formless/archive/restore`.
 - Archive restore is dry-run by default.
 - Mutating archive restore requires `--apply`.
 - Archive replace behavior requires `--replace`.
 - Archive restore sends `Authorization: Bearer <FORMLESS_ADMIN_TOKEN>` when an admin token is configured or passed.
 - App archive restore can retarget a Site app archive to a new install id.
-- Site project import rewrites legacy same-origin Site media hrefs to install-scoped media hrefs.
 - Site project import preserves external URLs.
+- Site project import writes core media objects and the `core-media-assets` capability when project media exists.
+- Site project import rejects legacy same-origin Site media hrefs with a migration error.
 - Portable archives include core image media objects and asset metadata for `mediaAssetId` references.
 - Portable archives include core image media objects referenced by core media hrefs.
+- New portable app, instance, and workspace archives do not emit app-scoped Site media objects.
+- Old app-scoped Site media archives restore only through the compatibility normalizer.
+- The compatibility normalizer converts matching legacy Site media objects to core media assets before mutation.
+- The compatibility normalizer rejects unresolved legacy Site media references before mutation.
 - Archive restore validates core media object keys, content types, byte sizes, asset metadata, and media files before mutation.
 - Archive restore writes core media objects before app records.
 - Standalone Site save, dev restore, and publish keep core media files explicit under project/source media roots.
-- Standalone Site save, dev restore, and publish preserve legacy `/api/site/media/...` href file movement.
+- Standalone Site save, dev restore, and publish reject legacy `/api/site/media/...` hrefs instead of moving files.
 - Portable archives are backup, restore, and import workflows, not bidirectional instance sync.
 
 ## Instance Workspaces

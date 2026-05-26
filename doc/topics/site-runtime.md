@@ -136,14 +136,15 @@ Last updated: 2026-05-26
 
 ## Media And Icons
 
-- Site media route code: `src/worker/media.ts`.
+- Media route code: `src/worker/media.ts`.
 - Site client media helper: `src/client/media.ts`.
 - Core media helpers: `src/media/core.ts`.
 - Source media helpers: `src/site/source-media.ts`.
 - Shared SVG icon primitive: `lib/ui/src/svg-icon.tsx`.
 - Site media usage records are `block` records.
+- Core media is the only current first-party owned image media path.
 - Image blocks can store a core media asset id in `block.mediaAssetId`.
-- Image blocks can store a legacy or manual served URL in `block.href`.
+- Image blocks can store a manual, external, or data URL in `block.href`.
 - Image blocks keep optional flat `width` and `height` fields.
 - Image blocks can be created before `href` exists.
 - Site image authoring uses text field `editor: "href"` for `block.href`.
@@ -157,17 +158,11 @@ Last updated: 2026-05-26
 - Core image media objects use storage keys under `media/images/`.
 - Core image media delivery uses `/api/formless/media/<storageKey>`.
 - Core image media assets store id, kind, label, filename, content type, byte size, status, provider, storage key, and optional dimensions.
-- Site image upload writes immutable R2 keys under `site/images/`.
-- Same-origin media hrefs use `/api/site/media/<key>`.
-- Installed Site image upload writes immutable R2 keys under `app-installs/<installId>/site/images/`.
-- Installed Site same-origin media hrefs use `/api/app-installs/site/<installId>/media/<key>`.
-- Installed Site media reads reject legacy Site media keys.
-- Legacy Site media reads reject installed app media keys.
-- Site media serving supports `GET` and `HEAD` for `/api/site/media/*`.
-- Installed Site media serving supports `GET` and `HEAD` for `/api/app-installs/site/:installId/media/*`.
+- Legacy Site media route paths `/api/site/media/*` and `/api/app-installs/site/:installId/media/*` are not active media routes.
+- Legacy Site media storage keys under `site/images/` and `app-installs/<installId>/site/images/` are migration and archive-compatibility input only.
 - Public Site tree resolves valid `mediaAssetId` values through core media delivery facts.
 - Public image rendering prefers resolved core media asset hrefs when present.
-- Public image rendering falls back to legacy or manual `href` values.
+- Public image rendering falls back to manual, external, or data `href` values.
 - Public image rendering uses the same Site tree and renderer path as authored image URLs.
 - Shared SVG icon rendering falls back to an empty outline for missing, invalid, or unsafe SVG.
 - Shared SVG icon rendering rejects scripts, event handlers, `javascript:` URLs, `foreignObject`, and external asset references.
@@ -200,7 +195,7 @@ Last updated: 2026-05-26
 - Mapped Site host public links use top-level paths instead of `/sites/<installId>` paths.
 - Mapped Site hosts serve `/robots.txt`, `/sitemap.xml`, root icons, and touch icons from the mapped install.
 - Mapped Site hosts block generated app/admin browser shell routes.
-- Mapped Site hosts keep installed Site media on `/api/app-installs/site/:installId/media/*`.
+- Mapped Site hosts use core media delivery for owned Site images.
 - Path-based `/sites/<installId>` remains available as fallback on the instance host.
 - Duplicate public slugs can exist in different installed Sites.
 - Preview and authoring Site page routes start Site push sync and refetch the active tree after Site sync applies.

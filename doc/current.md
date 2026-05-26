@@ -17,6 +17,8 @@ Installed Site custom-domain shipped facts live across Site runtime, Site CLI an
 storage, and Generated UI topic docs.
 Icon catalog and picker shipped facts live across Generated UI, Schema runtime, and Site runtime
 topic docs.
+Legacy Site-owned media retirement shipped facts live across Site runtime, Site CLI and publish,
+Authority storage, and Instance media direction docs.
 
 ## Docs
 

@@ -30,8 +30,7 @@ Last updated: 2026-05-26
 - Instance domain mapping lookup API path: `/api/formless/domain-mappings/lookup`.
 - Instance domain mapping apply evidence API path: `/api/formless/domain-mappings/apply-evidence`.
 - Core image media API paths include `/api/formless/media/images` and `/api/formless/media/*`.
-- Site media API paths include `/api/site/media/images` and `/api/site/media/*`.
-- Installed Site media API paths include `/api/app-installs/site/:installId/media/images` and `/api/app-installs/site/:installId/media/*`.
+- Legacy Site media API paths `/api/site/media/*` and `/api/app-installs/site/:installId/media/*` are not active media routes.
 - Media route handling runs before Authority dispatch in `src/worker/index.ts`.
 - Core image media upload writes immutable R2 keys under `media/images/`.
 - Media upload and restore use the `FORMLESS_MEDIA` R2 binding, not Durable Object storage.
@@ -59,8 +58,9 @@ Last updated: 2026-05-26
 - Durable instance app install metadata is stored in `app_installs` on the instance authority.
 - Bundled installable packages are Site, Tasks, and Estii.
 - Installed app creation initializes from the package source schema and seed records.
-- Site is the only installed package with public Site routes and Site media facts.
-- Installed Tasks and Estii use install-scoped storage identity without Site public routes or Site media facts.
+- Site is the only installed package with public Site routes.
+- Normal app storage identities do not expose Site media route or key facts.
+- Installed Tasks and Estii use install-scoped storage identity without Site public routes.
 - Default product Site bootstrap: `src/worker/default-app-installs.ts`.
 - Owner setup uses the default app bootstrap policy `starter-site-if-empty`.
 - Blank owner setup creates the default installed Site id `site` label `Site`.
@@ -105,6 +105,8 @@ Last updated: 2026-05-26
 - Portable archive restore executor: `src/worker/archive-restore.ts`.
 - Portable archive kinds: `formless.instanceArchive`, `formless.appArchive`.
 - Portable archive capabilities include `core-media-assets`.
+- Current archive export uses core media assets for owned Site images.
+- Legacy app-scoped Site media archive objects restore only through the compatibility normalizer.
 - Archive restore validates before mutation.
 - Archive restore supports dry-run and apply policy.
 - Archive restore creates or replaces app install registry rows by policy.

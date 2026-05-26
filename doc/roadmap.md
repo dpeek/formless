@@ -93,7 +93,7 @@ Good next chunks:
 - Browser management UI for portable app and instance archives.
 - Safer archive review and replacement UX.
 - Browser management UI for core media assets.
-- Video media assets after the image asset spine proves the provider boundary.
+- Video media assets on the core image asset spine.
 - Domain control-plane apply after exact-host CLI domain apply is proven.
 - Apex/www redirects, wildcard domains, and non-Site domain modes when a concrete deployment needs them.
 - Users and permissions.
@@ -108,6 +108,7 @@ Avoid:
 
 - Account or marketplace work before one deployment story is clear.
 - Bidirectional sync before local and remote instance identity exists.
+- New Site-specific owned media paths outside core media.
 
 ## Direction: Extensibility
 
@@ -121,7 +122,7 @@ Good next chunks:
 - Plugin view registry.
 - Custom result presentations backed by schema-declared views.
 - App marketplace shape after source app packaging is stable.
-- General media library after core image asset ownership rules are clearer.
+- General media library after core image asset ownership rules need browser management.
 
 Avoid:
 
