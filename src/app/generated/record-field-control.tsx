@@ -1,18 +1,9 @@
 import { Button } from "@dpeek/formless-ui/button";
 import { Checkbox } from "@dpeek/formless-ui/checkbox";
 import { DatePicker, DatePickerTrigger } from "@dpeek/formless-ui/date-picker";
-import {
-  ModalBody,
-  ModalClose,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from "@dpeek/formless-ui/modal";
 import { FieldError, Label, fieldErrorStyles } from "@dpeek/formless-ui/field";
 import { Input } from "@dpeek/formless-ui/input";
 import { NativeSelect, NativeSelectContent } from "@dpeek/formless-ui/native-select";
-import { parseSvgIconSource, SvgIcon } from "@dpeek/formless-ui/svg-icon";
 import { TextField } from "@dpeek/formless-ui/text-field";
 import { Textarea } from "@dpeek/formless-ui/textarea";
 import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
@@ -28,7 +19,7 @@ import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import type { FieldSchema, TableColumnFormat } from "../../shared/schema.ts";
 import {
   GeneratedColorFieldControl,
-  GeneratedIconSourceFieldControl,
+  GeneratedIconPickerFieldControl,
   GeneratedMarkdownFieldControl,
   GeneratedNumberFieldControl,
 } from "./field-control-primitives.tsx";
@@ -1231,19 +1222,21 @@ function RecordIconFieldRenderer({
       <TextField isDisabled={!canPatch || isPending} isInvalid={error !== null}>
         <Label className={labelClass}>{fieldControl.label}</Label>
         <div data-slot="control">
-          <IconFieldControl
-            canPatch={canPatch}
+          <GeneratedIconPickerFieldControl
+            ariaInvalid={error !== null ? true : undefined}
+            canEdit={canPatch}
             density={density}
-            draft={iconDialogDraft}
             error={error}
             isPending={isPending}
             label={fieldControl.label}
             onCancel={onIconCancel}
-            onDraftChange={onIconDraftChange}
+            onChange={onIconDraftChange}
             onOpenChange={onIconOpenChange}
             onSave={onIconSave}
             open={iconDialogOpen}
             previewSource={previewSource}
+            readOnly={!canPatch || isPending}
+            value={iconDialogDraft}
           />
         </div>
         {error ? <FieldError>{error}</FieldError> : null}
@@ -1412,108 +1405,6 @@ function recordSpecializedFieldContainerClassName(
 
 function recordNumberFieldContainerClassName(density: GeneratedRecordFieldControlDensity) {
   return density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-36 flex-none space-y-1";
-}
-
-function IconFieldControl({
-  canPatch,
-  density,
-  draft,
-  error,
-  isPending,
-  label,
-  onCancel,
-  onDraftChange,
-  onOpenChange,
-  onSave,
-  open,
-  previewSource,
-}: {
-  canPatch: boolean;
-  density: GeneratedRecordFieldControlDensity;
-  draft: string;
-  error: string | null;
-  isPending: boolean;
-  label: string;
-  onCancel: () => void;
-  onDraftChange: (value: string) => void;
-  onOpenChange: (open: boolean) => void;
-  onSave: () => Promise<void>;
-  open: boolean;
-  previewSource: string;
-}) {
-  const hasRenderableIcon = parseSvgIconSource(previewSource) !== null;
-  const triggerSize = density === "compact" ? "sq-xs" : "sq-sm";
-  const iconSizeClassName = density === "compact" ? "size-4" : "size-5";
-  const triggerClassName = hasRenderableIcon
-    ? "border-transparent bg-transparent p-0 text-slate-700 hover:bg-slate-100"
-    : "border-dashed border-slate-300 bg-slate-50 p-0 text-slate-500 hover:border-slate-400 hover:bg-slate-100";
-
-  return (
-    <>
-      <div
-        className={
-          density === "compact"
-            ? "flex h-6 w-full min-w-0 items-center"
-            : "flex min-h-8 w-full min-w-0 items-center"
-        }
-        data-web-field-kind="icon"
-      >
-        <Button
-          aria-label={`Edit ${label}`}
-          className={triggerClassName}
-          data-web-icon-field-edit="trigger"
-          data-web-icon-field-empty={hasRenderableIcon ? undefined : "true"}
-          data-web-icon-field-preview="compact"
-          isDisabled={!canPatch || isPending}
-          onPress={() => onOpenChange(true)}
-          size={triggerSize}
-          type="button"
-          intent="plain"
-        >
-          <SvgIcon className={iconSizeClassName} source={previewSource} />
-        </Button>
-      </div>
-      <ModalContent
-        isOpen={open}
-        onOpenChange={(nextOpen) => {
-          if (nextOpen) {
-            onOpenChange(true);
-          } else {
-            onCancel();
-          }
-        }}
-        size="2xl"
-      >
-        <ModalHeader>
-          <ModalTitle>Edit {label}</ModalTitle>
-        </ModalHeader>
-        <ModalBody>
-          <TextField isDisabled={!canPatch || isPending} isInvalid={error !== null}>
-            <Label className="sr-only">{label} SVG source</Label>
-            <div data-slot="control">
-              <GeneratedIconSourceFieldControl
-                ariaInvalid={error !== null ? true : undefined}
-                label={label}
-                onChange={onDraftChange}
-                readOnly={!canPatch || isPending}
-                sourceLabel={`${label} SVG source`}
-                value={draft}
-              />
-            </div>
-            {error ? <FieldError>{error}</FieldError> : null}
-          </TextField>
-          <ModalFooter>
-            <ModalClose intent="outline" type="button">
-              Cancel
-            </ModalClose>
-            <Button isDisabled={!canPatch || isPending} onPress={() => void onSave()} type="button">
-              {isPending ? "Saving..." : "Save"}
-            </Button>
-          </ModalFooter>
-        </ModalBody>
-      </ModalContent>
-    </>
-  );
 }
 
 function MediaFieldControl({

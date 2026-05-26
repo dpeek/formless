@@ -13,7 +13,7 @@ import type { FieldVisibilityValue } from "../../shared/schema.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import {
   GeneratedColorFieldControl,
-  GeneratedIconSourceFieldControl,
+  GeneratedIconPickerFieldControl,
   GeneratedMarkdownFieldControl,
   GeneratedNumberFieldControl,
 } from "./field-control-primitives.tsx";
@@ -252,34 +252,57 @@ function CreateIconField({
 }) {
   const resetValue = defaultValue ?? "";
   const [value, setValue] = useState(resetValue);
-  const fieldRef = useRef<HTMLDivElement>(null);
+  const [dialogDraft, setDialogDraft] = useState(resetValue);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const form = fieldRef.current?.closest("form");
+    const form = hiddenInputRef.current?.form;
 
     if (!form) {
       return;
     }
 
-    const handleReset = () => setValue(resetValue);
+    const handleReset = () => {
+      setValue(resetValue);
+      setDialogDraft(resetValue);
+      setDialogOpen(false);
+    };
     form.addEventListener("reset", handleReset);
 
     return () => form.removeEventListener("reset", handleReset);
   }, [resetValue]);
 
+  function handleOpenChange(open: boolean) {
+    setDialogDraft(value);
+    setDialogOpen(open);
+  }
+
+  function handleCancel() {
+    setDialogDraft(value);
+    setDialogOpen(false);
+  }
+
+  function handleSave() {
+    setValue(dialogDraft);
+    onValueChange?.(dialogDraft);
+    setDialogOpen(false);
+  }
+
   return (
     <TextField isRequired={required}>
       <Label>{label}</Label>
-      <div data-slot="control" ref={fieldRef}>
-        <GeneratedIconSourceFieldControl
+      <input name={fieldName} readOnly ref={hiddenInputRef} type="hidden" value={value} />
+      <div data-slot="control">
+        <GeneratedIconPickerFieldControl
           label={label}
-          name={fieldName}
-          onChange={(nextValue) => {
-            setValue(nextValue);
-            onValueChange?.(nextValue);
-          }}
-          required={required}
-          value={value}
+          onCancel={handleCancel}
+          onChange={setDialogDraft}
+          onOpenChange={handleOpenChange}
+          onSave={handleSave}
+          open={dialogOpen}
+          previewSource={value}
+          value={dialogDraft}
         />
       </div>
     </TextField>

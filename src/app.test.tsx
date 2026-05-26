@@ -5206,9 +5206,10 @@ describe("generated forms and records", () => {
     expect(html).toMatch(inputWithAriaLabelAndType("Color", "text"));
     expect(html).toMatch(inputWithNameAndType("href", "text"));
     expect(html).toMatch(inputWithNameAndType("slug", "text"));
-    expect(html).toMatch(textareaWithName("icon"));
+    expect(html).toMatch(inputWithNameAndType("icon", "hidden"));
     expect(html).toContain('data-web-field-kind="icon"');
-    expect(html).toContain("data-web-svg-source");
+    expect(html).toContain('data-web-icon-field-edit="trigger"');
+    expect(html).not.toContain("data-web-svg-source");
     expect(html).toMatch(inputWithNameAndType("publishedAt", "hidden"));
     expect(html).toContain('data-slot="date-picker-trigger"');
     expect(html).toContain('role="spinbutton"');

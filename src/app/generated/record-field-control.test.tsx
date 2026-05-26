@@ -2,8 +2,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
+import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
 import type { FieldSchema } from "../../shared/schema.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
+import { GeneratedIconPickerEditor } from "./field-control-primitives.tsx";
 import { GeneratedRecordFieldControl } from "./record-field-control.tsx";
 
 describe("generated record field presentation rendering", () => {
@@ -83,11 +85,76 @@ describe("generated record field presentation rendering", () => {
     expect(html).toContain('name="done"');
     expect(html).toContain("size-6");
   });
+
+  it("opens icon editing as a catalog picker before showing custom SVG source", () => {
+    const githubSvg = requiredCatalogSvg("github");
+    const html = renderToStaticMarkup(
+      <GeneratedIconPickerEditor
+        disabled={false}
+        label="Icon"
+        onChange={() => undefined}
+        onSave={() => undefined}
+        value={githubSvg}
+      />,
+    );
+
+    expect(html).toContain('data-web-icon-picker="catalog"');
+    expect(html).toContain('aria-label="Search icons"');
+    expect(html).toContain('data-web-icon-picker-option="empty"');
+    expect(html).toContain('data-web-icon-picker-group="social"');
+    expect(html).toContain('data-web-icon-picker-option="github"');
+    expect(html).toContain('data-web-icon-picker-selected="true"');
+    expect(html).toContain("Custom SVG");
+    expect(html).not.toContain('data-web-svg-source="textarea"');
+  });
+
+  it("shows the SVG source editor only in custom icon mode", () => {
+    const html = renderToStaticMarkup(
+      <GeneratedIconPickerEditor
+        disabled={false}
+        initialMode="custom"
+        label="Icon"
+        onChange={() => undefined}
+        onSave={() => undefined}
+        value="<svg><script /></svg>"
+      />,
+    );
+
+    expect(html).toContain('data-web-icon-picker="custom"');
+    expect(html).toContain('data-web-svg-source="textarea"');
+    expect(html).toContain('data-web-icon-picker-custom-preview="true"');
+    expect(html).toContain('data-web-svg-icon-empty="true"');
+  });
+
+  it("submits create icon values through the existing text-backed field name", () => {
+    const html = renderToStaticMarkup(
+      <GeneratedCreateFieldControl
+        fieldConfig={
+          {
+            fieldName: "icon",
+            field: { type: "text", required: false, format: "icon" },
+            editor: "icon",
+          } satisfies CreateFieldConfig
+        }
+      />,
+    );
+
+    expect(html).toContain('name="icon"');
+    expect(html).toContain('type="hidden"');
+    expect(html).toContain('value=""');
+    expect(html).toContain('data-web-icon-field-edit="trigger"');
+    expect(html).not.toContain('data-web-svg-source="textarea"');
+  });
 });
 
 function renderRecordControl(
   fieldConfig: RecordFieldConfig,
-  options: { draft: string; recordValue: FieldValue | undefined },
+  options: {
+    draft: string;
+    iconDialogDraft?: string;
+    iconDialogOpen?: boolean;
+    recordValue: FieldValue | undefined;
+  },
 ) {
   return renderToStaticMarkup(
     <GeneratedRecordFieldControl
@@ -95,8 +162,8 @@ function renderRecordControl(
       draft={options.draft}
       error={null}
       fieldConfig={fieldConfig}
-      iconDialogDraft=""
-      iconDialogOpen={false}
+      iconDialogDraft={options.iconDialogDraft ?? ""}
+      iconDialogOpen={options.iconDialogOpen ?? false}
       isPending={false}
       mediaAssetOptions={[]}
       mediaEditorMode="url"
@@ -119,6 +186,16 @@ function renderRecordControl(
       uploadEnabled={false}
     />,
   );
+}
+
+function requiredCatalogSvg(key: string) {
+  const svg = resolveIconCatalogSvg(key);
+
+  if (!svg) {
+    throw new Error(`Missing catalog icon "${key}".`);
+  }
+
+  return svg;
 }
 
 const priorityField = {
