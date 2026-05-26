@@ -4,21 +4,19 @@ import type { StoredRecord } from "../shared/protocol.ts";
 import {
   siteImageExtensionForContentType,
   siteMediaContentTypeForKey,
-  siteMediaDeliveryFactsForAssetId,
-  siteMediaHrefForKey,
   siteSourceMediaAssetsFromRecords,
   siteSourceMediaPathForKey,
 } from "./source-media.ts";
 
 describe("Site source media", () => {
-  it("maps internal media hrefs and asset ids to deterministic source asset paths", () => {
+  it("maps core media hrefs and asset ids to deterministic source asset paths", () => {
     const records: StoredRecord[] = [
-      blockRecord("image-a", "/api/site/media/site/images/cover.png"),
+      blockRecord("image-a", "/api/formless/media/media/images/cover.png"),
       blockRecord("image-b", "data:image/svg+xml,%3Csvg%20/%3E"),
       blockRecord("image-c", "https://example.com/image.png"),
-      blockRecord("image-d", "/api/site/media/site/images/cover.png"),
+      blockRecord("image-d", "/api/formless/media/media/images/cover.png"),
       {
-        ...blockRecord("image-e", "/api/site/media/site/images/deleted.webp"),
+        ...blockRecord("image-e", "/api/formless/media/media/images/deleted.webp"),
         deletedAt: "2026-05-14T00:00:00.000Z",
       },
       blockRecord("image-f", undefined, {
@@ -38,39 +36,54 @@ describe("Site source media", () => {
       },
       {
         contentType: "image/png",
-        href: "/api/site/media/site/images/cover.png",
-        key: "site/images/cover.png",
-        sourcePath: "schema/apps/site/media/site/images/cover.png",
+        href: "/api/formless/media/media/images/cover.png",
+        key: "media/images/cover.png",
+        sourcePath: "schema/apps/site/media/media/images/cover.png",
       },
     ]);
   });
 
-  it("rejects unsupported or unsafe source media keys", () => {
+  it("rejects legacy Site media hrefs with a migration error", () => {
     expect(() =>
       siteSourceMediaAssetsFromRecords([
-        blockRecord("video", "/api/site/media/site/videos/clip.mp4"),
+        blockRecord("legacy", "/api/site/media/site/images/cover.png"),
       ]),
     ).toThrow(
-      'Site media href "/api/site/media/site/videos/clip.mp4" uses unsupported source media key "site/videos/clip.mp4".',
+      'Legacy Site media href "/api/site/media/site/images/cover.png" must be migrated to core media before source Site media collection.',
     );
 
-    expect(() => siteSourceMediaPathForKey("site/images/../cover.png")).toThrow(
-      "Site source media key is not restorable: site/images/../cover.png",
+    expect(() =>
+      siteSourceMediaAssetsFromRecords([
+        blockRecord(
+          "installed-legacy",
+          "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+        ),
+      ]),
+    ).toThrow(
+      'Legacy Site media href "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png" must be migrated to core media before source Site media collection.',
+    );
+  });
+
+  it("rejects unsupported or unsafe core source media keys", () => {
+    expect(() =>
+      siteSourceMediaAssetsFromRecords([
+        blockRecord("video", "/api/formless/media/media/videos/clip.mp4"),
+      ]),
+    ).toThrow(
+      'Core media href "/api/formless/media/media/videos/clip.mp4" uses unsupported source media key "media/videos/clip.mp4".',
+    );
+
+    expect(() => siteSourceMediaPathForKey("site/images/cover.png")).toThrow(
+      "Site source media key is not core image media: site/images/cover.png",
     );
   });
 
   it("shares image content-type and href conventions", () => {
     expect(siteImageExtensionForContentType("image/jpeg; charset=binary")).toBe("jpg");
-    expect(siteMediaContentTypeForKey("site/images/photo.jpeg")).toBe("image/jpeg");
-    expect(siteMediaHrefForKey("site/images/photo.webp")).toBe(
-      "/api/site/media/site/images/photo.webp",
+    expect(siteMediaContentTypeForKey("media/images/photo.jpeg")).toBe("image/jpeg");
+    expect(siteSourceMediaPathForKey("media/images/photo.webp")).toBe(
+      "schema/apps/site/media/media/images/photo.webp",
     );
-    expect(siteMediaDeliveryFactsForAssetId("photo.webp")).toEqual({
-      assetId: "photo.webp",
-      href: "/api/site/media/site/images/photo.webp",
-      kind: "image",
-    });
-    expect(siteMediaDeliveryFactsForAssetId("site/images/photo.webp")).toBeUndefined();
   });
 });
 

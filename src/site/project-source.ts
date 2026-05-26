@@ -11,10 +11,9 @@ import {
 import { buildSiteSeedRecordsFromSnapshot, validateSiteSeedRecords } from "./seed-promotion.ts";
 import { buildSiteSourceSnapshot, type SiteSourceSnapshotOptions } from "./source-snapshot.ts";
 import {
-  isRestorableSiteMediaKey,
+  isLegacySiteMediaHref,
+  legacySiteMediaMigrationMessage,
   siteMediaContentTypeForKey,
-  siteMediaKeyFromHref,
-  siteMediaHrefForKey,
 } from "./source-media.ts";
 import { SITE_PROJECT_MEDIA_ROOT, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 
@@ -106,11 +105,15 @@ export function siteProjectMediaAssetsFromRecords(
     const href = record.values.href;
 
     if (typeof href === "string") {
-      const key = siteMediaKeyFromHref(href) ?? coreMediaKeyFromHref(href);
+      if (isLegacySiteMediaHref(href)) {
+        throw new Error(legacySiteMediaMigrationMessage(href, "Site project media collection"));
+      }
+
+      const key = coreMediaKeyFromHref(href);
 
       if (key) {
-        if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
-          throw new Error(`Site project media href "${href}" uses unsupported media key "${key}".`);
+        if (!isRestorableCoreMediaKey(key)) {
+          throw new Error(`Core media href "${href}" uses unsupported media key "${key}".`);
         }
 
         setSiteProjectMediaAsset(assetsByKey, key, options);
@@ -133,8 +136,8 @@ export function siteProjectMediaPathForKey(
   key: string,
   options: SiteProjectMediaOptions = {},
 ): string {
-  if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
-    throw new Error(`Site project media key is not restorable: ${key}`);
+  if (!isRestorableCoreMediaKey(key)) {
+    throw new Error(`Site project media key is not core image media: ${key}`);
   }
 
   const mediaRoot = options.mediaRoot ?? SITE_PROJECT_MEDIA_ROOT;
@@ -154,7 +157,7 @@ function setSiteProjectMediaAsset(
 
   assetsByKey.set(key, {
     contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
-    href: isRestorableCoreMediaKey(key) ? coreMediaHrefForKey(key) : siteMediaHrefForKey(key),
+    href: coreMediaHrefForKey(key),
     key,
     sourcePath: siteProjectMediaPathForKey(key, options),
   });

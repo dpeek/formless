@@ -7,18 +7,10 @@ import {
   type SourceArchiveRecord,
 } from "../shared/archive.ts";
 import { validateAppInstallId } from "../shared/app-installs.ts";
-import {
-  installedAppStorageIdentity,
-  legacySiteMediaStorageIdentity,
-} from "../shared/app-storage-identity.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import type { ArchiveRestoreMediaFile } from "../shared/archive-restore-plan.ts";
-import {
-  CORE_IMAGE_KEY_PREFIX,
-  coreMediaHrefForKey,
-  isRestorableImageMediaKey,
-} from "../media/core.ts";
+import { CORE_IMAGE_KEY_PREFIX, coreMediaHrefForKey } from "../media/core.ts";
 import {
   packageSiteSourceSchema,
   parseSiteProjectRecords,
@@ -29,7 +21,6 @@ import {
   readSiteProjectSource,
   type SiteProjectMediaFile,
 } from "./project-files.ts";
-import { siteMediaKeyFromHref } from "./source-media.ts";
 
 export type SiteProjectAppArchiveMediaFile = ArchiveRestoreMediaFile & {
   bytes: Uint8Array;
@@ -44,14 +35,6 @@ export type SiteProjectAppArchiveReport = {
   mediaCount: number;
   recordCount: number;
   recordCountsByEntity: Record<string, number>;
-  rewrittenMediaHrefs: SiteProjectMediaHrefRewrite[];
-};
-
-export type SiteProjectMediaHrefRewrite = {
-  nextHref: string;
-  previousHref: string;
-  recordId: string;
-  storageKey: string;
 };
 
 export type SiteProjectAppArchiveEntry = {
@@ -105,20 +88,12 @@ export function buildSiteProjectAppArchiveEntry(
   input: BuildSiteProjectAppArchiveEntryInput,
 ): SiteProjectAppArchiveEntry {
   const installId = parseTargetInstallId(input.installId);
-  const identity = installedAppStorageIdentity({ installId, packageAppKey: "site" });
-  const legacySiteMedia = legacySiteMediaStorageIdentity(identity);
-
-  if (!identity || !legacySiteMedia) {
-    throw new Error(`Site project import target "${installId}" does not support Site media.`);
-  }
-
   const sourceSchema = input.sourceSchema ?? packageSiteSourceSchema;
   const records = parseSiteProjectRecords(input.records, { sourceSchema });
   const mediaAssets = siteProjectMediaAssetsFromRecords(records);
   const mediaFilesByKey = new Map(input.mediaFiles.map((file) => [file.key, file]));
   const mediaObjects: AppArchiveMediaObject[] = [];
   const archiveMediaFiles: SiteProjectAppArchiveMediaFile[] = [];
-  const storageKeyBySourceKey = new Map<string, string>();
 
   for (const asset of mediaAssets) {
     const mediaFile = mediaFilesByKey.get(asset.key);
@@ -129,34 +104,25 @@ export function buildSiteProjectAppArchiveEntry(
       );
     }
 
-    const storageKey = archiveStorageKeyForProjectMedia(legacySiteMedia.imageKeyPrefix, asset.key);
+    const storageKey = asset.key;
     const archivePath = archiveMediaPath(installId, asset.key);
     const contentType = asset.contentType;
     const byteSize = mediaFile.bytes.byteLength;
-    const deliveryHref = isCoreMediaKey(asset.key)
-      ? coreMediaHrefForKey(storageKey)
-      : installScopedDeliveryHref(legacySiteMedia.routePrefix, storageKey);
+    const deliveryHref = coreMediaHrefForKey(storageKey);
 
-    if (!isCoreMediaKey(asset.key)) {
-      storageKeyBySourceKey.set(asset.key, storageKey);
-    }
     mediaObjects.push({
       archivePath,
-      ...(isCoreMediaKey(asset.key)
-        ? {
-            asset: {
-              byteSize,
-              contentType,
-              deliveryHref,
-              id: asset.key.slice(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX).length),
-              kind: "image" as const,
-              label: asset.key.slice(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX).length),
-              provider: "r2",
-              status: "ready" as const,
-              storageKey,
-            },
-          }
-        : {}),
+      asset: {
+        byteSize,
+        contentType,
+        deliveryHref,
+        id: asset.key.slice(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX).length),
+        kind: "image" as const,
+        label: asset.key.slice(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX).length),
+        provider: "r2",
+        status: "ready" as const,
+        storageKey,
+      },
       byteSize,
       contentType,
       deliveryHref,
@@ -173,17 +139,14 @@ export function buildSiteProjectAppArchiveEntry(
     });
   }
 
-  const rewriteResult = rewriteSiteProjectMediaHrefs(records, {
-    routePrefix: legacySiteMedia.routePrefix,
-    storageKeyBySourceKey,
-  });
-  const label = siteProjectArchiveLabel(input.label, rewriteResult.records, installId);
+  const label = siteProjectArchiveLabel(input.label, records, installId);
   const timestamp = input.exportedAt;
   const archive: AppArchive = {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: input.exportedAt,
-    capabilities: ["source-records", "app-scoped-media", "core-media-assets"],
+    capabilities:
+      mediaObjects.length > 0 ? ["source-records", "core-media-assets"] : ["source-records"],
     restorePolicy: input.restorePolicy ?? { dryRun: true, installCollisions: "reject" },
     app: {
       installId,
@@ -199,7 +162,7 @@ export function buildSiteProjectAppArchiveEntry(
       schemaKey: "site",
       schemaUpdatedAt: input.schemaUpdatedAt ?? timestamp,
       schema: sourceSchema,
-      records: rewriteResult.records.map(sourceArchiveRecord),
+      records: records.map(sourceArchiveRecord),
     },
     media: {
       objects: mediaObjects,
@@ -215,9 +178,8 @@ export function buildSiteProjectAppArchiveEntry(
       installId,
       label,
       mediaCount: mediaObjects.length,
-      recordCount: rewriteResult.records.length,
-      recordCountsByEntity: recordCountsByEntity(rewriteResult.records),
-      rewrittenMediaHrefs: rewriteResult.rewrites,
+      recordCount: records.length,
+      recordCountsByEntity: recordCountsByEntity(records),
     },
   };
 }
@@ -230,61 +192,6 @@ function parseTargetInstallId(value: string): string {
   }
 
   return result.installId;
-}
-
-function rewriteSiteProjectMediaHrefs(
-  records: readonly StoredRecord[],
-  options: {
-    routePrefix: string;
-    storageKeyBySourceKey: Map<string, string>;
-  },
-): {
-  records: StoredRecord[];
-  rewrites: SiteProjectMediaHrefRewrite[];
-} {
-  const rewrites: SiteProjectMediaHrefRewrite[] = [];
-  const rewrittenRecords = records.map((record) => {
-    const href = record.values.href;
-    const sourceKey = typeof href === "string" ? siteMediaKeyFromHref(href) : undefined;
-    const storageKey = sourceKey ? options.storageKeyBySourceKey.get(sourceKey) : undefined;
-
-    if (!sourceKey || !storageKey || typeof href !== "string") {
-      return {
-        id: record.id,
-        entity: record.entity,
-        values: { ...record.values },
-        createdAt: record.createdAt,
-      };
-    }
-
-    const nextHref = installScopedDeliveryHref(options.routePrefix, storageKey);
-
-    rewrites.push({
-      nextHref,
-      previousHref: href,
-      recordId: record.id,
-      storageKey,
-    });
-
-    return {
-      id: record.id,
-      entity: record.entity,
-      values: {
-        ...record.values,
-        href: nextHref,
-      },
-      createdAt: record.createdAt,
-    };
-  });
-
-  return {
-    records: rewrittenRecords,
-    rewrites: rewrites.sort((left, right) => {
-      const recordOrder = left.recordId.localeCompare(right.recordId);
-
-      return recordOrder === 0 ? left.previousHref.localeCompare(right.previousHref) : recordOrder;
-    }),
-  };
 }
 
 function sourceArchiveRecord(record: StoredRecord): SourceArchiveRecord {
@@ -309,40 +216,12 @@ function siteProjectArchiveLabel(
   return typeof label === "string" && label.trim() !== "" ? label.trim() : installId;
 }
 
-function archiveStorageKeyForProjectMedia(imageKeyPrefix: string, sourceKey: string): string {
-  if (isCoreMediaKey(sourceKey)) {
-    return sourceKey;
-  }
-
-  return installScopedStorageKey(imageKeyPrefix, sourceKey);
-}
-
-function installScopedStorageKey(imageKeyPrefix: string, sourceKey: string): string {
-  const sourceImageSegment = "site/images/";
-
-  if (!sourceKey.startsWith(sourceImageSegment)) {
-    throw new Error(`Site project media key is not importable: ${sourceKey}`);
-  }
-
-  return `${mediaKeyPrefix(imageKeyPrefix)}${sourceKey.slice(sourceImageSegment.length)}`;
-}
-
-function installScopedDeliveryHref(routePrefix: string, storageKey: string): string {
-  const prefix = routePrefix.endsWith("/") ? routePrefix.slice(0, -1) : routePrefix;
-
-  return `${prefix}/${storageKey}`;
-}
-
 function archiveMediaPath(installId: string, sourceKey: string): string {
   return `media/${installId}/${sourceKey}`;
 }
 
 function mediaKeyPrefix(prefix: string): string {
   return prefix.endsWith("/") ? prefix : `${prefix}/`;
-}
-
-function isCoreMediaKey(key: string): boolean {
-  return isRestorableImageMediaKey(key, { keyPrefix: mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX) });
 }
 
 function recordCountsByEntity(records: readonly StoredRecord[]): Record<string, number> {

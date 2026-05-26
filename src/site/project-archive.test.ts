@@ -32,13 +32,13 @@ describe("Site project app archive import", () => {
       exportedAt: now,
       installId: "personal",
       mediaFiles: [
-        mediaFile("site/images/cover.png", coverBytes),
+        mediaFile("media/images/cover.png", coverBytes),
         mediaFile("media/images/avatar.webp", avatarBytes),
       ],
       records: [
         siteRecord("Personal Site"),
         imageRecord("image-cover", {
-          href: "/api/site/media/site/images/cover.png",
+          href: "/api/formless/media/media/images/cover.png",
         }),
         imageRecord("image-avatar", {
           mediaAssetId: "avatar.webp",
@@ -63,20 +63,12 @@ describe("Site project app archive import", () => {
     }
 
     expect(reparsed.data.records.find((record) => record.id === "image-cover")?.values.href).toBe(
-      "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+      "/api/formless/media/media/images/cover.png",
     );
     expect(reparsed.data.records.find((record) => record.id === "image-remote")?.values.href).toBe(
       "https://example.com/remote.png",
     );
     expect(reparsed.media.objects).toEqual([
-      {
-        archivePath: "media/personal/site/images/cover.png",
-        byteSize: coverBytes.byteLength,
-        contentType: "image/png",
-        deliveryHref:
-          "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
-        storageKey: "app-installs/personal/site/images/cover.png",
-      },
       {
         archivePath: "media/personal/media/images/avatar.webp",
         asset: {
@@ -95,10 +87,28 @@ describe("Site project app archive import", () => {
         deliveryHref: "/api/formless/media/media/images/avatar.webp",
         storageKey: "media/images/avatar.webp",
       },
+      {
+        archivePath: "media/personal/media/images/cover.png",
+        asset: {
+          byteSize: coverBytes.byteLength,
+          contentType: "image/png",
+          deliveryHref: "/api/formless/media/media/images/cover.png",
+          id: "cover.png",
+          kind: "image",
+          label: "cover.png",
+          provider: "r2",
+          status: "ready",
+          storageKey: "media/images/cover.png",
+        },
+        byteSize: coverBytes.byteLength,
+        contentType: "image/png",
+        deliveryHref: "/api/formless/media/media/images/cover.png",
+        storageKey: "media/images/cover.png",
+      },
     ]);
     expect(entry.mediaFiles.map((file) => file.archivePath)).toEqual([
       "media/personal/media/images/avatar.webp",
-      "media/personal/site/images/cover.png",
+      "media/personal/media/images/cover.png",
     ]);
     expect(entry.report).toMatchObject({
       installId: "personal",
@@ -110,15 +120,6 @@ describe("Site project app archive import", () => {
         site: 1,
       },
     });
-    expect(entry.report.rewrittenMediaHrefs).toEqual([
-      {
-        nextHref:
-          "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
-        previousHref: "/api/site/media/site/images/cover.png",
-        recordId: "image-cover",
-        storageKey: "app-installs/personal/site/images/cover.png",
-      },
-    ]);
     expect(
       planAppArchiveRestore(reparsed, {
         mediaFiles: entry.mediaFiles,
@@ -143,18 +144,18 @@ describe("Site project app archive import", () => {
     const records = [
       siteRecord("Project Site"),
       imageRecord("image-cover", {
-        href: "/api/site/media/site/images/cover.png",
+        mediaAssetId: "cover.png",
       }),
     ];
 
-    await mkdir(path.join(projectRoot, "media/site/images"), { recursive: true });
+    await mkdir(path.join(projectRoot, "media/media/images"), { recursive: true });
     await writeFile(
       path.join(projectRoot, "formless.config.json"),
       formatSiteProjectConfig(defaultSiteProjectConfig()),
     );
     await writeFile(path.join(projectRoot, "site.records.json"), formatSiteProjectRecords(records));
     await writeFile(
-      path.join(projectRoot, "media/site/images/cover.png"),
+      path.join(projectRoot, "media/media/images/cover.png"),
       new Uint8Array([1, 2, 3]),
     );
 
@@ -169,12 +170,30 @@ describe("Site project app archive import", () => {
       label: "Project Site",
     });
     expect(entry.mediaFiles).toHaveLength(1);
-    expect(await readFile(path.join(projectRoot, "media/site/images/cover.png"))).toEqual(
+    expect(await readFile(path.join(projectRoot, "media/media/images/cover.png"))).toEqual(
       Buffer.from([1, 2, 3]),
     );
   });
 
-  it("fails when a referenced project media file is not supplied", () => {
+  it("fails when a referenced core project media file is not supplied", () => {
+    expect(() =>
+      buildSiteProjectAppArchiveEntry({
+        exportedAt: now,
+        installId: "personal",
+        mediaFiles: [],
+        records: [
+          siteRecord("Personal Site"),
+          imageRecord("image-cover", {
+            mediaAssetId: "cover.png",
+          }),
+        ],
+      }),
+    ).toThrow(
+      'Site project import is missing media file "media/media/images/cover.png" for "/api/formless/media/media/images/cover.png".',
+    );
+  });
+
+  it("fails with a migration error for legacy Site media hrefs", () => {
     expect(() =>
       buildSiteProjectAppArchiveEntry({
         exportedAt: now,
@@ -188,7 +207,7 @@ describe("Site project app archive import", () => {
         ],
       }),
     ).toThrow(
-      'Site project import is missing media file "media/site/images/cover.png" for "/api/site/media/site/images/cover.png".',
+      'Legacy Site media href "/api/site/media/site/images/cover.png" must be migrated to core media before Site project media collection.',
     );
   });
 });
@@ -231,7 +250,7 @@ function mediaFile(key: string, bytes: Uint8Array<ArrayBuffer>): SiteProjectMedi
   return {
     bytes,
     contentType,
-    href: key.startsWith("media/images/") ? `/api/formless/media/${key}` : `/api/site/media/${key}`,
+    href: `/api/formless/media/${key}`,
     key,
     sourcePath: `media/${key}`,
   };

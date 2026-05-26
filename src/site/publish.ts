@@ -351,7 +351,7 @@ async function restoreSourceMedia(
     return;
   }
 
-  input.dependencies.log(`Media restore: PUT ${sourceMediaFiles.length} source media files.`);
+  input.dependencies.log(`Core media restore: PUT ${sourceMediaFiles.length} source media files.`);
 
   for (const file of sourceMediaFiles) {
     validateMediaRestoreResponse(
@@ -370,7 +370,7 @@ async function restoreSourceMedia(
 
 function validateMediaRestoreResponse(value: unknown, file: SourceMediaFile) {
   if (!isRecord(value)) {
-    throw new Error("Site media restore response must be an object.");
+    throw new Error("Core media restore response must be an object.");
   }
 
   if (
@@ -379,7 +379,7 @@ function validateMediaRestoreResponse(value: unknown, file: SourceMediaFile) {
     value.key !== file.key ||
     value.size !== file.bytes.byteLength
   ) {
-    throw new Error(`Site media restore response did not match source media "${file.key}".`);
+    throw new Error(`Core media restore response did not match source media "${file.key}".`);
   }
 }
 

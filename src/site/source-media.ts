@@ -12,6 +12,7 @@ import {
 } from "../media/core.ts";
 
 export const SITE_MEDIA_ROUTE_PREFIX = "/api/site/media/";
+export const INSTALLED_SITE_MEDIA_ROUTE_PREFIX = "/api/app-installs/site/";
 export const SITE_IMAGE_KEY_PREFIX = "site/images/";
 export const SITE_SOURCE_MEDIA_ROOT = "schema/apps/site/media";
 
@@ -95,6 +96,18 @@ export function siteMediaKeyFromHref(href: string): string | undefined {
   return key && isValidMediaStorageKey(key) ? key : undefined;
 }
 
+export function isLegacySiteMediaHref(href: string): boolean {
+  return (
+    href.startsWith(SITE_MEDIA_ROUTE_PREFIX) ||
+    (href.startsWith(INSTALLED_SITE_MEDIA_ROUTE_PREFIX) &&
+      /^\/api\/app-installs\/site\/[^/]+\/media\//.test(href))
+  );
+}
+
+export function legacySiteMediaMigrationMessage(href: string, workflow: string): string {
+  return `Legacy Site media href "${href}" must be migrated to core media before ${workflow}.`;
+}
+
 export function siteMediaKeyFromPathname(pathname: string): string | undefined {
   const key = pathname.startsWith(SITE_MEDIA_ROUTE_PREFIX)
     ? pathname.slice(SITE_MEDIA_ROUTE_PREFIX.length)
@@ -118,11 +131,15 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
     const href = record.values.href;
 
     if (typeof href === "string") {
-      const key = siteMediaKeyFromHref(href) ?? coreMediaKeyFromHref(href);
+      if (isLegacySiteMediaHref(href)) {
+        throw new Error(legacySiteMediaMigrationMessage(href, "source Site media collection"));
+      }
+
+      const key = coreMediaKeyFromHref(href);
 
       if (key) {
-        if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
-          throw new Error(`Site media href "${href}" uses unsupported source media key "${key}".`);
+        if (!isRestorableCoreMediaKey(key)) {
+          throw new Error(`Core media href "${href}" uses unsupported source media key "${key}".`);
         }
 
         setSiteSourceMediaAsset(assetsByKey, key);
@@ -142,8 +159,8 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
 }
 
 export function siteSourceMediaPathForKey(key: string): string {
-  if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
-    throw new Error(`Site source media key is not restorable: ${key}`);
+  if (!isRestorableCoreMediaKey(key)) {
+    throw new Error(`Site source media key is not core image media: ${key}`);
   }
 
   return `${SITE_SOURCE_MEDIA_ROOT}/${key}`;
@@ -160,7 +177,7 @@ function setSiteSourceMediaAsset(assetsByKey: Map<string, SiteSourceMediaAsset>,
 
   assetsByKey.set(key, {
     contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
-    href: isRestorableCoreMediaKey(key) ? coreMediaHrefForKey(key) : siteMediaHrefForKey(key),
+    href: coreMediaHrefForKey(key),
     key,
     sourcePath: siteSourceMediaPathForKey(key),
   });

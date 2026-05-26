@@ -122,10 +122,10 @@ describe("Site project source", () => {
     });
   });
 
-  it("maps project media from same-origin Site hrefs and media asset ids", () => {
+  it("maps project media from core media hrefs and media asset ids", () => {
     const records: StoredRecord[] = [
       blockRecord("image-a", "2026-05-05T00:00:01.000Z", {
-        href: "/api/site/media/site/images/cover.png",
+        href: "/api/formless/media/media/images/cover.png",
         label: "Cover",
         type: "image",
       }),
@@ -140,7 +140,7 @@ describe("Site project source", () => {
         type: "image",
       }),
       blockRecord("image-d", "2026-05-05T00:00:04.000Z", {
-        href: "/api/site/media/site/images/cover.png",
+        href: "/api/formless/media/media/images/cover.png",
         label: "Duplicate",
         type: "image",
       }),
@@ -165,14 +165,11 @@ describe("Site project source", () => {
       },
       {
         contentType: "image/png",
-        href: "/api/site/media/site/images/cover.png",
-        key: "site/images/cover.png",
-        sourcePath: "media/site/images/cover.png",
+        href: "/api/formless/media/media/images/cover.png",
+        key: "media/images/cover.png",
+        sourcePath: "media/media/images/cover.png",
       },
     ]);
-    expect(
-      siteProjectMediaPathForKey("site/images/photo.webp", { mediaRoot: "source-media" }),
-    ).toBe("source-media/site/images/photo.webp");
     expect(
       siteProjectMediaPathForKey("media/images/photo.webp", { mediaRoot: "source-media" }),
     ).toBe("source-media/media/images/photo.webp");
@@ -182,22 +179,52 @@ describe("Site project source", () => {
     expect(siteProjectMediaAssetsFromRecords(siteSeedRecords)).toEqual([]);
   });
 
+  it("rejects legacy Site media hrefs with a migration error", () => {
+    expect(() =>
+      siteProjectMediaAssetsFromRecords([
+        blockRecord("legacy", "2026-05-05T00:00:01.000Z", {
+          href: "/api/site/media/site/images/cover.png",
+          label: "Legacy",
+          type: "image",
+        }),
+      ]),
+    ).toThrow(
+      'Legacy Site media href "/api/site/media/site/images/cover.png" must be migrated to core media before Site project media collection.',
+    );
+
+    expect(() =>
+      siteProjectMediaAssetsFromRecords([
+        blockRecord("legacy-installed", "2026-05-05T00:00:01.000Z", {
+          href: "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+          label: "Legacy installed",
+          type: "image",
+        }),
+      ]),
+    ).toThrow(
+      'Legacy Site media href "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png" must be migrated to core media before Site project media collection.',
+    );
+  });
+
   it("rejects unsupported project media paths", () => {
     expect(() =>
       siteProjectMediaAssetsFromRecords([
         blockRecord("video", "2026-05-05T00:00:01.000Z", {
-          href: "/api/site/media/site/videos/clip.mp4",
+          href: "/api/formless/media/media/videos/clip.mp4",
           label: "Video",
           type: "image",
         }),
       ]),
     ).toThrow(
-      'Site project media href "/api/site/media/site/videos/clip.mp4" uses unsupported media key "site/videos/clip.mp4".',
+      'Core media href "/api/formless/media/media/videos/clip.mp4" uses unsupported media key "media/videos/clip.mp4".',
     );
 
     expect(() =>
-      siteProjectMediaPathForKey("site/images/cover.png", { mediaRoot: "../media" }),
+      siteProjectMediaPathForKey("media/images/cover.png", { mediaRoot: "../media" }),
     ).toThrow("Site project media root must be a safe project-relative path.");
+
+    expect(() =>
+      siteProjectMediaPathForKey("site/images/cover.png", { mediaRoot: "media" }),
+    ).toThrow("Site project media key is not core image media: site/images/cover.png");
   });
 });
 

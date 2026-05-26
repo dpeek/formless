@@ -65,9 +65,9 @@ describe("Site project files", () => {
     const mediaFile: SiteProjectMediaFile = {
       bytes: new Uint8Array([1, 2, 3]),
       contentType: "image/png",
-      href: "/api/site/media/site/images/cover.png",
-      key: "site/images/cover.png",
-      sourcePath: "media/site/images/cover.png",
+      href: "/api/formless/media/media/images/cover.png",
+      key: "media/images/cover.png",
+      sourcePath: "media/media/images/cover.png",
     };
     const nextRecords = formatSiteProjectRecords(records);
 
@@ -93,7 +93,7 @@ describe("Site project files", () => {
     await writeFile(path.join(projectRoot, mediaFile.sourcePath), Buffer.from([9]));
 
     await expect(staleSiteProjectSourcePaths(project, nextRecords, [mediaFile])).resolves.toEqual([
-      "media/site/images/cover.png",
+      "media/media/images/cover.png",
     ]);
   });
 });
@@ -115,7 +115,7 @@ function mediaRecords(): StoredRecord[] {
     block("block-cover", "2026-05-05T00:00:02.000Z", {
       type: "image",
       label: "Cover",
-      href: "/api/site/media/site/images/cover.png",
+      mediaAssetId: "cover.png",
     }),
   ];
 }

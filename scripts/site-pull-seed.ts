@@ -249,7 +249,7 @@ function printUsage() {
       "Usage: bun run site:pull-seed [--check] [--source <url>]",
       "",
       "Fetches the local Site authority snapshot and writes schema/apps/site/seed-records.json.",
-      `Referenced Site media is written under ${SITE_SOURCE_MEDIA_ROOT}.`,
+      `Referenced core media is written under ${SITE_SOURCE_MEDIA_ROOT}.`,
       "--check exits non-zero when the source seed file or source media files are stale.",
     ].join("\n"),
   );

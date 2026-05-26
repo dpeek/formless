@@ -230,7 +230,6 @@ export {
   type SiteProjectAppArchiveEntry,
   type SiteProjectAppArchiveMediaFile,
   type SiteProjectAppArchiveReport,
-  type SiteProjectMediaHrefRewrite,
 } from "./project-archive.ts";
 export {
   PORTABLE_ARCHIVE_MANIFEST_FILE,
@@ -477,7 +476,6 @@ export async function runFormlessCli(
           `Archive: ${formatCliPath(dependencies.cwd, result.archivePath)}.`,
           `Records: ${result.recordCount}.`,
           `Media files: ${result.mediaCount}.`,
-          `Rewritten media hrefs: ${result.report.rewrittenMediaHrefs.length}.`,
         ].join("\n"),
       );
       return;

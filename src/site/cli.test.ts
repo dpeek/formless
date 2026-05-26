@@ -2550,7 +2550,6 @@ describe("Formless Site CLI", () => {
         `Archive: ${path.relative(tempDir, path.join(outDir, PORTABLE_ARCHIVE_MANIFEST_FILE))}.`,
         `Records: ${mediaRecords().length}.`,
         "Media files: 1.",
-        "Rewritten media hrefs: 0.",
       ].join("\n"),
     ]);
   });

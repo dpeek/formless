@@ -13,7 +13,28 @@ import type { StoredRecord } from "../shared/protocol.ts";
 import { siteSeedRecords, siteSourceSchema } from "../test/schema-apps.ts";
 
 describe("Site publish workflow", () => {
-  const sourceMediaAssets = siteSourceMediaAssetsFromRecords(siteSeedRecords);
+  const coreMediaSeedRecords: StoredRecord[] = [
+    {
+      id: "site-primary",
+      entity: "site",
+      values: {
+        key: "primary",
+        label: "Personal Site",
+      },
+      createdAt: "2026-05-14T00:00:00.000Z",
+    },
+    {
+      id: "source-image",
+      entity: "block",
+      values: {
+        label: "Image",
+        mediaAssetId: "cover.png",
+        type: "image",
+      },
+      createdAt: "2026-05-14T00:00:01.000Z",
+    },
+  ];
+  const sourceMediaAssets = siteSourceMediaAssetsFromRecords(coreMediaSeedRecords);
 
   it("parses a dry-run command by default and exposes safe apply modes", () => {
     expect(parseSitePublishArgs([], {})).toEqual({
@@ -71,9 +92,10 @@ describe("Site publish workflow", () => {
     const harness = publishHarness({
       adminToken: "secret-token",
       apply: true,
+      sourceSeedRecords: coreMediaSeedRecords,
       target: "https://live.example",
     });
-    const backupSnapshot = buildSiteSourceSnapshot(siteSourceSchema, siteSeedRecords, {
+    const backupSnapshot = buildSiteSourceSnapshot(siteSourceSchema, coreMediaSeedRecords, {
       exportedAt: "2026-05-12T03:00:00.000Z",
     });
     harness.queueJson(backupSnapshot);
@@ -87,7 +109,7 @@ describe("Site publish workflow", () => {
     }
     harness.queueJson({
       cursor: 8,
-      records: siteSeedRecords,
+      records: coreMediaSeedRecords,
       schema: siteSourceSchema,
       schemaUpdatedAt: "2026-05-12T04:00:00.000Z",
     });
@@ -98,7 +120,9 @@ describe("Site publish workflow", () => {
     expect(harness.commands).toEqual(["devstate check", "bun run deploy"]);
     expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://live.example/api/site/snapshot",
-      ...sourceMediaAssets.map((asset) => `PUT https://live.example/api/site/media/${asset.key}`),
+      ...sourceMediaAssets.map(
+        (asset) => `PUT https://live.example/api/formless/media/${asset.key}`,
+      ),
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/pages/home",
     ]);
@@ -138,11 +162,12 @@ describe("Site publish workflow", () => {
   it("keeps the backup artifact path in restore failure errors", async () => {
     const harness = publishHarness({
       apply: true,
+      sourceSeedRecords: coreMediaSeedRecords,
       skipCheck: true,
       target: "https://live.example",
     });
     harness.queueJson(
-      buildSiteSourceSnapshot(siteSourceSchema, siteSeedRecords, {
+      buildSiteSourceSnapshot(siteSourceSchema, coreMediaSeedRecords, {
         exportedAt: "2026-05-12T03:00:00.000Z",
       }),
     );
@@ -164,7 +189,9 @@ describe("Site publish workflow", () => {
     expect(harness.writes).toHaveLength(1);
     expect(harness.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://live.example/api/site/snapshot",
-      ...sourceMediaAssets.map((asset) => `PUT https://live.example/api/site/media/${asset.key}`),
+      ...sourceMediaAssets.map(
+        (asset) => `PUT https://live.example/api/formless/media/${asset.key}`,
+      ),
       "POST https://live.example/api/site/snapshot/restore",
     ]);
   });
@@ -190,6 +217,33 @@ describe("Site publish workflow", () => {
 
     await expect(runSitePublish(harness.input())).rejects.toThrow(
       'Missing Site source media file schema/apps/site/media/media/images/missing.png. Run "bun run site:pull-seed" before publishing.',
+    );
+
+    expect(harness.commands).toEqual([]);
+    expect(harness.requests).toEqual([]);
+    expect(harness.writes).toEqual([]);
+  });
+
+  it("fails before deploy when source records reference legacy Site media", async () => {
+    const harness = publishHarness({
+      apply: true,
+      sourceSeedRecords: [
+        {
+          id: "source-image",
+          entity: "block",
+          values: {
+            href: "/api/site/media/site/images/cover.png",
+            label: "Image",
+            type: "image",
+          },
+          createdAt: "2026-05-14T00:00:00.000Z",
+        },
+      ],
+      target: "https://live.example",
+    });
+
+    await expect(runSitePublish(harness.input())).rejects.toThrow(
+      'Legacy Site media href "/api/site/media/site/images/cover.png" must be migrated to core media before source Site media collection.',
     );
 
     expect(harness.commands).toEqual([]);
