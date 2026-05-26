@@ -6,6 +6,7 @@ import {
   type StoredRecord,
 } from "./protocol.ts";
 import { parseAppSchema, type AppSchema } from "./schema.ts";
+import type { MediaAsset } from "../media/core.ts";
 
 export const INSTANCE_ARCHIVE_KIND = "formless.instanceArchive";
 export const APP_ARCHIVE_KIND = "formless.appArchive";
@@ -16,6 +17,7 @@ export const archiveCapabilities = [
   "app-store-snapshots",
   "source-records",
   "app-scoped-media",
+  "core-media-assets",
 ] as const;
 
 export type ArchiveCapability = (typeof archiveCapabilities)[number];
@@ -60,6 +62,7 @@ export type AppArchiveSourceRecordsData = {
 export type AppArchiveData = AppArchiveStoreSnapshotData | AppArchiveSourceRecordsData;
 
 export type AppArchiveMediaObject = {
+  asset?: MediaAsset;
   storageKey: string;
   archivePath: string;
   contentType: string;
@@ -313,14 +316,9 @@ function parseMediaManifest(context: string, value: unknown): AppArchiveMediaMan
 
 function parseMediaObject(context: string, value: unknown): AppArchiveMediaObject {
   const object = parseObject(context, value);
+  const requiredKeys = ["storageKey", "archivePath", "contentType", "byteSize", "deliveryHref"];
 
-  assertExactKeys(context, object, [
-    "storageKey",
-    "archivePath",
-    "contentType",
-    "byteSize",
-    "deliveryHref",
-  ]);
+  assertExactKeys(context, object, "asset" in object ? [...requiredKeys, "asset"] : requiredKeys);
 
   return {
     storageKey: parseRelativeKey(`${context} storageKey`, object.storageKey),
@@ -328,6 +326,57 @@ function parseMediaObject(context: string, value: unknown): AppArchiveMediaObjec
     contentType: parseContentType(`${context} contentType`, object.contentType),
     byteSize: parseNonNegativeInteger(`${context} byteSize`, object.byteSize),
     deliveryHref: parseDeliveryHref(`${context} deliveryHref`, object.deliveryHref),
+    ...("asset" in object ? { asset: parseMediaAsset(`${context} asset`, object.asset) } : {}),
+  };
+}
+
+function parseMediaAsset(context: string, value: unknown): MediaAsset {
+  const object = parseObject(context, value);
+  const requiredKeys = [
+    "byteSize",
+    "contentType",
+    "deliveryHref",
+    "id",
+    "kind",
+    "label",
+    "provider",
+    "status",
+    "storageKey",
+  ];
+  const optionalKeys = ["filename", "height", "width"];
+
+  assertExactKeys(context, object, [
+    ...requiredKeys,
+    ...optionalKeys.filter((key) => key in object),
+  ]);
+
+  if (object.kind !== "image") {
+    throw new Error(`${context} kind must be "image".`);
+  }
+
+  if (object.status !== "ready") {
+    throw new Error(`${context} status must be "ready".`);
+  }
+
+  return {
+    byteSize: parseNonNegativeInteger(`${context} byteSize`, object.byteSize),
+    contentType: parseContentType(`${context} contentType`, object.contentType),
+    deliveryHref: parseDeliveryHref(`${context} deliveryHref`, object.deliveryHref),
+    ...("filename" in object
+      ? { filename: parseTrimmedNonEmptyString(`${context} filename`, object.filename) }
+      : {}),
+    ...("height" in object
+      ? { height: parseNonNegativeInteger(`${context} height`, object.height) }
+      : {}),
+    id: parseTrimmedNonEmptyString(`${context} id`, object.id),
+    kind: "image",
+    label: parseTrimmedNonEmptyString(`${context} label`, object.label),
+    provider: parseTrimmedNonEmptyString(`${context} provider`, object.provider),
+    status: "ready",
+    storageKey: parseRelativeKey(`${context} storageKey`, object.storageKey),
+    ...("width" in object
+      ? { width: parseNonNegativeInteger(`${context} width`, object.width) }
+      : {}),
   };
 }
 
@@ -639,6 +688,24 @@ function canonicalMediaObject(media: AppArchiveMediaObject): AppArchiveMediaObje
     contentType: media.contentType,
     byteSize: media.byteSize,
     deliveryHref: media.deliveryHref,
+    ...(media.asset === undefined ? {} : { asset: canonicalMediaAsset(media.asset) }),
+  };
+}
+
+function canonicalMediaAsset(asset: MediaAsset): MediaAsset {
+  return {
+    byteSize: asset.byteSize,
+    contentType: asset.contentType,
+    deliveryHref: asset.deliveryHref,
+    ...(asset.filename === undefined ? {} : { filename: asset.filename }),
+    ...(asset.height === undefined ? {} : { height: asset.height }),
+    id: asset.id,
+    kind: asset.kind,
+    label: asset.label,
+    provider: asset.provider,
+    status: asset.status,
+    storageKey: asset.storageKey,
+    ...(asset.width === undefined ? {} : { width: asset.width }),
   };
 }
 

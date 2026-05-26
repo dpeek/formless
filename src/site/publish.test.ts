@@ -189,7 +189,7 @@ describe("Site publish workflow", () => {
     });
 
     await expect(runSitePublish(harness.input())).rejects.toThrow(
-      'Missing Site source media file schema/apps/site/media/site/images/missing.png. Run "bun run site:pull-seed" before publishing.',
+      'Missing Site source media file schema/apps/site/media/media/images/missing.png. Run "bun run site:pull-seed" before publishing.',
     );
 
     expect(harness.commands).toEqual([]);

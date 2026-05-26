@@ -215,7 +215,7 @@ describe("instance archive restore API", () => {
   it("restores installed Site media before public tree reads reference it", async () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
-    const served = await harness.fetch(installedMediaHref);
+    const served = await harness.fetch(coreMediaHref);
 
     expect(applied.response.status).toBe(200);
     expect(applied.body).toMatchObject({
@@ -229,7 +229,7 @@ describe("instance archive restore API", () => {
         },
       },
     });
-    expect(JSON.stringify(tree.body)).toContain(installedMediaHref);
+    expect(JSON.stringify(tree.body)).toContain(coreMediaHref);
     expect(tree.body.page.label).toBe("Home");
     expect(served.status).toBe(200);
     expect(served.headers.get("Content-Type")).toBe("image/png");
@@ -288,7 +288,12 @@ function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    capabilities: [
+      "installed-app-registry",
+      "app-store-snapshots",
+      "app-scoped-media",
+      "core-media-assets",
+    ],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     apps: [appArchive(input), tasksAppArchive(input), estiiAppArchive(input)],
   };
@@ -299,7 +304,7 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["source-records", "app-scoped-media"],
+    capabilities: ["source-records", "app-scoped-media", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "personal",
@@ -326,7 +331,7 @@ function tasksAppArchive(input: { dryRun: boolean }): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "work",
@@ -359,7 +364,7 @@ function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     app: {
       installId: "rates",
@@ -388,8 +393,8 @@ function estiiAppArchive(input: { dryRun: boolean }): AppArchive {
 }
 
 const mediaBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
-const installedMediaStorageKey = "app-installs/personal/site/images/installed.png";
-const installedMediaHref = `/api/app-installs/site/personal/media/${installedMediaStorageKey}`;
+const coreMediaStorageKey = "media/images/installed.png";
+const coreMediaHref = `/api/formless/media/${coreMediaStorageKey}`;
 
 function appArchiveWithMedia(input: { dryRun: boolean }): AppArchive {
   return {
@@ -400,28 +405,44 @@ function appArchiveWithMedia(input: { dryRun: boolean }): AppArchive {
       schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
       schema: siteSourceSchema,
       records: testSiteSeedRecords.map((record) =>
-        record.id === "rec_site_media_avatar"
-          ? {
-              ...record,
-              values: {
-                ...record.values,
-                href: installedMediaHref,
-                mediaAssetId: "installed.png",
-              },
-            }
-          : record,
+        record.id === "rec_site_media_avatar" ? imageAssetRecord(record) : record,
       ),
     },
     media: {
       objects: [
         {
           archivePath: "media/personal/installed.png",
+          asset: {
+            byteSize: mediaBytes.byteLength,
+            contentType: "image/png",
+            deliveryHref: coreMediaHref,
+            id: "installed.png",
+            kind: "image",
+            label: "installed.png",
+            provider: "r2",
+            status: "ready",
+            storageKey: coreMediaStorageKey,
+          },
           byteSize: mediaBytes.byteLength,
           contentType: "image/png",
-          deliveryHref: installedMediaHref,
-          storageKey: installedMediaStorageKey,
+          deliveryHref: coreMediaHref,
+          storageKey: coreMediaStorageKey,
         },
       ],
+    },
+  };
+}
+
+function imageAssetRecord(record: StoredRecord): StoredRecord {
+  const values = { ...record.values };
+
+  delete values.href;
+
+  return {
+    ...record,
+    values: {
+      ...values,
+      mediaAssetId: "installed.png",
     },
   };
 }

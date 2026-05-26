@@ -10,11 +10,7 @@ import {
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import { buildSiteSourceSnapshot } from "./source-snapshot.ts";
-import {
-  SITE_MEDIA_ROUTE_PREFIX,
-  siteSourceMediaAssetsFromRecords,
-  type SiteSourceMediaAsset,
-} from "./source-media.ts";
+import { siteSourceMediaAssetsFromRecords, type SiteSourceMediaAsset } from "./source-media.ts";
 
 export type SitePublishOptions = {
   apply: boolean;
@@ -359,7 +355,7 @@ async function restoreSourceMedia(
 
   for (const file of sourceMediaFiles) {
     validateMediaRestoreResponse(
-      await fetchJson(input, sitePublishUrl(target, `${SITE_MEDIA_ROUTE_PREFIX}${file.key}`), {
+      await fetchJson(input, sitePublishUrl(target, file.href), {
         body: file.bytes,
         headers: authHeaders(input.adminToken, {
           accept: "application/json",

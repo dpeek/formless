@@ -33,13 +33,12 @@ describe("Site project app archive import", () => {
       installId: "personal",
       mediaFiles: [
         mediaFile("site/images/cover.png", coverBytes),
-        mediaFile("site/images/avatar.webp", avatarBytes),
+        mediaFile("media/images/avatar.webp", avatarBytes),
       ],
       records: [
         siteRecord("Personal Site"),
         imageRecord("image-cover", {
           href: "/api/site/media/site/images/cover.png",
-          mediaAssetId: "cover.png",
         }),
         imageRecord("image-avatar", {
           mediaAssetId: "avatar.webp",
@@ -71,14 +70,6 @@ describe("Site project app archive import", () => {
     );
     expect(reparsed.media.objects).toEqual([
       {
-        archivePath: "media/personal/site/images/avatar.webp",
-        byteSize: avatarBytes.byteLength,
-        contentType: "image/webp",
-        deliveryHref:
-          "/api/app-installs/site/personal/media/app-installs/personal/site/images/avatar.webp",
-        storageKey: "app-installs/personal/site/images/avatar.webp",
-      },
-      {
         archivePath: "media/personal/site/images/cover.png",
         byteSize: coverBytes.byteLength,
         contentType: "image/png",
@@ -86,9 +77,27 @@ describe("Site project app archive import", () => {
           "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
         storageKey: "app-installs/personal/site/images/cover.png",
       },
+      {
+        archivePath: "media/personal/media/images/avatar.webp",
+        asset: {
+          byteSize: avatarBytes.byteLength,
+          contentType: "image/webp",
+          deliveryHref: "/api/formless/media/media/images/avatar.webp",
+          id: "avatar.webp",
+          kind: "image",
+          label: "avatar.webp",
+          provider: "r2",
+          status: "ready",
+          storageKey: "media/images/avatar.webp",
+        },
+        byteSize: avatarBytes.byteLength,
+        contentType: "image/webp",
+        deliveryHref: "/api/formless/media/media/images/avatar.webp",
+        storageKey: "media/images/avatar.webp",
+      },
     ]);
     expect(entry.mediaFiles.map((file) => file.archivePath)).toEqual([
-      "media/personal/site/images/avatar.webp",
+      "media/personal/media/images/avatar.webp",
       "media/personal/site/images/cover.png",
     ]);
     expect(entry.report).toMatchObject({
@@ -135,7 +144,6 @@ describe("Site project app archive import", () => {
       siteRecord("Project Site"),
       imageRecord("image-cover", {
         href: "/api/site/media/site/images/cover.png",
-        mediaAssetId: "cover.png",
       }),
     ];
 
@@ -176,7 +184,6 @@ describe("Site project app archive import", () => {
           siteRecord("Personal Site"),
           imageRecord("image-cover", {
             href: "/api/site/media/site/images/cover.png",
-            mediaAssetId: "cover.png",
           }),
         ],
       }),
@@ -224,7 +231,7 @@ function mediaFile(key: string, bytes: Uint8Array<ArrayBuffer>): SiteProjectMedi
   return {
     bytes,
     contentType,
-    href: `/api/site/media/${key}`,
+    href: key.startsWith("media/images/") ? `/api/formless/media/${key}` : `/api/site/media/${key}`,
     key,
     sourcePath: `media/${key}`,
   };

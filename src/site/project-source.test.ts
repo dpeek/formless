@@ -159,9 +159,9 @@ describe("Site project source", () => {
     expect(siteProjectMediaAssetsFromRecords(records)).toEqual([
       {
         contentType: "image/webp",
-        href: "/api/site/media/site/images/asset-only.webp",
-        key: "site/images/asset-only.webp",
-        sourcePath: "media/site/images/asset-only.webp",
+        href: "/api/formless/media/media/images/asset-only.webp",
+        key: "media/images/asset-only.webp",
+        sourcePath: "media/media/images/asset-only.webp",
       },
       {
         contentType: "image/png",
@@ -173,6 +173,9 @@ describe("Site project source", () => {
     expect(
       siteProjectMediaPathForKey("site/images/photo.webp", { mediaRoot: "source-media" }),
     ).toBe("source-media/site/images/photo.webp");
+    expect(
+      siteProjectMediaPathForKey("media/images/photo.webp", { mediaRoot: "source-media" }),
+    ).toBe("source-media/media/images/photo.webp");
   });
 
   it("finds no project media assets in the package starter records", () => {

@@ -19,6 +19,8 @@ import {
   type ArchiveRestorePlanStep,
 } from "../shared/archive-restore-plan.ts";
 import {
+  CORE_IMAGE_KEY_PREFIX,
+  coreMediaHrefForKey,
   restoreImageMedia,
   type MediaObjectStore,
   type MediaWriteResponse,
@@ -354,6 +356,29 @@ export async function restoreArchiveMediaObjectToStore(
   bytes: Uint8Array,
 ): Promise<MediaWriteResponse> {
   const media = identity.siteMedia;
+  const coreKeyPrefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
+
+  if (object.storageKey.startsWith(coreKeyPrefix)) {
+    const result = await restoreImageMedia({
+      asset: object.asset ?? coreMediaAssetForObject(object),
+      bytes,
+      contentType: object.contentType,
+      hrefForKey: coreMediaHrefForKey,
+      key: object.storageKey,
+      keyPrefix: coreKeyPrefix,
+      store,
+    });
+
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+
+    if (result.upload.href !== object.deliveryHref) {
+      throw new Error(`Restored media href for "${object.storageKey}" did not match the archive.`);
+    }
+
+    return result.upload;
+  }
 
   if (!media) {
     throw new Error(`Installed app "${identity.installId}" does not support app-scoped media.`);
@@ -363,6 +388,7 @@ export async function restoreArchiveMediaObjectToStore(
     ? media.imageKeyPrefix
     : `${media.imageKeyPrefix}/`;
   const result = await restoreImageMedia({
+    asset: object.asset,
     bytes,
     contentType: object.contentType,
     hrefForKey: (key) => `${media.routePrefix}/${key}`,
@@ -380,6 +406,25 @@ export async function restoreArchiveMediaObjectToStore(
   }
 
   return result.upload;
+}
+
+function coreMediaAssetForObject(object: AppArchiveMediaObject) {
+  const keyPrefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
+  const id = object.storageKey.startsWith(keyPrefix)
+    ? object.storageKey.slice(keyPrefix.length)
+    : object.storageKey;
+
+  return {
+    byteSize: object.byteSize,
+    contentType: object.contentType,
+    deliveryHref: object.deliveryHref,
+    id,
+    kind: "image" as const,
+    label: id,
+    provider: "r2",
+    status: "ready" as const,
+    storageKey: object.storageKey,
+  };
 }
 
 async function parseAndPlanArchiveRestore(
@@ -585,4 +630,8 @@ function restoreFailure(
 
 function normalizeContentType(value: string) {
   return value.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
+function mediaKeyPrefix(prefix: string) {
+  return prefix.endsWith("/") ? prefix : `${prefix}/`;
 }

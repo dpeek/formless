@@ -32,9 +32,9 @@ describe("Site source media", () => {
     expect(siteSourceMediaAssetsFromRecords(records)).toEqual([
       {
         contentType: "image/webp",
-        href: "/api/site/media/site/images/asset-only.webp",
-        key: "site/images/asset-only.webp",
-        sourcePath: "schema/apps/site/media/site/images/asset-only.webp",
+        href: "/api/formless/media/media/images/asset-only.webp",
+        key: "media/images/asset-only.webp",
+        sourcePath: "schema/apps/site/media/media/images/asset-only.webp",
       },
       {
         contentType: "image/png",

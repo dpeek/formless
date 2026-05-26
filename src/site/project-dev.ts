@@ -16,7 +16,6 @@ import {
   siteProjectStatePath,
   SITE_PROJECT_STATE_DIRECTORY,
 } from "./project-state.ts";
-import { SITE_MEDIA_ROUTE_PREFIX } from "./source-media.ts";
 
 export type SiteProjectDevCommand = {
   args: string[];
@@ -180,18 +179,14 @@ async function restoreSiteProjectToLocalAuthority(
   });
 
   for (const mediaFile of mediaFiles) {
-    await fetchJson(
-      dependencies.fetch,
-      new URL(`${SITE_MEDIA_ROUTE_PREFIX}${mediaFile.key}`, `${source}/`).toString(),
-      {
-        body: mediaFile.bytes,
-        headers: {
-          accept: "application/json",
-          "content-type": mediaFile.contentType,
-        },
-        method: "PUT",
+    await fetchJson(dependencies.fetch, new URL(mediaFile.href, `${source}/`).toString(), {
+      body: mediaFile.bytes,
+      headers: {
+        accept: "application/json",
+        "content-type": mediaFile.contentType,
       },
-    );
+      method: "PUT",
+    });
   }
 
   await fetchJson(dependencies.fetch, siteSnapshotRestoreUrl(source), {

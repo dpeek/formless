@@ -340,6 +340,38 @@ describe("archive restore planner", () => {
     ]);
   });
 
+  it("plans core media asset restores before records that store media asset ids", () => {
+    const plan = expectPlan(
+      planAppArchiveRestore(
+        appArchive({
+          capabilities: ["app-store-snapshots", "core-media-assets"],
+          data: {
+            kind: "storeSnapshot",
+            snapshot: storeSnapshot({
+              records: [siteRecord("rec_site_settings_media", "media"), coreImageBlock("hero")],
+            }),
+          },
+          media: {
+            objects: [coreMediaObject("hero")],
+          },
+        }),
+        {
+          mediaFiles: [coreMediaFile("hero")],
+          sourceSchemas: { site: siteSourceSchema },
+        },
+      ),
+    );
+
+    expect(plan.steps.map((step) => step.kind)).toEqual([
+      "createInstall",
+      "restoreMedia",
+      "restoreAppData",
+    ]);
+    expect(
+      plan.steps.filter((step) => step.kind === "restoreMedia").map((step) => step.storageKey),
+    ).toEqual(["media/images/hero.png"]);
+  });
+
   it("reports codec failures as invalid archive planner errors", () => {
     expect(expectFailure(planPortableArchiveRestore({ kind: "formless.futureArchive" }))).toEqual([
       {
@@ -474,6 +506,13 @@ function imageBlock(installId: string, name: string): StoredRecord {
 
   return blockRecord(`rec_block_${name}`, `${name} image`, {
     href: object.deliveryHref,
+    width: 1200,
+    height: 800,
+  });
+}
+
+function coreImageBlock(name: string): StoredRecord {
+  return blockRecord(`rec_block_${name}`, `${name} image`, {
     mediaAssetId: `${name}.png`,
     width: 1200,
     height: 800,
@@ -513,6 +552,41 @@ function mediaObject(
 function mediaFile(installId: string, name: string): ArchiveRestoreMediaFile {
   return {
     archivePath: `media/${installId}/${name}.png`,
+    byteSize: 8,
+    contentType: "image/png",
+  };
+}
+
+function coreMediaObject(
+  name: string,
+  overrides: Partial<AppArchiveMediaObject> = {},
+): AppArchiveMediaObject {
+  const storageKey = `media/images/${name}.png`;
+
+  return {
+    storageKey,
+    archivePath: `media/personal/media/images/${name}.png`,
+    asset: {
+      byteSize: 8,
+      contentType: "image/png",
+      deliveryHref: `/api/formless/media/${storageKey}`,
+      id: `${name}.png`,
+      kind: "image",
+      label: `${name}.png`,
+      provider: "r2",
+      status: "ready",
+      storageKey,
+    },
+    contentType: "image/png",
+    byteSize: 8,
+    deliveryHref: `/api/formless/media/${storageKey}`,
+    ...overrides,
+  };
+}
+
+function coreMediaFile(name: string): ArchiveRestoreMediaFile {
+  return {
+    archivePath: `media/personal/media/images/${name}.png`,
     byteSize: 8,
     contentType: "image/png",
   };

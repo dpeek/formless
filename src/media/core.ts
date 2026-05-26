@@ -229,6 +229,23 @@ export function coreMediaHrefForKey(key: string): string {
   return `${CORE_MEDIA_ROUTE_PREFIX}${key}`;
 }
 
+export function coreMediaKeyFromHref(href: string): string | undefined {
+  if (!href.startsWith(CORE_MEDIA_ROUTE_PREFIX)) {
+    return undefined;
+  }
+
+  const url = new URL(href, "https://formless.local");
+  const key = url.pathname.startsWith(CORE_MEDIA_ROUTE_PREFIX)
+    ? url.pathname.slice(CORE_MEDIA_ROUTE_PREFIX.length)
+    : "";
+
+  return isValidMediaStorageKey(key) ? key : undefined;
+}
+
+export function coreMediaKeyFromAssetId(assetId: string): string | undefined {
+  return coreImageMediaDeliveryFactsForAssetId(assetId)?.storageKey;
+}
+
 export async function listImageMediaAssets({
   hrefForKey,
   keyPrefix,
@@ -372,6 +389,7 @@ export async function uploadImageMedia({
 }
 
 export async function restoreImageMedia({
+  asset,
   bytes,
   contentType,
   hrefForKey,
@@ -380,6 +398,7 @@ export async function restoreImageMedia({
   maxBytes = MEDIA_IMAGE_UPLOAD_MAX_BYTES,
   store,
 }: {
+  asset?: MediaAsset;
   bytes: Uint8Array;
   contentType: string;
   hrefForKey: (key: string) => string;
@@ -416,13 +435,31 @@ export async function restoreImageMedia({
     return { error: "Image file is larger than the 5 MB limit.", ok: false, status: 413 };
   }
 
-  await writeMediaObject(store, key, bytes, expectedContentType);
+  const href = hrefForKey(key);
+  const metadataAsset =
+    asset &&
+    asset.kind === "image" &&
+    asset.storageKey === key &&
+    normalizeMediaContentType(asset.contentType) === expectedContentType &&
+    asset.byteSize === bytes.byteLength &&
+    asset.deliveryHref === href &&
+    asset.status === "ready"
+      ? asset
+      : undefined;
+
+  await writeMediaObject(
+    store,
+    key,
+    bytes,
+    expectedContentType,
+    metadataAsset ? { customMetadata: mediaObjectMetadataForAsset(metadataAsset) } : {},
+  );
 
   return {
     ok: true,
     upload: {
       contentType: expectedContentType,
-      href: hrefForKey(key),
+      href,
       key,
       size: bytes.byteLength,
     },

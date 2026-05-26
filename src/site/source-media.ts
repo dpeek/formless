@@ -1,5 +1,9 @@
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
+  CORE_IMAGE_KEY_PREFIX,
+  coreMediaHrefForKey,
+  coreMediaKeyFromAssetId,
+  coreMediaKeyFromHref,
   imageMediaDeliveryFactsForAssetId,
   imageMediaContentTypeForKey,
   imageMediaExtensionForContentType,
@@ -114,10 +118,10 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
     const href = record.values.href;
 
     if (typeof href === "string") {
-      const key = siteMediaKeyFromHref(href);
+      const key = siteMediaKeyFromHref(href) ?? coreMediaKeyFromHref(href);
 
       if (key) {
-        if (!isRestorableSiteMediaKey(key)) {
+        if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
           throw new Error(`Site media href "${href}" uses unsupported source media key "${key}".`);
         }
 
@@ -127,7 +131,7 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
 
     const mediaAssetId = record.values.mediaAssetId;
     const mediaAssetKey =
-      typeof mediaAssetId === "string" ? siteMediaKeyFromAssetId(mediaAssetId) : undefined;
+      typeof mediaAssetId === "string" ? coreMediaKeyFromAssetId(mediaAssetId) : undefined;
 
     if (mediaAssetKey) {
       setSiteSourceMediaAsset(assetsByKey, mediaAssetKey);
@@ -138,11 +142,15 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
 }
 
 export function siteSourceMediaPathForKey(key: string): string {
-  if (!isRestorableSiteMediaKey(key)) {
+  if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
     throw new Error(`Site source media key is not restorable: ${key}`);
   }
 
   return `${SITE_SOURCE_MEDIA_ROOT}/${key}`;
+}
+
+function isRestorableCoreMediaKey(key: string): boolean {
+  return isRestorableImageMediaKey(key, { keyPrefix: `${CORE_IMAGE_KEY_PREFIX}/` });
 }
 
 function setSiteSourceMediaAsset(assetsByKey: Map<string, SiteSourceMediaAsset>, key: string) {
@@ -152,7 +160,7 @@ function setSiteSourceMediaAsset(assetsByKey: Map<string, SiteSourceMediaAsset>,
 
   assetsByKey.set(key, {
     contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
-    href: siteMediaHrefForKey(key),
+    href: isRestorableCoreMediaKey(key) ? coreMediaHrefForKey(key) : siteMediaHrefForKey(key),
     key,
     sourcePath: siteSourceMediaPathForKey(key),
   });

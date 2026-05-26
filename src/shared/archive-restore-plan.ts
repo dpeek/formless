@@ -18,7 +18,11 @@ import type { RecordValues, StoredRecord } from "./protocol.ts";
 import type { AppSchema, FieldSchema } from "./schema.ts";
 import type { SchemaKey } from "./schema-apps.ts";
 import {
+  CORE_IMAGE_KEY_PREFIX,
+  CORE_MEDIA_ROUTE_PREFIX,
   MEDIA_IMAGE_UPLOAD_MAX_BYTES,
+  coreImageMediaDeliveryFactsForAssetId,
+  coreMediaHrefForKey,
   imageMediaContentTypeForKey,
   isRestorableImageMediaKey,
 } from "../media/core.ts";
@@ -632,24 +636,18 @@ function validateMedia(
   const seenArchivePaths = new Set<string>();
   const deliveryHrefs = new Set<string>();
 
-  if (!identity?.siteMedia && mediaObjects.length > 0) {
-    for (const object of mediaObjects) {
-      errors.push(
-        planError("invalid-media", {
-          appInstallId: app.installId,
-          message: `Archive app "${app.installId}" package "${app.packageAppKey}" does not support app-scoped media.`,
-          storageKey: object.storageKey,
-        }),
-      );
-    }
-    return;
-  }
-
   const media = identity?.siteMedia;
   const keyPrefix = media ? mediaKeyPrefix(media.imageKeyPrefix) : undefined;
   const deliveryPrefix = media ? `${media.routePrefix}/` : undefined;
+  const coreKeyPrefix = mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX);
 
   for (const object of sortedMediaObjects(mediaObjects)) {
+    const isCoreMedia = isRestorableImageMediaKey(object.storageKey, {
+      keyPrefix: coreKeyPrefix,
+    });
+    const isAppScopedMedia =
+      keyPrefix !== undefined && isRestorableImageMediaKey(object.storageKey, { keyPrefix });
+
     if (seenStorageKeys.has(object.storageKey)) {
       errors.push(
         planError("duplicate-media-object", {
@@ -674,11 +672,11 @@ function validateMedia(
     seenArchivePaths.add(object.archivePath);
     deliveryHrefs.add(object.deliveryHref);
 
-    if (!keyPrefix || !isRestorableImageMediaKey(object.storageKey, { keyPrefix })) {
+    if (!isCoreMedia && !isAppScopedMedia) {
       errors.push(
         planError("invalid-media", {
           appInstallId: app.installId,
-          message: `Archive app "${app.installId}" media key "${object.storageKey}" is not install-scoped restorable image media.`,
+          message: `Archive app "${app.installId}" media key "${object.storageKey}" is not restorable image media for this app.`,
           storageKey: object.storageKey,
         }),
       );
@@ -716,21 +714,57 @@ function validateMedia(
       );
     }
 
-    if (deliveryPrefix && object.deliveryHref !== `${deliveryPrefix}${object.storageKey}`) {
+    const expectedDeliveryHref = isCoreMedia
+      ? coreMediaHrefForKey(object.storageKey)
+      : deliveryPrefix
+        ? `${deliveryPrefix}${object.storageKey}`
+        : undefined;
+
+    if (expectedDeliveryHref && object.deliveryHref !== expectedDeliveryHref) {
       errors.push(
         planError("invalid-media", {
           appInstallId: app.installId,
-          message: `Archive app "${app.installId}" media key "${object.storageKey}" delivery href is not install-scoped.`,
+          message: `Archive app "${app.installId}" media key "${object.storageKey}" delivery href is not scoped to its storage key.`,
           storageKey: object.storageKey,
         }),
       );
     }
 
+    validateMediaAsset(app.installId, object, errors);
     validateMediaFile(app.installId, object, context.mediaFilesByPath, errors);
   }
 
+  validateCoreMediaReferences(app.installId, records, deliveryHrefs, errors);
+
   if (deliveryPrefix) {
     validateMediaReferences(app.installId, records, deliveryPrefix, deliveryHrefs, errors);
+  }
+}
+
+function validateMediaAsset(
+  appInstallId: string,
+  object: AppArchiveMediaObject,
+  errors: ArchiveRestorePlanError[],
+) {
+  if (!object.asset) {
+    return;
+  }
+
+  const asset = object.asset;
+
+  if (
+    asset.storageKey !== object.storageKey ||
+    normalizeContentType(asset.contentType) !== normalizeContentType(object.contentType) ||
+    asset.byteSize !== object.byteSize ||
+    asset.deliveryHref !== object.deliveryHref
+  ) {
+    errors.push(
+      planError("invalid-media", {
+        appInstallId,
+        message: `Archive app "${appInstallId}" media asset metadata for "${object.storageKey}" does not match the media object.`,
+        storageKey: object.storageKey,
+      }),
+    );
   }
 }
 
@@ -804,6 +838,43 @@ function validateMediaReferences(
       }
     }
   }
+}
+
+function validateCoreMediaReferences(
+  appInstallId: string,
+  records: StoredRecord[],
+  deliveryHrefs: Set<string>,
+  errors: ArchiveRestorePlanError[],
+) {
+  for (const record of records) {
+    for (const [fieldName, value] of Object.entries(record.values)) {
+      if (typeof value !== "string") {
+        continue;
+      }
+
+      const mediaAssetDelivery =
+        fieldName === "mediaAssetId" ? coreImageMediaDeliveryFactsForAssetId(value) : undefined;
+      const deliveryHref = mediaAssetDelivery?.href ?? coreDeliveryHrefFromValue(value);
+
+      if (!deliveryHref || deliveryHrefs.has(deliveryHref)) {
+        continue;
+      }
+
+      errors.push(
+        planError("missing-media-object", {
+          appInstallId,
+          entity: record.entity,
+          field: `${record.entity}.${fieldName}`,
+          message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" references core media missing from the archive manifest.`,
+          recordId: record.id,
+        }),
+      );
+    }
+  }
+}
+
+function coreDeliveryHrefFromValue(value: string): string | undefined {
+  return value.startsWith(CORE_MEDIA_ROUTE_PREFIX) ? value : undefined;
 }
 
 function planSteps(

@@ -12,6 +12,11 @@ import type { StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import type { ArchiveRestoreMediaFile } from "../shared/archive-restore-plan.ts";
 import {
+  CORE_IMAGE_KEY_PREFIX,
+  coreMediaHrefForKey,
+  isRestorableImageMediaKey,
+} from "../media/core.ts";
+import {
   packageSiteSourceSchema,
   parseSiteProjectRecords,
   siteProjectMediaAssetsFromRecords,
@@ -120,15 +125,37 @@ export function buildSiteProjectAppArchiveEntry(
       );
     }
 
-    const storageKey = installScopedStorageKey(identity.siteMedia.imageKeyPrefix, asset.key);
+    const storageKey = archiveStorageKeyForProjectMedia(
+      identity.siteMedia.imageKeyPrefix,
+      asset.key,
+    );
     const archivePath = archiveMediaPath(installId, asset.key);
     const contentType = asset.contentType;
     const byteSize = mediaFile.bytes.byteLength;
-    const deliveryHref = installScopedDeliveryHref(identity.siteMedia.routePrefix, storageKey);
+    const deliveryHref = isCoreMediaKey(asset.key)
+      ? coreMediaHrefForKey(storageKey)
+      : installScopedDeliveryHref(identity.siteMedia.routePrefix, storageKey);
 
-    storageKeyBySourceKey.set(asset.key, storageKey);
+    if (!isCoreMediaKey(asset.key)) {
+      storageKeyBySourceKey.set(asset.key, storageKey);
+    }
     mediaObjects.push({
       archivePath,
+      ...(isCoreMediaKey(asset.key)
+        ? {
+            asset: {
+              byteSize,
+              contentType,
+              deliveryHref,
+              id: asset.key.slice(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX).length),
+              kind: "image" as const,
+              label: asset.key.slice(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX).length),
+              provider: "r2",
+              status: "ready" as const,
+              storageKey,
+            },
+          }
+        : {}),
       byteSize,
       contentType,
       deliveryHref,
@@ -155,7 +182,7 @@ export function buildSiteProjectAppArchiveEntry(
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: input.exportedAt,
-    capabilities: ["source-records", "app-scoped-media"],
+    capabilities: ["source-records", "app-scoped-media", "core-media-assets"],
     restorePolicy: input.restorePolicy ?? { dryRun: true, installCollisions: "reject" },
     app: {
       installId,
@@ -281,6 +308,14 @@ function siteProjectArchiveLabel(
   return typeof label === "string" && label.trim() !== "" ? label.trim() : installId;
 }
 
+function archiveStorageKeyForProjectMedia(imageKeyPrefix: string, sourceKey: string): string {
+  if (isCoreMediaKey(sourceKey)) {
+    return sourceKey;
+  }
+
+  return installScopedStorageKey(imageKeyPrefix, sourceKey);
+}
+
 function installScopedStorageKey(imageKeyPrefix: string, sourceKey: string): string {
   const sourceImageSegment = "site/images/";
 
@@ -303,6 +338,10 @@ function archiveMediaPath(installId: string, sourceKey: string): string {
 
 function mediaKeyPrefix(prefix: string): string {
   return prefix.endsWith("/") ? prefix : `${prefix}/`;
+}
+
+function isCoreMediaKey(key: string): boolean {
+  return isRestorableImageMediaKey(key, { keyPrefix: mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX) });
 }
 
 function recordCountsByEntity(records: readonly StoredRecord[]): Record<string, number> {

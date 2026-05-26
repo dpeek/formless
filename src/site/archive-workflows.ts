@@ -28,9 +28,13 @@ import {
   type InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import {
+  CORE_IMAGE_KEY_PREFIX,
+  CORE_MEDIA_ROUTE_PREFIX,
+  coreImageMediaDeliveryFactsForAssetId,
+  coreMediaHrefForKey,
   imageMediaContentTypeForKey,
-  imageMediaDeliveryFactsForAssetId,
   isRestorableImageMediaKey,
+  type MediaAsset,
 } from "../media/core.ts";
 import type { AppInstallsResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import {
@@ -118,7 +122,12 @@ export async function exportInstanceArchive(
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt,
-    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    capabilities: [
+      "installed-app-registry",
+      "app-store-snapshots",
+      "app-scoped-media",
+      "core-media-assets",
+    ],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps: entries.map((entry) => entry.archive),
   };
@@ -289,7 +298,7 @@ async function buildRemoteAppArchiveEntry(input: {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: input.exportedAt,
-    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: {
       installId: input.install.installId,
@@ -326,10 +335,6 @@ async function exportRemoteAppMedia(input: {
     packageAppKey: input.install.packageAppKey,
   });
 
-  if (!identity?.siteMedia) {
-    return { files: [], objects: [] };
-  }
-
   const references = appMediaReferences(input.records, identity);
   const files: ArchiveDiskMediaFile[] = [];
   const objects: AppArchiveMediaObject[] = [];
@@ -352,6 +357,9 @@ async function exportRemoteAppMedia(input: {
 
     objects.push({
       archivePath,
+      ...(reference.asset
+        ? { asset: mediaAssetForArchiveObject(reference.asset, bytes.byteLength) }
+        : {}),
       byteSize: bytes.byteLength,
       contentType: reference.contentType,
       deliveryHref: reference.deliveryHref,
@@ -370,18 +378,15 @@ async function exportRemoteAppMedia(input: {
 
 function appMediaReferences(
   records: readonly StoredRecord[],
-  identity: InstalledAppStorageIdentity,
+  identity: InstalledAppStorageIdentity | undefined,
 ): AppArchiveMediaObject[] {
-  const media = identity.siteMedia;
-
-  if (!media) {
-    return [];
-  }
-
   const referencesByKey = new Map<string, AppArchiveMediaObject>();
-  const keyPrefix = media.imageKeyPrefix.endsWith("/")
-    ? media.imageKeyPrefix
-    : `${media.imageKeyPrefix}/`;
+  const media = identity?.siteMedia;
+  const keyPrefix = media
+    ? media.imageKeyPrefix.endsWith("/")
+      ? media.imageKeyPrefix
+      : `${media.imageKeyPrefix}/`
+    : undefined;
 
   for (const record of records) {
     if (record.deletedAt !== undefined) {
@@ -390,17 +395,34 @@ function appMediaReferences(
 
     for (const [fieldName, value] of Object.entries(record.values)) {
       if (fieldName === "mediaAssetId" && typeof value === "string") {
-        const facts = imageMediaDeliveryFactsForAssetId(value, {
-          hrefForKey: (storageKey) => `${media.routePrefix}/${storageKey}`,
-          keyPrefix,
-        });
+        const facts = coreImageMediaDeliveryFactsForAssetId(value);
 
         if (facts) {
-          referencesByKey.set(facts.storageKey, mediaReference(facts.storageKey, facts.href));
+          referencesByKey.set(facts.storageKey, coreMediaReference(facts.storageKey, facts.href));
         }
       }
 
       if (typeof value === "string") {
+        const coreStorageKey = storageKeyFromDeliveryHref(value, CORE_MEDIA_ROUTE_PREFIX);
+
+        if (
+          coreStorageKey &&
+          isRestorableImageMediaKey(coreStorageKey, {
+            keyPrefix: mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX),
+          }) &&
+          !referencesByKey.has(coreStorageKey)
+        ) {
+          referencesByKey.set(
+            coreStorageKey,
+            coreMediaReference(coreStorageKey, coreMediaHrefForKey(coreStorageKey)),
+          );
+          continue;
+        }
+
+        if (!media || !keyPrefix) {
+          continue;
+        }
+
         const storageKey = storageKeyFromDeliveryHref(value, media.routePrefix);
 
         if (
@@ -419,6 +441,36 @@ function appMediaReferences(
   );
 }
 
+function coreMediaReference(storageKey: string, deliveryHref: string): AppArchiveMediaObject {
+  const contentType = imageMediaContentTypeForKey(storageKey);
+  const assetId = storageKey.startsWith(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX))
+    ? storageKey.slice(mediaKeyPrefix(CORE_IMAGE_KEY_PREFIX).length)
+    : storageKey;
+
+  if (!contentType) {
+    throw new Error(`Media key "${storageKey}" has unsupported content type.`);
+  }
+
+  return {
+    archivePath: "",
+    asset: {
+      byteSize: 0,
+      contentType,
+      deliveryHref,
+      id: assetId,
+      kind: "image",
+      label: assetId,
+      provider: "r2",
+      status: "ready",
+      storageKey,
+    },
+    byteSize: 0,
+    contentType,
+    deliveryHref,
+    storageKey,
+  };
+}
+
 function mediaReference(storageKey: string, deliveryHref: string): AppArchiveMediaObject {
   const contentType = imageMediaContentTypeForKey(storageKey);
 
@@ -435,10 +487,21 @@ function mediaReference(storageKey: string, deliveryHref: string): AppArchiveMed
   };
 }
 
+function mediaAssetForArchiveObject(asset: MediaAsset, byteSize: number): MediaAsset {
+  return {
+    ...asset,
+    byteSize,
+  };
+}
+
 function storageKeyFromDeliveryHref(href: string, routePrefix: string): string | undefined {
   const prefix = routePrefix.endsWith("/") ? routePrefix : `${routePrefix}/`;
 
   return href.startsWith(prefix) ? href.slice(prefix.length) : undefined;
+}
+
+function mediaKeyPrefix(prefix: string): string {
+  return prefix.endsWith("/") ? prefix : `${prefix}/`;
 }
 
 async function fetchRemoteAppRegistry(
@@ -593,6 +656,10 @@ function retargetMediaObject(
   nextIdentity: InstalledAppStorageIdentity,
 ): AppArchiveMediaObject {
   if (!previousIdentity.siteMedia || !nextIdentity.siteMedia) {
+    return { ...object };
+  }
+
+  if (!object.storageKey.startsWith(mediaKeyPrefix(previousIdentity.siteMedia.imageKeyPrefix))) {
     return { ...object };
   }
 

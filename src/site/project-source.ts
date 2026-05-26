@@ -1,14 +1,20 @@
 import rawSiteSourceSchema from "../../schema/apps/site/schema.json";
 import type { RecordValues, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
+import {
+  CORE_IMAGE_KEY_PREFIX,
+  coreMediaHrefForKey,
+  coreMediaKeyFromAssetId,
+  coreMediaKeyFromHref,
+  isRestorableImageMediaKey,
+} from "../media/core.ts";
 import { buildSiteSeedRecordsFromSnapshot, validateSiteSeedRecords } from "./seed-promotion.ts";
 import { buildSiteSourceSnapshot, type SiteSourceSnapshotOptions } from "./source-snapshot.ts";
 import {
   isRestorableSiteMediaKey,
   siteMediaContentTypeForKey,
-  siteMediaHrefForKey,
-  siteMediaKeyFromAssetId,
   siteMediaKeyFromHref,
+  siteMediaHrefForKey,
 } from "./source-media.ts";
 import { SITE_PROJECT_MEDIA_ROOT, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 
@@ -100,10 +106,10 @@ export function siteProjectMediaAssetsFromRecords(
     const href = record.values.href;
 
     if (typeof href === "string") {
-      const key = siteMediaKeyFromHref(href);
+      const key = siteMediaKeyFromHref(href) ?? coreMediaKeyFromHref(href);
 
       if (key) {
-        if (!isRestorableSiteMediaKey(key)) {
+        if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
           throw new Error(`Site project media href "${href}" uses unsupported media key "${key}".`);
         }
 
@@ -113,7 +119,7 @@ export function siteProjectMediaAssetsFromRecords(
 
     const mediaAssetId = record.values.mediaAssetId;
     const mediaAssetKey =
-      typeof mediaAssetId === "string" ? siteMediaKeyFromAssetId(mediaAssetId) : undefined;
+      typeof mediaAssetId === "string" ? coreMediaKeyFromAssetId(mediaAssetId) : undefined;
 
     if (mediaAssetKey) {
       setSiteProjectMediaAsset(assetsByKey, mediaAssetKey, options);
@@ -127,7 +133,7 @@ export function siteProjectMediaPathForKey(
   key: string,
   options: SiteProjectMediaOptions = {},
 ): string {
-  if (!isRestorableSiteMediaKey(key)) {
+  if (!isRestorableSiteMediaKey(key) && !isRestorableCoreMediaKey(key)) {
     throw new Error(`Site project media key is not restorable: ${key}`);
   }
 
@@ -148,10 +154,14 @@ function setSiteProjectMediaAsset(
 
   assetsByKey.set(key, {
     contentType: siteMediaContentTypeForKey(key) ?? "application/octet-stream",
-    href: siteMediaHrefForKey(key),
+    href: isRestorableCoreMediaKey(key) ? coreMediaHrefForKey(key) : siteMediaHrefForKey(key),
     key,
     sourcePath: siteProjectMediaPathForKey(key, options),
   });
+}
+
+function isRestorableCoreMediaKey(key: string): boolean {
+  return isRestorableImageMediaKey(key, { keyPrefix: `${CORE_IMAGE_KEY_PREFIX}/` });
 }
 
 function normalizeSiteProjectRecords(records: StoredRecord[], sourceSchema: AppSchema) {

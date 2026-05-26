@@ -830,12 +830,7 @@ describe("Formless Site CLI", () => {
 
     expect(pulledInstance.apps.map((app) => app.app.installId)).toEqual(["david", "james"]);
     await expect(
-      readFile(
-        path.join(
-          workspaceRoot,
-          "archives/apps/david/media/david/app-installs/david/site/images/cover.png",
-        ),
-      ),
+      readFile(path.join(workspaceRoot, "archives/apps/david/media/david/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
     await expect(
       readFile(
@@ -847,10 +842,10 @@ describe("Formless Site CLI", () => {
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/snapshot",
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
-      "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/media/app-installs/david/site/images/cover.png",
+      "GET https://personal.dpeek.workers.dev/api/formless/media/media/images/cover.png",
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/snapshot",
-      "GET https://personal.dpeek.workers.dev/api/app-installs/site/david/media/app-installs/david/site/images/cover.png",
+      "GET https://personal.dpeek.workers.dev/api/formless/media/media/images/cover.png",
       "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
       "GET https://personal.dpeek.workers.dev/api/app-installs/site/james/snapshot",
     ]);
@@ -1783,7 +1778,7 @@ describe("Formless Site CLI", () => {
     await expect(readFile(path.join(projectRoot, "site.records.json"), "utf8")).resolves.toBe(
       formatSiteProjectRecords(sourceRecords),
     );
-    await expect(readFile(path.join(projectRoot, "media/site/images/cover.png"))).resolves.toEqual(
+    await expect(readFile(path.join(projectRoot, "media/media/images/cover.png"))).resolves.toEqual(
       Buffer.from([1, 2, 3]),
     );
 
@@ -1794,13 +1789,13 @@ describe("Formless Site CLI", () => {
       ),
     ).resolves.toMatchObject({ mode: "check" });
 
-    await writeFile(path.join(projectRoot, "media/site/images/cover.png"), Buffer.from([9]));
+    await writeFile(path.join(projectRoot, "media/media/images/cover.png"), Buffer.from([9]));
     await expect(
       saveSiteProject(
         { check: true, projectPath: projectRoot, source: "https://local.test" },
         { cwd: tempDir, fetch: fetcher },
       ),
-    ).rejects.toThrow("Site project source is stale: media/site/images/cover.png.");
+    ).rejects.toThrow("Site project source is stale: media/media/images/cover.png.");
   });
 
   it("exports app archives and restores them through the archive API", async () => {
@@ -1860,19 +1855,18 @@ describe("Formless Site CLI", () => {
     expect(archive.app.installId).toBe("personal");
     expect(archive.media.objects).toEqual([
       expect.objectContaining({
-        archivePath: "media/personal/app-installs/personal/site/images/cover.png",
-        deliveryHref:
-          "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
-        storageKey: "app-installs/personal/site/images/cover.png",
+        archivePath: "media/personal/media/images/cover.png",
+        deliveryHref: "/api/formless/media/media/images/cover.png",
+        storageKey: "media/images/cover.png",
       }),
     ]);
     await expect(
-      readFile(path.join(outDir, "media/personal/app-installs/personal/site/images/cover.png")),
+      readFile(path.join(outDir, "media/personal/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://instance.example/api/formless/app-installs",
       "GET https://instance.example/api/app-installs/site/personal/snapshot",
-      "GET https://instance.example/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+      "GET https://instance.example/api/formless/media/media/images/cover.png",
     ]);
 
     responses.queueJson({
@@ -1925,9 +1919,8 @@ describe("Formless Site CLI", () => {
       installCollisions: "reject",
     });
     expect(restoreBody.archive.media.objects[0]).toMatchObject({
-      deliveryHref:
-        "/api/app-installs/site/personal-copy/media/app-installs/personal-copy/site/images/cover.png",
-      storageKey: "app-installs/personal-copy/site/images/cover.png",
+      deliveryHref: "/api/formless/media/media/images/cover.png",
+      storageKey: "media/images/cover.png",
     });
     expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
     expect(logs.at(-1)).toContain("App archive restore for personal-copy applied ok.");
@@ -2078,21 +2071,21 @@ describe("Formless Site CLI", () => {
     ]);
     expect(personal?.media.objects).toEqual([
       expect.objectContaining({
-        archivePath: "media/personal/app-installs/personal/site/images/cover.png",
-        storageKey: "app-installs/personal/site/images/cover.png",
+        archivePath: "media/personal/media/images/cover.png",
+        storageKey: "media/images/cover.png",
       }),
     ]);
     expect(rates?.media.objects).toEqual([]);
     expect(work?.media.objects).toEqual([]);
     await expect(
-      readFile(path.join(outDir, "media/personal/app-installs/personal/site/images/cover.png")),
+      readFile(path.join(outDir, "media/personal/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([4, 5, 6]));
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://instance.example/api/formless/app-installs",
       "GET https://instance.example/api/app-installs/site/personal/snapshot",
       "GET https://instance.example/api/app-installs/tasks/work/snapshot",
       "GET https://instance.example/api/app-installs/estii/rates/snapshot",
-      "GET https://instance.example/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
+      "GET https://instance.example/api/formless/media/media/images/cover.png",
     ]);
     expect(logs.at(-1)).toContain("Instance archive exported.");
 
@@ -2165,8 +2158,8 @@ describe("Formless Site CLI", () => {
     const logs: string[] = [];
 
     await writeFileTree(projectRoot, mediaRecords());
-    await mkdir(path.join(projectRoot, "media/site/images"), { recursive: true });
-    await writeFile(path.join(projectRoot, "media/site/images/cover.png"), Buffer.from([7, 8]));
+    await mkdir(path.join(projectRoot, "media/media/images"), { recursive: true });
+    await writeFile(path.join(projectRoot, "media/media/images/cover.png"), Buffer.from([7, 8]));
 
     await runFormlessCli(
       [
@@ -2195,13 +2188,12 @@ describe("Formless Site CLI", () => {
     expect(archive.app.installId).toBe("personal");
     expect(archive.data.kind).toBe("sourceRecords");
     expect(archive.media.objects[0]).toMatchObject({
-      archivePath: "media/personal/site/images/cover.png",
-      deliveryHref:
-        "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png",
-      storageKey: "app-installs/personal/site/images/cover.png",
+      archivePath: "media/personal/media/images/cover.png",
+      deliveryHref: "/api/formless/media/media/images/cover.png",
+      storageKey: "media/images/cover.png",
     });
     await expect(
-      readFile(path.join(outDir, "media/personal/site/images/cover.png")),
+      readFile(path.join(outDir, "media/personal/media/images/cover.png")),
     ).resolves.toEqual(Buffer.from([7, 8]));
     expect(logs).toEqual([
       [
@@ -2368,7 +2360,7 @@ describe("Formless Site CLI", () => {
     });
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET https://live.example/api/site/snapshot",
-      "PUT https://live.example/api/site/media/site/images/cover.png",
+      "PUT https://live.example/api/formless/media/media/images/cover.png",
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/",
       "GET https://live.example/about",
@@ -2481,16 +2473,16 @@ describe("Formless Site CLI", () => {
     await expect(readFile(path.join(projectRoot, "site.records.json"), "utf8")).resolves.toBe(
       formatSiteProjectRecords(sourceRecords),
     );
-    await expect(readFile(path.join(projectRoot, "media/site/images/cover.png"))).resolves.toEqual(
+    await expect(readFile(path.join(projectRoot, "media/media/images/cover.png"))).resolves.toEqual(
       Buffer.from([7, 8, 9]),
     );
     expect(commands).toEqual([]);
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:5173/api/site/snapshot",
-      "GET http://localhost:5173/api/site/media/site/images/cover.png",
+      "GET http://localhost:5173/api/formless/media/media/images/cover.png",
       "GET https://live.example/api/formless/deploy",
       "GET https://live.example/api/site/snapshot",
-      "PUT https://live.example/api/site/media/site/images/cover.png",
+      "PUT https://live.example/api/formless/media/media/images/cover.png",
       "POST https://live.example/api/site/snapshot/restore",
       "GET https://live.example/",
       "GET https://live.example/about",
@@ -2653,7 +2645,12 @@ function instanceArchive(apps: AppArchive[]): InstanceArchive {
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    capabilities: [
+      "installed-app-registry",
+      "app-store-snapshots",
+      "app-scoped-media",
+      "core-media-assets",
+    ],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps,
   };
@@ -2672,7 +2669,7 @@ function appArchive(
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
-    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    capabilities: ["app-store-snapshots", "app-scoped-media", "core-media-assets"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: {
       installId,
@@ -2691,11 +2688,22 @@ function appArchive(
       objects: options.mediaBytes
         ? [
             {
-              archivePath: `media/${installId}/app-installs/${installId}/site/images/cover.png`,
+              archivePath: `media/${installId}/media/images/cover.png`,
+              asset: {
+                byteSize: options.mediaBytes.byteLength,
+                contentType: "image/png",
+                deliveryHref: "/api/formless/media/media/images/cover.png",
+                id: "cover.png",
+                kind: "image",
+                label: "cover.png",
+                provider: "r2",
+                status: "ready",
+                storageKey: "media/images/cover.png",
+              },
               byteSize: options.mediaBytes.byteLength,
               contentType: "image/png",
-              deliveryHref: `/api/app-installs/site/${installId}/media/app-installs/${installId}/site/images/cover.png`,
-              storageKey: `app-installs/${installId}/site/images/cover.png`,
+              deliveryHref: "/api/formless/media/media/images/cover.png",
+              storageKey: "media/images/cover.png",
             },
           ]
         : [],
@@ -2772,6 +2780,16 @@ function archiveFetch(
       return Response.json(
         snapshotForPackage(packageAppKey, dataByInstall[installId]?.records ?? []),
       );
+    }
+
+    if (parsedUrl.pathname === "/api/formless/media/media/images/cover.png") {
+      const mediaBytes = Object.values(dataByInstall).find((data) => data.mediaBytes)?.mediaBytes;
+
+      if (mediaBytes) {
+        return new Response(Buffer.from(mediaBytes), {
+          headers: { "content-type": "image/png" },
+        });
+      }
     }
 
     const mediaMatch = parsedUrl.pathname.match(/^\/api\/app-installs\/site\/([^/]+)\/media\//);
@@ -3065,7 +3083,7 @@ function fakeSaveFetch(snapshotValue: StoreSnapshot, mediaBytes: Uint8Array): ty
       return Response.json(snapshotValue);
     }
 
-    if (requestUrl === "https://local.test/api/site/media/site/images/cover.png") {
+    if (requestUrl === "https://local.test/api/formless/media/media/images/cover.png") {
       return new Response(Buffer.from(mediaBytes), {
         headers: {
           "content-type": "image/png",

@@ -52,8 +52,8 @@ describe("Site project dev loop", () => {
     let configuredProject: SiteProjectSource | null = null;
 
     await writeFileTree(projectRoot, records);
-    await mkdir(path.join(projectRoot, "media/site/images"), { recursive: true });
-    await writeFile(path.join(projectRoot, "media/site/images/cover.png"), Buffer.from([1, 2, 3]));
+    await mkdir(path.join(projectRoot, "media/media/images"), { recursive: true });
+    await writeFile(path.join(projectRoot, "media/media/images/cover.png"), Buffer.from([1, 2, 3]));
 
     const run = runSiteProjectDev(
       { projectPath: "site" },
@@ -133,7 +133,7 @@ describe("Site project dev loop", () => {
     expect(spawnCalls[0]?.env).not.toHaveProperty("FORMLESS_ADMIN_TOKEN");
     expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       "GET http://localhost:4444/api/site/bootstrap",
-      "PUT http://localhost:4444/api/site/media/site/images/cover.png",
+      "PUT http://localhost:4444/api/formless/media/media/images/cover.png",
       "POST http://localhost:4444/api/site/snapshot/restore",
     ]);
     expect(Buffer.from(requests[1]?.body as Uint8Array)).toEqual(Buffer.from([1, 2, 3]));
@@ -247,7 +247,7 @@ function devFetch(requests: CapturedFetchRequest[]): typeof fetch {
     }
 
     if (
-      requestUrl === "http://localhost:4444/api/site/media/site/images/cover.png" &&
+      requestUrl === "http://localhost:4444/api/formless/media/media/images/cover.png" &&
       init?.method === "PUT"
     ) {
       return Response.json({ ok: true });
