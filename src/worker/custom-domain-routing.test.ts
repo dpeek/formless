@@ -94,33 +94,36 @@ describe("installed Site custom-domain Worker routing", () => {
     const robots = await fetchMappedHost("/robots.txt", {
       headers: { Accept: "text/html" },
     });
+    const robotsText = await robots.text();
+
     const sitemap = await fetchMappedHost("/sitemap.xml", {
       headers: { Accept: "text/html" },
     });
+    const sitemapText = await sitemap.text();
+
     const favicon = await fetchMappedHost("/favicon.svg", {
       headers: { Accept: "text/html" },
     });
+    const faviconText = await favicon.text();
+
     const media = await fetchMappedHost("/api/formless/media/media/images/custom-domain.png");
+    const mediaBytes = new Uint8Array(await media.arrayBuffer());
 
     expect(robots.status).toBe(200);
     expect(robots.headers.get("Cache-Control")).toBe(PUBLIC_SITE_INDEXING_CACHE_CONTROL);
-    expect(await robots.text()).toContain(`Sitemap: http://${mappedHost}/sitemap.xml`);
+    expect(robotsText).toContain(`Sitemap: http://${mappedHost}/sitemap.xml`);
 
     expect(sitemap.status).toBe(200);
     expect(sitemap.headers.get("Content-Type")).toBe("application/xml; charset=utf-8");
-    expect(await sitemap.text()).toContain(
-      `<loc>http://${mappedHost}/custom-domain-sitemap-page</loc>`,
-    );
+    expect(sitemapText).toContain(`<loc>http://${mappedHost}/custom-domain-sitemap-page</loc>`);
 
     expect(favicon.status).toBe(200);
     expect(favicon.headers.get("Content-Type")).toBe("image/svg+xml; charset=utf-8");
-    expect(await favicon.text()).toContain("#16a34a");
+    expect(faviconText).toContain("#16a34a");
 
     expect(media.status).toBe(200);
     expect(media.headers.get("Content-Type")).toBe("image/png");
-    expect(new Uint8Array(await media.arrayBuffer())).toEqual(
-      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
-    );
+    expect(mediaBytes).toEqual(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]));
   });
 
   it("keeps path-based installed Site fallback off the mapped-host admin shell", async () => {
