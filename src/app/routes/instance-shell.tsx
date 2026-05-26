@@ -14,7 +14,7 @@ import {
   ModalTitle,
 } from "@dpeek/formless-ui/modal";
 import { TextField } from "@dpeek/formless-ui/text-field";
-import { ControlAddIcon } from "@dpeek/formless-ui/icons";
+import { AddIcon } from "@dpeek/formless-ui/icons";
 import {
   AppInstallApiError,
   createInstanceAppInstall,
@@ -321,7 +321,7 @@ export function InstanceShellRouteView({
             size="sm"
             type="button"
           >
-            <ControlAddIcon />
+            <AddIcon />
             Install
           </Button>
         </div>
@@ -423,7 +423,7 @@ function CustomDomainsSection({
         </div>
         <div className="flex items-end">
           <Button isDisabled={isDisabled} type="submit">
-            <ControlAddIcon />
+            <AddIcon />
             {state.domainMappingSubmitting ? "Adding..." : "Add"}
           </Button>
         </div>
@@ -631,7 +631,7 @@ export function InstallAppDialogForm({
           Cancel
         </ModalClose>
         <Button isDisabled={state.installing} type="submit">
-          <ControlAddIcon />
+          <AddIcon />
           {selectedInstalling ? "Installing..." : `Install ${selectedPackage.label}`}
         </Button>
       </ModalFooter>

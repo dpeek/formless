@@ -6,7 +6,7 @@ import { twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Button, type ButtonProps } from "./button";
 
-import { ControlCloseIcon } from "./icons";
+import { CloseIcon } from "./icons";
 
 const Dialog = ({
   role = "dialog",
@@ -127,7 +127,7 @@ const DialogCloseIcon = ({ className, ...props }: CloseButtonIndicatorProps) => 
         className,
       )}
     >
-      <ControlCloseIcon className="size-4" />
+      <CloseIcon className="size-4" />
     </PrimitiveButton>
   ) : null;
 };

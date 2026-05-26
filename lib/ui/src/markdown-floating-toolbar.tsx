@@ -15,17 +15,17 @@ import { Separator } from "@dpeek/formless-ui/separator";
 import { TooltipContent } from "@dpeek/formless-ui/tooltip";
 import { Toggle } from "@dpeek/formless-ui/toggle";
 import {
-  MarkdownBoldIcon,
-  MarkdownBulletedListIcon,
-  MarkdownCodeIcon,
-  MarkdownHeading2Icon,
-  MarkdownHeading3Icon,
-  MarkdownItalicIcon,
-  MarkdownLinkIcon,
-  MarkdownNumberedListIcon,
-  MarkdownParagraphIcon,
-  MarkdownQuoteIcon,
-  MarkdownStrikethroughIcon,
+  TextBoldIcon,
+  TextBulletedListIcon,
+  TextCodeIcon,
+  TextHeading2Icon,
+  TextHeading3Icon,
+  TextItalicIcon,
+  TextLinkIcon,
+  TextNumberedListIcon,
+  TextParagraphIcon,
+  TextQuoteIcon,
+  TextStrikethroughIcon,
 } from "@dpeek/formless-ui/icons";
 import { cn } from "./primitive";
 import { type ReactNode, useRef, useState } from "react";
@@ -41,11 +41,11 @@ import {
 type TextBlockType = typeof KEYS.p | typeof KEYS.h2 | typeof KEYS.h3;
 
 const TEXT_BLOCK_OPTIONS = [
-  { icon: MarkdownParagraphIcon, label: "Paragraph", value: KEYS.p },
-  { icon: MarkdownHeading2Icon, label: "Heading 2", value: KEYS.h2 },
-  { icon: MarkdownHeading3Icon, label: "Heading 3", value: KEYS.h3 },
+  { icon: TextParagraphIcon, label: "Paragraph", value: KEYS.p },
+  { icon: TextHeading2Icon, label: "Heading 2", value: KEYS.h2 },
+  { icon: TextHeading3Icon, label: "Heading 3", value: KEYS.h3 },
 ] satisfies Array<{
-  icon: typeof MarkdownParagraphIcon;
+  icon: typeof TextParagraphIcon;
   label: string;
   value: TextBlockType;
 }>;
@@ -81,29 +81,29 @@ export function MarkdownFloatingToolbar() {
       role="toolbar"
     >
       <MarkdownMarkButton label="Bold" mark={KEYS.bold}>
-        <MarkdownBoldIcon />
+        <TextBoldIcon />
       </MarkdownMarkButton>
       <MarkdownMarkButton label="Italic" mark={KEYS.italic}>
-        <MarkdownItalicIcon />
+        <TextItalicIcon />
       </MarkdownMarkButton>
       <MarkdownMarkButton label="Strikethrough" mark={KEYS.strikethrough}>
-        <MarkdownStrikethroughIcon />
+        <TextStrikethroughIcon />
       </MarkdownMarkButton>
       <MarkdownMarkButton label="Inline code" mark={KEYS.code}>
-        <MarkdownCodeIcon />
+        <TextCodeIcon />
       </MarkdownMarkButton>
       <MarkdownToolbarSeparator />
       <MarkdownLinkButton />
       <MarkdownTextBlockSelect />
       <MarkdownToolbarSeparator />
       <MarkdownListButton label="Bulleted list" listStyleType={KEYS.ul}>
-        <MarkdownBulletedListIcon />
+        <TextBulletedListIcon />
       </MarkdownListButton>
       <MarkdownListButton label="Numbered list" listStyleType={KEYS.ol}>
-        <MarkdownNumberedListIcon />
+        <TextNumberedListIcon />
       </MarkdownListButton>
       <MarkdownBlockButton label="Blockquote" type={KEYS.blockquote}>
-        <MarkdownQuoteIcon />
+        <TextQuoteIcon />
       </MarkdownBlockButton>
       <MarkdownCodeBlockButton />
     </div>
@@ -151,7 +151,7 @@ function MarkdownLinkButton() {
       }}
       pressed={active}
     >
-      <MarkdownLinkIcon />
+      <TextLinkIcon />
     </MarkdownToolbarToggle>
   );
 }
@@ -270,7 +270,7 @@ function MarkdownCodeBlockButton() {
       }}
       pressed={active}
     >
-      <MarkdownCodeIcon />
+      <TextCodeIcon />
     </MarkdownToolbarToggle>
   );
 }

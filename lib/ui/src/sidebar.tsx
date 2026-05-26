@@ -25,7 +25,7 @@ import { Button } from "./button";
 import { Link } from "./link";
 import { Tooltip, TooltipContent } from "./tooltip";
 
-import { ControlDisclosureDownIcon } from "./icons";
+import { DisclosureDownIcon } from "./icons";
 
 const SIDEBAR_WIDTH = "17rem";
 const SIDEBAR_WIDTH_DOCK = "3.25rem";
@@ -611,7 +611,7 @@ const SidebarDisclosureTrigger = ({ className, ref, ...props }: SidebarDisclosur
           <>
             {typeof props.children === "function" ? props.children(values) : props.children}
             {state !== "collapsed" && (
-              <ControlDisclosureDownIcon
+              <DisclosureDownIcon
                 data-slot="chevron"
                 className="z-10 ms-auto size-3.5 transition-transform duration-200 group-aria-expanded/sidebar-disclosure-trigger:rotate-180"
               />

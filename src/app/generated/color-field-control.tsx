@@ -16,7 +16,7 @@ import { ColorSlider, ColorSliderTrack } from "@dpeek/formless-ui/color-slider";
 import { ColorSwatch } from "@dpeek/formless-ui/color-swatch";
 import { ColorThumb } from "@dpeek/formless-ui/color-thumb";
 import { cn } from "@dpeek/formless-ui/primitive";
-import { ControlColorPickIcon, ControlLoadingIcon } from "@dpeek/formless-ui/icons";
+import { ColorPickIcon, LoadingIcon } from "@dpeek/formless-ui/icons";
 import { useEffect, useState } from "react";
 
 import {
@@ -374,7 +374,7 @@ export function GeneratedColorInput({
                     isDisabled={disabled || !isEyeDropperAvailable()}
                     type="button"
                   >
-                    <ControlColorPickIcon className="h-3 w-3" />
+                    <ColorPickIcon className="h-3 w-3" />
                   </Button>
                   <ColorPicker
                     value={pickerColor}
@@ -597,7 +597,7 @@ export function GeneratedColorInput({
         />
         {isLoading ? (
           <span data-slot="loader">
-            <ControlLoadingIcon className="size-3.5 animate-spin" />
+            <LoadingIcon className="size-3.5 animate-spin" />
           </span>
         ) : null}
       </InputGroup>

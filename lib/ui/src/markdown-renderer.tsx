@@ -1,5 +1,5 @@
 import { Button } from "@dpeek/formless-ui/button";
-import { ControlCheckIcon, ControlCopyIcon } from "@dpeek/formless-ui/icons";
+import { ConfirmIcon, CopyIcon } from "@dpeek/formless-ui/icons";
 import { lexer, type Token, type Tokens } from "marked";
 import { createElement, useEffect, useState, type ReactNode } from "react";
 
@@ -314,7 +314,7 @@ function MarkdownCodeCopyButton({ code }: { code: string }) {
       type="button"
       intent="plain"
     >
-      {copyState === "copied" ? <ControlCheckIcon /> : <ControlCopyIcon />}
+      {copyState === "copied" ? <ConfirmIcon /> : <CopyIcon />}
     </Button>
   );
 }

@@ -9,7 +9,7 @@ import { twMerge } from "tailwind-merge";
 import { Button } from "./button";
 import { fieldStyles } from "./field";
 
-import { ControlColorPickIcon } from "./icons";
+import { ColorPickIcon } from "./icons";
 
 interface ColorPickerProps extends ColorPickerPrimitiveProps {
   className?: string;
@@ -54,7 +54,7 @@ const EyeDropper = () => {
         void eyeDropper.open().then((result) => state.setColor(parseColor(result.sRGBHex)));
       }}
     >
-      <ControlColorPickIcon />
+      <ColorPickIcon />
     </Button>
   );
 };

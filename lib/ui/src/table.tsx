@@ -28,7 +28,7 @@ import {
 import { twJoin, twMerge } from "tailwind-merge";
 import { CardDescription, CardTitle } from "./card";
 import { Checkbox } from "./checkbox";
-import { TableDragHandleIcon, TableSortIcon, TableTreeDisclosureIcon } from "./icons";
+import { DragHandleIcon, SortIcon, TreeDisclosureIcon } from "./icons";
 import { cx } from "./primitive";
 
 interface TableProps extends Omit<TablePrimitiveProps, "className"> {
@@ -320,7 +320,7 @@ const TableColumn = ({ isResizable = false, className, ...props }: TableColumnPr
                 values.isHovered ? "bg-secondary-fg/10" : "",
               )}
             >
-              <TableSortIcon className={values.sortDirection === "ascending" ? "rotate-180" : ""} />
+              <SortIcon className={values.sortDirection === "ascending" ? "rotate-180" : ""} />
             </span>
           )}
           {isResizable && <ColumnResizer />}
@@ -433,7 +433,7 @@ const TableRow = <T extends object>({
             slot="drag"
             className="grid place-content-center rounded-xs px-[calc(var(--gutter)/2)] outline-hidden focus-visible:ring focus-visible:ring-ring"
           >
-            <TableDragHandleIcon aria-hidden="true" className="size-4" />
+            <DragHandleIcon aria-hidden="true" className="size-4" />
           </Button>
         </TableCell>
       )}
@@ -486,7 +486,7 @@ const TableCell = ({ className, ref, ...props }: TableCellProps) => {
                   "mr-2 grid size-[1.15rem] flex-none shrink-0 place-content-center rounded text-fg hover:bg-secondary",
                 )}
               >
-                <TableTreeDisclosureIcon
+                <TreeDisclosureIcon
                   className={twJoin(
                     "size-4 transition-transform duration-200",
                     isExpanded && "rotate-90",

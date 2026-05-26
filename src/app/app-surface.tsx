@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { Button } from "@dpeek/formless-ui/button";
-import { ControlAddIcon } from "@dpeek/formless-ui/icons";
+import { AddIcon } from "@dpeek/formless-ui/icons";
 import {
   Sidebar,
   SidebarContent,
@@ -357,7 +357,7 @@ function AppRootRecordNavigationGroup({
             size="sq-xs"
             type="button"
           >
-            <ControlAddIcon />
+            <AddIcon />
           </Button>
         ) : null
       }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DragDropProvider, type DragEndEvent } from "@dnd-kit/react";
 import { isSortableOperation, useSortable } from "@dnd-kit/react/sortable";
 import { Button, buttonStyles } from "@dpeek/formless-ui/button";
-import { ControlAddIcon, ControlMenuIcon, ControlRemoveIcon } from "@dpeek/formless-ui/icons";
+import { AddIcon, MenuIcon, RemoveIcon } from "@dpeek/formless-ui/icons";
 import { ModalBody, ModalContent, ModalHeader, ModalTitle } from "@dpeek/formless-ui/modal";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@dpeek/formless-ui/menu";
 import { useRecordReadinessWarnings, useRecordsById } from "../../client/store.ts";
@@ -487,7 +487,7 @@ function TreeChildAddControls({
           isDisabled={!result.composition?.create}
           type="button"
         >
-          <ControlAddIcon aria-hidden="true" />
+          <AddIcon aria-hidden="true" />
         </MenuTrigger>
         <MenuContent className="w-auto min-w-36">
           {allowedChildVariants.map((variant) => (
@@ -630,7 +630,7 @@ function TreePlacementRemoveButton({
       type="button"
       intent="plain"
     >
-      <ControlRemoveIcon />
+      <RemoveIcon />
     </Button>
   );
 }
@@ -699,7 +699,7 @@ function PlacementOrderingControls({
           type="button"
           intent="plain"
         >
-          <ControlMenuIcon aria-hidden="true" />
+          <MenuIcon aria-hidden="true" />
         </Button>
       ) : null}
       {moveItems.map((item) => (

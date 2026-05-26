@@ -20,7 +20,7 @@ import { twMerge } from "tailwind-merge";
 import { Button } from "./button";
 import { Select, SelectContent, SelectItem, SelectLabel, SelectTrigger } from "./select";
 
-import { CalendarNextIcon, CalendarPreviousIcon } from "./icons";
+import { NextIcon, PreviousIcon } from "./icons";
 
 interface CalendarProps<T extends DateValue> extends Omit<
   CalendarPrimitiveProps<T>,
@@ -84,7 +84,7 @@ const CalendarHeader = ({ className, ...props }: React.ComponentProps<"header">)
           intent="plain"
           slot="previous"
         >
-          {direction === "rtl" ? <CalendarNextIcon /> : <CalendarPreviousIcon />}
+          {direction === "rtl" ? <NextIcon /> : <PreviousIcon />}
         </Button>
         <Button
           size="sq-sm"
@@ -93,7 +93,7 @@ const CalendarHeader = ({ className, ...props }: React.ComponentProps<"header">)
           intent="plain"
           slot="next"
         >
-          {direction === "rtl" ? <CalendarPreviousIcon /> : <CalendarNextIcon />}
+          {direction === "rtl" ? <PreviousIcon /> : <NextIcon />}
         </Button>
       </div>
     </header>

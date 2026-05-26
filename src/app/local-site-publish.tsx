@@ -1,5 +1,5 @@
 import { Button } from "@dpeek/formless-ui/button";
-import { ControlLoadingIcon, PublishIcon } from "@dpeek/formless-ui/icons";
+import { LoadingIcon, PublishIcon } from "@dpeek/formless-ui/icons";
 import { useState } from "react";
 
 import {
@@ -46,7 +46,7 @@ export function LocalSitePublishControl({ broker }: { broker: LocalSitePublishBr
       intent="outline"
     >
       {isPublishing ? (
-        <ControlLoadingIcon aria-hidden="true" className="animate-spin" data-icon="inline-start" />
+        <LoadingIcon aria-hidden="true" className="animate-spin" data-icon="inline-start" />
       ) : (
         <PublishIcon aria-hidden="true" data-icon="inline-start" />
       )}

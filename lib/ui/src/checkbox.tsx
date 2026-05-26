@@ -8,7 +8,7 @@ import { twMerge } from "tailwind-merge";
 import { cx } from "./primitive";
 import { Label } from "./field";
 
-import { ControlCheckIcon, ControlIndeterminateIcon } from "./icons";
+import { ConfirmIcon, IndeterminateIcon } from "./icons";
 
 export function CheckboxGroup({ className, ...props }: CheckboxGroupProps) {
   return (
@@ -38,9 +38,9 @@ export function Checkbox({ className, children, ...props }: CheckboxProps) {
         (children, { isSelected, isIndeterminate, isFocusVisible, isInvalid }) => {
           const isStringChild = typeof children === "string";
           const indicator = isIndeterminate ? (
-            <ControlIndeterminateIcon data-slot="check-indicator" />
+            <IndeterminateIcon data-slot="check-indicator" />
           ) : isSelected ? (
-            <ControlCheckIcon data-slot="check-indicator" />
+            <ConfirmIcon data-slot="check-indicator" />
           ) : null;
 
           const content = isStringChild ? <CheckboxLabel>{children}</CheckboxLabel> : children;

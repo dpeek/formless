@@ -10,7 +10,7 @@ import type { PopoverProps } from "react-aria-components/Popover";
 import { twJoin } from "tailwind-merge";
 import { useIsMobile } from "./use-mobile";
 
-import { ControlCalendarIcon } from "./icons";
+import { CalendarIcon } from "./icons";
 import { cx } from "./primitive";
 import { Calendar } from "./calendar";
 import { DateInput } from "./date-field";
@@ -103,7 +103,7 @@ export function DatePickerTrigger({ className, ...props }: GroupProps) {
           "*:size-5 sm:*:size-4",
         )}
       >
-        <ControlCalendarIcon />
+        <CalendarIcon />
       </Button>
     </InputGroup>
   );

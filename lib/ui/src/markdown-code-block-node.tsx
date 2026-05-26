@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@dpeek/formless-ui/button";
-import { ControlCheckIcon, ControlCopyIcon } from "@dpeek/formless-ui/icons";
+import { ConfirmIcon, CopyIcon } from "@dpeek/formless-ui/icons";
 import { cn } from "./primitive";
 import { useEffect, useState } from "react";
 import {
@@ -163,7 +163,7 @@ function MarkdownCodeCopyButton({ code }: { code: string }) {
       type="button"
       intent="plain"
     >
-      {copyState === "copied" ? <ControlCheckIcon /> : <ControlCopyIcon />}
+      {copyState === "copied" ? <ConfirmIcon /> : <CopyIcon />}
     </Button>
   );
 }

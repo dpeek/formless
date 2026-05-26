@@ -17,7 +17,7 @@ import {
 } from "./dropdown";
 import { fieldStyles } from "./field";
 
-import { ControlSelectIcon } from "./icons";
+import { SelectIcon } from "./icons";
 import { PopoverContent } from "./popover";
 
 interface SelectProps<
@@ -118,7 +118,7 @@ const SelectTrigger = ({ children, className, ...props }: SelectTriggerProps) =>
                     "*:mt-0 *:data-[slot=avatar]:[--avatar-size:--spacing(5)] sm:*:data-[slot=avatar]:[--avatar-size:--spacing(4.5)]",
                   ])}
                 />
-                <ControlSelectIcon
+                <SelectIcon
                   data-slot="chevron"
                   className="ms-auto -me-1 size-5 shrink-0 text-muted-fg sm:size-4"
                 />

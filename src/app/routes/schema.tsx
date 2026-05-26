@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@dpeek/formless-ui/badge";
 import { Button } from "@dpeek/formless-ui/button";
 import {
-  ControlAddIcon,
-  ControlCheckIcon,
-  ControlCloseIcon,
-  ControlIndeterminateIcon,
-  ControlLoadingIcon,
+  AddIcon,
+  CloseIcon,
+  ConfirmIcon,
+  IndeterminateIcon,
+  LoadingIcon,
 } from "@dpeek/formless-ui/icons";
 import {
   ModalBody,
@@ -298,12 +298,12 @@ function SchemaDraftStatus({
         ? "border-amber-200 bg-amber-50 text-amber-800"
         : "border-emerald-200 bg-emerald-50 text-emerald-700";
   const Icon = isSaving
-    ? ControlLoadingIcon
+    ? LoadingIcon
     : sourceError
-      ? ControlCloseIcon
+      ? CloseIcon
       : isDirty
-        ? ControlIndeterminateIcon
-        : ControlCheckIcon;
+        ? IndeterminateIcon
+        : ConfirmIcon;
 
   return (
     <span
@@ -621,7 +621,7 @@ function SchemaBuilderEntityList({
         size="sm"
         type="button"
       >
-        <ControlAddIcon aria-hidden />
+        <AddIcon aria-hidden />
         <span>Entity</span>
       </Button>
     </div>
@@ -705,7 +705,7 @@ function SchemaBuilderEntityEditor({
           size="sm"
           type="button"
         >
-          <ControlAddIcon aria-hidden />
+          <AddIcon aria-hidden />
           <span>Field</span>
         </Button>
       </div>

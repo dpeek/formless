@@ -26,7 +26,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "./menu";
-import { ControlAddIcon, ControlMenuIcon, TableDragHandleIcon } from "./icons";
+import { AddIcon, DragHandleIcon, MenuIcon } from "./icons";
 
 export type ObjectListSelection = Selection;
 export type ObjectListActionIntent = "danger" | "warning";
@@ -372,7 +372,7 @@ function ObjectListActionControls<T extends object>({
         data-slot="object-list-action-trigger"
         {...actionMetadata}
       >
-        <ControlMenuIcon aria-hidden="true" />
+        <MenuIcon aria-hidden="true" />
       </MenuTrigger>
       <MenuContent placement="bottom end">
         {visibleActions.map((action, index) => (
@@ -512,7 +512,7 @@ function ObjectListDragHandle({
       data-slot="object-list-drag-handle"
       slot="drag"
     >
-      <TableDragHandleIcon aria-hidden="true" className="size-4" />
+      <DragHandleIcon aria-hidden="true" className="size-4" />
       {reason && (
         <span id={reasonId} className="sr-only">
           {reason}
@@ -558,7 +558,7 @@ function ObjectListEmptyState<T extends object>({
               })
             }
           >
-            <ControlAddIcon aria-hidden="true" />
+            <AddIcon aria-hidden="true" />
             {actions[0].label}
           </Button>
         </div>

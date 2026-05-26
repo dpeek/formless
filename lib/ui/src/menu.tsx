@@ -27,7 +27,7 @@ import {
   dropdownSectionStyles,
 } from "./dropdown";
 
-import { ControlCheckIcon, ControlDisclosureIcon } from "./icons";
+import { ConfirmIcon, DisclosureIcon } from "./icons";
 import { PopoverContent, type PopoverContentProps } from "./popover";
 
 const Menu = (props: MenuTriggerPrimitiveProps) => <MenuTriggerPrimitive {...props} />;
@@ -126,13 +126,13 @@ const MenuItem = ({ className, intent, children, ...props }: MenuItemProps) => {
       {(values) => (
         <>
           {values.isSelected && ["single", "multiple"].includes(values.selectionMode) && (
-            <ControlCheckIcon />
+            <ConfirmIcon />
           )}
 
           {typeof children === "function" ? children(values) : children}
 
           {values.hasSubmenu && (
-            <ControlDisclosureIcon
+            <DisclosureIcon
               data-slot="chevron"
               className="absolute end-0 size-4 -translate-y-1/2"
               style={{

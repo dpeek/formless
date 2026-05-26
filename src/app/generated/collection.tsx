@@ -54,7 +54,7 @@ import { useSchemaAppTarget } from "./schema-app-context.tsx";
 import { RecordTable } from "./table.tsx";
 import { RecordTree } from "./tree.tsx";
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
-import { ControlAddIcon } from "@dpeek/formless-ui/icons";
+import { AddIcon } from "@dpeek/formless-ui/icons";
 
 export function HomeCollection({
   collection,
@@ -532,7 +532,7 @@ function ContextSelector({
             type="button"
             intent="plain"
           >
-            <ControlAddIcon />
+            <AddIcon />
           </Button>
         ) : null}
       </div>
