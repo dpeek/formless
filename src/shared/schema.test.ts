@@ -4809,7 +4809,7 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "media" },
+            href: { editor: "href" },
           },
         },
       },
@@ -4855,7 +4855,8 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "media", commit: "field-commit" },
+            mediaAssetId: { editor: "media", commit: "field-commit" },
+            href: { editor: "href", commit: "field-commit" },
           },
         },
       },
@@ -5259,7 +5260,8 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "media", commit: "field-commit" },
+            mediaAssetId: { editor: "media", commit: "field-commit" },
+            href: { editor: "href", commit: "field-commit" },
           },
         },
       },
@@ -5285,7 +5287,8 @@ describe("personal site sample schema", () => {
         image: {
           presentation: "fields",
           fields: {
-            href: { editor: "media", commit: "field-commit" },
+            mediaAssetId: { editor: "media", commit: "field-commit" },
+            href: { editor: "href", commit: "field-commit" },
           },
         },
       },
@@ -5313,7 +5316,7 @@ describe("personal site sample schema", () => {
     expect(blockCreate.variants?.image).toMatchObject({
       presentation: "fields",
       fields: {
-        href: { editor: "media" },
+        href: { editor: "href" },
       },
     });
     expect(blockCreate.variants?.feature).toMatchObject({
@@ -5344,7 +5347,8 @@ describe("personal site sample schema", () => {
     expect(blockEdit.variants?.image).toMatchObject({
       presentation: "fields",
       fields: {
-        href: { editor: "media", commit: "field-commit" },
+        mediaAssetId: { editor: "media", commit: "field-commit" },
+        href: { editor: "href", commit: "field-commit" },
       },
     });
     expect(blockEdit.variants?.feature).toMatchObject({

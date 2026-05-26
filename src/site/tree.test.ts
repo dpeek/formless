@@ -194,12 +194,37 @@ describe("site page tree projection", () => {
       label: "Site owner portrait",
       media: {
         assetId: "avatar.webp",
-        href: "/api/site/media/site/images/avatar.webp",
+        href: "/api/formless/media/media/images/avatar.webp",
         kind: "image",
       },
       width: 1200,
       height: 1200,
       placements: [],
+    });
+  });
+
+  it("keeps legacy image href fallback when media asset ids are present", () => {
+    const records = baseTreeRecords().map((record) =>
+      record.id === "rec_site_media_avatar"
+        ? {
+            ...record,
+            values: {
+              ...record.values,
+              href: "/api/site/media/site/images/legacy-avatar.webp",
+              mediaAssetId: "avatar.webp",
+            },
+          }
+        : record,
+    );
+    const tree = requireTree(buildSitePageTree(siteSourceSchema, records, "home", { generatedAt }));
+    const hero = childForPlacement(tree.page, "rec_site_place_home_hero");
+    const heroImage = childForPlacement(hero, "rec_site_place_home_hero_image");
+
+    expect(heroImage.href).toBe("/api/site/media/site/images/legacy-avatar.webp");
+    expect(heroImage.media).toEqual({
+      assetId: "avatar.webp",
+      href: "/api/formless/media/media/images/avatar.webp",
+      kind: "image",
     });
   });
 

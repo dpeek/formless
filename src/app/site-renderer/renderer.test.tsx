@@ -50,10 +50,10 @@ describe("public Site renderer characterization", () => {
       placements: [
         placement(
           "feature-media",
-          imageNode("feature-image", "Feature media", undefined, {
+          imageNode("feature-image", "Feature media", "/api/site/media/site/images/stale.webp", {
             media: {
               assetId: "feature.webp",
-              href: "/api/site/media/site/images/feature.webp",
+              href: "/api/formless/media/media/images/feature.webp",
               kind: "image",
             },
           }),
@@ -115,7 +115,8 @@ describe("public Site renderer characterization", () => {
     expect(actionHtml).toContain("Read the guide");
     expect(actionHtml).toContain('target="_blank"');
     expect(actionHtml).toContain('rel="noreferrer"');
-    expect(html).toContain('src="/api/site/media/site/images/feature.webp"');
+    expect(html).toContain('src="/api/formless/media/media/images/feature.webp"');
+    expect(html).not.toContain('src="/api/site/media/site/images/stale.webp"');
     expect(html).toContain("Default child copy.");
     expect(html).not.toContain("Ignored slot copy.");
     expect(html).toContain('aria-label="Pending upload"');

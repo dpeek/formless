@@ -218,19 +218,7 @@ export function executeAuthorityOperation(
 
       const slug = parseSiteTreeSlug(operation.metadata.path);
       const { schema } = initializeStorageFromSource(input.storage, input.source);
-      const projection = buildSitePageTree(
-        schema,
-        getBootstrapRecords(input.storage),
-        slug,
-        input.identity.siteMedia
-          ? {
-              media: {
-                imageKeyPrefix: input.identity.siteMedia.imageKeyPrefix,
-                routePrefix: input.identity.siteMedia.routePrefix,
-              },
-            }
-          : {},
-      );
+      const projection = buildSitePageTree(schema, getBootstrapRecords(input.storage), slug);
 
       if (!projection.tree) {
         return {

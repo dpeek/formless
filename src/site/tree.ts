@@ -10,13 +10,13 @@ import type {
   StoredRecord,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import { coreImageMediaDeliveryFactsForAssetId } from "../media/core.ts";
 import {
   resolveSiteRoute,
   routeInfoForResolution,
   type SiteRouteResolution,
 } from "./route-resolver.ts";
 import { resolveSiteLinkHref } from "./link-targets.ts";
-import { siteMediaDeliveryFactsForAssetId, type SiteMediaDeliveryOptions } from "./source-media.ts";
 
 export type {
   SiteBlockNode,
@@ -31,7 +31,6 @@ export type {
 export type BuildSitePageTreeOptions = {
   generatedAt?: string;
   maxDepth?: number;
-  media?: SiteMediaDeliveryOptions;
 };
 
 type SiteTreeIndexes = {
@@ -43,7 +42,6 @@ type SiteTreeIndexes = {
 type SiteTreeBuildContext = {
   schema: AppSchema;
   indexes: SiteTreeIndexes;
-  media?: SiteMediaDeliveryOptions;
   warnings: SiteTreeWarning[];
   maxDepth: number;
 };
@@ -84,7 +82,6 @@ export function buildSitePageTree(
   const context = {
     schema,
     indexes,
-    ...(options.media ? { media: options.media } : {}),
     warnings,
     maxDepth: normalizeMaxDepth(options.maxDepth),
   };
@@ -379,10 +376,14 @@ function projectedMediaFields(
     return undefined;
   }
 
-  const media = siteMediaDeliveryFactsForAssetId(assetId, context.media);
+  const media = coreImageMediaDeliveryFactsForAssetId(assetId);
 
   if (media) {
-    return media;
+    return {
+      assetId: media.assetId,
+      href: media.href,
+      kind: media.kind,
+    };
   }
 
   context.warnings.push({
