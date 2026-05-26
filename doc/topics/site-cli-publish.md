@@ -24,6 +24,7 @@ Last updated: 2026-05-26
 - Site publish workflow source: `src/site/publish.ts`.
 - Site publish script: `scripts/site-publish.ts`.
 - Formless instance onboarding source: `src/site/instance-onboarding.ts`.
+- Cloudflare custom-domain client source: `src/site/cloudflare-domain-client.ts`.
 - Editing and publish workflow source: `src/site/editing-publish-workflow.test.ts`.
 - Local browser publish client: `src/client/local-publish.ts`.
 - Local publish UI: `src/app/local-site-publish.tsx`.
@@ -57,6 +58,8 @@ Last updated: 2026-05-26
 - `formless instance dev` runs a local product instance profile from workspace archive state.
 - `formless instance reset-local` clears workspace-local runtime state only.
 - `formless instance deploy` deploys code and assets for a claimed instance workspace.
+- `formless instance domains plan` dry-runs exact-host Worker Custom Domain changes.
+- `formless instance domains apply` applies exact-host Worker Custom Domain changes.
 - `formless instance token adopt` stores an automation admin token in ignored workspace secret state.
 - `formless instance token rotate` uploads a new automation admin token and updates ignored workspace secret state.
 - `bun run site:pull-seed` promotes local Site authority state into `schema/apps/site/seed-records.json`.
@@ -127,17 +130,21 @@ Last updated: 2026-05-26
 
 - Instance workspace manifest file: `formless.instance-workspace.json`.
 - Instance workspace manifests store reviewable target, archive, deploy, local state, app, default app policy, and domain intent.
+- Instance workspace `domains` entries are reviewable exact-host Site mapping intent.
 - Instance workspace manifests reject secret-looking fields.
 - Instance workspace ignored secret state file: `.formless/instance.env`.
 - Instance workspace secret state can store the automation admin token.
 - Environment variable `FORMLESS_INSTANCE_WORKSPACE_ADMIN_TOKEN` can provide the automation admin token.
 - Cloudflare Worker secrets cannot be read back by workspace status.
 - Workspace pull exports the selected target to `archives/instance` and app archives under `archives/apps/<installId>`.
+- Workspace pull refreshes manifest `domains` from live enabled domain mappings.
 - Workspace check exports target archive state to ignored temporary state and reports drift after generated archive timestamp normalization.
+- Workspace check reports domain desired-mapping drift.
 - Workspace push composes declared app archives into a temporary instance archive.
 - Workspace push defaults to dry-run.
 - Workspace push apply requires `--apply`, takes a fresh whole-instance backup, dry-runs, then applies in one process.
 - Workspace push apply refuses current target drift unless `--allow-stale` acknowledges it.
+- Workspace push apply treats desired-domain drift as remote drift unless `--allow-stale` acknowledges it.
 - Workspace push requires `--replace` for app install collision replacement.
 - Workspace `--replace-install-set` reports unsupported install pruning instead of deleting extra remote installs.
 - Workspace local dev uses product instance runtime profile vars and the `empty` launch fixture.
@@ -150,6 +157,20 @@ Last updated: 2026-05-26
 - Workspace deploy verifies no-store deploy metadata after upload.
 - Workspace deploy state and Alchemy local secrets live under ignored `.formless/deploy/<workerName>`.
 - Instance workspace archive movement is explicit backup, restore, and import movement, not bidirectional instance sync.
+- Workspace deploy does not write live domain mappings or provider apply state.
+- Domain plan uses workspace domain intent when present and live enabled mappings when workspace intent is empty.
+- Domain plan uses CLI-side Cloudflare API reads for active zones, Worker Custom Domains, Worker Routes, and DNS records.
+- Domain plan reports apex-host risk, DNS conflicts, Worker Route conflicts, and existing Worker Custom Domains.
+- Domain plan does not mutate Cloudflare provider state.
+- Domain apply reruns preflight before provider mutation.
+- Domain apply default policy is `create-only`.
+- Domain apply `override` policy requires one explicit `--host`.
+- Domain apply creates exact-host Cloudflare Worker Custom Domains.
+- Domain apply can adopt equivalent same-worker Custom Domain bindings.
+- Domain apply records applied Cloudflare state and audit evidence in instance domain metadata.
+- Domain apply refuses when workspace and live desired domain mappings drift.
+- CLI domain plan/apply read Cloudflare credentials from `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`.
+- Product Workers do not need broad Cloudflare API credentials for domain apply.
 
 ## Key Tests
 
@@ -166,6 +187,7 @@ Last updated: 2026-05-26
 - Instance workspace CLI workflow tests: `src/site/cli.test.ts`.
 - Instance workspace manifest tests: `src/site/instance-workspace-config.test.ts`.
 - Instance workspace secret tests: `src/site/instance-workspace-secrets.test.ts`.
+- Cloudflare domain client tests: `src/site/cloudflare-domain-client.test.ts`.
 - Instance onboarding tests: `src/site/instance-onboarding.test.ts`.
 - Publish tests: `src/site/publish.test.ts`.
 - Local publish client tests: `src/client/local-publish.test.ts`.

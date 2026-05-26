@@ -94,6 +94,8 @@ Good next chunks:
 - Safer archive review and replacement UX.
 - Browser management UI for core media assets.
 - Video media assets after the image asset spine proves the provider boundary.
+- Domain control-plane apply after exact-host CLI domain apply is proven.
+- Apex/www redirects, wildcard domains, and non-Site domain modes when a concrete deployment needs them.
 - Users and permissions.
 - Multi-tenant account routing.
 - Admin token and publish hardening.

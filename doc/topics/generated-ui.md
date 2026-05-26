@@ -30,6 +30,11 @@ Last updated: 2026-05-26
 - Workbench runtime shell switches App management, Tasks, Estii, Site, and supported installed apps.
 - Instance shell renders package-generic install controls for bundled app packages.
 - Bundled install controls support Site, Tasks, and Estii.
+- Instance shell renders a Custom domains surface.
+- Custom domains surface lists desired domain mappings and applied provider state.
+- Custom domains surface creates desired Site mappings through `/api/formless/domain-mappings`.
+- Custom domains surface does not mutate Cloudflare provider state.
+- Custom domains surface only targets installed Site apps.
 - Workbench runtime shell does not own app-local Schema, sync, reset, publish, archive, Export, or Restore controls.
 - Active app sidebar owns app screens, root/context navigation, and app settings.
 - App settings source: `src/app/app-surface.tsx`.

@@ -32,6 +32,7 @@ Last updated: 2026-05-26
 - Published Worker SSR source: `src/worker/site-ssr.tsx`.
 - Published Site cache source: `src/worker/site-cache.ts`.
 - Published document route classifier: `src/worker/routing.ts`.
+- Installed Site custom-host mapping source: `src/worker/mapped-site-host.ts`.
 
 ## Records And Tree
 
@@ -191,6 +192,14 @@ Last updated: 2026-05-26
 - Installed Site public rendering uses install-scoped tree reads.
 - Installed Site public links keep their `/sites/<installId>` route base.
 - Installed Site public routes render outside generated admin chrome.
+- Enabled exact-host domain mappings can serve installed Site public documents at top-level routes.
+- Mapped Site hosts render `/` as the installed Site home route.
+- Mapped Site hosts render nested page and post routes from install-scoped storage.
+- Mapped Site host public links use top-level paths instead of `/sites/<installId>` paths.
+- Mapped Site hosts serve `/robots.txt`, `/sitemap.xml`, root icons, and touch icons from the mapped install.
+- Mapped Site hosts block generated app/admin browser shell routes.
+- Mapped Site hosts keep installed Site media on `/api/app-installs/site/:installId/media/*`.
+- Path-based `/sites/<installId>` remains available as fallback on the instance host.
 - Duplicate public slugs can exist in different installed Sites.
 - Preview and authoring Site page routes start Site push sync and refetch the active tree after Site sync applies.
 - Preview and authoring Site page routes also refetch after same-profile Site record or schema events.
@@ -264,3 +273,4 @@ Last updated: 2026-05-26
 - Public indexing tests: `src/site/public-indexing.test.ts`, `src/worker/public-indexing.test.ts`.
 - Public document metadata tests: `src/site/public-document-metadata.test.ts`.
 - Site icon tests: `src/site/site-icon-source.test.ts`, `src/site/ico.test.ts`.
+- Installed Site custom-domain routing tests: `src/worker/custom-domain-routing.test.ts`.

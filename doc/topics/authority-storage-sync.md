@@ -26,6 +26,9 @@ Last updated: 2026-05-26
 - Installed app snapshot API paths: `/api/app-installs/:packageAppKey/:installId/snapshot`, `/api/app-installs/:packageAppKey/:installId/snapshot/restore`.
 - Instance app installs API path: `/api/formless/app-installs`.
 - Instance archive restore API path: `/api/formless/archive/restore`.
+- Instance domain mapping API path: `/api/formless/domain-mappings`.
+- Instance domain mapping lookup API path: `/api/formless/domain-mappings/lookup`.
+- Instance domain mapping apply evidence API path: `/api/formless/domain-mappings/apply-evidence`.
 - Core image media API paths include `/api/formless/media/images` and `/api/formless/media/*`.
 - Site media API paths include `/api/site/media/images` and `/api/site/media/*`.
 - Installed Site media API paths include `/api/app-installs/site/:installId/media/images` and `/api/app-installs/site/:installId/media/*`.
@@ -109,6 +112,16 @@ Last updated: 2026-05-26
 - Archive restore restores media before app data.
 - Archive restore validates core media asset metadata and referenced media files before mutation.
 - Archive restore is backup, restore, and import plumbing, not bidirectional instance sync.
+- Instance domain mappings are desired host mappings stored on the instance authority.
+- Instance domain mappings normalize hostnames.
+- Instance domain mappings currently support only `surface = "site"`.
+- Instance domain mappings target installed Site apps only.
+- Duplicate domain mapping host/surface pairs are rejected.
+- Domain mapping create writes use the owner/admin write guard.
+- Domain mapping apply-evidence writes use the owner/admin write guard.
+- Domain mapping reads and enabled-host lookup are public.
+- Domain mapping applied state is stored separately from desired mappings.
+- Domain mapping audit events are append-only provider apply evidence.
 
 ## Push Sync
 
@@ -161,6 +174,7 @@ Last updated: 2026-05-26
 - Authority operation tests: `src/worker/authority-operations.test.ts`.
 - Authority admin guard tests: `src/worker/authority-admin-guard.test.ts`.
 - Instance app install tests: `src/worker/instance-app-installs.test.ts`.
+- Instance domain mapping tests: `src/shared/instance-domain-mappings.test.ts`, `src/worker/instance-domain-mappings.test.ts`.
 - Owner setup tests: `src/worker/owner-setup.test.ts`.
 - Owner session tests: `src/worker/owner-session.test.ts`.
 - Storage tests: `src/worker/storage.test.ts`.

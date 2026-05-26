@@ -13,6 +13,9 @@ Current shipped behavior lives in topic docs.
 - Site CLI and publish: `doc/topics/site-cli-publish.md`.
 - Testing and devstate: `doc/topics/testing-devstate.md`.
 
+Installed Site custom-domain shipped facts live across Site runtime, Site CLI and publish, Authority
+storage, and Generated UI topic docs.
+
 ## Docs
 
 - Agent docs map: `doc/README.md`.
