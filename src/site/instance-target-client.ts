@@ -2,11 +2,13 @@ import {
   FORMLESS_DEPLOY_METADATA_PATH,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
+import type { InstanceDomainMappingsResponse } from "../shared/instance-domain-mappings.ts";
 import type { AppInstallsResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
 import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
 const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
+const DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 
 export type FormlessInstanceTargetStatus = {
   appRegistry: AppInstallsResponse;
@@ -91,6 +93,19 @@ export async function readFormlessInstanceAppRegistry(
   );
 }
 
+export async function readFormlessInstanceDomainMappings(
+  input: { targetUrl: string },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDomainMappingsResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const mappingsUrl = apiUrl(targetUrl, DOMAIN_MAPPINGS_API_PATH);
+
+  return parseDomainMappings(
+    await fetchJson(dependencies.fetch, mappingsUrl, { headers: { accept: "application/json" } }),
+    mappingsUrl,
+  );
+}
+
 async function fetchJson(fetcher: typeof fetch, url: string, init: RequestInit): Promise<unknown> {
   const response = await fetcher(url, init);
 
@@ -144,6 +159,16 @@ function parseAppRegistry(value: unknown, context: string): AppInstallsResponse 
   return {
     installs: value.installs as AppInstallsResponse["installs"],
     packages: value.packages as AppInstallsResponse["packages"],
+  };
+}
+
+function parseDomainMappings(value: unknown, context: string): InstanceDomainMappingsResponse {
+  if (!isRecord(value) || !Array.isArray(value.mappings)) {
+    throw new Error(`${context} failed: domain mappings response must include mappings.`);
+  }
+
+  return {
+    mappings: value.mappings as InstanceDomainMappingsResponse["mappings"],
   };
 }
 

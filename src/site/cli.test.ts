@@ -16,6 +16,13 @@ import {
   type AppArchive,
   type InstanceArchive,
 } from "../shared/archive.ts";
+import type {
+  CloudflareDnsRecord,
+  CloudflareDomainClient,
+  CloudflareWorkerDomain,
+  CloudflareWorkerRoute,
+  CloudflareZone,
+} from "./cloudflare-domain-client.ts";
 import { listBundledAppPackages, type BundledAppPackage } from "../shared/app-installs.ts";
 import {
   STORE_SNAPSHOT_KIND,
@@ -103,6 +110,8 @@ describe("Formless Site CLI", () => {
       "  instance dev|reset-local [--workspace <path>]",
       "  instance deploy [--workspace <path>] [--target <alias>]",
       "       [--migration-policy <new|existing>]",
+      "  instance domains plan [--workspace <path>] [--target <alias>]",
+      "       [--policy <create-only|adopt|override>]",
       "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
       "       [--admin-token <token>]",
     ].join("\n");
@@ -508,6 +517,22 @@ describe("Formless Site CLI", () => {
     expect(
       parseFormlessCliArgs([
         "instance",
+        "domains",
+        "plan",
+        "--target",
+        "remote",
+        "--policy",
+        "adopt",
+      ]),
+    ).toEqual({
+      kind: "instanceDomainsPlan",
+      policy: "adopt",
+      targetAlias: "remote",
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
         "token",
         "adopt",
         "--target",
@@ -533,7 +558,7 @@ describe("Formless Site CLI", () => {
 
   it("validates instance workspace command options", () => {
     expect(() => parseFormlessCliArgs(["instance"])).toThrow(
-      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|token>",
+      "Usage: formless instance <init-workspace|status|pull|check|push|dev|reset-local|deploy|domains|token>",
     );
     expect(() => parseFormlessCliArgs(["instance", "init-workspace", "--from-remote"])).toThrow(
       "Missing required option for formless instance init-workspace: --target-url.",
@@ -555,6 +580,14 @@ describe("Formless Site CLI", () => {
     expect(() =>
       parseFormlessCliArgs(["instance", "deploy", "--migration-policy", "auto"]),
     ).toThrow('formless instance deploy --migration-policy must be "new" or "existing".');
+    expect(() => parseFormlessCliArgs(["instance", "domains", "apply"])).toThrow(
+      "Usage: formless instance domains plan",
+    );
+    expect(() =>
+      parseFormlessCliArgs(["instance", "domains", "plan", "--policy", "force"]),
+    ).toThrow(
+      'formless instance domains plan --policy must be "create-only", "adopt", or "override".',
+    );
     expect(() => parseFormlessCliArgs(["instance", "token", "forget"])).toThrow(
       "Usage: formless instance token <adopt|rotate>",
     );
@@ -966,6 +999,86 @@ describe("Formless Site CLI", () => {
         "Changed records: david.",
         "Changed media: david.",
         "Changed archive paths: archives/apps/david, archives/apps/dom, archives/apps/james, archives/instance.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("plans instance domains from workspace and live desired mappings without mutations", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot, {
+      domains: [
+        { host: "dpeek.com", installId: "david", surface: "site" },
+        { host: "www.dpeek.com", installId: "david", surface: "site" },
+      ],
+    });
+
+    await runFormlessCli(
+      ["instance", "domains", "plan", "--workspace", workspaceRoot, "--policy", "adopt"],
+      cliDeps(tempDir, {
+        cloudflareDomainClient: fakeCloudflareDomainClient({
+          dnsRecords: {
+            "dpeek.com": [
+              {
+                content: "192.0.2.10",
+                id: "dns-1",
+                name: "dpeek.com",
+                proxied: true,
+                type: "A",
+              },
+            ],
+          },
+          workerDomains: [
+            {
+              hostname: "www.dpeek.com",
+              id: "domain-1",
+              service: "personal",
+              zoneId: "zone-1",
+              zoneName: "dpeek.com",
+            },
+          ],
+          workerRoutes: {
+            "zone-1": [
+              {
+                id: "route-1",
+                pattern: "dpeek.com/*",
+                script: "old-worker",
+              },
+            ],
+          },
+          zonesByName: {
+            "dpeek.com": [{ id: "zone-1", name: "dpeek.com", status: "active" }],
+          },
+        }),
+        fetch: domainMappingFetch(requests),
+        logs,
+      }),
+    );
+
+    expect(requests).toEqual([
+      {
+        body: undefined,
+        headers: { accept: "application/json" },
+        method: "GET",
+        url: "https://personal.dpeek.workers.dev/api/formless/domain-mappings",
+      },
+    ]);
+    expect(logs).toEqual([
+      [
+        "Instance domain plan dry run.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Account: account-123.",
+        "Worker: personal.",
+        "Policy: adopt.",
+        "Desired source: workspace (2 workspace, 2 live enabled).",
+        "Desired drift: none.",
+        "Domains: dpeek.com, www.dpeek.com.",
+        "dpeek.com: blocked; install david; zone dpeek.com (zone-1); apex yes; custom domains none; routes dpeek.com/* -> old-worker; dns A 192.0.2.10; actions none; issues worker-route-conflict, dns-record-conflict, apex-domain",
+        "www.dpeek.com: ready; install david; zone dpeek.com (zone-1); apex no; custom domains www.dpeek.com -> personal; routes none; dns none; actions adopt-existing-worker-custom-domain; issues none",
       ].join("\n"),
     ]);
   });
@@ -2597,6 +2710,7 @@ async function writeWorkspaceManifest(
   workspaceRoot: string,
   options: {
     apps?: ReturnType<typeof workspaceApp>[];
+    domains?: Array<{ host: string; installId: string; surface: "site" }>;
   } = {},
 ) {
   await mkdir(workspaceRoot, { recursive: true });
@@ -2618,6 +2732,7 @@ async function writeWorkspaceManifest(
         workerName: "personal",
         migrationPolicy: "existing",
       },
+      ...(options.domains === undefined ? {} : { domains: options.domains }),
     }),
   );
 }
@@ -2823,6 +2938,44 @@ function archiveFetch(
   };
 }
 
+function domainMappingFetch(requests: CapturedFetchRequest[]): typeof fetch {
+  return async (url, init) => {
+    const requestUrl =
+      typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const parsedUrl = new URL(requestUrl);
+
+    requests.push({
+      body: init?.body,
+      headers: normalizeHeaders(init?.headers),
+      method: init?.method ?? "GET",
+      url: requestUrl,
+    });
+
+    if (parsedUrl.pathname === "/api/formless/domain-mappings") {
+      return Response.json({
+        mappings: [
+          domainMapping("dpeek.com", "david"),
+          domainMapping("www.dpeek.com", "david"),
+          { ...domainMapping("disabled.dpeek.com", "david"), enabled: false },
+        ],
+      });
+    }
+
+    return Response.json({ error: "not found" }, { status: 404 });
+  };
+}
+
+function domainMapping(host: string, installId: string) {
+  return {
+    createdAt: "2026-05-26T00:00:00.000Z",
+    enabled: true,
+    host,
+    installId,
+    surface: "site",
+    updatedAt: "2026-05-26T00:00:00.000Z",
+  };
+}
+
 function pushArchiveFetch(
   requests: CapturedFetchRequest[],
   installs: ReturnType<typeof installedApp>[],
@@ -2935,9 +3088,24 @@ function restoreSummary(
   };
 }
 
+function fakeCloudflareDomainClient(input: {
+  dnsRecords: Record<string, CloudflareDnsRecord[]>;
+  workerDomains: CloudflareWorkerDomain[];
+  workerRoutes: Record<string, CloudflareWorkerRoute[]>;
+  zonesByName: Record<string, CloudflareZone[]>;
+}): CloudflareDomainClient {
+  return {
+    listActiveZonesForName: async ({ name }) => input.zonesByName[name] ?? [],
+    listDnsRecords: async ({ name }) => input.dnsRecords[name] ?? [],
+    listWorkerDomains: async () => input.workerDomains,
+    listWorkerRoutes: async ({ zoneId }) => input.workerRoutes[zoneId] ?? [],
+  };
+}
+
 function cliDeps(
   cwd: string,
   options: {
+    cloudflareDomainClient?: CloudflareDomainClient;
     commands?: CapturedCommand[];
     deploy?: (input: DeployFormlessInstanceInput) => Promise<{ url: string }>;
     env?: NodeJS.ProcessEnv;
@@ -2964,6 +3132,14 @@ function cliDeps(
         },
       ],
     },
+    cloudflareDomainClient: () =>
+      options.cloudflareDomainClient ??
+      fakeCloudflareDomainClient({
+        dnsRecords: {},
+        workerDomains: [],
+        workerRoutes: {},
+        zonesByName: {},
+      }),
     cwd,
     deploymentAdapter: {
       deploy:

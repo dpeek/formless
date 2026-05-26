@@ -14,7 +14,15 @@ import {
   type PortableArchive,
 } from "../shared/archive.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
+import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
 import type { AppInstallsResponse } from "../shared/protocol.ts";
+import {
+  planCloudflareWorkerDomainPreflight,
+  type CloudflareDomainClient,
+  type CloudflareDomainIntent,
+  type CloudflareDomainPreflightPlan,
+  type CloudflareDomainPreflightPolicy,
+} from "./cloudflare-domain-client.ts";
 import {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
   FORMLESS_INSTANCE_WORKSPACE_MANIFEST_FILE,
@@ -39,6 +47,7 @@ import {
   type FormlessInstanceWorkspaceSecretState,
 } from "./instance-workspace-secrets.ts";
 import {
+  readFormlessInstanceDomainMappings,
   readFormlessInstanceTargetStatus,
   type FormlessInstanceTargetStatus,
 } from "./instance-target-client.ts";
@@ -265,6 +274,40 @@ export type DeployFormlessInstanceWorkspaceResult = {
   plan: FormlessInstanceDeploymentPlan;
   secretPath: string;
   selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type PlanFormlessInstanceWorkspaceDomainsInput = {
+  policy?: CloudflareDomainPreflightPolicy;
+  targetAlias?: string | null;
+  workspacePath?: string;
+};
+
+export type PlanFormlessInstanceWorkspaceDomainsDependencies = {
+  cloudflareDomainClient: CloudflareDomainClient;
+  cwd: string;
+  fetch: typeof fetch;
+};
+
+export type FormlessInstanceWorkspaceDomainDesiredDrift = {
+  host: string;
+  installId?: string;
+  liveInstallId?: string;
+  localInstallId?: string;
+  status: "local-only" | "live-only" | "mismatch";
+};
+
+export type PlanFormlessInstanceWorkspaceDomainsResult = {
+  accountId: string;
+  desired: {
+    drift: FormlessInstanceWorkspaceDomainDesiredDrift[];
+    liveEnabledCount: number;
+    source: "live" | "workspace";
+    workspaceCount: number;
+  };
+  preflight: CloudflareDomainPreflightPlan;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workerName: string;
   workspaceRoot: string;
 };
 
@@ -742,6 +785,51 @@ export async function deployFormlessInstanceWorkspace(
     plan,
     secretPath: formlessInstanceWorkspaceSecretStatePath(workspaceRoot),
     selectedTarget,
+    workspaceRoot,
+  };
+}
+
+export async function planFormlessInstanceWorkspaceDomains(
+  input: PlanFormlessInstanceWorkspaceDomainsInput,
+  dependencies: PlanFormlessInstanceWorkspaceDomainsDependencies,
+): Promise<PlanFormlessInstanceWorkspaceDomainsResult> {
+  const workspaceRoot = workspaceRootForInput(dependencies.cwd, input.workspacePath);
+  const { manifest } = await readWorkspaceManifest(workspaceRoot);
+  const selectedTarget = requireWorkspaceTarget(manifest, input.targetAlias, "domains plan");
+  const accountId = requireWorkspaceDeployAccountId(manifest);
+  const workerName = selectWorkspaceWorkerName(manifest, selectedTarget, "domains plan");
+  const liveMappings = await readFormlessInstanceDomainMappings(
+    { targetUrl: selectedTarget.url },
+    dependencies,
+  );
+  const workspaceDomains = manifest.domains ?? [];
+  const liveEnabledDomains = liveMappings.mappings
+    .filter((mapping) => mapping.enabled && mapping.surface === "site")
+    .map(domainIntentFromLiveMapping);
+  const source = workspaceDomains.length > 0 ? "workspace" : "live";
+  const intents = source === "workspace" ? workspaceDomains : liveEnabledDomains;
+  const preflight = await planCloudflareWorkerDomainPreflight({
+    accountId,
+    client: dependencies.cloudflareDomainClient,
+    intents,
+    policy: input.policy ?? "create-only",
+    workerName,
+  });
+
+  return {
+    accountId,
+    desired: {
+      drift:
+        workspaceDomains.length === 0
+          ? []
+          : compareWorkspaceDomainIntentToLive(workspaceDomains, liveEnabledDomains),
+      liveEnabledCount: liveEnabledDomains.length,
+      source,
+      workspaceCount: workspaceDomains.length,
+    },
+    preflight,
+    selectedTarget,
+    workerName,
     workspaceRoot,
   };
 }
@@ -1449,7 +1537,7 @@ function appRecordCount(app: AppArchive): number {
 function requireWorkspaceTarget(
   manifest: FormlessInstanceWorkspaceManifest,
   targetAlias: string | null | undefined,
-  commandName: "check" | "deploy" | "pull" | "push",
+  commandName: "check" | "deploy" | "domains plan" | "pull" | "push",
 ): FormlessInstanceWorkspaceTarget {
   const target = selectWorkspaceTarget(manifest, targetAlias);
 
@@ -1458,6 +1546,16 @@ function requireWorkspaceTarget(
   }
 
   return target;
+}
+
+function requireWorkspaceDeployAccountId(manifest: FormlessInstanceWorkspaceManifest): string {
+  const accountId = manifest.deploy?.accountId?.trim();
+
+  if (!accountId) {
+    throw new Error("Formless instance domains plan requires deploy.accountId.");
+  }
+
+  return accountId;
 }
 
 function formlessInstanceWorkspaceDeploymentPlan(input: {
@@ -1688,16 +1786,69 @@ function selectWorkspaceTarget(
 function selectWorkspaceWorkerName(
   manifest: FormlessInstanceWorkspaceManifest,
   target: FormlessInstanceWorkspaceTarget | undefined,
+  commandName: "domains plan" | "token rotate" = "token rotate",
 ): string {
   const workerName = manifest.deploy?.workerName ?? workerNameFromWorkersDevUrl(target?.url);
 
   if (!workerName) {
     throw new Error(
-      "Formless instance token rotate requires deploy.workerName or a workers.dev target URL.",
+      `Formless instance ${commandName} requires deploy.workerName or a workers.dev target URL.`,
     );
   }
 
   return workerName;
+}
+
+function domainIntentFromLiveMapping(mapping: InstanceDomainMapping): CloudflareDomainIntent {
+  return {
+    host: mapping.host,
+    installId: mapping.installId,
+    surface: mapping.surface,
+  };
+}
+
+function compareWorkspaceDomainIntentToLive(
+  workspaceDomains: readonly CloudflareDomainIntent[],
+  liveDomains: readonly CloudflareDomainIntent[],
+): FormlessInstanceWorkspaceDomainDesiredDrift[] {
+  const workspaceByHost = new Map(workspaceDomains.map((domain) => [domain.host, domain]));
+  const liveByHost = new Map(liveDomains.map((domain) => [domain.host, domain]));
+  const hosts = new Set([...workspaceByHost.keys(), ...liveByHost.keys()]);
+  const drift: FormlessInstanceWorkspaceDomainDesiredDrift[] = [];
+
+  for (const host of [...hosts].sort((left, right) => left.localeCompare(right))) {
+    const local = workspaceByHost.get(host);
+    const live = liveByHost.get(host);
+
+    if (local && !live) {
+      drift.push({
+        host,
+        installId: local.installId,
+        status: "local-only",
+      });
+      continue;
+    }
+
+    if (!local && live) {
+      drift.push({
+        host,
+        installId: live.installId,
+        status: "live-only",
+      });
+      continue;
+    }
+
+    if (local && live && local.installId !== live.installId) {
+      drift.push({
+        host,
+        liveInstallId: live.installId,
+        localInstallId: local.installId,
+        status: "mismatch",
+      });
+    }
+  }
+
+  return drift;
 }
 
 function workspaceSecretStateLabel(

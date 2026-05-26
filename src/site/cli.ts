@@ -16,6 +16,15 @@ import {
   type ImportSiteProjectArchiveResult,
   type RestorePortableArchiveResult,
 } from "./archive-workflows.ts";
+import {
+  cloudflareDomainClientFromEnv,
+  type CloudflareDnsRecord,
+  type CloudflareDomainClient,
+  type CloudflareDomainPreflightHostPlan,
+  type CloudflareDomainPreflightIssue,
+  type CloudflareWorkerDomain,
+  type CloudflareWorkerRoute,
+} from "./cloudflare-domain-client.ts";
 import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
 import {
   type FormlessInstanceWorkspaceApp,
@@ -29,6 +38,7 @@ import {
   deployFormlessInstanceWorkspace as deployFormlessInstanceWorkspaceCommand,
   getFormlessInstanceWorkspaceStatus as getFormlessInstanceWorkspaceStatusCommand,
   initFormlessInstanceWorkspace as initFormlessInstanceWorkspaceCommand,
+  planFormlessInstanceWorkspaceDomains as planFormlessInstanceWorkspaceDomainsCommand,
   resetFormlessInstanceWorkspaceLocalState as resetFormlessInstanceWorkspaceLocalStateCommand,
   runFormlessInstanceWorkspaceDev as runFormlessInstanceWorkspaceDevCommand,
   pullFormlessInstanceWorkspace as pullFormlessInstanceWorkspaceCommand,
@@ -41,6 +51,8 @@ import {
   type FormlessInstanceWorkspaceDevCommand,
   type FormlessInstanceWorkspaceStatusResult,
   type InitFormlessInstanceWorkspaceResult,
+  type PlanFormlessInstanceWorkspaceDomainsInput,
+  type PlanFormlessInstanceWorkspaceDomainsResult,
   type PullFormlessInstanceWorkspaceResult,
   type PushFormlessInstanceWorkspaceResult,
   type ResetFormlessInstanceWorkspaceLocalStateResult,
@@ -88,6 +100,24 @@ export {
   parseFormlessCliArgs,
   type FormlessCliCommand,
 } from "./cli-command.ts";
+export {
+  CF_API_TOKEN_ENV_NAME,
+  CLOUDFLARE_API_TOKEN_ENV_NAME,
+  cloudflareDomainClientFromEnv,
+  createFetchCloudflareDomainClient,
+  planCloudflareWorkerDomainPreflight,
+  workerRoutePatternMatchesHost,
+  type CloudflareDnsRecord,
+  type CloudflareDomainClient,
+  type CloudflareDomainIntent,
+  type CloudflareDomainPreflightHostPlan,
+  type CloudflareDomainPreflightIssue,
+  type CloudflareDomainPreflightPlan,
+  type CloudflareDomainPreflightPolicy,
+  type CloudflareWorkerDomain,
+  type CloudflareWorkerRoute,
+  type CloudflareZone,
+} from "./cloudflare-domain-client.ts";
 export {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
@@ -155,6 +185,9 @@ export {
   type InitFormlessInstanceWorkspaceInput,
   type InitFormlessInstanceWorkspaceResult,
   type PullFormlessInstanceWorkspaceAppArchiveResult,
+  type PlanFormlessInstanceWorkspaceDomainsDependencies,
+  type PlanFormlessInstanceWorkspaceDomainsInput,
+  type PlanFormlessInstanceWorkspaceDomainsResult,
   type PullFormlessInstanceWorkspaceDependencies,
   type PullFormlessInstanceWorkspaceInput,
   type PullFormlessInstanceWorkspaceResult,
@@ -171,6 +204,7 @@ export {
 export {
   readFormlessInstanceAppRegistry,
   readFormlessInstanceDeployMetadata,
+  readFormlessInstanceDomainMappings,
   readFormlessInstanceOwnerSetupStatus,
   readFormlessInstanceTargetStatus,
   type FormlessInstanceTargetClientDependencies,
@@ -279,6 +313,7 @@ export type FormlessCliRunCommandOptions = {
 
 export type FormlessCliDependencies = {
   accountDiscovery: FormlessInstanceAccountDiscoveryAdapter;
+  cloudflareDomainClient: () => CloudflareDomainClient;
   cwd: string;
   deploymentAdapter: FormlessInstanceDeploymentAdapter;
   env: NodeJS.ProcessEnv;
@@ -487,6 +522,11 @@ export async function runFormlessCli(
     case "instanceDeploy": {
       const result = await deployFormlessInstanceWorkspace(command, dependencies);
       dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceDomainsPlan": {
+      const result = await planFormlessInstanceWorkspaceDomains(command, dependencies);
+      dependencies.log(formatInstanceWorkspaceDomainPlanResult(result, dependencies.cwd));
       return;
     }
     case "save": {
@@ -774,6 +814,24 @@ export async function deployFormlessInstanceWorkspace(
     packageRoot: dependencies.packageRoot,
     packageVersion: packageJson.version,
     randomToken: dependencies.randomToken,
+  });
+}
+
+export async function planFormlessInstanceWorkspaceDomains(
+  input: {
+    policy?: PlanFormlessInstanceWorkspaceDomainsInput["policy"];
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cloudflareDomainClient" | "cwd" | "fetch"
+  > = nodeFormlessCliDependencies(),
+): Promise<PlanFormlessInstanceWorkspaceDomainsResult> {
+  return planFormlessInstanceWorkspaceDomainsCommand(input, {
+    cloudflareDomainClient: dependencies.cloudflareDomainClient(),
+    cwd: dependencies.cwd,
+    fetch: dependencies.fetch,
   });
 }
 
@@ -1080,6 +1138,24 @@ function formatInstanceWorkspaceDeployResult(
   ].join("\n");
 }
 
+function formatInstanceWorkspaceDomainPlanResult(
+  result: PlanFormlessInstanceWorkspaceDomainsResult,
+  cwd: string,
+): string {
+  return [
+    "Instance domain plan dry run.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Account: ${result.accountId}.`,
+    `Worker: ${result.workerName}.`,
+    `Policy: ${result.preflight.policy}.`,
+    `Desired source: ${result.desired.source} (${result.desired.workspaceCount} workspace, ${result.desired.liveEnabledCount} live enabled).`,
+    `Desired drift: ${formatDomainDesiredDrift(result.desired.drift)}.`,
+    `Domains: ${formatList(result.preflight.hosts.map((host) => host.host))}.`,
+    ...result.preflight.hosts.map(formatDomainHostPlan),
+  ].join("\n");
+}
+
 function formatWorkspaceTargets(manifest: FormlessInstanceWorkspaceManifest): string {
   if (manifest.targets.length === 0) {
     return "none";
@@ -1149,6 +1225,75 @@ function formatPackageMismatches(
         `${mismatch.installId} (local ${mismatch.localPackageAppKey}, remote ${mismatch.remotePackageAppKey})`,
     )
     .join(", ");
+}
+
+function formatDomainHostPlan(host: CloudflareDomainPreflightHostPlan): string {
+  const issues = [...host.blockers, ...host.warnings];
+
+  return [
+    `${host.host}: ${host.status}`,
+    `install ${host.installId}`,
+    `zone ${host.zone ? `${host.zone.name} (${host.zone.id})` : "missing"}`,
+    `apex ${host.apex ? "yes" : "no"}`,
+    `custom domains ${formatWorkerDomains(host.workerDomains)}`,
+    `routes ${formatWorkerRoutes(host.workerRoutes)}`,
+    `dns ${formatDnsRecords(host.dnsRecords)}`,
+    `actions ${formatList(host.actions)}`,
+    `issues ${formatDomainIssues(issues)}`,
+  ].join("; ");
+}
+
+function formatDomainDesiredDrift(
+  drift: readonly PlanFormlessInstanceWorkspaceDomainsResult["desired"]["drift"][number][],
+): string {
+  if (drift.length === 0) {
+    return "none";
+  }
+
+  return drift
+    .map((entry) => {
+      switch (entry.status) {
+        case "local-only":
+          return `${entry.host} local-only (${entry.installId})`;
+        case "live-only":
+          return `${entry.host} live-only (${entry.installId})`;
+        case "mismatch":
+          return `${entry.host} mismatch (workspace ${entry.localInstallId}, live ${entry.liveInstallId})`;
+      }
+    })
+    .join(", ");
+}
+
+function formatDomainIssues(issues: readonly CloudflareDomainPreflightIssue[]): string {
+  if (issues.length === 0) {
+    return "none";
+  }
+
+  return issues.map((issue) => issue.code).join(", ");
+}
+
+function formatWorkerDomains(domains: readonly CloudflareWorkerDomain[]): string {
+  if (domains.length === 0) {
+    return "none";
+  }
+
+  return domains.map((domain) => `${domain.hostname} -> ${domain.service}`).join(", ");
+}
+
+function formatWorkerRoutes(routes: readonly CloudflareWorkerRoute[]): string {
+  if (routes.length === 0) {
+    return "none";
+  }
+
+  return routes.map((route) => `${route.pattern} -> ${route.script ?? "<none>"}`).join(", ");
+}
+
+function formatDnsRecords(records: readonly CloudflareDnsRecord[]): string {
+  if (records.length === 0) {
+    return "none";
+  }
+
+  return records.map((record) => `${record.type} ${record.content}`).join(", ");
 }
 
 function formatOwnerSetup(status: {
@@ -1243,6 +1388,7 @@ function nodeFormlessCliDependencies(): FormlessCliDependencies {
 
   return {
     accountDiscovery: alchemyFormlessInstanceAccountDiscoveryAdapter,
+    cloudflareDomainClient: () => cloudflareDomainClientFromEnv({ env: process.env, fetch }),
     cwd: process.cwd(),
     deploymentAdapter: alchemyFormlessInstanceDeploymentAdapter,
     env: process.env,
