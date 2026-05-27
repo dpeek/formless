@@ -3,8 +3,15 @@ import {
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_PLAN_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type DomainProviderConfigIssue,
   type DomainProviderConfigStatus,
+  type CreateInstanceDomainProviderRedirectIntentRequest,
+  type CreateInstanceDomainProviderRedirectIntentResponse,
+  type DeleteInstanceDomainProviderRedirectIntentRequest,
+  type DeleteInstanceDomainProviderRedirectIntentResponse,
+  type InstanceDomainProviderAppliedResourceState,
+  type InstanceDomainProviderAuditEvent,
   type InstanceDomainProviderApplyBlockedCode,
   type InstanceDomainProviderApplyJob,
   type InstanceDomainProviderApplyJobResourceEvidence,
@@ -14,11 +21,15 @@ import {
   type InstanceDomainProviderApplyRequest,
   type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderPlanResponse,
+  type InstanceDomainProviderRedirectIntent,
+  type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
   DomainProviderApplyPolicy,
   DomainProviderPlan,
+  DomainProviderRedirectIntent,
+  DomainProviderRedirectStatusCode,
   DomainProviderResource,
   DomainProviderZone,
 } from "../shared/domain-provider-protocol.ts";
@@ -47,6 +58,55 @@ const applyJobsTableSql = `
     result_json TEXT,
     error TEXT,
     created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`;
+const redirectIntentsTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_domain_provider_redirect_intents (
+    from_host TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    to_host TEXT,
+    to_url TEXT,
+    preserve_path INTEGER NOT NULL CHECK (preserve_path IN (0, 1)),
+    preserve_query_string INTEGER NOT NULL CHECK (preserve_query_string IN (0, 1)),
+    status_code INTEGER NOT NULL CHECK (status_code IN (301, 302, 303, 307, 308)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK ((to_host IS NOT NULL AND to_url IS NULL) OR (to_host IS NULL AND to_url IS NOT NULL))
+  )
+`;
+const appliedResourcesTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_domain_provider_applied_resources (
+    logical_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    host TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    alchemy_resource_id TEXT NOT NULL,
+    runner_id TEXT,
+    zone_id TEXT NOT NULL,
+    zone_name TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    resource_json TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'overridden')),
+    applied_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`;
+const providerAuditEventsTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_domain_provider_audit_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    logical_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    host TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    alchemy_resource_id TEXT NOT NULL,
+    runner_id TEXT,
+    zone_id TEXT NOT NULL,
+    zone_name TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    resource_json TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'overridden')),
+    applied_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
 `;
@@ -88,6 +148,38 @@ type DomainProviderApplyJobRow = {
   error: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type DomainProviderRedirectIntentRow = {
+  created_at: string;
+  enabled: number;
+  from_host: string;
+  preserve_path: number;
+  preserve_query_string: number;
+  status_code: DomainProviderRedirectStatusCode;
+  to_host: string | null;
+  to_url: string | null;
+  updated_at: string;
+};
+
+type DomainProviderAppliedResourceRow = {
+  account_id: string;
+  action: InstanceDomainProviderAppliedResourceState["action"];
+  alchemy_resource_id: string;
+  applied_at: string;
+  host: string;
+  kind: InstanceDomainProviderAppliedResourceState["kind"];
+  logical_id: string;
+  resource_id: string;
+  resource_json: string;
+  runner_id: string | null;
+  updated_at: string;
+  zone_id: string;
+  zone_name: string;
+};
+
+type DomainProviderAuditEventRow = DomainProviderAppliedResourceRow & {
+  event_id: number;
 };
 
 export async function handleInstanceDomainProviderApiRequest(
@@ -141,6 +233,10 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
     return jsonResponse(domainProviderPlanResponse(storage, env, options.options));
   }
 
+  if (url.pathname === INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH) {
+    return handleRedirectIntentsRequest(request, storage, env, url);
+  }
+
   if (url.pathname === INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH) {
     return handleApplyRequest(request, storage, env);
   }
@@ -158,6 +254,84 @@ function handleApplyRequest(
   }
 
   return applyWithAuthorization(request, storage, env);
+}
+
+async function handleRedirectIntentsRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: DurableObjectDomainProviderEnv,
+  url: URL,
+): Promise<Response> {
+  if (request.method === "GET") {
+    return jsonResponse(domainProviderRedirectsResponse(storage));
+  }
+
+  if (request.method === "POST") {
+    const authorization = await authorizeInstanceWrite(request, env);
+
+    if (!authorization.authorized) {
+      return jsonResponse(
+        { error: authorization.error },
+        authorization.status,
+        authorization.headers,
+      );
+    }
+
+    const parsed = await readRedirectIntentRequest(request);
+
+    if (!parsed.ok) {
+      return jsonResponse({ error: parsed.error }, 400);
+    }
+
+    const result = writeRedirectIntent(storage, {
+      intent: parsed.request,
+      now: nowIsoString(),
+    });
+
+    return jsonResponse(
+      {
+        redirectIntent: result,
+        redirectIntents: readDomainProviderRedirectIntents(storage),
+      } satisfies CreateInstanceDomainProviderRedirectIntentResponse,
+      201,
+    );
+  }
+
+  if (request.method === "DELETE") {
+    const authorization = await authorizeInstanceWrite(request, env);
+
+    if (!authorization.authorized) {
+      return jsonResponse(
+        { error: authorization.error },
+        authorization.status,
+        authorization.headers,
+      );
+    }
+
+    const parsed = parseDeleteRedirectIntentRequest({
+      fromHost: url.searchParams.get("fromHost") ?? "",
+    });
+
+    if (!parsed.ok) {
+      return jsonResponse({ error: parsed.error }, 400);
+    }
+
+    const result = disableRedirectIntent(storage, {
+      fromHost: parsed.request.fromHost,
+      now: nowIsoString(),
+    });
+
+    if (!result.ok) {
+      return jsonResponse({ error: result.error }, 404);
+    }
+
+    return jsonResponse({
+      redirectIntent: result.redirectIntent,
+      redirectIntents: readDomainProviderRedirectIntents(storage),
+    } satisfies DeleteInstanceDomainProviderRedirectIntentResponse);
+  }
+
+  return methodNotAllowedResponse("GET, POST, DELETE");
 }
 
 async function applyWithAuthorization(
@@ -302,6 +476,7 @@ function domainProviderPlanResponse(
   options: DomainProviderPlanOptions = {},
 ): InstanceDomainProviderPlanResponse {
   const config = domainProviderConfigStatus(env);
+  const redirectIntents = readDomainProviderRedirectIntents(storage);
   const plan = planDomainProviderResources({
     instanceId: config.instanceId ?? "unconfigured-instance",
     mappings: readInstanceDomainMappings(storage)
@@ -315,6 +490,9 @@ function domainProviderPlanResponse(
           : { targetInstallId: mapping.targetInstallId }),
       })),
     policy: options.policy ?? "create-only",
+    redirectIntents: redirectIntents
+      .filter((intent) => options.host === undefined || intent.fromHost === options.host)
+      .map((intent) => redirectIntentForPlan(intent)),
     workerName: config.workerName ?? "unconfigured-worker",
     zones: config.zones,
   });
@@ -322,6 +500,7 @@ function domainProviderPlanResponse(
   return {
     config,
     plan,
+    redirectIntents,
   };
 }
 
@@ -465,6 +644,200 @@ function invalidZoneConfigIssue(): { ok: false; issue: DomainProviderConfigIssue
   };
 }
 
+function domainProviderRedirectsResponse(
+  storage: DurableObjectStorage,
+): InstanceDomainProviderRedirectsResponse {
+  return {
+    appliedResources: readAppliedProviderResources(storage),
+    auditEvents: readProviderAuditEvents(storage),
+    redirectIntents: readDomainProviderRedirectIntents(storage),
+  };
+}
+
+function readDomainProviderRedirectIntents(
+  storage: DurableObjectStorage,
+): InstanceDomainProviderRedirectIntent[] {
+  ensureDomainProviderRedirectIntentsTable(storage);
+  const redirects: InstanceDomainProviderRedirectIntent[] = [];
+
+  for (const row of storage.sql.exec<DomainProviderRedirectIntentRow>(
+    `
+      SELECT
+        from_host,
+        enabled,
+        to_host,
+        to_url,
+        preserve_path,
+        preserve_query_string,
+        status_code,
+        created_at,
+        updated_at
+      FROM instance_domain_provider_redirect_intents
+      ORDER BY from_host ASC
+    `,
+  )) {
+    redirects.push(redirectIntentFromRow(row));
+  }
+
+  return redirects;
+}
+
+function writeRedirectIntent(
+  storage: DurableObjectStorage,
+  input: {
+    intent: CreateInstanceDomainProviderRedirectIntentRequest;
+    now: string;
+  },
+): InstanceDomainProviderRedirectIntent {
+  ensureDomainProviderRedirectIntentsTable(storage);
+
+  const current = readRedirectIntentByHost(storage, input.intent.fromHost);
+  const createdAt = current?.createdAt ?? input.now;
+  const enabled = input.intent.enabled ?? true;
+  const preservePath = input.intent.preservePath ?? true;
+  const preserveQueryString = input.intent.preserveQueryString ?? true;
+  const statusCode = input.intent.statusCode ?? 301;
+
+  storage.sql.exec(
+    `
+      INSERT INTO instance_domain_provider_redirect_intents (
+        from_host,
+        enabled,
+        to_host,
+        to_url,
+        preserve_path,
+        preserve_query_string,
+        status_code,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(from_host) DO UPDATE SET
+        enabled = excluded.enabled,
+        to_host = excluded.to_host,
+        to_url = excluded.to_url,
+        preserve_path = excluded.preserve_path,
+        preserve_query_string = excluded.preserve_query_string,
+        status_code = excluded.status_code,
+        updated_at = excluded.updated_at
+    `,
+    input.intent.fromHost,
+    enabled ? 1 : 0,
+    input.intent.toHost ?? null,
+    input.intent.toUrl ?? null,
+    preservePath ? 1 : 0,
+    preserveQueryString ? 1 : 0,
+    statusCode,
+    createdAt,
+    input.now,
+  );
+
+  const written = readRedirectIntentByHost(storage, input.intent.fromHost);
+
+  if (!written) {
+    throw new Error("Domain provider redirect intent was not written.");
+  }
+
+  return written;
+}
+
+function disableRedirectIntent(
+  storage: DurableObjectStorage,
+  input: { fromHost: string; now: string },
+):
+  | { ok: true; redirectIntent: InstanceDomainProviderRedirectIntent }
+  | { ok: false; error: string } {
+  ensureDomainProviderRedirectIntentsTable(storage);
+
+  const current = readRedirectIntentByHost(storage, input.fromHost);
+
+  if (!current) {
+    return {
+      ok: false,
+      error: `Domain provider redirect intent for "${input.fromHost}" does not exist.`,
+    };
+  }
+
+  storage.sql.exec(
+    `
+      UPDATE instance_domain_provider_redirect_intents
+      SET enabled = 0, updated_at = ?
+      WHERE from_host = ?
+    `,
+    input.now,
+    input.fromHost,
+  );
+
+  return {
+    ok: true,
+    redirectIntent: readRedirectIntentByHost(storage, input.fromHost) ?? {
+      ...current,
+      enabled: false,
+      updatedAt: input.now,
+    },
+  };
+}
+
+function readRedirectIntentByHost(
+  storage: DurableObjectStorage,
+  fromHost: string,
+): InstanceDomainProviderRedirectIntent | undefined {
+  ensureDomainProviderRedirectIntentsTable(storage);
+
+  for (const row of storage.sql.exec<DomainProviderRedirectIntentRow>(
+    `
+      SELECT
+        from_host,
+        enabled,
+        to_host,
+        to_url,
+        preserve_path,
+        preserve_query_string,
+        status_code,
+        created_at,
+        updated_at
+      FROM instance_domain_provider_redirect_intents
+      WHERE from_host = ?
+      LIMIT 1
+    `,
+    fromHost,
+  )) {
+    return redirectIntentFromRow(row);
+  }
+
+  return undefined;
+}
+
+function redirectIntentFromRow(
+  row: DomainProviderRedirectIntentRow,
+): InstanceDomainProviderRedirectIntent {
+  return {
+    createdAt: row.created_at,
+    enabled: row.enabled === 1,
+    fromHost: row.from_host,
+    preservePath: row.preserve_path === 1,
+    preserveQueryString: row.preserve_query_string === 1,
+    statusCode: row.status_code,
+    ...(row.to_host === null ? {} : { toHost: row.to_host }),
+    ...(row.to_url === null ? {} : { toUrl: row.to_url }),
+    updatedAt: row.updated_at,
+  };
+}
+
+function redirectIntentForPlan(
+  intent: InstanceDomainProviderRedirectIntent,
+): DomainProviderRedirectIntent {
+  return {
+    enabled: intent.enabled,
+    fromHost: intent.fromHost,
+    preservePath: intent.preservePath,
+    preserveQueryString: intent.preserveQueryString,
+    statusCode: intent.statusCode,
+    ...(intent.toHost === undefined ? {} : { toHost: intent.toHost }),
+    ...(intent.toUrl === undefined ? {} : { toUrl: intent.toUrl }),
+  };
+}
+
 function writeApplyJob(
   storage: DurableObjectStorage,
   input: {
@@ -553,27 +926,37 @@ function completeApplyJob(
   }
 
   for (const evidence of input.result.resources) {
-    const recorded = recordInstanceDomainMappingApplyEvidence(storage, {
-      action: evidence.action,
-      alchemyResourceId: evidence.alchemyResourceId,
-      host: evidence.host,
-      now: input.now,
-      profile: evidence.profile,
-      provider: "cloudflare-worker-custom-domain",
-      runnerId: input.result.runnerId ?? job.runnerId,
-      ...(evidence.targetInstallId === undefined
-        ? {}
-        : { targetInstallId: evidence.targetInstallId }),
-      accountId: evidence.accountId,
-      workerDomainId: evidence.workerDomainId,
-      workerName: evidence.workerName,
-      zoneId: evidence.zoneId,
-      zoneName: evidence.zoneName,
-    });
+    if (evidence.kind === "cloudflare-worker-custom-domain") {
+      const recorded = recordInstanceDomainMappingApplyEvidence(storage, {
+        action: evidence.action,
+        alchemyResourceId: evidence.alchemyResourceId,
+        host: evidence.host,
+        now: input.now,
+        profile: evidence.profile,
+        provider: "cloudflare-worker-custom-domain",
+        runnerId: input.result.runnerId ?? job.runnerId,
+        ...(evidence.targetInstallId === undefined
+          ? {}
+          : { targetInstallId: evidence.targetInstallId }),
+        accountId: evidence.accountId,
+        workerDomainId: evidence.workerDomainId,
+        workerName: evidence.workerName,
+        zoneId: evidence.zoneId,
+        zoneName: evidence.zoneName,
+      });
 
-    if (!recorded.ok) {
-      return { ok: false, error: recorded.error.message, status: 400 };
+      if (!recorded.ok) {
+        return { ok: false, error: recorded.error.message, status: 400 };
+      }
+
+      continue;
     }
+
+    recordDomainProviderResourceEvidence(storage, {
+      evidence,
+      now: input.now,
+      runnerId: input.result.runnerId ?? job.runnerId,
+    });
   }
 
   return finishApplyJob(storage, {
@@ -658,29 +1041,270 @@ function validateResourceEvidence(
   resource: DomainProviderResource,
   evidence: InstanceDomainProviderApplyJobResourceEvidence,
 ): { ok: true } | { ok: false; error: string } {
-  if (resource.kind !== "cloudflare-worker-custom-domain") {
-    return {
-      ok: false,
-      error: `Domain provider apply evidence for "${resource.logicalId}" is not supported yet.`,
-    };
+  switch (resource.kind) {
+    case "cloudflare-worker-custom-domain":
+      if (
+        evidence.kind !== resource.kind ||
+        evidence.host !== resource.host ||
+        evidence.profile !== resource.profile ||
+        evidence.targetInstallId !== resource.targetInstallId ||
+        evidence.workerName !== resource.props.workerName ||
+        evidence.zoneId !== resource.zone.id ||
+        evidence.zoneName !== resource.zone.name
+      ) {
+        return {
+          ok: false,
+          error: `Domain provider apply evidence for "${resource.logicalId}" does not match the job plan.`,
+        };
+      }
+
+      return { ok: true };
+    case "cloudflare-redirect-rule":
+      if (
+        evidence.kind !== resource.kind ||
+        evidence.host !== resource.fromHost ||
+        evidence.targetUrl !== resource.targetUrl ||
+        evidence.statusCode !== resource.props.statusCode ||
+        evidence.preserveQueryString !== resource.props.preserveQueryString ||
+        evidence.zoneId !== resource.zone.id ||
+        evidence.zoneName !== resource.zone.name
+      ) {
+        return {
+          ok: false,
+          error: `Domain provider apply evidence for "${resource.logicalId}" does not match the job plan.`,
+        };
+      }
+
+      return { ok: true };
+    case "cloudflare-dns-records":
+      if (
+        evidence.kind !== resource.kind ||
+        evidence.host !== resource.fromHost ||
+        evidence.zoneId !== resource.zone.id ||
+        evidence.zoneName !== resource.zone.name
+      ) {
+        return {
+          ok: false,
+          error: `Domain provider apply evidence for "${resource.logicalId}" does not match the job plan.`,
+        };
+      }
+
+      return { ok: true };
+  }
+}
+
+function recordDomainProviderResourceEvidence(
+  storage: DurableObjectStorage,
+  input: {
+    evidence: Exclude<
+      InstanceDomainProviderApplyJobResourceEvidence,
+      { kind: "cloudflare-worker-custom-domain" }
+    >;
+    now: string;
+    runnerId?: string;
+  },
+) {
+  ensureDomainProviderAppliedResourcesTables(storage);
+  const state = providerAppliedResourceFromEvidence(input.evidence, {
+    now: input.now,
+    runnerId: input.runnerId,
+  });
+
+  storage.sql.exec(
+    `
+      INSERT INTO instance_domain_provider_applied_resources (
+        logical_id,
+        kind,
+        host,
+        account_id,
+        alchemy_resource_id,
+        runner_id,
+        zone_id,
+        zone_name,
+        resource_id,
+        resource_json,
+        action,
+        applied_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(logical_id) DO UPDATE SET
+        kind = excluded.kind,
+        host = excluded.host,
+        account_id = excluded.account_id,
+        alchemy_resource_id = excluded.alchemy_resource_id,
+        runner_id = excluded.runner_id,
+        zone_id = excluded.zone_id,
+        zone_name = excluded.zone_name,
+        resource_id = excluded.resource_id,
+        resource_json = excluded.resource_json,
+        action = excluded.action,
+        applied_at = excluded.applied_at,
+        updated_at = excluded.updated_at
+    `,
+    state.logicalId,
+    state.kind,
+    state.host,
+    state.accountId,
+    state.alchemyResourceId,
+    state.runnerId ?? null,
+    state.zoneId,
+    state.zoneName,
+    state.resourceId,
+    state.resourceJson,
+    state.action,
+    state.appliedAt,
+    state.updatedAt,
+  );
+
+  storage.sql.exec(
+    `
+      INSERT INTO instance_domain_provider_audit_events (
+        logical_id,
+        kind,
+        host,
+        account_id,
+        alchemy_resource_id,
+        runner_id,
+        zone_id,
+        zone_name,
+        resource_id,
+        resource_json,
+        action,
+        applied_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    state.logicalId,
+    state.kind,
+    state.host,
+    state.accountId,
+    state.alchemyResourceId,
+    state.runnerId ?? null,
+    state.zoneId,
+    state.zoneName,
+    state.resourceId,
+    state.resourceJson,
+    state.action,
+    state.appliedAt,
+    state.updatedAt,
+  );
+}
+
+function providerAppliedResourceFromEvidence(
+  evidence: Exclude<
+    InstanceDomainProviderApplyJobResourceEvidence,
+    { kind: "cloudflare-worker-custom-domain" }
+  >,
+  input: { now: string; runnerId?: string },
+): InstanceDomainProviderAppliedResourceState {
+  return {
+    accountId: evidence.accountId,
+    action: evidence.action,
+    alchemyResourceId: evidence.alchemyResourceId,
+    appliedAt: input.now,
+    host: evidence.host,
+    kind: evidence.kind,
+    logicalId: evidence.logicalId,
+    resourceId:
+      evidence.kind === "cloudflare-redirect-rule"
+        ? evidence.redirectRuleId
+        : evidence.dnsRecordIds.join(","),
+    resourceJson: JSON.stringify(evidence),
+    ...(input.runnerId === undefined ? {} : { runnerId: input.runnerId }),
+    updatedAt: input.now,
+    zoneId: evidence.zoneId,
+    zoneName: evidence.zoneName,
+  };
+}
+
+function readAppliedProviderResources(
+  storage: DurableObjectStorage,
+): InstanceDomainProviderAppliedResourceState[] {
+  ensureDomainProviderAppliedResourcesTables(storage);
+  const resources: InstanceDomainProviderAppliedResourceState[] = [];
+
+  for (const row of storage.sql.exec<DomainProviderAppliedResourceRow>(
+    `
+      SELECT
+        logical_id,
+        kind,
+        host,
+        account_id,
+        alchemy_resource_id,
+        runner_id,
+        zone_id,
+        zone_name,
+        resource_id,
+        resource_json,
+        action,
+        applied_at,
+        updated_at
+      FROM instance_domain_provider_applied_resources
+      ORDER BY host ASC, kind ASC, logical_id ASC
+    `,
+  )) {
+    resources.push(providerAppliedResourceFromRow(row));
   }
 
-  if (
-    evidence.kind !== resource.kind ||
-    evidence.host !== resource.host ||
-    evidence.profile !== resource.profile ||
-    evidence.targetInstallId !== resource.targetInstallId ||
-    evidence.workerName !== resource.props.workerName ||
-    evidence.zoneId !== resource.zone.id ||
-    evidence.zoneName !== resource.zone.name
-  ) {
-    return {
-      ok: false,
-      error: `Domain provider apply evidence for "${resource.logicalId}" does not match the job plan.`,
-    };
+  return resources;
+}
+
+function readProviderAuditEvents(
+  storage: DurableObjectStorage,
+): InstanceDomainProviderAuditEvent[] {
+  ensureDomainProviderAppliedResourcesTables(storage);
+  const events: InstanceDomainProviderAuditEvent[] = [];
+
+  for (const row of storage.sql.exec<DomainProviderAuditEventRow>(
+    `
+      SELECT
+        event_id,
+        logical_id,
+        kind,
+        host,
+        account_id,
+        alchemy_resource_id,
+        runner_id,
+        zone_id,
+        zone_name,
+        resource_id,
+        resource_json,
+        action,
+        applied_at,
+        updated_at
+      FROM instance_domain_provider_audit_events
+      ORDER BY event_id ASC
+    `,
+  )) {
+    events.push({
+      eventId: row.event_id,
+      ...providerAppliedResourceFromRow(row),
+    });
   }
 
-  return { ok: true };
+  return events;
+}
+
+function providerAppliedResourceFromRow(
+  row: DomainProviderAppliedResourceRow,
+): InstanceDomainProviderAppliedResourceState {
+  return {
+    accountId: row.account_id,
+    action: row.action,
+    alchemyResourceId: row.alchemy_resource_id,
+    appliedAt: row.applied_at,
+    host: row.host,
+    kind: row.kind,
+    logicalId: row.logical_id,
+    resourceId: row.resource_id,
+    resourceJson: row.resource_json,
+    ...(row.runner_id === null ? {} : { runnerId: row.runner_id }),
+    updatedAt: row.updated_at,
+    zoneId: row.zone_id,
+    zoneName: row.zone_name,
+  };
 }
 
 function readApplyJob(
@@ -785,6 +1409,17 @@ function ensureDomainProviderApplyLockTable(storage: DurableObjectStorage) {
 
 function ensureDomainProviderApplyJobsTable(storage: DurableObjectStorage) {
   storage.sql.exec(applyJobsTableSql);
+}
+
+function ensureDomainProviderRedirectIntentsTable(storage: DurableObjectStorage) {
+  storage.sql.exec(redirectIntentsTableSql);
+}
+
+function ensureDomainProviderAppliedResourcesTables(storage: DurableObjectStorage) {
+  storage.sql.exec(`
+    ${appliedResourcesTableSql};
+    ${providerAuditEventsTableSql};
+  `);
 }
 
 function applyBlockedResponse(
@@ -930,6 +1565,89 @@ async function readApplyJobResultRequest(
   };
 }
 
+async function readRedirectIntentRequest(
+  request: Request,
+): Promise<
+  | { ok: true; request: CreateInstanceDomainProviderRedirectIntentRequest }
+  | { ok: false; error: string }
+> {
+  const parsed = await readRequiredJsonObject(request, "Domain provider redirect intent request");
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return parseRedirectIntentRequest(parsed.value);
+}
+
+function parseRedirectIntentRequest(
+  value: Record<string, unknown>,
+):
+  | { ok: true; request: CreateInstanceDomainProviderRedirectIntentRequest }
+  | { ok: false; error: string } {
+  const fromHost = parseRequiredHost(value.fromHost, "Domain provider redirect from host");
+  const enabled = parseOptionalBoolean(value.enabled, "Domain provider redirect enabled");
+  const preservePath = parseOptionalBoolean(
+    value.preservePath,
+    "Domain provider redirect preserve path",
+  );
+  const preserveQueryString = parseOptionalBoolean(
+    value.preserveQueryString,
+    "Domain provider redirect preserve query string",
+  );
+  const statusCode = parseOptionalRedirectStatusCode(
+    value.statusCode,
+    "Domain provider redirect status code",
+  );
+  const toHost = parseOptionalHost(value.toHost, "Domain provider redirect target host");
+  const toUrl = parseOptionalHttpsUrl(value.toUrl, "Domain provider redirect target URL");
+
+  if (!fromHost.ok) return fromHost;
+  if (!enabled.ok) return enabled;
+  if (!preservePath.ok) return preservePath;
+  if (!preserveQueryString.ok) return preserveQueryString;
+  if (!statusCode.ok) return statusCode;
+  if (!toHost.ok) return toHost;
+  if (!toUrl.ok) return toUrl;
+
+  if ((toHost.value === undefined && toUrl.value === undefined) || (toHost.value && toUrl.value)) {
+    return { ok: false, error: "Domain provider redirect must set target host or target URL." };
+  }
+
+  return {
+    ok: true,
+    request: {
+      ...(enabled.value === undefined ? {} : { enabled: enabled.value }),
+      fromHost: fromHost.value,
+      ...(preservePath.value === undefined ? {} : { preservePath: preservePath.value }),
+      ...(preserveQueryString.value === undefined
+        ? {}
+        : { preserveQueryString: preserveQueryString.value }),
+      ...(statusCode.value === undefined ? {} : { statusCode: statusCode.value }),
+      ...(toHost.value === undefined ? {} : { toHost: toHost.value }),
+      ...(toUrl.value === undefined ? {} : { toUrl: toUrl.value }),
+    },
+  };
+}
+
+function parseDeleteRedirectIntentRequest(
+  value: unknown,
+):
+  | { ok: true; request: DeleteInstanceDomainProviderRedirectIntentRequest }
+  | { ok: false; error: string } {
+  if (!isRecord(value)) {
+    return { ok: false, error: "Domain provider redirect delete request must be an object." };
+  }
+
+  const fromHost = parseRequiredHost(value.fromHost, "Domain provider redirect from host");
+
+  if (!fromHost.ok) {
+    return fromHost;
+  }
+
+  return { ok: true, request: { fromHost: fromHost.value } };
+}
+
 function parseApplyJobResourceEvidence(
   value: unknown,
 ):
@@ -948,16 +1666,6 @@ function parseApplyJobResourceEvidence(
   const host = parseRequiredHost(value.host, "Domain provider apply host");
   const kind = parseRequiredString(value.kind, "Domain provider apply resource kind");
   const logicalId = parseRequiredString(value.logicalId, "Domain provider apply logical id");
-  const profile = parseRequiredString(value.profile, "Domain provider apply profile");
-  const targetInstallId = parseOptionalString(
-    value.targetInstallId,
-    "Domain provider apply target install id",
-  );
-  const workerDomainId = parseRequiredString(
-    value.workerDomainId,
-    "Domain provider apply Worker Custom Domain id",
-  );
-  const workerName = parseRequiredString(value.workerName, "Domain provider apply Worker name");
   const zoneId = parseRequiredString(value.zoneId, "Domain provider apply zone id");
   const zoneName = parseRequiredString(value.zoneName, "Domain provider apply zone name");
 
@@ -967,26 +1675,8 @@ function parseApplyJobResourceEvidence(
   if (!host.ok) return host;
   if (!kind.ok) return kind;
   if (!logicalId.ok) return logicalId;
-  if (!profile.ok) return profile;
-  if (!targetInstallId.ok) return targetInstallId;
-  if (!workerDomainId.ok) return workerDomainId;
-  if (!workerName.ok) return workerName;
   if (!zoneId.ok) return zoneId;
   if (!zoneName.ok) return zoneName;
-
-  if (kind.value !== "cloudflare-worker-custom-domain") {
-    return {
-      ok: false,
-      error: 'Domain provider apply resource kind must be "cloudflare-worker-custom-domain".',
-    };
-  }
-
-  if (profile.value !== "instance" && profile.value !== "app" && profile.value !== "publicSite") {
-    return {
-      ok: false,
-      error: 'Domain provider apply profile must be "instance", "app", or "publicSite".',
-    };
-  }
 
   if (action.value !== "adopted" && action.value !== "created" && action.value !== "overridden") {
     return {
@@ -995,22 +1685,118 @@ function parseApplyJobResourceEvidence(
     };
   }
 
+  const actionValue = action.value as InstanceDomainProviderApplyJobResourceEvidence["action"];
+  const common = {
+    accountId: accountId.value,
+    action: actionValue,
+    alchemyResourceId: alchemyResourceId.value,
+    host: host.value,
+    logicalId: logicalId.value,
+    zoneId: zoneId.value,
+    zoneName: zoneName.value,
+  };
+
+  if (kind.value === "cloudflare-worker-custom-domain") {
+    const profile = parseRequiredString(value.profile, "Domain provider apply profile");
+    const targetInstallId = parseOptionalString(
+      value.targetInstallId,
+      "Domain provider apply target install id",
+    );
+    const workerDomainId = parseRequiredString(
+      value.workerDomainId,
+      "Domain provider apply Worker Custom Domain id",
+    );
+    const workerName = parseRequiredString(value.workerName, "Domain provider apply Worker name");
+
+    if (!profile.ok) return profile;
+    if (!targetInstallId.ok) return targetInstallId;
+    if (!workerDomainId.ok) return workerDomainId;
+    if (!workerName.ok) return workerName;
+
+    if (profile.value !== "instance" && profile.value !== "app" && profile.value !== "publicSite") {
+      return {
+        ok: false,
+        error: 'Domain provider apply profile must be "instance", "app", or "publicSite".',
+      };
+    }
+
+    return {
+      ok: true,
+      resource: {
+        ...common,
+        kind: kind.value,
+        profile: profile.value,
+        ...(targetInstallId.value === undefined ? {} : { targetInstallId: targetInstallId.value }),
+        workerDomainId: workerDomainId.value,
+        workerName: workerName.value,
+      },
+    };
+  }
+
+  if (kind.value === "cloudflare-redirect-rule") {
+    const preserveQueryString = parseRequiredBoolean(
+      value.preserveQueryString,
+      "Domain provider apply redirect preserve query string",
+    );
+    const redirectRuleId = parseRequiredString(
+      value.redirectRuleId,
+      "Domain provider apply redirect rule id",
+    );
+    const redirectRulesetId = parseRequiredString(
+      value.redirectRulesetId,
+      "Domain provider apply redirect ruleset id",
+    );
+    const statusCode = parseRedirectStatusCode(
+      value.statusCode,
+      "Domain provider apply redirect status code",
+    );
+    const targetUrl = parseRequiredString(
+      value.targetUrl,
+      "Domain provider apply redirect target URL",
+    );
+
+    if (!preserveQueryString.ok) return preserveQueryString;
+    if (!redirectRuleId.ok) return redirectRuleId;
+    if (!redirectRulesetId.ok) return redirectRulesetId;
+    if (!statusCode.ok) return statusCode;
+    if (!targetUrl.ok) return targetUrl;
+
+    return {
+      ok: true,
+      resource: {
+        ...common,
+        kind: kind.value,
+        preserveQueryString: preserveQueryString.value,
+        redirectRuleId: redirectRuleId.value,
+        redirectRulesetId: redirectRulesetId.value,
+        statusCode: statusCode.value,
+        targetUrl: targetUrl.value,
+      },
+    };
+  }
+
+  if (kind.value === "cloudflare-dns-records") {
+    const dnsRecordIds = parseRequiredStringArray(
+      value.dnsRecordIds,
+      "Domain provider apply DNS record ids",
+    );
+
+    if (!dnsRecordIds.ok) return dnsRecordIds;
+
+    return {
+      ok: true,
+      resource: {
+        ...common,
+        dnsRecordIds: dnsRecordIds.value,
+        kind: kind.value,
+      },
+    };
+  }
+
   return {
-    ok: true,
-    resource: {
-      accountId: accountId.value,
-      action: action.value,
-      alchemyResourceId: alchemyResourceId.value,
-      host: host.value,
-      kind: kind.value,
-      logicalId: logicalId.value,
-      profile: profile.value,
-      ...(targetInstallId.value === undefined ? {} : { targetInstallId: targetInstallId.value }),
-      workerDomainId: workerDomainId.value,
-      workerName: workerName.value,
-      zoneId: zoneId.value,
-      zoneName: zoneName.value,
-    },
+    ok: false,
+    error:
+      'Domain provider apply resource kind must be "cloudflare-worker-custom-domain", "cloudflare-redirect-rule", or "cloudflare-dns-records".',
   };
 }
 
@@ -1133,6 +1919,38 @@ function parseRequiredHost(
   return { ok: true, value: host.value };
 }
 
+function parseOptionalBoolean(
+  value: unknown,
+  context: string,
+): { ok: true; value?: boolean } | { ok: false; error: string } {
+  if (value === undefined) {
+    return { ok: true };
+  }
+
+  if (typeof value !== "boolean") {
+    return { ok: false, error: `${context} must be a boolean.` };
+  }
+
+  return { ok: true, value };
+}
+
+function parseRequiredBoolean(
+  value: unknown,
+  context: string,
+): { ok: true; value: boolean } | { ok: false; error: string } {
+  const parsed = parseOptionalBoolean(value, context);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  if (parsed.value === undefined) {
+    return { ok: false, error: `${context} must be a boolean.` };
+  }
+
+  return { ok: true, value: parsed.value };
+}
+
 function parseOptionalString(
   value: unknown,
   context: string,
@@ -1153,6 +1971,90 @@ function parseRequiredString(
   }
 
   return { ok: true, value: value.trim() };
+}
+
+function parseRequiredStringArray(
+  value: unknown,
+  context: string,
+): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(value)) {
+    return { ok: false, error: `${context} must be an array.` };
+  }
+
+  const values: string[] = [];
+
+  for (const item of value) {
+    const parsed = parseRequiredString(item, context);
+
+    if (!parsed.ok) {
+      return parsed;
+    }
+
+    values.push(parsed.value);
+  }
+
+  if (values.length === 0) {
+    return { ok: false, error: `${context} must include at least one id.` };
+  }
+
+  return { ok: true, value: values };
+}
+
+function parseOptionalHttpsUrl(
+  value: unknown,
+  context: string,
+): { ok: true; value?: string } | { ok: false; error: string } {
+  if (value === undefined) {
+    return { ok: true };
+  }
+
+  const parsed = parseRequiredString(value, context);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  try {
+    const url = new URL(parsed.value);
+
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.hash !== ""
+    ) {
+      return {
+        ok: false,
+        error: `${context} must be an absolute HTTPS URL without credentials or fragment.`,
+      };
+    }
+
+    return { ok: true, value: url.toString().replace(/\/$/, "") };
+  } catch {
+    return { ok: false, error: `${context} must be valid.` };
+  }
+}
+
+function parseOptionalRedirectStatusCode(
+  value: unknown,
+  context: string,
+): { ok: true; value?: DomainProviderRedirectStatusCode } | { ok: false; error: string } {
+  if (value === undefined) {
+    return { ok: true };
+  }
+
+  return parseRedirectStatusCode(value, context);
+}
+
+function parseRedirectStatusCode(
+  value: unknown,
+  context: string,
+): { ok: true; value: DomainProviderRedirectStatusCode } | { ok: false; error: string } {
+  if (value === 301 || value === 302 || value === 303 || value === 307 || value === 308) {
+    return { ok: true, value };
+  }
+
+  return { ok: false, error: `${context} must be 301, 302, 303, 307, or 308.` };
 }
 
 function configIssue(

@@ -3,10 +3,12 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   applyCloudflareWorkerDomainPreflightPlan,
   createFetchCloudflareDomainClient,
+  planCloudflareDomainProviderResourcePreflight,
   planCloudflareWorkerDomainPreflight,
   workerRoutePatternMatchesHost,
   type CloudflareDomainClient,
 } from "./cloudflare-domain-client.ts";
+import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 
 type CapturedCloudflareRequest = {
   headers: Record<string, string>;
@@ -365,6 +367,84 @@ describe("Cloudflare domain API client", () => {
     });
   });
 
+  it("blocks create-only redirect apply when DNS records or redirect rules conflict", async () => {
+    const plan = planDomainProviderResources({
+      instanceId: "primary",
+      mappings: [],
+      redirectIntents: [{ fromHost: "www.dpeek.com", toHost: "dpeek.com" }],
+      workerName: "personal",
+      zones: [{ id: "zone-1", name: "dpeek.com" }],
+    });
+    const preflight = await planCloudflareDomainProviderResourcePreflight({
+      client: {
+        ...fakeCloudflareDomainClient(),
+        listDnsRecords: async () => [
+          {
+            content: "192.0.2.10",
+            id: "dns-1",
+            name: "www.dpeek.com",
+            proxied: true,
+            type: "A",
+          },
+        ],
+        listRedirectRules: async () => [
+          {
+            description: "Existing redirect",
+            expression: 'http.host == "www.dpeek.com" and ssl',
+            id: "rule-1",
+            preserveQueryString: true,
+            statusCode: 301,
+            targetUrl: "https://elsewhere.example/${1}",
+          },
+        ],
+      },
+      plan,
+    });
+
+    expect(preflight.blockers.map((blocker) => [blocker.host, blocker.code])).toEqual([
+      ["www.dpeek.com", "redirect-dns-record-conflict"],
+      ["www.dpeek.com", "redirect-rule-conflict"],
+    ]);
+  });
+
+  it("allows matching redirect placeholder DNS and matching redirect rules", async () => {
+    const plan = planDomainProviderResources({
+      instanceId: "primary",
+      mappings: [],
+      redirectIntents: [{ fromHost: "www.dpeek.com", toHost: "dpeek.com" }],
+      workerName: "personal",
+      zones: [{ id: "zone-1", name: "dpeek.com" }],
+    });
+    const preflight = await planCloudflareDomainProviderResourcePreflight({
+      client: {
+        ...fakeCloudflareDomainClient(),
+        listDnsRecords: async () => [
+          {
+            content: "100::",
+            id: "dns-1",
+            name: "www.dpeek.com",
+            proxied: true,
+            type: "AAAA",
+          },
+        ],
+        listRedirectRules: async () => [
+          {
+            description: "Formless redirect www.dpeek.com to dpeek.com",
+            expression:
+              'http.host == "www.dpeek.com" and http.request.uri.path starts_with "/" and ssl',
+            id: "rule-1",
+            preserveQueryString: true,
+            statusCode: 301,
+            targetUrl: "https://dpeek.com/${1}",
+          },
+        ],
+      },
+      plan,
+    });
+
+    expect(preflight.blockers).toEqual([]);
+  });
+
   it("matches exact and wildcard Worker Route host patterns conservatively", () => {
     expect(workerRoutePatternMatchesHost("dpeek.com/*", "dpeek.com")).toBe(true);
     expect(workerRoutePatternMatchesHost("https://dpeek.com/blog/*", "dpeek.com")).toBe(true);
@@ -396,6 +476,7 @@ function fakeCloudflareDomainClient(): CloudflareDomainClient {
             },
           ]
         : [],
+    listRedirectRules: async () => [],
     listWorkerDomains: async () => [
       {
         hostname: "www.dpeek.com",

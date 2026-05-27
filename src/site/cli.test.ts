@@ -3462,6 +3462,7 @@ function fakeCloudflareDomainClient(input: {
     }),
     listActiveZonesForName: async ({ name }) => input.zonesByName[name] ?? [],
     listDnsRecords: async ({ name }) => input.dnsRecords[name] ?? [],
+    listRedirectRules: async () => [],
     listWorkerDomains: async () => input.workerDomains,
     listWorkerRoutes: async ({ zoneId }) => input.workerRoutes[zoneId] ?? [],
   };

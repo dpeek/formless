@@ -26,7 +26,14 @@ import {
   DomainMappingApiError,
   fetchInstanceDomainMappings,
 } from "../../client/domain-mappings.ts";
+import {
+  createInstanceDomainProviderRedirect,
+  deleteInstanceDomainProviderRedirect,
+  DomainProviderApiError,
+  fetchInstanceDomainProviderRedirects,
+} from "../../client/domain-provider.ts";
 import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/app-installs.ts";
+import type { InstanceDomainProviderRedirectIntent } from "../../shared/domain-provider-api.ts";
 import type {
   InstanceDomainMapping,
   InstanceDomainMappingAppliedState,
@@ -46,6 +53,13 @@ export type DomainMappingDraft = {
   targetInstallId: string;
 };
 
+export type DomainRedirectDraft = {
+  fromHost: string;
+  targetMode: "host" | "url";
+  toHost: string;
+  toUrl: string;
+};
+
 export type InstanceShellRouteState =
   | { status: "failed"; message: string }
   | { status: "loading" }
@@ -55,6 +69,10 @@ export type InstanceShellRouteState =
       domainMappingError?: string;
       domainMappingSubmitting: boolean;
       domainMappings: InstanceDomainMapping[];
+      domainRedirectDeletingKey?: string;
+      domainRedirectDraftError?: string;
+      domainRedirectIntents: InstanceDomainProviderRedirectIntent[];
+      domainRedirectSubmitting: boolean;
       installError?: string;
       installErrorPackageAppKey?: PackageAppKey;
       installing: boolean;
@@ -73,6 +91,12 @@ export function InstanceShellRoute() {
     profile: "publicSite",
     targetInstallId: "",
   });
+  const [domainRedirectDraft, setDomainRedirectDraft] = useState<DomainRedirectDraft>({
+    fromHost: "",
+    targetMode: "host",
+    toHost: "",
+    toUrl: "",
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -80,9 +104,10 @@ export function InstanceShellRoute() {
 
     async function loadInstalls() {
       try {
-        const [appResponse, domainResponse] = await Promise.all([
+        const [appResponse, domainResponse, redirectResponse] = await Promise.all([
           fetchInstanceAppInstalls({ signal: controller.signal }),
           fetchInstanceDomainMappings({ signal: controller.signal }),
+          fetchInstanceDomainProviderRedirects({ signal: controller.signal }),
         ]);
 
         if (stopped) {
@@ -94,6 +119,9 @@ export function InstanceShellRoute() {
           domainMappingDeletingKey: undefined,
           domainMappingSubmitting: false,
           domainMappings: domainResponse.mappings,
+          domainRedirectDeletingKey: undefined,
+          domainRedirectIntents: redirectResponse.redirectIntents,
+          domainRedirectSubmitting: false,
           installing: false,
           installs: appResponse.installs,
           packages: appResponse.packages,
@@ -170,6 +198,10 @@ export function InstanceShellRoute() {
         domainMappingError: state.domainMappingError,
         domainMappingSubmitting: false,
         domainMappings: state.domainMappings,
+        domainRedirectDeletingKey: state.domainRedirectDeletingKey,
+        domainRedirectDraftError: state.domainRedirectDraftError,
+        domainRedirectIntents: state.domainRedirectIntents,
+        domainRedirectSubmitting: state.domainRedirectSubmitting,
         installing: false,
         installs: response.installs,
         packages: state.packages,
@@ -309,12 +341,113 @@ export function InstanceShellRoute() {
     }
   }
 
+  async function submitDomainRedirect(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (state.status !== "ready" || state.domainRedirectSubmitting) {
+      return;
+    }
+
+    setState({
+      ...state,
+      domainRedirectDraftError: undefined,
+      domainRedirectSubmitting: true,
+    });
+
+    try {
+      const response = await createInstanceDomainProviderRedirect({
+        enabled: true,
+        fromHost: domainRedirectDraft.fromHost,
+        preservePath: true,
+        preserveQueryString: true,
+        statusCode: 301,
+        ...(domainRedirectDraft.targetMode === "host"
+          ? { toHost: domainRedirectDraft.toHost }
+          : { toUrl: domainRedirectDraft.toUrl }),
+      });
+
+      setState({
+        ...state,
+        domainRedirectDeletingKey: undefined,
+        domainRedirectDraftError: undefined,
+        domainRedirectIntents: response.redirectIntents,
+        domainRedirectSubmitting: false,
+      });
+      setDomainRedirectDraft((current) => ({
+        fromHost: "",
+        targetMode: current.targetMode,
+        toHost: "",
+        toUrl: "",
+      }));
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Domain redirect failed.";
+
+      setState({
+        ...state,
+        domainRedirectDraftError: message,
+        domainRedirectSubmitting: false,
+      });
+    }
+  }
+
+  async function submitDeleteDomainRedirect(redirect: InstanceDomainProviderRedirectIntent) {
+    if (
+      state.status !== "ready" ||
+      state.domainRedirectSubmitting ||
+      state.domainRedirectDeletingKey
+    ) {
+      return;
+    }
+
+    if (!window.confirm(`Remove desired redirect for ${redirect.fromHost}?`)) {
+      return;
+    }
+
+    setState({
+      ...state,
+      domainRedirectDeletingKey: redirect.fromHost,
+      domainRedirectDraftError: undefined,
+    });
+
+    try {
+      const response = await deleteInstanceDomainProviderRedirect({
+        fromHost: redirect.fromHost,
+      });
+
+      setState({
+        ...state,
+        domainRedirectDeletingKey: undefined,
+        domainRedirectDraftError: undefined,
+        domainRedirectIntents: response.redirectIntents,
+        domainRedirectSubmitting: false,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Domain redirect delete failed.";
+
+      setState({
+        ...state,
+        domainRedirectDeletingKey: undefined,
+        domainRedirectDraftError: message,
+      });
+    }
+  }
+
   return (
     <InstanceShellRouteView
       domainDraft={domainDraft}
+      domainRedirectDraft={domainRedirectDraft}
       installDrafts={installDrafts}
       onDomainDraftChange={setDomainDraft}
+      onDomainRedirectDraftChange={setDomainRedirectDraft}
+      onDeleteDomainRedirect={submitDeleteDomainRedirect}
       onDeleteDomainMapping={submitDeleteDomainMapping}
+      onSubmitDomainRedirect={submitDomainRedirect}
       onSubmitDomainMapping={submitDomainMapping}
       onInstallDraftChange={(packageAppKey, draft) =>
         setInstallDrafts((current) => ({
@@ -330,18 +463,26 @@ export function InstanceShellRoute() {
 
 export function InstanceShellRouteView({
   domainDraft,
+  domainRedirectDraft,
   installDrafts = {},
   onDomainDraftChange,
+  onDomainRedirectDraftChange,
+  onDeleteDomainRedirect,
   onDeleteDomainMapping,
+  onSubmitDomainRedirect,
   onSubmitDomainMapping,
   onInstallDraftChange,
   onSubmitInstall,
   state,
 }: {
   domainDraft?: DomainMappingDraft;
+  domainRedirectDraft?: DomainRedirectDraft;
   installDrafts?: PackageInstallDrafts;
   onDomainDraftChange?: (draft: DomainMappingDraft) => void;
+  onDomainRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
+  onDeleteDomainRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
   onDeleteDomainMapping?: (mapping: InstanceDomainMapping) => void;
+  onSubmitDomainRedirect?: (event: React.FormEvent<HTMLFormElement>) => void;
   onSubmitDomainMapping?: (event: React.FormEvent<HTMLFormElement>) => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
   onSubmitInstall?: (packageAppKey: PackageAppKey, event: React.FormEvent<HTMLFormElement>) => void;
@@ -413,6 +554,12 @@ export function InstanceShellRouteView({
         }
         onDraftChange={onDomainDraftChange}
         onDelete={onDeleteDomainMapping}
+        onDeleteRedirect={onDeleteDomainRedirect}
+        onRedirectDraftChange={onDomainRedirectDraftChange}
+        onRedirectSubmit={onSubmitDomainRedirect}
+        redirectDraft={
+          domainRedirectDraft ?? { fromHost: "", targetMode: "host", toHost: "", toUrl: "" }
+        }
         onSubmit={onSubmitDomainMapping}
         state={state}
       />
@@ -432,18 +579,29 @@ function CustomDomainsSection({
   draft,
   onDraftChange,
   onDelete,
+  onDeleteRedirect,
+  onRedirectDraftChange,
+  onRedirectSubmit,
+  redirectDraft,
   onSubmit,
   state,
 }: {
   draft: DomainMappingDraft;
   onDraftChange?: (draft: DomainMappingDraft) => void;
   onDelete?: (mapping: InstanceDomainMapping) => void;
+  onDeleteRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  onRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
+  onRedirectSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  redirectDraft: DomainRedirectDraft;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   state: Extract<InstanceShellRouteState, { status: "ready" }>;
 }) {
   const hostInputId = useMemo(() => "domain-mapping-host", []);
   const profileSelectId = useMemo(() => "domain-mapping-profile", []);
   const targetSelectId = useMemo(() => "domain-mapping-target", []);
+  const redirectFromInputId = useMemo(() => "domain-redirect-from-host", []);
+  const redirectModeSelectId = useMemo(() => "domain-redirect-target-mode", []);
+  const redirectTargetInputId = useMemo(() => "domain-redirect-target", []);
   const normalizedDraft = initializeDomainMappingDraft({
     currentDraft: draft,
     installs: state.installs,
@@ -459,6 +617,8 @@ function CustomDomainsSection({
         (mapping) => mapping.host === appliedState.host && mapping.profile === appliedState.profile,
       ),
   );
+  const redirectDisabled =
+    state.domainRedirectSubmitting || state.domainRedirectDeletingKey !== undefined;
 
   return (
     <section className="space-y-3" aria-labelledby="custom-domains-heading">
@@ -552,6 +712,70 @@ function CustomDomainsSection({
           </p>
         ) : null}
       </form>
+      <form
+        className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(0,1fr)_auto]"
+        onSubmit={onRedirectSubmit}
+      >
+        <TextField
+          isDisabled={state.domainRedirectSubmitting}
+          isRequired
+          onChange={(fromHost) => onRedirectDraftChange?.({ ...redirectDraft, fromHost })}
+          value={redirectDraft.fromHost}
+        >
+          <Label htmlFor={redirectFromInputId}>Redirect from</Label>
+          <Input id={redirectFromInputId} placeholder="www.example.com" />
+        </TextField>
+        <div className="space-y-1">
+          <Label htmlFor={redirectModeSelectId}>Target type</Label>
+          <NativeSelect>
+            <NativeSelectContent
+              disabled={state.domainRedirectSubmitting}
+              id={redirectModeSelectId}
+              onChange={(event) =>
+                onRedirectDraftChange?.({
+                  ...redirectDraft,
+                  targetMode: event.target.value === "url" ? "url" : "host",
+                })
+              }
+              value={redirectDraft.targetMode}
+            >
+              <option value="host">Host</option>
+              <option value="url">URL</option>
+            </NativeSelectContent>
+          </NativeSelect>
+        </div>
+        <TextField
+          isDisabled={state.domainRedirectSubmitting}
+          isRequired
+          onChange={(target) =>
+            onRedirectDraftChange?.(
+              redirectDraft.targetMode === "host"
+                ? { ...redirectDraft, toHost: target }
+                : { ...redirectDraft, toUrl: target },
+            )
+          }
+          value={redirectDraft.targetMode === "host" ? redirectDraft.toHost : redirectDraft.toUrl}
+        >
+          <Label htmlFor={redirectTargetInputId}>Redirect to</Label>
+          <Input
+            id={redirectTargetInputId}
+            placeholder={
+              redirectDraft.targetMode === "host" ? "example.com" : "https://example.com"
+            }
+          />
+        </TextField>
+        <div className="flex items-end">
+          <Button isDisabled={redirectDisabled} type="submit">
+            <AddIcon />
+            {state.domainRedirectSubmitting ? "Adding..." : "Add redirect"}
+          </Button>
+        </div>
+        {state.domainRedirectDraftError ? (
+          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
+            {state.domainRedirectDraftError}
+          </p>
+        ) : null}
+      </form>
       {state.domainMappings.length === 0 && orphanAppliedStates.length === 0 ? (
         <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
           No custom domains.
@@ -577,6 +801,22 @@ function CustomDomainsSection({
                 (install) => install.installId === appliedState.targetInstallId,
               )}
               key={`applied:${appliedState.profile}:${appliedState.host}`}
+            />
+          ))}
+        </div>
+      )}
+      {state.domainRedirectIntents.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
+          No redirects.
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {state.domainRedirectIntents.map((redirect) => (
+            <DomainRedirectRow
+              deleting={state.domainRedirectDeletingKey === redirect.fromHost}
+              key={redirect.fromHost}
+              onDelete={onDeleteRedirect}
+              redirect={redirect}
             />
           ))}
         </div>
@@ -617,6 +857,48 @@ function DomainMappingRow({
               intent="outline"
               isDisabled={deleting}
               onPress={() => onDelete?.(mapping)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {deleting ? "Removing..." : "Remove"}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function DomainRedirectRow({
+  deleting,
+  onDelete,
+  redirect,
+}: {
+  deleting: boolean;
+  onDelete?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  redirect: InstanceDomainProviderRedirectIntent;
+}) {
+  return (
+    <article className="rounded-md border border-border bg-overlay p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h3 className="truncate text-sm font-semibold">{redirect.fromHost}</h3>
+          <p className="text-xs text-muted-fg">
+            <code>{redirectTargetLabel(redirect)}</code> ·{" "}
+            {redirect.enabled ? "enabled" : "disabled"}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <p className="text-xs text-muted-fg">
+            {redirect.statusCode} · {redirect.preservePath ? "path" : "no path"} ·{" "}
+            {redirect.preserveQueryString ? "query" : "no query"}
+          </p>
+          {redirect.enabled ? (
+            <Button
+              intent="outline"
+              isDisabled={deleting}
+              onPress={() => onDelete?.(redirect)}
               size="sm"
               type="button"
             >
@@ -1035,6 +1317,10 @@ function domainProfileTargetLabel(
   targetInstallId: string | undefined,
 ): string {
   return targetInstallId === undefined ? profile : `${profile}:${targetInstallId}`;
+}
+
+function redirectTargetLabel(redirect: InstanceDomainProviderRedirectIntent): string {
+  return redirect.toHost ?? redirect.toUrl ?? "missing target";
 }
 
 function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">): string {

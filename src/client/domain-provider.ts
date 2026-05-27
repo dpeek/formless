@@ -1,8 +1,14 @@
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+  type CreateInstanceDomainProviderRedirectIntentRequest,
+  type CreateInstanceDomainProviderRedirectIntentResponse,
+  type DeleteInstanceDomainProviderRedirectIntentRequest,
+  type DeleteInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderPlanResponse,
+  type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
 
 export type DomainProviderApiErrorBody = {
@@ -54,6 +60,68 @@ export async function applyInstanceDomainProviderPlan({
   });
 
   return readJsonResponse<InstanceDomainProviderApplyResponse>(response);
+}
+
+export async function fetchInstanceDomainProviderRedirects({
+  fetcher = fetch,
+  signal,
+}: {
+  fetcher?: typeof fetch;
+  signal?: AbortSignal;
+} = {}): Promise<InstanceDomainProviderRedirectsResponse> {
+  const response = await fetcher(INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+
+  return readJsonResponse<InstanceDomainProviderRedirectsResponse>(response);
+}
+
+export async function createInstanceDomainProviderRedirect(
+  input: CreateInstanceDomainProviderRedirectIntentRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<CreateInstanceDomainProviderRedirectIntentResponse> {
+  const response = await fetcher(INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH, {
+    body: JSON.stringify(input),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+
+  return readJsonResponse<CreateInstanceDomainProviderRedirectIntentResponse>(response);
+}
+
+export async function deleteInstanceDomainProviderRedirect(
+  input: DeleteInstanceDomainProviderRedirectIntentRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<DeleteInstanceDomainProviderRedirectIntentResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("fromHost", input.fromHost);
+  const response = await fetcher(`${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}?${searchParams}`, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    method: "DELETE",
+    signal,
+  });
+
+  return readJsonResponse<DeleteInstanceDomainProviderRedirectIntentResponse>(response);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

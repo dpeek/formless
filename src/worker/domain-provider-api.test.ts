@@ -3,9 +3,11 @@ import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type InstanceDomainProviderApplyJobResponse,
   type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderPlanResponse,
+  type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
 import type { CreateInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import type { InstanceDomainMappingsResponse } from "../shared/instance-domain-mappings.ts";
@@ -209,6 +211,104 @@ describe("instance domain provider API routes", () => {
         workerDomainId: "custom-domain-123",
       }),
     ]);
+  });
+
+  it("stores redirect intents, plans redirect resources, and records runner evidence", async () => {
+    const created = await postAdminJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+      {
+        fromHost: "WWW.Example.COM.",
+        toHost: "example.com",
+      },
+    );
+    const plan = await getJson<InstanceDomainProviderPlanResponse>(
+      INSTANCE_DOMAIN_PROVIDER_API_PATH,
+    );
+
+    expect(created.response.status).toBe(201);
+    expect(plan.body.redirectIntents).toEqual([
+      expect.objectContaining({
+        enabled: true,
+        fromHost: "www.example.com",
+        preservePath: true,
+        preserveQueryString: true,
+        statusCode: 301,
+        toHost: "example.com",
+      }),
+    ]);
+    expect(plan.body.plan.resources.map((resource) => resource.kind)).toEqual([
+      "cloudflare-dns-records",
+      "cloudflare-redirect-rule",
+    ]);
+
+    const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { runnerId: "runner-redirects" },
+    );
+
+    if (apply.body.status !== "ready") {
+      throw new Error("Apply did not create a redirect job.");
+    }
+
+    const dns = apply.body.job.plan.resources.find(
+      (resource) => resource.kind === "cloudflare-dns-records",
+    );
+    const redirect = apply.body.job.plan.resources.find(
+      (resource) => resource.kind === "cloudflare-redirect-rule",
+    );
+
+    if (!dns || !redirect) {
+      throw new Error("Expected DNS and redirect resources.");
+    }
+
+    const completion = await postAdminJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${apply.body.job.jobId}/result`,
+      {
+        resources: [
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: dns.logicalId,
+            dnsRecordIds: ["dns-1"],
+            host: "www.example.com",
+            kind: "cloudflare-dns-records",
+            logicalId: dns.logicalId,
+            zoneId: dns.zone.id,
+            zoneName: dns.zone.name,
+          },
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: redirect.logicalId,
+            host: "www.example.com",
+            kind: "cloudflare-redirect-rule",
+            logicalId: redirect.logicalId,
+            preserveQueryString: redirect.props.preserveQueryString,
+            redirectRuleId: "rule-1",
+            redirectRulesetId: "ruleset-1",
+            statusCode: redirect.props.statusCode,
+            targetUrl: redirect.targetUrl,
+            zoneId: redirect.zone.id,
+            zoneName: redirect.zone.name,
+          },
+        ],
+        runnerId: "runner-redirects",
+        status: "succeeded",
+      },
+    );
+    const redirects = await getJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+    );
+
+    expect(completion.body.job).toMatchObject({
+      result: { evidenceCount: 2 },
+      status: "succeeded",
+    });
+    expect(redirects.body.appliedResources.map((resource) => resource.kind)).toEqual([
+      "cloudflare-dns-records",
+      "cloudflare-redirect-rule",
+    ]);
+    expect(redirects.body.auditEvents).toHaveLength(2);
   });
 });
 

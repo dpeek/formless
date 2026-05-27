@@ -1,5 +1,5 @@
 import type { AlchemyOptions } from "alchemy";
-import type { CustomDomain } from "alchemy/cloudflare";
+import type { CustomDomain, DnsRecords, RedirectRule } from "alchemy/cloudflare";
 
 import {
   type InstanceDomainProviderApplyJobResourceEvidence,
@@ -8,6 +8,8 @@ import {
 import type {
   DomainProviderApplyPolicy,
   DomainProviderCustomDomainResource,
+  DomainProviderDnsRecordsResource,
+  DomainProviderRedirectRuleResource,
   DomainProviderResource,
 } from "../shared/domain-provider-protocol.ts";
 import {
@@ -17,6 +19,10 @@ import {
   type AlchemyDomainProviderRunner,
 } from "../worker/domain-provider-alchemy.ts";
 import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
+import {
+  assertCloudflareDomainProviderResourcePreflight,
+  createFetchCloudflareDomainClient,
+} from "./cloudflare-domain-client.ts";
 import {
   completeFormlessInstanceDomainProviderApplyJob,
   requestFormlessInstanceDomainProviderApply,
@@ -28,6 +34,7 @@ export const ALCHEMY_STATE_TOKEN_ENV_NAME = "ALCHEMY_STATE_TOKEN";
 export type DomainProviderAlchemyRuntime = {
   factories: AlchemyDomainProviderFactories;
   password: string;
+  preflight?: (input: { plan: InstanceDomainProviderApplyReadyResponse["plan"] }) => Promise<void>;
   rootDir?: string;
   runner: AlchemyDomainProviderRunner;
   stateStore: AlchemyOptions["stateStore"];
@@ -90,6 +97,8 @@ export async function runFormlessInstanceDomainProviderApply(
   });
 
   try {
+    await runtime.preflight?.({ plan: apply.job.plan });
+
     const alchemy = await applyAlchemyDomainProviderPlan({
       appName: `formless-domain-${apply.plan.instanceId}`,
       factories: runtime.factories,
@@ -181,6 +190,14 @@ export async function nodeAlchemyDomainProviderRuntime(input: {
         }),
     },
     password: alchemyPassword,
+    preflight: ({ plan }) =>
+      assertCloudflareDomainProviderResourcePreflight({
+        client: createFetchCloudflareDomainClient({
+          apiToken: cloudflareApiToken,
+          fetch: globalThis.fetch,
+        }),
+        plan,
+      }),
     runner: async (appName, options, apply) => {
       const app = await alchemy(appName, options);
       const result = await apply();
@@ -216,16 +233,25 @@ function applyEvidenceFromAlchemyResult(input: {
       );
     }
 
-    if (resource.kind !== "cloudflare-worker-custom-domain") {
-      throw new Error(
-        `Domain provider runner cannot write evidence for resource kind "${resource.kind}" yet.`,
-      );
-    }
-
-    evidence.push(customDomainEvidence(input.accountId, resource, resourceResult.output));
+    evidence.push(resourceEvidence(input.accountId, resource, resourceResult.output));
   }
 
   return evidence;
+}
+
+function resourceEvidence(
+  accountId: string,
+  resource: DomainProviderResource,
+  output: unknown,
+): InstanceDomainProviderApplyJobResourceEvidence {
+  switch (resource.kind) {
+    case "cloudflare-worker-custom-domain":
+      return customDomainEvidence(accountId, resource, output);
+    case "cloudflare-redirect-rule":
+      return redirectRuleEvidence(accountId, resource, output);
+    case "cloudflare-dns-records":
+      return dnsRecordsEvidence(accountId, resource, output);
+  }
 }
 
 function customDomainEvidence(
@@ -253,12 +279,93 @@ function customDomainEvidence(
   };
 }
 
+function redirectRuleEvidence(
+  accountId: string,
+  resource: DomainProviderRedirectRuleResource,
+  output: unknown,
+): InstanceDomainProviderApplyJobResourceEvidence {
+  const redirectRule = parseRedirectRuleOutput(output, resource.logicalId);
+
+  return {
+    accountId,
+    action: "created",
+    alchemyResourceId: resource.logicalId,
+    host: resource.fromHost,
+    kind: resource.kind,
+    logicalId: resource.logicalId,
+    preserveQueryString: resource.props.preserveQueryString,
+    redirectRuleId: redirectRule.ruleId,
+    redirectRulesetId: redirectRule.rulesetId,
+    statusCode: resource.props.statusCode,
+    targetUrl: resource.targetUrl,
+    zoneId: resource.zone.id,
+    zoneName: resource.zone.name,
+  };
+}
+
+function dnsRecordsEvidence(
+  accountId: string,
+  resource: DomainProviderDnsRecordsResource,
+  output: unknown,
+): InstanceDomainProviderApplyJobResourceEvidence {
+  const dnsRecords = parseDnsRecordsOutput(output, resource.logicalId);
+
+  return {
+    accountId,
+    action: "created",
+    alchemyResourceId: resource.logicalId,
+    dnsRecordIds: dnsRecords.records.map((record) => record.id),
+    host: resource.fromHost,
+    kind: resource.kind,
+    logicalId: resource.logicalId,
+    zoneId: resource.zone.id,
+    zoneName: resource.zone.name,
+  };
+}
+
 function parseCustomDomainOutput(output: unknown, logicalId: string): Pick<CustomDomain, "id"> {
   if (!isRecord(output) || typeof output.id !== "string" || output.id.trim() === "") {
     throw new Error(`Alchemy CustomDomain "${logicalId}" did not return a provider id.`);
   }
 
   return { id: output.id };
+}
+
+function parseRedirectRuleOutput(
+  output: unknown,
+  logicalId: string,
+): Pick<RedirectRule, "ruleId" | "rulesetId"> {
+  if (
+    !isRecord(output) ||
+    typeof output.ruleId !== "string" ||
+    output.ruleId.trim() === "" ||
+    typeof output.rulesetId !== "string" ||
+    output.rulesetId.trim() === ""
+  ) {
+    throw new Error(`Alchemy RedirectRule "${logicalId}" did not return provider ids.`);
+  }
+
+  return { ruleId: output.ruleId, rulesetId: output.rulesetId };
+}
+
+function parseDnsRecordsOutput(output: unknown, logicalId: string): Pick<DnsRecords, "records"> {
+  if (!isRecord(output) || !Array.isArray(output.records)) {
+    throw new Error(`Alchemy DnsRecords "${logicalId}" did not return provider records.`);
+  }
+
+  const records = output.records.map((record) => {
+    if (!isRecord(record) || typeof record.id !== "string" || record.id.trim() === "") {
+      throw new Error(`Alchemy DnsRecords "${logicalId}" returned a record without an id.`);
+    }
+
+    return { id: record.id };
+  });
+
+  if (records.length === 0) {
+    throw new Error(`Alchemy DnsRecords "${logicalId}" did not return provider record ids.`);
+  }
+
+  return { records } as Pick<DnsRecords, "records">;
 }
 
 function customDomainAction(

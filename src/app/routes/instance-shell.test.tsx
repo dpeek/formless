@@ -16,6 +16,8 @@ describe("instance shell route view", () => {
           domainAppliedStates: [],
           domainMappingSubmitting: false,
           domainMappings: [],
+          domainRedirectIntents: [],
+          domainRedirectSubmitting: false,
           installing: false,
           installs: [
             siteInstall({
@@ -56,6 +58,8 @@ describe("instance shell route view", () => {
           domainAppliedStates: [],
           domainMappingSubmitting: false,
           domainMappings: [],
+          domainRedirectIntents: [],
+          domainRedirectSubmitting: false,
           installing: false,
           installs: [],
           packages: listBundledAppPackages(),
@@ -88,6 +92,8 @@ describe("instance shell route view", () => {
           domainAppliedStates: [],
           domainMappingSubmitting: false,
           domainMappings: [],
+          domainRedirectIntents: [],
+          domainRedirectSubmitting: false,
           installError: 'Install id "personal" is already installed.',
           installErrorPackageAppKey: "site",
           installing: false,
@@ -106,6 +112,8 @@ describe("instance shell route view", () => {
           domainAppliedStates: [],
           domainMappingSubmitting: false,
           domainMappings: [],
+          domainRedirectIntents: [],
+          domainRedirectSubmitting: false,
           installError: 'Install id "personal" is already installed.',
           installErrorPackageAppKey: "site",
           installing: false,
@@ -164,6 +172,8 @@ describe("instance shell route view", () => {
               updatedAt: "2026-05-26T00:00:00.000Z",
             },
           ],
+          domainRedirectIntents: [],
+          domainRedirectSubmitting: false,
           installing: false,
           installs: [
             siteInstall({ installId: "personal", label: "Personal Site" }),
@@ -209,6 +219,19 @@ describe("instance shell route view", () => {
           ],
           domainMappingSubmitting: false,
           domainMappings: [],
+          domainRedirectIntents: [
+            {
+              createdAt: "2026-05-27T00:00:00.000Z",
+              enabled: true,
+              fromHost: "www.example.com",
+              preservePath: true,
+              preserveQueryString: true,
+              statusCode: 301,
+              toHost: "example.com",
+              updatedAt: "2026-05-27T00:00:00.000Z",
+            },
+          ],
+          domainRedirectSubmitting: false,
           installing: false,
           installs: [
             siteInstall({ installId: "personal", label: "Personal Site" }),
@@ -225,6 +248,9 @@ describe("instance shell route view", () => {
     expect(html).toContain("Public Site");
     expect(html).toContain("admin.example.com");
     expect(html).toContain("applied without desired mapping");
+    expect(html).toContain("www.example.com");
+    expect(html).toContain("example.com");
+    expect(html).toContain("Add redirect");
   });
 });
 
