@@ -36,6 +36,11 @@ import type {
 } from "../shared/schema.ts";
 import type { QueryExpression } from "../shared/query.ts";
 import {
+  selectEntityActionUi,
+  type EntityActionTargetCountConfig,
+  type EntityActionUiConfig,
+} from "./action-ui.ts";
+import {
   selectResultOrderingConfig,
   type ResultOrderingConfig,
   type ResultOrderingScopeConfig,
@@ -456,61 +461,7 @@ export type HomeActionConfig =
       ui: EntityActionUiConfig;
     };
 
-export type EntityActionTargetCountConfig = {
-  display: CountDisplaySchema;
-  query: QueryExpression;
-  ariaLabel: string;
-};
-
-export type EntityActionUiConfig = {
-  showAffectedCountOnSuccess: boolean;
-  targetCount?: EntityActionTargetCountConfig;
-};
-
-type EntityActionUiSelectionContext<TAction extends EntityActionSchema> = {
-  schema: AppSchema;
-  label: string;
-  action: TAction;
-  count?: CountDisplaySchema;
-};
-
-type EntityActionUiModule<TAction extends EntityActionSchema = EntityActionSchema> = {
-  kind: TAction["kind"];
-  selectUi: (context: EntityActionUiSelectionContext<TAction>) => EntityActionUiConfig;
-};
-
-type EntityActionUiModuleUnion = {
-  [Kind in EntityActionSchema["kind"]]: EntityActionUiModule<
-    Extract<EntityActionSchema, { kind: Kind }>
-  >;
-}[EntityActionSchema["kind"]];
-
-const entityActionUiModules = [
-  {
-    kind: "clear-completed",
-    selectUi: selectClearCompletedActionUi,
-  },
-  {
-    kind: "create-missing-join-records",
-    selectUi: selectDefaultEntityActionUi,
-  },
-  {
-    kind: "create-selected-join-record",
-    selectUi: selectDefaultEntityActionUi,
-  },
-  {
-    kind: "remove-selected-join-records",
-    selectUi: selectDefaultEntityActionUi,
-  },
-  {
-    kind: "create-tree-child",
-    selectUi: selectDefaultEntityActionUi,
-  },
-  {
-    kind: "remove-tree-placement",
-    selectUi: selectDefaultEntityActionUi,
-  },
-] satisfies EntityActionUiModuleUnion[];
+export type { EntityActionTargetCountConfig, EntityActionUiConfig };
 
 export function selectPrimaryCollectionModels(schema: AppSchema): HomeViewModel[] {
   return selectCollectionModels(schema).filter((model) => model.navigation.primary);
@@ -1189,65 +1140,6 @@ function selectAggregateSlot(
     ...(slot.suffix === undefined ? {} : { suffix: slot.suffix }),
     format: slot.format ?? "plain",
   };
-}
-
-function selectEntityActionUi<TAction extends EntityActionSchema>(
-  schema: AppSchema,
-  label: string,
-  action: TAction,
-  count: CountDisplaySchema | undefined,
-): EntityActionUiConfig {
-  return getEntityActionUiModule(action).selectUi({
-    schema,
-    label,
-    action,
-    ...(count === undefined ? {} : { count }),
-  });
-}
-
-function selectClearCompletedActionUi(
-  context: EntityActionUiSelectionContext<Extract<EntityActionSchema, { kind: "clear-completed" }>>,
-): EntityActionUiConfig {
-  const ui = selectDefaultEntityActionUi(context);
-
-  if (context.count?.type !== "count") {
-    return ui;
-  }
-
-  const targetQuery = context.schema.queries[context.action.target.query];
-
-  if (!targetQuery) {
-    throw new Error(`Missing action target query "${context.action.target.query}".`);
-  }
-
-  return {
-    ...ui,
-    targetCount: {
-      display: context.count,
-      query: targetQuery.expression,
-      ariaLabel: `${context.label} target count`,
-    },
-  };
-}
-
-function selectDefaultEntityActionUi(
-  context: EntityActionUiSelectionContext<EntityActionSchema>,
-): EntityActionUiConfig {
-  return {
-    showAffectedCountOnSuccess: context.count?.type === "count",
-  };
-}
-
-function getEntityActionUiModule<TAction extends EntityActionSchema>(
-  action: TAction,
-): EntityActionUiModule<TAction> {
-  const actionModule = entityActionUiModules.find((candidate) => candidate.kind === action.kind);
-
-  if (!actionModule) {
-    throw new Error(`Unsupported action kind "${action.kind}".`);
-  }
-
-  return actionModule as EntityActionUiModule<TAction>;
 }
 
 function selectCreateAction(

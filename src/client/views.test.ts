@@ -255,6 +255,47 @@ describe("home view model collections", () => {
     });
   });
 
+  it("uses default generated UI facts for non-target-count action kinds", () => {
+    const rateHome = rateCardSchema.views.rateHome;
+
+    if (rateHome?.type !== "collection") {
+      throw new Error("Missing rate home collection view.");
+    }
+
+    const schema: AppSchema = {
+      ...rateCardSchema,
+      views: {
+        ...rateCardSchema.views,
+        rateHome: {
+          ...rateHome,
+          actions: [
+            {
+              type: "entityAction",
+              action: "regenerateMissingRates",
+              count: { type: "count" },
+            },
+          ],
+        },
+      },
+    };
+    const model = requiredCollectionModel(schema, "rateHome");
+    const action = model.actions[0];
+
+    expect(action).toMatchObject({
+      type: "entity-action",
+      label: "Regenerate missing rates",
+      entityName: "rate",
+      actionName: "regenerateMissingRates",
+      action: {
+        kind: "create-missing-join-records",
+      },
+      ui: {
+        showAffectedCountOnSuccess: true,
+      },
+    });
+    expect(action?.type === "entity-action" ? action.ui.targetCount : undefined).toBeUndefined();
+  });
+
   it("characterizes the task primary home model contract", () => {
     const model = selectPrimaryCollectionModels(appSchema)[0];
 
