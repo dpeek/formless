@@ -157,7 +157,12 @@ Last updated: 2026-05-27
 - Icon catalog helpers list entries, list groups, find entries by key, and resolve SVG source.
 - Icon catalog aliases keep `flag`, `priority-flag`, `check`, and `twitter` compatible.
 - Field behavior exports create input conversion, inline input conversion, input attributes, display helpers, and editor controls.
+- Generated field control selector: `src/app/generated/field-controls.ts`.
+- Generated field controls adapt field behavior into selected editor, control kind, create default, required, and input-attribute facts.
 - Generated field UI adapters consume field behavior control, default, required, and input-attribute facts in `src/app/generated/field-ui-adapters.ts`.
+- Generated field UI adapters select record field renderer facts through `src/app/generated/field-ui-adapters.ts`.
+- Generated create-field authoring source: `src/app/generated/create-field-authoring.ts`.
+- Generated create-field authoring delegates create defaults, union discriminator state, visible field selection, and submit values to `src/shared/create-defaults.ts`.
 - Create views can declare hidden literal defaults for scalar fields.
 - Date fields preserve `YYYY-MM-DD` values.
 - Number fields store numbers.

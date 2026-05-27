@@ -147,16 +147,23 @@ Last updated: 2026-05-27
 - Generated action UI modules: `entityActionUiModules` in `src/client/action-ui.ts`.
 - Collection view models select `action.ui` through generated action UI modules.
 - Generated actions consume selected `action.ui` facts in `src/app/generated/actions.tsx`.
+- Generated field control source: `src/app/generated/field-controls.ts`.
+- Generated field controls expose selected editor, control kind, create default, required, and input-attribute facts.
 - Generated field UI adapters: `src/app/generated/field-ui-adapters.ts`.
+- Generated record field authoring adapter selects field control and renderer kind through `src/app/generated/field-ui-adapters.ts`.
 - Generated field presentation resolver: `src/app/generated/field-presentation.tsx`.
 - Generated field presentation icons resolve through `src/shared/icon-catalog.ts`.
 - Generated field display: `src/app/generated/record-field-display.tsx`.
+- Generated inline record field authoring source: `src/app/generated/record-field-authoring.ts`.
+- Generated inline record field authoring owns draft values, patch diffing, editability facts, media editor mode, upload patch fields, icon dialog drafts, media asset option updates, and value/unit patch values.
 - Generated inline editor: `src/app/generated/record-field-editor.tsx`.
 - Generated delete control: `src/app/generated/record-delete.tsx`.
 - Generated tree renderer: `src/app/generated/tree.tsx`.
 - Generated union presentation helpers: `src/app/generated/union-presentation.ts`.
 - Union presentation model selection: `src/client/union-presentation-model.ts`.
 - Generated authoring primitives: `src/client/generated-authoring.ts`.
+- Generated create-field authoring source: `src/app/generated/create-field-authoring.ts`.
+- Generated create-field authoring owns initial discriminator state, visible field selection, context-default submit readiness, input-value transitions, and submitted value shaping.
 - Create default primitive: `src/shared/create-defaults.ts`.
 - Shared UI primitives live under `lib/ui/src/`.
 - Shared UI icon aliases source: `lib/ui/src/icons.ts`.
@@ -206,6 +213,7 @@ Last updated: 2026-05-27
 - Generated delete controls appear in collection contexts, list rows, table rows, and tree child nodes.
 - Tree placement remove stays separate from child record delete.
 - Create default primitive owns create-default parsing, validation, context readiness, field selection, and submitted value shaping.
+- Generated create-field authoring delegates default resolution and visibility to the create default primitive.
 - Generated create and action renderers call the create default primitive for create-default readiness and value resolution.
 - Generated authoring primitive owns context option fallback, query context facts, action query context facts, local selector visibility, root navigation selection, active-root fallback, and root group item facts.
 - Item, edit, and create renderers can select active union variant fields.

@@ -25,6 +25,8 @@ Runtime topology shipped facts live across Generated UI, Authority storage, Site
 Testing topic docs.
 Action kind module shipped facts live across Schema runtime, Authority storage, and Generated UI
 topic docs.
+Generated field authoring shipped facts live across Schema runtime, Generated UI, and Testing topic
+docs.
 
 ## Docs
 

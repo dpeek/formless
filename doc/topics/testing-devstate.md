@@ -52,8 +52,10 @@ Last updated: 2026-05-27
 - Archive API tests: `src/worker/archive-api.test.ts`.
 - Generated format tests: `src/app/generated/format.test.ts`.
 - Generated field UI adapter tests: `src/app/generated/field-ui-adapters.test.ts`.
+- Generated record field authoring tests: `src/app/generated/record-field-authoring.test.ts`.
 - Generated record field control tests: `src/app/generated/record-field-control.test.tsx`.
 - Generated record field renderer model tests: `src/app/generated/record-field-renderer-model.test.ts`.
+- Generated create field authoring tests: `src/app/generated/create-field-authoring.test.ts`.
 - Generated authoring tests: `src/client/generated-authoring.test.ts`.
 - Schema Builder tests: `src/client/schema-builder.test.ts`, `src/app/routes/schema-draft.test.ts`.
 - Shared ObjectList tests: `lib/ui/src/object-list.test.tsx`.

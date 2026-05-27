@@ -66,6 +66,8 @@ Why:
 
 - Generated UI is useful only when edits feel safe and direct.
 - Better generic authoring helps both app and Site workstreams.
+- Generated field authoring now centralizes render-ready editor facts, inline field commit helpers,
+  and create-field authoring facts.
 
 Good next chunks:
 
@@ -75,6 +77,7 @@ Good next chunks:
 - More predictable create defaults and scoped child creation.
 - Better empty, loading, and error states.
 - Import/export workflows for app data.
+- Extend generated field authoring adapters only when a real app workflow needs new behavior.
 
 Avoid:
 
