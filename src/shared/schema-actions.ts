@@ -17,6 +17,7 @@ import type {
   EntityActionJoinSchema,
   EntityActionJoinSourceSchema,
   EntityActionKind,
+  EntityActionSchemaForKind,
   EntityActionSchema,
   EntityActionTargetSchema,
   EntitySchema,
@@ -39,41 +40,45 @@ type EntityActionKindModule<TAction extends EntityActionSchema = EntityActionSch
   parse: (context: EntityActionParseContext, value: Record<string, unknown>) => TAction;
 };
 
-const entityActionKindModules = [
-  {
+type EntityActionKindModuleMap = {
+  [Kind in EntityActionKind]: EntityActionKindModule<EntityActionSchemaForKind<Kind>>;
+};
+
+const entityActionKindModules = {
+  "clear-completed": {
     kind: "clear-completed",
     capabilities: { createAfterCreateHook: false },
     parse: parseClearCompletedEntityAction,
   },
-  {
+  "create-missing-join-records": {
     kind: "create-missing-join-records",
     capabilities: { createAfterCreateHook: true },
     parse: parseCreateMissingJoinRecordsEntityAction,
   },
-  {
+  "create-selected-join-record": {
     kind: "create-selected-join-record",
     capabilities: { createAfterCreateHook: false },
     parse: parseCreateSelectedJoinRecordEntityAction,
   },
-  {
+  "remove-selected-join-records": {
     kind: "remove-selected-join-records",
     capabilities: { createAfterCreateHook: false },
     parse: parseRemoveSelectedJoinRecordsEntityAction,
   },
-  {
+  "create-tree-child": {
     kind: "create-tree-child",
     capabilities: { createAfterCreateHook: false },
     parse: parseCreateTreeChildEntityAction,
   },
-  {
+  "remove-tree-placement": {
     kind: "remove-tree-placement",
     capabilities: { createAfterCreateHook: false },
     parse: parseRemoveTreePlacementEntityAction,
   },
-] satisfies EntityActionKindModule[];
+} satisfies EntityActionKindModuleMap;
 
 export function getEntityActionKindCapabilities(kind: EntityActionKind): EntityActionCapabilities {
-  return requireEntityActionKindModule(kind).capabilities;
+  return entityActionKindModules[kind].capabilities;
 }
 
 export function parseEntityActionsForEntities(
@@ -655,16 +660,14 @@ function getEntityActionCapabilities(action: EntityActionSchema): EntityActionCa
   return getEntityActionKindCapabilities(action.kind);
 }
 
-function requireEntityActionKindModule(kind: EntityActionKind): EntityActionKindModule {
-  const actionKind = getEntityActionKindModule(kind);
-
-  if (!actionKind) {
-    throw new Error(`Unsupported action kind "${kind}".`);
+function getEntityActionKindModule(kind: unknown): EntityActionKindModule | undefined {
+  if (!isEntityActionKind(kind)) {
+    return undefined;
   }
 
-  return actionKind;
+  return entityActionKindModules[kind];
 }
 
-function getEntityActionKindModule(kind: unknown): EntityActionKindModule | undefined {
-  return entityActionKindModules.find((actionKind) => actionKind.kind === kind);
+function isEntityActionKind(kind: unknown): kind is EntityActionKind {
+  return typeof kind === "string" && kind in entityActionKindModules;
 }

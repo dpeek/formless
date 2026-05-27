@@ -658,14 +658,6 @@ export type EntityActionJoinSchema = {
   right: EntityActionJoinSourceSchema;
 };
 
-export type EntityActionKind =
-  | "clear-completed"
-  | "create-missing-join-records"
-  | "create-selected-join-record"
-  | "remove-selected-join-records"
-  | "create-tree-child"
-  | "remove-tree-placement";
-
 export type EntityActionCapabilities = {
   createAfterCreateHook: boolean;
 };
@@ -708,13 +700,21 @@ export type RemoveTreePlacementEntityActionSchema = {
   relationship: string;
 };
 
-export type EntityActionSchema =
-  | ClearCompletedEntityActionSchema
-  | CreateMissingJoinRecordsEntityActionSchema
-  | CreateSelectedJoinRecordEntityActionSchema
-  | RemoveSelectedJoinRecordsEntityActionSchema
-  | CreateTreeChildEntityActionSchema
-  | RemoveTreePlacementEntityActionSchema;
+export type EntityActionSchemaByKind = {
+  "clear-completed": ClearCompletedEntityActionSchema;
+  "create-missing-join-records": CreateMissingJoinRecordsEntityActionSchema;
+  "create-selected-join-record": CreateSelectedJoinRecordEntityActionSchema;
+  "remove-selected-join-records": RemoveSelectedJoinRecordsEntityActionSchema;
+  "create-tree-child": CreateTreeChildEntityActionSchema;
+  "remove-tree-placement": RemoveTreePlacementEntityActionSchema;
+};
+
+export type EntityActionKind = keyof EntityActionSchemaByKind;
+
+export type EntityActionSchemaForKind<Kind extends EntityActionKind> =
+  EntityActionSchemaByKind[Kind];
+
+export type EntityActionSchema = EntityActionSchemaByKind[EntityActionKind];
 
 export type UniqueConstraintSchema = {
   kind: "unique";

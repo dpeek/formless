@@ -3,7 +3,9 @@ import rawRateCardSchema from "../../schema/apps/estii/schema.json";
 import rawSiteSchema from "../../schema/apps/site/schema.json";
 import { sourceLikeSchemas, sourceLikeSiteSchema } from "../test/schema-builders.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
+import { getEntityActionKindCapabilities } from "./schema-actions.ts";
 import { parseAppSchema, stringifySchema } from "./schema.ts";
+import type { EntityActionCapabilities, EntityActionKind } from "./schema-types.ts";
 
 describe("schema mutation policies", () => {
   it("preserves delete policy through stringify", () => {
@@ -6111,6 +6113,21 @@ describe("schema relationships", () => {
 });
 
 describe("schema entity actions", () => {
+  it("exposes module-owned capabilities for every action kind", () => {
+    const capabilitiesByKind = {
+      "clear-completed": { createAfterCreateHook: false },
+      "create-missing-join-records": { createAfterCreateHook: true },
+      "create-selected-join-record": { createAfterCreateHook: false },
+      "remove-selected-join-records": { createAfterCreateHook: false },
+      "create-tree-child": { createAfterCreateHook: false },
+      "remove-tree-placement": { createAfterCreateHook: false },
+    } satisfies Record<EntityActionKind, EntityActionCapabilities>;
+
+    for (const [kind, capabilities] of Object.entries(capabilitiesByKind)) {
+      expect(getEntityActionKindCapabilities(kind as EntityActionKind)).toEqual(capabilities);
+    }
+  });
+
   it("accepts valid clear-completed actions that target named queries", () => {
     const schema = parseAppSchema(baseSchema());
 
