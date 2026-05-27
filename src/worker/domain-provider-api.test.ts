@@ -59,7 +59,16 @@ describe("instance domain provider API routes", () => {
       cloudflareApiToken: { configured: true },
       instanceId: "primary",
       issues: [],
+      jobReady: true,
       planReady: true,
+      runnerMutation: {
+        checkedBy: "node-runner",
+        requiredEnvNames: expect.arrayContaining([
+          "ALCHEMY_PASSWORD",
+          "ALCHEMY_STATE_TOKEN",
+          "CLOUDFLARE_API_TOKEN",
+        ]),
+      },
       workerName: "formless-primary",
     });
     expect(response.body.plan.blockers).toEqual([]);
@@ -103,12 +112,11 @@ describe("instance domain provider API routes", () => {
     );
 
     expect(plan.body.config.applyReady).toBe(false);
+    expect(plan.body.config.jobReady).toBe(false);
     expect(plan.body.config.issues.map((issue) => issue.code)).toEqual([
       "missing-instance-id",
       "missing-worker-name",
       "missing-account-id",
-      "missing-cloudflare-api-token",
-      "missing-alchemy-password",
       "missing-zone-config",
     ]);
     expect(apply.response.status).toBe(409);
@@ -118,6 +126,98 @@ describe("instance domain provider API routes", () => {
     });
     expect(JSON.stringify(apply.body)).not.toContain(cloudflareToken);
     expect(JSON.stringify(apply.body)).not.toContain(alchemyPassword);
+  });
+
+  it("creates apply and delete jobs without Worker-held runner secrets", async () => {
+    await harness.dispose();
+    harness = await createHarness({
+      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
+      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
+      FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
+    });
+
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "admin.example.com",
+      profile: "instance",
+    });
+
+    const plan = await getJson<InstanceDomainProviderPlanResponse>(
+      INSTANCE_DOMAIN_PROVIDER_API_PATH,
+    );
+
+    expect(plan.body.config).toMatchObject({
+      accountId: "account-123",
+      alchemyPassword: { configured: false },
+      applyReady: true,
+      cloudflareApiToken: { configured: false },
+      issues: [],
+      jobReady: true,
+      planReady: true,
+    });
+    expect(plan.body.plan.blockers).toEqual([]);
+
+    const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { runnerId: "runner-with-external-secrets" },
+    );
+
+    expect(apply.response.status).toBe(202);
+
+    if (apply.body.status !== "ready") {
+      throw new Error("Apply did not create a job without Worker-held runner secrets.");
+    }
+
+    const resource = apply.body.job.plan.resources[0];
+
+    if (resource?.kind !== "cloudflare-worker-custom-domain") {
+      throw new Error("Expected a CustomDomain job resource.");
+    }
+
+    await postAdminJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${apply.body.job.jobId}/result`,
+      {
+        resources: [
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: resource.logicalId,
+            host: resource.host,
+            kind: resource.kind,
+            logicalId: resource.logicalId,
+            profile: resource.profile,
+            workerDomainId: "custom-domain-123",
+            workerName: resource.props.workerName,
+            zoneId: resource.zone.id,
+            zoneName: resource.zone.name,
+          },
+        ],
+        runnerId: "runner-with-external-secrets",
+        status: "succeeded",
+      },
+    );
+
+    const deleteJob = await postAdminJson<InstanceDomainProviderDeleteResponse>(
+      INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
+      {
+        host: "admin.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        runnerId: "runner-delete-with-external-secrets",
+      },
+    );
+
+    expect(deleteJob.response.status).toBe(202);
+    expect(deleteJob.body).toMatchObject({
+      code: "domain-provider-delete-job-ready",
+      status: "ready",
+      targets: [
+        expect.objectContaining({
+          host: "admin.example.com",
+          kind: "cloudflare-worker-custom-domain",
+          resourceId: "custom-domain-123",
+        }),
+      ],
+    });
   });
 
   it("serializes a reviewed apply job and records runner evidence", async () => {

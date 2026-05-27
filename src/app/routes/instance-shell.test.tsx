@@ -320,7 +320,17 @@ describe("instance shell route view", () => {
               },
               instanceId: "primary",
               issues: [],
+              jobReady: true,
               planReady: true,
+              runnerMutation: {
+                checkedBy: "node-runner",
+                requiredEnvNames: [
+                  "CLOUDFLARE_API_TOKEN",
+                  "CF_API_TOKEN",
+                  "ALCHEMY_PASSWORD",
+                  "ALCHEMY_STATE_TOKEN",
+                ],
+              },
               workerName: "personal",
               zones: [{ id: "zone-1", name: "example.com" }],
             },

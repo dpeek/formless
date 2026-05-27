@@ -114,12 +114,13 @@ export async function runFormlessInstanceDomainProviderApply(
   }
 
   const accountId = requireApplyAccountId(apply);
-  const runtime = await (dependencies.runtime ?? nodeAlchemyDomainProviderRuntime)({
-    accountId,
-    env: dependencies.env,
-  });
 
   try {
+    const runtime = await (dependencies.runtime ?? nodeAlchemyDomainProviderRuntime)({
+      accountId,
+      env: dependencies.env,
+    });
+
     await runtime.preflight?.({ plan: apply.job.plan });
 
     const alchemy = await applyAlchemyDomainProviderPlan({
@@ -205,12 +206,13 @@ export async function runFormlessInstanceDomainProviderDelete(
   }
 
   const accountId = requireConfiguredAccountId(deleteJob.config.accountId);
-  const runtime = await (dependencies.runtime ?? nodeAlchemyDomainProviderRuntime)({
-    accountId,
-    env: dependencies.env,
-  });
 
   try {
+    const runtime = await (dependencies.runtime ?? nodeAlchemyDomainProviderRuntime)({
+      accountId,
+      env: dependencies.env,
+    });
+
     const alchemy = await applyAlchemyDomainProviderPlan({
       appName: `formless-domain-${deleteJob.plan.instanceId}`,
       factories: runtime.factories,
@@ -270,14 +272,14 @@ export async function nodeAlchemyDomainProviderRuntime(input: {
   accountId: string;
   env: NodeJS.ProcessEnv;
 }): Promise<DomainProviderAlchemyRuntime> {
+  const alchemyPassword = requiredEnv(input.env, "ALCHEMY_PASSWORD");
+  const alchemyStateToken = requiredEnv(input.env, ALCHEMY_STATE_TOKEN_ENV_NAME);
+  const cloudflareApiToken = cloudflareApiTokenFromEnv(input.env);
   const [{ default: alchemy }, cloudflare, state] = await Promise.all([
     import("alchemy"),
     import("alchemy/cloudflare"),
     import("alchemy/state"),
   ]);
-  const alchemyPassword = requiredEnv(input.env, "ALCHEMY_PASSWORD");
-  const alchemyStateToken = requiredEnv(input.env, ALCHEMY_STATE_TOKEN_ENV_NAME);
-  const cloudflareApiToken = cloudflareApiTokenFromEnv(input.env);
   const apiToken = alchemy.secret(cloudflareApiToken);
   const stateToken = alchemy.secret(alchemyStateToken);
 

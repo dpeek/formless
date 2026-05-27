@@ -17,6 +17,12 @@ export const INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH = `${INSTANCE_DOMAIN_P
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete`;
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete-jobs`;
 export const INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/redirects`;
+export const DOMAIN_PROVIDER_RUNNER_MUTATION_ENV_NAMES = [
+  "CLOUDFLARE_API_TOKEN",
+  "CF_API_TOKEN",
+  "ALCHEMY_PASSWORD",
+  "ALCHEMY_STATE_TOKEN",
+];
 
 export type DomainProviderConfigIssueCode =
   | "invalid-zone-config"
@@ -38,6 +44,11 @@ export type DomainProviderSecretStatus = {
   envNames: string[];
 };
 
+export type DomainProviderRunnerMutationStatus = {
+  checkedBy: "node-runner";
+  requiredEnvNames: string[];
+};
+
 export type DomainProviderConfigStatus = {
   accountId?: string;
   alchemyPassword: DomainProviderSecretStatus;
@@ -45,7 +56,9 @@ export type DomainProviderConfigStatus = {
   cloudflareApiToken: DomainProviderSecretStatus;
   instanceId?: string;
   issues: DomainProviderConfigIssue[];
+  jobReady: boolean;
   planReady: boolean;
+  runnerMutation: DomainProviderRunnerMutationStatus;
   workerName?: string;
   zones: DomainProviderZone[];
 };

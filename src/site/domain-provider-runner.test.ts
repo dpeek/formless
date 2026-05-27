@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import {
+  nodeAlchemyDomainProviderRuntime,
   runFormlessInstanceDomainProviderApply,
   runFormlessInstanceDomainProviderDelete,
   type DomainProviderAlchemyRuntime,
@@ -163,6 +164,145 @@ describe("domain provider Alchemy runner", () => {
       runnerId: "runner-1",
       status: "succeeded",
     });
+  });
+
+  it("posts missing runner secret failures to the apply job result", async () => {
+    const plan = planDomainProviderResources({
+      instanceId: "primary",
+      mappings: [
+        {
+          enabled: true,
+          host: "admin.example.com",
+          profile: "instance",
+        },
+      ],
+      workerName: "formless-primary",
+      zones: [{ id: "zone-1", name: "example.com" }],
+    });
+    const requests: Array<{ body: unknown; url: string }> = [];
+
+    await expect(
+      runFormlessInstanceDomainProviderApply(
+        {
+          adminToken: "admin-token",
+          host: "admin.example.com",
+          runnerId: "runner-missing-secrets",
+          targetUrl: "https://instance.example",
+        },
+        {
+          createRunnerId: () => "unused-runner",
+          env: {},
+          fetch: async (input, init) => {
+            const url =
+              typeof input === "string"
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url;
+            const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+
+            requests.push({ body, url });
+
+            if (url === "https://instance.example/api/formless/domain-provider/apply") {
+              return Response.json(
+                {
+                  code: "domain-provider-apply-job-ready",
+                  config: {
+                    accountId: "account-123",
+                    alchemyPassword: { configured: false, envNames: ["ALCHEMY_PASSWORD"] },
+                    applyReady: true,
+                    cloudflareApiToken: {
+                      configured: false,
+                      envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+                    },
+                    instanceId: "primary",
+                    issues: [],
+                    jobReady: true,
+                    planReady: true,
+                    runnerMutation: {
+                      checkedBy: "node-runner",
+                      requiredEnvNames: [
+                        "CLOUDFLARE_API_TOKEN",
+                        "CF_API_TOKEN",
+                        "ALCHEMY_PASSWORD",
+                        "ALCHEMY_STATE_TOKEN",
+                      ],
+                    },
+                    workerName: "formless-primary",
+                    zones: [{ id: "zone-1", name: "example.com" }],
+                  },
+                  job: {
+                    createdAt: "2026-05-27T00:00:00.000Z",
+                    jobId: "job-missing-secrets",
+                    plan,
+                    runnerId: "runner-missing-secrets",
+                    status: "ready",
+                    updatedAt: "2026-05-27T00:00:00.000Z",
+                  },
+                  plan,
+                  status: "ready",
+                },
+                { status: 202 },
+              );
+            }
+
+            if (
+              url ===
+              "https://instance.example/api/formless/domain-provider/apply-jobs/job-missing-secrets/result"
+            ) {
+              return Response.json({
+                job: {
+                  createdAt: "2026-05-27T00:00:00.000Z",
+                  jobId: "job-missing-secrets",
+                  plan,
+                  result: {
+                    error: "Domain provider runner requires ALCHEMY_PASSWORD.",
+                    evidenceCount: 0,
+                  },
+                  runnerId: "runner-missing-secrets",
+                  status: "failed",
+                  updatedAt: "2026-05-27T00:00:01.000Z",
+                },
+              });
+            }
+
+            return Response.json({ error: "Unexpected request." }, { status: 404 });
+          },
+        },
+      ),
+    ).rejects.toThrow("Domain provider runner requires ALCHEMY_PASSWORD.");
+
+    expect(requests[1]).toEqual({
+      body: {
+        error: "Domain provider runner requires ALCHEMY_PASSWORD.",
+        runnerId: "runner-missing-secrets",
+        status: "failed",
+      },
+      url: "https://instance.example/api/formless/domain-provider/apply-jobs/job-missing-secrets/result",
+    });
+  });
+
+  it("reports runner mutation secret requirements before Alchemy setup", async () => {
+    await expect(
+      nodeAlchemyDomainProviderRuntime({ accountId: "account-123", env: {} }),
+    ).rejects.toThrow("Domain provider runner requires ALCHEMY_PASSWORD.");
+
+    await expect(
+      nodeAlchemyDomainProviderRuntime({
+        accountId: "account-123",
+        env: { ALCHEMY_PASSWORD: "alchemy-password" },
+      }),
+    ).rejects.toThrow("Domain provider runner requires ALCHEMY_STATE_TOKEN.");
+
+    await expect(
+      nodeAlchemyDomainProviderRuntime({
+        accountId: "account-123",
+        env: {
+          ALCHEMY_PASSWORD: "alchemy-password",
+          ALCHEMY_STATE_TOKEN: "state-token",
+        },
+      }),
+    ).rejects.toThrow("Domain provider runner requires CLOUDFLARE_API_TOKEN or CF_API_TOKEN.");
   });
 
   it("runs redirect and placeholder DNS resources after preflight and posts evidence", async () => {

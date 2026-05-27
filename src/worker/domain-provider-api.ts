@@ -1,4 +1,5 @@
 import {
+  DOMAIN_PROVIDER_RUNNER_MUTATION_ENV_NAMES,
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
@@ -433,7 +434,7 @@ async function applyWithAuthorization(
 
   const response = domainProviderPlanResponse(storage, env, applyRequest.options);
 
-  if (!response.config.applyReady) {
+  if (!response.config.jobReady) {
     return applyBlockedResponse(
       "domain-provider-apply-not-configured",
       "Domain provider apply is not configured. Review config issues before applying.",
@@ -513,7 +514,7 @@ async function deleteWithAuthorization(
   const config = domainProviderConfigStatus(env);
   const deletePlan = domainProviderDeletePlan(storage, config, deleteRequest.options);
 
-  if (!config.applyReady) {
+  if (!config.jobReady) {
     return deleteBlockedResponse(
       "domain-provider-delete-not-configured",
       "Domain provider delete is not configured. Review config issues before deleting provider resources.",
@@ -953,16 +954,6 @@ function domainProviderConfigStatus(
     );
   }
 
-  if (!cloudflareApiToken) {
-    issues.push(
-      configIssue("missing-cloudflare-api-token", ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"]),
-    );
-  }
-
-  if (!alchemyPassword) {
-    issues.push(configIssue("missing-alchemy-password", ["ALCHEMY_PASSWORD"]));
-  }
-
   if (!zoneResult.ok) {
     issues.push(zoneResult.issue);
   } else if (zoneResult.zones.length === 0) {
@@ -975,10 +966,11 @@ function domainProviderConfigStatus(
     );
   }
 
-  const planReady = Boolean(
-    instanceId && workerName && zoneResult.ok && zoneResult.zones.length > 0,
+  const jobReady = Boolean(
+    instanceId && workerName && accountId && zoneResult.ok && zoneResult.zones.length > 0,
   );
-  const applyReady = Boolean(planReady && accountId && cloudflareApiToken && alchemyPassword);
+  const planReady = jobReady;
+  const applyReady = jobReady;
 
   return {
     ...(accountId === undefined ? {} : { accountId }),
@@ -993,7 +985,12 @@ function domainProviderConfigStatus(
     },
     ...(instanceId === undefined ? {} : { instanceId }),
     issues,
+    jobReady,
     planReady,
+    runnerMutation: {
+      checkedBy: "node-runner",
+      requiredEnvNames: [...DOMAIN_PROVIDER_RUNNER_MUTATION_ENV_NAMES],
+    },
     ...(workerName === undefined ? {} : { workerName }),
     zones: zoneResult.ok ? zoneResult.zones : [],
   };
@@ -3175,7 +3172,7 @@ function configIssueMessage(code: DomainProviderConfigIssue["code"], envNames: s
     case "invalid-zone-config":
       return "Domain provider zone config is invalid.";
     case "missing-account-id":
-      return `Domain provider apply requires Cloudflare account id in ${envNames.join(" or ")}.`;
+      return `Domain provider planning requires Cloudflare account id in ${envNames.join(" or ")}.`;
     case "missing-alchemy-password":
       return `Domain provider apply requires Alchemy state password secret ${envNames.join(" or ")}.`;
     case "missing-cloudflare-api-token":
