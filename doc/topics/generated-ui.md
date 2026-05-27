@@ -1,6 +1,6 @@
 # Generated UI
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Facts
 
@@ -36,9 +36,16 @@ Last updated: 2026-05-26
 - Custom domains surface lists desired domain mappings and applied provider state.
 - Custom domains surface creates desired `instance`, `app`, and `publicSite` profile mappings through `/api/formless/domain-mappings`.
 - Custom domains surface disables desired mappings through `DELETE /api/formless/domain-mappings`.
-- Custom domains surface does not mutate Cloudflare provider state.
+- Custom domains surface fetches provider config, resource counts, blockers, and redirect intent through `/api/formless/domain-provider`.
+- Custom domains surface creates desired redirects through `/api/formless/domain-provider/redirects`.
+- Custom domains surface disables desired redirects with `DELETE /api/formless/domain-provider/redirects`.
+- Custom domains surface requests provider apply jobs through `/api/formless/domain-provider/apply`.
+- Custom domains surface requests provider delete jobs through `/api/formless/domain-provider/delete`.
+- Custom domains surface shows apply job status/result and delete job status/result.
+- Custom domains surface does not receive Cloudflare API tokens or Alchemy secret values.
 - Custom domains surface only lets `publicSite` mappings target installed Site apps.
 - Custom domains surface leaves disabled desired mappings visible with applied provider state.
+- Custom domains surface leaves disabled redirects visible with applied provider state.
 - Workbench runtime shell does not own app-local Schema, sync, reset, publish, archive, Export, or Restore controls.
 - Active app sidebar owns app screens, root/context navigation, and app settings.
 - App settings source: `src/app/app-surface.tsx`.

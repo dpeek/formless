@@ -1,6 +1,6 @@
 # Site CLI And Publish
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Facts
 
@@ -58,8 +58,10 @@ Last updated: 2026-05-26
 - `formless instance dev` runs a local product instance profile from workspace archive state.
 - `formless instance reset-local` clears workspace-local runtime state only.
 - `formless instance deploy` deploys code and assets for a claimed instance workspace.
-- `formless instance domains plan` dry-runs exact-host Worker Custom Domain changes.
-- `formless instance domains apply` applies exact-host Worker Custom Domain changes.
+- `formless instance domains remote-plan` reads the remote Worker domain provider plan.
+- `formless instance domains run-apply` runs the Node Alchemy domain provider runner through the Worker control plane.
+- `formless instance domains plan` dry-runs direct Cloudflare fallback exact-host Worker Custom Domain changes.
+- `formless instance domains apply` applies direct Cloudflare fallback exact-host Worker Custom Domain changes.
 - `formless instance token adopt` stores an automation admin token in ignored workspace secret state.
 - `formless instance token rotate` uploads a new automation admin token and updates ignored workspace secret state.
 - `bun run site:pull-seed` promotes local Site authority state into `schema/apps/site/seed-records.json`.
@@ -166,6 +168,14 @@ Last updated: 2026-05-26
 - Workspace deploy state and Alchemy local secrets live under ignored `.formless/deploy/<workerName>`.
 - Instance workspace archive movement is explicit backup, restore, and import movement, not bidirectional instance sync.
 - Workspace deploy does not write live domain mappings or provider apply state.
+- Domain remote-plan reads `/api/formless/domain-provider` from the selected remote target.
+- Domain run-apply requests a reviewed Worker-side apply job and executes provider mutation in Node.
+- Domain run-apply uses Alchemy `CustomDomain`, `RedirectRule`, and `DnsRecords` resources.
+- Domain run-apply uses runner-held Cloudflare API token, `ALCHEMY_PASSWORD`, and `ALCHEMY_STATE_TOKEN`.
+- Domain run-apply initializes Alchemy with `CloudflareStateStore` from `alchemy/state`.
+- Domain provider resources use deterministic logical ids from instance, host, resource kind, profile, and redirect intent.
+- Domain provider redirects plan one Cloudflare RedirectRule plus one proxied originless placeholder DNS record.
+- Originless redirect placeholder DNS is proxied `AAAA 100::`.
 - Domain plan uses workspace domain intent when present and live enabled mappings when workspace intent is empty.
 - Domain plan filters provider intents to enabled profile mappings.
 - Domain plan uses CLI-side Cloudflare API reads for active zones, Worker Custom Domains, Worker Routes, and DNS records.
@@ -181,7 +191,8 @@ Last updated: 2026-05-26
 - Domain apply evidence for `instance` hosts stores no target install id.
 - Domain apply refuses when workspace and live desired domain mappings drift.
 - CLI domain plan/apply read Cloudflare credentials from `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`.
-- Product Workers do not need broad Cloudflare API credentials for domain apply.
+- CLI direct domain plan/apply output is labeled fallback.
+- Browser clients, portable archives, and workspace manifests do not receive Cloudflare API credentials for domain apply.
 
 ## Key Tests
 

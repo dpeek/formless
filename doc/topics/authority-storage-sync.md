@@ -1,6 +1,6 @@
 # Authority, Storage, And Sync
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Facts
 
@@ -31,6 +31,16 @@ Last updated: 2026-05-26
 - Instance domain mapping apply evidence API path: `/api/formless/domain-mappings/apply-evidence`.
 - Instance domain mapping shared model: `src/shared/instance-domain-mappings.ts`.
 - Instance domain mapping Durable Object state: `src/worker/instance-domain-mappings-state.ts`.
+- Instance domain provider API path: `/api/formless/domain-provider`.
+- Instance domain provider plan API path: `/api/formless/domain-provider/plan`.
+- Instance domain provider apply API path: `/api/formless/domain-provider/apply`.
+- Instance domain provider apply job API paths are `/api/formless/domain-provider/apply-jobs/:jobId` and `/api/formless/domain-provider/apply-jobs/:jobId/result`.
+- Instance domain provider delete API path: `/api/formless/domain-provider/delete`.
+- Instance domain provider delete job API paths are `/api/formless/domain-provider/delete-jobs/:jobId` and `/api/formless/domain-provider/delete-jobs/:jobId/result`.
+- Instance domain provider redirect intent API path: `/api/formless/domain-provider/redirects`.
+- Instance domain provider shared API model: `src/shared/domain-provider-api.ts`.
+- Instance domain provider Durable Object routes: `src/worker/domain-provider-api.ts`.
+- Instance domain provider planner: `src/shared/domain-provider-planner.ts`.
 - Core image media API paths include `/api/formless/media/images` and `/api/formless/media/*`.
 - Legacy Site media API paths `/api/site/media/*` and `/api/app-installs/site/:installId/media/*` are not active media routes.
 - Media route handling runs before Authority dispatch in `src/worker/index.ts`.
@@ -133,6 +143,15 @@ Last updated: 2026-05-26
 - Domain mapping applied state is stored separately from desired mappings.
 - Domain mapping applied state is keyed by host/profile and optional target install id.
 - Domain mapping audit events are append-only provider apply evidence.
+- Domain provider plan reads enabled domain mappings, redirect intents, provider config facts, and applied provider state.
+- Domain provider config status reports account, instance, worker, zone, Alchemy password, and Cloudflare API token readiness without returning secret values.
+- Domain provider apply writes owner/admin guarded broker jobs and serializes mutation with one instance apply lock.
+- Domain provider apply jobs store reviewed plan, status, result summary, and runner id.
+- Domain provider apply job result writeback records current CustomDomain, RedirectRule, and DnsRecords applied resources.
+- Domain provider redirects are desired control-plane state separate from profile domain mappings.
+- Domain provider redirect disablement does not delete provider resources.
+- Domain provider delete writes owner/admin guarded delete jobs from recorded applied resources only.
+- Successful domain provider delete removes current applied provider resource rows and appends `deleted` audit events.
 
 ## Push Sync
 
@@ -186,6 +205,8 @@ Last updated: 2026-05-26
 - Authority admin guard tests: `src/worker/authority-admin-guard.test.ts`.
 - Instance app install tests: `src/worker/instance-app-installs.test.ts`.
 - Instance domain mapping tests: `src/shared/instance-domain-mappings.test.ts`, `src/worker/instance-domain-mappings.test.ts`.
+- Domain provider API tests: `src/worker/domain-provider-api.test.ts`.
+- Domain provider planner tests: `src/shared/domain-provider-planner.test.ts`.
 - Owner setup tests: `src/worker/owner-setup.test.ts`.
 - Owner session tests: `src/worker/owner-session.test.ts`.
 - Storage tests: `src/worker/storage.test.ts`.

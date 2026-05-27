@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 Purpose: possible directions for what to work on next.
 
@@ -86,7 +86,7 @@ Why:
 - Current runtime pieces work locally and in Workers.
 - Productization decides whether Formless can support real users and deployments.
 - The Formless instance direction names the deployment model before onboarding PRDs. See `doc/directions/formless-instance.md`.
-- Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, claimable instance workspaces, and profile-based custom domains now exist.
+- Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, claimable instance workspaces, profile-based custom domains, brokered domain provider apply, provider redirects, and explicit provider delete now exist.
 
 Good next chunks:
 
@@ -94,8 +94,9 @@ Good next chunks:
 - Safer archive review and replacement UX.
 - Browser management UI for core media assets.
 - Video media assets on the core image asset spine.
-- Browser domain control-plane apply after exact-host CLI domain apply is proven.
-- Apex/www redirects, wildcard domains, and provider detach/delete when a concrete deployment needs them.
+- Browser provider configuration and least-privilege credential setup.
+- Direct Cloudflare domain CLI fallback retirement after remote runner use is proven.
+- Wildcard domains when a concrete deployment needs them.
 - Users and permissions.
 - Multi-tenant account routing.
 - Admin token and publish hardening.

@@ -1,6 +1,6 @@
 # Current
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 Current shipped behavior lives in topic docs.
 
@@ -15,6 +15,8 @@ Current shipped behavior lives in topic docs.
 
 Profile-based custom-domain shipped facts live across Site runtime, Site CLI and publish,
 Authority storage, and Generated UI topic docs.
+Alchemy domain provider apply, redirects, and explicit provider delete shipped facts live across
+Authority storage, Generated UI, and Site CLI and publish topic docs.
 Icon catalog and picker shipped facts live across Generated UI, Schema runtime, and Site runtime
 topic docs.
 Legacy Site-owned media retirement shipped facts live across Site runtime, Site CLI and publish,
