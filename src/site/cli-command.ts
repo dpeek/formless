@@ -78,6 +78,13 @@ export type FormlessCliCommand =
       workspacePath: string;
     }
   | {
+      kind: "instanceDomainsRemotePlan";
+      host: string | null;
+      policy: CloudflareDomainPreflightPolicy;
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
       adminToken: string | null;
       host: string | null;
       kind: "instanceDomainsApply";
@@ -159,7 +166,7 @@ export function formlessCliUsage(): string {
     "  instance dev|reset-local [--workspace <path>]",
     "  instance deploy [--workspace <path>] [--target <alias>]",
     "       [--migration-policy <new|existing>]",
-    "  instance domains plan|apply|run-apply [--workspace <path>] [--target <alias>]",
+    "  instance domains remote-plan|run-apply|plan|apply [--workspace <path>] [--target <alias>]",
     "       [--policy <create-only|adopt|override>] [--host <hostname>]",
     "       [--admin-token <token>] [--runner-id <id>]",
     "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
@@ -786,6 +793,8 @@ function parseInstanceDomainsArgs(args: string[]): FormlessCliCommand {
   const [subcommand, ...rest] = args;
 
   switch (subcommand) {
+    case "remote-plan":
+      return parseInstanceDomainsRemotePlanArgs(rest);
     case "plan":
       return parseInstanceDomainsPlanArgs(rest);
     case "apply":
@@ -793,8 +802,47 @@ function parseInstanceDomainsArgs(args: string[]): FormlessCliCommand {
     case "run-apply":
       return parseInstanceDomainsRunApplyArgs(rest);
     default:
-      throw new Error("Usage: formless instance domains <plan|apply|run-apply>");
+      throw new Error("Usage: formless instance domains <remote-plan|run-apply|plan|apply>");
   }
+}
+
+function parseInstanceDomainsRemotePlanArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance domains remote-plan");
+  let host: string | null = null;
+  let policy: CloudflareDomainPreflightPolicy = "create-only";
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--dry-run") {
+      continue;
+    }
+
+    if (arg === "--policy") {
+      policy = parseCloudflareDomainPreflightPolicy(
+        readOptionValue(options.rest, index, "--policy"),
+        "formless instance domains remote-plan",
+      );
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--host") {
+      host = readOptionValue(options.rest, index, "--host");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance domains remote-plan: ${arg}`);
+  }
+
+  return {
+    host,
+    kind: "instanceDomainsRemotePlan",
+    policy,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
 }
 
 function parseInstanceDomainsPlanArgs(args: string[]): FormlessCliCommand {
@@ -944,7 +992,10 @@ function parseInstanceDomainsRunApplyArgs(args: string[]): FormlessCliCommand {
 
 function parseCloudflareDomainPreflightPolicy(
   value: string,
-  commandName: "formless instance domains apply" | "formless instance domains plan",
+  commandName:
+    | "formless instance domains apply"
+    | "formless instance domains plan"
+    | "formless instance domains remote-plan",
 ): CloudflareDomainPreflightPolicy {
   if (value === "create-only" || value === "adopt" || value === "override") {
     return value;

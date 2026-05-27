@@ -28,6 +28,7 @@ import {
   type CloudflareWorkerRoute,
 } from "./cloudflare-domain-client.ts";
 import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
+import type { InstanceDomainProviderPlanResponse } from "../shared/domain-provider-api.ts";
 import {
   runFormlessInstanceDomainProviderApply as runFormlessInstanceDomainProviderApplyCommand,
   type RunFormlessInstanceDomainProviderApplyResult,
@@ -71,6 +72,7 @@ import {
   type ResetFormlessInstanceWorkspaceLocalStateResult,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
 } from "./instance-workspace.ts";
+import { readFormlessInstanceDomainProviderPlan } from "./instance-target-client.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
 import { SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import { initSiteProjectSource, type InitSiteProjectSourceResult } from "./project-files.ts";
@@ -547,6 +549,11 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceDeployResult(result, dependencies.cwd));
       return;
     }
+    case "instanceDomainsRemotePlan": {
+      const result = await planFormlessInstanceDomainProviderFromWorkspace(command, dependencies);
+      dependencies.log(formatInstanceDomainProviderPlanResult(result, dependencies.cwd));
+      return;
+    }
     case "instanceDomainsPlan": {
       const result = await planFormlessInstanceWorkspaceDomains(command, dependencies);
       dependencies.log(formatInstanceWorkspaceDomainPlanResult(result, dependencies.cwd));
@@ -851,6 +858,54 @@ export async function deployFormlessInstanceWorkspace(
     packageVersion: packageJson.version,
     randomToken: dependencies.randomToken,
   });
+}
+
+export type PlanFormlessInstanceDomainProviderResult = {
+  plan: InstanceDomainProviderPlanResponse;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export async function planFormlessInstanceDomainProviderFromWorkspace(
+  input: {
+    host?: string | null;
+    policy?: ApplyFormlessInstanceWorkspaceDomainsInput["policy"];
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch"
+  > = nodeFormlessCliDependencies(),
+): Promise<PlanFormlessInstanceDomainProviderResult> {
+  const status = await getFormlessInstanceWorkspaceStatus(
+    {
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+
+  if (!status.selectedTarget) {
+    throw new Error("Formless instance domains remote-plan requires a selected target.");
+  }
+
+  return {
+    plan: await readFormlessInstanceDomainProviderPlan(
+      {
+        host: input.host,
+        policy: input.policy,
+        targetUrl: status.selectedTarget.url,
+      },
+      dependencies,
+    ),
+    selectedTarget: status.selectedTarget,
+    workspaceRoot: status.workspaceRoot,
+  };
 }
 
 export async function planFormlessInstanceWorkspaceDomains(
@@ -1260,12 +1315,36 @@ function formatInstanceWorkspaceDeployResult(
   ].join("\n");
 }
 
+function formatInstanceDomainProviderPlanResult(
+  result: PlanFormlessInstanceDomainProviderResult,
+  cwd: string,
+): string {
+  const plan = result.plan;
+
+  return [
+    "Instance domain remote provider plan.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Provider config: plan ${plan.config.planReady ? "ready" : "blocked"}, apply ${
+      plan.config.applyReady ? "ready" : "blocked"
+    }.`,
+    `Account: ${plan.config.accountId ?? "missing"}.`,
+    `Worker: ${plan.config.workerName ?? plan.plan.workerName}.`,
+    `Policy: ${plan.plan.policy}.`,
+    `Zones: ${formatList(plan.config.zones.map((zone) => `${zone.name} (${zone.id})`))}.`,
+    `Config issues: ${formatList(plan.config.issues.map((issue) => issue.code))}.`,
+    `Resources: ${formatDomainProviderResourceCounts(plan)}.`,
+    `Blockers: ${formatDomainProviderPlanBlockers(plan)}.`,
+    ...plan.plan.resources.map(formatDomainProviderResource),
+  ].join("\n");
+}
+
 function formatInstanceWorkspaceDomainPlanResult(
   result: PlanFormlessInstanceWorkspaceDomainsResult,
   cwd: string,
 ): string {
   return [
-    "Instance domain plan dry run.",
+    "Instance domain direct Cloudflare fallback plan dry run.",
     `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
     `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
     `Account: ${result.accountId}.`,
@@ -1283,7 +1362,7 @@ function formatInstanceWorkspaceDomainApplyResult(
   cwd: string,
 ): string {
   return [
-    "Instance domain apply complete.",
+    "Instance domain direct Cloudflare fallback apply complete.",
     `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
     `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
     `Account: ${result.accountId}.`,
@@ -1302,6 +1381,7 @@ function formatInstanceDomainProviderRunApplyResult(
     "Instance domain Alchemy apply complete.",
     `Target: ${result.targetUrl}.`,
     `Job: ${result.apply.job.jobId}.`,
+    `Job status: ${result.completion.job.status}.`,
     `Runner: ${result.runnerId}.`,
     `Policy: ${result.apply.plan.policy}.`,
     `Resources: ${result.alchemy.resources.length}.`,
@@ -1351,6 +1431,58 @@ function formatWorkspaceDomainIntents(
   return domains
     .map((domain) => `${domain.host} -> ${formatDomainIntentTarget(domain)}`)
     .join(", ");
+}
+
+function formatDomainProviderResourceCounts(plan: InstanceDomainProviderPlanResponse): string {
+  const customDomains = plan.plan.resources.filter(
+    (resource) => resource.kind === "cloudflare-worker-custom-domain",
+  ).length;
+  const redirectRules = plan.plan.resources.filter(
+    (resource) => resource.kind === "cloudflare-redirect-rule",
+  ).length;
+  const dnsRecords = plan.plan.resources.filter(
+    (resource) => resource.kind === "cloudflare-dns-records",
+  ).length;
+
+  return `${plan.plan.resources.length} (custom domains ${customDomains}, redirect rules ${redirectRules}, DNS records ${dnsRecords})`;
+}
+
+function formatDomainProviderPlanBlockers(plan: InstanceDomainProviderPlanResponse): string {
+  if (plan.plan.blockers.length === 0) {
+    return "none";
+  }
+
+  return plan.plan.blockers
+    .map((blocker) => (blocker.host ? `${blocker.host}:${blocker.code}` : blocker.code))
+    .join(", ");
+}
+
+function formatDomainProviderResource(
+  resource: InstanceDomainProviderPlanResponse["plan"]["resources"][number],
+): string {
+  switch (resource.kind) {
+    case "cloudflare-worker-custom-domain":
+      return [
+        `${resource.host}: cloudflare-worker-custom-domain`,
+        `profile ${formatDomainIntentTarget(resource)}`,
+        `zone ${resource.zone.name} (${resource.zone.id})`,
+        `alchemy ${resource.logicalId}`,
+      ].join("; ");
+    case "cloudflare-redirect-rule":
+      return [
+        `${resource.fromHost}: cloudflare-redirect-rule`,
+        `target ${resource.targetUrl}`,
+        `zone ${resource.zone.name} (${resource.zone.id})`,
+        `alchemy ${resource.logicalId}`,
+      ].join("; ");
+    case "cloudflare-dns-records":
+      return [
+        `${resource.fromHost}: cloudflare-dns-records`,
+        `records ${resource.props.records.length}`,
+        `zone ${resource.zone.name} (${resource.zone.id})`,
+        `alchemy ${resource.logicalId}`,
+      ].join("; ");
+  }
 }
 
 function formatRemoteInstalls(

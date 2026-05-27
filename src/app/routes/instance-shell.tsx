@@ -27,15 +27,22 @@ import {
   fetchInstanceDomainMappings,
 } from "../../client/domain-mappings.ts";
 import {
+  applyInstanceDomainProviderPlan,
   createInstanceDomainProviderRedirect,
   deleteInstanceDomainProviderResource,
   deleteInstanceDomainProviderRedirect,
   DomainProviderApiError,
+  fetchInstanceDomainProviderApplyJob,
+  fetchInstanceDomainProviderDeleteJob,
+  fetchInstanceDomainProviderPlan,
   fetchInstanceDomainProviderRedirects,
 } from "../../client/domain-provider.ts";
 import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/app-installs.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
+  InstanceDomainProviderApplyJob,
+  InstanceDomainProviderDeleteJob,
+  InstanceDomainProviderPlanResponse,
   InstanceDomainProviderRedirectIntent,
 } from "../../shared/domain-provider-api.ts";
 import type {
@@ -74,9 +81,16 @@ export type InstanceShellRouteState =
       domainMappingSubmitting: boolean;
       domainMappings: InstanceDomainMapping[];
       domainProviderAppliedResources?: InstanceDomainProviderAppliedResourceState[];
+      domainProviderApplying?: boolean;
+      domainProviderApplyError?: string;
+      domainProviderApplyJob?: InstanceDomainProviderApplyJob;
+      domainProviderDeleteJob?: InstanceDomainProviderDeleteJob;
       domainProviderDeleteError?: string;
       domainProviderDeleteMessage?: string;
       domainProviderDeletingKey?: string;
+      domainProviderPlan?: InstanceDomainProviderPlanResponse;
+      domainProviderPlanError?: string;
+      domainProviderPlanLoading?: boolean;
       domainRedirectDeletingKey?: string;
       domainRedirectDraftError?: string;
       domainRedirectIntents: InstanceDomainProviderRedirectIntent[];
@@ -112,11 +126,13 @@ export function InstanceShellRoute() {
 
     async function loadInstalls() {
       try {
-        const [appResponse, domainResponse, redirectResponse] = await Promise.all([
-          fetchInstanceAppInstalls({ signal: controller.signal }),
-          fetchInstanceDomainMappings({ signal: controller.signal }),
-          fetchInstanceDomainProviderRedirects({ signal: controller.signal }),
-        ]);
+        const [appResponse, domainResponse, redirectResponse, providerPlanResponse] =
+          await Promise.all([
+            fetchInstanceAppInstalls({ signal: controller.signal }),
+            fetchInstanceDomainMappings({ signal: controller.signal }),
+            fetchInstanceDomainProviderRedirects({ signal: controller.signal }),
+            fetchInstanceDomainProviderPlan({ signal: controller.signal }),
+          ]);
 
         if (stopped) {
           return;
@@ -128,7 +144,10 @@ export function InstanceShellRoute() {
           domainMappingSubmitting: false,
           domainMappings: domainResponse.mappings,
           domainProviderAppliedResources: redirectResponse.appliedResources,
+          domainProviderApplying: false,
           domainProviderDeletingKey: undefined,
+          domainProviderPlan: providerPlanResponse,
+          domainProviderPlanLoading: false,
           domainRedirectDeletingKey: undefined,
           domainRedirectIntents: redirectResponse.redirectIntents,
           domainRedirectSubmitting: false,
@@ -209,9 +228,16 @@ export function InstanceShellRoute() {
         domainMappingSubmitting: false,
         domainMappings: state.domainMappings,
         domainProviderAppliedResources: state.domainProviderAppliedResources,
+        domainProviderApplying: state.domainProviderApplying,
+        domainProviderApplyError: state.domainProviderApplyError,
+        domainProviderApplyJob: state.domainProviderApplyJob,
+        domainProviderDeleteJob: state.domainProviderDeleteJob,
         domainProviderDeleteError: state.domainProviderDeleteError,
         domainProviderDeleteMessage: state.domainProviderDeleteMessage,
         domainProviderDeletingKey: state.domainProviderDeletingKey,
+        domainProviderPlan: state.domainProviderPlan,
+        domainProviderPlanError: state.domainProviderPlanError,
+        domainProviderPlanLoading: state.domainProviderPlanLoading,
         domainRedirectDeletingKey: state.domainRedirectDeletingKey,
         domainRedirectDraftError: state.domainRedirectDraftError,
         domainRedirectIntents: state.domainRedirectIntents,
@@ -484,6 +510,8 @@ export function InstanceShellRoute() {
       setState({
         ...state,
         domainProviderDeleteError: undefined,
+        domainProviderDeleteJob:
+          response.status === "ready" ? response.job : state.domainProviderDeleteJob,
         domainProviderDeleteMessage:
           response.status === "ready"
             ? `Provider delete job ready for ${input.host}.`
@@ -505,6 +533,140 @@ export function InstanceShellRoute() {
     }
   }
 
+  async function refreshDomainProviderPlan() {
+    if (state.status !== "ready" || state.domainProviderPlanLoading) {
+      return;
+    }
+
+    setState({
+      ...state,
+      domainProviderPlanError: undefined,
+      domainProviderPlanLoading: true,
+    });
+
+    try {
+      const response = await fetchInstanceDomainProviderPlan();
+
+      setState({
+        ...state,
+        domainProviderPlan: response,
+        domainProviderPlanError: undefined,
+        domainProviderPlanLoading: false,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Provider plan failed.";
+
+      setState({
+        ...state,
+        domainProviderPlanError: message,
+        domainProviderPlanLoading: false,
+      });
+    }
+  }
+
+  async function submitApplyDomainProviderPlan() {
+    if (state.status !== "ready" || state.domainProviderApplying) {
+      return;
+    }
+
+    if (!window.confirm("Apply domain provider plan?")) {
+      return;
+    }
+
+    setState({
+      ...state,
+      domainProviderApplyError: undefined,
+      domainProviderApplying: true,
+    });
+
+    try {
+      const response = await applyInstanceDomainProviderPlan();
+
+      setState({
+        ...state,
+        domainProviderApplying: false,
+        domainProviderApplyError: response.status === "ready" ? undefined : response.error,
+        domainProviderApplyJob:
+          response.status === "ready" ? response.job : state.domainProviderApplyJob,
+        domainProviderPlan: {
+          config: response.config,
+          plan: response.plan,
+          redirectIntents: state.domainProviderPlan?.redirectIntents ?? state.domainRedirectIntents,
+        },
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Provider apply failed.";
+
+      setState({
+        ...state,
+        domainProviderApplying: false,
+        domainProviderApplyError: message,
+      });
+    }
+  }
+
+  async function refreshDomainProviderApplyJob() {
+    if (state.status !== "ready" || !state.domainProviderApplyJob) {
+      return;
+    }
+
+    try {
+      const response = await fetchInstanceDomainProviderApplyJob({
+        jobId: state.domainProviderApplyJob.jobId,
+      });
+
+      setState({
+        ...state,
+        domainProviderApplyError: undefined,
+        domainProviderApplyJob: response.job,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Provider apply job refresh failed.";
+
+      setState({
+        ...state,
+        domainProviderApplyError: message,
+      });
+    }
+  }
+
+  async function refreshDomainProviderDeleteJob() {
+    if (state.status !== "ready" || !state.domainProviderDeleteJob) {
+      return;
+    }
+
+    try {
+      const response = await fetchInstanceDomainProviderDeleteJob({
+        jobId: state.domainProviderDeleteJob.jobId,
+      });
+
+      setState({
+        ...state,
+        domainProviderDeleteError: undefined,
+        domainProviderDeleteJob: response.job,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Provider delete job refresh failed.";
+
+      setState({
+        ...state,
+        domainProviderDeleteError: message,
+      });
+    }
+  }
+
   return (
     <InstanceShellRouteView
       domainDraft={domainDraft}
@@ -515,6 +677,10 @@ export function InstanceShellRoute() {
       onDeleteDomainRedirect={submitDeleteDomainRedirect}
       onDeleteDomainMapping={submitDeleteDomainMapping}
       onDeleteDomainProviderResource={submitDeleteDomainProviderResource}
+      onRefreshDomainProviderApplyJob={refreshDomainProviderApplyJob}
+      onRefreshDomainProviderDeleteJob={refreshDomainProviderDeleteJob}
+      onRefreshDomainProviderPlan={refreshDomainProviderPlan}
+      onSubmitDomainProviderApply={submitApplyDomainProviderPlan}
       onSubmitDomainRedirect={submitDomainRedirect}
       onSubmitDomainMapping={submitDomainMapping}
       onInstallDraftChange={(packageAppKey, draft) =>
@@ -538,6 +704,10 @@ export function InstanceShellRouteView({
   onDeleteDomainRedirect,
   onDeleteDomainMapping,
   onDeleteDomainProviderResource,
+  onRefreshDomainProviderApplyJob,
+  onRefreshDomainProviderDeleteJob,
+  onRefreshDomainProviderPlan,
+  onSubmitDomainProviderApply,
   onSubmitDomainRedirect,
   onSubmitDomainMapping,
   onInstallDraftChange,
@@ -556,6 +726,10 @@ export function InstanceShellRouteView({
     kind?: InstanceDomainProviderAppliedResourceState["kind"];
     logicalId?: string;
   }) => void;
+  onRefreshDomainProviderApplyJob?: () => void;
+  onRefreshDomainProviderDeleteJob?: () => void;
+  onRefreshDomainProviderPlan?: () => void;
+  onSubmitDomainProviderApply?: () => void;
   onSubmitDomainRedirect?: (event: React.FormEvent<HTMLFormElement>) => void;
   onSubmitDomainMapping?: (event: React.FormEvent<HTMLFormElement>) => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
@@ -630,8 +804,12 @@ export function InstanceShellRouteView({
         onDelete={onDeleteDomainMapping}
         onDeleteProvider={onDeleteDomainProviderResource}
         onDeleteRedirect={onDeleteDomainRedirect}
+        onRefreshApplyJob={onRefreshDomainProviderApplyJob}
+        onRefreshDeleteJob={onRefreshDomainProviderDeleteJob}
+        onRefreshPlan={onRefreshDomainProviderPlan}
         onRedirectDraftChange={onDomainRedirectDraftChange}
         onRedirectSubmit={onSubmitDomainRedirect}
+        onSubmitProviderApply={onSubmitDomainProviderApply}
         redirectDraft={
           domainRedirectDraft ?? { fromHost: "", targetMode: "host", toHost: "", toUrl: "" }
         }
@@ -656,8 +834,12 @@ function CustomDomainsSection({
   onDelete,
   onDeleteProvider,
   onDeleteRedirect,
+  onRefreshApplyJob,
+  onRefreshDeleteJob,
+  onRefreshPlan,
   onRedirectDraftChange,
   onRedirectSubmit,
+  onSubmitProviderApply,
   redirectDraft,
   onSubmit,
   state,
@@ -671,8 +853,12 @@ function CustomDomainsSection({
     logicalId?: string;
   }) => void;
   onDeleteRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  onRefreshApplyJob?: () => void;
+  onRefreshDeleteJob?: () => void;
+  onRefreshPlan?: () => void;
   onRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
   onRedirectSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmitProviderApply?: () => void;
   redirectDraft: DomainRedirectDraft;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   state: Extract<InstanceShellRouteState, { status: "ready" }>;
@@ -701,6 +887,14 @@ function CustomDomainsSection({
   const providerAppliedResources = state.domainProviderAppliedResources ?? [];
   const redirectDisabled =
     state.domainRedirectSubmitting || state.domainRedirectDeletingKey !== undefined;
+  const providerPlanLoading = state.domainProviderPlanLoading ?? false;
+  const providerApplying = state.domainProviderApplying ?? false;
+  const providerApplyDisabled =
+    providerPlanLoading ||
+    providerApplying ||
+    state.domainProviderPlan === undefined ||
+    !state.domainProviderPlan.config.applyReady ||
+    state.domainProviderPlan.plan.blockers.length > 0;
 
   return (
     <section className="space-y-3" aria-labelledby="custom-domains-heading">
@@ -712,6 +906,20 @@ function CustomDomainsSection({
           <span className="text-xs text-muted-fg">{state.domainMappings.length}</span>
         </div>
       </div>
+      <DomainProviderControlPanel
+        applyDisabled={providerApplyDisabled}
+        applying={providerApplying}
+        deleteJob={state.domainProviderDeleteJob}
+        onApply={onSubmitProviderApply}
+        onRefreshApplyJob={onRefreshApplyJob}
+        onRefreshDeleteJob={onRefreshDeleteJob}
+        onRefreshPlan={onRefreshPlan}
+        plan={state.domainProviderPlan}
+        planLoading={providerPlanLoading}
+        refreshError={state.domainProviderPlanError}
+        applyError={state.domainProviderApplyError}
+        applyJob={state.domainProviderApplyJob}
+      />
       <form
         className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_minmax(12rem,16rem)_auto]"
         onSubmit={onSubmit}
@@ -923,6 +1131,126 @@ function CustomDomainsSection({
         </div>
       )}
     </section>
+  );
+}
+
+function DomainProviderControlPanel({
+  applyDisabled,
+  applying,
+  applyError,
+  applyJob,
+  deleteJob,
+  onApply,
+  onRefreshApplyJob,
+  onRefreshDeleteJob,
+  onRefreshPlan,
+  plan,
+  planLoading,
+  refreshError,
+}: {
+  applyDisabled: boolean;
+  applying: boolean;
+  applyError?: string;
+  applyJob?: InstanceDomainProviderApplyJob;
+  deleteJob?: InstanceDomainProviderDeleteJob;
+  onApply?: () => void;
+  onRefreshApplyJob?: () => void;
+  onRefreshDeleteJob?: () => void;
+  onRefreshPlan?: () => void;
+  plan?: InstanceDomainProviderPlanResponse;
+  planLoading: boolean;
+  refreshError?: string;
+}) {
+  return (
+    <div className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="min-w-0 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">Provider</h3>
+          <span className="text-xs text-muted-fg">
+            {plan ? domainProviderConfigLabel(plan) : "not loaded"}
+          </span>
+        </div>
+        {plan ? (
+          <div className="grid gap-2 text-xs text-muted-fg sm:grid-cols-2">
+            <p>{domainProviderTargetLabel(plan)}</p>
+            <p>{domainProviderResourceSummary(plan)}</p>
+            <p>{domainProviderBlockerSummary(plan)}</p>
+            <p>{domainProviderIssueSummary(plan)}</p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-fg">Provider plan unavailable.</p>
+        )}
+        {applyJob ? (
+          <DomainProviderJobStatus
+            jobId={applyJob.jobId}
+            kind="Apply"
+            onRefresh={onRefreshApplyJob}
+            result={applyJob.result}
+            status={applyJob.status}
+          />
+        ) : null}
+        {deleteJob ? (
+          <DomainProviderJobStatus
+            jobId={deleteJob.jobId}
+            kind="Delete"
+            onRefresh={onRefreshDeleteJob}
+            result={deleteJob.result}
+            status={deleteJob.status}
+          />
+        ) : null}
+        {refreshError ? (
+          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
+            {refreshError}
+          </p>
+        ) : null}
+        {applyError ? (
+          <p className={fieldErrorStyles()} data-slot="field-error" role="alert">
+            {applyError}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-start justify-end gap-2">
+        <Button
+          intent="outline"
+          isDisabled={planLoading || !onRefreshPlan}
+          onPress={onRefreshPlan}
+          size="sm"
+          type="button"
+        >
+          {planLoading ? "Planning..." : "Refresh plan"}
+        </Button>
+        <Button isDisabled={applyDisabled || !onApply} onPress={onApply} size="sm" type="button">
+          {applying ? "Applying..." : "Apply provider"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DomainProviderJobStatus({
+  jobId,
+  kind,
+  onRefresh,
+  result,
+  status,
+}: {
+  jobId: string;
+  kind: "Apply" | "Delete";
+  onRefresh?: () => void;
+  result?: { error?: string; evidenceCount: number };
+  status: InstanceDomainProviderApplyJob["status"];
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-fg">
+      <span>
+        {kind} job: {status} · <code>{jobId}</code>
+        {result ? ` · evidence ${result.evidenceCount}` : ""}
+      </span>
+      {result?.error ? <span className="text-danger-subtle-fg">{result.error}</span> : null}
+      <Button intent="outline" isDisabled={!onRefresh} onPress={onRefresh} size="sm" type="button">
+        Refresh job
+      </Button>
+    </div>
   );
 }
 
@@ -1498,6 +1826,53 @@ function domainProfileTargetLabel(
 
 function redirectTargetLabel(redirect: InstanceDomainProviderRedirectIntent): string {
   return redirect.toHost ?? redirect.toUrl ?? "missing target";
+}
+
+function domainProviderConfigLabel(plan: InstanceDomainProviderPlanResponse): string {
+  if (plan.config.applyReady) {
+    return "apply ready";
+  }
+
+  return plan.config.planReady ? "plan ready" : "setup needed";
+}
+
+function domainProviderTargetLabel(plan: InstanceDomainProviderPlanResponse): string {
+  const account = plan.config.accountId ?? "missing account";
+  const worker = plan.config.workerName ?? plan.plan.workerName;
+
+  return `Account ${account} · Worker ${worker}`;
+}
+
+function domainProviderResourceSummary(plan: InstanceDomainProviderPlanResponse): string {
+  const customDomains = plan.plan.resources.filter(
+    (resource) => resource.kind === "cloudflare-worker-custom-domain",
+  ).length;
+  const redirects = plan.plan.resources.filter(
+    (resource) => resource.kind === "cloudflare-redirect-rule",
+  ).length;
+  const dns = plan.plan.resources.filter(
+    (resource) => resource.kind === "cloudflare-dns-records",
+  ).length;
+
+  return `Resources ${plan.plan.resources.length} · domains ${customDomains} · redirects ${redirects} · DNS ${dns}`;
+}
+
+function domainProviderBlockerSummary(plan: InstanceDomainProviderPlanResponse): string {
+  if (plan.plan.blockers.length === 0) {
+    return "Blockers none";
+  }
+
+  return `Blockers ${plan.plan.blockers
+    .map((blocker) => (blocker.host ? `${blocker.host}:${blocker.code}` : blocker.code))
+    .join(", ")}`;
+}
+
+function domainProviderIssueSummary(plan: InstanceDomainProviderPlanResponse): string {
+  if (plan.config.issues.length === 0) {
+    return `Zones ${plan.config.zones.map((zone) => zone.name).join(", ") || "none"}`;
+  }
+
+  return `Config ${plan.config.issues.map((issue) => issue.code).join(", ")}`;
 }
 
 function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">): string {

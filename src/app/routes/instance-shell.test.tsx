@@ -272,6 +272,119 @@ describe("instance shell route view", () => {
     expect(html).toContain("Add redirect");
     expect(html).toContain("Delete provider");
   });
+
+  it("renders provider config, plan, blockers, and job status", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        state={{
+          domainAppliedStates: [],
+          domainMappingSubmitting: false,
+          domainMappings: [],
+          domainProviderApplyJob: {
+            createdAt: "2026-05-27T00:00:00.000Z",
+            jobId: "apply-job-1",
+            plan: {
+              blockers: [],
+              instanceId: "primary",
+              policy: "create-only",
+              resources: [],
+              workerName: "personal",
+            },
+            result: { evidenceCount: 2 },
+            status: "succeeded",
+            updatedAt: "2026-05-27T00:01:00.000Z",
+          },
+          domainProviderDeleteJob: {
+            createdAt: "2026-05-27T00:00:00.000Z",
+            jobId: "delete-job-1",
+            plan: {
+              blockers: [],
+              instanceId: "primary",
+              policy: "create-only",
+              resources: [],
+              workerName: "personal",
+            },
+            result: { evidenceCount: 1 },
+            status: "succeeded",
+            targets: [],
+            updatedAt: "2026-05-27T00:01:00.000Z",
+          },
+          domainProviderPlan: {
+            config: {
+              accountId: "account-123",
+              alchemyPassword: { configured: true, envNames: ["ALCHEMY_PASSWORD"] },
+              applyReady: true,
+              cloudflareApiToken: {
+                configured: true,
+                envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+              },
+              instanceId: "primary",
+              issues: [],
+              planReady: true,
+              workerName: "personal",
+              zones: [{ id: "zone-1", name: "example.com" }],
+            },
+            plan: {
+              blockers: [],
+              instanceId: "primary",
+              policy: "create-only",
+              resources: [
+                {
+                  host: "www.example.com",
+                  kind: "cloudflare-worker-custom-domain",
+                  logicalId: "primary-custom-domain-www-example-com-publicsite-site",
+                  profile: "publicSite",
+                  props: {
+                    adopt: false,
+                    name: "www.example.com",
+                    overrideExistingOrigin: false,
+                    workerName: "personal",
+                    zoneId: "zone-1",
+                  },
+                  targetInstallId: "site",
+                  zone: { id: "zone-1", name: "example.com" },
+                },
+                {
+                  fromHost: "example.com",
+                  kind: "cloudflare-redirect-rule",
+                  logicalId: "primary-redirect-rule-example-com",
+                  props: {
+                    description: "Formless redirect example.com to www.example.com",
+                    preserveQueryString: true,
+                    requestUrl: "https://example.com/*",
+                    statusCode: 301,
+                    targetUrl: "https://www.example.com/${1}",
+                    zone: "zone-1",
+                  },
+                  targetUrl: "https://www.example.com/${1}",
+                  zone: { id: "zone-1", name: "example.com" },
+                },
+              ],
+              workerName: "personal",
+            },
+            redirectIntents: [],
+          },
+          domainRedirectIntents: [],
+          domainRedirectSubmitting: false,
+          installing: false,
+          installs: [siteInstall({ installId: "site", label: "Site" })],
+          packages: listBundledAppPackages(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(html).toContain("Provider");
+    expect(html).toContain("apply ready");
+    expect(html).toContain("Account account-123");
+    expect(html).toContain("Resources 2");
+    expect(html).toContain("Blockers none");
+    expect(html).toContain("Zones example.com");
+    expect(html).toContain("Apply job: succeeded");
+    expect(html).toContain("Delete job: succeeded");
+    expect(html).toContain("Refresh plan");
+    expect(html).toContain("Apply provider");
+  });
 });
 
 function siteInstall(input: { installId: string; label: string }): AppInstall {

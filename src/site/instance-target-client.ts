@@ -18,6 +18,7 @@ import {
   type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
+import type { DomainProviderApplyPolicy } from "../shared/domain-provider-protocol.ts";
 import type {
   InstanceDomainMappingsResponse,
   RecordInstanceDomainMappingApplyEvidenceRequest,
@@ -128,15 +129,25 @@ export async function readFormlessInstanceDomainMappings(
 }
 
 export async function readFormlessInstanceDomainProviderPlan(
-  input: { targetUrl: string },
+  input: { host?: string | null; policy?: DomainProviderApplyPolicy; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<InstanceDomainProviderPlanResponse> {
   const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
-  const providerUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_API_PATH);
+  const providerUrl = new URL(apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_API_PATH));
+
+  if (input.host && input.host.trim() !== "") {
+    providerUrl.searchParams.set("host", input.host);
+  }
+
+  if (input.policy) {
+    providerUrl.searchParams.set("policy", input.policy);
+  }
 
   return parseDomainProviderPlan(
-    await fetchJson(dependencies.fetch, providerUrl, { headers: { accept: "application/json" } }),
-    providerUrl,
+    await fetchJson(dependencies.fetch, providerUrl.toString(), {
+      headers: { accept: "application/json" },
+    }),
+    providerUrl.toString(),
   );
 }
 

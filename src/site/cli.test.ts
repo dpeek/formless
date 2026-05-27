@@ -110,7 +110,7 @@ describe("Formless Site CLI", () => {
       "  instance dev|reset-local [--workspace <path>]",
       "  instance deploy [--workspace <path>] [--target <alias>]",
       "       [--migration-policy <new|existing>]",
-      "  instance domains plan|apply|run-apply [--workspace <path>] [--target <alias>]",
+      "  instance domains remote-plan|run-apply|plan|apply [--workspace <path>] [--target <alias>]",
       "       [--policy <create-only|adopt|override>] [--host <hostname>]",
       "       [--admin-token <token>] [--runner-id <id>]",
       "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
@@ -519,6 +519,23 @@ describe("Formless Site CLI", () => {
       parseFormlessCliArgs([
         "instance",
         "domains",
+        "remote-plan",
+        "--target",
+        "remote",
+        "--policy",
+        "adopt",
+      ]),
+    ).toEqual({
+      host: null,
+      kind: "instanceDomainsRemotePlan",
+      policy: "adopt",
+      targetAlias: "remote",
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "domains",
         "plan",
         "--target",
         "remote",
@@ -628,7 +645,7 @@ describe("Formless Site CLI", () => {
       parseFormlessCliArgs(["instance", "deploy", "--migration-policy", "auto"]),
     ).toThrow('formless instance deploy --migration-policy must be "new" or "existing".');
     expect(() => parseFormlessCliArgs(["instance", "domains", "forget"])).toThrow(
-      "Usage: formless instance domains <plan|apply|run-apply>",
+      "Usage: formless instance domains <remote-plan|run-apply|plan|apply>",
     );
     expect(() =>
       parseFormlessCliArgs(["instance", "domains", "plan", "--policy", "force"]),
@@ -1225,7 +1242,7 @@ describe("Formless Site CLI", () => {
     ]);
     expect(logs).toEqual([
       [
-        "Instance domain plan dry run.",
+        "Instance domain direct Cloudflare fallback plan dry run.",
         `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
         "Target: remote (https://personal.dpeek.workers.dev).",
         "Account: account-123.",
@@ -1236,6 +1253,101 @@ describe("Formless Site CLI", () => {
         "Domains: dpeek.com, www.dpeek.com.",
         "dpeek.com: blocked; profile publicSite:david; zone dpeek.com (zone-1); apex yes; custom domains none; routes dpeek.com/* -> old-worker; dns A 192.0.2.10; actions none; issues worker-route-conflict, dns-record-conflict, apex-domain",
         "www.dpeek.com: ready; profile publicSite:david; zone dpeek.com (zone-1); apex no; custom domains www.dpeek.com -> personal; routes none; dns none; actions adopt-existing-worker-custom-domain; issues none",
+      ].join("\n"),
+    ]);
+  });
+
+  it("requests a remote domain provider plan through the instance control plane", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+    responses.queueJson({
+      config: {
+        accountId: "account-123",
+        alchemyPassword: { configured: true, envNames: ["ALCHEMY_PASSWORD"] },
+        applyReady: true,
+        cloudflareApiToken: {
+          configured: true,
+          envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+        },
+        instanceId: "primary",
+        issues: [],
+        planReady: true,
+        workerName: "personal",
+        zones: [{ id: "zone-1", name: "dpeek.com" }],
+      },
+      plan: {
+        blockers: [],
+        instanceId: "primary",
+        policy: "adopt",
+        resources: [
+          {
+            host: "www.dpeek.com",
+            kind: "cloudflare-worker-custom-domain",
+            logicalId: "primary-custom-domain-www-dpeek-com-publicsite-david",
+            profile: "publicSite",
+            props: {
+              adopt: true,
+              name: "www.dpeek.com",
+              overrideExistingOrigin: false,
+              workerName: "personal",
+              zoneId: "zone-1",
+            },
+            targetInstallId: "david",
+            zone: { id: "zone-1", name: "dpeek.com" },
+          },
+        ],
+        workerName: "personal",
+      },
+      redirectIntents: [],
+    });
+
+    await runFormlessCli(
+      [
+        "instance",
+        "domains",
+        "remote-plan",
+        "--workspace",
+        workspaceRoot,
+        "--policy",
+        "adopt",
+        "--host",
+        "www.dpeek.com",
+      ],
+      cliDeps(tempDir, { fetch: responses.fetcher(requests), logs }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "GET https://personal.dpeek.workers.dev/api/formless/domain-provider?host=www.dpeek.com&policy=adopt",
+    ]);
+    expect(logs).toEqual([
+      [
+        "Instance domain remote provider plan.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Provider config: plan ready, apply ready.",
+        "Account: account-123.",
+        "Worker: personal.",
+        "Policy: adopt.",
+        "Zones: dpeek.com (zone-1).",
+        "Config issues: none.",
+        "Resources: 1 (custom domains 1, redirect rules 0, DNS records 0).",
+        "Blockers: none.",
+        "www.dpeek.com: cloudflare-worker-custom-domain; profile publicSite:david; zone dpeek.com (zone-1); alchemy primary-custom-domain-www-dpeek-com-publicsite-david",
       ].join("\n"),
     ]);
   });
@@ -1318,7 +1430,7 @@ describe("Formless Site CLI", () => {
     });
     expect(logs).toEqual([
       [
-        "Instance domain apply complete.",
+        "Instance domain direct Cloudflare fallback apply complete.",
         `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
         "Target: remote (https://personal.dpeek.workers.dev).",
         "Account: account-123.",
