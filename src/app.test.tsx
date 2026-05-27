@@ -27,6 +27,8 @@ import {
   getClientStoreSnapshot,
   resetClientStore,
 } from "./client/store.ts";
+import type { TableCollectionResultModel } from "./client/collection-result-model.ts";
+import type { ListResultModel } from "./client/list-result-model.ts";
 import type { ClientAppTarget } from "./client/app-target.ts";
 import { resetSyncStatus, setSyncStatus } from "./client/sync-status.ts";
 import {
@@ -104,6 +106,30 @@ function renderRoute(
       />
     </Router>,
   );
+}
+
+function listResult(
+  recordFields: RecordFieldConfig[],
+  options: Omit<ListResultModel, "type" | "itemViewName" | "recordFields"> = {},
+): ListResultModel {
+  return {
+    type: "list",
+    itemViewName: "testItem",
+    recordFields,
+    ...options,
+  };
+}
+
+function tableResult(
+  columns: TableColumnConfig[],
+  options: Omit<TableCollectionResultModel, "type" | "tableViewName" | "columns"> = {},
+): TableCollectionResultModel {
+  return {
+    type: "table",
+    tableViewName: "testTable",
+    columns,
+    ...options,
+  };
 }
 
 function SchemaKeyProbeHomeRoute({
@@ -3321,7 +3347,7 @@ describe("generated collection home", () => {
         entity={task}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={model?.result.type === "list" ? model.result.recordFields : []}
+        result={model?.result.type === "list" ? model.result : listResult([])}
       />,
     );
 
@@ -4391,13 +4417,7 @@ describe("generated forms and records", () => {
       bootstrap([discriminatedTaskRecord("record-1", "role", "Role title", true)], schema),
     );
     const roleHtml = renderToStaticMarkup(
-      <RecordList
-        entity={task}
-        entityName="task"
-        query={{ kind: "all" }}
-        recordFields={model.result.recordFields}
-        recordUnion={model.result.recordUnion}
-      />,
+      <RecordList entity={task} entityName="task" query={{ kind: "all" }} result={model.result} />,
     );
 
     resetClientStore();
@@ -4405,13 +4425,7 @@ describe("generated forms and records", () => {
       bootstrap([discriminatedTaskRecord("record-1", "stream", "Hidden title", true)], schema),
     );
     const streamHtml = renderToStaticMarkup(
-      <RecordList
-        entity={task}
-        entityName="task"
-        query={{ kind: "all" }}
-        recordFields={model.result.recordFields}
-        recordUnion={model.result.recordUnion}
-      />,
+      <RecordList entity={task} entityName="task" query={{ kind: "all" }} result={model.result} />,
     );
 
     expect(roleHtml).toContain("Role title");
@@ -4700,7 +4714,7 @@ describe("generated forms and records", () => {
         entity={task}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={recordFields}
+        result={listResult(recordFields)}
       />,
     );
 
@@ -4729,7 +4743,12 @@ describe("generated forms and records", () => {
 
     applyBootstrapResponse(bootstrap([markdownRecord("## Draft\n\nLong body")]));
     const html = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={task} entityName="task" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
 
     expect(html).toContain('data-web-markdown-renderer="shared"');
@@ -4755,7 +4774,7 @@ describe("generated forms and records", () => {
         entity={task}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={recordFields}
+        result={listResult(recordFields)}
       />,
     );
 
@@ -4781,10 +4800,10 @@ describe("generated forms and records", () => {
     );
     const html = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={rateCardSchema.entities.rate}
         entityName="rate"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
 
@@ -4846,7 +4865,12 @@ describe("generated forms and records", () => {
       ),
     );
     const html = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
 
     expect(html).toContain("Designer");
@@ -4913,7 +4937,12 @@ describe("generated forms and records", () => {
       bootstrap([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], rateCardSchema),
     );
     const html = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
 
     expect(html).toContain("Inspect rate");
@@ -5005,10 +5034,10 @@ describe("generated forms and records", () => {
 
     const before = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={rateCardSchema.entities.rate}
         entityName="rate"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
 
@@ -5016,10 +5045,10 @@ describe("generated forms and records", () => {
 
     const after = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={rateCardSchema.entities.rate}
         entityName="rate"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
     const resourceIds = getClientStoreSnapshot().recordIdsByEntity.resource ?? [];
@@ -5041,10 +5070,10 @@ describe("generated forms and records", () => {
     );
     const html = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={rateCardSchema.entities.rate}
         entityName="rate"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
 
@@ -5076,7 +5105,12 @@ describe("generated forms and records", () => {
       bootstrap([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], rateCardSchema),
     );
     const html = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
 
     expect(html).toContain("Price");
@@ -5094,12 +5128,22 @@ describe("generated forms and records", () => {
       bootstrap([rateCardRateRecord("rate-1", "resource-1", "card-1", 475)], schema),
     );
     const before = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
 
     applyRecordMerge([rateCardRateRecordWithCost("rate-1", "resource-1", "card-1", 250, 500)], 2);
     const after = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={rate} entityName="rate" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={rate}
+        entityName="rate"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
 
     expect(before).toContain("Margin");
@@ -5133,10 +5177,10 @@ describe("generated forms and records", () => {
     applyBootstrapResponse(bootstrap([fieldEditorCharacterizationRecord(), invalidColorRecord]));
     const html = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={entity}
         entityName="editorCase"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
 
@@ -5167,7 +5211,7 @@ describe("generated forms and records", () => {
         entity={task}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={recordFields}
+        result={listResult(recordFields)}
       />,
     );
 
@@ -5231,7 +5275,12 @@ describe("generated forms and records", () => {
 
     applyBootstrapResponse(bootstrap([record]));
     const html = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={entity} entityName="metric" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={entity}
+        entityName="metric"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
 
     expect(html.match(/data-web-formatted-number-input="true"/g)?.length).toBe(2);
@@ -5325,7 +5374,7 @@ describe("generated forms and records", () => {
         entity={entity}
         entityName="editorCase"
         query={{ kind: "all" }}
-        recordFields={fieldEditorCharacterizationRecordFields(entity)}
+        result={listResult(fieldEditorCharacterizationRecordFields(entity))}
       />,
     );
 
@@ -5384,10 +5433,10 @@ describe("generated forms and records", () => {
     applyBootstrapResponse(bootstrap([record]));
     const html = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={entity}
         entityName="editorCase"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
 
@@ -5417,10 +5466,10 @@ describe("generated forms and records", () => {
     applyBootstrapResponse(bootstrap([fieldEditorCharacterizationRecord()]));
     const html = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={entity}
         entityName="editorCase"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
 
@@ -5673,7 +5722,7 @@ describe("generated forms and records", () => {
         entity={appSchema.entities.task}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={listRecordFieldsFor(appSchema, "taskHome")}
+        result={listResult(listRecordFieldsFor(appSchema, "taskHome"))}
       />,
     );
 
@@ -5713,10 +5762,10 @@ describe("generated forms and records", () => {
     );
     const editHtml = renderToStaticMarkup(
       <RecordTable
-        columns={tableColumnsFor(rateCardSchema, "rateHome")}
         entity={rateCardSchema.entities.rate}
         entityName="rate"
         query={{ kind: "all" }}
+        result={tableResult(tableColumnsFor(rateCardSchema, "rateHome"))}
       />,
     );
 
@@ -5763,10 +5812,10 @@ describe("generated forms and records", () => {
     );
     const editHtml = renderToStaticMarkup(
       <RecordTable
-        columns={tableColumnsFor(siteSourceSchema, "blockHome")}
         entity={siteSourceSchema.entities.block}
         entityName="block"
         query={{ kind: "all" }}
+        result={tableResult(tableColumnsFor(siteSourceSchema, "blockHome"))}
       />,
     );
 
@@ -6148,7 +6197,7 @@ describe("generated forms and records", () => {
         entity={rate}
         entityName="rate"
         query={{ kind: "all" }}
-        recordFields={recordFields}
+        result={listResult(recordFields)}
       />,
     );
 
@@ -6201,7 +6250,7 @@ describe("generated forms and records", () => {
         entity={task}
         entityName="task"
         query={appSchema.queries.taskCompleted?.expression ?? { kind: "all" }}
-        recordFields={model?.result.type === "list" ? model.result.recordFields : []}
+        result={model?.result.type === "list" ? model.result : listResult([])}
       />,
     );
 
@@ -6221,7 +6270,7 @@ describe("generated forms and records", () => {
         entity={task}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={recordFields}
+        result={listResult(recordFields)}
       />,
     );
     const enabledHtml = renderToStaticMarkup(
@@ -6229,7 +6278,7 @@ describe("generated forms and records", () => {
         entity={taskWithDelete}
         entityName="task"
         query={{ kind: "all" }}
-        recordFields={recordFields}
+        result={listResult(recordFields)}
       />,
     );
 
@@ -6257,14 +6306,19 @@ describe("generated forms and records", () => {
 
     applyBootstrapResponse(bootstrap([taskRecord("record-1", "Disposable task", false)]));
     const disabledHtml = renderToStaticMarkup(
-      <RecordTable columns={columns} entity={task} entityName="task" query={{ kind: "all" }} />,
+      <RecordTable
+        entity={task}
+        entityName="task"
+        query={{ kind: "all" }}
+        result={tableResult(columns)}
+      />,
     );
     const enabledHtml = renderToStaticMarkup(
       <RecordTable
-        columns={columns}
         entity={taskWithDelete}
         entityName="task"
         query={{ kind: "all" }}
+        result={tableResult(columns)}
       />,
     );
 

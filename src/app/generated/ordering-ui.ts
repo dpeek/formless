@@ -1,4 +1,4 @@
-import type { ResultOrderingConfig } from "../../client/views.ts";
+import type { ResultOrderingConfig } from "../../client/result-ordering-model.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
 import type { ClientAppTarget } from "../../client/app-target.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";

@@ -5,11 +5,14 @@ import { selectTreeResultModel } from "./tree-result-model.ts";
 import type { HomeResultConfig } from "./views.ts";
 import { selectResultOrderingConfig } from "./result-ordering-model.ts";
 
+export type CollectionResultModel = HomeResultConfig;
+export type TableCollectionResultModel = Extract<HomeResultConfig, { type: "table" }>;
+
 export function selectHomeResultModel(
   schema: AppSchema,
   collectionView: CollectionViewSchema,
   entity: EntitySchema,
-): HomeResultConfig {
+): CollectionResultModel {
   const result = collectionView.result;
 
   if (result.type === "table") {

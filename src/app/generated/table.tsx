@@ -33,11 +33,11 @@ import type {
   FieldTableColumnConfig,
   HomeQueryTabConfig,
   OrderingHandleTableColumnConfig,
-  ResultOrderingConfig,
   ReferenceFieldTableColumnConfig,
   TableColumnConfig,
   TableFooterSlotConfig,
 } from "../../client/views.ts";
+import type { TableCollectionResultModel } from "../../client/collection-result-model.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import { evaluateNumericExpression } from "../../shared/read-model.ts";
@@ -71,28 +71,25 @@ import {
 import { selectRecordFieldsForActiveUnion } from "./union-presentation.ts";
 
 export function RecordTable({
-  columns,
   entity,
   entityName,
-  footer = [],
-  ordering,
   query,
   queryName,
   queryContext,
+  result,
 }: {
-  columns: TableColumnConfig[];
   entity: EntitySchema;
   entityName: string;
-  footer?: TableFooterSlotConfig[];
-  ordering?: ResultOrderingConfig;
   query: HomeQueryTabConfig["query"];
   queryName?: string;
   queryContext?: QueryEvaluationContext;
+  result: TableCollectionResultModel;
 }) {
   const appTarget = useSchemaAppTarget();
   const canPatch = entity.mutations.patch.enabled;
   const canDelete = entity.mutations.delete.enabled;
   const [pendingDragRecordId, setPendingDragRecordId] = useState<string | null>(null);
+  const { columns, ordering } = result;
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const recordsById = useRecordsById();
   const orderingContext = selectResultOrderingContext({
@@ -108,7 +105,7 @@ export function RecordTable({
     canDelete,
     canPatch,
     columns,
-    footer,
+    footer: result.footer ?? [],
     orderedRecordIds,
     orderingDragFacts,
     orderingDragPatchEnabled: orderingContext?.canPatch,

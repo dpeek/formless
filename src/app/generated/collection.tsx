@@ -26,13 +26,13 @@ import type {
   HomeCollectionConfig,
   HomeContextConfig,
   HomeQueryTabConfig,
-  HomeResultConfig,
   HomeSummarySlotConfig,
   RecordFieldConfig,
   RelatedCollectionConfig,
   RecordUnionPresentationConfig,
-  ResultOrderingConfig,
 } from "../../client/views.ts";
+import type { CollectionResultModel } from "../../client/collection-result-model.ts";
+import type { ListResultModel, RecordResultModel } from "../../client/list-result-model.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { StoredRecord } from "../../shared/protocol.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
@@ -287,7 +287,7 @@ function ListDetailScopedHomeCollection({
   onSelectContext?: (recordId: string | null) => void;
   onSelectQuery: (queryName: string) => void;
   queryTabs: HomeQueryTabConfig[];
-  result: HomeResultConfig;
+  result: CollectionResultModel;
   selectedQuery: HomeQueryTabConfig;
   summary: HomeSummarySlotConfig[];
 }) {
@@ -808,20 +808,18 @@ function CollectionResult({
   query: HomeQueryTabConfig["query"];
   queryName: string;
   queryContext?: QueryEvaluationContext;
-  result: HomeResultConfig;
+  result: CollectionResultModel;
   selectableContextRecordIds?: Set<string>;
 }) {
   if (result.type === "table") {
     return (
       <RecordTable
-        columns={result.columns}
         entity={entity}
         entityName={entityName}
-        footer={result.footer ?? []}
-        ordering={result.ordering}
         query={query}
         queryName={queryName}
         queryContext={queryContext}
+        result={result}
       />
     );
   }
@@ -833,8 +831,7 @@ function CollectionResult({
         entityName={entityName}
         query={query}
         queryContext={queryContext}
-        recordFields={result.recordFields}
-        recordUnion={result.recordUnion}
+        result={result}
       />
     );
   }
@@ -857,11 +854,9 @@ function CollectionResult({
     <RecordList
       entity={entity}
       entityName={entityName}
-      ordering={result.ordering}
       query={query}
       queryContext={queryContext}
-      recordFields={result.recordFields}
-      recordUnion={result.recordUnion}
+      result={result}
     />
   );
 }
@@ -871,15 +866,13 @@ function RecordDetail({
   entityName,
   query,
   queryContext,
-  recordFields,
-  recordUnion,
+  result,
 }: {
   entity: EntitySchema;
   entityName: string;
   query: HomeQueryTabConfig["query"];
   queryContext?: QueryEvaluationContext;
-  recordFields: RecordFieldConfig[];
-  recordUnion?: RecordUnionPresentationConfig;
+  result: RecordResultModel;
 }) {
   const canPatch = entity.mutations.patch.enabled;
   const canDelete = entity.mutations.delete.enabled;
@@ -892,7 +885,11 @@ function RecordDetail({
     return <p className="text-sm text-slate-600">No {entity.label.toLowerCase()} record found.</p>;
   }
 
-  const visibleFields = selectRecordFieldsForActiveUnion(recordFields, recordUnion, record);
+  const visibleFields = selectRecordFieldsForActiveUnion(
+    result.recordFields,
+    result.recordUnion,
+    record,
+  );
 
   return (
     <section
@@ -935,23 +932,20 @@ type RecordListItem = {
 export function RecordList({
   entity,
   entityName,
-  ordering,
   query,
   queryContext,
-  recordFields,
-  recordUnion,
+  result,
 }: {
   entity: EntitySchema;
   entityName: string;
-  ordering?: ResultOrderingConfig;
   query: HomeQueryTabConfig["query"];
   queryContext?: QueryEvaluationContext;
-  recordFields: RecordFieldConfig[];
-  recordUnion?: RecordUnionPresentationConfig;
+  result: ListResultModel;
 }) {
   const appTarget = useSchemaAppTarget();
   const canPatch = entity.mutations.patch.enabled;
   const canDelete = entity.mutations.delete.enabled;
+  const { ordering, recordFields, recordUnion } = result;
   const [pendingOrderingRecordId, setPendingOrderingRecordId] = useState<string | null>(null);
   const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
   const recordsById = useRecordsById();

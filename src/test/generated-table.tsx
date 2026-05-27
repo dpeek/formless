@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { applyBootstrapResponse } from "../client/store.ts";
+import type { TableCollectionResultModel } from "../client/collection-result-model.ts";
 import {
   selectCollectionModels,
   type HomeQueryTabConfig,
@@ -38,6 +39,7 @@ export function requiredTableModel(schema: AppSchema, viewName: string) {
     entityName: model.entityName,
     footer: model.result.footer,
     ordering: model.result.ordering,
+    result: model.result,
   };
 }
 
@@ -50,10 +52,12 @@ export function renderRecordTableHtml({
   query = { kind: "all" },
   queryName,
   records,
+  result,
   schema,
   schemaKey,
+  tableViewName = "testTable",
 }: {
-  columns: TableColumnConfig[];
+  columns?: TableColumnConfig[];
   entity: EntitySchema;
   entityName: string;
   footer?: ReturnType<typeof requiredTableModel>["footer"];
@@ -61,20 +65,21 @@ export function renderRecordTableHtml({
   query?: HomeQueryTabConfig["query"];
   queryName?: string;
   records: StoredRecord[];
+  result?: TableCollectionResultModel;
   schema: AppSchema;
   schemaKey?: SchemaKey;
+  tableViewName?: string;
 }) {
   applyBootstrapResponse(bootstrapResponse(schema, records), schemaKey);
+  const tableResult = result ?? tableResultFromProps({ columns, footer, ordering, tableViewName });
 
   return renderToStaticMarkup(
     <RecordTable
-      columns={columns}
       entity={entity}
       entityName={entityName}
-      footer={footer}
-      ordering={ordering}
       query={query}
       queryName={queryName}
+      result={tableResult}
     />,
   );
 }
@@ -95,14 +100,36 @@ export function renderTableViewHtml({
   const table = requiredTableModel(schema, viewName);
 
   return renderRecordTableHtml({
-    columns: table.columns,
     entity: table.entity,
     entityName: table.entityName,
-    footer: table.footer,
-    ordering: table.ordering,
     query,
     records,
+    result: table.result,
     schema,
     schemaKey,
   });
+}
+
+function tableResultFromProps({
+  columns,
+  footer,
+  ordering,
+  tableViewName,
+}: {
+  columns: TableColumnConfig[] | undefined;
+  footer?: ReturnType<typeof requiredTableModel>["footer"];
+  ordering?: TableOrderingConfig;
+  tableViewName: string;
+}): TableCollectionResultModel {
+  if (columns === undefined) {
+    throw new Error("RecordTable test helper requires columns or a table result.");
+  }
+
+  return {
+    type: "table",
+    tableViewName,
+    columns,
+    ...(ordering === undefined ? {} : { ordering }),
+    ...(footer === undefined ? {} : { footer }),
+  };
 }

@@ -12,11 +12,13 @@ import type {
   CreateDefaultConfig,
   CreateFieldConfig,
   HomeContextConfig,
-  HomeResultConfig,
   RecordFieldConfig,
-  TreeAllowedChildVariantConfig,
   RecordVariantContextLinkPresentationConfig,
 } from "../../client/views.ts";
+import type {
+  TreeAllowedChildVariantConfig,
+  TreeResultModel,
+} from "../../client/tree-result-model.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type {
   ActionResponse,
@@ -48,7 +50,7 @@ import {
   selectRecordFieldsForActiveUnion,
 } from "./union-presentation.ts";
 
-type TreeResultConfig = Extract<HomeResultConfig, { type: "tree" }>;
+type TreeResultConfig = TreeResultModel;
 
 export function RecordTree({
   entity,
