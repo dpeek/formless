@@ -108,6 +108,10 @@ Last updated: 2026-05-27
 - Authority broadcast is best effort per socket; one stale socket does not block later sockets.
 - Replayed mutation and action writes return stored responses without push notification.
 - Failed validation and mutation replay do not broadcast.
+- Action runtime source: `src/worker/actions.ts`.
+- Worker action kind runtime modules: `entityActionKindRuntimeModules` in `src/worker/actions.ts`.
+- Action request input validation, execution, and create-after-create hook behavior dispatch through action kind runtime modules.
+- Runtime action kind capabilities source from shared schema action kind capabilities.
 - Delete mutation storage writer: `deleteStoredRecordOutcome` in `src/worker/storage.ts`.
 - Delete mutations soft-delete by setting `deletedAt`.
 - Delete mutations keep the record row, `id`, `entity`, `values`, and `createdAt`.

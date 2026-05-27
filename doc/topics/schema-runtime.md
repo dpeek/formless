@@ -1,6 +1,6 @@
 # Schema Runtime
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Facts
 
@@ -191,8 +191,10 @@ Last updated: 2026-05-26
 ## Actions
 
 - Schema action kind modules: `entityActionKindModules` in `src/shared/schema-actions.ts`.
+- Action schema types derive from `EntityActionSchemaByKind` in `src/shared/schema-types.ts`.
+- Schema action kind modules own action parsing and capability facts.
 - Worker action kind runtime modules: `entityActionKindRuntimeModules` in `src/worker/actions.ts`.
-- Generated action UI modules: `entityActionUiModules` in `src/client/views.ts`.
+- Generated action UI modules: `entityActionUiModules` in `src/client/action-ui.ts`.
 - Generated action renderer consumes `action.ui` in `src/app/generated/actions.tsx`.
 - Action kinds: `clear-completed`, `create-missing-join-records`, `create-selected-join-record`, `remove-selected-join-records`, `create-tree-child`, `remove-tree-placement`.
 - Action kind capabilities expose after-create hook eligibility.

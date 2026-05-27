@@ -23,6 +23,8 @@ Legacy Site-owned media and archive compatibility retirement shipped facts live 
 Site CLI and publish, Authority storage, and Instance media direction docs.
 Runtime topology shipped facts live across Generated UI, Authority storage, Site runtime, and
 Testing topic docs.
+Action kind module shipped facts live across Schema runtime, Authority storage, and Generated UI
+topic docs.
 
 ## Docs
 

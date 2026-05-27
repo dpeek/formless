@@ -143,6 +143,9 @@ Last updated: 2026-05-27
 - Schema Builder opens create entity and create field dialogs from compact add controls.
 - Schema Builder field presentation preview derives generated control and renderer facts.
 - Schema Builder preserves enum option presentation metadata when enum labels change.
+- Generated action UI adapter source: `src/client/action-ui.ts`.
+- Generated action UI modules: `entityActionUiModules` in `src/client/action-ui.ts`.
+- Collection view models select `action.ui` through generated action UI modules.
 - Generated actions consume selected `action.ui` facts in `src/app/generated/actions.tsx`.
 - Generated field UI adapters: `src/app/generated/field-ui-adapters.ts`.
 - Generated field presentation resolver: `src/app/generated/field-presentation.tsx`.

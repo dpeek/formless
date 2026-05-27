@@ -28,6 +28,7 @@ Good next chunks:
 
 - Add one richer source app that is not Site-shaped.
 - Exercise multi-screen workflows with related records.
+- Use the existing action kind module seams when adding future schema-declared actions.
 - Improve reference workflows and scoped creation.
 - Expand schema-declared actions for non-Site use cases.
 - Expand query/read-model capability only when a real app chunk needs it.
