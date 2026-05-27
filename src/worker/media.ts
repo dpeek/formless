@@ -1,4 +1,3 @@
-import { type ImageMediaStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_IMAGE_UPLOAD_PATH,
@@ -22,6 +21,12 @@ export { CORE_IMAGE_KEY_PREFIX, CORE_MEDIA_ROUTE_PREFIX } from "../media/core.ts
 
 type MediaEnv = AuthorityAdminGuardEnv & {
   FORMLESS_MEDIA: R2Bucket;
+};
+
+type ImageMediaStorageIdentity = {
+  imageKeyPrefix: string;
+  imageUploadPath: `/api/${string}/media/images`;
+  routePrefix: `/api/${string}/media`;
 };
 
 type ImageMediaRoute = {

@@ -10,12 +10,10 @@ import {
   parseAppArchive,
   parsePortableArchive,
   type AppArchive,
-  type AppArchiveData,
   type AppArchiveMediaObject,
   type ArchiveRestorePolicy,
   type InstanceArchive,
   type PortableArchive,
-  type SourceArchiveRecord,
 } from "../shared/archive.ts";
 import {
   findAppInstall,
@@ -23,11 +21,7 @@ import {
   type AppInstall,
   type BundledAppPackage,
 } from "../shared/app-installs.ts";
-import {
-  installedAppStorageIdentity,
-  legacySiteMediaStorageIdentity,
-  type InstalledAppStorageIdentity,
-} from "../shared/app-storage-identity.ts";
+import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_MEDIA_ROUTE_PREFIX,
@@ -585,148 +579,18 @@ function retargetAppArchive(archive: AppArchive, installId: string): AppArchive 
     return nextArchive;
   }
 
-  const previousIdentity = installedAppStorageIdentity({
-    installId: nextArchive.app.installId,
-    packageAppKey: nextArchive.app.packageAppKey,
-  });
   const nextIdentity = installedAppStorageIdentity({
     installId,
     packageAppKey: nextArchive.app.packageAppKey,
   });
 
-  if (!previousIdentity || !nextIdentity) {
+  if (!nextIdentity) {
     throw new Error(`App archive cannot restore into install "${installId}".`);
   }
 
   nextArchive.app.installId = nextIdentity.installId;
-  nextArchive.media.objects = nextArchive.media.objects.map((object) =>
-    retargetMediaObject(object, previousIdentity, nextIdentity),
-  );
-  nextArchive.data = retargetArchiveData(nextArchive.data, previousIdentity, nextIdentity);
 
   return nextArchive;
-}
-
-function retargetMediaObject(
-  object: AppArchiveMediaObject,
-  previousIdentity: InstalledAppStorageIdentity,
-  nextIdentity: InstalledAppStorageIdentity,
-): AppArchiveMediaObject {
-  const previousMedia = legacySiteMediaStorageIdentity(previousIdentity);
-  const nextMedia = legacySiteMediaStorageIdentity(nextIdentity);
-
-  if (!previousMedia || !nextMedia) {
-    return { ...object };
-  }
-
-  if (!object.storageKey.startsWith(mediaKeyPrefix(previousMedia.imageKeyPrefix))) {
-    return { ...object };
-  }
-
-  const storageKey = retargetMediaStorageKey(
-    object.storageKey,
-    previousMedia.imageKeyPrefix,
-    nextMedia.imageKeyPrefix,
-  );
-
-  return {
-    ...object,
-    deliveryHref: `${nextMedia.routePrefix}/${storageKey}`,
-    storageKey,
-  };
-}
-
-function retargetArchiveData(
-  data: AppArchiveData,
-  previousIdentity: InstalledAppStorageIdentity,
-  nextIdentity: InstalledAppStorageIdentity,
-): AppArchiveData {
-  if (data.kind === "storeSnapshot") {
-    return {
-      kind: "storeSnapshot",
-      snapshot: {
-        ...data.snapshot,
-        records: data.snapshot.records.map((record) =>
-          retargetStoredRecord(record, previousIdentity, nextIdentity),
-        ),
-      },
-    };
-  }
-
-  return {
-    ...data,
-    records: data.records.map((record) =>
-      retargetSourceRecord(record, previousIdentity, nextIdentity),
-    ),
-  };
-}
-
-function retargetStoredRecord(
-  record: StoredRecord,
-  previousIdentity: InstalledAppStorageIdentity,
-  nextIdentity: InstalledAppStorageIdentity,
-): StoredRecord {
-  return {
-    ...record,
-    values: retargetRecordValues(record.values, previousIdentity, nextIdentity),
-  };
-}
-
-function retargetSourceRecord(
-  record: SourceArchiveRecord,
-  previousIdentity: InstalledAppStorageIdentity,
-  nextIdentity: InstalledAppStorageIdentity,
-): SourceArchiveRecord {
-  return {
-    ...record,
-    values: retargetRecordValues(record.values, previousIdentity, nextIdentity),
-  };
-}
-
-function retargetRecordValues(
-  values: StoredRecord["values"],
-  previousIdentity: InstalledAppStorageIdentity,
-  nextIdentity: InstalledAppStorageIdentity,
-): StoredRecord["values"] {
-  const previousMedia = legacySiteMediaStorageIdentity(previousIdentity);
-  const nextMedia = legacySiteMediaStorageIdentity(nextIdentity);
-
-  if (!previousMedia || !nextMedia) {
-    return { ...values };
-  }
-
-  const previousRoutePrefix = `${previousMedia.routePrefix}/`;
-  const nextRoutePrefix = `${nextMedia.routePrefix}/`;
-
-  return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [
-      key,
-      typeof value === "string" && value.startsWith(previousRoutePrefix)
-        ? `${nextRoutePrefix}${retargetMediaStorageKey(
-            value.slice(previousRoutePrefix.length),
-            previousMedia.imageKeyPrefix,
-            nextMedia.imageKeyPrefix,
-          )}`
-        : value,
-    ]),
-  );
-}
-
-function retargetMediaStorageKey(
-  storageKey: string,
-  previousPrefixInput: string,
-  nextPrefixInput: string,
-): string {
-  const previousPrefix = previousPrefixInput.endsWith("/")
-    ? previousPrefixInput
-    : `${previousPrefixInput}/`;
-  const nextPrefix = nextPrefixInput.endsWith("/") ? nextPrefixInput : `${nextPrefixInput}/`;
-
-  if (!storageKey.startsWith(previousPrefix)) {
-    throw new Error(`App archive media key "${storageKey}" does not match the source install id.`);
-  }
-
-  return `${nextPrefix}${storageKey.slice(previousPrefix.length)}`;
 }
 
 function withRestorePolicy(

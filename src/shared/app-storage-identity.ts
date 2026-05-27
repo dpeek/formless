@@ -31,14 +31,6 @@ export type InstalledAppStorageIdentity = {
   broadcastChannelName: string;
 };
 
-export type ImageMediaStorageIdentity = {
-  imageKeyPrefix: string;
-  imageUploadPath: `/api/${string}/media/images`;
-  routePrefix: `/api/${string}/media`;
-};
-
-export type SiteMediaStorageIdentity = ImageMediaStorageIdentity;
-
 export type AuthorityApiRoute = {
   identity: AppStorageIdentity;
   path: `/${string}`;
@@ -47,7 +39,6 @@ export type AuthorityApiRoute = {
 const browserStoragePrefix = "formless";
 const installedAppAuthorityPrefix = "app";
 const installedAppApiPrefix = "/api/app-installs";
-const legacySiteImageKeyPrefix = "site/images";
 
 export function schemaKeyStorageIdentity(
   schemaKey: SchemaKey,
@@ -94,28 +85,6 @@ export function installedAppStorageIdentity(input: {
     apiRoutePrefix,
     browserDatabaseName: storageName,
     broadcastChannelName: storageName,
-  };
-}
-
-export function legacySiteMediaStorageIdentity(
-  identity: AppStorageIdentity | undefined,
-): SiteMediaStorageIdentity | undefined {
-  if (!identity || identity.packageAppKey !== "site") {
-    return undefined;
-  }
-
-  if (identity.kind === "schemaKey") {
-    return {
-      imageKeyPrefix: legacySiteImageKeyPrefix,
-      imageUploadPath: "/api/site/media/images",
-      routePrefix: "/api/site/media",
-    };
-  }
-
-  return {
-    imageKeyPrefix: `app-installs/${identity.installId}/site/images`,
-    imageUploadPath: `${identity.apiRoutePrefix}/media/images`,
-    routePrefix: `${identity.apiRoutePrefix}/media`,
   };
 }
 

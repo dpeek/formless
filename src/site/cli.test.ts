@@ -2464,6 +2464,92 @@ describe("Formless Site CLI", () => {
     expect(logs.at(-1)).toContain("App archive restore for personal-copy applied ok.");
   });
 
+  it("does not retarget old Site media keys or hrefs during app archive restore", async () => {
+    const tempDir = await makeTempDir();
+    const outDir = path.join(tempDir, "legacy-site-media-backup");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const legacyStorageKey = "app-installs/personal/site/images/cover.png";
+    const legacyHref = `/api/app-installs/site/personal/media/${legacyStorageKey}`;
+    const legacyArchive: AppArchive = {
+      ...appArchive("personal", "Personal", {
+        records: [
+          block("block-cover", "2026-05-05T00:00:02.000Z", {
+            type: "image",
+            label: "Cover",
+            href: legacyHref,
+          }),
+        ],
+      }),
+      capabilities: ["app-store-snapshots", "app-scoped-media"],
+      media: {
+        objects: [
+          {
+            archivePath: "media/personal/site/images/cover.png",
+            byteSize: 3,
+            contentType: "image/png",
+            deliveryHref: legacyHref,
+            storageKey: legacyStorageKey,
+          },
+        ],
+      },
+    };
+
+    await writeArchiveDirectory(outDir, legacyArchive, { personal: new Uint8Array([4, 5, 6]) });
+    responses.queueJson({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["personal-copy"],
+          mediaCountsByApp: { "personal-copy": 1 },
+          recordCountsByApp: { "personal-copy": { total: 1 } },
+          replacedInstalls: [],
+        },
+      },
+    });
+
+    await runFormlessCli(
+      [
+        "archive",
+        "restore-app",
+        "--target",
+        "https://instance.example",
+        "--archive",
+        outDir,
+        "--install",
+        "personal-copy",
+        "--apply",
+      ],
+      cliDeps(tempDir, {
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    const restoreRequest = requests.at(-1);
+    const restoreBody = capturedRequestJson<{
+      archive: AppArchive;
+      mediaFiles: { bytesBase64: string }[];
+    }>(restoreRequest);
+
+    expect(restoreBody.archive.app.installId).toBe("personal-copy");
+    expect(restoreBody.archive.media.objects[0]).toMatchObject({
+      deliveryHref: legacyHref,
+      storageKey: legacyStorageKey,
+    });
+    expect(
+      restoreBody.archive.data.kind === "storeSnapshot"
+        ? restoreBody.archive.data.snapshot.records[0]?.values.href
+        : undefined,
+    ).toBe(legacyHref);
+    expect(restoreBody.mediaFiles[0]?.bytesBase64).toBe(Buffer.from([4, 5, 6]).toString("base64"));
+    expect(JSON.stringify(restoreBody.archive)).not.toContain("personal-copy/site/images");
+    expect(logs.at(-1)).toContain("App archive restore for personal-copy applied ok.");
+  });
+
   it("exports installed Tasks app archives without media requests", async () => {
     const tempDir = await makeTempDir();
     const outDir = path.join(tempDir, "tasks-backup");

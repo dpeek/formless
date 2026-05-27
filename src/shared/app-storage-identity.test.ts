@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   installedAppStorageIdentity,
-  legacySiteMediaStorageIdentity,
   parseAuthorityApiRoute,
   schemaKeyStorageIdentity,
 } from "./app-storage-identity.ts";
@@ -148,7 +147,7 @@ describe("app storage identity", () => {
     expect(personal.broadcastChannelName).not.toBe(docs.broadcastChannelName);
   });
 
-  it("keeps legacy Site media facts out of normal identities", () => {
+  it("exposes no Site-owned media scope on storage identities", () => {
     const schemaSite = schemaKeyStorageIdentity("site");
     const personal = installedAppStorageIdentity({
       installId: "personal",
@@ -156,17 +155,17 @@ describe("app storage identity", () => {
     });
     const tasks = installedAppStorageIdentity({ installId: "tasks", packageAppKey: "tasks" });
 
-    expect(legacySiteMediaStorageIdentity(schemaSite)).toEqual({
-      imageKeyPrefix: "site/images",
-      imageUploadPath: "/api/site/media/images",
-      routePrefix: "/api/site/media",
-    });
-    expect(legacySiteMediaStorageIdentity(personal)).toEqual({
-      imageKeyPrefix: "app-installs/personal/site/images",
-      imageUploadPath: "/api/app-installs/site/personal/media/images",
-      routePrefix: "/api/app-installs/site/personal/media",
-    });
-    expect(legacySiteMediaStorageIdentity(tasks)).toBeUndefined();
+    expect(schemaSite).not.toHaveProperty("imageKeyPrefix");
+    expect(schemaSite).not.toHaveProperty("imageUploadPath");
+    expect(schemaSite).not.toHaveProperty("routePrefix");
+    expect(personal).not.toHaveProperty("imageKeyPrefix");
+    expect(personal).not.toHaveProperty("imageUploadPath");
+    expect(personal).not.toHaveProperty("routePrefix");
+    expect(tasks).not.toHaveProperty("imageKeyPrefix");
+    expect(tasks).not.toHaveProperty("imageUploadPath");
+    expect(tasks).not.toHaveProperty("routePrefix");
+    expect(JSON.stringify([schemaSite, personal, tasks])).not.toContain("site/images");
+    expect(JSON.stringify([schemaSite, personal, tasks])).not.toContain("/media");
   });
 
   it("parses legacy and installed app API route identities", () => {
