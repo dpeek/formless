@@ -11,10 +11,6 @@ import {
   type InstanceArchive,
   type PortableArchive,
 } from "./archive.ts";
-import {
-  normalizePortableArchiveLegacySiteMedia,
-  type ArchiveCompatibilityError,
-} from "./archive-compat.ts";
 import { listBundledAppPackages, type AppInstall, type BundledAppPackage } from "./app-installs.ts";
 import { isValidStoredFieldValue } from "./field-types.ts";
 import type { RecordValues, StoredRecord } from "./protocol.ts";
@@ -160,9 +156,7 @@ export function planPortableArchiveRestore(
     return invalidArchiveResult(error);
   }
 
-  const normalized = normalizeArchiveForPlanning(archive);
-
-  return normalized.ok ? planParsedPortableArchiveRestore(normalized.archive, target) : normalized;
+  return planParsedPortableArchiveRestore(archive, target);
 }
 
 export function planInstanceArchiveRestore(
@@ -177,15 +171,7 @@ export function planInstanceArchiveRestore(
     return invalidArchiveResult(error);
   }
 
-  const normalized = normalizeArchiveForPlanning(archive);
-
-  if (!normalized.ok) {
-    return normalized;
-  }
-
-  return normalized.archive.kind === INSTANCE_ARCHIVE_KIND
-    ? planParsedInstanceArchiveRestore(normalized.archive, target)
-    : planParsedAppArchiveRestore(normalized.archive, target);
+  return planParsedInstanceArchiveRestore(archive, target);
 }
 
 export function planAppArchiveRestore(
@@ -200,33 +186,7 @@ export function planAppArchiveRestore(
     return invalidArchiveResult(error);
   }
 
-  const normalized = normalizeArchiveForPlanning(archive);
-
-  if (!normalized.ok) {
-    return normalized;
-  }
-
-  return normalized.archive.kind === INSTANCE_ARCHIVE_KIND
-    ? planParsedInstanceArchiveRestore(normalized.archive, target)
-    : planParsedAppArchiveRestore(normalized.archive, target);
-}
-
-function normalizeArchiveForPlanning(archive: PortableArchive):
-  | {
-      archive: PortableArchive;
-      ok: true;
-    }
-  | {
-      errors: ArchiveRestorePlanError[];
-      ok: false;
-    } {
-  const normalized = normalizePortableArchiveLegacySiteMedia(archive);
-
-  if (!normalized.ok) {
-    return compatibilityErrorResult(normalized.errors);
-  }
-
-  return normalized;
+  return planParsedAppArchiveRestore(archive, target);
 }
 
 function planParsedPortableArchiveRestore(
@@ -760,7 +720,7 @@ function validateMedia(
     validateMediaFile(app.installId, object, context.mediaFilesByPath, errors);
   }
 
-  validateCoreMediaReferences(app.installId, records, deliveryHrefs, errors);
+  validateMediaReferences(app.installId, records, deliveryHrefs, errors);
 }
 
 function validateMediaAsset(
@@ -834,7 +794,7 @@ function validateMediaFile(
   }
 }
 
-function validateCoreMediaReferences(
+function validateMediaReferences(
   appInstallId: string,
   records: StoredRecord[],
   deliveryHrefs: Set<string>,
@@ -843,6 +803,19 @@ function validateCoreMediaReferences(
   for (const record of records) {
     for (const [fieldName, value] of Object.entries(record.values)) {
       if (typeof value !== "string") {
+        continue;
+      }
+
+      if (isLegacySiteMediaHref(value)) {
+        errors.push(
+          planError("invalid-media", {
+            appInstallId,
+            entity: record.entity,
+            field: `${record.entity}.${fieldName}`,
+            message: `Archive app "${appInstallId}" record "${record.id}" field "${record.entity}.${fieldName}" references unsupported legacy Site media.`,
+            recordId: record.id,
+          }),
+        );
         continue;
       }
 
@@ -869,6 +842,12 @@ function validateCoreMediaReferences(
 
 function coreDeliveryHrefFromValue(value: string): string | undefined {
   return value.startsWith(CORE_MEDIA_ROUTE_PREFIX) ? value : undefined;
+}
+
+function isLegacySiteMediaHref(value: string): boolean {
+  return (
+    value.startsWith("/api/site/media/") || /^\/api\/app-installs\/site\/[^/]+\/media\//.test(value)
+  );
 }
 
 function planSteps(
@@ -1030,15 +1009,6 @@ function invalidArchiveResult(error: unknown): ArchiveRestorePlanResult {
         message: error instanceof Error ? error.message : "Archive is invalid.",
       }),
     ],
-    ok: false,
-  };
-}
-
-function compatibilityErrorResult(
-  errors: readonly ArchiveCompatibilityError[],
-): Extract<ArchiveRestorePlanResult, { ok: false }> {
-  return {
-    errors: errorsByLocation(errors.map(({ code, ...details }) => planError(code, { ...details }))),
     ok: false,
   };
 }

@@ -6,7 +6,6 @@ import {
   type PortableArchive,
   type SourceArchiveRecord,
 } from "../shared/archive.ts";
-import { normalizePortableArchiveLegacySiteMedia } from "../shared/archive-compat.ts";
 import type { AppInstall, BundledAppPackage } from "../shared/app-installs.ts";
 import {
   installedAppStorageIdentity,
@@ -381,7 +380,7 @@ export async function restoreArchiveMediaObjectToStore(
   }
 
   throw new Error(
-    `Archive media key "${object.storageKey}" must be normalized to core media before restore for "${identity.installId}".`,
+    `Archive media key "${object.storageKey}" is not core image media for "${identity.installId}".`,
   );
 }
 
@@ -433,17 +432,6 @@ async function parseAndPlanArchiveRestore(
       ok: false,
     };
   }
-
-  const normalized = normalizePortableArchiveLegacySiteMedia(archive);
-
-  if (!normalized.ok) {
-    return {
-      errors: normalized.errors.map((error) => ({ ...error })),
-      ok: false,
-    };
-  }
-
-  archive = normalized.archive;
 
   const planResult = planPortableArchiveRestore(archive, {
     installedApps: await target.listInstalledApps(),

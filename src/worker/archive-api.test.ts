@@ -236,36 +236,28 @@ describe("instance archive restore API", () => {
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(mediaBytes);
   });
 
-  it("normalizes old app-scoped Site media archives into core media on restore", async () => {
-    const applied = await postArchiveRestore(appArchiveWithLegacyMedia({ dryRun: false }), [
+  it("rejects old app-scoped Site media archives before restore mutation", async () => {
+    const rejected = await postArchiveRestore(appArchiveWithLegacyMedia({ dryRun: false }), [
       legacyMediaFile(),
     ]);
-    const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
-    const bootstrap = await getJson<BootstrapResponse>("/api/app-installs/site/personal/bootstrap");
-    const served = await harness.fetch(legacyCoreMediaHref);
-    const mediaRecord = bootstrap.body.records.find(
-      (record) => record.id === "rec_site_media_avatar",
-    );
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
 
-    expect(applied.response.status).toBe(200);
-    expect(applied.body).toMatchObject({
-      ok: true,
-      report: {
-        applied: true,
-        summary: {
-          appCount: 1,
-          createdInstalls: ["personal"],
-          mediaCountsByApp: { personal: 1 },
-        },
-      },
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.body).toMatchObject({
+      ok: false,
+      errors: expect.arrayContaining([
+        expect.objectContaining({
+          code: "invalid-media",
+          storageKey: legacyStorageKey,
+        }),
+        expect.objectContaining({
+          code: "invalid-media",
+          field: "block.href",
+          recordId: "rec_site_media_avatar",
+        }),
+      ]),
     });
-    expect(mediaRecord?.values).toMatchObject({ mediaAssetId: legacyCoreAssetId });
-    expect(mediaRecord?.values).not.toHaveProperty("href");
-    expect(JSON.stringify(tree.body)).toContain(legacyCoreMediaHref);
-    expect(JSON.stringify(tree.body)).not.toContain("/api/app-installs/site/personal/media/");
-    expect(served.status).toBe(200);
-    expect(served.headers.get("Content-Type")).toBe("image/png");
-    expect(new Uint8Array(await served.arrayBuffer())).toEqual(mediaBytes);
+    expect(installs.body.installs).toEqual([]);
   });
 
   it("requires write authorization", async () => {
@@ -424,9 +416,6 @@ const coreMediaStorageKey = "media/images/installed.png";
 const coreMediaHref = `/api/formless/media/${coreMediaStorageKey}`;
 const legacyStorageKey = "app-installs/personal/site/images/installed.png";
 const legacyMediaHref = `/api/app-installs/site/personal/media/${legacyStorageKey}`;
-const legacyCoreAssetId = "legacy-site-app-installs__personal__site__images__installed.png";
-const legacyCoreMediaStorageKey = `media/images/${legacyCoreAssetId}`;
-const legacyCoreMediaHref = `/api/formless/media/${legacyCoreMediaStorageKey}`;
 
 function appArchiveWithMedia(input: { dryRun: boolean }): AppArchive {
   return {

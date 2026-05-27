@@ -58,10 +58,13 @@ describe("archive restore execution", () => {
           data: {
             kind: "storeSnapshot",
             snapshot: storeSnapshot({
-              records: [siteRecord("rec_site_settings_personal", "personal")],
+              records: [
+                coreImageBlock("hero"),
+                siteRecord("rec_site_settings_personal", "personal"),
+              ],
             }),
           },
-          media: { objects: [mediaObject("personal", "hero")] },
+          media: { objects: [coreMediaObject("hero")] },
         }),
         appArchive({
           app: archivedInstall("docs", "Docs"),
@@ -78,7 +81,7 @@ describe("archive restore execution", () => {
     const events: string[] = [];
     const target = memoryRestoreTarget({
       events,
-      mediaFiles: [mediaFile("personal", "hero")],
+      mediaFiles: [coreMediaFile("hero")],
     });
     const result = await applyPortableArchiveRestore(archive, target);
 
@@ -92,7 +95,7 @@ describe("archive restore execution", () => {
       "install:create:docs",
       "app-data:app:docs:docs:storeSnapshot",
       "install:create:personal",
-      `media:app:personal:${legacyCoreStorageKey("personal", "hero")}`,
+      "media:app:personal:media/images/hero.png",
       "app-data:app:personal:personal:storeSnapshot",
     ]);
     expect(result.report.applied).toBe(true);
@@ -206,7 +209,7 @@ describe("archive restore execution", () => {
         pngBytes,
       ),
     ).rejects.toThrow(
-      'Archive media key "app-installs/personal/site/images/hero.png" must be normalized to core media before restore for "personal".',
+      'Archive media key "app-installs/personal/site/images/hero.png" is not core image media for "personal".',
     );
   });
 });
@@ -262,7 +265,7 @@ function instanceArchive(overrides: Partial<InstanceArchive> = {}): InstanceArch
     kind: INSTANCE_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: now,
-    capabilities: ["installed-app-registry", "app-store-snapshots", "app-scoped-media"],
+    capabilities: ["installed-app-registry", "app-store-snapshots"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     apps: [appArchive()],
     ...overrides,
@@ -274,7 +277,7 @@ function appArchive(overrides: Partial<AppArchive> = {}): AppArchive {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: now,
-    capabilities: ["app-store-snapshots", "app-scoped-media"],
+    capabilities: ["app-store-snapshots"],
     restorePolicy: { dryRun: true, installCollisions: "reject" },
     app: archivedInstall("personal", "Personal"),
     data: {
@@ -326,6 +329,19 @@ function siteRecord(id: string, key: string): StoredRecord {
   };
 }
 
+function coreImageBlock(name: string): StoredRecord {
+  return {
+    id: `rec_block_${name}`,
+    entity: "block",
+    values: {
+      type: "image",
+      label: `${name} image`,
+      mediaAssetId: `${name}.png`,
+    },
+    createdAt: "2026-05-23T00:00:02.000Z",
+  };
+}
+
 function mediaObject(installId: string, name: string): AppArchiveMediaObject {
   const storageKey = `app-installs/${installId}/site/images/${name}.png`;
 
@@ -361,17 +377,13 @@ function coreMediaObject(name: string): AppArchiveMediaObject {
   };
 }
 
-function mediaFile(installId: string, name: string): ArchiveRestoreMediaRead {
+function coreMediaFile(name: string): ArchiveRestoreMediaRead {
   return {
-    archivePath: `media/${installId}/${name}.png`,
+    archivePath: `media/personal/media/images/${name}.png`,
     byteSize: pngBytes.byteLength,
     bytes: pngBytes,
     contentType: "image/png",
   };
-}
-
-function legacyCoreStorageKey(installId: string, name: string): string {
-  return `media/images/legacy-site-app-installs__${installId}__site__images__${name}.png`;
 }
 
 function siteInstall(installId: string): AppInstall {
