@@ -3,10 +3,12 @@ import type {
   CreateInstanceDomainMappingResponse,
   DeleteInstanceDomainMappingRequest,
   DeleteInstanceDomainMappingResponse,
+  ForgetInstanceDomainMappingResponse,
   InstanceDomainMappingsResponse,
 } from "../shared/instance-domain-mappings.ts";
 
 export const INSTANCE_DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
+export const INSTANCE_DOMAIN_MAPPINGS_FORGET_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/forget`;
 
 export type DomainMappingApiErrorBody = {
   code?: string;
@@ -95,6 +97,37 @@ export async function deleteInstanceDomainMapping(
   });
 
   return readJsonResponse<DeleteInstanceDomainMappingResponse>(response);
+}
+
+export async function forgetInstanceDomainMapping(
+  input: DeleteInstanceDomainMappingRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<ForgetInstanceDomainMappingResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("host", input.host);
+
+  if (input.profile !== undefined) {
+    searchParams.set("profile", input.profile);
+  }
+
+  if (input.surface !== undefined) {
+    searchParams.set("surface", input.surface);
+  }
+
+  const response = await fetcher(`${INSTANCE_DOMAIN_MAPPINGS_FORGET_API_PATH}?${searchParams}`, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    method: "DELETE",
+    signal,
+  });
+
+  return readJsonResponse<ForgetInstanceDomainMappingResponse>(response);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

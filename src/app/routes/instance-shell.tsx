@@ -25,6 +25,7 @@ import {
   deleteInstanceDomainMapping,
   DomainMappingApiError,
   fetchInstanceDomainMappings,
+  forgetInstanceDomainMapping,
 } from "../../client/domain-mappings.ts";
 import {
   applyInstanceDomainProviderPlan,
@@ -36,12 +37,15 @@ import {
   fetchInstanceDomainProviderDeleteJob,
   fetchInstanceDomainProviderPlan,
   fetchInstanceDomainProviderRedirects,
+  forgetInstanceDomainProviderRedirect,
+  markInstanceDomainProviderResourceManuallyRemoved,
 } from "../../client/domain-provider.ts";
 import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/app-installs.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
   InstanceDomainProviderApplyJob,
   InstanceDomainProviderDeleteJob,
+  InstanceDomainProviderDeleteTarget,
   InstanceDomainProviderPlanResponse,
   InstanceDomainProviderRedirectIntent,
 } from "../../shared/domain-provider-api.ts";
@@ -71,6 +75,18 @@ export type DomainRedirectDraft = {
   toUrl: string;
 };
 
+type DomainProviderDeleteActionInput = {
+  host: string;
+  kind?: InstanceDomainProviderAppliedResourceState["kind"];
+  logicalId?: string;
+};
+
+type DomainProviderCleanupActionInput = {
+  host: string;
+  kind: InstanceDomainProviderAppliedResourceState["kind"];
+  logicalId: string;
+};
+
 export type InstanceShellRouteState =
   | { status: "failed"; message: string }
   | { status: "loading" }
@@ -78,11 +94,15 @@ export type InstanceShellRouteState =
       domainAppliedStates: InstanceDomainMappingAppliedState[];
       domainMappingDeletingKey?: string;
       domainMappingError?: string;
+      domainMappingForgettingKey?: string;
       domainMappingSubmitting: boolean;
       domainMappings: InstanceDomainMapping[];
       domainProviderAppliedResources?: InstanceDomainProviderAppliedResourceState[];
       domainProviderApplying?: boolean;
       domainProviderApplyError?: string;
+      domainProviderCleanupError?: string;
+      domainProviderCleanupKey?: string;
+      domainProviderCleanupMessage?: string;
       domainProviderApplyJob?: InstanceDomainProviderApplyJob;
       domainProviderDeleteJob?: InstanceDomainProviderDeleteJob;
       domainProviderDeleteError?: string;
@@ -93,6 +113,7 @@ export type InstanceShellRouteState =
       domainProviderPlanLoading?: boolean;
       domainRedirectDeletingKey?: string;
       domainRedirectDraftError?: string;
+      domainRedirectForgettingKey?: string;
       domainRedirectIntents: InstanceDomainProviderRedirectIntent[];
       domainRedirectSubmitting: boolean;
       installError?: string;
@@ -225,12 +246,16 @@ export function InstanceShellRoute() {
         domainAppliedStates: state.domainAppliedStates,
         domainMappingDeletingKey: state.domainMappingDeletingKey,
         domainMappingError: state.domainMappingError,
+        domainMappingForgettingKey: state.domainMappingForgettingKey,
         domainMappingSubmitting: false,
         domainMappings: state.domainMappings,
         domainProviderAppliedResources: state.domainProviderAppliedResources,
         domainProviderApplying: state.domainProviderApplying,
         domainProviderApplyError: state.domainProviderApplyError,
         domainProviderApplyJob: state.domainProviderApplyJob,
+        domainProviderCleanupError: state.domainProviderCleanupError,
+        domainProviderCleanupKey: state.domainProviderCleanupKey,
+        domainProviderCleanupMessage: state.domainProviderCleanupMessage,
         domainProviderDeleteJob: state.domainProviderDeleteJob,
         domainProviderDeleteError: state.domainProviderDeleteError,
         domainProviderDeleteMessage: state.domainProviderDeleteMessage,
@@ -240,6 +265,7 @@ export function InstanceShellRoute() {
         domainProviderPlanLoading: state.domainProviderPlanLoading,
         domainRedirectDeletingKey: state.domainRedirectDeletingKey,
         domainRedirectDraftError: state.domainRedirectDraftError,
+        domainRedirectForgettingKey: state.domainRedirectForgettingKey,
         domainRedirectIntents: state.domainRedirectIntents,
         domainRedirectSubmitting: state.domainRedirectSubmitting,
         installing: false,
@@ -337,7 +363,8 @@ export function InstanceShellRoute() {
     if (
       state.status !== "ready" ||
       state.domainMappingSubmitting ||
-      state.domainMappingDeletingKey
+      state.domainMappingDeletingKey ||
+      state.domainMappingForgettingKey
     ) {
       return;
     }
@@ -377,6 +404,55 @@ export function InstanceShellRoute() {
         ...state,
         domainMappingDeletingKey: undefined,
         domainMappingError: message,
+      });
+    }
+  }
+
+  async function submitForgetDomainMapping(mapping: InstanceDomainMapping) {
+    if (
+      state.status !== "ready" ||
+      state.domainMappingSubmitting ||
+      state.domainMappingDeletingKey ||
+      state.domainMappingForgettingKey
+    ) {
+      return;
+    }
+
+    if (!window.confirm(`Forget disabled route for ${mapping.host}?`)) {
+      return;
+    }
+
+    const key = domainMappingKey(mapping);
+
+    setState({
+      ...state,
+      domainMappingError: undefined,
+      domainMappingForgettingKey: key,
+    });
+
+    try {
+      const response = await forgetInstanceDomainMapping({
+        host: mapping.host,
+        profile: mapping.profile,
+      });
+
+      setState({
+        ...state,
+        domainMappingError: undefined,
+        domainMappingForgettingKey: undefined,
+        domainMappingSubmitting: false,
+        domainMappings: response.mappings,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainMappingApiError || error instanceof Error
+          ? error.message
+          : "Domain mapping forget failed.";
+
+      setState({
+        ...state,
+        domainMappingError: message,
+        domainMappingForgettingKey: undefined,
       });
     }
   }
@@ -437,7 +513,8 @@ export function InstanceShellRoute() {
     if (
       state.status !== "ready" ||
       state.domainRedirectSubmitting ||
-      state.domainRedirectDeletingKey
+      state.domainRedirectDeletingKey ||
+      state.domainRedirectForgettingKey
     ) {
       return;
     }
@@ -478,11 +555,53 @@ export function InstanceShellRoute() {
     }
   }
 
-  async function submitDeleteDomainProviderResource(input: {
-    host: string;
-    kind?: InstanceDomainProviderAppliedResourceState["kind"];
-    logicalId?: string;
-  }) {
+  async function submitForgetDomainRedirect(redirect: InstanceDomainProviderRedirectIntent) {
+    if (
+      state.status !== "ready" ||
+      state.domainRedirectSubmitting ||
+      state.domainRedirectDeletingKey ||
+      state.domainRedirectForgettingKey
+    ) {
+      return;
+    }
+
+    if (!window.confirm(`Forget disabled redirect for ${redirect.fromHost}?`)) {
+      return;
+    }
+
+    setState({
+      ...state,
+      domainRedirectDraftError: undefined,
+      domainRedirectForgettingKey: redirect.fromHost,
+    });
+
+    try {
+      const response = await forgetInstanceDomainProviderRedirect({
+        fromHost: redirect.fromHost,
+      });
+
+      setState({
+        ...state,
+        domainRedirectDraftError: undefined,
+        domainRedirectForgettingKey: undefined,
+        domainRedirectIntents: response.redirectIntents,
+        domainRedirectSubmitting: false,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Domain redirect forget failed.";
+
+      setState({
+        ...state,
+        domainRedirectDraftError: message,
+        domainRedirectForgettingKey: undefined,
+      });
+    }
+  }
+
+  async function submitDeleteDomainProviderResource(input: DomainProviderDeleteActionInput) {
     if (state.status !== "ready" || state.domainProviderDeletingKey) {
       return;
     }
@@ -529,6 +648,62 @@ export function InstanceShellRoute() {
         domainProviderDeleteError: message,
         domainProviderDeleteMessage: undefined,
         domainProviderDeletingKey: undefined,
+      });
+    }
+  }
+
+  async function submitMarkDomainProviderResourceManuallyRemoved(
+    input: DomainProviderCleanupActionInput,
+  ) {
+    if (state.status !== "ready" || state.domainProviderCleanupKey) {
+      return;
+    }
+
+    const key = domainProviderDeleteKey(input);
+
+    if (
+      !window.confirm(
+        `Mark provider resource for ${input.host} as manually removed? This clears Formless provider evidence only.`,
+      )
+    ) {
+      return;
+    }
+
+    setState({
+      ...state,
+      domainProviderCleanupError: undefined,
+      domainProviderCleanupKey: key,
+      domainProviderCleanupMessage: undefined,
+    });
+
+    try {
+      const response = await markInstanceDomainProviderResourceManuallyRemoved(input);
+
+      setState({
+        ...state,
+        domainAppliedStates: removeCleanedDomainAppliedState(
+          state.domainAppliedStates,
+          response.target,
+        ),
+        domainProviderAppliedResources: removeCleanedProviderAppliedResource(
+          state.domainProviderAppliedResources ?? [],
+          response.target,
+        ),
+        domainProviderCleanupError: undefined,
+        domainProviderCleanupKey: undefined,
+        domainProviderCleanupMessage: `Marked provider evidence for ${input.host} manually removed.`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Manual provider cleanup failed.";
+
+      setState({
+        ...state,
+        domainProviderCleanupError: message,
+        domainProviderCleanupKey: undefined,
+        domainProviderCleanupMessage: undefined,
       });
     }
   }
@@ -677,6 +852,9 @@ export function InstanceShellRoute() {
       onDeleteDomainRedirect={submitDeleteDomainRedirect}
       onDeleteDomainMapping={submitDeleteDomainMapping}
       onDeleteDomainProviderResource={submitDeleteDomainProviderResource}
+      onForgetDomainMapping={submitForgetDomainMapping}
+      onForgetDomainRedirect={submitForgetDomainRedirect}
+      onMarkDomainProviderResourceManuallyRemoved={submitMarkDomainProviderResourceManuallyRemoved}
       onRefreshDomainProviderApplyJob={refreshDomainProviderApplyJob}
       onRefreshDomainProviderDeleteJob={refreshDomainProviderDeleteJob}
       onRefreshDomainProviderPlan={refreshDomainProviderPlan}
@@ -704,6 +882,9 @@ export function InstanceShellRouteView({
   onDeleteDomainRedirect,
   onDeleteDomainMapping,
   onDeleteDomainProviderResource,
+  onForgetDomainMapping,
+  onForgetDomainRedirect,
+  onMarkDomainProviderResourceManuallyRemoved,
   onRefreshDomainProviderApplyJob,
   onRefreshDomainProviderDeleteJob,
   onRefreshDomainProviderPlan,
@@ -721,11 +902,10 @@ export function InstanceShellRouteView({
   onDomainRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
   onDeleteDomainRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
   onDeleteDomainMapping?: (mapping: InstanceDomainMapping) => void;
-  onDeleteDomainProviderResource?: (input: {
-    host: string;
-    kind?: InstanceDomainProviderAppliedResourceState["kind"];
-    logicalId?: string;
-  }) => void;
+  onDeleteDomainProviderResource?: (input: DomainProviderDeleteActionInput) => void;
+  onForgetDomainMapping?: (mapping: InstanceDomainMapping) => void;
+  onForgetDomainRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  onMarkDomainProviderResourceManuallyRemoved?: (input: DomainProviderCleanupActionInput) => void;
   onRefreshDomainProviderApplyJob?: () => void;
   onRefreshDomainProviderDeleteJob?: () => void;
   onRefreshDomainProviderPlan?: () => void;
@@ -804,6 +984,9 @@ export function InstanceShellRouteView({
         onDelete={onDeleteDomainMapping}
         onDeleteProvider={onDeleteDomainProviderResource}
         onDeleteRedirect={onDeleteDomainRedirect}
+        onForget={onForgetDomainMapping}
+        onForgetRedirect={onForgetDomainRedirect}
+        onManualCleanup={onMarkDomainProviderResourceManuallyRemoved}
         onRefreshApplyJob={onRefreshDomainProviderApplyJob}
         onRefreshDeleteJob={onRefreshDomainProviderDeleteJob}
         onRefreshPlan={onRefreshDomainProviderPlan}
@@ -834,6 +1017,9 @@ function CustomDomainsSection({
   onDelete,
   onDeleteProvider,
   onDeleteRedirect,
+  onForget,
+  onForgetRedirect,
+  onManualCleanup,
   onRefreshApplyJob,
   onRefreshDeleteJob,
   onRefreshPlan,
@@ -847,12 +1033,11 @@ function CustomDomainsSection({
   draft: DomainMappingDraft;
   onDraftChange?: (draft: DomainMappingDraft) => void;
   onDelete?: (mapping: InstanceDomainMapping) => void;
-  onDeleteProvider?: (input: {
-    host: string;
-    kind?: InstanceDomainProviderAppliedResourceState["kind"];
-    logicalId?: string;
-  }) => void;
+  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
   onDeleteRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  onForget?: (mapping: InstanceDomainMapping) => void;
+  onForgetRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
   onRefreshApplyJob?: () => void;
   onRefreshDeleteJob?: () => void;
   onRefreshPlan?: () => void;
@@ -885,15 +1070,21 @@ function CustomDomainsSection({
       ),
   );
   const providerAppliedResources = state.domainProviderAppliedResources ?? [];
+  const orphanProviderAppliedResources = providerAppliedResources.filter(
+    (resource) =>
+      !state.domainRedirectIntents.some((redirect) => redirect.fromHost === resource.host),
+  );
   const redirectDisabled =
-    state.domainRedirectSubmitting || state.domainRedirectDeletingKey !== undefined;
+    state.domainRedirectSubmitting ||
+    state.domainRedirectDeletingKey !== undefined ||
+    state.domainRedirectForgettingKey !== undefined;
   const providerPlanLoading = state.domainProviderPlanLoading ?? false;
   const providerApplying = state.domainProviderApplying ?? false;
   const providerApplyDisabled =
     providerPlanLoading ||
     providerApplying ||
     state.domainProviderPlan === undefined ||
-    !state.domainProviderPlan.config.applyReady ||
+    !state.domainProviderPlan.config.jobReady ||
     state.domainProviderPlan.plan.blockers.length > 0;
 
   return (
@@ -1011,6 +1202,16 @@ function CustomDomainsSection({
             {state.domainProviderDeleteMessage}
           </p>
         ) : null}
+        {state.domainProviderCleanupError ? (
+          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
+            {state.domainProviderCleanupError}
+          </p>
+        ) : null}
+        {state.domainProviderCleanupMessage ? (
+          <p className="text-xs text-muted-fg sm:col-span-4" role="status">
+            {state.domainProviderCleanupMessage}
+          </p>
+        ) : null}
       </form>
       <form
         className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(0,1fr)_auto]"
@@ -1086,6 +1287,7 @@ function CustomDomainsSection({
             <DomainMappingRow
               appliedState={appliedStateForMapping(mapping, state.domainAppliedStates)}
               deleting={state.domainMappingDeletingKey === domainMappingKey(mapping)}
+              forgetting={state.domainMappingForgettingKey === domainMappingKey(mapping)}
               install={state.installs.find(
                 (install) => install.installId === mapping.targetInstallId,
               )}
@@ -1093,6 +1295,9 @@ function CustomDomainsSection({
               mapping={mapping}
               onDelete={onDelete}
               onDeleteProvider={onDeleteProvider}
+              onForget={onForget}
+              onManualCleanup={onManualCleanup}
+              providerCleanupKey={state.domainProviderCleanupKey}
               providerDeletingKey={state.domainProviderDeletingKey}
             />
           ))}
@@ -1104,12 +1309,14 @@ function CustomDomainsSection({
               )}
               key={`applied:${appliedState.profile}:${appliedState.host}`}
               onDeleteProvider={onDeleteProvider}
+              onManualCleanup={onManualCleanup}
+              providerCleanupKey={state.domainProviderCleanupKey}
               providerDeletingKey={state.domainProviderDeletingKey}
             />
           ))}
         </div>
       )}
-      {state.domainRedirectIntents.length === 0 ? (
+      {state.domainRedirectIntents.length === 0 && orphanProviderAppliedResources.length === 0 ? (
         <div className="rounded-md border border-dashed border-border bg-overlay p-4 text-sm text-muted-fg">
           No redirects.
         </div>
@@ -1118,14 +1325,28 @@ function CustomDomainsSection({
           {state.domainRedirectIntents.map((redirect) => (
             <DomainRedirectRow
               deleting={state.domainRedirectDeletingKey === redirect.fromHost}
+              forgetting={state.domainRedirectForgettingKey === redirect.fromHost}
               key={redirect.fromHost}
               onDelete={onDeleteRedirect}
               onDeleteProvider={onDeleteProvider}
+              onForget={onForgetRedirect}
+              onManualCleanup={onManualCleanup}
               providerAppliedResources={providerAppliedResources.filter(
                 (resource) => resource.host === redirect.fromHost,
               )}
+              providerCleanupKey={state.domainProviderCleanupKey}
               providerDeletingKey={state.domainProviderDeletingKey}
               redirect={redirect}
+            />
+          ))}
+          {orphanProviderAppliedResources.map((resource) => (
+            <AppliedProviderResourceRow
+              key={`resource:${resource.kind}:${resource.logicalId}`}
+              onDeleteProvider={onDeleteProvider}
+              onManualCleanup={onManualCleanup}
+              providerCleanupKey={state.domainProviderCleanupKey}
+              providerDeletingKey={state.domainProviderDeletingKey}
+              resource={resource}
             />
           ))}
         </div>
@@ -1176,6 +1397,7 @@ function DomainProviderControlPanel({
             <p>{domainProviderResourceSummary(plan)}</p>
             <p>{domainProviderBlockerSummary(plan)}</p>
             <p>{domainProviderIssueSummary(plan)}</p>
+            <p>{domainProviderRunnerSummary(plan)}</p>
           </div>
         ) : (
           <p className="text-xs text-muted-fg">Provider plan unavailable.</p>
@@ -1257,29 +1479,40 @@ function DomainProviderJobStatus({
 function DomainMappingRow({
   appliedState,
   deleting,
+  forgetting,
   install,
   mapping,
   onDelete,
   onDeleteProvider,
+  onForget,
+  onManualCleanup,
+  providerCleanupKey,
   providerDeletingKey,
 }: {
   appliedState: InstanceDomainMappingAppliedState | undefined;
   deleting: boolean;
+  forgetting: boolean;
   install: AppInstall | undefined;
   mapping: InstanceDomainMapping;
   onDelete?: (mapping: InstanceDomainMapping) => void;
-  onDeleteProvider?: (input: {
-    host: string;
-    kind?: InstanceDomainProviderAppliedResourceState["kind"];
-    logicalId?: string;
-  }) => void;
+  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
+  onForget?: (mapping: InstanceDomainMapping) => void;
+  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
+  providerCleanupKey?: string;
   providerDeletingKey?: string;
 }) {
   const providerDelete = appliedState
     ? providerDeleteInputForAppliedState(appliedState)
     : undefined;
+  const providerCleanup = appliedState
+    ? providerCleanupInputForAppliedState(appliedState)
+    : undefined;
   const providerDeleting =
     providerDelete !== undefined && providerDeletingKey === domainProviderDeleteKey(providerDelete);
+  const providerCleaning =
+    providerCleanup !== undefined &&
+    providerCleanupKey === domainProviderDeleteKey(providerCleanup);
+  const canForget = !mapping.enabled && appliedState === undefined;
 
   return (
     <article className="rounded-md border border-border bg-overlay p-4">
@@ -1288,13 +1521,12 @@ function DomainMappingRow({
           <h3 className="truncate text-sm font-semibold">{mapping.host}</h3>
           <p className="text-xs text-muted-fg">
             <code>{domainProfileTargetLabel(mapping.profile, mapping.targetInstallId)}</code>
-            {install ? ` · ${install.label}` : ""} · {mapping.enabled ? "enabled" : "disabled"}
+            {install ? ` · ${install.label}` : ""} · Route:{" "}
+            {mapping.enabled ? "enabled" : "disabled"} ·{" "}
+            {appliedState ? `Applied: ${appliedState.workerName}` : "Applied: none"}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <p className="text-xs text-muted-fg">
-            {appliedState ? `Applied: ${appliedState.workerName}` : "Applied: none"}
-          </p>
           {mapping.enabled ? (
             <Button
               intent="outline"
@@ -1304,7 +1536,19 @@ function DomainMappingRow({
               type="button"
             >
               <RemoveIcon />
-              {deleting ? "Removing..." : "Remove"}
+              {deleting ? "Removing..." : "Remove route"}
+            </Button>
+          ) : null}
+          {canForget ? (
+            <Button
+              intent="outline"
+              isDisabled={forgetting}
+              onPress={() => onForget?.(mapping)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {forgetting ? "Forgetting..." : "Forget route"}
             </Button>
           ) : null}
           {providerDelete ? (
@@ -1319,6 +1563,18 @@ function DomainMappingRow({
               {providerDeleting ? "Deleting..." : "Delete provider"}
             </Button>
           ) : null}
+          {providerCleanup ? (
+            <Button
+              intent="outline"
+              isDisabled={providerCleaning}
+              onPress={() => onManualCleanup?.(providerCleanup)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {providerCleaning ? "Marking..." : "Mark manually removed"}
+            </Button>
+          ) : null}
         </div>
       </div>
     </article>
@@ -1327,20 +1583,24 @@ function DomainMappingRow({
 
 function DomainRedirectRow({
   deleting,
+  forgetting,
   onDelete,
   onDeleteProvider,
+  onForget,
+  onManualCleanup,
   providerAppliedResources,
+  providerCleanupKey,
   providerDeletingKey,
   redirect,
 }: {
   deleting: boolean;
+  forgetting: boolean;
   onDelete?: (redirect: InstanceDomainProviderRedirectIntent) => void;
-  onDeleteProvider?: (input: {
-    host: string;
-    kind?: InstanceDomainProviderAppliedResourceState["kind"];
-    logicalId?: string;
-  }) => void;
+  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
+  onForget?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
   providerAppliedResources: InstanceDomainProviderAppliedResourceState[];
+  providerCleanupKey?: string;
   providerDeletingKey?: string;
   redirect: InstanceDomainProviderRedirectIntent;
 }) {
@@ -1348,6 +1608,7 @@ function DomainRedirectRow({
     providerAppliedResources.length === 0 ? undefined : { host: redirect.fromHost };
   const providerDeleting =
     providerDelete !== undefined && providerDeletingKey === domainProviderDeleteKey(providerDelete);
+  const canForget = !redirect.enabled && providerAppliedResources.length === 0;
 
   return (
     <article className="rounded-md border border-border bg-overlay p-4">
@@ -1355,8 +1616,11 @@ function DomainRedirectRow({
         <div className="min-w-0 space-y-1">
           <h3 className="truncate text-sm font-semibold">{redirect.fromHost}</h3>
           <p className="text-xs text-muted-fg">
-            <code>{redirectTargetLabel(redirect)}</code> ·{" "}
-            {redirect.enabled ? "enabled" : "disabled"}
+            <code>{redirectTargetLabel(redirect)}</code> · Route:{" "}
+            {redirect.enabled ? "enabled" : "disabled"} · Applied:{" "}
+            {providerAppliedResources.length === 0
+              ? "none"
+              : `${providerAppliedResources.length} resources`}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -1373,7 +1637,19 @@ function DomainRedirectRow({
               type="button"
             >
               <RemoveIcon />
-              {deleting ? "Removing..." : "Remove"}
+              {deleting ? "Removing..." : "Remove route"}
+            </Button>
+          ) : null}
+          {canForget ? (
+            <Button
+              intent="outline"
+              isDisabled={forgetting}
+              onPress={() => onForget?.(redirect)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {forgetting ? "Forgetting..." : "Forget route"}
             </Button>
           ) : null}
           {providerDelete ? (
@@ -1390,6 +1666,18 @@ function DomainRedirectRow({
           ) : null}
         </div>
       </div>
+      {providerAppliedResources.length > 0 ? (
+        <div className="mt-3 grid gap-2 border-t border-border pt-3">
+          {providerAppliedResources.map((resource) => (
+            <ProviderResourceEvidenceRow
+              key={`${resource.kind}:${resource.logicalId}`}
+              onManualCleanup={onManualCleanup}
+              providerCleanupKey={providerCleanupKey}
+              resource={resource}
+            />
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -1398,19 +1686,23 @@ function AppliedDomainStateRow({
   appliedState,
   install,
   onDeleteProvider,
+  onManualCleanup,
+  providerCleanupKey,
   providerDeletingKey,
 }: {
   appliedState: InstanceDomainMappingAppliedState;
   install: AppInstall | undefined;
-  onDeleteProvider?: (input: {
-    host: string;
-    kind?: InstanceDomainProviderAppliedResourceState["kind"];
-    logicalId?: string;
-  }) => void;
+  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
+  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
+  providerCleanupKey?: string;
   providerDeletingKey?: string;
 }) {
   const providerDelete = providerDeleteInputForAppliedState(appliedState);
+  const providerCleanup = providerCleanupInputForAppliedState(appliedState);
   const providerDeleting = providerDeletingKey === domainProviderDeleteKey(providerDelete);
+  const providerCleaning =
+    providerCleanup !== undefined &&
+    providerCleanupKey === domainProviderDeleteKey(providerCleanup);
 
   return (
     <article className="rounded-md border border-dashed border-border bg-overlay p-4">
@@ -1421,11 +1713,11 @@ function AppliedDomainStateRow({
             <code>
               {domainProfileTargetLabel(appliedState.profile, appliedState.targetInstallId)}
             </code>
-            {install ? ` · ${install.label}` : ""} · applied without desired mapping
+            {install ? ` · ${install.label}` : ""} · Route: removed · Applied:{" "}
+            {appliedState.workerName}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <p className="text-xs text-muted-fg">Applied: {appliedState.workerName}</p>
           <Button
             intent="outline"
             isDisabled={providerDeleting}
@@ -1436,9 +1728,107 @@ function AppliedDomainStateRow({
             <RemoveIcon />
             {providerDeleting ? "Deleting..." : "Delete provider"}
           </Button>
+          {providerCleanup ? (
+            <Button
+              intent="outline"
+              isDisabled={providerCleaning}
+              onPress={() => onManualCleanup?.(providerCleanup)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {providerCleaning ? "Marking..." : "Mark manually removed"}
+            </Button>
+          ) : null}
         </div>
       </div>
     </article>
+  );
+}
+
+function AppliedProviderResourceRow({
+  onDeleteProvider,
+  onManualCleanup,
+  providerCleanupKey,
+  providerDeletingKey,
+  resource,
+}: {
+  onDeleteProvider?: (input: DomainProviderDeleteActionInput) => void;
+  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
+  providerCleanupKey?: string;
+  providerDeletingKey?: string;
+  resource: InstanceDomainProviderAppliedResourceState;
+}) {
+  const providerDelete = providerDeleteInputForAppliedResource(resource);
+  const providerCleanup = providerCleanupInputForAppliedResource(resource);
+  const providerDeleting = providerDeletingKey === domainProviderDeleteKey(providerDelete);
+  const providerCleaning = providerCleanupKey === domainProviderDeleteKey(providerCleanup);
+
+  return (
+    <article className="rounded-md border border-dashed border-border bg-overlay p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h3 className="truncate text-sm font-semibold">{resource.host}</h3>
+          <p className="text-xs text-muted-fg">
+            {domainProviderResourceKindLabel(resource.kind)} · Route: removed · Applied:{" "}
+            {resource.action}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <Button
+            intent="outline"
+            isDisabled={providerDeleting}
+            onPress={() => onDeleteProvider?.(providerDelete)}
+            size="sm"
+            type="button"
+          >
+            <RemoveIcon />
+            {providerDeleting ? "Deleting..." : "Delete provider"}
+          </Button>
+          <Button
+            intent="outline"
+            isDisabled={providerCleaning}
+            onPress={() => onManualCleanup?.(providerCleanup)}
+            size="sm"
+            type="button"
+          >
+            <RemoveIcon />
+            {providerCleaning ? "Marking..." : "Mark manually removed"}
+          </Button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ProviderResourceEvidenceRow({
+  onManualCleanup,
+  providerCleanupKey,
+  resource,
+}: {
+  onManualCleanup?: (input: DomainProviderCleanupActionInput) => void;
+  providerCleanupKey?: string;
+  resource: InstanceDomainProviderAppliedResourceState;
+}) {
+  const providerCleanup = providerCleanupInputForAppliedResource(resource);
+  const providerCleaning = providerCleanupKey === domainProviderDeleteKey(providerCleanup);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-fg">
+      <span className="min-w-0 truncate">
+        {domainProviderResourceKindLabel(resource.kind)} · <code>{resource.logicalId}</code>
+      </span>
+      <Button
+        intent="outline"
+        isDisabled={providerCleaning}
+        onPress={() => onManualCleanup?.(providerCleanup)}
+        size="sm"
+        type="button"
+      >
+        <RemoveIcon />
+        {providerCleaning ? "Marking..." : "Mark manually removed"}
+      </Button>
+    </div>
   );
 }
 
@@ -1829,8 +2219,8 @@ function redirectTargetLabel(redirect: InstanceDomainProviderRedirectIntent): st
 }
 
 function domainProviderConfigLabel(plan: InstanceDomainProviderPlanResponse): string {
-  if (plan.config.applyReady) {
-    return "apply ready";
+  if (plan.config.jobReady) {
+    return "jobs ready";
   }
 
   return plan.config.planReady ? "plan ready" : "setup needed";
@@ -1868,11 +2258,21 @@ function domainProviderBlockerSummary(plan: InstanceDomainProviderPlanResponse):
 }
 
 function domainProviderIssueSummary(plan: InstanceDomainProviderPlanResponse): string {
-  if (plan.config.issues.length === 0) {
+  const issues = plan.config.issues.filter((issue) => !isRunnerMutationConfigIssue(issue.code));
+
+  if (issues.length === 0) {
     return `Zones ${plan.config.zones.map((zone) => zone.name).join(", ") || "none"}`;
   }
 
-  return `Config ${plan.config.issues.map((issue) => issue.code).join(", ")}`;
+  return `Config blockers ${issues.map((issue) => issue.code).join(", ")}`;
+}
+
+function domainProviderRunnerSummary(plan: InstanceDomainProviderPlanResponse): string {
+  return `Runner mutation checked by ${plan.config.runnerMutation.checkedBy}`;
+}
+
+function isRunnerMutationConfigIssue(code: string): boolean {
+  return code === "missing-alchemy-password" || code === "missing-cloudflare-api-token";
 }
 
 function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">): string {
@@ -1893,12 +2293,86 @@ function providerDeleteInputForAppliedState(appliedState: InstanceDomainMappingA
   };
 }
 
+function providerCleanupInputForAppliedState(
+  appliedState: InstanceDomainMappingAppliedState,
+): DomainProviderCleanupActionInput | undefined {
+  if (appliedState.alchemyResourceId === undefined) {
+    return undefined;
+  }
+
+  return {
+    host: appliedState.host,
+    kind: "cloudflare-worker-custom-domain",
+    logicalId: appliedState.alchemyResourceId,
+  };
+}
+
+function providerDeleteInputForAppliedResource(
+  resource: InstanceDomainProviderAppliedResourceState,
+): DomainProviderDeleteActionInput {
+  return {
+    host: resource.host,
+    kind: resource.kind,
+    logicalId: resource.logicalId,
+  };
+}
+
+function providerCleanupInputForAppliedResource(
+  resource: InstanceDomainProviderAppliedResourceState,
+): DomainProviderCleanupActionInput {
+  return {
+    host: resource.host,
+    kind: resource.kind,
+    logicalId: resource.logicalId,
+  };
+}
+
 function domainProviderDeleteKey(input: {
   host: string;
   kind?: InstanceDomainProviderAppliedResourceState["kind"];
   logicalId?: string;
 }): string {
   return input.logicalId ?? `${input.kind ?? "host"}:${input.host}`;
+}
+
+function domainProviderResourceKindLabel(
+  kind: InstanceDomainProviderAppliedResourceState["kind"],
+): string {
+  switch (kind) {
+    case "cloudflare-dns-records":
+      return "DNS records";
+    case "cloudflare-redirect-rule":
+      return "Redirect rule";
+    case "cloudflare-worker-custom-domain":
+      return "Custom domain";
+  }
+}
+
+function removeCleanedDomainAppliedState(
+  appliedStates: readonly InstanceDomainMappingAppliedState[],
+  target: InstanceDomainProviderDeleteTarget,
+): InstanceDomainMappingAppliedState[] {
+  if (target.kind !== "cloudflare-worker-custom-domain") {
+    return [...appliedStates];
+  }
+
+  return appliedStates.filter(
+    (state) =>
+      state.host !== target.host ||
+      state.alchemyResourceId !== (target.alchemyResourceId ?? target.logicalId),
+  );
+}
+
+function removeCleanedProviderAppliedResource(
+  resources: readonly InstanceDomainProviderAppliedResourceState[],
+  target: InstanceDomainProviderDeleteTarget,
+): InstanceDomainProviderAppliedResourceState[] {
+  return resources.filter(
+    (resource) =>
+      resource.host !== target.host ||
+      resource.kind !== target.kind ||
+      resource.logicalId !== target.logicalId,
+  );
 }
 
 function shellLinkButtonClassName(intent: "solid" | "outline" = "solid") {

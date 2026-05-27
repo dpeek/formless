@@ -266,11 +266,57 @@ describe("instance shell route view", () => {
     expect(html).toContain("App");
     expect(html).toContain("Public Site");
     expect(html).toContain("admin.example.com");
-    expect(html).toContain("applied without desired mapping");
+    expect(html).toContain("Route: removed");
     expect(html).toContain("www.example.com");
     expect(html).toContain("example.com");
     expect(html).toContain("Add redirect");
     expect(html).toContain("Delete provider");
+    expect(html).toContain("Mark manually removed");
+  });
+
+  it("renders forget actions for disabled desired routes with no provider evidence", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        state={{
+          domainAppliedStates: [],
+          domainMappingSubmitting: false,
+          domainMappings: [
+            {
+              createdAt: "2026-05-26T00:00:00.000Z",
+              enabled: false,
+              host: "draft.example.com",
+              profile: "publicSite",
+              surface: "site",
+              targetInstallId: "site",
+              updatedAt: "2026-05-26T00:00:00.000Z",
+            },
+          ],
+          domainRedirectIntents: [
+            {
+              createdAt: "2026-05-27T00:00:00.000Z",
+              enabled: false,
+              fromHost: "old.example.com",
+              preservePath: true,
+              preserveQueryString: true,
+              statusCode: 301,
+              toHost: "example.com",
+              updatedAt: "2026-05-27T00:00:00.000Z",
+            },
+          ],
+          domainRedirectSubmitting: false,
+          installing: false,
+          installs: [siteInstall({ installId: "site", label: "Site" })],
+          packages: listBundledAppPackages(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(html).toContain("draft.example.com");
+    expect(html).toContain("old.example.com");
+    expect(html).toContain("Route: disabled");
+    expect(html.match(/Forget route/g)?.length).toBe(2);
+    expect(html).not.toContain("Delete provider");
   });
 
   it("renders provider config, plan, blockers, and job status", () => {
@@ -385,15 +431,83 @@ describe("instance shell route view", () => {
     );
 
     expect(html).toContain("Provider");
-    expect(html).toContain("apply ready");
+    expect(html).toContain("jobs ready");
     expect(html).toContain("Account account-123");
     expect(html).toContain("Resources 2");
     expect(html).toContain("Blockers none");
     expect(html).toContain("Zones example.com");
+    expect(html).toContain("Runner mutation checked by node-runner");
     expect(html).toContain("Apply job: succeeded");
     expect(html).toContain("Delete job: succeeded");
     expect(html).toContain("Refresh plan");
     expect(html).toContain("Apply provider");
+  });
+
+  it("keeps runner secret gaps out of provider config blocker copy", () => {
+    const html = renderToStaticMarkup(
+      <InstanceShellRouteView
+        state={{
+          domainAppliedStates: [],
+          domainMappingSubmitting: false,
+          domainMappings: [],
+          domainProviderPlan: {
+            config: {
+              alchemyPassword: { configured: false, envNames: ["ALCHEMY_PASSWORD"] },
+              applyReady: true,
+              cloudflareApiToken: {
+                configured: false,
+                envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+              },
+              issues: [
+                {
+                  code: "missing-cloudflare-api-token",
+                  envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+                  message: "Cloudflare API token is not configured.",
+                },
+                {
+                  code: "missing-alchemy-password",
+                  envNames: ["ALCHEMY_PASSWORD"],
+                  message: "Alchemy password is not configured.",
+                },
+              ],
+              jobReady: true,
+              planReady: true,
+              runnerMutation: {
+                checkedBy: "node-runner",
+                requiredEnvNames: [
+                  "CLOUDFLARE_API_TOKEN",
+                  "CF_API_TOKEN",
+                  "ALCHEMY_PASSWORD",
+                  "ALCHEMY_STATE_TOKEN",
+                ],
+              },
+              zones: [{ id: "zone-1", name: "example.com" }],
+            },
+            plan: {
+              blockers: [],
+              instanceId: "primary",
+              policy: "create-only",
+              resources: [],
+              workerName: "personal",
+            },
+            redirectIntents: [],
+          },
+          domainRedirectIntents: [],
+          domainRedirectSubmitting: false,
+          installing: false,
+          installs: [siteInstall({ installId: "site", label: "Site" })],
+          packages: listBundledAppPackages(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(html).toContain("jobs ready");
+    expect(html).toContain("Zones example.com");
+    expect(html).toContain("Runner mutation checked by node-runner");
+    expect(html).not.toContain("Config missing-cloudflare-api-token");
+    expect(html).not.toContain("Config blockers missing-cloudflare-api-token");
+    expect(html).not.toContain("Config blockers missing-alchemy-password");
   });
 });
 

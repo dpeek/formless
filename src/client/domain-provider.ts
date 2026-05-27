@@ -4,16 +4,21 @@ import {
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type CreateInstanceDomainProviderRedirectIntentRequest,
   type CreateInstanceDomainProviderRedirectIntentResponse,
   type DeleteInstanceDomainProviderRedirectIntentRequest,
   type DeleteInstanceDomainProviderRedirectIntentResponse,
+  type ForgetInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderApplyJobResponse,
   type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderDeleteRequest,
   type InstanceDomainProviderDeleteJobResponse,
   type InstanceDomainProviderDeleteResponse,
+  type InstanceDomainProviderManualCleanupRequest,
+  type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
@@ -115,6 +120,30 @@ export async function deleteInstanceDomainProviderResource(
   return readJsonResponse<InstanceDomainProviderDeleteResponse>(response);
 }
 
+export async function markInstanceDomainProviderResourceManuallyRemoved(
+  input: InstanceDomainProviderManualCleanupRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<InstanceDomainProviderManualCleanupResponse> {
+  const response = await fetcher(INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH, {
+    body: JSON.stringify(input),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+
+  return readJsonResponse<InstanceDomainProviderManualCleanupResponse>(response);
+}
+
 export async function fetchInstanceDomainProviderDeleteJob(
   input: { jobId: string },
   {
@@ -197,6 +226,31 @@ export async function deleteInstanceDomainProviderRedirect(
   });
 
   return readJsonResponse<DeleteInstanceDomainProviderRedirectIntentResponse>(response);
+}
+
+export async function forgetInstanceDomainProviderRedirect(
+  input: DeleteInstanceDomainProviderRedirectIntentRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<ForgetInstanceDomainProviderRedirectIntentResponse> {
+  const searchParams = new URLSearchParams();
+  searchParams.set("fromHost", input.fromHost);
+  const response = await fetcher(
+    `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?${searchParams}`,
+    {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      method: "DELETE",
+      signal,
+    },
+  );
+
+  return readJsonResponse<ForgetInstanceDomainProviderRedirectIntentResponse>(response);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

@@ -4,7 +4,9 @@ import {
   deleteInstanceDomainMapping,
   DomainMappingApiError,
   fetchInstanceDomainMappings,
+  forgetInstanceDomainMapping,
   INSTANCE_DOMAIN_MAPPINGS_API_PATH,
+  INSTANCE_DOMAIN_MAPPINGS_FORGET_API_PATH,
 } from "./domain-mappings.ts";
 
 describe("client domain mapping API helpers", () => {
@@ -125,6 +127,39 @@ describe("client domain mapping API helpers", () => {
       },
       status: 404,
     } satisfies Partial<DomainMappingApiError>);
+  });
+
+  it("forgets a disabled desired domain mapping", async () => {
+    const forgotten = await forgetInstanceDomainMapping(
+      {
+        host: "draft.example.com",
+        profile: "publicSite",
+      },
+      {
+        fetcher: jsonFetcher(
+          `${INSTANCE_DOMAIN_MAPPINGS_FORGET_API_PATH}?host=draft.example.com&profile=publicSite`,
+          {
+            desiredCleanupEvent: {
+              action: "forgotten",
+              host: "draft.example.com",
+              profile: "publicSite",
+              reason: "disabled-unapplied",
+            },
+            desiredCleanupEvents: [],
+            mapping: { enabled: false, host: "draft.example.com", profile: "publicSite" },
+            mappings: [],
+          },
+          { expectedMethod: "DELETE" },
+        ),
+      },
+    );
+
+    expect(forgotten.mapping).toEqual({
+      enabled: false,
+      host: "draft.example.com",
+      profile: "publicSite",
+    });
+    expect(forgotten.mappings).toEqual([]);
   });
 });
 
