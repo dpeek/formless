@@ -136,7 +136,7 @@ const appliedStateTableSql = `
     zone_name TEXT NOT NULL,
     worker_name TEXT NOT NULL,
     worker_domain_id TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'overridden')),
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'manually-removed', 'overridden')),
     applied_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (host, profile)
@@ -158,7 +158,7 @@ const auditEventsTableSql = `
     zone_name TEXT NOT NULL,
     worker_name TEXT NOT NULL,
     worker_domain_id TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'overridden')),
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'manually-removed', 'overridden')),
     applied_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
@@ -398,6 +398,7 @@ export function recordInstanceDomainMappingApplyEvidence(
 export function deleteInstanceDomainMappingAppliedState(
   storage: DurableObjectStorage,
   input: {
+    action?: Extract<InstanceDomainMappingAppliedAction, "deleted" | "manually-removed">;
     now: string;
     runnerId?: string;
     state: InstanceDomainMappingAppliedState;
@@ -406,9 +407,11 @@ export function deleteInstanceDomainMappingAppliedState(
   ensureInstanceDomainMappingTables(storage);
 
   return storage.transactionSync(() => {
+    const stateWithoutRunner = { ...input.state };
+    delete stateWithoutRunner.runnerId;
     const deletedState: InstanceDomainMappingAppliedState = {
-      ...input.state,
-      action: "deleted",
+      ...stateWithoutRunner,
+      action: input.action ?? "deleted",
       appliedAt: input.now,
       ...(input.runnerId === undefined ? {} : { runnerId: input.runnerId }),
       updatedAt: input.now,
@@ -861,7 +864,7 @@ function migrateAppliedActionChecks(storage: DurableObjectStorage) {
   ] as const) {
     const sql = tableDefinition(storage, table);
 
-    if (sql !== undefined && !sql.includes("'deleted'")) {
+    if (sql !== undefined && !sql.includes("'manually-removed'")) {
       migrateAppliedActionCheckTable(storage, table);
     }
   }

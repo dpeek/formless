@@ -20,7 +20,12 @@ export type InstanceDomainMapping = {
   updatedAt: string;
 };
 
-export type InstanceDomainMappingAppliedAction = "adopted" | "created" | "deleted" | "overridden";
+export type InstanceDomainMappingAppliedAction =
+  | "adopted"
+  | "created"
+  | "deleted"
+  | "manually-removed"
+  | "overridden";
 
 export type InstanceDomainMappingAppliedProvider = "cloudflare-worker-custom-domain";
 

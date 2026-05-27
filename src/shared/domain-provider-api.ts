@@ -16,6 +16,7 @@ export const INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH = `${INSTANCE_DOMAIN_PROVID
 export const INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/apply-jobs`;
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete`;
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete-jobs`;
+export const INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/manual-cleanup`;
 export const INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/redirects`;
 export const INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}/forget`;
 export const DOMAIN_PROVIDER_RUNNER_MUTATION_ENV_NAMES = [
@@ -109,6 +110,10 @@ export type DeleteInstanceDomainProviderRedirectIntentRequest = {
 };
 
 export type InstanceDomainProviderAppliedResourceAction = InstanceDomainMappingAppliedAction;
+export type InstanceDomainProviderAppliedResourceApplyAction = Exclude<
+  InstanceDomainProviderAppliedResourceAction,
+  "deleted" | "manually-removed"
+>;
 
 export type InstanceDomainProviderAppliedResourceState = {
   accountId: string;
@@ -215,7 +220,7 @@ export type InstanceDomainProviderApplyReadyResponse = {
 
 export type InstanceDomainProviderApplyJobCustomDomainResourceEvidence = {
   accountId: string;
-  action: InstanceDomainMappingAppliedAction;
+  action: InstanceDomainProviderAppliedResourceApplyAction;
   alchemyResourceId: string;
   host: string;
   kind: "cloudflare-worker-custom-domain";
@@ -230,7 +235,7 @@ export type InstanceDomainProviderApplyJobCustomDomainResourceEvidence = {
 
 export type InstanceDomainProviderApplyJobRedirectRuleResourceEvidence = {
   accountId: string;
-  action: InstanceDomainProviderAppliedResourceAction;
+  action: InstanceDomainProviderAppliedResourceApplyAction;
   alchemyResourceId: string;
   host: string;
   kind: "cloudflare-redirect-rule";
@@ -246,7 +251,7 @@ export type InstanceDomainProviderApplyJobRedirectRuleResourceEvidence = {
 
 export type InstanceDomainProviderApplyJobDnsRecordsResourceEvidence = {
   accountId: string;
-  action: InstanceDomainProviderAppliedResourceAction;
+  action: InstanceDomainProviderAppliedResourceApplyAction;
   alchemyResourceId: string;
   dnsRecordIds: string[];
   host: string;
@@ -284,7 +289,7 @@ export type InstanceDomainProviderApplyResponse =
 
 export type InstanceDomainProviderDeleteTarget = {
   accountId: string;
-  action: Exclude<InstanceDomainProviderAppliedResourceAction, "deleted">;
+  action: InstanceDomainProviderAppliedResourceApplyAction;
   alchemyResourceId?: string;
   host: string;
   kind: DomainProviderResourceKind;
@@ -297,6 +302,18 @@ export type InstanceDomainProviderDeleteTarget = {
   workerName?: string;
   zoneId: string;
   zoneName: string;
+};
+
+export type InstanceDomainProviderManualCleanupRequest = {
+  host: string;
+  kind: DomainProviderResourceKind;
+  logicalId: string;
+};
+
+export type InstanceDomainProviderManualCleanupResponse = {
+  action: "manually-removed";
+  status: "cleaned";
+  target: InstanceDomainProviderDeleteTarget;
 };
 
 export type InstanceDomainProviderDeleteBlockedCode =

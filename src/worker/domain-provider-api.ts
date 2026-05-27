@@ -5,6 +5,7 @@ import {
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_PLAN_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
@@ -33,6 +34,8 @@ import {
   type InstanceDomainProviderDeleteRequest,
   type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderDeleteTarget,
+  type InstanceDomainProviderManualCleanupRequest,
+  type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
   type InstanceDomainProviderRedirectIntentCleanupEvent,
   type InstanceDomainProviderRedirectIntent,
@@ -142,7 +145,7 @@ const appliedResourcesTableSql = `
     zone_name TEXT NOT NULL,
     resource_id TEXT NOT NULL,
     resource_json TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'overridden')),
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'manually-removed', 'overridden')),
     applied_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
@@ -160,7 +163,7 @@ const providerAuditEventsTableSql = `
     zone_name TEXT NOT NULL,
     resource_id TEXT NOT NULL,
     resource_json TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'overridden')),
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'manually-removed', 'overridden')),
     applied_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
@@ -338,6 +341,10 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
     return handleDeleteRequest(request, storage, env);
   }
 
+  if (url.pathname === INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH) {
+    return handleManualCleanupRequest(request, storage, env);
+  }
+
   return jsonResponse({ error: "Not found." }, 404);
 }
 
@@ -363,6 +370,18 @@ function handleDeleteRequest(
   }
 
   return deleteWithAuthorization(request, storage, env);
+}
+
+function handleManualCleanupRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: DurableObjectDomainProviderEnv,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return Promise.resolve(methodNotAllowedResponse("POST"));
+  }
+
+  return manualCleanupWithAuthorization(request, storage, env);
 }
 
 async function handleRedirectIntentsRequest(
@@ -652,6 +671,45 @@ async function deleteWithAuthorization(
   );
 }
 
+async function manualCleanupWithAuthorization(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: DurableObjectDomainProviderEnv,
+): Promise<Response> {
+  const authorization = await authorizeInstanceWrite(request, env);
+
+  if (!authorization.authorized) {
+    return jsonResponse(
+      { error: authorization.error },
+      authorization.status,
+      authorization.headers,
+    );
+  }
+
+  const cleanupRequest = await readManualCleanupRequest(request);
+
+  if (!cleanupRequest.ok) {
+    return jsonResponse({ error: cleanupRequest.error }, 400);
+  }
+
+  const result = markDomainProviderResourceManuallyRemoved(storage, {
+    now: nowIsoString(),
+    request: cleanupRequest.request,
+    targetOptions: cleanupRequest.options,
+    targetConfig: domainProviderConfigStatus(env),
+  });
+
+  if (!result.ok) {
+    return jsonResponse({ code: result.code, error: result.error }, result.status);
+  }
+
+  return jsonResponse({
+    action: "manually-removed",
+    status: "cleaned",
+    target: result.target,
+  } satisfies InstanceDomainProviderManualCleanupResponse);
+}
+
 function handleApplyJobStatusRequest(
   request: Request,
   storage: DurableObjectStorage,
@@ -836,7 +894,7 @@ function readDomainProviderDeleteTargets(
   );
 
   for (const state of readInstanceDomainMappingAppliedStates(storage)) {
-    if (state.action === "deleted") {
+    if (state.action === "deleted" || state.action === "manually-removed") {
       continue;
     }
 
@@ -871,7 +929,7 @@ function readDomainProviderDeleteTargets(
   }
 
   for (const state of readAppliedProviderResources(storage)) {
-    if (state.action === "deleted") {
+    if (state.action === "deleted" || state.action === "manually-removed") {
       continue;
     }
 
@@ -2084,6 +2142,10 @@ function recordDomainProviderResourceEvidence(
 function deleteDomainProviderAppliedResource(
   storage: DurableObjectStorage,
   input: {
+    action?: Extract<
+      InstanceDomainProviderAppliedResourceState["action"],
+      "deleted" | "manually-removed"
+    >;
     now: string;
     runnerId?: string;
     target: InstanceDomainProviderDeleteTarget;
@@ -2092,7 +2154,7 @@ function deleteDomainProviderAppliedResource(
   ensureDomainProviderAppliedResourcesTables(storage);
   const deletedState: InstanceDomainProviderAppliedResourceState = {
     accountId: input.target.accountId,
-    action: "deleted",
+    action: input.action ?? "deleted",
     alchemyResourceId: input.target.alchemyResourceId ?? input.target.logicalId,
     appliedAt: input.now,
     host: input.target.host,
@@ -2147,6 +2209,65 @@ function deleteDomainProviderAppliedResource(
     deletedState.appliedAt,
     deletedState.updatedAt,
   );
+}
+
+function markDomainProviderResourceManuallyRemoved(
+  storage: DurableObjectStorage,
+  input: {
+    now: string;
+    request: InstanceDomainProviderManualCleanupRequest;
+    targetConfig: DomainProviderConfigStatus;
+    targetOptions: Required<DomainProviderDeleteOptions>;
+  },
+):
+  | { ok: true; target: InstanceDomainProviderDeleteTarget }
+  | { ok: false; code: string; error: string; status: number } {
+  ensureDomainProviderAppliedResourcesTables(storage);
+
+  const deletePlan = domainProviderDeletePlan(storage, input.targetConfig, input.targetOptions);
+
+  if (deletePlan.targets.length === 0) {
+    return {
+      ok: false,
+      code: "domain-provider-manual-cleanup-not-found",
+      error: `Domain provider manual cleanup found no recorded ${input.request.kind} resource "${input.request.logicalId}" for "${input.request.host}".`,
+      status: 404,
+    };
+  }
+
+  if (deletePlan.targets.length > 1) {
+    return {
+      ok: false,
+      code: "domain-provider-manual-cleanup-ambiguous",
+      error:
+        "Domain provider manual cleanup requires one exact recorded provider resource identity.",
+      status: 409,
+    };
+  }
+
+  const target = deletePlan.targets[0];
+
+  if (!target) {
+    throw new Error("Domain provider manual cleanup target disappeared.");
+  }
+
+  if (target.kind === "cloudflare-worker-custom-domain") {
+    deleteInstanceDomainMappingAppliedState(storage, {
+      action: "manually-removed",
+      now: input.now,
+      state: customDomainAppliedStateFromDeleteTarget(target, input.now),
+    });
+
+    return { ok: true, target };
+  }
+
+  deleteDomainProviderAppliedResource(storage, {
+    action: "manually-removed",
+    now: input.now,
+    target,
+  });
+
+  return { ok: true, target };
 }
 
 function customDomainAppliedStateFromDeleteTarget(
@@ -2464,7 +2585,7 @@ function migrateDomainProviderAppliedActionChecks(storage: DurableObjectStorage)
   ] as const) {
     const sql = providerTableDefinition(storage, table);
 
-    if (sql !== undefined && !sql.includes("'deleted'")) {
+    if (sql !== undefined && !sql.includes("'manually-removed'")) {
       migrateDomainProviderAppliedActionCheckTable(storage, table);
     }
   }
@@ -2666,6 +2787,50 @@ async function readDeleteRequest(
       ...(kind.value === undefined ? {} : { kind: kind.value }),
       ...(logicalId.value === undefined ? {} : { logicalId: logicalId.value }),
       ...(runnerId.value === undefined ? {} : { runnerId: runnerId.value }),
+    },
+  };
+}
+
+async function readManualCleanupRequest(request: Request): Promise<
+  | {
+      ok: true;
+      options: Required<DomainProviderDeleteOptions>;
+      request: InstanceDomainProviderManualCleanupRequest;
+    }
+  | { ok: false; error: string }
+> {
+  const parsed = await readRequiredJsonObject(request, "Domain provider manual cleanup request");
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const value = parsed.value;
+  const host = parseRequiredHost(value.host, "Domain provider manual cleanup host");
+  const kind = parseRequiredResourceKind(
+    value.kind,
+    "Domain provider manual cleanup resource kind",
+  );
+  const logicalId = parseRequiredString(
+    value.logicalId,
+    "Domain provider manual cleanup logical id",
+  );
+
+  if (!host.ok) return host;
+  if (!kind.ok) return kind;
+  if (!logicalId.ok) return logicalId;
+
+  return {
+    ok: true,
+    options: {
+      host: host.value,
+      kind: kind.value,
+      logicalId: logicalId.value,
+    },
+    request: {
+      host: host.value,
+      kind: kind.value,
+      logicalId: logicalId.value,
     },
   };
 }

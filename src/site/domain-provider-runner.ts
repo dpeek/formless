@@ -213,15 +213,12 @@ export async function runFormlessInstanceDomainProviderDelete(
       env: dependencies.env,
     });
 
-    const alchemy = await applyAlchemyDomainProviderPlan({
+    const alchemy = await destroyDomainProviderDeleteTargets({
       appName: `formless-domain-${deleteJob.plan.instanceId}`,
-      factories: runtime.factories,
-      password: runtime.password,
-      phase: "destroy",
       plan: deleteJob.job.plan,
+      runtime,
       rootDir: runtime.rootDir,
-      runner: runtime.runner,
-      stateStore: runtime.stateStore,
+      targets: deleteJob.job.targets,
     });
     const resources = deleteEvidenceFromAlchemyResult({
       result: alchemy,
@@ -266,6 +263,63 @@ export async function runFormlessInstanceDomainProviderDelete(
 
     throw error;
   }
+}
+
+async function destroyDomainProviderDeleteTargets(input: {
+  appName: string;
+  plan: InstanceDomainProviderDeleteReadyResponse["plan"];
+  rootDir?: string;
+  runtime: DomainProviderAlchemyRuntime;
+  targets: Readonly<InstanceDomainProviderDeleteReadyResponse["targets"]>;
+}): Promise<AlchemyDomainProviderApplyResult> {
+  const plannedResources = new Map(
+    input.plan.resources.map((resource) => [resource.logicalId, resource]),
+  );
+  const resources: AlchemyDomainProviderApplyResult["resources"] = [];
+  let stage = "production";
+
+  for (const target of input.targets) {
+    const resource = plannedResources.get(target.logicalId);
+
+    if (!resource) {
+      throw new Error(`Domain provider delete target "${target.logicalId}" was not in the plan.`);
+    }
+
+    try {
+      const result = await applyAlchemyDomainProviderPlan({
+        appName: input.appName,
+        factories: input.runtime.factories,
+        password: input.runtime.password,
+        phase: "destroy",
+        plan: {
+          ...input.plan,
+          resources: [resource],
+        },
+        rootDir: input.rootDir,
+        runner: input.runtime.runner,
+        stateStore: input.runtime.stateStore,
+      });
+
+      stage = result.stage;
+      resources.push(...result.resources);
+    } catch (error) {
+      if (!isProviderNotFoundError(error)) {
+        throw error;
+      }
+
+      resources.push({
+        kind: target.kind,
+        logicalId: target.logicalId,
+        output: { status: "already-missing" },
+      });
+    }
+  }
+
+  return {
+    appName: input.appName,
+    resources,
+    stage,
+  };
 }
 
 export async function nodeAlchemyDomainProviderRuntime(input: {
@@ -568,6 +622,17 @@ function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isProviderNotFoundError(error: unknown): boolean {
+  const message = errorMessage(error).toLowerCase();
+
+  return (
+    /\b404\b/.test(message) ||
+    message.includes("not found") ||
+    message.includes("does not exist") ||
+    message.includes("could not find")
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

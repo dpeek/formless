@@ -5,6 +5,7 @@ import {
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type ForgetInstanceDomainProviderRedirectIntentResponse,
@@ -12,6 +13,7 @@ import {
   type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderDeleteJobResponse,
   type InstanceDomainProviderDeleteResponse,
+  type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
@@ -96,6 +98,24 @@ describe("instance domain provider API routes", () => {
 
   it("requires owner or admin authorization for apply", async () => {
     const response = await harness.fetch(INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await response.json()).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+  });
+
+  it("requires owner or admin authorization for manual provider cleanup", async () => {
+    const response = await harness.fetch(INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH, {
+      body: JSON.stringify({
+        host: "admin.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "primary-custom-domain-admin-example-com-instance",
+      }),
+      headers: { "Content-Type": "application/json" },
       method: "POST",
     });
 
@@ -384,6 +404,104 @@ describe("instance domain provider API routes", () => {
     ]);
   });
 
+  it("marks manually removed CustomDomain evidence without Cloudflare credentials", async () => {
+    await harness.dispose();
+    harness = await createHarness({
+      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
+      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
+      FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
+    });
+
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "manual.example.com",
+      profile: "instance",
+    });
+
+    const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { host: "manual.example.com", runnerId: "runner-1" },
+    );
+
+    if (apply.body.status !== "ready") {
+      throw new Error("Apply did not create a CustomDomain job.");
+    }
+
+    const resource = apply.body.job.plan.resources[0];
+
+    if (resource?.kind !== "cloudflare-worker-custom-domain") {
+      throw new Error("Expected a CustomDomain job resource.");
+    }
+
+    await postAdminJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${apply.body.job.jobId}/result`,
+      {
+        resources: [
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: resource.logicalId,
+            host: resource.host,
+            kind: resource.kind,
+            logicalId: resource.logicalId,
+            profile: resource.profile,
+            workerDomainId: "custom-domain-123",
+            workerName: resource.props.workerName,
+            zoneId: resource.zone.id,
+            zoneName: resource.zone.name,
+          },
+        ],
+        runnerId: "runner-1",
+        status: "succeeded",
+      },
+    );
+    await deleteAdminJson("/api/formless/domain-mappings?host=manual.example.com&profile=instance");
+
+    const unrelated = await postAdminJson<DomainProviderFailureResponse>(
+      INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
+      {
+        host: "manual.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: "unrelated-resource",
+      },
+    );
+    const stillApplied = await getJson<InstanceDomainMappingsResponse>(
+      "/api/formless/domain-mappings",
+    );
+
+    expect(unrelated.response.status).toBe(404);
+    expect(unrelated.body).toMatchObject({
+      code: "domain-provider-manual-cleanup-not-found",
+    });
+    expect(stillApplied.body.appliedStates).toHaveLength(1);
+
+    const cleanup = await postAdminJson<InstanceDomainProviderManualCleanupResponse>(
+      INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
+      {
+        host: "manual.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: resource.logicalId,
+      },
+    );
+    const after = await getJson<InstanceDomainMappingsResponse>("/api/formless/domain-mappings");
+
+    expect(cleanup.response.status).toBe(200);
+    expect(cleanup.body).toMatchObject({
+      action: "manually-removed",
+      status: "cleaned",
+      target: expect.objectContaining({
+        host: "manual.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        logicalId: resource.logicalId,
+      }),
+    });
+    expect(after.body.appliedStates).toEqual([]);
+    expect(after.body.auditEvents.map((event) => event.action)).toEqual([
+      "created",
+      "manually-removed",
+    ]);
+  });
+
   it("stores redirect intents, plans redirect resources, and records runner evidence", async () => {
     const created = await postAdminJson<InstanceDomainProviderRedirectsResponse>(
       INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
@@ -538,6 +656,116 @@ describe("instance domain provider API routes", () => {
       "created",
       "deleted",
       "deleted",
+    ]);
+  });
+
+  it("marks manually removed redirect and DNS evidence without Cloudflare credentials", async () => {
+    await harness.dispose();
+    harness = await createHarness({
+      FORMLESS_DOMAIN_PROVIDER_CLOUDFLARE_ACCOUNT_ID: "account-123",
+      FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID: "primary",
+      FORMLESS_DOMAIN_PROVIDER_WORKER_NAME: "formless-primary",
+      FORMLESS_DOMAIN_PROVIDER_ZONES: JSON.stringify([{ id: "zone-1", name: "example.com" }]),
+    });
+
+    await postAdminJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+      {
+        fromHost: "manual-redirect.example.com",
+        toHost: "example.com",
+      },
+    );
+
+    const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { host: "manual-redirect.example.com", runnerId: "runner-redirects" },
+    );
+
+    if (apply.body.status !== "ready") {
+      throw new Error("Apply did not create a redirect job.");
+    }
+
+    const dns = apply.body.job.plan.resources.find(
+      (resource) => resource.kind === "cloudflare-dns-records",
+    );
+    const redirect = apply.body.job.plan.resources.find(
+      (resource) => resource.kind === "cloudflare-redirect-rule",
+    );
+
+    if (!dns || !redirect) {
+      throw new Error("Expected DNS and redirect resources.");
+    }
+
+    await postAdminJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${apply.body.job.jobId}/result`,
+      {
+        resources: [
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: dns.logicalId,
+            dnsRecordIds: ["dns-1"],
+            host: "manual-redirect.example.com",
+            kind: "cloudflare-dns-records",
+            logicalId: dns.logicalId,
+            zoneId: dns.zone.id,
+            zoneName: dns.zone.name,
+          },
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: redirect.logicalId,
+            host: "manual-redirect.example.com",
+            kind: "cloudflare-redirect-rule",
+            logicalId: redirect.logicalId,
+            preserveQueryString: redirect.props.preserveQueryString,
+            redirectRuleId: "rule-1",
+            redirectRulesetId: "ruleset-1",
+            statusCode: redirect.props.statusCode,
+            targetUrl: redirect.targetUrl,
+            zoneId: redirect.zone.id,
+            zoneName: redirect.zone.name,
+          },
+        ],
+        runnerId: "runner-redirects",
+        status: "succeeded",
+      },
+    );
+    await deleteAdminJson<InstanceDomainProviderRedirectsResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}?fromHost=manual-redirect.example.com`,
+    );
+
+    for (const resource of [dns, redirect]) {
+      const cleanup = await postAdminJson<InstanceDomainProviderManualCleanupResponse>(
+        INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
+        {
+          host: "manual-redirect.example.com",
+          kind: resource.kind,
+          logicalId: resource.logicalId,
+        },
+      );
+
+      expect(cleanup.response.status).toBe(200);
+      expect(cleanup.body).toMatchObject({
+        action: "manually-removed",
+        target: expect.objectContaining({
+          host: "manual-redirect.example.com",
+          kind: resource.kind,
+          logicalId: resource.logicalId,
+        }),
+      });
+    }
+
+    const after = await getJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+    );
+
+    expect(after.body.appliedResources).toEqual([]);
+    expect(after.body.auditEvents.map((event) => event.action)).toEqual([
+      "created",
+      "created",
+      "manually-removed",
+      "manually-removed",
     ]);
   });
 
