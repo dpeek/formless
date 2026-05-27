@@ -13,7 +13,7 @@ import {
 import { mediaObjectStoreFromR2Bucket } from "../media/r2.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { responseWithoutBodyForHead } from "./head-response.ts";
-import { type WorkerRuntimeProfileInput } from "./routing.ts";
+import { resolveWorkerRuntimeRequestTopology, type WorkerRuntimeRouteInput } from "./routing.ts";
 
 export const SITE_IMAGE_UPLOAD_MAX_BYTES = MEDIA_IMAGE_UPLOAD_MAX_BYTES;
 export const SITE_MEDIA_CACHE_CONTROL = MEDIA_OBJECT_CACHE_CONTROL;
@@ -57,7 +57,7 @@ type MultipartPart = {
 export async function handleMediaRequest(
   request: Request,
   env: MediaEnv,
-  runtimeProfile: WorkerRuntimeProfileInput = {},
+  runtimeProfile: WorkerRuntimeRouteInput = {},
 ) {
   const route = imageMediaRouteFromPathname(request, runtimeProfile);
 
@@ -193,9 +193,9 @@ async function serveImage(
 
 function imageMediaRouteFromPathname(
   request: Request,
-  _runtimeProfile: WorkerRuntimeProfileInput,
+  runtimeProfile: WorkerRuntimeRouteInput,
 ): ImageMediaRoute | undefined {
-  const pathname = new URL(request.url).pathname;
+  const { pathname } = resolveWorkerRuntimeRequestTopology(request, runtimeProfile);
 
   if (pathname.startsWith(CORE_MEDIA_ROUTE_PREFIX)) {
     const key = mediaKeyFromPathname(pathname, CORE_MEDIA_ROUTE_PREFIX);

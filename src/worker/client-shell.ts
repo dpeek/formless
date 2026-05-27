@@ -2,12 +2,14 @@ import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
+  runtimeTopologyRoutes,
 } from "../shared/runtime-topology.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { MappedAppHost } from "./mapped-app-host.ts";
-import { isApiPath, looksLikeStaticAssetPath } from "./routing.ts";
-
-const CLIENT_SHELL_PATH = "/index.html";
+import {
+  shouldServeMappedAppHostClientShell,
+  type WorkerRuntimeRequestTopology,
+} from "./routing.ts";
 
 type ClientAssetEnv = {
   ASSETS?: Fetcher;
@@ -16,13 +18,13 @@ type ClientAssetEnv = {
 export async function handleClientAssetRequest(
   request: Request,
   env: ClientAssetEnv,
-  options: { mappedAppHost?: MappedAppHost } = {},
+  options: { mappedAppHost?: MappedAppHost; runtimeTopology?: WorkerRuntimeRequestTopology } = {},
 ): Promise<Response | undefined> {
   if (!env.ASSETS) {
     return undefined;
   }
 
-  if (options.mappedAppHost && shouldServeMappedAppHostShell(request)) {
+  if (options.mappedAppHost && shouldServeMappedAppHostShell(request, options.runtimeTopology)) {
     const shellResponse = await env.ASSETS.fetch(
       clientShellAssetRequest(getEquivalentRequestForHead(request)),
     );
@@ -44,23 +46,16 @@ export async function handleClientAssetRequest(
   return env.ASSETS.fetch(request);
 }
 
-function shouldServeMappedAppHostShell(request: Request): boolean {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return false;
-  }
-
-  const url = new URL(request.url);
-
-  return (
-    !isApiPath(url.pathname) &&
-    !looksLikeStaticAssetPath(url.pathname) &&
-    acceptsHtml(request.headers.get("Accept"))
-  );
+function shouldServeMappedAppHostShell(
+  request: Request,
+  runtimeTopology?: WorkerRuntimeRequestTopology,
+): boolean {
+  return shouldServeMappedAppHostClientShell(request, runtimeTopology);
 }
 
 function clientShellAssetRequest(request: Request): Request {
   const url = new URL(request.url);
-  url.pathname = CLIENT_SHELL_PATH;
+  url.pathname = runtimeTopologyRoutes.clientShellAssetPath;
   url.search = "";
   url.hash = "";
 
@@ -101,12 +96,6 @@ function injectHeadHtml(html: string, injectedHtml: string): string {
 
 function isHtmlResponse(response: Response): boolean {
   return (response.headers.get("Content-Type") ?? "").toLowerCase().includes("text/html");
-}
-
-function acceptsHtml(acceptHeader: string | null): boolean {
-  return (
-    acceptHeader === null || acceptHeader.includes("text/html") || acceptHeader.includes("*/*")
-  );
 }
 
 function escapeHtmlAttribute(value: string): string {

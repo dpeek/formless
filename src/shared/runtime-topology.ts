@@ -32,9 +32,11 @@ export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
 
 export const runtimeTopologyRoutes = {
   appRouteBase: "/apps",
+  clientShellAssetPath: "/index.html",
   dynamicSiteIconPaths: ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png"],
   instanceRootRoute: "/",
   loginRoute: "/login",
+  publicSiteIndexingResourcePaths: ["/robots.txt", "/sitemap.xml"],
   publicSiteHomeSlug: "home",
   publicSitePackageAppKey: "site",
   publicSitePreviewRouteBase: "/pages",
@@ -186,6 +188,12 @@ export function looksLikeRuntimeStaticAssetPath(pathname: string): boolean {
 export function isRuntimeDynamicSiteIconPath(pathname: string): boolean {
   return runtimeTopologyRoutes.dynamicSiteIconPaths.includes(
     pathname as (typeof runtimeTopologyRoutes.dynamicSiteIconPaths)[number],
+  );
+}
+
+export function isRuntimePublishedSiteIndexingResourcePath(pathname: string): boolean {
+  return runtimeTopologyRoutes.publicSiteIndexingResourcePaths.includes(
+    pathname as (typeof runtimeTopologyRoutes.publicSiteIndexingResourcePaths)[number],
   );
 }
 

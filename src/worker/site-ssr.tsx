@@ -10,7 +10,10 @@ import {
 } from "../site/public-document-metadata.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
-import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../shared/runtime-topology.ts";
+import {
+  FORMLESS_RUNTIME_PROFILE_META_NAME,
+  runtimeTopologyRoutes,
+} from "../shared/runtime-topology.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
 import type { MappedSiteHost } from "./mapped-site-host.ts";
@@ -18,6 +21,7 @@ import {
   shouldBlockMappedSiteHostBrowserRoute,
   shouldHandleMappedSiteHostDocument,
   shouldHandlePublishedSiteDocument,
+  type WorkerRuntimeRequestTopology,
   type WorkerRuntimeProfileInput,
   workerRuntimeProfileInput,
 } from "./routing.ts";
@@ -28,7 +32,6 @@ import {
 
 const SITE_SCHEMA_KEY = "site";
 const CLIENT_MODULE_PATH = "/src/main.tsx";
-const CLIENT_SHELL_PATH = "/index.html";
 const VITE_REACT_REFRESH_PREAMBLE = `<script type="module">
 import RefreshRuntime from "/@react-refresh";
 RefreshRuntime.injectIntoGlobalHook(window);
@@ -98,21 +101,27 @@ type ClientDocumentAssets = {
 export async function handlePublishedSiteDocumentRequest(
   request: Request,
   env: Env,
-  options: { mappedSiteHost?: MappedSiteHost; runtimeProfile?: WorkerRuntimeProfileInput } = {},
+  options: {
+    mappedSiteHost?: MappedSiteHost;
+    runtimeProfile?: WorkerRuntimeProfileInput;
+    runtimeTopology?: WorkerRuntimeRequestTopology;
+  } = {},
 ): Promise<Response | undefined> {
   if (options.mappedSiteHost) {
-    if (shouldBlockMappedSiteHostBrowserRoute(request)) {
+    if (shouldBlockMappedSiteHostBrowserRoute(request, options.runtimeTopology)) {
       return responseWithoutBodyForHead(request, new Response(null, { status: 404 }));
     }
 
-    if (!shouldHandleMappedSiteHostDocument(request)) {
+    if (!shouldHandleMappedSiteHostDocument(request, options.runtimeTopology)) {
       return undefined;
     }
   } else {
     if (
       !shouldHandlePublishedSiteDocument(
         request,
-        options.runtimeProfile ?? workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
+        options.runtimeTopology ??
+          options.runtimeProfile ??
+          workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
       )
     ) {
       return undefined;
@@ -275,7 +284,7 @@ async function loadClientDocumentAssets(request: Request, env: Env): Promise<Cli
   let shellHtml = "";
 
   try {
-    const shellUrl = new URL(CLIENT_SHELL_PATH, request.url);
+    const shellUrl = new URL(runtimeTopologyRoutes.clientShellAssetPath, request.url);
     const shellResponse = await env.ASSETS.fetch(
       new Request(shellUrl, {
         headers: { Accept: "text/html" },

@@ -21,6 +21,7 @@ import {
   areSchemaKeyApiRoutesEnabledForRequest,
   mappedSiteHostRedirectForRequest,
   publishedSiteRedirectForRequest,
+  resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
   workerRuntimeProfileInput,
 } from "./routing.ts";
@@ -72,7 +73,8 @@ export default {
           ? "app"
           : env.FORMLESS_RUNTIME_PROFILE,
     );
-    const mediaResponse = await handleMediaRequest(request, env, effectiveRuntimeProfile);
+    const requestTopology = resolveWorkerRuntimeRequestTopology(request, effectiveRuntimeProfile);
+    const mediaResponse = await handleMediaRequest(request, env, requestTopology);
 
     if (mediaResponse) {
       return mediaResponse;
@@ -80,15 +82,18 @@ export default {
 
     const mappedSiteHost = mappedSiteHostFromDomainMapping(domainMapping);
 
-    const siteIconResponse = await handleSiteIconRequest(request, env, { mappedSiteHost });
+    const siteIconResponse = await handleSiteIconRequest(request, env, {
+      mappedSiteHost,
+      runtimeTopology: requestTopology,
+    });
 
     if (siteIconResponse) {
       return siteIconResponse;
     }
 
     const publishedSiteRedirect = mappedSiteHost
-      ? mappedSiteHostRedirectForRequest(request)
-      : publishedSiteRedirectForRequest(request, effectiveRuntimeProfile);
+      ? mappedSiteHostRedirectForRequest(request, requestTopology)
+      : publishedSiteRedirectForRequest(request, requestTopology);
 
     if (publishedSiteRedirect) {
       return redirectResponse(publishedSiteRedirect.location, publishedSiteRedirect.status);
@@ -96,7 +101,7 @@ export default {
 
     const publishedSiteIndexingResponse = await handlePublishedSiteIndexingRequest(request, env, {
       mappedSiteHost,
-      runtimeProfile: effectiveRuntimeProfile,
+      runtimeTopology: requestTopology,
     });
 
     if (publishedSiteIndexingResponse) {
@@ -152,7 +157,7 @@ export default {
       if (
         authorityRoute.identity.kind === "schemaKey" &&
         (isMappedAppProfileHost ||
-          !areSchemaKeyApiRoutesEnabledForRequest(request, effectiveRuntimeProfile))
+          !areSchemaKeyApiRoutesEnabledForRequest(request, requestTopology))
       ) {
         return Response.json({ error: "Not found." }, { status: 404 });
       }
@@ -165,15 +170,18 @@ export default {
 
     const siteDocumentResponse = await handlePublishedSiteDocumentRequest(request, env, {
       mappedSiteHost,
-      runtimeProfile: effectiveRuntimeProfile,
+      runtimeTopology: requestTopology,
     });
 
     if (siteDocumentResponse) {
       return siteDocumentResponse;
     }
 
-    if (env.ASSETS && shouldDeferToStaticAssets(request, effectiveRuntimeProfile)) {
-      const clientAssetResponse = await handleClientAssetRequest(request, env, { mappedAppHost });
+    if (env.ASSETS && shouldDeferToStaticAssets(request, requestTopology)) {
+      const clientAssetResponse = await handleClientAssetRequest(request, env, {
+        mappedAppHost,
+        runtimeTopology: requestTopology,
+      });
 
       if (clientAssetResponse) {
         return clientAssetResponse;

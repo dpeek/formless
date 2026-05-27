@@ -4,10 +4,15 @@ import { encodeIcoFromPngs } from "../site/ico.ts";
 import { DEFAULT_SITE_ICON_SVG, resolveSiteIconSvgSource } from "../site/site-icon-source.ts";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
+import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
 import type { MappedSiteHost } from "./mapped-site-host.ts";
-import { isDynamicSiteIconPath } from "./routing.ts";
+import {
+  isDynamicSiteIconPath,
+  resolveWorkerRuntimeRequestTopology,
+  type WorkerRuntimeRequestTopology,
+} from "./routing.ts";
 import { PUBLIC_SITE_ICON_CACHE_CONTROL } from "./site-cache.ts";
 
 type SiteIconRouteKind = "apple-touch-png" | "favicon-ico" | "favicon-svg";
@@ -23,21 +28,21 @@ const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
 const defaultSiteIconSvg = resolveSiteIconSvgSource(DEFAULT_SITE_ICON_SVG);
 const siteIconRoutes = new Map<string, SiteIconRoute>([
   [
-    "/favicon.svg",
+    runtimeTopologyRoutes.dynamicSiteIconPaths[0],
     {
       contentType: "image/svg+xml; charset=utf-8",
       kind: "favicon-svg",
     },
   ],
   [
-    "/favicon.ico",
+    runtimeTopologyRoutes.dynamicSiteIconPaths[1],
     {
       contentType: "image/x-icon",
       kind: "favicon-ico",
     },
   ],
   [
-    "/apple-touch-icon.png",
+    runtimeTopologyRoutes.dynamicSiteIconPaths[2],
     {
       contentType: "image/png",
       kind: "apple-touch-png",
@@ -48,9 +53,9 @@ const siteIconRoutes = new Map<string, SiteIconRoute>([
 export async function handleSiteIconRequest(
   request: Request,
   env: Env,
-  options: { mappedSiteHost?: MappedSiteHost } = {},
+  options: { mappedSiteHost?: MappedSiteHost; runtimeTopology?: WorkerRuntimeRequestTopology } = {},
 ): Promise<Response | undefined> {
-  const route = siteIconRouteForRequest(request);
+  const route = siteIconRouteForRequest(request, options.runtimeTopology);
 
   if (!route) {
     return undefined;
@@ -67,12 +72,17 @@ export function isSiteIconPath(pathname: string): boolean {
   return isDynamicSiteIconPath(pathname);
 }
 
-function siteIconRouteForRequest(request: Request): SiteIconRoute | undefined {
-  if (request.method !== "GET" && request.method !== "HEAD") {
+function siteIconRouteForRequest(
+  request: Request,
+  runtimeTopology?: WorkerRuntimeRequestTopology,
+): SiteIconRoute | undefined {
+  const topology = runtimeTopology ?? resolveWorkerRuntimeRequestTopology(request);
+
+  if (!topology.readMethod || !topology.dynamicSiteIconPath) {
     return undefined;
   }
 
-  return siteIconRoutes.get(new URL(request.url).pathname);
+  return siteIconRoutes.get(topology.pathname);
 }
 
 async function buildSiteIconResponse(

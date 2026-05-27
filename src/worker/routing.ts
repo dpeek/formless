@@ -6,12 +6,14 @@ import {
   isRuntimeDynamicSiteIconPath,
   isRuntimeInstanceProfileClientShellRoute,
   isRuntimePublishedProfileClientShellRoute,
+  isRuntimePublishedSiteIndexingResourcePath,
   isRuntimeReadRequestMethod,
   looksLikeRuntimeStaticAssetPath,
   publishedSiteRedirectLocation,
   resolveRuntimeProfileKind,
   runtimeRoutePolicyForProfileKind,
   stringRuntimeConfigValue,
+  type RuntimeProfileKind,
 } from "../shared/runtime-topology.ts";
 
 export type WorkerRuntimeProfileInput = {
@@ -31,9 +33,63 @@ export type WorkerRuntimeRoutePolicy = {
   schemaKeyBrowserRoutes: boolean;
 };
 
+export type WorkerRuntimeRequestTopology = {
+  acceptsHtml: boolean;
+  apiPath: boolean;
+  clientShellRoute: boolean;
+  dynamicSiteIconPath: boolean;
+  instanceProfileClientShellRoute: boolean;
+  pathname: string;
+  profileKind: RuntimeProfileKind;
+  publishedProfileClientShellRoute: boolean;
+  publishedSiteIndexingResourcePath: boolean;
+  publishedSitePreviewRedirectLocation?: string | undefined;
+  readMethod: boolean;
+  routePolicy: WorkerRuntimeRoutePolicy;
+  staticAssetPath: boolean;
+  url: URL;
+};
+
+export type WorkerRuntimeRouteInput = WorkerRuntimeProfileInput | WorkerRuntimeRequestTopology;
+
 export function workerRuntimeProfileInput(profile: string | undefined): WorkerRuntimeProfileInput {
   return {
     profile: stringRuntimeConfigValue(profile),
+  };
+}
+
+export function resolveWorkerRuntimeRequestTopology(
+  request: Request,
+  input: WorkerRuntimeRouteInput = {},
+): WorkerRuntimeRequestTopology {
+  if (isWorkerRuntimeRequestTopology(input)) {
+    return input;
+  }
+
+  const url = new URL(request.url);
+  const profileKind = resolveRuntimeProfileKind({ ...input, hostname: url.hostname });
+  const readMethod = isRuntimeReadRequestMethod(request.method);
+  const apiPath = isRuntimeApiPath(url.pathname);
+  const staticAssetPath = looksLikeRuntimeStaticAssetPath(url.pathname);
+
+  return {
+    acceptsHtml: acceptsRuntimeHtml(request.headers.get("Accept")),
+    apiPath,
+    clientShellRoute: isRuntimeClientShellRoute(url.pathname),
+    dynamicSiteIconPath: isRuntimeDynamicSiteIconPath(url.pathname),
+    instanceProfileClientShellRoute: isRuntimeInstanceProfileClientShellRoute(url.pathname),
+    pathname: url.pathname,
+    profileKind,
+    publishedProfileClientShellRoute: isRuntimePublishedProfileClientShellRoute(url.pathname),
+    publishedSiteIndexingResourcePath: isRuntimePublishedSiteIndexingResourcePath(url.pathname),
+    publishedSitePreviewRedirectLocation:
+      readMethod && !apiPath && !staticAssetPath
+        ? publishedSiteRedirectLocation(url.pathname, url.search)
+        : undefined,
+    readMethod,
+    routePolicy: workerRuntimeRoutePolicyFromKind(profileKind),
+    staticAssetPath,
+    url,
   };
 }
 
@@ -45,148 +101,143 @@ export function workerRuntimeRoutePolicy(
 
 export function areSchemaKeyApiRoutesEnabledForRequest(
   request: Request,
-  input: WorkerRuntimeProfileInput = {},
+  input: WorkerRuntimeRouteInput = {},
 ): boolean {
-  const url = new URL(request.url);
-  const profileKind = resolveRuntimeProfileKind({ ...input, hostname: url.hostname });
-
-  return workerRuntimeRoutePolicyFromKind(profileKind).schemaKeyApiRoutes;
+  return resolveWorkerRuntimeRequestTopology(request, input).routePolicy.schemaKeyApiRoutes;
 }
 
 export function shouldHandlePublishedSiteDocument(
   request: Request,
-  input: WorkerRuntimeProfileInput = {},
+  input: WorkerRuntimeRouteInput = {},
 ): boolean {
-  if (!isRuntimeReadRequestMethod(request.method)) {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  if (!topology.readMethod) {
     return false;
   }
 
-  const url = new URL(request.url);
-  const profileKind = resolveRuntimeProfileKind({ ...input, hostname: url.hostname });
-
-  if (profileKind !== "publishedSite") {
+  if (topology.profileKind !== "publishedSite") {
     return false;
   }
 
   if (
-    isApiPath(url.pathname) ||
-    publishedSiteRedirectLocation(url.pathname, url.search) ||
-    isClientShellRoute(url.pathname) ||
-    looksLikeStaticAssetPath(url.pathname)
+    topology.apiPath ||
+    topology.publishedSitePreviewRedirectLocation ||
+    topology.clientShellRoute ||
+    topology.staticAssetPath
   ) {
     return false;
   }
 
-  return acceptsRuntimeHtml(request.headers.get("Accept"));
+  return topology.acceptsHtml;
 }
 
 export function shouldHandlePublishedSiteIndexingResource(
   request: Request,
-  input: WorkerRuntimeProfileInput = {},
+  input: WorkerRuntimeRouteInput = {},
 ): boolean {
-  if (!isRuntimeReadRequestMethod(request.method)) {
-    return false;
-  }
-
-  const url = new URL(request.url);
-  const profileKind = resolveRuntimeProfileKind({ ...input, hostname: url.hostname });
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
 
   return (
-    profileKind === "publishedSite" &&
-    (url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml")
+    topology.readMethod &&
+    topology.profileKind === "publishedSite" &&
+    topology.publishedSiteIndexingResourcePath
   );
 }
 
 export function shouldResolveInstanceSiteDomainMappingForRequest(
   request: Request,
-  input: WorkerRuntimeProfileInput = {},
+  input: WorkerRuntimeRouteInput = {},
 ): boolean {
-  if (!isRuntimeReadRequestMethod(request.method)) {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  if (!topology.readMethod) {
     return false;
   }
 
-  const url = new URL(request.url);
-
-  if (isApiPath(url.pathname)) {
+  if (topology.apiPath) {
     return false;
   }
 
-  const profileKind = resolveRuntimeProfileKind({ ...input, hostname: url.hostname });
-
-  return profileKind === "instance";
+  return topology.profileKind === "instance";
 }
 
-export function shouldHandleMappedSiteHostDocument(request: Request): boolean {
-  if (!isRuntimeReadRequestMethod(request.method)) {
+export function shouldHandleMappedSiteHostDocument(
+  request: Request,
+  input: WorkerRuntimeRouteInput = { profile: "publishedSite" },
+): boolean {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  if (!topology.readMethod) {
     return false;
   }
 
-  const url = new URL(request.url);
-
   if (
-    isApiPath(url.pathname) ||
-    mappedSiteHostRedirectForRequest(request) ||
-    isClientShellRoute(url.pathname) ||
-    looksLikeStaticAssetPath(url.pathname)
+    topology.apiPath ||
+    mappedSiteHostRedirectForRequest(request, topology) ||
+    topology.clientShellRoute ||
+    topology.staticAssetPath
   ) {
     return false;
   }
 
-  return acceptsRuntimeHtml(request.headers.get("Accept"));
+  return topology.acceptsHtml;
 }
 
-export function shouldBlockMappedSiteHostBrowserRoute(request: Request): boolean {
-  if (!isRuntimeReadRequestMethod(request.method)) {
-    return false;
-  }
-
-  const url = new URL(request.url);
+export function shouldBlockMappedSiteHostBrowserRoute(
+  request: Request,
+  input: WorkerRuntimeRouteInput = { profile: "publishedSite" },
+): boolean {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
 
   return (
-    !isApiPath(url.pathname) &&
-    !looksLikeStaticAssetPath(url.pathname) &&
-    isClientShellRoute(url.pathname)
+    topology.readMethod &&
+    !topology.apiPath &&
+    !topology.staticAssetPath &&
+    topology.clientShellRoute
   );
 }
 
-export function shouldHandleMappedSiteHostIndexingResource(request: Request): boolean {
-  if (!isRuntimeReadRequestMethod(request.method)) {
-    return false;
-  }
+export function shouldHandleMappedSiteHostIndexingResource(
+  request: Request,
+  input: WorkerRuntimeRouteInput = { profile: "publishedSite" },
+): boolean {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
 
-  const url = new URL(request.url);
+  return topology.readMethod && topology.publishedSiteIndexingResourcePath;
+}
 
-  return url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml";
+export function shouldServeMappedAppHostClientShell(
+  request: Request,
+  input: WorkerRuntimeRouteInput = { profile: "app" },
+): boolean {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  return (
+    topology.readMethod && !topology.apiPath && !topology.staticAssetPath && topology.acceptsHtml
+  );
 }
 
 export function shouldDeferToStaticAssets(
   request: Request,
-  input: WorkerRuntimeProfileInput = {},
+  input: WorkerRuntimeRouteInput = {},
 ): boolean {
-  if (request.method !== "GET" && request.method !== "HEAD") {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  if (!topology.readMethod) {
     return false;
   }
 
-  const url = new URL(request.url);
-
-  if (isApiPath(url.pathname) || isDynamicSiteIconPath(url.pathname)) {
+  if (topology.apiPath || topology.dynamicSiteIconPath) {
     return false;
   }
 
-  const profileKind = resolveRuntimeProfileKind({ ...input, hostname: url.hostname });
-
-  if (profileKind === "publishedSite") {
-    return (
-      isRuntimePublishedProfileClientShellRoute(url.pathname) ||
-      looksLikeStaticAssetPath(url.pathname)
-    );
+  if (topology.profileKind === "publishedSite") {
+    return topology.publishedProfileClientShellRoute || topology.staticAssetPath;
   }
 
-  if (profileKind === "instance") {
-    return (
-      isRuntimeInstanceProfileClientShellRoute(url.pathname) ||
-      looksLikeStaticAssetPath(url.pathname)
-    );
+  if (topology.profileKind === "instance") {
+    return topology.instanceProfileClientShellRoute || topology.staticAssetPath;
   }
 
   return true;
@@ -194,42 +245,38 @@ export function shouldDeferToStaticAssets(
 
 export function publishedSiteRedirectForRequest(
   request: Request,
-  input: WorkerRuntimeProfileInput = {},
+  input: WorkerRuntimeRouteInput = {},
 ): PublishedSiteRedirect | undefined {
-  if (!isRuntimeReadRequestMethod(request.method)) {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  if (!topology.readMethod) {
     return undefined;
   }
 
-  const url = new URL(request.url);
-  const profileKind = resolveRuntimeProfileKind({ ...input, hostname: url.hostname });
-
-  if (
-    profileKind !== "publishedSite" ||
-    isApiPath(url.pathname) ||
-    looksLikeStaticAssetPath(url.pathname)
-  ) {
+  if (topology.profileKind !== "publishedSite" || topology.apiPath || topology.staticAssetPath) {
     return undefined;
   }
 
-  const location = publishedSiteRedirectLocation(url.pathname, url.search);
+  const location = topology.publishedSitePreviewRedirectLocation;
 
   return location ? { location, status: PUBLISHED_SITE_REDIRECT_STATUS } : undefined;
 }
 
 export function mappedSiteHostRedirectForRequest(
   request: Request,
+  input: WorkerRuntimeRouteInput = { profile: "publishedSite" },
 ): PublishedSiteRedirect | undefined {
-  if (!isRuntimeReadRequestMethod(request.method)) {
+  const topology = resolveWorkerRuntimeRequestTopology(request, input);
+
+  if (!topology.readMethod) {
     return undefined;
   }
 
-  const url = new URL(request.url);
-
-  if (isApiPath(url.pathname) || looksLikeStaticAssetPath(url.pathname)) {
+  if (topology.apiPath || topology.staticAssetPath) {
     return undefined;
   }
 
-  const location = publishedSiteRedirectLocation(url.pathname, url.search);
+  const location = topology.publishedSitePreviewRedirectLocation;
 
   return location ? { location, status: PUBLISHED_SITE_REDIRECT_STATUS } : undefined;
 }
@@ -243,7 +290,7 @@ export function isClientShellRoute(pathname: string): boolean {
 }
 
 function workerRuntimeRoutePolicyFromKind(
-  profileKind: ReturnType<typeof resolveRuntimeProfileKind>,
+  profileKind: RuntimeProfileKind,
 ): WorkerRuntimeRoutePolicy {
   const policy = runtimeRoutePolicyForProfileKind(profileKind);
 
@@ -261,4 +308,10 @@ export function looksLikeStaticAssetPath(pathname: string): boolean {
 
 export function isDynamicSiteIconPath(pathname: string): boolean {
   return isRuntimeDynamicSiteIconPath(pathname);
+}
+
+function isWorkerRuntimeRequestTopology(
+  input: WorkerRuntimeRouteInput,
+): input is WorkerRuntimeRequestTopology {
+  return "profileKind" in input && "routePolicy" in input && "url" in input;
 }

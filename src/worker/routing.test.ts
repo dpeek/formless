@@ -5,13 +5,70 @@ import {
   isClientShellRoute,
   isDynamicSiteIconPath,
   publishedSiteRedirectForRequest,
+  resolveWorkerRuntimeRequestTopology,
   shouldDeferToStaticAssets,
   shouldHandlePublishedSiteDocument,
   shouldHandlePublishedSiteIndexingResource,
+  shouldServeMappedAppHostClientShell,
   workerRuntimeRoutePolicy,
 } from "./routing.ts";
 
 describe("Worker document routing", () => {
+  it("classifies Worker request topology from shared runtime policy", () => {
+    const preview = resolveWorkerRuntimeRequestTopology(
+      documentRequest("http://published-site.example.com/pages/home?ref=old"),
+    );
+    const robots = resolveWorkerRuntimeRequestTopology(
+      new Request("http://example.com/robots.txt"),
+      {
+        profile: "publishedSite",
+      },
+    );
+    const icon = resolveWorkerRuntimeRequestTopology(
+      new Request("http://example.com/favicon.svg"),
+      {
+        profile: "publishedSite",
+      },
+    );
+    const media = resolveWorkerRuntimeRequestTopology(
+      new Request("http://example.com/api/formless/media/images"),
+      { profile: "instance" },
+    );
+
+    expect(preview.profileKind).toBe("publishedSite");
+    expect(preview.routePolicy).toEqual({
+      instanceBrowserRoutes: false,
+      installedAppApiRoutes: true,
+      schemaKeyApiRoutes: true,
+      schemaKeyBrowserRoutes: false,
+    });
+    expect(preview.clientShellRoute).toBe(true);
+    expect(preview.publishedSitePreviewRedirectLocation).toBe("/?ref=old");
+    expect(preview.acceptsHtml).toBe(true);
+
+    expect(robots.publishedSiteIndexingResourcePath).toBe(true);
+    expect(robots.staticAssetPath).toBe(true);
+    expect(icon.dynamicSiteIconPath).toBe(true);
+    expect(icon.staticAssetPath).toBe(true);
+    expect(media.apiPath).toBe(true);
+    expect(media.routePolicy.schemaKeyApiRoutes).toBe(false);
+  });
+
+  it("lets Worker adapter helpers reuse precomputed request topology", () => {
+    const document = documentRequest("http://example.com/blog");
+    const documentTopology = resolveWorkerRuntimeRequestTopology(document, {
+      profile: "publishedSite",
+    });
+    const mappedAppShell = documentRequest("http://tasks.example.com/");
+    const mappedAppTopology = resolveWorkerRuntimeRequestTopology(mappedAppShell, {
+      profile: "app",
+    });
+
+    expect(shouldHandlePublishedSiteDocument(document, documentTopology)).toBe(true);
+    expect(shouldDeferToStaticAssets(document, documentTopology)).toBe(false);
+    expect(shouldServeMappedAppHostClientShell(mappedAppShell, mappedAppTopology)).toBe(true);
+  });
+
   it("routes published Site documents to the Worker SSR path only in the published profile", () => {
     expect(
       shouldHandlePublishedSiteDocument(documentRequest("http://example.com/"), {

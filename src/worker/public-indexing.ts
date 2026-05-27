@@ -5,12 +5,14 @@ import {
 } from "../site/public-indexing.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
 import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
+import { runtimeTopologyRoutes } from "../shared/runtime-topology.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
 import type { MappedSiteHost } from "./mapped-site-host.ts";
 import {
   shouldHandleMappedSiteHostIndexingResource,
   shouldHandlePublishedSiteIndexingResource,
+  type WorkerRuntimeRequestTopology,
   type WorkerRuntimeProfileInput,
   workerRuntimeProfileInput,
 } from "./routing.ts";
@@ -24,17 +26,23 @@ const SITE_SCHEMA_KEY = "site";
 export async function handlePublishedSiteIndexingRequest(
   request: Request,
   env: Env,
-  options: { mappedSiteHost?: MappedSiteHost; runtimeProfile?: WorkerRuntimeProfileInput } = {},
+  options: {
+    mappedSiteHost?: MappedSiteHost;
+    runtimeProfile?: WorkerRuntimeProfileInput;
+    runtimeTopology?: WorkerRuntimeRequestTopology;
+  } = {},
 ): Promise<Response | undefined> {
   if (options.mappedSiteHost) {
-    if (!shouldHandleMappedSiteHostIndexingResource(request)) {
+    if (!shouldHandleMappedSiteHostIndexingResource(request, options.runtimeTopology)) {
       return undefined;
     }
   } else {
     if (
       !shouldHandlePublishedSiteIndexingResource(
         request,
-        options.runtimeProfile ?? workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
+        options.runtimeTopology ??
+          options.runtimeProfile ??
+          workerRuntimeProfileInput(env.FORMLESS_RUNTIME_PROFILE),
       )
     ) {
       return undefined;
@@ -56,7 +64,7 @@ async function renderPublishedSiteIndexingResponse(
   url: URL,
   options: { target?: InstalledAppStorageIdentity } = {},
 ): Promise<Response> {
-  if (url.pathname === "/robots.txt") {
+  if (url.pathname === runtimeTopologyRoutes.publicSiteIndexingResourcePaths[0]) {
     return textResponse(renderPublicRobotsTxt(url.origin), "text/plain; charset=utf-8");
   }
 
