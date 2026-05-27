@@ -8,6 +8,10 @@ import {
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
+  type DeleteInstanceDomainProviderRedirectIntentRequest,
+  type ForgetInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderApplyJobResultRequest,
   type InstanceDomainProviderApplyJobResponse,
   type InstanceDomainProviderApplyRequest,
@@ -16,10 +20,14 @@ import {
   type InstanceDomainProviderDeleteJobResponse,
   type InstanceDomainProviderDeleteRequest,
   type InstanceDomainProviderDeleteResponse,
+  type InstanceDomainProviderManualCleanupRequest,
+  type InstanceDomainProviderManualCleanupResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
 import type { DomainProviderApplyPolicy } from "../shared/domain-provider-protocol.ts";
 import type {
+  DeleteInstanceDomainMappingRequest,
+  ForgetInstanceDomainMappingResponse,
   InstanceDomainMappingsResponse,
   RecordInstanceDomainMappingApplyEvidenceRequest,
   RecordInstanceDomainMappingApplyEvidenceResponse,
@@ -31,6 +39,7 @@ const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
 const APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 const DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
+const DOMAIN_MAPPINGS_FORGET_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/forget`;
 
 export type FormlessInstanceTargetStatus = {
   appRegistry: AppInstallsResponse;
@@ -242,6 +251,35 @@ export async function requestFormlessInstanceDomainProviderDelete(
   );
 }
 
+export async function markFormlessInstanceDomainProviderResourceManuallyRemoved(
+  input: {
+    adminToken?: string | null;
+    request: InstanceDomainProviderManualCleanupRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDomainProviderManualCleanupResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const cleanupUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_MANUAL_CLEANUP_API_PATH);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseDomainProviderManualCleanupResponse(
+    await postJson(dependencies.fetch, cleanupUrl, {
+      body: JSON.stringify(input.request),
+      headers,
+      method: "POST",
+    }),
+    cleanupUrl,
+  );
+}
+
 export async function completeFormlessInstanceDomainProviderDeleteJob(
   input: {
     adminToken?: string | null;
@@ -272,6 +310,68 @@ export async function completeFormlessInstanceDomainProviderDeleteJob(
       method: "POST",
     }),
     resultUrl,
+  );
+}
+
+export async function forgetFormlessInstanceDomainMapping(
+  input: {
+    adminToken?: string | null;
+    request: DeleteInstanceDomainMappingRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<ForgetInstanceDomainMappingResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const forgetUrl = new URL(apiUrl(targetUrl, DOMAIN_MAPPINGS_FORGET_API_PATH));
+  const headers: Record<string, string> = { accept: "application/json" };
+
+  forgetUrl.searchParams.set("host", input.request.host);
+
+  if (input.request.profile !== undefined) {
+    forgetUrl.searchParams.set("profile", input.request.profile);
+  }
+
+  if (input.request.surface !== undefined) {
+    forgetUrl.searchParams.set("surface", input.request.surface);
+  }
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseForgetDomainMappingResponse(
+    await deleteJson(dependencies.fetch, forgetUrl.toString(), {
+      headers,
+      method: "DELETE",
+    }),
+    forgetUrl.toString(),
+  );
+}
+
+export async function forgetFormlessInstanceDomainProviderRedirect(
+  input: {
+    adminToken?: string | null;
+    request: DeleteInstanceDomainProviderRedirectIntentRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<ForgetInstanceDomainProviderRedirectIntentResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const forgetUrl = new URL(apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH));
+  const headers: Record<string, string> = { accept: "application/json" };
+
+  forgetUrl.searchParams.set("fromHost", input.request.fromHost);
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseForgetDomainProviderRedirectResponse(
+    await deleteJson(dependencies.fetch, forgetUrl.toString(), {
+      headers,
+      method: "DELETE",
+    }),
+    forgetUrl.toString(),
   );
 }
 
@@ -314,6 +414,12 @@ async function postJson(fetcher: typeof fetch, url: string, init: RequestInit): 
   const response = await fetcher(url, init);
 
   return readJsonResponse(response, `POST ${url}`);
+}
+
+async function deleteJson(fetcher: typeof fetch, url: string, init: RequestInit): Promise<unknown> {
+  const response = await fetcher(url, init);
+
+  return readJsonResponse(response, `DELETE ${url}`);
 }
 
 async function readJsonResponse(response: Response, context: string): Promise<unknown> {
@@ -438,6 +544,51 @@ function parseDomainProviderDeleteJobResponse(
   }
 
   return value as InstanceDomainProviderDeleteJobResponse;
+}
+
+function parseDomainProviderManualCleanupResponse(
+  value: unknown,
+  context: string,
+): InstanceDomainProviderManualCleanupResponse {
+  if (!isRecord(value) || value.status !== "cleaned" || !isRecord(value.target)) {
+    throw new Error(`${context} failed: domain provider manual cleanup response is invalid.`);
+  }
+
+  return value as InstanceDomainProviderManualCleanupResponse;
+}
+
+function parseForgetDomainMappingResponse(
+  value: unknown,
+  context: string,
+): ForgetInstanceDomainMappingResponse {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.mapping) ||
+    !Array.isArray(value.mappings) ||
+    !isRecord(value.desiredCleanupEvent) ||
+    !Array.isArray(value.desiredCleanupEvents)
+  ) {
+    throw new Error(`${context} failed: domain mapping forget response is invalid.`);
+  }
+
+  return value as ForgetInstanceDomainMappingResponse;
+}
+
+function parseForgetDomainProviderRedirectResponse(
+  value: unknown,
+  context: string,
+): ForgetInstanceDomainProviderRedirectIntentResponse {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.redirectIntent) ||
+    !Array.isArray(value.redirectIntents) ||
+    !isRecord(value.redirectIntentCleanupEvent) ||
+    !Array.isArray(value.redirectIntentCleanupEvents)
+  ) {
+    throw new Error(`${context} failed: domain provider redirect forget response is invalid.`);
+  }
+
+  return value as ForgetInstanceDomainProviderRedirectIntentResponse;
 }
 
 function parseApplyEvidenceResponse(

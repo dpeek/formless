@@ -16,6 +16,7 @@ import {
   type AppArchive,
   type InstanceArchive,
 } from "../shared/archive.ts";
+import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
   CloudflareDnsRecord,
   CloudflareDomainClient,
@@ -110,9 +111,12 @@ describe("Formless Site CLI", () => {
       "  instance dev|reset-local [--workspace <path>]",
       "  instance deploy [--workspace <path>] [--target <alias>]",
       "       [--migration-policy <new|existing>]",
-      "  instance domains remote-plan|run-apply|plan|apply [--workspace <path>] [--target <alias>]",
+      "  instance domains remote-plan|run-apply|run-delete|forget-route|forget-redirect",
+      "       |mark-manually-removed|plan|apply [--workspace <path>] [--target <alias>]",
       "       [--policy <create-only|adopt|override>] [--host <hostname>]",
-      "       [--admin-token <token>] [--runner-id <id>]",
+      "       [--profile <instance|app|publicSite>] [--kind <provider-kind>]",
+      "       [--logical-id <id>] [--from-host <hostname>] [--admin-token <token>]",
+      "       [--runner-id <id>]",
       "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
       "       [--admin-token <token>]",
     ].join("\n");
@@ -597,6 +601,88 @@ describe("Formless Site CLI", () => {
     expect(
       parseFormlessCliArgs([
         "instance",
+        "domains",
+        "run-delete",
+        "--target",
+        "remote",
+        "--host",
+        "app.dpeek.com",
+        "--kind",
+        "cloudflare-worker-custom-domain",
+        "--logical-id",
+        "primary-custom-domain-app-dpeek-com-app-app",
+        "--runner-id",
+        "runner-delete",
+      ]),
+    ).toEqual({
+      adminToken: null,
+      host: "app.dpeek.com",
+      kind: "instanceDomainsRunDelete",
+      logicalId: "primary-custom-domain-app-dpeek-com-app-app",
+      resourceKind: "cloudflare-worker-custom-domain",
+      runnerId: "runner-delete",
+      targetAlias: "remote",
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "domains",
+        "forget-route",
+        "--host",
+        "draft.dpeek.com",
+        "--profile",
+        "publicSite",
+        "--admin-token",
+        "secret",
+      ]),
+    ).toEqual({
+      adminToken: "secret",
+      host: "draft.dpeek.com",
+      kind: "instanceDomainsForgetRoute",
+      profile: "publicSite",
+      targetAlias: null,
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "domains",
+        "forget-redirect",
+        "--from-host",
+        "old.dpeek.com",
+      ]),
+    ).toEqual({
+      adminToken: null,
+      fromHost: "old.dpeek.com",
+      kind: "instanceDomainsForgetRedirect",
+      targetAlias: null,
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
+        "domains",
+        "mark-manually-removed",
+        "--host",
+        "old.dpeek.com",
+        "--kind",
+        "cloudflare-redirect-rule",
+        "--logical-id",
+        "primary-redirect-old-dpeek-com",
+      ]),
+    ).toEqual({
+      adminToken: null,
+      host: "old.dpeek.com",
+      kind: "instanceDomainsMarkManuallyRemoved",
+      logicalId: "primary-redirect-old-dpeek-com",
+      resourceKind: "cloudflare-redirect-rule",
+      targetAlias: null,
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
         "token",
         "adopt",
         "--target",
@@ -645,7 +731,7 @@ describe("Formless Site CLI", () => {
       parseFormlessCliArgs(["instance", "deploy", "--migration-policy", "auto"]),
     ).toThrow('formless instance deploy --migration-policy must be "new" or "existing".');
     expect(() => parseFormlessCliArgs(["instance", "domains", "forget"])).toThrow(
-      "Usage: formless instance domains <remote-plan|run-apply|plan|apply>",
+      "Usage: formless instance domains <remote-plan|run-apply|run-delete|forget-route|forget-redirect|mark-manually-removed|plan|apply>",
     );
     expect(() =>
       parseFormlessCliArgs(["instance", "domains", "plan", "--policy", "force"]),
@@ -658,6 +744,33 @@ describe("Formless Site CLI", () => {
     expect(() =>
       parseFormlessCliArgs(["instance", "domains", "run-apply", "--policy", "override"]),
     ).toThrow("formless instance domains run-apply --policy override requires --host <hostname>.");
+    expect(() => parseFormlessCliArgs(["instance", "domains", "run-delete"])).toThrow(
+      "Missing required option for formless instance domains run-delete: --host.",
+    );
+    expect(() =>
+      parseFormlessCliArgs(["instance", "domains", "run-delete", "--host", "dpeek.com"]),
+    ).toThrow("Missing required option for formless instance domains run-delete: --logical-id.");
+    expect(() =>
+      parseFormlessCliArgs([
+        "instance",
+        "domains",
+        "mark-manually-removed",
+        "--host",
+        "dpeek.com",
+        "--logical-id",
+        "resource",
+        "--kind",
+        "cloudflare-pages-domain",
+      ]),
+    ).toThrow(
+      'formless instance domains mark-manually-removed --kind must be "cloudflare-worker-custom-domain", "cloudflare-redirect-rule", or "cloudflare-dns-records".',
+    );
+    expect(() =>
+      parseFormlessCliArgs(["instance", "domains", "forget-route", "--host", "draft.dpeek.com"]),
+    ).toThrow("Missing required option for formless instance domains forget-route: --profile.");
+    expect(() => parseFormlessCliArgs(["instance", "domains", "forget-redirect"])).toThrow(
+      "Missing required option for formless instance domains forget-redirect: --from-host.",
+    );
     expect(() => parseFormlessCliArgs(["instance", "token", "forget"])).toThrow(
       "Usage: formless instance token <adopt|rotate>",
     );
@@ -1348,6 +1461,332 @@ describe("Formless Site CLI", () => {
         "Resources: 1 (custom domains 1, redirect rules 0, DNS records 0).",
         "Blockers: none.",
         "www.dpeek.com: cloudflare-worker-custom-domain; profile publicSite:david; zone dpeek.com (zone-1); alchemy primary-custom-domain-www-dpeek-com-publicsite-david",
+      ].join("\n"),
+    ]);
+  });
+
+  it("starts remote provider delete jobs before requiring runner secrets", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const plan = planDomainProviderResources({
+      instanceId: "primary",
+      mappings: [
+        {
+          enabled: true,
+          host: "old.dpeek.com",
+          profile: "instance",
+        },
+      ],
+      workerName: "personal",
+      zones: [{ id: "zone-1", name: "dpeek.com" }],
+    });
+    const target = {
+      accountId: "account-123",
+      action: "created" as const,
+      alchemyResourceId: "primary-custom-domain-old-dpeek-com-instance",
+      host: "old.dpeek.com",
+      kind: "cloudflare-worker-custom-domain" as const,
+      logicalId: "primary-custom-domain-old-dpeek-com-instance",
+      profile: "instance" as const,
+      resourceId: "custom-domain-old",
+      resourceJson: "{}",
+      workerName: "personal",
+      zoneId: "zone-1",
+      zoneName: "dpeek.com",
+    };
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+    responses.queueJson(
+      {
+        code: "domain-provider-delete-job-ready",
+        config: {
+          accountId: "account-123",
+          alchemyPassword: { configured: false, envNames: ["ALCHEMY_PASSWORD"] },
+          applyReady: true,
+          cloudflareApiToken: {
+            configured: false,
+            envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+          },
+          instanceId: "primary",
+          issues: [],
+          jobReady: true,
+          planReady: true,
+          runnerMutation: {
+            checkedBy: "node-runner",
+            requiredEnvNames: [
+              "CLOUDFLARE_API_TOKEN",
+              "CF_API_TOKEN",
+              "ALCHEMY_PASSWORD",
+              "ALCHEMY_STATE_TOKEN",
+            ],
+          },
+          workerName: "personal",
+          zones: [{ id: "zone-1", name: "dpeek.com" }],
+        },
+        job: {
+          createdAt: "2026-05-27T00:00:00.000Z",
+          jobId: "delete-job-1",
+          plan,
+          runnerId: "runner-delete",
+          status: "ready",
+          targets: [target],
+          updatedAt: "2026-05-27T00:00:00.000Z",
+        },
+        plan,
+        status: "ready",
+        targets: [target],
+      },
+      202,
+    );
+    responses.queueJson({
+      job: {
+        createdAt: "2026-05-27T00:00:00.000Z",
+        jobId: "delete-job-1",
+        plan,
+        result: {
+          error: "Domain provider runner requires ALCHEMY_PASSWORD.",
+          evidenceCount: 0,
+        },
+        runnerId: "runner-delete",
+        status: "failed",
+        targets: [target],
+        updatedAt: "2026-05-27T00:00:01.000Z",
+      },
+    });
+
+    await expect(
+      runFormlessCli(
+        [
+          "instance",
+          "domains",
+          "run-delete",
+          "--workspace",
+          workspaceRoot,
+          "--host",
+          "old.dpeek.com",
+          "--kind",
+          "cloudflare-worker-custom-domain",
+          "--logical-id",
+          "primary-custom-domain-old-dpeek-com-instance",
+          "--runner-id",
+          "runner-delete",
+          "--admin-token",
+          "admin-token",
+        ],
+        cliDeps(tempDir, { env: {}, fetch: responses.fetcher(requests) }),
+      ),
+    ).rejects.toThrow("Domain provider runner requires ALCHEMY_PASSWORD.");
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/delete",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/delete-jobs/delete-job-1/result",
+    ]);
+    expect(requests[3]?.headers.authorization).toBe("Bearer admin-token");
+    expect(requests[4]?.headers.authorization).toBe("Bearer admin-token");
+    expect(
+      capturedRequestJson<{ host: string; kind: string; logicalId: string; runnerId: string }>(
+        requests[3],
+      ),
+    ).toEqual({
+      host: "old.dpeek.com",
+      kind: "cloudflare-worker-custom-domain",
+      logicalId: "primary-custom-domain-old-dpeek-com-instance",
+      runnerId: "runner-delete",
+    });
+    expect(
+      capturedRequestJson<{ error: string; runnerId: string; status: string }>(requests[4]),
+    ).toEqual({
+      error: "Domain provider runner requires ALCHEMY_PASSWORD.",
+      runnerId: "runner-delete",
+      status: "failed",
+    });
+  });
+
+  it("runs route forget and manual provider cleanup through remote instance APIs", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const now = "2026-05-27T00:00:00.000Z";
+    const mapping = { ...domainMapping("draft.dpeek.com", "david"), enabled: false };
+    const desiredCleanupEvent = {
+      ...mapping,
+      action: "forgotten",
+      eventId: 1,
+      reason: "disabled-unapplied",
+      recordedAt: now,
+    };
+    const redirectIntent = {
+      createdAt: now,
+      enabled: false,
+      fromHost: "old.dpeek.com",
+      preservePath: true,
+      preserveQueryString: true,
+      statusCode: 308,
+      toHost: "new.dpeek.com",
+      updatedAt: now,
+    };
+    const redirectCleanupEvent = {
+      ...redirectIntent,
+      action: "forgotten",
+      eventId: 2,
+      reason: "disabled-unapplied",
+      recordedAt: now,
+    };
+    const cleanupTarget = {
+      accountId: "account-123",
+      action: "created",
+      alchemyResourceId: "primary-redirect-old-dpeek-com",
+      host: "old.dpeek.com",
+      kind: "cloudflare-redirect-rule",
+      logicalId: "primary-redirect-old-dpeek-com",
+      resourceId: "redirect-rule-old",
+      resourceJson: "{}",
+      runnerId: "runner-1",
+      zoneId: "zone-1",
+      zoneName: "dpeek.com",
+    };
+    const queueStatus = () => {
+      responses.queueJson({ version: packageJson.version });
+      responses.queueJson({ setupComplete: true });
+      responses.queueJson({
+        packages: listBundledAppPackages(),
+        installs: [installedSite("david", "David Peek")],
+      });
+    };
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    queueStatus();
+    responses.queueJson({
+      desiredCleanupEvent,
+      desiredCleanupEvents: [desiredCleanupEvent],
+      mapping,
+      mappings: [],
+    });
+    queueStatus();
+    responses.queueJson({
+      redirectIntent,
+      redirectIntentCleanupEvent: redirectCleanupEvent,
+      redirectIntentCleanupEvents: [redirectCleanupEvent],
+      redirectIntents: [],
+    });
+    queueStatus();
+    responses.queueJson({
+      action: "manually-removed",
+      status: "cleaned",
+      target: cleanupTarget,
+    });
+
+    await runFormlessCli(
+      [
+        "instance",
+        "domains",
+        "forget-route",
+        "--workspace",
+        workspaceRoot,
+        "--host",
+        "draft.dpeek.com",
+        "--profile",
+        "publicSite",
+        "--admin-token",
+        "admin-token",
+      ],
+      cliDeps(tempDir, { fetch: responses.fetcher(requests), logs }),
+    );
+    await runFormlessCli(
+      [
+        "instance",
+        "domains",
+        "forget-redirect",
+        "--workspace",
+        workspaceRoot,
+        "--from-host",
+        "old.dpeek.com",
+        "--admin-token",
+        "admin-token",
+      ],
+      cliDeps(tempDir, { fetch: responses.fetcher(requests), logs }),
+    );
+    await runFormlessCli(
+      [
+        "instance",
+        "domains",
+        "mark-manually-removed",
+        "--workspace",
+        workspaceRoot,
+        "--host",
+        "old.dpeek.com",
+        "--kind",
+        "cloudflare-redirect-rule",
+        "--logical-id",
+        "primary-redirect-old-dpeek-com",
+        "--admin-token",
+        "admin-token",
+      ],
+      cliDeps(tempDir, { fetch: responses.fetcher(requests), logs }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "DELETE https://personal.dpeek.workers.dev/api/formless/domain-mappings/forget?host=draft.dpeek.com&profile=publicSite",
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "DELETE https://personal.dpeek.workers.dev/api/formless/domain-provider/redirects/forget?fromHost=old.dpeek.com",
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/manual-cleanup",
+    ]);
+    expect(requests[3]?.headers.authorization).toBe("Bearer admin-token");
+    expect(requests[7]?.headers.authorization).toBe("Bearer admin-token");
+    expect(requests[11]?.headers.authorization).toBe("Bearer admin-token");
+    expect(
+      capturedRequestJson<{ host: string; kind: string; logicalId: string }>(requests[11]),
+    ).toEqual({
+      host: "old.dpeek.com",
+      kind: "cloudflare-redirect-rule",
+      logicalId: "primary-redirect-old-dpeek-com",
+    });
+    expect(logs).toEqual([
+      [
+        "Instance domain route forgotten.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Route: draft.dpeek.com (publicSite).",
+        "Reason: disabled-unapplied.",
+        "Remaining desired routes: 0.",
+      ].join("\n"),
+      [
+        "Instance domain redirect forgotten.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Redirect: old.dpeek.com.",
+        "Reason: disabled-unapplied.",
+        "Remaining desired redirects: 0.",
+      ].join("\n"),
+      [
+        "Instance domain provider evidence marked manually removed.",
+        `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
+        "Target: remote (https://personal.dpeek.workers.dev).",
+        "Resource: old.dpeek.com cloudflare-redirect-rule primary-redirect-old-dpeek-com.",
+        "Action: manually-removed.",
       ].join("\n"),
     ]);
   });

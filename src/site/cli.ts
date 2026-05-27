@@ -28,10 +28,18 @@ import {
   type CloudflareWorkerRoute,
 } from "./cloudflare-domain-client.ts";
 import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
-import type { InstanceDomainProviderPlanResponse } from "../shared/domain-provider-api.ts";
+import type {
+  ForgetInstanceDomainProviderRedirectIntentResponse,
+  InstanceDomainProviderManualCleanupResponse,
+  InstanceDomainProviderPlanResponse,
+} from "../shared/domain-provider-api.ts";
+import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import {
   runFormlessInstanceDomainProviderApply as runFormlessInstanceDomainProviderApplyCommand,
+  runFormlessInstanceDomainProviderDelete as runFormlessInstanceDomainProviderDeleteCommand,
   type RunFormlessInstanceDomainProviderApplyResult,
+  type RunFormlessInstanceDomainProviderDeleteInput,
+  type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
 import {
   type FormlessInstanceWorkspaceApp,
@@ -72,7 +80,12 @@ import {
   type ResetFormlessInstanceWorkspaceLocalStateResult,
   type RotateFormlessInstanceWorkspaceAdminTokenResult,
 } from "./instance-workspace.ts";
-import { readFormlessInstanceDomainProviderPlan } from "./instance-target-client.ts";
+import {
+  forgetFormlessInstanceDomainMapping,
+  forgetFormlessInstanceDomainProviderRedirect,
+  markFormlessInstanceDomainProviderResourceManuallyRemoved,
+  readFormlessInstanceDomainProviderPlan,
+} from "./instance-target-client.ts";
 import { packageRunScriptCommand } from "./package-commands.ts";
 import { SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 import { initSiteProjectSource, type InitSiteProjectSourceResult } from "./project-files.ts";
@@ -138,9 +151,12 @@ export {
   ALCHEMY_STATE_TOKEN_ENV_NAME,
   nodeAlchemyDomainProviderRuntime,
   runFormlessInstanceDomainProviderApply,
+  runFormlessInstanceDomainProviderDelete,
   type DomainProviderAlchemyRuntime,
   type RunFormlessInstanceDomainProviderApplyInput,
   type RunFormlessInstanceDomainProviderApplyResult,
+  type RunFormlessInstanceDomainProviderDeleteInput,
+  type RunFormlessInstanceDomainProviderDeleteResult,
 } from "./domain-provider-runner.ts";
 export {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
@@ -234,6 +250,9 @@ export {
   readFormlessInstanceDomainMappings,
   readFormlessInstanceOwnerSetupStatus,
   readFormlessInstanceTargetStatus,
+  forgetFormlessInstanceDomainMapping,
+  forgetFormlessInstanceDomainProviderRedirect,
+  markFormlessInstanceDomainProviderResourceManuallyRemoved,
   type FormlessInstanceTargetClientDependencies,
   type FormlessInstanceTargetDeployMetadata,
   type FormlessInstanceTargetStatus,
@@ -572,6 +591,32 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceDomainProviderRunApplyResult(result));
       return;
     }
+    case "instanceDomainsRunDelete": {
+      const result = await runFormlessInstanceDomainProviderDeleteFromWorkspace(
+        command,
+        dependencies,
+      );
+      dependencies.log(formatInstanceDomainProviderRunDeleteResult(result));
+      return;
+    }
+    case "instanceDomainsForgetRoute": {
+      const result = await forgetFormlessInstanceDomainRouteFromWorkspace(command, dependencies);
+      dependencies.log(formatInstanceDomainRouteForgetResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceDomainsForgetRedirect": {
+      const result = await forgetFormlessInstanceDomainRedirectFromWorkspace(command, dependencies);
+      dependencies.log(formatInstanceDomainRedirectForgetResult(result, dependencies.cwd));
+      return;
+    }
+    case "instanceDomainsMarkManuallyRemoved": {
+      const result = await markFormlessInstanceDomainProviderResourceManuallyRemovedFromWorkspace(
+        command,
+        dependencies,
+      );
+      dependencies.log(formatInstanceDomainProviderManualCleanupResult(result, dependencies.cwd));
+      return;
+    }
     case "save": {
       const result = await saveSiteProject(command, dependencies);
       dependencies.log(
@@ -866,6 +911,24 @@ export type PlanFormlessInstanceDomainProviderResult = {
   workspaceRoot: string;
 };
 
+export type ForgetFormlessInstanceDomainRouteResult = {
+  response: ForgetInstanceDomainMappingResponse;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type ForgetFormlessInstanceDomainRedirectResult = {
+  response: ForgetInstanceDomainProviderRedirectIntentResponse;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
+export type MarkFormlessInstanceDomainProviderResourceManuallyRemovedResult = {
+  response: InstanceDomainProviderManualCleanupResponse;
+  selectedTarget: FormlessInstanceWorkspaceTarget;
+  workspaceRoot: string;
+};
+
 export async function planFormlessInstanceDomainProviderFromWorkspace(
   input: {
     host?: string | null;
@@ -1006,6 +1069,249 @@ export async function runFormlessInstanceDomainProviderApplyFromWorkspace(
       fetch: dependencies.fetch,
     },
   );
+}
+
+export async function runFormlessInstanceDomainProviderDeleteFromWorkspace(
+  input: {
+    adminToken?: string | null;
+    host: string;
+    logicalId: string;
+    resourceKind: RunFormlessInstanceDomainProviderDeleteInput["kind"];
+    runnerId?: string | null;
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch" | "randomToken"
+  > = nodeFormlessCliDependencies(),
+): Promise<RunFormlessInstanceDomainProviderDeleteResult> {
+  const status = await getFormlessInstanceWorkspaceStatus(
+    {
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+
+  if (!status.selectedTarget) {
+    throw new Error("Formless instance domains run-delete requires a selected target.");
+  }
+
+  const adminToken = await requireFormlessInstanceDomainCommandAdminToken(
+    {
+      explicitAdminToken: input.adminToken,
+      workspaceRoot: status.workspaceRoot,
+    },
+    dependencies,
+    "run-delete",
+  );
+
+  return runFormlessInstanceDomainProviderDeleteCommand(
+    {
+      adminToken,
+      host: input.host,
+      kind: input.resourceKind,
+      logicalId: input.logicalId,
+      runnerId: input.runnerId,
+      targetUrl: status.selectedTarget.url,
+    },
+    {
+      createRunnerId: () => `formless-cli-${dependencies.randomToken()}`,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+}
+
+export async function forgetFormlessInstanceDomainRouteFromWorkspace(
+  input: {
+    adminToken?: string | null;
+    host: string;
+    profile: ForgetFormlessInstanceDomainRouteResult["response"]["mapping"]["profile"];
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch"
+  > = nodeFormlessCliDependencies(),
+): Promise<ForgetFormlessInstanceDomainRouteResult> {
+  const status = await getFormlessInstanceWorkspaceStatus(
+    {
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+
+  if (!status.selectedTarget) {
+    throw new Error("Formless instance domains forget-route requires a selected target.");
+  }
+
+  const adminToken = await requireFormlessInstanceDomainCommandAdminToken(
+    {
+      explicitAdminToken: input.adminToken,
+      workspaceRoot: status.workspaceRoot,
+    },
+    dependencies,
+    "forget-route",
+  );
+
+  return {
+    response: await forgetFormlessInstanceDomainMapping(
+      {
+        adminToken,
+        request: {
+          host: input.host,
+          profile: input.profile,
+        },
+        targetUrl: status.selectedTarget.url,
+      },
+      dependencies,
+    ),
+    selectedTarget: status.selectedTarget,
+    workspaceRoot: status.workspaceRoot,
+  };
+}
+
+export async function forgetFormlessInstanceDomainRedirectFromWorkspace(
+  input: {
+    adminToken?: string | null;
+    fromHost: string;
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch"
+  > = nodeFormlessCliDependencies(),
+): Promise<ForgetFormlessInstanceDomainRedirectResult> {
+  const status = await getFormlessInstanceWorkspaceStatus(
+    {
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+
+  if (!status.selectedTarget) {
+    throw new Error("Formless instance domains forget-redirect requires a selected target.");
+  }
+
+  const adminToken = await requireFormlessInstanceDomainCommandAdminToken(
+    {
+      explicitAdminToken: input.adminToken,
+      workspaceRoot: status.workspaceRoot,
+    },
+    dependencies,
+    "forget-redirect",
+  );
+
+  return {
+    response: await forgetFormlessInstanceDomainProviderRedirect(
+      {
+        adminToken,
+        request: {
+          fromHost: input.fromHost,
+        },
+        targetUrl: status.selectedTarget.url,
+      },
+      dependencies,
+    ),
+    selectedTarget: status.selectedTarget,
+    workspaceRoot: status.workspaceRoot,
+  };
+}
+
+export async function markFormlessInstanceDomainProviderResourceManuallyRemovedFromWorkspace(
+  input: {
+    adminToken?: string | null;
+    host: string;
+    logicalId: string;
+    resourceKind: MarkFormlessInstanceDomainProviderResourceManuallyRemovedResult["response"]["target"]["kind"];
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch"
+  > = nodeFormlessCliDependencies(),
+): Promise<MarkFormlessInstanceDomainProviderResourceManuallyRemovedResult> {
+  const status = await getFormlessInstanceWorkspaceStatus(
+    {
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+
+  if (!status.selectedTarget) {
+    throw new Error("Formless instance domains mark-manually-removed requires a selected target.");
+  }
+
+  const adminToken = await requireFormlessInstanceDomainCommandAdminToken(
+    {
+      explicitAdminToken: input.adminToken,
+      workspaceRoot: status.workspaceRoot,
+    },
+    dependencies,
+    "mark-manually-removed",
+  );
+
+  return {
+    response: await markFormlessInstanceDomainProviderResourceManuallyRemoved(
+      {
+        adminToken,
+        request: {
+          host: input.host,
+          kind: input.resourceKind,
+          logicalId: input.logicalId,
+        },
+        targetUrl: status.selectedTarget.url,
+      },
+      dependencies,
+    ),
+    selectedTarget: status.selectedTarget,
+    workspaceRoot: status.workspaceRoot,
+  };
+}
+
+async function requireFormlessInstanceDomainCommandAdminToken(
+  input: { explicitAdminToken?: string | null; workspaceRoot: string },
+  dependencies: Pick<FormlessCliDependencies, "env">,
+  commandName: "forget-redirect" | "forget-route" | "mark-manually-removed" | "run-delete",
+): Promise<string> {
+  const secretState = await readFormlessInstanceWorkspaceSecretState(input.workspaceRoot);
+  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    explicitAdminToken: input.explicitAdminToken,
+    secretState,
+  });
+
+  if (!adminToken) {
+    throw new Error(
+      `Formless instance domains ${commandName} requires an admin token; run \`formless instance token adopt\` or pass --admin-token.`,
+    );
+  }
+
+  return adminToken;
 }
 
 export async function adoptFormlessInstanceWorkspaceAdminToken(
@@ -1386,6 +1692,61 @@ function formatInstanceDomainProviderRunApplyResult(
     `Policy: ${result.apply.plan.policy}.`,
     `Resources: ${result.alchemy.resources.length}.`,
     `Evidence writes: ${result.evidenceCount}.`,
+  ].join("\n");
+}
+
+function formatInstanceDomainProviderRunDeleteResult(
+  result: RunFormlessInstanceDomainProviderDeleteResult,
+): string {
+  return [
+    "Instance domain Alchemy delete complete.",
+    `Target: ${result.targetUrl}.`,
+    `Job: ${result.delete.job.jobId}.`,
+    `Job status: ${result.completion.job.status}.`,
+    `Runner: ${result.runnerId}.`,
+    `Resources: ${result.alchemy.resources.length}.`,
+    `Evidence writes: ${result.evidenceCount}.`,
+  ].join("\n");
+}
+
+function formatInstanceDomainRouteForgetResult(
+  result: ForgetFormlessInstanceDomainRouteResult,
+  cwd: string,
+): string {
+  return [
+    "Instance domain route forgotten.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Route: ${result.response.mapping.host} (${result.response.mapping.profile}).`,
+    `Reason: ${result.response.desiredCleanupEvent.reason}.`,
+    `Remaining desired routes: ${result.response.mappings.length}.`,
+  ].join("\n");
+}
+
+function formatInstanceDomainRedirectForgetResult(
+  result: ForgetFormlessInstanceDomainRedirectResult,
+  cwd: string,
+): string {
+  return [
+    "Instance domain redirect forgotten.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Redirect: ${result.response.redirectIntent.fromHost}.`,
+    `Reason: ${result.response.redirectIntentCleanupEvent.reason}.`,
+    `Remaining desired redirects: ${result.response.redirectIntents.length}.`,
+  ].join("\n");
+}
+
+function formatInstanceDomainProviderManualCleanupResult(
+  result: MarkFormlessInstanceDomainProviderResourceManuallyRemovedResult,
+  cwd: string,
+): string {
+  return [
+    "Instance domain provider evidence marked manually removed.",
+    `Workspace: ${formatCliPath(cwd, result.workspaceRoot)}.`,
+    `Target: ${formatSelectedTarget(result.selectedTarget)}.`,
+    `Resource: ${result.response.target.host} ${result.response.target.kind} ${result.response.target.logicalId}.`,
+    `Action: ${result.response.action}.`,
   ].join("\n");
 }
 

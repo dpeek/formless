@@ -4,6 +4,8 @@ import {
   parseFormlessInstanceWorkspaceTargetAlias,
 } from "./instance-workspace-config.ts";
 import type { CloudflareDomainPreflightPolicy } from "./cloudflare-domain-client.ts";
+import type { DomainProviderResourceKind } from "../shared/domain-provider-protocol.ts";
+import type { InstanceDomainMappingProfile } from "../shared/instance-domain-mappings.ts";
 
 export type FormlessCliCommand =
   | {
@@ -103,6 +105,40 @@ export type FormlessCliCommand =
     }
   | {
       adminToken: string | null;
+      host: string;
+      kind: "instanceDomainsRunDelete";
+      logicalId: string;
+      resourceKind: DomainProviderResourceKind;
+      runnerId: string | null;
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
+      adminToken: string | null;
+      host: string;
+      kind: "instanceDomainsForgetRoute";
+      profile: InstanceDomainMappingProfile;
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
+      adminToken: string | null;
+      fromHost: string;
+      kind: "instanceDomainsForgetRedirect";
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
+      adminToken: string | null;
+      host: string;
+      kind: "instanceDomainsMarkManuallyRemoved";
+      logicalId: string;
+      resourceKind: DomainProviderResourceKind;
+      targetAlias: string | null;
+      workspacePath: string;
+    }
+  | {
+      adminToken: string | null;
       kind: "instanceTokenAdopt";
       targetAlias: string | null;
       workspacePath: string;
@@ -166,9 +202,12 @@ export function formlessCliUsage(): string {
     "  instance dev|reset-local [--workspace <path>]",
     "  instance deploy [--workspace <path>] [--target <alias>]",
     "       [--migration-policy <new|existing>]",
-    "  instance domains remote-plan|run-apply|plan|apply [--workspace <path>] [--target <alias>]",
+    "  instance domains remote-plan|run-apply|run-delete|forget-route|forget-redirect",
+    "       |mark-manually-removed|plan|apply [--workspace <path>] [--target <alias>]",
     "       [--policy <create-only|adopt|override>] [--host <hostname>]",
-    "       [--admin-token <token>] [--runner-id <id>]",
+    "       [--profile <instance|app|publicSite>] [--kind <provider-kind>]",
+    "       [--logical-id <id>] [--from-host <hostname>] [--admin-token <token>]",
+    "       [--runner-id <id>]",
     "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
     "       [--admin-token <token>]",
   ].join("\n");
@@ -801,8 +840,18 @@ function parseInstanceDomainsArgs(args: string[]): FormlessCliCommand {
       return parseInstanceDomainsApplyArgs(rest);
     case "run-apply":
       return parseInstanceDomainsRunApplyArgs(rest);
+    case "run-delete":
+      return parseInstanceDomainsRunDeleteArgs(rest);
+    case "forget-route":
+      return parseInstanceDomainsForgetRouteArgs(rest);
+    case "forget-redirect":
+      return parseInstanceDomainsForgetRedirectArgs(rest);
+    case "mark-manually-removed":
+      return parseInstanceDomainsMarkManuallyRemovedArgs(rest);
     default:
-      throw new Error("Usage: formless instance domains <remote-plan|run-apply|plan|apply>");
+      throw new Error(
+        "Usage: formless instance domains <remote-plan|run-apply|run-delete|forget-route|forget-redirect|mark-manually-removed|plan|apply>",
+      );
   }
 }
 
@@ -946,7 +995,7 @@ function parseInstanceDomainsRunApplyArgs(args: string[]): FormlessCliCommand {
     if (arg === "--policy") {
       policy = parseCloudflareDomainPreflightPolicy(
         readOptionValue(options.rest, index, "--policy"),
-        "formless instance domains apply",
+        "formless instance domains run-apply",
       );
       index += 1;
       continue;
@@ -990,11 +1039,208 @@ function parseInstanceDomainsRunApplyArgs(args: string[]): FormlessCliCommand {
   };
 }
 
+function parseInstanceDomainsRunDeleteArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance domains run-delete");
+  let adminToken: string | null = null;
+  let host: string | null = null;
+  let logicalId: string | null = null;
+  let resourceKind: DomainProviderResourceKind | null = null;
+  let runnerId: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--host") {
+      host = readOptionValue(options.rest, index, "--host");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--kind") {
+      resourceKind = parseDomainProviderResourceKind(
+        readOptionValue(options.rest, index, "--kind"),
+        "formless instance domains run-delete",
+      );
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--logical-id") {
+      logicalId = readOptionValue(options.rest, index, "--logical-id");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--runner-id") {
+      runnerId = readOptionValue(options.rest, index, "--runner-id");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance domains run-delete: ${arg}`);
+  }
+
+  return {
+    adminToken,
+    host: requireOption(host, "formless instance domains run-delete", "--host"),
+    kind: "instanceDomainsRunDelete",
+    logicalId: requireOption(logicalId, "formless instance domains run-delete", "--logical-id"),
+    resourceKind: requireOption(resourceKind, "formless instance domains run-delete", "--kind"),
+    runnerId,
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseInstanceDomainsForgetRouteArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance domains forget-route");
+  let adminToken: string | null = null;
+  let host: string | null = null;
+  let profile: InstanceDomainMappingProfile | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--host") {
+      host = readOptionValue(options.rest, index, "--host");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--profile") {
+      profile = parseInstanceDomainMappingProfile(
+        readOptionValue(options.rest, index, "--profile"),
+        "formless instance domains forget-route",
+      );
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance domains forget-route: ${arg}`);
+  }
+
+  return {
+    adminToken,
+    host: requireOption(host, "formless instance domains forget-route", "--host"),
+    kind: "instanceDomainsForgetRoute",
+    profile: requireOption(profile, "formless instance domains forget-route", "--profile"),
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseInstanceDomainsForgetRedirectArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(args, "formless instance domains forget-redirect");
+  let adminToken: string | null = null;
+  let fromHost: string | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--from-host") {
+      fromHost = readOptionValue(options.rest, index, "--from-host");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance domains forget-redirect: ${arg}`);
+  }
+
+  return {
+    adminToken,
+    fromHost: requireOption(fromHost, "formless instance domains forget-redirect", "--from-host"),
+    kind: "instanceDomainsForgetRedirect",
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
+function parseInstanceDomainsMarkManuallyRemovedArgs(args: string[]): FormlessCliCommand {
+  const options = parseInstanceTargetOptions(
+    args,
+    "formless instance domains mark-manually-removed",
+  );
+  let adminToken: string | null = null;
+  let host: string | null = null;
+  let logicalId: string | null = null;
+  let resourceKind: DomainProviderResourceKind | null = null;
+
+  for (let index = 0; index < options.rest.length; index += 1) {
+    const arg = options.rest[index];
+
+    if (arg === "--host") {
+      host = readOptionValue(options.rest, index, "--host");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--kind") {
+      resourceKind = parseDomainProviderResourceKind(
+        readOptionValue(options.rest, index, "--kind"),
+        "formless instance domains mark-manually-removed",
+      );
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--logical-id") {
+      logicalId = readOptionValue(options.rest, index, "--logical-id");
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--admin-token") {
+      adminToken = readOptionValue(options.rest, index, "--admin-token");
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unknown option for formless instance domains mark-manually-removed: ${arg}`);
+  }
+
+  return {
+    adminToken,
+    host: requireOption(host, "formless instance domains mark-manually-removed", "--host"),
+    kind: "instanceDomainsMarkManuallyRemoved",
+    logicalId: requireOption(
+      logicalId,
+      "formless instance domains mark-manually-removed",
+      "--logical-id",
+    ),
+    resourceKind: requireOption(
+      resourceKind,
+      "formless instance domains mark-manually-removed",
+      "--kind",
+    ),
+    targetAlias: options.targetAlias,
+    workspacePath: options.workspacePath,
+  };
+}
+
 function parseCloudflareDomainPreflightPolicy(
   value: string,
   commandName:
     | "formless instance domains apply"
     | "formless instance domains plan"
+    | "formless instance domains run-apply"
     | "formless instance domains remote-plan",
 ): CloudflareDomainPreflightPolicy {
   if (value === "create-only" || value === "adopt" || value === "override") {
@@ -1002,6 +1248,36 @@ function parseCloudflareDomainPreflightPolicy(
   }
 
   throw new Error(`${commandName} --policy must be "create-only", "adopt", or "override".`);
+}
+
+function parseDomainProviderResourceKind(
+  value: string,
+  commandName:
+    | "formless instance domains mark-manually-removed"
+    | "formless instance domains run-delete",
+): DomainProviderResourceKind {
+  if (
+    value === "cloudflare-dns-records" ||
+    value === "cloudflare-redirect-rule" ||
+    value === "cloudflare-worker-custom-domain"
+  ) {
+    return value;
+  }
+
+  throw new Error(
+    `${commandName} --kind must be "cloudflare-worker-custom-domain", "cloudflare-redirect-rule", or "cloudflare-dns-records".`,
+  );
+}
+
+function parseInstanceDomainMappingProfile(
+  value: string,
+  commandName: "formless instance domains forget-route",
+): InstanceDomainMappingProfile {
+  if (value === "instance" || value === "app" || value === "publicSite") {
+    return value;
+  }
+
+  throw new Error(`${commandName} --profile must be "instance", "app", or "publicSite".`);
 }
 
 function parseInstanceTokenArgs(args: string[]): FormlessCliCommand {
@@ -1262,6 +1538,14 @@ function readOptionValue(args: string[], index: number, option: string): string 
 
   if (typeof value !== "string" || value.length === 0 || value.startsWith("-")) {
     throw new Error(`Missing value for ${option}.`);
+  }
+
+  return value;
+}
+
+function requireOption<T>(value: T | null, commandName: string, option: string): T {
+  if (value === null) {
+    throw new Error(`Missing required option for ${commandName}: ${option}.`);
   }
 
   return value;
