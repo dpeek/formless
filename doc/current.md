@@ -19,8 +19,8 @@ Alchemy domain provider apply, redirects, and explicit provider delete shipped f
 Authority storage, Generated UI, and Site CLI and publish topic docs.
 Icon catalog and picker shipped facts live across Generated UI, Schema runtime, and Site runtime
 topic docs.
-Legacy Site-owned media retirement shipped facts live across Site runtime, Site CLI and publish,
-Authority storage, and Instance media direction docs.
+Legacy Site-owned media and archive compatibility retirement shipped facts live across Site runtime,
+Site CLI and publish, Authority storage, and Instance media direction docs.
 
 ## Docs
 

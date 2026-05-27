@@ -1,6 +1,6 @@
 # Instance Media Direction
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 Purpose: product and architecture direction before media PRDs.
 
@@ -243,14 +243,16 @@ or DASH logic.
   `/api/app-installs/site/<installId>/media/*` are retired.
 - Standalone Site save, dev restore, publish, and import-site reject legacy
   same-origin Site media hrefs with a migration error.
-- Old app-scoped Site media archives restore only through a compatibility
-  normalizer that converts matching objects into core media.
+- Old app-scoped Site media archives are unsupported restore input.
+- Archive capability parsing rejects `app-scoped-media`.
 
 ## PRD
 
 Core media app for images shipped in GitHub issue #28.
 
 Legacy Site-owned media path retired in GitHub issue #32.
+
+Legacy Site-owned archive compatibility retired in GitHub issue #40.
 
 Second PRD candidate: video assets with Cloudflare Stream playback.
 

@@ -124,13 +124,13 @@ Last updated: 2026-05-27
 - Portable archives include core image media objects and asset metadata for `mediaAssetId` references.
 - Portable archives include core image media objects referenced by core media hrefs.
 - New portable app, instance, and workspace archives do not emit app-scoped Site media objects.
-- Old app-scoped Site media archives restore only through the compatibility normalizer.
-- The compatibility normalizer converts matching legacy Site media objects to core media assets before mutation.
-- The compatibility normalizer rejects unresolved legacy Site media references before mutation.
+- Archive capability parsing accepts `core-media-assets` for media and rejects `app-scoped-media`.
+- Old app-scoped Site media archives are unsupported restore input.
+- Archive restore rejects legacy Site media storage keys and same-origin legacy Site media hrefs before mutation.
 - Archive restore validates core media object keys, content types, byte sizes, asset metadata, and media files before mutation.
 - Archive restore writes core media objects before app records.
 - Standalone Site save, dev restore, and publish keep core media files explicit under project/source media roots.
-- Standalone Site save, dev restore, and publish reject legacy `/api/site/media/...` hrefs instead of moving files.
+- Standalone Site save, dev restore, publish, and import-site reject legacy same-origin Site media hrefs instead of moving files.
 - Portable archives are backup, restore, and import workflows, not bidirectional instance sync.
 
 ## Instance Workspaces

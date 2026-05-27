@@ -117,8 +117,9 @@ Last updated: 2026-05-27
 - Portable archive restore executor: `src/worker/archive-restore.ts`.
 - Portable archive kinds: `formless.instanceArchive`, `formless.appArchive`.
 - Portable archive capabilities include `core-media-assets`.
+- Portable archive capability parsing rejects `app-scoped-media`.
 - Current archive export uses core media assets for owned Site images.
-- Legacy app-scoped Site media archive objects restore only through the compatibility normalizer.
+- Legacy app-scoped Site media archive objects are unsupported restore input.
 - Archive restore validates before mutation.
 - Archive restore supports dry-run and apply policy.
 - Archive restore creates or replaces app install registry rows by policy.

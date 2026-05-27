@@ -1,6 +1,6 @@
 # Site Runtime
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Facts
 
@@ -160,7 +160,7 @@ Last updated: 2026-05-26
 - Core image media delivery uses `/api/formless/media/<storageKey>`.
 - Core image media assets store id, kind, label, filename, content type, byte size, status, provider, storage key, and optional dimensions.
 - Legacy Site media route paths `/api/site/media/*` and `/api/app-installs/site/:installId/media/*` are not active media routes.
-- Legacy Site media storage keys under `site/images/` and `app-installs/<installId>/site/images/` are migration and archive-compatibility input only.
+- Legacy Site media storage keys under `site/images/` and `app-installs/<installId>/site/images/` are unsupported input.
 - Public Site tree resolves valid `mediaAssetId` values through core media delivery facts.
 - Public image rendering prefers resolved core media asset hrefs when present.
 - Public image rendering falls back to manual, external, or data `href` values.
