@@ -11,8 +11,18 @@ import {
   type AppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
+import {
+  FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
+  FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
+  FORMLESS_RUNTIME_PROFILE_META_NAME,
+  resolveRuntimeProfileKind,
+  runtimeRoutePolicyForProfileKind,
+  runtimeTopologyRoutes,
+  stringRuntimeConfigValue,
+  type RuntimeProfileKind,
+} from "../shared/runtime-topology.ts";
 
-export type RuntimeProfileKind = "instance" | "dev" | "app" | "siteAuthoring" | "publishedSite";
+export type { RuntimeProfileKind };
 
 export type RuntimeShellKind = "instance" | "dev" | "app" | "publishedSite";
 
@@ -103,9 +113,11 @@ export type SiteAuthoringRuntimeProfileOptions = {
   localPublish?: RuntimeLocalPublishBroker;
 };
 
-export const FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME = "formless-runtime-app-install-id";
-export const FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME = "formless-runtime-package-app-key";
-export const FORMLESS_RUNTIME_PROFILE_META_NAME = "formless-runtime-profile";
+export {
+  FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
+  FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
+  FORMLESS_RUNTIME_PROFILE_META_NAME,
+};
 
 type RuntimeProfileHintDocument = {
   querySelector(selector: string): { getAttribute(name: string): string | null } | null;
@@ -120,8 +132,7 @@ export type RuntimeProfileDocumentHints = {
 export function resolveRuntimeProfile(
   input: RuntimeProfileResolverInput = browserRuntimeProfileConfig(),
 ): RuntimeProfile {
-  const profileKind =
-    parseRuntimeProfileKind(input.profile) ?? runtimeProfileKindFromHost(input.hostname) ?? "dev";
+  const profileKind = resolveRuntimeProfileKind(input);
   const schemaKey = parseSchemaKey(input.schemaKey) ?? defaultSchemaKey;
 
   switch (profileKind) {
@@ -152,13 +163,13 @@ export function createInstanceRuntimeProfile(): RuntimeProfile {
     worlds: [],
     instanceShell: true,
     installedAppRoutes: {
-      appRouteBase: "/apps",
+      appRouteBase: runtimeTopologyRoutes.appRouteBase,
       schemaRoutes: false,
     },
     installedSitePublicRoutes: {
-      homeSlug: "home",
-      packageAppKey: "site",
-      siteRouteBase: "/sites",
+      homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
+      packageAppKey: runtimeTopologyRoutes.publicSitePackageAppKey,
+      siteRouteBase: runtimeTopologyRoutes.siteRouteBase,
     },
   };
 }
@@ -179,30 +190,32 @@ export function createDevWorkbenchRuntimeProfile(): RuntimeProfile {
     })),
     instanceShell: true,
     installedAppRoutes: {
-      appRouteBase: "/apps",
+      appRouteBase: runtimeTopologyRoutes.appRouteBase,
       schemaRoutes: true,
     },
     installedSitePublicRoutes: {
-      homeSlug: "home",
-      packageAppKey: "site",
-      siteRouteBase: "/sites",
+      homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
+      packageAppKey: runtimeTopologyRoutes.publicSitePackageAppKey,
+      siteRouteBase: runtimeTopologyRoutes.siteRouteBase,
     },
     publicSitePreview: {
-      rootRoute: "/pages",
-      routePattern: "/pages/*",
-      homeRoute: "/pages/home",
-      homeSlug: "home",
+      rootRoute: runtimeTopologyRoutes.publicSitePreviewRouteBase,
+      routePattern: `${runtimeTopologyRoutes.publicSitePreviewRouteBase}/*`,
+      homeRoute: `${runtimeTopologyRoutes.publicSitePreviewRouteBase}/home`,
+      homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
       linkMode: "preview",
     },
   };
 }
 
 export function runtimeRoutePolicy(profile: RuntimeProfile): RuntimeRoutePolicy {
+  const policy = runtimeRoutePolicyForProfileKind(profile.kind);
+
   return {
-    installedAppBrowserRoutes: profile.installedAppRoutes !== undefined,
-    installedSitePublicRoutes: profile.installedSitePublicRoutes !== undefined,
-    schemaKeyApiRoutes: profile.kind !== "instance",
-    schemaKeyBrowserRoutes: profile.kind === "dev",
+    installedAppBrowserRoutes: policy.installedAppBrowserRoutes,
+    installedSitePublicRoutes: policy.installedSitePublicRoutes,
+    schemaKeyApiRoutes: policy.schemaKeyApiRoutes,
+    schemaKeyBrowserRoutes: policy.schemaKeyBrowserRoutes,
   };
 }
 
@@ -259,15 +272,17 @@ export function createSiteAuthoringRuntimeProfile(
       {
         app: getSchemaAppDefinition("site"),
         generatedRoutes: true,
-        route: "/admin",
-        schemaRoute: options.exposeSchemaRoute ? "/admin/schema" : undefined,
+        route: runtimeTopologyRoutes.siteAdminRoute,
+        schemaRoute: options.exposeSchemaRoute
+          ? `${runtimeTopologyRoutes.siteAdminRoute}${runtimeTopologyRoutes.schemaRoute}`
+          : undefined,
       },
     ],
     localPublish: options.localPublish,
     publicSitePreview: {
-      rootRoute: "/",
+      rootRoute: runtimeTopologyRoutes.instanceRootRoute,
       routePattern: "/*",
-      homeSlug: "home",
+      homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
       linkMode: "authoring",
     },
   };
@@ -281,13 +296,13 @@ export function createPublishedSiteRuntimeProfile(): RuntimeProfile {
       {
         app: getSchemaAppDefinition("site"),
         generatedRoutes: false,
-        route: "/",
+        route: runtimeTopologyRoutes.instanceRootRoute,
       },
     ],
     publishedSite: {
-      rootRoute: "/",
+      rootRoute: runtimeTopologyRoutes.instanceRootRoute,
       routePattern: "/*",
-      homeSlug: "home",
+      homeSlug: runtimeTopologyRoutes.publicSiteHomeSlug,
     },
   };
 }
@@ -505,14 +520,14 @@ function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {
     }),
     appInstallId: documentHints.appInstallId,
     packageAppKey: documentHints.packageAppKey,
-    schemaKey: stringConfigValue(import.meta.env.VITE_FORMLESS_SCHEMA_KEY),
+    schemaKey: stringRuntimeConfigValue(import.meta.env.VITE_FORMLESS_SCHEMA_KEY),
     hostname: typeof window === "undefined" ? undefined : window.location.hostname,
   };
 }
 
 function browserLocalPublishBrokerConfig(): RuntimeLocalPublishBroker | undefined {
-  const endpoint = stringConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL);
-  const token = stringConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN);
+  const endpoint = stringRuntimeConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_URL);
+  const token = stringRuntimeConfigValue(import.meta.env.VITE_FORMLESS_LOCAL_PUBLISH_BROKER_TOKEN);
 
   if (!endpoint || !token) {
     return undefined;
@@ -547,58 +562,13 @@ export function selectBrowserRuntimeProfileHint(input: {
   documentProfile?: string | undefined;
   envProfile?: string | undefined;
 }): string | undefined {
-  return stringConfigValue(input.documentProfile) ?? stringConfigValue(input.envProfile);
-}
-
-function parseRuntimeProfileKind(value: string | undefined): RuntimeProfileKind | undefined {
-  switch (value) {
-    case "instance":
-    case "dev":
-    case "app":
-    case "siteAuthoring":
-    case "publishedSite":
-      return value;
-    default:
-      return undefined;
-  }
-}
-
-function runtimeProfileKindFromHost(hostname: string | undefined): RuntimeProfileKind | undefined {
-  if (!hostname) {
-    return undefined;
-  }
-
-  const normalized = hostname.toLowerCase();
-
-  if (normalized.startsWith("published-site.")) {
-    return "publishedSite";
-  }
-
-  if (normalized.startsWith("instance.")) {
-    return "instance";
-  }
-
-  if (normalized.startsWith("app.")) {
-    return "app";
-  }
-
-  if (normalized.startsWith("site-authoring.")) {
-    return "siteAuthoring";
-  }
-
-  if (isWorkersDevHost(normalized)) {
-    return "publishedSite";
-  }
-
-  return undefined;
+  return (
+    stringRuntimeConfigValue(input.documentProfile) ?? stringRuntimeConfigValue(input.envProfile)
+  );
 }
 
 function parseSchemaKey(value: string | undefined): SchemaKey | undefined {
   return value ? findSchemaAppDefinition(value)?.key : undefined;
-}
-
-function stringConfigValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function browserDocument(): RuntimeProfileHintDocument | undefined {
@@ -611,9 +581,5 @@ function readRuntimeProfileMetaContent(
 ): string | undefined {
   const value = doc?.querySelector(`meta[name="${name}"]`)?.getAttribute("content");
 
-  return stringConfigValue(value);
-}
-
-function isWorkersDevHost(hostname: string): boolean {
-  return hostname === "workers.dev" || hostname.endsWith(".workers.dev");
+  return stringRuntimeConfigValue(value);
 }

@@ -3,7 +3,6 @@ import { renderToReadableStream } from "react-dom/server.edge";
 
 import { renderInitialSitePageTreeScript } from "../app/site-renderer/initial-tree.ts";
 import { PUBLIC_SITE_THEME_STORAGE_KEY, SitePageRenderer } from "../app/site-renderer/renderer.tsx";
-import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../app/runtime-profile.ts";
 import { normalizeSitePageSlug } from "../app/routes/site-page-slug.ts";
 import {
   buildPublicDocumentMetadata,
@@ -11,6 +10,7 @@ import {
 } from "../site/public-document-metadata.ts";
 import type { SitePageTree, SitePageTreeResponse } from "../shared/protocol.ts";
 import type { InstalledAppStorageIdentity } from "../shared/app-storage-identity.ts";
+import { FORMLESS_RUNTIME_PROFILE_META_NAME } from "../shared/runtime-topology.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { Env } from "./index.ts";
 import type { MappedSiteHost } from "./mapped-site-host.ts";

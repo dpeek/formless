@@ -2,7 +2,7 @@ import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
   FORMLESS_RUNTIME_PROFILE_META_NAME,
-} from "../app/runtime-profile.ts";
+} from "../shared/runtime-topology.ts";
 import { getEquivalentRequestForHead, responseWithoutBodyForHead } from "./head-response.ts";
 import type { MappedAppHost } from "./mapped-app-host.ts";
 import { isApiPath, looksLikeStaticAssetPath } from "./routing.ts";
