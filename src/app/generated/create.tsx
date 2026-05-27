@@ -21,13 +21,11 @@ import type { RecordValues } from "../../shared/protocol.ts";
 import type { QueryEvaluationContext } from "../../shared/query.ts";
 import type { EntitySchema } from "../../shared/schema.ts";
 import {
-  createDefaultsAreResolved,
-  initialCreateDiscriminatorValue,
-  resolveCreateValues as resolveCreateDefaultValues,
-  selectCreateFieldsForDiscriminator,
-  selectCreateFieldsForInputValues,
-} from "../../shared/create-defaults.ts";
-import type { FieldVisibilityValue } from "../../shared/schema.ts";
+  initialGeneratedCreateFieldAuthoringState,
+  nextGeneratedCreateFieldAuthoringState,
+  resolveGeneratedCreateValues,
+  selectGeneratedCreateFieldAuthoring,
+} from "./create-field-authoring.ts";
 import { GeneratedCreateFieldControl } from "./create-field-control.tsx";
 import { useSchemaAppTarget } from "./schema-app-context.tsx";
 
@@ -48,31 +46,32 @@ export function GeneratedCreateForm({
 }) {
   const appTarget = useSchemaAppTarget();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [discriminatorValue, setDiscriminatorValue] = useState(() =>
-    initialCreateDiscriminatorValue(union, defaults),
+  const [authoringState, setAuthoringState] = useState(() =>
+    initialGeneratedCreateFieldAuthoringState({ defaults, union }),
   );
-  const [inputValues, setInputValues] = useState<Record<string, FieldVisibilityValue>>({});
   const canCreate = entity.mutations.create.enabled;
-  const visibleCreateFields = selectCreateFieldsForInputValues(
-    selectCreateFieldsForDiscriminator(createFields, union, discriminatorValue),
-    inputValues,
-  );
+  const authoring = selectGeneratedCreateFieldAuthoring({
+    defaults,
+    enabled: canCreate,
+    fields: createFields,
+    state: authoringState,
+    union,
+  });
 
   useEffect(() => {
-    setDiscriminatorValue(initialCreateDiscriminatorValue(union, defaults));
-    setInputValues({});
+    setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
   }, [defaults, union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!canCreate) {
+    if (!authoring.canSubmit) {
       return;
     }
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const values = resolveCreateDefaultValues({
+    const values = resolveGeneratedCreateValues({
       formData,
       fields: createFields,
       union,
@@ -85,8 +84,7 @@ export function GeneratedCreateForm({
     try {
       await submitCreateMutation(appTarget, entityName, values);
       form.reset();
-      setDiscriminatorValue(initialCreateDiscriminatorValue(union, defaults));
-      setInputValues({});
+      setAuthoringState(initialGeneratedCreateFieldAuthoringState({ defaults, union }));
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
       setSyncStatus({
@@ -106,26 +104,26 @@ export function GeneratedCreateForm({
         <p className="text-sm text-slate-600">Create is disabled for {entity.label}.</p>
       ) : null}
 
-      <Fieldset className="space-y-4" disabled={!canCreate || isSubmitting}>
-        {visibleCreateFields.map((fieldConfig) => (
+      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || isSubmitting}>
+        {authoring.visibleFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
             fieldConfig={fieldConfig}
             key={fieldConfig.fieldName}
             onValueChange={(value) => {
-              setInputValues((current) => ({
-                ...current,
-                [fieldConfig.fieldName]: value,
-              }));
-
-              if (fieldConfig.fieldName === union?.discriminatorFieldName) {
-                setDiscriminatorValue(String(value));
-              }
+              setAuthoringState((state) =>
+                nextGeneratedCreateFieldAuthoringState({
+                  fieldName: fieldConfig.fieldName,
+                  state,
+                  union,
+                  value,
+                }),
+              );
             }}
           />
         ))}
       </Fieldset>
 
-      <Button isDisabled={!canCreate || isSubmitting} type="submit">
+      <Button isDisabled={!authoring.canSubmit || isSubmitting} type="submit">
         {isSubmitting ? "Saving..." : canCreate ? `Create ${entity.label}` : "Create disabled"}
       </Button>
     </form>
@@ -179,25 +177,34 @@ export function GeneratedCreateDialogForm({
 }) {
   const appTarget = useSchemaAppTarget();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [discriminatorValue, setDiscriminatorValue] = useState(() =>
-    initialCreateDiscriminatorValue(action.union, action.defaults),
+  const [authoringState, setAuthoringState] = useState(() =>
+    initialGeneratedCreateFieldAuthoringState({
+      defaults: action.defaults,
+      union: action.union,
+    }),
   );
-  const [inputValues, setInputValues] = useState<Record<string, FieldVisibilityValue>>({});
-  const canSubmit = action.enabled && createDefaultsAreResolved(action.defaults, queryContext);
-  const visibleFields = selectCreateFieldsForInputValues(
-    selectCreateFieldsForDiscriminator(action.fields, action.union, discriminatorValue),
-    inputValues,
-  );
+  const authoring = selectGeneratedCreateFieldAuthoring({
+    defaults: action.defaults,
+    enabled: action.enabled,
+    fields: action.fields,
+    queryContext,
+    state: authoringState,
+    union: action.union,
+  });
 
   useEffect(() => {
-    setDiscriminatorValue(initialCreateDiscriminatorValue(action.union, action.defaults));
-    setInputValues({});
+    setAuthoringState(
+      initialGeneratedCreateFieldAuthoringState({
+        defaults: action.defaults,
+        union: action.union,
+      }),
+    );
   }, [action.defaults, action.union]);
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!canSubmit) {
+    if (!authoring.canSubmit) {
       return;
     }
 
@@ -220,8 +227,12 @@ export function GeneratedCreateDialogForm({
             }
           : await submitValues(values);
       form.reset();
-      setDiscriminatorValue(initialCreateDiscriminatorValue(action.union, action.defaults));
-      setInputValues({});
+      setAuthoringState(
+        initialGeneratedCreateFieldAuthoringState({
+          defaults: action.defaults,
+          union: action.union,
+        }),
+      );
       onSuccess?.(response.recordId);
       setSyncStatus({ state: "idle", message: "Saved and synced." });
     } catch (error) {
@@ -240,20 +251,20 @@ export function GeneratedCreateDialogForm({
         <p className="text-sm text-slate-600">Create is disabled for {action.entity.label}.</p>
       ) : null}
 
-      <Fieldset className="space-y-4" disabled={!canSubmit || isSubmitting}>
-        {visibleFields.map((fieldConfig) => (
+      <Fieldset className="space-y-4" disabled={!authoring.canSubmit || isSubmitting}>
+        {authoring.visibleFields.map((fieldConfig) => (
           <GeneratedCreateFieldControl
             fieldConfig={fieldConfig}
             key={fieldConfig.fieldName}
             onValueChange={(value) => {
-              setInputValues((current) => ({
-                ...current,
-                [fieldConfig.fieldName]: value,
-              }));
-
-              if (fieldConfig.fieldName === action.union?.discriminatorFieldName) {
-                setDiscriminatorValue(String(value));
-              }
+              setAuthoringState((state) =>
+                nextGeneratedCreateFieldAuthoringState({
+                  fieldName: fieldConfig.fieldName,
+                  state,
+                  union: action.union,
+                  value,
+                }),
+              );
             }}
           />
         ))}
@@ -269,7 +280,7 @@ export function GeneratedCreateDialogForm({
             Cancel
           </Button>
         )}
-        <Button isDisabled={!canSubmit || isSubmitting} type="submit">
+        <Button isDisabled={!authoring.canSubmit || isSubmitting} type="submit">
           {isSubmitting ? "Saving..." : action.enabled ? action.label : "Create disabled"}
         </Button>
       </ModalFooter>
@@ -282,7 +293,7 @@ export function resolveCreateValues(
   action: CreateHomeActionConfig,
   queryContext?: QueryEvaluationContext,
 ): RecordValues {
-  return resolveCreateDefaultValues({
+  return resolveGeneratedCreateValues({
     formData,
     fields: action.fields,
     union: action.union,
