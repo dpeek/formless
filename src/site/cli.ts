@@ -29,11 +29,19 @@ import {
 } from "./cloudflare-domain-client.ts";
 import { formlessCliUsage, parseFormlessCliArgs } from "./cli-command.ts";
 import {
+  runFormlessInstanceDomainProviderApply as runFormlessInstanceDomainProviderApplyCommand,
+  type RunFormlessInstanceDomainProviderApplyResult,
+} from "./domain-provider-runner.ts";
+import {
   type FormlessInstanceWorkspaceApp,
   type FormlessInstanceWorkspaceManifest,
   type FormlessInstanceWorkspaceTarget,
 } from "./instance-workspace-config.ts";
-import { FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH } from "./instance-workspace-secrets.ts";
+import {
+  FORMLESS_INSTANCE_WORKSPACE_SECRET_STATE_PATH,
+  readFormlessInstanceWorkspaceSecretState,
+  resolveFormlessInstanceWorkspaceAdminToken,
+} from "./instance-workspace-secrets.ts";
 import {
   adoptFormlessInstanceWorkspaceAdminToken as adoptFormlessInstanceWorkspaceAdminTokenCommand,
   applyFormlessInstanceWorkspaceDomains as applyFormlessInstanceWorkspaceDomainsCommand,
@@ -124,6 +132,14 @@ export {
   type CloudflareWorkerRoute,
   type CloudflareZone,
 } from "./cloudflare-domain-client.ts";
+export {
+  ALCHEMY_STATE_TOKEN_ENV_NAME,
+  nodeAlchemyDomainProviderRuntime,
+  runFormlessInstanceDomainProviderApply,
+  type DomainProviderAlchemyRuntime,
+  type RunFormlessInstanceDomainProviderApplyInput,
+  type RunFormlessInstanceDomainProviderApplyResult,
+} from "./domain-provider-runner.ts";
 export {
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT,
   DEFAULT_FORMLESS_INSTANCE_WORKSPACE_ARCHIVE_ROOT,
@@ -541,6 +557,14 @@ export async function runFormlessCli(
       dependencies.log(formatInstanceWorkspaceDomainApplyResult(result, dependencies.cwd));
       return;
     }
+    case "instanceDomainsRunApply": {
+      const result = await runFormlessInstanceDomainProviderApplyFromWorkspace(
+        command,
+        dependencies,
+      );
+      dependencies.log(formatInstanceDomainProviderRunApplyResult(result));
+      return;
+    }
     case "save": {
       const result = await saveSiteProject(command, dependencies);
       dependencies.log(
@@ -868,6 +892,65 @@ export async function applyFormlessInstanceWorkspaceDomains(
     fetch: dependencies.fetch,
     now: dependencies.now,
   });
+}
+
+export async function runFormlessInstanceDomainProviderApplyFromWorkspace(
+  input: {
+    adminToken?: string | null;
+    host?: string | null;
+    policy?: ApplyFormlessInstanceWorkspaceDomainsInput["policy"];
+    runnerId?: string | null;
+    targetAlias?: string | null;
+    workspacePath?: string;
+  },
+  dependencies: Pick<
+    FormlessCliDependencies,
+    "cwd" | "env" | "fetch" | "randomToken"
+  > = nodeFormlessCliDependencies(),
+): Promise<RunFormlessInstanceDomainProviderApplyResult> {
+  const status = await getFormlessInstanceWorkspaceStatus(
+    {
+      targetAlias: input.targetAlias,
+      workspacePath: input.workspacePath,
+    },
+    {
+      cwd: dependencies.cwd,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
+
+  if (!status.selectedTarget) {
+    throw new Error("Formless instance domains run-apply requires a selected target.");
+  }
+
+  const secretState = await readFormlessInstanceWorkspaceSecretState(status.workspaceRoot);
+  const adminToken = resolveFormlessInstanceWorkspaceAdminToken({
+    env: dependencies.env,
+    explicitAdminToken: input.adminToken,
+    secretState,
+  });
+
+  if (!adminToken) {
+    throw new Error(
+      "Formless instance domains run-apply requires an admin token; run `formless instance token adopt` or pass --admin-token.",
+    );
+  }
+
+  return runFormlessInstanceDomainProviderApplyCommand(
+    {
+      adminToken,
+      host: input.host,
+      policy: input.policy,
+      runnerId: input.runnerId,
+      targetUrl: status.selectedTarget.url,
+    },
+    {
+      createRunnerId: () => `formless-cli-${dependencies.randomToken()}`,
+      env: dependencies.env,
+      fetch: dependencies.fetch,
+    },
+  );
 }
 
 export async function adoptFormlessInstanceWorkspaceAdminToken(
@@ -1209,6 +1292,20 @@ function formatInstanceWorkspaceDomainApplyResult(
     `Domains: ${formatList(result.applied.hosts.map((host) => host.host))}.`,
     `Evidence writes: ${result.evidenceCount}.`,
     ...result.applied.hosts.map(formatDomainAppliedHost),
+  ].join("\n");
+}
+
+function formatInstanceDomainProviderRunApplyResult(
+  result: RunFormlessInstanceDomainProviderApplyResult,
+): string {
+  return [
+    "Instance domain Alchemy apply complete.",
+    `Target: ${result.targetUrl}.`,
+    `Job: ${result.apply.job.jobId}.`,
+    `Runner: ${result.runnerId}.`,
+    `Policy: ${result.apply.plan.policy}.`,
+    `Resources: ${result.alchemy.resources.length}.`,
+    `Evidence writes: ${result.evidenceCount}.`,
   ].join("\n");
 }
 

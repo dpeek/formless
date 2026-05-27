@@ -38,6 +38,8 @@ type InstanceDomainMappingAppliedStateRow = {
   surface: InstanceDomainMappingSurface | null;
   provider: InstanceDomainMappingAppliedProvider;
   account_id: string;
+  alchemy_resource_id: string | null;
+  runner_id: string | null;
   zone_id: string;
   zone_name: string;
   worker_name: string;
@@ -87,6 +89,8 @@ const appliedStateTableSql = `
     surface TEXT CHECK (surface IS NULL OR surface = 'site'),
     provider TEXT NOT NULL CHECK (provider = 'cloudflare-worker-custom-domain'),
     account_id TEXT NOT NULL,
+    alchemy_resource_id TEXT,
+    runner_id TEXT,
     zone_id TEXT NOT NULL,
     zone_name TEXT NOT NULL,
     worker_name TEXT NOT NULL,
@@ -107,6 +111,8 @@ const auditEventsTableSql = `
     surface TEXT CHECK (surface IS NULL OR surface = 'site'),
     provider TEXT NOT NULL CHECK (provider = 'cloudflare-worker-custom-domain'),
     account_id TEXT NOT NULL,
+    alchemy_resource_id TEXT,
+    runner_id TEXT,
     zone_id TEXT NOT NULL,
     zone_name TEXT NOT NULL,
     worker_name TEXT NOT NULL,
@@ -125,6 +131,7 @@ export function ensureInstanceDomainMappingTables(storage: DurableObjectStorage)
     ${appliedStateTableSql};
     ${auditEventsTableSql};
   `);
+  migrateProviderEvidenceColumns(storage);
 }
 
 export function readInstanceDomainMappings(storage: DurableObjectStorage): InstanceDomainMapping[] {
@@ -349,6 +356,8 @@ function readAppliedStates(storage: DurableObjectStorage): InstanceDomainMapping
         surface,
         provider,
         account_id,
+        alchemy_resource_id,
+        runner_id,
         zone_id,
         zone_name,
         worker_name,
@@ -379,6 +388,8 @@ function readAuditEvents(storage: DurableObjectStorage): InstanceDomainMappingAu
         surface,
         provider,
         account_id,
+        alchemy_resource_id,
+        runner_id,
         zone_id,
         zone_name,
         worker_name,
@@ -409,6 +420,8 @@ function writeAppliedState(
         surface,
         provider,
         account_id,
+        alchemy_resource_id,
+        runner_id,
         zone_id,
         zone_name,
         worker_name,
@@ -417,12 +430,14 @@ function writeAppliedState(
         applied_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(host, profile) DO UPDATE SET
         target_install_id = excluded.target_install_id,
         surface = excluded.surface,
         provider = excluded.provider,
         account_id = excluded.account_id,
+        alchemy_resource_id = excluded.alchemy_resource_id,
+        runner_id = excluded.runner_id,
         zone_id = excluded.zone_id,
         zone_name = excluded.zone_name,
         worker_name = excluded.worker_name,
@@ -437,6 +452,8 @@ function writeAppliedState(
     state.surface ?? null,
     state.provider,
     state.accountId,
+    state.alchemyResourceId ?? null,
+    state.runnerId ?? null,
     state.zoneId,
     state.zoneName,
     state.workerName,
@@ -457,6 +474,8 @@ function writeAuditEvent(storage: DurableObjectStorage, state: InstanceDomainMap
         surface,
         provider,
         account_id,
+        alchemy_resource_id,
+        runner_id,
         zone_id,
         zone_name,
         worker_name,
@@ -465,7 +484,7 @@ function writeAuditEvent(storage: DurableObjectStorage, state: InstanceDomainMap
         applied_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     state.host,
     state.profile,
@@ -473,6 +492,8 @@ function writeAuditEvent(storage: DurableObjectStorage, state: InstanceDomainMap
     state.surface ?? null,
     state.provider,
     state.accountId,
+    state.alchemyResourceId ?? null,
+    state.runnerId ?? null,
     state.zoneId,
     state.zoneName,
     state.workerName,
@@ -494,6 +515,8 @@ function readLastAuditEvent(storage: DurableObjectStorage): InstanceDomainMappin
         surface,
         provider,
         account_id,
+        alchemy_resource_id,
+        runner_id,
         zone_id,
         zone_name,
         worker_name,
@@ -538,6 +561,8 @@ function appliedStateFromRow(
       : { installId: row.target_install_id, targetInstallId: row.target_install_id }),
     provider: row.provider,
     accountId: row.account_id,
+    ...(row.alchemy_resource_id === null ? {} : { alchemyResourceId: row.alchemy_resource_id }),
+    ...(row.runner_id === null ? {} : { runnerId: row.runner_id }),
     zoneId: row.zone_id,
     zoneName: row.zone_name,
     workerName: row.worker_name,
@@ -577,6 +602,21 @@ function migrateLegacySurfaceTables(storage: DurableObjectStorage) {
     !tableHasColumn(storage, "instance_domain_mapping_audit_events", "profile")
   ) {
     migrateLegacyAuditEventsTable(storage);
+  }
+}
+
+function migrateProviderEvidenceColumns(storage: DurableObjectStorage) {
+  for (const table of [
+    "instance_domain_mapping_applied_state",
+    "instance_domain_mapping_audit_events",
+  ] as const) {
+    if (!tableHasColumn(storage, table, "alchemy_resource_id")) {
+      storage.sql.exec(`ALTER TABLE ${table} ADD COLUMN alchemy_resource_id TEXT`);
+    }
+
+    if (!tableHasColumn(storage, table, "runner_id")) {
+      storage.sql.exec(`ALTER TABLE ${table} ADD COLUMN runner_id TEXT`);
+    }
   }
 }
 
@@ -624,6 +664,8 @@ function migrateLegacyAppliedStateTable(storage: DurableObjectStorage) {
       surface,
       provider,
       account_id,
+      alchemy_resource_id,
+      runner_id,
       zone_id,
       zone_name,
       worker_name,
@@ -639,6 +681,8 @@ function migrateLegacyAppliedStateTable(storage: DurableObjectStorage) {
       surface,
       provider,
       account_id,
+      NULL,
+      NULL,
       zone_id,
       zone_name,
       worker_name,
@@ -667,6 +711,8 @@ function migrateLegacyAuditEventsTable(storage: DurableObjectStorage) {
       surface,
       provider,
       account_id,
+      alchemy_resource_id,
+      runner_id,
       zone_id,
       zone_name,
       worker_name,
@@ -683,6 +729,8 @@ function migrateLegacyAuditEventsTable(storage: DurableObjectStorage) {
       surface,
       provider,
       account_id,
+      NULL,
+      NULL,
       zone_id,
       zone_name,
       worker_name,

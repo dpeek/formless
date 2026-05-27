@@ -110,9 +110,9 @@ describe("Formless Site CLI", () => {
       "  instance dev|reset-local [--workspace <path>]",
       "  instance deploy [--workspace <path>] [--target <alias>]",
       "       [--migration-policy <new|existing>]",
-      "  instance domains plan|apply [--workspace <path>] [--target <alias>]",
+      "  instance domains plan|apply|run-apply [--workspace <path>] [--target <alias>]",
       "       [--policy <create-only|adopt|override>] [--host <hostname>]",
-      "       [--admin-token <token>]",
+      "       [--admin-token <token>] [--runner-id <id>]",
       "  instance token <adopt|rotate> [--workspace <path>] [--target <alias>]",
       "       [--admin-token <token>]",
     ].join("\n");
@@ -557,6 +557,29 @@ describe("Formless Site CLI", () => {
     expect(
       parseFormlessCliArgs([
         "instance",
+        "domains",
+        "run-apply",
+        "--target",
+        "remote",
+        "--policy",
+        "adopt",
+        "--host",
+        "app.dpeek.com",
+        "--runner-id",
+        "runner-1",
+      ]),
+    ).toEqual({
+      adminToken: null,
+      host: "app.dpeek.com",
+      kind: "instanceDomainsRunApply",
+      policy: "adopt",
+      runnerId: "runner-1",
+      targetAlias: "remote",
+      workspacePath: ".",
+    });
+    expect(
+      parseFormlessCliArgs([
+        "instance",
         "token",
         "adopt",
         "--target",
@@ -605,7 +628,7 @@ describe("Formless Site CLI", () => {
       parseFormlessCliArgs(["instance", "deploy", "--migration-policy", "auto"]),
     ).toThrow('formless instance deploy --migration-policy must be "new" or "existing".');
     expect(() => parseFormlessCliArgs(["instance", "domains", "forget"])).toThrow(
-      "Usage: formless instance domains <plan|apply>",
+      "Usage: formless instance domains <plan|apply|run-apply>",
     );
     expect(() =>
       parseFormlessCliArgs(["instance", "domains", "plan", "--policy", "force"]),
@@ -615,6 +638,9 @@ describe("Formless Site CLI", () => {
     expect(() =>
       parseFormlessCliArgs(["instance", "domains", "apply", "--policy", "override"]),
     ).toThrow("formless instance domains apply --policy override requires --host <hostname>.");
+    expect(() =>
+      parseFormlessCliArgs(["instance", "domains", "run-apply", "--policy", "override"]),
+    ).toThrow("formless instance domains run-apply --policy override requires --host <hostname>.");
     expect(() => parseFormlessCliArgs(["instance", "token", "forget"])).toThrow(
       "Usage: formless instance token <adopt|rotate>",
     );

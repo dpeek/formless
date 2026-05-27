@@ -4,6 +4,12 @@ import {
 } from "../shared/deploy-metadata.ts";
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
+  type InstanceDomainProviderApplyJobResultRequest,
+  type InstanceDomainProviderApplyJobResponse,
+  type InstanceDomainProviderApplyRequest,
+  type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
 import type {
@@ -128,6 +134,68 @@ export async function readFormlessInstanceDomainProviderPlan(
   );
 }
 
+export async function requestFormlessInstanceDomainProviderApply(
+  input: {
+    adminToken?: string | null;
+    request?: InstanceDomainProviderApplyRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDomainProviderApplyResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const applyUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseDomainProviderApplyResponse(
+    await postJson(dependencies.fetch, applyUrl, {
+      body: JSON.stringify(input.request ?? {}),
+      headers,
+      method: "POST",
+    }),
+    applyUrl,
+  );
+}
+
+export async function completeFormlessInstanceDomainProviderApplyJob(
+  input: {
+    adminToken?: string | null;
+    jobId: string;
+    result: InstanceDomainProviderApplyJobResultRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDomainProviderApplyJobResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const resultUrl = apiUrl(
+    targetUrl,
+    `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${encodeURIComponent(input.jobId)}/result`,
+  );
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseDomainProviderApplyJobResponse(
+    await postJson(dependencies.fetch, resultUrl, {
+      body: JSON.stringify(input.result),
+      headers,
+      method: "POST",
+    }),
+    resultUrl,
+  );
+}
+
 export async function recordFormlessInstanceDomainMappingApplyEvidence(
   input: {
     adminToken?: string | null;
@@ -244,6 +312,28 @@ function parseDomainProviderPlan(
   }
 
   return value as InstanceDomainProviderPlanResponse;
+}
+
+function parseDomainProviderApplyResponse(
+  value: unknown,
+  context: string,
+): InstanceDomainProviderApplyResponse {
+  if (!isRecord(value) || typeof value.status !== "string") {
+    throw new Error(`${context} failed: domain provider apply response is invalid.`);
+  }
+
+  return value as InstanceDomainProviderApplyResponse;
+}
+
+function parseDomainProviderApplyJobResponse(
+  value: unknown,
+  context: string,
+): InstanceDomainProviderApplyJobResponse {
+  if (!isRecord(value) || !isRecord(value.job)) {
+    throw new Error(`${context} failed: domain provider apply job response is invalid.`);
+  }
+
+  return value as InstanceDomainProviderApplyJobResponse;
 }
 
 function parseApplyEvidenceResponse(

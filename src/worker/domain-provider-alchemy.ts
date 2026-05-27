@@ -20,7 +20,7 @@ export type AlchemyDomainProviderPhase = "destroy" | "read" | "up";
 
 export type AlchemyDomainProviderRunOptions = Pick<
   AlchemyOptions,
-  "noTrack" | "phase" | "quiet" | "stage" | "stateStore"
+  "noTrack" | "password" | "phase" | "quiet" | "rootDir" | "stage" | "stateStore"
 >;
 
 export type AlchemyDomainProviderRunner = <T>(
@@ -38,8 +38,10 @@ export type AlchemyDomainProviderFactories = {
 export type ApplyAlchemyDomainProviderPlanInput = {
   appName?: string;
   factories: AlchemyDomainProviderFactories;
+  password?: string;
   phase?: AlchemyDomainProviderPhase;
   plan: DomainProviderPlan;
+  rootDir?: string;
   runner: AlchemyDomainProviderRunner;
   stage?: string;
   stateStore?: AlchemyOptions["stateStore"];
@@ -75,8 +77,10 @@ export async function applyAlchemyDomainProviderPlan(
     appName,
     {
       noTrack: true,
+      ...(input.password === undefined ? {} : { password: input.password }),
       phase: input.phase ?? "up",
       quiet: true,
+      ...(input.rootDir === undefined ? {} : { rootDir: input.rootDir }),
       stage,
       ...(input.stateStore === undefined ? {} : { stateStore: input.stateStore }),
     },

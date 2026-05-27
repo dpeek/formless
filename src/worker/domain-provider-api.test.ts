@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+  type InstanceDomainProviderApplyJobResponse,
   type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
 import type { CreateInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
+import type { InstanceDomainMappingsResponse } from "../shared/instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -111,36 +114,101 @@ describe("instance domain provider API routes", () => {
     expect(JSON.stringify(apply.body)).not.toContain(alchemyPassword);
   });
 
-  it("keeps apply bounded and token-free until the Alchemy executor chunk", async () => {
-    const [left, right] = await Promise.all([
-      postAdminJson<InstanceDomainProviderApplyResponse>(
-        INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
-        {},
-      ),
-      postAdminJson<InstanceDomainProviderApplyResponse>(
-        INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
-        {},
-      ),
-    ]);
-    const responses = [left, right].sort((a, b) => a.response.status - b.response.status);
+  it("serializes a reviewed apply job and records runner evidence", async () => {
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "admin.example.com",
+      profile: "instance",
+    });
 
-    expect(responses.map((response) => response.response.status)).toEqual([501, 501]);
-    expect(responses.map((response) => response.body)).toEqual([
+    const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { runnerId: "runner-1" },
+    );
+
+    expect(apply.response.status).toBe(202);
+    expect(apply.body).toMatchObject({
+      code: "domain-provider-apply-job-ready",
+      status: "ready",
+    });
+    expect(JSON.stringify(apply.body)).not.toContain(cloudflareToken);
+    expect(JSON.stringify(apply.body)).not.toContain(alchemyPassword);
+
+    if (apply.body.status !== "ready") {
+      throw new Error("Apply did not create a job.");
+    }
+
+    const job = apply.body.job;
+    const resource = job.plan.resources[0];
+
+    if (resource?.kind !== "cloudflare-worker-custom-domain") {
+      throw new Error("Expected a CustomDomain job resource.");
+    }
+
+    expect(job).toMatchObject({
+      runnerId: "runner-1",
+      status: "ready",
+    });
+
+    const status = await getJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${job.jobId}`,
+    );
+
+    expect(status.body.job).toMatchObject({
+      jobId: job.jobId,
+      status: "ready",
+    });
+
+    const concurrent = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { runnerId: "runner-2" },
+    );
+
+    expect(concurrent.response.status).toBe(409);
+    expect(concurrent.body).toMatchObject({
+      code: "domain-provider-apply-running",
+      status: "blocked",
+    });
+
+    const completion = await postAdminJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${job.jobId}/result`,
+      {
+        resources: [
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: resource.logicalId,
+            host: resource.host,
+            kind: resource.kind,
+            logicalId: resource.logicalId,
+            profile: resource.profile,
+            workerDomainId: "custom-domain-123",
+            workerName: resource.props.workerName,
+            zoneId: resource.zone.id,
+            zoneName: resource.zone.name,
+          },
+        ],
+        runnerId: "runner-1",
+        status: "succeeded",
+      },
+    );
+
+    expect(completion.body.job).toMatchObject({
+      result: { evidenceCount: 1 },
+      status: "succeeded",
+    });
+
+    const mappings = await getJson<InstanceDomainMappingsResponse>("/api/formless/domain-mappings");
+
+    expect(mappings.body.appliedStates).toEqual([
       expect.objectContaining({
-        code: "domain-provider-apply-executor-missing",
-        status: "not-implemented",
-      }),
-      expect.objectContaining({
-        code: "domain-provider-apply-executor-missing",
-        status: "not-implemented",
+        action: "created",
+        alchemyResourceId: resource.logicalId,
+        host: "admin.example.com",
+        profile: "instance",
+        runnerId: "runner-1",
+        workerDomainId: "custom-domain-123",
       }),
     ]);
-    expect(JSON.stringify(responses.map((response) => response.body))).not.toContain(
-      cloudflareToken,
-    );
-    expect(JSON.stringify(responses.map((response) => response.body))).not.toContain(
-      alchemyPassword,
-    );
   });
 });
 

@@ -32,6 +32,8 @@ export type InstanceDomainMappingAppliedState = {
   installId?: AppInstallId;
   provider: InstanceDomainMappingAppliedProvider;
   accountId: string;
+  alchemyResourceId?: string;
+  runnerId?: string;
   zoneId: string;
   zoneName: string;
   workerName: string;
@@ -78,6 +80,8 @@ export type RecordInstanceDomainMappingApplyEvidenceRequest = {
   installId?: string;
   provider: string;
   accountId: string;
+  alchemyResourceId?: string;
+  runnerId?: string;
   zoneId: string;
   zoneName: string;
   workerName: string;
@@ -279,6 +283,12 @@ export function parseRecordInstanceDomainMappingApplyEvidenceRequest(
     ...optionalStringProperty("installId", "Domain mapping install id", value.installId),
     provider: parseTrimmedNonEmptyString("Domain mapping applied provider", value.provider),
     accountId: parseTrimmedNonEmptyString("Domain mapping Cloudflare account id", value.accountId),
+    ...optionalStringProperty(
+      "alchemyResourceId",
+      "Domain mapping Alchemy resource id",
+      value.alchemyResourceId,
+    ),
+    ...optionalStringProperty("runnerId", "Domain mapping provider runner id", value.runnerId),
     zoneId: parseTrimmedNonEmptyString("Domain mapping Cloudflare zone id", value.zoneId),
     zoneName: parseTrimmedNonEmptyString("Domain mapping Cloudflare zone name", value.zoneName),
     workerName: parseTrimmedNonEmptyString("Domain mapping Worker name", value.workerName),
@@ -540,10 +550,12 @@ export function buildInstanceDomainMappingAppliedState(
     appliedState: instanceDomainMappingAppliedStateFromParts({
       accountId: input.accountId,
       action: actionResult.action,
+      alchemyResourceId: input.alchemyResourceId,
       host: hostResult.host,
       now: input.now,
       profile: profileResult.profile,
       provider: providerResult.provider,
+      runnerId: input.runnerId,
       targetInstallId: targetResult.targetInstallId,
       workerDomainId: input.workerDomainId,
       workerName: input.workerName,
@@ -739,10 +751,12 @@ function instanceDomainMappingFromParts(input: {
 function instanceDomainMappingAppliedStateFromParts(input: {
   accountId: string;
   action: InstanceDomainMappingAppliedAction;
+  alchemyResourceId?: string;
   host: string;
   now: string;
   profile: InstanceDomainMappingProfile;
   provider: InstanceDomainMappingAppliedProvider;
+  runnerId?: string;
   targetInstallId?: AppInstallId;
   workerDomainId: string;
   workerName: string;
@@ -756,6 +770,10 @@ function instanceDomainMappingAppliedStateFromParts(input: {
     ...compatibilityTargetForInstallId(input.targetInstallId),
     provider: input.provider,
     accountId: input.accountId,
+    ...(input.alchemyResourceId === undefined
+      ? {}
+      : { alchemyResourceId: input.alchemyResourceId }),
+    ...(input.runnerId === undefined ? {} : { runnerId: input.runnerId }),
     zoneId: input.zoneId,
     zoneName: input.zoneName,
     workerName: input.workerName,
@@ -955,8 +973,10 @@ function assertRecordInstanceDomainMappingApplyEvidenceRequestKeys(value: Record
   ];
   const allowedKeys = new Set([
     ...requiredKeys,
+    "alchemyResourceId",
     "installId",
     "profile",
+    "runnerId",
     "surface",
     "targetInstallId",
   ]);
