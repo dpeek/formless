@@ -68,6 +68,12 @@ export type RecordInstanceDomainMappingApplyEvidenceResult =
     }
   | Extract<BuildInstanceDomainMappingAppliedStateResult, { ok: false }>;
 
+export type DeleteInstanceDomainMappingAppliedStateResult = {
+  appliedStates: InstanceDomainMappingAppliedState[];
+  auditEvent: InstanceDomainMappingAuditEvent;
+  auditEvents: InstanceDomainMappingAuditEvent[];
+};
+
 const domainMappingsTableSql = `
   CREATE TABLE IF NOT EXISTS instance_domain_mappings (
     host TEXT NOT NULL,
@@ -95,7 +101,7 @@ const appliedStateTableSql = `
     zone_name TEXT NOT NULL,
     worker_name TEXT NOT NULL,
     worker_domain_id TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'overridden')),
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'overridden')),
     applied_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (host, profile)
@@ -117,7 +123,7 @@ const auditEventsTableSql = `
     zone_name TEXT NOT NULL,
     worker_name TEXT NOT NULL,
     worker_domain_id TEXT NOT NULL,
-    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'overridden')),
+    action TEXT NOT NULL CHECK (action IN ('adopted', 'created', 'deleted', 'overridden')),
     applied_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
@@ -132,6 +138,7 @@ export function ensureInstanceDomainMappingTables(storage: DurableObjectStorage)
     ${auditEventsTableSql};
   `);
   migrateProviderEvidenceColumns(storage);
+  migrateAppliedActionChecks(storage);
 }
 
 export function readInstanceDomainMappings(storage: DurableObjectStorage): InstanceDomainMapping[] {
@@ -303,6 +310,43 @@ export function recordInstanceDomainMappingApplyEvidence(
       appliedState: result.appliedState,
       appliedStates: readAppliedStates(storage),
       auditEvent,
+      auditEvents: readAuditEvents(storage),
+    };
+  });
+}
+
+export function deleteInstanceDomainMappingAppliedState(
+  storage: DurableObjectStorage,
+  input: {
+    now: string;
+    runnerId?: string;
+    state: InstanceDomainMappingAppliedState;
+  },
+): DeleteInstanceDomainMappingAppliedStateResult {
+  ensureInstanceDomainMappingTables(storage);
+
+  return storage.transactionSync(() => {
+    const deletedState: InstanceDomainMappingAppliedState = {
+      ...input.state,
+      action: "deleted",
+      appliedAt: input.now,
+      ...(input.runnerId === undefined ? {} : { runnerId: input.runnerId }),
+      updatedAt: input.now,
+    };
+
+    storage.sql.exec(
+      `
+        DELETE FROM instance_domain_mapping_applied_state
+        WHERE host = ? AND profile = ?
+      `,
+      deletedState.host,
+      deletedState.profile,
+    );
+    writeAuditEvent(storage, deletedState);
+
+    return {
+      appliedStates: readAppliedStates(storage),
+      auditEvent: readLastAuditEvent(storage),
       auditEvents: readAuditEvents(storage),
     };
   });
@@ -620,6 +664,72 @@ function migrateProviderEvidenceColumns(storage: DurableObjectStorage) {
   }
 }
 
+function migrateAppliedActionChecks(storage: DurableObjectStorage) {
+  for (const table of [
+    "instance_domain_mapping_applied_state",
+    "instance_domain_mapping_audit_events",
+  ] as const) {
+    const sql = tableDefinition(storage, table);
+
+    if (sql !== undefined && !sql.includes("'deleted'")) {
+      migrateAppliedActionCheckTable(storage, table);
+    }
+  }
+}
+
+function migrateAppliedActionCheckTable(
+  storage: DurableObjectStorage,
+  table: "instance_domain_mapping_applied_state" | "instance_domain_mapping_audit_events",
+) {
+  const legacyTable = `${table}_action_legacy`;
+  const createSql =
+    table === "instance_domain_mapping_applied_state" ? appliedStateTableSql : auditEventsTableSql;
+  const eventIdColumns =
+    table === "instance_domain_mapping_audit_events" ? "event_id,\n      " : "";
+  const eventIdSelect = table === "instance_domain_mapping_audit_events" ? "event_id,\n      " : "";
+
+  storage.sql.exec(`DROP TABLE IF EXISTS ${legacyTable}`);
+  storage.sql.exec(`ALTER TABLE ${table} RENAME TO ${legacyTable}`);
+  storage.sql.exec(createSql);
+  storage.sql.exec(`
+    INSERT INTO ${table} (
+      ${eventIdColumns}host,
+      profile,
+      target_install_id,
+      surface,
+      provider,
+      account_id,
+      alchemy_resource_id,
+      runner_id,
+      zone_id,
+      zone_name,
+      worker_name,
+      worker_domain_id,
+      action,
+      applied_at,
+      updated_at
+    )
+    SELECT
+      ${eventIdSelect}host,
+      profile,
+      target_install_id,
+      surface,
+      provider,
+      account_id,
+      alchemy_resource_id,
+      runner_id,
+      zone_id,
+      zone_name,
+      worker_name,
+      worker_domain_id,
+      action,
+      applied_at,
+      updated_at
+    FROM ${legacyTable}
+  `);
+  storage.sql.exec(`DROP TABLE ${legacyTable}`);
+}
+
 function migrateLegacyDomainMappingsTable(storage: DurableObjectStorage) {
   storage.sql.exec("DROP TABLE IF EXISTS instance_domain_mappings_surface_legacy");
   storage.sql.exec(
@@ -766,4 +876,18 @@ function tableHasColumn(
   }
 
   return false;
+}
+
+function tableDefinition(
+  storage: DurableObjectStorage,
+  table: DomainMappingTableName,
+): string | undefined {
+  for (const row of storage.sql.exec<{ sql: string | null }>(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+    table,
+  )) {
+    return row.sql ?? undefined;
+  }
+
+  return undefined;
 }

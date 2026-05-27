@@ -1,12 +1,15 @@
 import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type CreateInstanceDomainProviderRedirectIntentRequest,
   type CreateInstanceDomainProviderRedirectIntentResponse,
   type DeleteInstanceDomainProviderRedirectIntentRequest,
   type DeleteInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderApplyResponse,
+  type InstanceDomainProviderDeleteRequest,
+  type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderPlanResponse,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
@@ -60,6 +63,30 @@ export async function applyInstanceDomainProviderPlan({
   });
 
   return readJsonResponse<InstanceDomainProviderApplyResponse>(response);
+}
+
+export async function deleteInstanceDomainProviderResource(
+  input: InstanceDomainProviderDeleteRequest,
+  {
+    fetcher = fetch,
+    signal,
+  }: {
+    fetcher?: typeof fetch;
+    signal?: AbortSignal;
+  } = {},
+): Promise<InstanceDomainProviderDeleteResponse> {
+  const response = await fetcher(INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH, {
+    body: JSON.stringify(input),
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal,
+  });
+
+  return readJsonResponse<InstanceDomainProviderDeleteResponse>(response);
 }
 
 export async function fetchInstanceDomainProviderRedirects({

@@ -6,10 +6,16 @@ import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   type InstanceDomainProviderApplyJobResultRequest,
   type InstanceDomainProviderApplyJobResponse,
   type InstanceDomainProviderApplyRequest,
   type InstanceDomainProviderApplyResponse,
+  type InstanceDomainProviderDeleteJobResultRequest,
+  type InstanceDomainProviderDeleteJobResponse,
+  type InstanceDomainProviderDeleteRequest,
+  type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
 import type {
@@ -196,6 +202,68 @@ export async function completeFormlessInstanceDomainProviderApplyJob(
   );
 }
 
+export async function requestFormlessInstanceDomainProviderDelete(
+  input: {
+    adminToken?: string | null;
+    request?: InstanceDomainProviderDeleteRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDomainProviderDeleteResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const deleteUrl = apiUrl(targetUrl, INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseDomainProviderDeleteResponse(
+    await postJson(dependencies.fetch, deleteUrl, {
+      body: JSON.stringify(input.request ?? {}),
+      headers,
+      method: "POST",
+    }),
+    deleteUrl,
+  );
+}
+
+export async function completeFormlessInstanceDomainProviderDeleteJob(
+  input: {
+    adminToken?: string | null;
+    jobId: string;
+    result: InstanceDomainProviderDeleteJobResultRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDomainProviderDeleteJobResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const resultUrl = apiUrl(
+    targetUrl,
+    `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${encodeURIComponent(input.jobId)}/result`,
+  );
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return parseDomainProviderDeleteJobResponse(
+    await postJson(dependencies.fetch, resultUrl, {
+      body: JSON.stringify(input.result),
+      headers,
+      method: "POST",
+    }),
+    resultUrl,
+  );
+}
+
 export async function recordFormlessInstanceDomainMappingApplyEvidence(
   input: {
     adminToken?: string | null;
@@ -334,6 +402,28 @@ function parseDomainProviderApplyJobResponse(
   }
 
   return value as InstanceDomainProviderApplyJobResponse;
+}
+
+function parseDomainProviderDeleteResponse(
+  value: unknown,
+  context: string,
+): InstanceDomainProviderDeleteResponse {
+  if (!isRecord(value) || typeof value.status !== "string") {
+    throw new Error(`${context} failed: domain provider delete response is invalid.`);
+  }
+
+  return value as InstanceDomainProviderDeleteResponse;
+}
+
+function parseDomainProviderDeleteJobResponse(
+  value: unknown,
+  context: string,
+): InstanceDomainProviderDeleteJobResponse {
+  if (!isRecord(value) || !isRecord(value.job)) {
+    throw new Error(`${context} failed: domain provider delete job response is invalid.`);
+  }
+
+  return value as InstanceDomainProviderDeleteJobResponse;
 }
 
 function parseApplyEvidenceResponse(

@@ -4,6 +4,8 @@ import type { CustomDomain, DnsRecords, RedirectRule } from "alchemy/cloudflare"
 import {
   type InstanceDomainProviderApplyJobResourceEvidence,
   type InstanceDomainProviderApplyReadyResponse,
+  type InstanceDomainProviderDeleteJobResourceEvidence,
+  type InstanceDomainProviderDeleteReadyResponse,
 } from "../shared/domain-provider-api.ts";
 import type {
   DomainProviderApplyPolicy,
@@ -11,6 +13,7 @@ import type {
   DomainProviderDnsRecordsResource,
   DomainProviderRedirectRuleResource,
   DomainProviderResource,
+  DomainProviderResourceKind,
 } from "../shared/domain-provider-protocol.ts";
 import {
   applyAlchemyDomainProviderPlan,
@@ -25,7 +28,9 @@ import {
 } from "./cloudflare-domain-client.ts";
 import {
   completeFormlessInstanceDomainProviderApplyJob,
+  completeFormlessInstanceDomainProviderDeleteJob,
   requestFormlessInstanceDomainProviderApply,
+  requestFormlessInstanceDomainProviderDelete,
   type FormlessInstanceTargetClientDependencies,
 } from "./instance-target-client.ts";
 
@@ -48,10 +53,28 @@ export type RunFormlessInstanceDomainProviderApplyInput = {
   targetUrl: string;
 };
 
+export type RunFormlessInstanceDomainProviderDeleteInput = {
+  adminToken?: string | null;
+  host?: string | null;
+  kind?: DomainProviderResourceKind | null;
+  logicalId?: string | null;
+  runnerId?: string | null;
+  targetUrl: string;
+};
+
 export type RunFormlessInstanceDomainProviderApplyResult = {
   alchemy: AlchemyDomainProviderApplyResult;
   apply: InstanceDomainProviderApplyReadyResponse;
   completion: Awaited<ReturnType<typeof completeFormlessInstanceDomainProviderApplyJob>>;
+  evidenceCount: number;
+  runnerId: string;
+  targetUrl: string;
+};
+
+export type RunFormlessInstanceDomainProviderDeleteResult = {
+  alchemy: AlchemyDomainProviderApplyResult;
+  delete: InstanceDomainProviderDeleteReadyResponse;
+  completion: Awaited<ReturnType<typeof completeFormlessInstanceDomainProviderDeleteJob>>;
   evidenceCount: number;
   runnerId: string;
   targetUrl: string;
@@ -155,6 +178,94 @@ export async function runFormlessInstanceDomainProviderApply(
   }
 }
 
+export async function runFormlessInstanceDomainProviderDelete(
+  input: RunFormlessInstanceDomainProviderDeleteInput,
+  dependencies: RunFormlessInstanceDomainProviderApplyDependencies,
+): Promise<RunFormlessInstanceDomainProviderDeleteResult> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const runnerId = normalizeRunnerId(input.runnerId ?? dependencies.createRunnerId());
+  const deleteJob = await requestFormlessInstanceDomainProviderDelete(
+    {
+      adminToken: input.adminToken,
+      request: {
+        ...(input.host === null || input.host === undefined ? {} : { host: input.host }),
+        ...(input.kind === null || input.kind === undefined ? {} : { kind: input.kind }),
+        ...(input.logicalId === null || input.logicalId === undefined
+          ? {}
+          : { logicalId: input.logicalId }),
+        runnerId,
+      },
+      targetUrl,
+    },
+    dependencies,
+  );
+
+  if (deleteJob.status !== "ready") {
+    throw new Error(`Domain provider delete did not create a runnable job: ${deleteJob.code}.`);
+  }
+
+  const accountId = requireConfiguredAccountId(deleteJob.config.accountId);
+  const runtime = await (dependencies.runtime ?? nodeAlchemyDomainProviderRuntime)({
+    accountId,
+    env: dependencies.env,
+  });
+
+  try {
+    const alchemy = await applyAlchemyDomainProviderPlan({
+      appName: `formless-domain-${deleteJob.plan.instanceId}`,
+      factories: runtime.factories,
+      password: runtime.password,
+      phase: "destroy",
+      plan: deleteJob.job.plan,
+      rootDir: runtime.rootDir,
+      runner: runtime.runner,
+      stateStore: runtime.stateStore,
+    });
+    const resources = deleteEvidenceFromAlchemyResult({
+      result: alchemy,
+      targets: deleteJob.job.targets,
+    });
+    const completion = await completeFormlessInstanceDomainProviderDeleteJob(
+      {
+        adminToken: input.adminToken,
+        jobId: deleteJob.job.jobId,
+        result: {
+          resources,
+          runnerId,
+          status: "succeeded",
+        },
+        targetUrl,
+      },
+      dependencies,
+    );
+
+    return {
+      alchemy,
+      completion,
+      delete: deleteJob,
+      evidenceCount: resources.length,
+      runnerId,
+      targetUrl,
+    };
+  } catch (error) {
+    await completeFormlessInstanceDomainProviderDeleteJob(
+      {
+        adminToken: input.adminToken,
+        jobId: deleteJob.job.jobId,
+        result: {
+          error: errorMessage(error),
+          runnerId,
+          status: "failed",
+        },
+        targetUrl,
+      },
+      dependencies,
+    );
+
+    throw error;
+  }
+}
+
 export async function nodeAlchemyDomainProviderRuntime(input: {
   accountId: string;
   env: NodeJS.ProcessEnv;
@@ -234,6 +345,33 @@ function applyEvidenceFromAlchemyResult(input: {
     }
 
     evidence.push(resourceEvidence(input.accountId, resource, resourceResult.output));
+  }
+
+  return evidence;
+}
+
+function deleteEvidenceFromAlchemyResult(input: {
+  targets: Readonly<InstanceDomainProviderDeleteReadyResponse["targets"]>;
+  result: AlchemyDomainProviderApplyResult;
+}): InstanceDomainProviderDeleteJobResourceEvidence[] {
+  const targets = new Map(input.targets.map((target) => [target.logicalId, target]));
+  const evidence: InstanceDomainProviderDeleteJobResourceEvidence[] = [];
+
+  for (const resourceResult of input.result.resources) {
+    const target = targets.get(resourceResult.logicalId);
+
+    if (!target) {
+      throw new Error(
+        `Domain provider delete output "${resourceResult.logicalId}" was not in the delete job.`,
+      );
+    }
+
+    evidence.push({
+      action: "deleted",
+      host: target.host,
+      kind: target.kind,
+      logicalId: target.logicalId,
+    });
   }
 
   return evidence;
@@ -383,10 +521,14 @@ function customDomainAction(
 }
 
 function requireApplyAccountId(apply: InstanceDomainProviderApplyReadyResponse): string {
-  const accountId = apply.config.accountId?.trim();
+  return requireConfiguredAccountId(apply.config.accountId);
+}
+
+function requireConfiguredAccountId(value: string | undefined): string {
+  const accountId = value?.trim();
 
   if (!accountId) {
-    throw new Error("Domain provider apply job did not include a Cloudflare account id.");
+    throw new Error("Domain provider job did not include a Cloudflare account id.");
   }
 
   return accountId;

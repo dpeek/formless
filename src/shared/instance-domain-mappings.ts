@@ -20,7 +20,7 @@ export type InstanceDomainMapping = {
   updatedAt: string;
 };
 
-export type InstanceDomainMappingAppliedAction = "adopted" | "created" | "overridden";
+export type InstanceDomainMappingAppliedAction = "adopted" | "created" | "deleted" | "overridden";
 
 export type InstanceDomainMappingAppliedProvider = "cloudflare-worker-custom-domain";
 
@@ -874,7 +874,7 @@ function parseInstanceDomainMappingAppliedAction(value: string):
       ok: false;
       error: InstanceDomainMappingRegistryError;
     } {
-  if (value === "adopted" || value === "created" || value === "overridden") {
+  if (value === "adopted" || value === "created" || value === "deleted" || value === "overridden") {
     return { ok: true, action: value };
   }
 
@@ -883,7 +883,7 @@ function parseInstanceDomainMappingAppliedAction(value: string):
     error: domainMappingError(
       "invalid-applied-action",
       "action",
-      'Domain mapping applied action must be "adopted", "created", or "overridden".',
+      'Domain mapping applied action must be "adopted", "created", "deleted", or "overridden".',
     ),
   };
 }

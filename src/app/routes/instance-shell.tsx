@@ -28,12 +28,16 @@ import {
 } from "../../client/domain-mappings.ts";
 import {
   createInstanceDomainProviderRedirect,
+  deleteInstanceDomainProviderResource,
   deleteInstanceDomainProviderRedirect,
   DomainProviderApiError,
   fetchInstanceDomainProviderRedirects,
 } from "../../client/domain-provider.ts";
 import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/app-installs.ts";
-import type { InstanceDomainProviderRedirectIntent } from "../../shared/domain-provider-api.ts";
+import type {
+  InstanceDomainProviderAppliedResourceState,
+  InstanceDomainProviderRedirectIntent,
+} from "../../shared/domain-provider-api.ts";
 import type {
   InstanceDomainMapping,
   InstanceDomainMappingAppliedState,
@@ -69,6 +73,10 @@ export type InstanceShellRouteState =
       domainMappingError?: string;
       domainMappingSubmitting: boolean;
       domainMappings: InstanceDomainMapping[];
+      domainProviderAppliedResources?: InstanceDomainProviderAppliedResourceState[];
+      domainProviderDeleteError?: string;
+      domainProviderDeleteMessage?: string;
+      domainProviderDeletingKey?: string;
       domainRedirectDeletingKey?: string;
       domainRedirectDraftError?: string;
       domainRedirectIntents: InstanceDomainProviderRedirectIntent[];
@@ -119,6 +127,8 @@ export function InstanceShellRoute() {
           domainMappingDeletingKey: undefined,
           domainMappingSubmitting: false,
           domainMappings: domainResponse.mappings,
+          domainProviderAppliedResources: redirectResponse.appliedResources,
+          domainProviderDeletingKey: undefined,
           domainRedirectDeletingKey: undefined,
           domainRedirectIntents: redirectResponse.redirectIntents,
           domainRedirectSubmitting: false,
@@ -198,6 +208,10 @@ export function InstanceShellRoute() {
         domainMappingError: state.domainMappingError,
         domainMappingSubmitting: false,
         domainMappings: state.domainMappings,
+        domainProviderAppliedResources: state.domainProviderAppliedResources,
+        domainProviderDeleteError: state.domainProviderDeleteError,
+        domainProviderDeleteMessage: state.domainProviderDeleteMessage,
+        domainProviderDeletingKey: state.domainProviderDeletingKey,
         domainRedirectDeletingKey: state.domainRedirectDeletingKey,
         domainRedirectDraftError: state.domainRedirectDraftError,
         domainRedirectIntents: state.domainRedirectIntents,
@@ -438,6 +452,59 @@ export function InstanceShellRoute() {
     }
   }
 
+  async function submitDeleteDomainProviderResource(input: {
+    host: string;
+    kind?: InstanceDomainProviderAppliedResourceState["kind"];
+    logicalId?: string;
+  }) {
+    if (state.status !== "ready" || state.domainProviderDeletingKey) {
+      return;
+    }
+
+    const key = domainProviderDeleteKey(input);
+
+    if (!window.confirm(`Delete recorded provider resources for ${input.host}?`)) {
+      return;
+    }
+
+    setState({
+      ...state,
+      domainProviderDeleteError: undefined,
+      domainProviderDeleteMessage: undefined,
+      domainProviderDeletingKey: key,
+    });
+
+    try {
+      const response = await deleteInstanceDomainProviderResource({
+        host: input.host,
+        ...(input.kind === undefined ? {} : { kind: input.kind }),
+        ...(input.logicalId === undefined ? {} : { logicalId: input.logicalId }),
+      });
+
+      setState({
+        ...state,
+        domainProviderDeleteError: undefined,
+        domainProviderDeleteMessage:
+          response.status === "ready"
+            ? `Provider delete job ready for ${input.host}.`
+            : "Provider delete request did not create a job.",
+        domainProviderDeletingKey: undefined,
+      });
+    } catch (error) {
+      const message =
+        error instanceof DomainProviderApiError || error instanceof Error
+          ? error.message
+          : "Provider delete failed.";
+
+      setState({
+        ...state,
+        domainProviderDeleteError: message,
+        domainProviderDeleteMessage: undefined,
+        domainProviderDeletingKey: undefined,
+      });
+    }
+  }
+
   return (
     <InstanceShellRouteView
       domainDraft={domainDraft}
@@ -447,6 +514,7 @@ export function InstanceShellRoute() {
       onDomainRedirectDraftChange={setDomainRedirectDraft}
       onDeleteDomainRedirect={submitDeleteDomainRedirect}
       onDeleteDomainMapping={submitDeleteDomainMapping}
+      onDeleteDomainProviderResource={submitDeleteDomainProviderResource}
       onSubmitDomainRedirect={submitDomainRedirect}
       onSubmitDomainMapping={submitDomainMapping}
       onInstallDraftChange={(packageAppKey, draft) =>
@@ -469,6 +537,7 @@ export function InstanceShellRouteView({
   onDomainRedirectDraftChange,
   onDeleteDomainRedirect,
   onDeleteDomainMapping,
+  onDeleteDomainProviderResource,
   onSubmitDomainRedirect,
   onSubmitDomainMapping,
   onInstallDraftChange,
@@ -482,6 +551,11 @@ export function InstanceShellRouteView({
   onDomainRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
   onDeleteDomainRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
   onDeleteDomainMapping?: (mapping: InstanceDomainMapping) => void;
+  onDeleteDomainProviderResource?: (input: {
+    host: string;
+    kind?: InstanceDomainProviderAppliedResourceState["kind"];
+    logicalId?: string;
+  }) => void;
   onSubmitDomainRedirect?: (event: React.FormEvent<HTMLFormElement>) => void;
   onSubmitDomainMapping?: (event: React.FormEvent<HTMLFormElement>) => void;
   onInstallDraftChange?: (packageAppKey: PackageAppKey, draft: PackageInstallDraft) => void;
@@ -554,6 +628,7 @@ export function InstanceShellRouteView({
         }
         onDraftChange={onDomainDraftChange}
         onDelete={onDeleteDomainMapping}
+        onDeleteProvider={onDeleteDomainProviderResource}
         onDeleteRedirect={onDeleteDomainRedirect}
         onRedirectDraftChange={onDomainRedirectDraftChange}
         onRedirectSubmit={onSubmitDomainRedirect}
@@ -579,6 +654,7 @@ function CustomDomainsSection({
   draft,
   onDraftChange,
   onDelete,
+  onDeleteProvider,
   onDeleteRedirect,
   onRedirectDraftChange,
   onRedirectSubmit,
@@ -589,6 +665,11 @@ function CustomDomainsSection({
   draft: DomainMappingDraft;
   onDraftChange?: (draft: DomainMappingDraft) => void;
   onDelete?: (mapping: InstanceDomainMapping) => void;
+  onDeleteProvider?: (input: {
+    host: string;
+    kind?: InstanceDomainProviderAppliedResourceState["kind"];
+    logicalId?: string;
+  }) => void;
   onDeleteRedirect?: (redirect: InstanceDomainProviderRedirectIntent) => void;
   onRedirectDraftChange?: (draft: DomainRedirectDraft) => void;
   onRedirectSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -617,6 +698,7 @@ function CustomDomainsSection({
         (mapping) => mapping.host === appliedState.host && mapping.profile === appliedState.profile,
       ),
   );
+  const providerAppliedResources = state.domainProviderAppliedResources ?? [];
   const redirectDisabled =
     state.domainRedirectSubmitting || state.domainRedirectDeletingKey !== undefined;
 
@@ -711,6 +793,16 @@ function CustomDomainsSection({
             {state.domainMappingError}
           </p>
         ) : null}
+        {state.domainProviderDeleteError ? (
+          <p className={`${fieldErrorStyles()} sm:col-span-4`} data-slot="field-error" role="alert">
+            {state.domainProviderDeleteError}
+          </p>
+        ) : null}
+        {state.domainProviderDeleteMessage ? (
+          <p className="text-xs text-muted-fg sm:col-span-4" role="status">
+            {state.domainProviderDeleteMessage}
+          </p>
+        ) : null}
       </form>
       <form
         className="grid gap-3 rounded-md border border-border bg-overlay p-4 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,10rem)_minmax(0,1fr)_auto]"
@@ -792,6 +884,8 @@ function CustomDomainsSection({
               key={domainMappingKey(mapping)}
               mapping={mapping}
               onDelete={onDelete}
+              onDeleteProvider={onDeleteProvider}
+              providerDeletingKey={state.domainProviderDeletingKey}
             />
           ))}
           {orphanAppliedStates.map((appliedState) => (
@@ -801,6 +895,8 @@ function CustomDomainsSection({
                 (install) => install.installId === appliedState.targetInstallId,
               )}
               key={`applied:${appliedState.profile}:${appliedState.host}`}
+              onDeleteProvider={onDeleteProvider}
+              providerDeletingKey={state.domainProviderDeletingKey}
             />
           ))}
         </div>
@@ -816,6 +912,11 @@ function CustomDomainsSection({
               deleting={state.domainRedirectDeletingKey === redirect.fromHost}
               key={redirect.fromHost}
               onDelete={onDeleteRedirect}
+              onDeleteProvider={onDeleteProvider}
+              providerAppliedResources={providerAppliedResources.filter(
+                (resource) => resource.host === redirect.fromHost,
+              )}
+              providerDeletingKey={state.domainProviderDeletingKey}
               redirect={redirect}
             />
           ))}
@@ -831,13 +932,27 @@ function DomainMappingRow({
   install,
   mapping,
   onDelete,
+  onDeleteProvider,
+  providerDeletingKey,
 }: {
   appliedState: InstanceDomainMappingAppliedState | undefined;
   deleting: boolean;
   install: AppInstall | undefined;
   mapping: InstanceDomainMapping;
   onDelete?: (mapping: InstanceDomainMapping) => void;
+  onDeleteProvider?: (input: {
+    host: string;
+    kind?: InstanceDomainProviderAppliedResourceState["kind"];
+    logicalId?: string;
+  }) => void;
+  providerDeletingKey?: string;
 }) {
+  const providerDelete = appliedState
+    ? providerDeleteInputForAppliedState(appliedState)
+    : undefined;
+  const providerDeleting =
+    providerDelete !== undefined && providerDeletingKey === domainProviderDeleteKey(providerDelete);
+
   return (
     <article className="rounded-md border border-border bg-overlay p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -864,6 +979,18 @@ function DomainMappingRow({
               {deleting ? "Removing..." : "Remove"}
             </Button>
           ) : null}
+          {providerDelete ? (
+            <Button
+              intent="outline"
+              isDisabled={providerDeleting}
+              onPress={() => onDeleteProvider?.(providerDelete)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {providerDeleting ? "Deleting..." : "Delete provider"}
+            </Button>
+          ) : null}
         </div>
       </div>
     </article>
@@ -873,12 +1000,27 @@ function DomainMappingRow({
 function DomainRedirectRow({
   deleting,
   onDelete,
+  onDeleteProvider,
+  providerAppliedResources,
+  providerDeletingKey,
   redirect,
 }: {
   deleting: boolean;
   onDelete?: (redirect: InstanceDomainProviderRedirectIntent) => void;
+  onDeleteProvider?: (input: {
+    host: string;
+    kind?: InstanceDomainProviderAppliedResourceState["kind"];
+    logicalId?: string;
+  }) => void;
+  providerAppliedResources: InstanceDomainProviderAppliedResourceState[];
+  providerDeletingKey?: string;
   redirect: InstanceDomainProviderRedirectIntent;
 }) {
+  const providerDelete =
+    providerAppliedResources.length === 0 ? undefined : { host: redirect.fromHost };
+  const providerDeleting =
+    providerDelete !== undefined && providerDeletingKey === domainProviderDeleteKey(providerDelete);
+
   return (
     <article className="rounded-md border border-border bg-overlay p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -906,6 +1048,18 @@ function DomainRedirectRow({
               {deleting ? "Removing..." : "Remove"}
             </Button>
           ) : null}
+          {providerDelete ? (
+            <Button
+              intent="outline"
+              isDisabled={providerDeleting}
+              onPress={() => onDeleteProvider?.(providerDelete)}
+              size="sm"
+              type="button"
+            >
+              <RemoveIcon />
+              {providerDeleting ? "Deleting..." : "Delete provider"}
+            </Button>
+          ) : null}
         </div>
       </div>
     </article>
@@ -915,10 +1069,21 @@ function DomainRedirectRow({
 function AppliedDomainStateRow({
   appliedState,
   install,
+  onDeleteProvider,
+  providerDeletingKey,
 }: {
   appliedState: InstanceDomainMappingAppliedState;
   install: AppInstall | undefined;
+  onDeleteProvider?: (input: {
+    host: string;
+    kind?: InstanceDomainProviderAppliedResourceState["kind"];
+    logicalId?: string;
+  }) => void;
+  providerDeletingKey?: string;
 }) {
+  const providerDelete = providerDeleteInputForAppliedState(appliedState);
+  const providerDeleting = providerDeletingKey === domainProviderDeleteKey(providerDelete);
+
   return (
     <article className="rounded-md border border-dashed border-border bg-overlay p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -931,7 +1096,19 @@ function AppliedDomainStateRow({
             {install ? ` · ${install.label}` : ""} · applied without desired mapping
           </p>
         </div>
-        <p className="text-xs text-muted-fg">Applied: {appliedState.workerName}</p>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <p className="text-xs text-muted-fg">Applied: {appliedState.workerName}</p>
+          <Button
+            intent="outline"
+            isDisabled={providerDeleting}
+            onPress={() => onDeleteProvider?.(providerDelete)}
+            size="sm"
+            type="button"
+          >
+            <RemoveIcon />
+            {providerDeleting ? "Deleting..." : "Delete provider"}
+          </Button>
+        </div>
       </div>
     </article>
   );
@@ -1325,6 +1502,28 @@ function redirectTargetLabel(redirect: InstanceDomainProviderRedirectIntent): st
 
 function domainMappingKey(mapping: Pick<InstanceDomainMapping, "host" | "profile">): string {
   return `${mapping.profile}:${mapping.host}`;
+}
+
+function providerDeleteInputForAppliedState(appliedState: InstanceDomainMappingAppliedState): {
+  host: string;
+  kind: InstanceDomainProviderAppliedResourceState["kind"];
+  logicalId?: string;
+} {
+  return {
+    host: appliedState.host,
+    kind: "cloudflare-worker-custom-domain",
+    ...(appliedState.alchemyResourceId === undefined
+      ? {}
+      : { logicalId: appliedState.alchemyResourceId }),
+  };
+}
+
+function domainProviderDeleteKey(input: {
+  host: string;
+  kind?: InstanceDomainProviderAppliedResourceState["kind"];
+  logicalId?: string;
+}): string {
+  return input.logicalId ?? `${input.kind ?? "host"}:${input.host}`;
 }
 
 function shellLinkButtonClassName(intent: "solid" | "outline" = "solid") {

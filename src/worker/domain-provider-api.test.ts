@@ -3,9 +3,13 @@ import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type InstanceDomainProviderApplyJobResponse,
   type InstanceDomainProviderApplyResponse,
+  type InstanceDomainProviderDeleteJobResponse,
+  type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderPlanResponse,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
@@ -211,6 +215,66 @@ describe("instance domain provider API routes", () => {
         workerDomainId: "custom-domain-123",
       }),
     ]);
+
+    await deleteAdminJson("/api/formless/domain-mappings?host=admin.example.com&profile=instance");
+    const afterDesiredDelete = await getJson<InstanceDomainMappingsResponse>(
+      "/api/formless/domain-mappings",
+    );
+
+    expect(afterDesiredDelete.body.mappings).toEqual([
+      expect.objectContaining({ enabled: false, host: "admin.example.com" }),
+    ]);
+    expect(afterDesiredDelete.body.appliedStates).toHaveLength(1);
+
+    const deleteJob = await postAdminJson<InstanceDomainProviderDeleteResponse>(
+      INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
+      {
+        host: "admin.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        runnerId: "runner-delete",
+      },
+    );
+
+    expect(deleteJob.response.status).toBe(202);
+
+    if (deleteJob.body.status !== "ready") {
+      throw new Error("Delete did not create a job.");
+    }
+
+    expect(deleteJob.body.targets).toEqual([
+      expect.objectContaining({
+        host: "admin.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        resourceId: "custom-domain-123",
+      }),
+    ]);
+
+    const deleteCompletion = await postAdminJson<InstanceDomainProviderDeleteJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${deleteJob.body.job.jobId}/result`,
+      {
+        resources: deleteJob.body.targets.map((target) => ({
+          action: "deleted",
+          host: target.host,
+          kind: target.kind,
+          logicalId: target.logicalId,
+        })),
+        runnerId: "runner-delete",
+        status: "succeeded",
+      },
+    );
+    const afterProviderDelete = await getJson<InstanceDomainMappingsResponse>(
+      "/api/formless/domain-mappings",
+    );
+
+    expect(deleteCompletion.body.job).toMatchObject({
+      result: { evidenceCount: 1 },
+      status: "succeeded",
+    });
+    expect(afterProviderDelete.body.appliedStates).toEqual([]);
+    expect(afterProviderDelete.body.auditEvents.map((event) => event.action)).toEqual([
+      "created",
+      "deleted",
+    ]);
   });
 
   it("stores redirect intents, plans redirect resources, and records runner evidence", async () => {
@@ -309,6 +373,65 @@ describe("instance domain provider API routes", () => {
       "cloudflare-redirect-rule",
     ]);
     expect(redirects.body.auditEvents).toHaveLength(2);
+
+    const disabled = await harness.fetch(
+      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}?fromHost=www.example.com`,
+      {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        method: "DELETE",
+      },
+    );
+    const afterDesiredDelete = await getJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+    );
+
+    expect(disabled.status).toBe(200);
+    expect(afterDesiredDelete.body.redirectIntents).toEqual([
+      expect.objectContaining({ enabled: false, fromHost: "www.example.com" }),
+    ]);
+    expect(afterDesiredDelete.body.appliedResources).toHaveLength(2);
+
+    const deleteJob = await postAdminJson<InstanceDomainProviderDeleteResponse>(
+      INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
+      { host: "www.example.com", runnerId: "runner-delete-redirects" },
+    );
+
+    expect(deleteJob.response.status).toBe(202);
+
+    if (deleteJob.body.status !== "ready") {
+      throw new Error("Redirect delete did not create a job.");
+    }
+
+    expect(deleteJob.body.targets.map((target) => target.kind)).toEqual([
+      "cloudflare-dns-records",
+      "cloudflare-redirect-rule",
+    ]);
+
+    await postAdminJson<InstanceDomainProviderDeleteJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH}/${deleteJob.body.job.jobId}/result`,
+      {
+        resources: deleteJob.body.targets.map((target) => ({
+          action: "deleted",
+          host: target.host,
+          kind: target.kind,
+          logicalId: target.logicalId,
+        })),
+        runnerId: "runner-delete-redirects",
+        status: "succeeded",
+      },
+    );
+
+    const afterProviderDelete = await getJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+    );
+
+    expect(afterProviderDelete.body.appliedResources).toEqual([]);
+    expect(afterProviderDelete.body.auditEvents.map((event) => event.action)).toEqual([
+      "created",
+      "created",
+      "deleted",
+      "deleted",
+    ]);
   });
 });
 
@@ -350,6 +473,22 @@ async function postAdminJson<T>(path: string, body: unknown) {
 
   return {
     body: (await response.json()) as T,
+    response,
+  };
+}
+
+async function deleteAdminJson(path: string) {
+  const response = await harness.fetch(path, {
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+    },
+    method: "DELETE",
+  });
+
+  expect(response.status).toBe(200);
+
+  return {
+    body: (await response.json()) as unknown,
     response,
   };
 }

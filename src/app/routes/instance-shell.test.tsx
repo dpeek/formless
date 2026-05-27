@@ -145,6 +145,7 @@ describe("instance shell route view", () => {
             {
               accountId: "account-123",
               action: "created",
+              alchemyResourceId: "primary-custom-domain-dpeek-com-publicsite-personal",
               appliedAt: "2026-05-26T00:00:00.000Z",
               host: "dpeek.com",
               installId: "personal",
@@ -194,6 +195,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("Personal Site");
     expect(html).toContain("Public Site");
     expect(html).toContain("Remove");
+    expect(html).toContain("Delete provider");
     expect(html).toContain("Add");
   });
 
@@ -206,6 +208,7 @@ describe("instance shell route view", () => {
             {
               accountId: "account-123",
               action: "created",
+              alchemyResourceId: "primary-custom-domain-admin-example-com-instance",
               appliedAt: "2026-05-26T00:00:00.000Z",
               host: "admin.example.com",
               profile: "instance",
@@ -219,6 +222,22 @@ describe("instance shell route view", () => {
           ],
           domainMappingSubmitting: false,
           domainMappings: [],
+          domainProviderAppliedResources: [
+            {
+              accountId: "account-123",
+              action: "created",
+              alchemyResourceId: "primary-redirect-dns-www-example-com",
+              appliedAt: "2026-05-27T00:00:00.000Z",
+              host: "www.example.com",
+              kind: "cloudflare-dns-records",
+              logicalId: "primary-redirect-dns-www-example-com",
+              resourceId: "dns-1",
+              resourceJson: "{}",
+              updatedAt: "2026-05-27T00:00:00.000Z",
+              zoneId: "zone-1",
+              zoneName: "example.com",
+            },
+          ],
           domainRedirectIntents: [
             {
               createdAt: "2026-05-27T00:00:00.000Z",
@@ -251,6 +270,7 @@ describe("instance shell route view", () => {
     expect(html).toContain("www.example.com");
     expect(html).toContain("example.com");
     expect(html).toContain("Add redirect");
+    expect(html).toContain("Delete provider");
   });
 });
 
