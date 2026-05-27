@@ -22,6 +22,8 @@ import type { SiteBlockNode, SitePlacementNode } from "../../shared/protocol.ts"
 
 const FEATURE_MEDIA_SLOT = "media";
 const FEATURE_ACTIONS_SLOT = "actions";
+const siteMarkdownLinkClassName =
+  "[&_a]:text-[color:var(--site-link)] [&_a]:decoration-[color:var(--site-link-decoration)] [&_a]:underline-offset-4 [&_a:hover]:decoration-[color:var(--site-link)]";
 
 export const sitePageRendererParts = {
   Footer: SiteRendererFooter,
@@ -154,7 +156,7 @@ function FeatureBlock({ block }: { block: SiteBlockNode }) {
         </h2>
         {block.body ? (
           <MarkdownRenderer
-            className="text-base leading-7 text-zinc-700 dark:text-zinc-300"
+            className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
             content={block.body}
             minHeadingLevel={3}
           />
@@ -216,7 +218,7 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
       ) : null}
       {block.body ? (
         <MarkdownRenderer
-          className="text-base leading-7 text-zinc-700 dark:text-zinc-300"
+          className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
           content={block.body}
           minHeadingLevel={2}
         />
@@ -321,7 +323,7 @@ function ContentSummaryBody({ block }: { block: SiteBlockNode }) {
   if (block.type === "project") {
     return (
       <MarkdownRenderer
-        className="text-sm text-zinc-600 dark:text-zinc-300 [&_a]:pointer-events-auto [&_a]:relative [&_a]:z-30"
+        className={`text-sm text-zinc-600 dark:text-zinc-300 [&_a]:pointer-events-auto [&_a]:relative [&_a]:z-30 ${siteMarkdownLinkClassName}`}
         content={block.body}
         minHeadingLevel={4}
       />

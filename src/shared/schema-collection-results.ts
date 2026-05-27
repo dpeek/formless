@@ -83,6 +83,32 @@ export function parseCollectionResult(
     };
   }
 
+  if (value.type === "record") {
+    assertExactKeys(`Collection view "${viewName}" result`, value, ["type", "itemView"]);
+
+    if (typeof value.itemView !== "string" || value.itemView.trim() === "") {
+      throw new Error(`Collection view "${viewName}" result itemView must be a non-empty string.`);
+    }
+
+    const itemView = itemViews[value.itemView];
+    if (!itemView) {
+      throw new Error(
+        `Collection view "${viewName}" result references unknown item view "${value.itemView}".`,
+      );
+    }
+
+    if (itemView.entity !== entityName) {
+      throw new Error(
+        `Collection view "${viewName}" result item view "${value.itemView}" must use entity "${entityName}".`,
+      );
+    }
+
+    return {
+      type: "record",
+      itemView: value.itemView,
+    };
+  }
+
   if (value.type === "table") {
     assertExactKeys(
       `Collection view "${viewName}" result`,
@@ -293,7 +319,9 @@ export function parseCollectionResult(
     };
   }
 
-  throw new Error(`Collection view "${viewName}" result type must be "list", "table", or "tree".`);
+  throw new Error(
+    `Collection view "${viewName}" result type must be "list", "record", "table", or "tree".`,
+  );
 }
 
 function parseOptionalTreeMaxDepth(context: string, value: unknown): number | undefined {

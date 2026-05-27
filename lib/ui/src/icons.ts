@@ -19,11 +19,13 @@ import {
   Loader2Icon as LucideLoaderIcon,
   MenuIcon as LucideMenuIcon,
   MinusIcon as LucideMinusIcon,
+  MoonIcon as LucideMoonIcon,
   PilcrowIcon as LucideParagraphIcon,
   PipetteIcon as LucideColorPickIcon,
   PlusIcon as LucidePlusIcon,
   QuoteIcon as LucideQuoteIcon,
   RocketIcon as LucidePublishIcon,
+  SunIcon as LucideSunIcon,
   StrikethroughIcon as LucideStrikethroughIcon,
   XIcon as LucideXIcon,
 } from "lucide-react";
@@ -60,6 +62,8 @@ export const TextParagraphIcon = LucideParagraphIcon;
 export const TextQuoteIcon = LucideQuoteIcon;
 export const TextStrikethroughIcon = LucideStrikethroughIcon;
 export const TreeDisclosureIcon = LucideChevronRightIcon;
+export const SiteThemeDarkIcon = LucideMoonIcon;
+export const SiteThemeLightIcon = LucideSunIcon;
 
 export const ControlAddIcon = AddIcon;
 export const ControlCalendarIcon = CalendarIcon;

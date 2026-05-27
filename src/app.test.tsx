@@ -1879,6 +1879,7 @@ describe("public site renderer", () => {
     expect(html).toContain('href="/pages/resume"');
     expect(html).toContain("Resume");
     expect(html).toContain("data-site-theme-toggle");
+    expect(html).toContain('data-site-theme-icon="light"');
     expect(html).toContain('aria-label="Switch to dark mode"');
     expect(html).toContain('data-site-theme="light"');
     expect(html).not.toMatch(/href="\/pages\/home"[^>]*>Formless<\/a>/);
@@ -1896,7 +1897,8 @@ describe("public site renderer", () => {
     const projectsHtml = renderSitePage("projects");
 
     expect(linkHtml(homeHtml, "/pages/home")).toContain('data-site-nav-active="true"');
-    expect(linkHtml(homeHtml, "/pages/home")).toContain("decoration-dashed");
+    expect(linkHtml(homeHtml, "/pages/home")).toContain("text-[color:var(--site-link)]");
+    expect(linkHtml(homeHtml, "/pages/home")).not.toContain("decoration-dashed");
     expect(linkHtml(homeHtml, "/pages/blog")).not.toContain('data-site-nav-active="true"');
     expect(linkHtml(blogHtml, "/pages/blog")).toContain('data-site-nav-active="true"');
     expect(linkHtml(postHtml, "/pages/blog")).toContain('data-site-nav-active="true"');
@@ -2845,9 +2847,16 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Label"');
     expect(html).toContain('aria-label="Description"');
     expect(html).toContain('aria-label="Edit Icon"');
-    expect(html).toContain('data-slot="table"');
+    expect(html).toContain('aria-label="Accent color"');
+    expect(html).toContain('aria-label="Background color"');
+    expect(html).toContain('aria-label="Site record"');
+    expect(html).toContain('data-formless-record-result="true"');
+    expect(html).not.toContain('data-slot="table"');
+    expect(html).not.toContain('role="grid"');
     expect(html).toContain("Example Site");
     expect(html).toContain("A public test site.");
+    expect(html).toContain('value="#C98A2E"');
+    expect(html).toContain('value="#09090B"');
     expect(html).not.toContain('aria-label="Pages roots"');
     expect(html).not.toContain('aria-label="Posts roots"');
     expect(html).not.toContain('aria-label="Create Site"');
@@ -2864,8 +2873,14 @@ describe("generated collection home", () => {
     expect(html).toContain('aria-label="Description"');
     expect(html).toContain('aria-label="Edit Icon"');
     expect(html).toContain('data-web-field-kind="icon"');
+    expect(html).toContain('aria-label="Accent color"');
+    expect(html).toContain('aria-label="Background color"');
+    expect(html).toContain('aria-label="Site record"');
+    expect(html).toContain('data-formless-record-result="true"');
     expect(html).toContain("Example Site");
     expect(html).toContain("A public test site.");
+    expect(html).toContain('value="#C98A2E"');
+    expect(html).toContain('value="#09090B"');
     expect(html).not.toContain(">Key<");
     expect(html).not.toContain('aria-label="Create Site"');
     expect(html).not.toContain('data-formless-delete-record="rec_site_settings_primary"');

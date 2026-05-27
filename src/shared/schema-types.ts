@@ -414,6 +414,10 @@ export type CollectionResultSchema =
       ordering?: ResultOrderingSchema;
     }
   | {
+      type: "record";
+      itemView: string;
+    }
+  | {
       type: "table";
       tableView: string;
       ordering?: ResultOrderingSchema;

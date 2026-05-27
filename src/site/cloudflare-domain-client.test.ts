@@ -211,6 +211,48 @@ describe("Cloudflare domain API client", () => {
     expect(plan.hosts[1]?.blockers.map((issue) => issue.code)).toEqual([]);
   });
 
+  it("allows apex Worker Custom Domains to coexist with mail and verification DNS records", async () => {
+    const plan = await planCloudflareWorkerDomainPreflight({
+      accountId: "account-123",
+      client: {
+        ...fakeCloudflareDomainClient(),
+        listDnsRecords: async ({ name }) =>
+          name === "dpeek.com"
+            ? [
+                {
+                  content: "mx01.mail.icloud.com",
+                  id: "dns-mx-1",
+                  name: "dpeek.com",
+                  type: "MX",
+                },
+                {
+                  content: '"apple-domain=sZpGHsJrm1GKJi0w"',
+                  id: "dns-txt-1",
+                  name: "dpeek.com",
+                  type: "TXT",
+                },
+              ]
+            : [],
+        listWorkerRoutes: async () => [],
+      },
+      intents: [{ host: "dpeek.com", profile: "publicSite", targetInstallId: "david" }],
+      policy: "create-only",
+      workerName: "personal",
+    });
+
+    expect(plan.hosts[0]).toMatchObject({
+      actions: ["create-worker-custom-domain"],
+      apex: true,
+      dnsRecords: [
+        { type: "MX", content: "mx01.mail.icloud.com" },
+        { type: "TXT", content: '"apple-domain=sZpGHsJrm1GKJi0w"' },
+      ],
+      status: "warning",
+    });
+    expect(plan.hosts[0]?.blockers.map((issue) => issue.code)).toEqual([]);
+    expect(plan.hosts[0]?.warnings.map((issue) => issue.code)).toEqual(["apex-domain"]);
+  });
+
   it("applies create and adopt host actions from a clean preflight plan", async () => {
     const plan = await planCloudflareWorkerDomainPreflight({
       accountId: "account-123",

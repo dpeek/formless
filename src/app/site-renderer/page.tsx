@@ -1,6 +1,7 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
 
 import { primaryImagePlacement, type PublicSitePrimaryImageVariant } from "./media.tsx";
+import { publicSiteThemeVariables } from "./theme-style.ts";
 import type { PublicSiteThemeController } from "./theme.ts";
 import type { SiteBlockNode, SitePageTree, SitePlacementNode } from "../../shared/protocol.ts";
 import type { SitePageLinkMode } from "./links.ts";
@@ -40,6 +41,7 @@ export function SitePageShell({
 }) {
   const frame = tree.frame;
   const { Footer, Header } = parts;
+  const themeVariables = publicSiteThemeVariables(tree.site, theme.theme);
 
   return (
     <SitePageLinkModeContext.Provider value={linkMode}>
@@ -49,10 +51,11 @@ export function SitePageShell({
             <article
               className={
                 theme.theme === "dark"
-                  ? "dark flex min-h-dvh flex-col bg-zinc-950 text-zinc-100"
-                  : "flex min-h-dvh flex-col bg-white text-zinc-950"
+                  ? "dark flex min-h-dvh flex-col text-zinc-100"
+                  : "flex min-h-dvh flex-col text-zinc-950"
               }
               data-site-theme={theme.theme}
+              style={themeVariables}
             >
               {frame.header ? <Header block={frame.header} /> : null}
               <SiteRoutePage parts={parts} tree={tree} />

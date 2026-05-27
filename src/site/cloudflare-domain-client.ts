@@ -108,6 +108,8 @@ export type CloudflareDomainApplyResult = {
   workerName: string;
 };
 
+const workerCustomDomainDnsConflictTypes = new Set(["A", "AAAA", "CNAME"]);
+
 export type CreateFetchCloudflareDomainClientInput = {
   apiToken: string;
   baseUrl?: string;
@@ -395,10 +397,14 @@ function buildHostPlan(input: {
     });
   }
 
-  if (input.dnsRecords.length > 0) {
+  const blockingDnsRecords = input.dnsRecords.filter((record) =>
+    workerCustomDomainDnsConflictTypes.has(record.type.toUpperCase()),
+  );
+
+  if (blockingDnsRecords.length > 0) {
     blockers.push({
       code: "dns-record-conflict",
-      message: `${input.intent.host} has existing DNS records.`,
+      message: `${input.intent.host} has existing DNS records that can conflict with Worker Custom Domain routing.`,
     });
   }
 

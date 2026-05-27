@@ -40,7 +40,7 @@ export function SiteLinkBlock({
   return (
     <a
       aria-current={isActive ? "page" : undefined}
-      className={linkClassName(isActive, isFooterNavigation)}
+      className={linkClassName(isActive, isHeaderNavigation, isFooterNavigation)}
       data-site-nav-active={isActive ? "true" : undefined}
       href={href}
       rel={siteLinkRel(href)}
@@ -73,7 +73,7 @@ export function SiteFooterSocialLink({ placement }: { placement: SitePlacementNo
   return (
     <a
       aria-label={label}
-      className="inline-flex size-8 items-center justify-center text-current transition hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
+      className="inline-flex size-8 items-center justify-center text-current transition hover:text-[color:var(--site-link)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--site-focus)]"
       href={href}
       rel={siteLinkRel(href)}
       target={siteLinkTarget(href)}
@@ -100,13 +100,25 @@ export function blockHref(
   return undefined;
 }
 
-function linkClassName(isActive: boolean, isFooterNavigation: boolean): string {
+function linkClassName(
+  isActive: boolean,
+  isHeaderNavigation: boolean,
+  isFooterNavigation: boolean,
+): string {
   const iconGap = isFooterNavigation ? "gap-2.5" : "gap-1.5";
-  const base = `inline-flex max-w-full items-center ${iconGap} whitespace-nowrap font-medium text-current underline underline-offset-4 transition`;
+  const base = `inline-flex max-w-full items-center ${iconGap} whitespace-nowrap font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--site-focus)]`;
 
-  return isActive
-    ? `${base} decoration-current decoration-dashed hover:decoration-solid`
-    : `${base} decoration-transparent hover:decoration-current`;
+  if (isHeaderNavigation) {
+    return isActive
+      ? `${base} text-[color:var(--site-link)] no-underline`
+      : `${base} text-current no-underline hover:text-[color:var(--site-link)]`;
+  }
+
+  if (isFooterNavigation) {
+    return `${base} text-current no-underline hover:text-[color:var(--site-link)]`;
+  }
+
+  return `${base} text-[color:var(--site-link)] underline decoration-[color:var(--site-link-decoration)] underline-offset-4 hover:decoration-[color:var(--site-link)]`;
 }
 
 export function siteLinkRel(href: string): "noreferrer" | undefined {

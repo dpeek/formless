@@ -34,7 +34,7 @@ Last updated: 2026-05-26
 - Schema parts: entities, relationships, queries, unions, read models, item views, table views, views, screens.
 - Generic mutation policies cover `create`, `patch`, and `delete`.
 - View types: `collection`, `create`, `edit`.
-- Collection result types: `list`, `table`, `tree`.
+- Collection result types: `list`, `record`, `table`, `tree`.
 - Result ordering parser: `src/shared/schema-ordering.ts`.
 - Collection result ordering works for `list`, `table`, and `tree` results.
 - Result ordering uses a non-integer number field, optional field scopes, and `moveMenu` or `dragHandle` presentations.

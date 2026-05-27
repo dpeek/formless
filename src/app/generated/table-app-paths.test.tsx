@@ -73,16 +73,17 @@ describe("generated table app paths", () => {
     expect(html).not.toContain('data-formless-delete-record="rec_task_overdue"');
   });
 
-  it("keeps Site settings tables on the React Aria table path without create or delete controls", () => {
-    const html = renderGeneratedTableCollectionHtml({
+  it("renders Site settings as a record form without create or delete controls", () => {
+    const html = renderGeneratedCollectionHtml({
       records: testSiteSeedRecords,
       schema: siteSourceSchema,
       schemaKey: "site",
       viewName: "siteSettingsHome",
     });
 
-    expect(html).toContain('aria-label="Site records"');
-    expect(html).toContain('role="grid"');
+    expect(html).toContain('aria-label="Site record"');
+    expect(html).toContain('data-formless-record-result="true"');
+    expect(html).not.toContain('role="grid"');
     expect(html).toContain('aria-label="Label"');
     expect(html).toContain('aria-label="Description"');
     expect(html).toContain('aria-label="Edit Icon"');
@@ -112,6 +113,43 @@ describe("generated table app paths", () => {
     expect(html).not.toContain('data-formless-delete-record="rec_site_place_home_hero"');
   });
 });
+
+function renderGeneratedCollectionHtml({
+  records,
+  schema,
+  schemaKey,
+  selectedContextRecordId,
+  selectedQuery,
+  viewName,
+}: {
+  records: StoredRecord[];
+  schema: AppSchema;
+  schemaKey: SchemaKey;
+  selectedContextRecordId?: string | null;
+  selectedQuery?: HomeQueryTabConfig;
+  viewName: string;
+}) {
+  const model = requiredCollectionModel(schema, viewName);
+
+  applyBootstrapResponse(
+    bootstrapResponse(schema, records, {
+      cursor: 1,
+      schemaUpdatedAt: "2026-05-22T00:00:00.000Z",
+    }),
+    schemaKey,
+  );
+
+  return renderToStaticMarkup(
+    <HomeCollection
+      collection={model.collection}
+      onSelectContext={() => {}}
+      onSelectQuery={() => {}}
+      selectedContextRecordId={selectedContextRecordId}
+      selectedQuery={selectedQuery ?? model.collection.queries.defaultTab}
+      today="2026-05-22"
+    />,
+  );
+}
 
 function renderGeneratedTableCollectionHtml({
   records,
@@ -150,12 +188,18 @@ function renderGeneratedTableCollectionHtml({
   );
 }
 
-function requiredTableCollectionModel(schema: AppSchema, viewName: string): HomeViewModel {
+function requiredCollectionModel(schema: AppSchema, viewName: string): HomeViewModel {
   const model = selectCollectionModels(schema).find((candidate) => candidate.viewName === viewName);
 
   if (!model) {
     throw new Error(`Missing collection model "${viewName}".`);
   }
+
+  return model;
+}
+
+function requiredTableCollectionModel(schema: AppSchema, viewName: string): HomeViewModel {
+  const model = requiredCollectionModel(schema, viewName);
 
   if (model.result.type !== "table") {
     throw new Error(`Collection model "${viewName}" must render a table.`);

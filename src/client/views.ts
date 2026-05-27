@@ -318,6 +318,12 @@ export type HomeResultConfig =
       ordering?: ResultOrderingConfig;
     }
   | {
+      type: "record";
+      itemViewName: string;
+      recordFields: RecordFieldConfig[];
+      recordUnion?: RecordUnionPresentationConfig;
+    }
+  | {
       type: "table";
       tableViewName: string;
       columns: TableColumnConfig[];
@@ -915,6 +921,22 @@ function selectResult(
       ...(branches === undefined ? {} : { branches }),
       ...(composition === undefined ? {} : { composition }),
       maxDepth: collectionView.result.maxDepth ?? 8,
+    };
+  }
+
+  if (collectionView.result.type === "record") {
+    const itemView = schema.itemViews[collectionView.result.itemView];
+
+    if (!itemView) {
+      throw new Error(`Missing item view "${collectionView.result.itemView}".`);
+    }
+    const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
+
+    return {
+      type: "record",
+      itemViewName: collectionView.result.itemView,
+      recordFields: selectRecordFields(itemView, entity),
+      ...(recordUnion === undefined ? {} : { recordUnion }),
     };
   }
 

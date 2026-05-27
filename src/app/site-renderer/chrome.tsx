@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { SiteThemeDarkIcon, SiteThemeLightIcon } from "@dpeek/formless-ui/icons";
 
 import { displayLabel, PlainText } from "./display.tsx";
 import { SiteFooterSocialLink } from "./link-rendering.tsx";
@@ -89,18 +90,20 @@ export function SiteHeaderNavGroup({
 function SiteThemeToggle() {
   const { theme, toggleTheme } = useSiteTheme();
   const nextTheme = theme === "dark" ? "light" : "dark";
+  const ThemeIcon = theme === "dark" ? SiteThemeDarkIcon : SiteThemeLightIcon;
 
   return (
     <button
       aria-label={`Switch to ${nextTheme} mode`}
       aria-pressed={theme === "dark"}
-      className="flex h-8 shrink-0 items-center justify-center rounded-md px-2.5 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 hover:text-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-400 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 dark:focus-visible:ring-zinc-600"
+      className="flex size-8 shrink-0 items-center justify-center rounded-md text-zinc-700 outline-none transition hover:bg-zinc-100 hover:text-[color:var(--site-link)] focus-visible:ring-2 focus-visible:ring-[color:var(--site-focus)] dark:text-zinc-300 dark:hover:bg-zinc-800"
+      data-site-theme-icon={theme}
       data-site-theme-toggle
       onClick={toggleTheme}
       title={`Switch to ${nextTheme} mode`}
       type="button"
     >
-      {theme === "dark" ? "Light" : "Dark"}
+      <ThemeIcon aria-hidden="true" className="size-4" strokeWidth={2} />
     </button>
   );
 }

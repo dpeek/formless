@@ -826,6 +826,19 @@ function CollectionResult({
     );
   }
 
+  if (result.type === "record") {
+    return (
+      <RecordDetail
+        entity={entity}
+        entityName={entityName}
+        query={query}
+        queryContext={queryContext}
+        recordFields={result.recordFields}
+        recordUnion={result.recordUnion}
+      />
+    );
+  }
+
   if (result.type === "tree") {
     return (
       <RecordTree
@@ -850,6 +863,68 @@ function CollectionResult({
       recordFields={result.recordFields}
       recordUnion={result.recordUnion}
     />
+  );
+}
+
+function RecordDetail({
+  entity,
+  entityName,
+  query,
+  queryContext,
+  recordFields,
+  recordUnion,
+}: {
+  entity: EntitySchema;
+  entityName: string;
+  query: HomeQueryTabConfig["query"];
+  queryContext?: QueryEvaluationContext;
+  recordFields: RecordFieldConfig[];
+  recordUnion?: RecordUnionPresentationConfig;
+}) {
+  const canPatch = entity.mutations.patch.enabled;
+  const canDelete = entity.mutations.delete.enabled;
+  const recordIds = useEntityRecordIdsMatchingQuery(entityName, query, queryContext);
+  const recordId = recordIds[0] ?? null;
+  const record = useRecord(recordId ?? "");
+  const warnings = useRecordReadinessWarnings(recordId ?? "");
+
+  if (!recordId) {
+    return <p className="text-sm text-slate-600">No {entity.label.toLowerCase()} record found.</p>;
+  }
+
+  const visibleFields = selectRecordFieldsForActiveUnion(recordFields, recordUnion, record);
+
+  return (
+    <section
+      aria-label={`${entity.label} record`}
+      className="max-w-3xl space-y-4"
+      data-formless-record-result="true"
+    >
+      <div className="grid min-w-0 gap-4">
+        {visibleFields.map((fieldConfig) => (
+          <RecordFieldEditor
+            canPatch={canPatch}
+            entityName={entityName}
+            fieldConfig={fieldConfig}
+            key={recordFieldEditorKey(entityName, recordId, fieldConfig.fieldName)}
+            recordId={recordId}
+            showLabel={true}
+          />
+        ))}
+        {canDelete ? (
+          <div>
+            <DeleteRecordButton
+              entityLabel={entity.label}
+              entityName={entityName}
+              labelFields={visibleFields}
+              recordId={recordId}
+              triggerData={{ "data-formless-delete-record": recordId }}
+            />
+          </div>
+        ) : null}
+      </div>
+      {warnings.length > 0 ? <RecordReadinessWarnings warnings={warnings} /> : null}
+    </section>
   );
 }
 

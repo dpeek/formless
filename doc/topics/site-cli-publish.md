@@ -170,6 +170,7 @@ Last updated: 2026-05-26
 - Domain plan filters provider intents to enabled profile mappings.
 - Domain plan uses CLI-side Cloudflare API reads for active zones, Worker Custom Domains, Worker Routes, and DNS records.
 - Domain plan reports apex-host risk, DNS conflicts, Worker Route conflicts, and existing Worker Custom Domains.
+- Domain plan treats exact-host `A`, `AAAA`, and `CNAME` records as Worker Custom Domain DNS conflicts; mail and verification records such as `MX` and `TXT` remain visible in the plan but do not block apply.
 - Domain plan does not mutate Cloudflare provider state.
 - Domain apply reruns preflight before provider mutation.
 - Domain apply default policy is `create-only`.

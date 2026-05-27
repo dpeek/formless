@@ -4282,7 +4282,7 @@ describe("source schemas", () => {
     expect(parsedSchemas.map((schema) => Object.keys(schema.tableViews))).toEqual([
       [],
       ["rateTable"],
-      ["siteSettingsTable", "blockTable", "blockPlacementTable"],
+      ["blockTable", "blockPlacementTable"],
     ]);
     expect(
       parsedSchemas.map((schema) =>
@@ -4294,9 +4294,6 @@ describe("source schemas", () => {
       [],
       ["referenceField", "field", "field", "field", "computed"],
       [
-        "field",
-        "field",
-        "field",
         "field",
         "field",
         "field",
@@ -4532,6 +4529,18 @@ describe("personal site sample schema", () => {
         label: "Icon",
         format: "icon",
       },
+      accentColor: {
+        type: "text",
+        required: false,
+        label: "Accent color",
+        format: "color",
+      },
+      backgroundColor: {
+        type: "text",
+        required: false,
+        label: "Background color",
+        format: "color",
+      },
     });
     expect(schema.entities.site?.mutations).toEqual({
       create: { enabled: false },
@@ -4765,18 +4774,16 @@ describe("personal site sample schema", () => {
         { ref: { kind: "value", name: "type" }, op: "eq", value: "footer" },
       ],
     });
-    expect(Object.keys(schema.tableViews)).toEqual([
-      "siteSettingsTable",
-      "blockTable",
-      "blockPlacementTable",
-    ]);
-    expect(schema.tableViews.siteSettingsTable).toMatchObject({
+    expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
+    expect(schema.itemViews.siteSettingsForm).toMatchObject({
       entity: "site",
-      columns: [
-        { type: "field", field: "label", editor: "text", commit: "field-commit" },
-        { type: "field", field: "description", editor: "textarea", commit: "field-commit" },
-        { type: "field", field: "icon", editor: "icon", commit: "field-commit" },
-      ],
+      fields: {
+        label: { editor: "text", commit: "field-commit" },
+        description: { editor: "textarea", commit: "field-commit" },
+        icon: { editor: "icon", commit: "field-commit" },
+        accentColor: { editor: "color", commit: "field-commit" },
+        backgroundColor: { editor: "color", commit: "field-commit" },
+      },
     });
     expect(schema.itemViews.blockTreeNode).toMatchObject({
       entity: "block",
@@ -4948,7 +4955,7 @@ describe("personal site sample schema", () => {
       navigation: { primary: false },
       queries: [{ query: "sitePrimary" }],
       defaultQuery: "sitePrimary",
-      result: { type: "table", tableView: "siteSettingsTable" },
+      result: { type: "record", itemView: "siteSettingsForm" },
     });
     expect(schema.views.siteSettingsHome).not.toHaveProperty("actions");
     expect(schema.views.siteCompositionHome).toMatchObject({

@@ -186,6 +186,8 @@ function projectSiteSettings(
     label,
     ...optionalStringField("description", settings.values.description),
     ...optionalStringField("icon", settings.values.icon),
+    ...optionalStringField("accentColor", settings.values.accentColor),
+    ...optionalStringField("backgroundColor", settings.values.backgroundColor),
   };
 }
 

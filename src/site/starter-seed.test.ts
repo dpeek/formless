@@ -21,7 +21,7 @@ describe("Site starter seed", () => {
     expect(serializedSeed()).not.toContain("OpenSurf");
   });
 
-  it("includes one primary Site settings record with authored label, description, and SVG icon", () => {
+  it("includes one primary Site settings record with authored label, description, SVG icon, and colors", () => {
     const settings = siteSeedRecords.filter((record) => record.entity === "site");
 
     expect(settings).toHaveLength(1);
@@ -30,6 +30,8 @@ describe("Site starter seed", () => {
       label: "Starter Site",
       description: "A small starter site.",
       icon: expect.stringMatching(/^<svg[\s\S]*<\/svg>$/),
+      accentColor: "#C98A2E",
+      backgroundColor: "#09090B",
     });
     expect(settings[0]?.values).not.toHaveProperty("png");
     expect(settings[0]?.values).not.toHaveProperty("ico");

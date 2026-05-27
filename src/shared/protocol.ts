@@ -228,6 +228,8 @@ export type SiteSettingsNode = {
   label: string;
   description?: string;
   icon?: string;
+  accentColor?: string;
+  backgroundColor?: string;
 };
 
 export type SitePageFrame = {

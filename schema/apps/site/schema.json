@@ -25,6 +25,18 @@
           "required": false,
           "label": "Icon",
           "format": "icon"
+        },
+        "accentColor": {
+          "type": "text",
+          "required": false,
+          "label": "Accent color",
+          "format": "color"
+        },
+        "backgroundColor": {
+          "type": "text",
+          "required": false,
+          "label": "Background color",
+          "format": "color"
         }
       },
       "mutations": {
@@ -600,6 +612,31 @@
     }
   },
   "itemViews": {
+    "siteSettingsForm": {
+      "entity": "site",
+      "fields": {
+        "label": {
+          "editor": "text",
+          "commit": "field-commit"
+        },
+        "description": {
+          "editor": "textarea",
+          "commit": "field-commit"
+        },
+        "icon": {
+          "editor": "icon",
+          "commit": "field-commit"
+        },
+        "accentColor": {
+          "editor": "color",
+          "commit": "field-commit"
+        },
+        "backgroundColor": {
+          "editor": "color",
+          "commit": "field-commit"
+        }
+      }
+    },
     "blockListItem": {
       "entity": "block",
       "fields": {
@@ -899,32 +936,6 @@
     }
   },
   "tableViews": {
-    "siteSettingsTable": {
-      "entity": "site",
-      "columns": [
-        {
-          "type": "field",
-          "field": "label",
-          "editor": "text",
-          "commit": "field-commit",
-          "width": "lg"
-        },
-        {
-          "type": "field",
-          "field": "description",
-          "editor": "textarea",
-          "commit": "field-commit",
-          "width": "lg"
-        },
-        {
-          "type": "field",
-          "field": "icon",
-          "editor": "icon",
-          "commit": "field-commit",
-          "width": "sm"
-        }
-      ]
-    },
     "blockTable": {
       "entity": "block",
       "columns": [
@@ -1089,8 +1100,8 @@
       ],
       "defaultQuery": "sitePrimary",
       "result": {
-        "type": "table",
-        "tableView": "siteSettingsTable"
+        "type": "record",
+        "itemView": "siteSettingsForm"
       }
     },
     "blockHome": {

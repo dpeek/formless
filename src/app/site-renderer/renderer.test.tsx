@@ -23,8 +23,12 @@ describe("public Site renderer characterization", () => {
 
     expect(PUBLIC_SITE_THEME_STORAGE_KEY).toBe("formless:public-site:theme");
     expect(html).toContain('data-site-theme="light"');
+    expect(html).toContain("background-color:var(--site-bg)");
+    expect(html).toContain("--site-bg:rgb(248 248 248)");
+    expect(html).toContain("--site-link:rgb(137 94 31)");
     expect(html).toContain("flex min-h-dvh flex-col");
     expect(html).toContain("data-site-theme-toggle");
+    expect(html).toContain('data-site-theme-icon="light"');
     expect(html).toContain('aria-label="Switch to dark mode"');
     expect(html).toContain("data-site-header");
     expect(html).toContain("data-site-footer");
@@ -33,7 +37,8 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain("data-site-header-mobile-primary");
     expect(html).toContain("data-site-header-mobile-menu");
     expect(linkHtml(html, "/pages/home")).toContain('data-site-nav-active="true"');
-    expect(linkHtml(html, "/pages/home")).toContain("decoration-dashed");
+    expect(linkHtml(html, "/pages/home")).toContain("text-[color:var(--site-link)]");
+    expect(linkHtml(html, "/pages/home")).not.toContain("decoration-dashed");
     expect(linkHtml(html, "/pages/blog")).not.toContain('data-site-nav-active="true"');
     expect(linkHtml(html, "https://github.com/dpeek")).toContain('target="_blank"');
     expect(linkHtml(html, "https://github.com/dpeek")).toContain('rel="noreferrer"');
@@ -110,10 +115,12 @@ describe("public Site renderer characterization", () => {
     expect(html).toContain("data-site-feature-media");
     expect(html).toContain("data-site-feature-actions");
     expect(html).toContain('data-web-markdown-renderer="shared"');
+    expect(html).toContain("[&amp;_a]:text-[color:var(--site-link)]");
     expect(html).toContain("<strong");
     expect(html).not.toContain("**slotted media**");
     expect(html).toContain('href="https://example.com/feature"');
     expect(actionHtml).toContain("Read the guide");
+    expect(actionHtml).toContain("text-[color:var(--site-link)]");
     expect(actionHtml).toContain('target="_blank"');
     expect(actionHtml).toContain('rel="noreferrer"');
     expect(html).toContain('src="/api/formless/media/media/images/feature.webp"');
@@ -275,6 +282,7 @@ function renderSite(
     frame?: SitePageFrame;
     linkMode?: "preview" | "published";
     route?: SitePageTree["route"];
+    site?: SitePageTree["site"];
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -287,11 +295,20 @@ function siteTree(
   options: {
     frame?: SitePageFrame;
     route?: SitePageTree["route"];
+    site?: SitePageTree["site"];
   } = {},
 ): SitePageTree {
   return {
     page,
     frame: options.frame ?? defaultFrame(),
+    site:
+      options.site ??
+      ({
+        id: "site",
+        label: "Example Site",
+        accentColor: "#C98A2E",
+        backgroundColor: "#09090B",
+      } satisfies SitePageTree["site"]),
     meta: {
       slug: options.route?.slug ?? "home",
       generatedAt: "2026-05-19T00:00:00.000Z",

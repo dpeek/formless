@@ -10,6 +10,8 @@ import {
   ControlCopyIcon,
   CopyIcon,
   DragHandleIcon,
+  SiteThemeDarkIcon,
+  SiteThemeLightIcon,
   TableDragHandleIcon,
   TableSortIcon,
   TableTreeDisclosureIcon,
@@ -23,6 +25,8 @@ describe("icon intents", () => {
         <CopyIcon aria-label="Copy code" data-icon="copy" />
         <CloseIcon aria-hidden="true" data-icon="close" />
         <DragHandleIcon aria-hidden="true" data-icon="drag-handle" />
+        <SiteThemeLightIcon aria-hidden="true" data-icon="theme-light" />
+        <SiteThemeDarkIcon aria-hidden="true" data-icon="theme-dark" />
       </div>,
     );
 
@@ -30,8 +34,10 @@ describe("icon intents", () => {
     expect(markup).toContain('data-icon="copy"');
     expect(markup).toContain('data-icon="close"');
     expect(markup).toContain('data-icon="drag-handle"');
+    expect(markup).toContain('data-icon="theme-light"');
+    expect(markup).toContain('data-icon="theme-dark"');
     expect(markup).toContain('aria-label="Copy code"');
-    expect(markup.match(/<svg/g)?.length).toBe(4);
+    expect(markup.match(/<svg/g)?.length).toBe(6);
   });
 
   it("keeps compatibility control icon aliases", () => {

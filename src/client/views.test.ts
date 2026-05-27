@@ -1516,7 +1516,7 @@ describe("home view model collections", () => {
 
   it("exposes Site settings as a generated non-primary editor section", () => {
     const settingsModel = requiredCollectionModel(siteSourceSchema, "siteSettingsHome");
-    const columns = settingsModel.result.type === "table" ? settingsModel.result.columns : [];
+    const fields = settingsModel.result.type === "record" ? settingsModel.result.recordFields : [];
 
     expect(settingsModel.label).toBe("Settings");
     expect(settingsModel.entityName).toBe("site");
@@ -1524,32 +1524,37 @@ describe("home view model collections", () => {
     expect(settingsModel.context).toBeUndefined();
     expect(settingsModel.defaultQueryName).toBe("sitePrimary");
     expect(settingsModel.actions).toEqual([]);
-    expect(settingsModel.result.type).toBe("table");
-    expect(columns.map((column) => column.key)).toEqual([
-      "field:label",
-      "field:description",
-      "field:icon",
+    expect(settingsModel.result.type).toBe("record");
+    expect(settingsModel.result.type === "record" ? settingsModel.result.itemViewName : null).toBe(
+      "siteSettingsForm",
+    );
+    expect(fields.map((field) => field.fieldName)).toEqual([
+      "label",
+      "description",
+      "icon",
+      "accentColor",
+      "backgroundColor",
     ]);
     expect(
-      columns.map((column) =>
-        column.type === "field"
-          ? {
-              fieldName: column.fieldName,
-              editor: column.editor,
-              commit: column.commit,
-              display: column.display,
-            }
-          : null,
-      ),
+      fields.map((field) => ({
+        fieldName: field.fieldName,
+        editor: field.editor,
+        commit: field.commit,
+      })),
     ).toEqual([
-      { fieldName: "label", editor: "text", commit: "field-commit", display: "editor" },
+      { fieldName: "label", editor: "text", commit: "field-commit" },
       {
         fieldName: "description",
         editor: "textarea",
         commit: "field-commit",
-        display: "editor",
       },
-      { fieldName: "icon", editor: "icon", commit: "field-commit", display: "editor" },
+      { fieldName: "icon", editor: "icon", commit: "field-commit" },
+      { fieldName: "accentColor", editor: "color", commit: "field-commit" },
+      {
+        fieldName: "backgroundColor",
+        editor: "color",
+        commit: "field-commit",
+      },
     ]);
   });
 
@@ -2557,30 +2562,36 @@ function summarizeHomeModel(model: HomeViewModel) {
             itemViewName: collection.result.itemViewName,
             fields: collection.result.recordFields.map((field) => field.fieldName),
           }
-        : collection.result.type === "tree"
+        : collection.result.type === "record"
           ? {
-              type: "tree",
-              relationshipName: collection.result.relationshipName,
-              childFieldName: collection.result.childFieldName,
-              childItemViewName: collection.result.childItemViewName,
-              childFields: collection.result.childRecordFields.map((field) => field.fieldName),
-              placementItemViewName: collection.result.placementItemViewName,
-              placementFields:
-                collection.result.placementRecordFields?.map((field) => field.fieldName) ?? [],
-              orderingField: collection.result.ordering?.fieldName ?? null,
-              orderingPresentations: collection.result.ordering?.presentations ?? [],
-              maxDepth: collection.result.maxDepth,
+              type: "record",
+              itemViewName: collection.result.itemViewName,
+              fields: collection.result.recordFields.map((field) => field.fieldName),
             }
-          : {
-              type: "table",
-              tableViewName: collection.result.tableViewName,
-              columns: collection.result.columns.map((column) => column.key),
-              footer: collection.result.footer?.map((slot) => ({
-                columnKey: slot.columnKey,
-                aggregateName: slot.aggregateName,
-                label: slot.label,
-              })),
-            },
+          : collection.result.type === "tree"
+            ? {
+                type: "tree",
+                relationshipName: collection.result.relationshipName,
+                childFieldName: collection.result.childFieldName,
+                childItemViewName: collection.result.childItemViewName,
+                childFields: collection.result.childRecordFields.map((field) => field.fieldName),
+                placementItemViewName: collection.result.placementItemViewName,
+                placementFields:
+                  collection.result.placementRecordFields?.map((field) => field.fieldName) ?? [],
+                orderingField: collection.result.ordering?.fieldName ?? null,
+                orderingPresentations: collection.result.ordering?.presentations ?? [],
+                maxDepth: collection.result.maxDepth,
+              }
+            : {
+                type: "table",
+                tableViewName: collection.result.tableViewName,
+                columns: collection.result.columns.map((column) => column.key),
+                footer: collection.result.footer?.map((slot) => ({
+                  columnKey: slot.columnKey,
+                  aggregateName: slot.aggregateName,
+                  label: slot.label,
+                })),
+              },
     actions: collection.actions.map(summarizeHomeAction),
   };
 }
