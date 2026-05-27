@@ -179,7 +179,7 @@ describe("Site project source", () => {
     expect(siteProjectMediaAssetsFromRecords(siteSeedRecords)).toEqual([]);
   });
 
-  it("rejects legacy Site media hrefs with a migration error", () => {
+  it("rejects unsupported legacy Site media hrefs", () => {
     expect(() =>
       siteProjectMediaAssetsFromRecords([
         blockRecord("legacy", "2026-05-05T00:00:01.000Z", {
@@ -189,7 +189,7 @@ describe("Site project source", () => {
         }),
       ]),
     ).toThrow(
-      'Legacy Site media href "/api/site/media/site/images/cover.png" must be migrated to core media before Site project media collection.',
+      'Unsupported legacy Site media href "/api/site/media/site/images/cover.png". Use core media before Site project media collection.',
     );
 
     expect(() =>
@@ -201,7 +201,7 @@ describe("Site project source", () => {
         }),
       ]),
     ).toThrow(
-      'Legacy Site media href "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png" must be migrated to core media before Site project media collection.',
+      'Unsupported legacy Site media href "/api/app-installs/site/personal/media/app-installs/personal/site/images/cover.png". Use core media before Site project media collection.',
     );
   });
 

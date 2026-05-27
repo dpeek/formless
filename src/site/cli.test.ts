@@ -2482,7 +2482,7 @@ describe("Formless Site CLI", () => {
           }),
         ],
       }),
-      capabilities: ["app-store-snapshots", "app-scoped-media"],
+      capabilities: ["app-store-snapshots"],
       media: {
         objects: [
           {

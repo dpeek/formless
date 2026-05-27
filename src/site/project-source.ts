@@ -12,8 +12,8 @@ import { buildSiteSeedRecordsFromSnapshot, validateSiteSeedRecords } from "./see
 import { buildSiteSourceSnapshot, type SiteSourceSnapshotOptions } from "./source-snapshot.ts";
 import {
   isLegacySiteMediaHref,
-  legacySiteMediaMigrationMessage,
   siteMediaContentTypeForKey,
+  unsupportedLegacySiteMediaMessage,
 } from "./source-media.ts";
 import { SITE_PROJECT_MEDIA_ROOT, SITE_PROJECT_RECORDS_FILE } from "./project-config.ts";
 
@@ -106,7 +106,7 @@ export function siteProjectMediaAssetsFromRecords(
 
     if (typeof href === "string") {
       if (isLegacySiteMediaHref(href)) {
-        throw new Error(legacySiteMediaMigrationMessage(href, "Site project media collection"));
+        throw new Error(unsupportedLegacySiteMediaMessage(href, "Site project media collection"));
       }
 
       const key = coreMediaKeyFromHref(href);

@@ -16,7 +16,6 @@ export const archiveCapabilities = [
   "installed-app-registry",
   "app-store-snapshots",
   "source-records",
-  "app-scoped-media",
   "core-media-assets",
 ] as const;
 

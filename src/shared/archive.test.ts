@@ -191,13 +191,22 @@ describe("portable archive protocol", () => {
     expect(reparsed.apps.map((app) => app.app.installId)).toEqual(["alpha", "zeta"]);
   });
 
-  it("parses old app-scoped media capability as restore compatibility input", () => {
-    const archive = appArchive({
-      capabilities: ["app-scoped-media"],
-      media: { objects: [legacySiteMediaObject("hero")] },
-    });
+  it("rejects old app-scoped media capability", () => {
+    expect(() =>
+      parseAppArchive({
+        ...appArchive(),
+        capabilities: ["app-scoped-media"],
+      }),
+    ).toThrow('App archive capabilities[0] "app-scoped-media" is unsupported.');
+  });
 
-    expect(parseAppArchive(archive)).toEqual(archive);
+  it("rejects old app-scoped media capability in instance archives", () => {
+    expect(() =>
+      parseInstanceArchive({
+        ...instanceArchive(),
+        capabilities: ["app-scoped-media"],
+      }),
+    ).toThrow('Instance archive capabilities[0] "app-scoped-media" is unsupported.');
   });
 });
 
@@ -288,15 +297,5 @@ function mediaObject(name: string): AppArchiveMediaObject {
     contentType: "image/png",
     byteSize: name.length,
     deliveryHref,
-  };
-}
-
-function legacySiteMediaObject(name: string): AppArchiveMediaObject {
-  return {
-    storageKey: `app-installs/personal/site/images/${name}.png`,
-    archivePath: `compat/legacy-site-media/${name}.png`,
-    contentType: "image/png",
-    byteSize: name.length,
-    deliveryHref: `/api/app-installs/site/personal/media/app-installs/personal/site/images/${name}.png`,
   };
 }

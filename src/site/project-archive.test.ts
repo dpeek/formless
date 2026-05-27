@@ -193,7 +193,7 @@ describe("Site project app archive import", () => {
     );
   });
 
-  it("fails with a migration error for legacy Site media hrefs", () => {
+  it("rejects unsupported legacy Site media hrefs", () => {
     expect(() =>
       buildSiteProjectAppArchiveEntry({
         exportedAt: now,
@@ -207,7 +207,7 @@ describe("Site project app archive import", () => {
         ],
       }),
     ).toThrow(
-      'Legacy Site media href "/api/site/media/site/images/cover.png" must be migrated to core media before Site project media collection.',
+      'Unsupported legacy Site media href "/api/site/media/site/images/cover.png". Use core media before Site project media collection.',
     );
   });
 });

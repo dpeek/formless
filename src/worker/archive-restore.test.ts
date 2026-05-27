@@ -188,7 +188,7 @@ describe("archive restore execution", () => {
     ]);
   });
 
-  it("rejects direct legacy Site media restore without compatibility normalization", async () => {
+  it("rejects direct legacy Site media restore as unsupported input", async () => {
     const identity = installedAppStorageIdentity({
       installId: "personal",
       packageAppKey: "site",
@@ -205,7 +205,7 @@ describe("archive restore execution", () => {
           putObject: async () => undefined,
         },
         identity,
-        mediaObject("personal", "hero"),
+        legacySiteMediaObject("personal", "hero"),
         pngBytes,
       ),
     ).rejects.toThrow(
@@ -342,7 +342,7 @@ function coreImageBlock(name: string): StoredRecord {
   };
 }
 
-function mediaObject(installId: string, name: string): AppArchiveMediaObject {
+function legacySiteMediaObject(installId: string, name: string): AppArchiveMediaObject {
   const storageKey = `app-installs/${installId}/site/images/${name}.png`;
 
   return {

@@ -37,7 +37,7 @@ import {
   type SiteProjectAppArchiveEntry,
   type SiteProjectAppArchiveMediaFile,
 } from "./project-archive.ts";
-import { isLegacySiteMediaHref, legacySiteMediaMigrationMessage } from "./source-media.ts";
+import { isLegacySiteMediaHref, unsupportedLegacySiteMediaMessage } from "./source-media.ts";
 
 export const PORTABLE_ARCHIVE_MANIFEST_FILE = "archive.json";
 
@@ -397,7 +397,7 @@ function appMediaReferences(records: readonly StoredRecord[]): AppArchiveMediaOb
         }
 
         if (isLegacySiteMediaHref(value)) {
-          throw new Error(legacySiteMediaMigrationMessage(value, "archive export"));
+          throw new Error(unsupportedLegacySiteMediaMessage(value, "archive export"));
         }
       }
     }

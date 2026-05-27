@@ -4,16 +4,13 @@ import {
   coreMediaHrefForKey,
   coreMediaKeyFromAssetId,
   coreMediaKeyFromHref,
-  imageMediaDeliveryFactsForAssetId,
   imageMediaContentTypeForKey,
   imageMediaExtensionForContentType,
   isRestorableImageMediaKey,
-  isValidMediaStorageKey,
 } from "../media/core.ts";
 
-export const SITE_MEDIA_ROUTE_PREFIX = "/api/site/media/";
-export const INSTALLED_SITE_MEDIA_ROUTE_PREFIX = "/api/app-installs/site/";
-export const SITE_IMAGE_KEY_PREFIX = "site/images/";
+const SITE_MEDIA_ROUTE_PREFIX = "/api/site/media/";
+const INSTALLED_SITE_MEDIA_ROUTE_PREFIX = "/api/app-installs/site/";
 export const SITE_SOURCE_MEDIA_ROOT = "schema/apps/site/media";
 
 export type SiteSourceMediaAsset = {
@@ -21,17 +18,6 @@ export type SiteSourceMediaAsset = {
   href: string;
   key: string;
   sourcePath: string;
-};
-
-export type SiteMediaDeliveryFacts = {
-  assetId: string;
-  href: string;
-  kind: "image";
-};
-
-export type SiteMediaDeliveryOptions = {
-  imageKeyPrefix?: string;
-  routePrefix?: string;
 };
 
 export function siteImageExtensionForContentType(contentType: string): string | undefined {
@@ -42,60 +28,6 @@ export function siteMediaContentTypeForKey(key: string): string | undefined {
   return imageMediaContentTypeForKey(key);
 }
 
-export function siteMediaHrefForKey(key: string, options: SiteMediaDeliveryOptions = {}): string {
-  const routePrefix = normalizeSiteMediaRoutePrefix(options.routePrefix);
-
-  return `${routePrefix}/${key}`;
-}
-
-export function siteMediaDeliveryFactsForAssetId(
-  assetId: string,
-  options: SiteMediaDeliveryOptions = {},
-): SiteMediaDeliveryFacts | undefined {
-  const facts = imageMediaDeliveryFactsForAssetId(assetId, {
-    hrefForKey: (key) => siteMediaHrefForKey(key, options),
-    keyPrefix: normalizeSiteImageKeyPrefix(options.imageKeyPrefix),
-  });
-
-  return facts
-    ? {
-        assetId: facts.assetId,
-        href: facts.href,
-        kind: facts.kind,
-      }
-    : undefined;
-}
-
-export function siteMediaKeyFromAssetId(assetId: string): string | undefined {
-  return imageMediaDeliveryFactsForAssetId(assetId, {
-    hrefForKey: siteMediaHrefForKey,
-    keyPrefix: SITE_IMAGE_KEY_PREFIX,
-  })?.storageKey;
-}
-
-function normalizeSiteImageKeyPrefix(value: string | undefined): string {
-  const prefix = value ?? SITE_IMAGE_KEY_PREFIX;
-
-  return prefix.endsWith("/") ? prefix : `${prefix}/`;
-}
-
-function normalizeSiteMediaRoutePrefix(value: string | undefined): string {
-  const prefix = value ?? SITE_MEDIA_ROUTE_PREFIX;
-
-  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
-}
-
-export function siteMediaKeyFromHref(href: string): string | undefined {
-  if (!href.startsWith(SITE_MEDIA_ROUTE_PREFIX)) {
-    return undefined;
-  }
-
-  const url = new URL(href, "https://formless.local");
-  const key = siteMediaKeyFromPathname(url.pathname);
-
-  return key && isValidMediaStorageKey(key) ? key : undefined;
-}
-
 export function isLegacySiteMediaHref(href: string): boolean {
   return (
     href.startsWith(SITE_MEDIA_ROUTE_PREFIX) ||
@@ -104,20 +36,8 @@ export function isLegacySiteMediaHref(href: string): boolean {
   );
 }
 
-export function legacySiteMediaMigrationMessage(href: string, workflow: string): string {
-  return `Legacy Site media href "${href}" must be migrated to core media before ${workflow}.`;
-}
-
-export function siteMediaKeyFromPathname(pathname: string): string | undefined {
-  const key = pathname.startsWith(SITE_MEDIA_ROUTE_PREFIX)
-    ? pathname.slice(SITE_MEDIA_ROUTE_PREFIX.length)
-    : "";
-
-  return isValidMediaStorageKey(key) ? key : undefined;
-}
-
-export function isRestorableSiteMediaKey(key: string): boolean {
-  return isRestorableImageMediaKey(key, { keyPrefix: SITE_IMAGE_KEY_PREFIX });
+export function unsupportedLegacySiteMediaMessage(href: string, workflow: string): string {
+  return `Unsupported legacy Site media href "${href}". Use core media before ${workflow}.`;
 }
 
 export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteSourceMediaAsset[] {
@@ -132,7 +52,7 @@ export function siteSourceMediaAssetsFromRecords(records: StoredRecord[]): SiteS
 
     if (typeof href === "string") {
       if (isLegacySiteMediaHref(href)) {
-        throw new Error(legacySiteMediaMigrationMessage(href, "source Site media collection"));
+        throw new Error(unsupportedLegacySiteMediaMessage(href, "source Site media collection"));
       }
 
       const key = coreMediaKeyFromHref(href);

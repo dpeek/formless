@@ -35,7 +35,7 @@ import {
 const now = "2026-05-23T00:00:00.000Z";
 
 describe("archive restore planner", () => {
-  it("rejects old app-scoped Site media instead of normalizing restore steps", () => {
+  it("rejects old app-scoped Site media archive input", () => {
     const archive = instanceArchive({
       apps: [
         appArchive({
@@ -44,13 +44,13 @@ describe("archive restore planner", () => {
             kind: "storeSnapshot",
             snapshot: storeSnapshot({
               records: [
-                imageBlock("personal", "hero"),
+                legacySiteMediaImageBlock("personal", "hero"),
                 siteRecord("rec_site_settings_personal", "personal"),
               ],
             }),
           },
           media: {
-            objects: [mediaObject("personal", "hero")],
+            objects: [legacySiteMediaObject("personal", "hero")],
           },
         }),
         appArchive({
@@ -68,7 +68,7 @@ describe("archive restore planner", () => {
 
     const errors = expectFailure(
       planInstanceArchiveRestore(archive, {
-        mediaFiles: [mediaFile("personal", "hero")],
+        mediaFiles: [legacySiteMediaFile("personal", "hero")],
         sourceSchemas: { site: siteSourceSchema },
       }),
     );
@@ -285,7 +285,7 @@ describe("archive restore planner", () => {
             snapshot: storeSnapshot({
               records: [
                 siteRecord("rec_site_settings_media", "media"),
-                imageBlock("personal", "missing"),
+                legacySiteMediaImageBlock("personal", "missing"),
               ],
             }),
           },
@@ -502,8 +502,8 @@ function blockRecord(id: string, label: string, values: StoredRecord["values"] =
   };
 }
 
-function imageBlock(installId: string, name: string): StoredRecord {
-  const object = mediaObject(installId, name);
+function legacySiteMediaImageBlock(installId: string, name: string): StoredRecord {
+  const object = legacySiteMediaObject(installId, name);
 
   return blockRecord(`rec_block_${name}`, `${name} image`, {
     href: object.deliveryHref,
@@ -533,7 +533,7 @@ function placementRecord(id: string, parent: string, block: string): StoredRecor
   };
 }
 
-function mediaObject(
+function legacySiteMediaObject(
   installId: string,
   name: string,
   overrides: Partial<AppArchiveMediaObject> = {},
@@ -550,7 +550,7 @@ function mediaObject(
   };
 }
 
-function mediaFile(installId: string, name: string): ArchiveRestoreMediaFile {
+function legacySiteMediaFile(installId: string, name: string): ArchiveRestoreMediaFile {
   return {
     archivePath: `media/${installId}/${name}.png`,
     byteSize: 8,

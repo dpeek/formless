@@ -243,7 +243,7 @@ describe("Site publish workflow", () => {
     });
 
     await expect(runSitePublish(harness.input())).rejects.toThrow(
-      'Legacy Site media href "/api/site/media/site/images/cover.png" must be migrated to core media before source Site media collection.',
+      'Unsupported legacy Site media href "/api/site/media/site/images/cover.png". Use core media before source Site media collection.',
     );
 
     expect(harness.commands).toEqual([]);

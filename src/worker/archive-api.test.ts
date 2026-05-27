@@ -471,7 +471,7 @@ function imageAssetRecord(record: StoredRecord): StoredRecord {
 function appArchiveWithLegacyMedia(input: { dryRun: boolean }): AppArchive {
   return {
     ...appArchive(input),
-    capabilities: ["source-records", "app-scoped-media"],
+    capabilities: ["source-records"],
     data: {
       kind: "sourceRecords",
       schemaKey: "site",
