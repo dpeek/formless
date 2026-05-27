@@ -60,6 +60,10 @@ Last updated: 2026-05-27
 - `formless instance deploy` deploys code and assets for a claimed instance workspace.
 - `formless instance domains remote-plan` reads the remote Worker domain provider plan.
 - `formless instance domains run-apply` runs the Node Alchemy domain provider runner through the Worker control plane.
+- `formless instance domains run-delete` runs the Node Alchemy domain provider delete runner through the Worker control plane.
+- `formless instance domains forget-route` forgets a disabled and unapplied remote desired domain mapping.
+- `formless instance domains forget-redirect` forgets a disabled and unapplied remote redirect intent.
+- `formless instance domains mark-manually-removed` clears exact remote provider evidence after out-of-band provider removal.
 - `formless instance domains plan` dry-runs direct Cloudflare fallback exact-host Worker Custom Domain changes.
 - `formless instance domains apply` applies direct Cloudflare fallback exact-host Worker Custom Domain changes.
 - `formless instance token adopt` stores an automation admin token in ignored workspace secret state.
@@ -170,9 +174,15 @@ Last updated: 2026-05-27
 - Workspace deploy does not write live domain mappings or provider apply state.
 - Domain remote-plan reads `/api/formless/domain-provider` from the selected remote target.
 - Domain run-apply requests a reviewed Worker-side apply job and executes provider mutation in Node.
+- Domain run-delete requests a reviewed Worker-side delete job and executes provider cleanup in Node.
 - Domain run-apply uses Alchemy `CustomDomain`, `RedirectRule`, and `DnsRecords` resources.
+- Domain run-delete uses Alchemy `CustomDomain`, `RedirectRule`, and `DnsRecords` resources.
 - Domain run-apply uses runner-held Cloudflare API token, `ALCHEMY_PASSWORD`, and `ALCHEMY_STATE_TOKEN`.
+- Domain run-delete uses runner-held Cloudflare API token, `ALCHEMY_PASSWORD`, and `ALCHEMY_STATE_TOKEN`.
 - Domain run-apply initializes Alchemy with `CloudflareStateStore` from `alchemy/state`.
+- Domain run-delete initializes Alchemy with `CloudflareStateStore` from `alchemy/state`.
+- Domain run-apply and run-delete create remote jobs before Node-runner secret validation.
+- Missing Node-runner secrets are posted back as failed job results.
 - Domain provider resources use deterministic logical ids from instance, host, resource kind, profile, and redirect intent.
 - Domain provider redirects plan one Cloudflare RedirectRule plus one proxied originless placeholder DNS record.
 - Originless redirect placeholder DNS is proxied `AAAA 100::`.
@@ -190,6 +200,10 @@ Last updated: 2026-05-27
 - Domain apply records applied Cloudflare state and audit evidence with profile vocabulary in instance domain metadata.
 - Domain apply evidence for `instance` hosts stores no target install id.
 - Domain apply refuses when workspace and live desired domain mappings drift.
+- Domain forget-route calls the remote desired mapping forget API with host and profile.
+- Domain forget-redirect calls the remote redirect forget API with from-host.
+- Domain mark-manually-removed calls the remote manual cleanup API with host, resource kind, and logical id.
+- Remote forget and manual cleanup commands do not read Cloudflare credentials.
 - CLI domain plan/apply read Cloudflare credentials from `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN`.
 - CLI direct domain plan/apply output is labeled fallback.
 - Browser clients, portable archives, and workspace manifests do not receive Cloudflare API credentials for domain apply.

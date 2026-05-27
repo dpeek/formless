@@ -35,6 +35,7 @@ Last updated: 2026-05-27
 - Instance domain mapping API path: `/api/formless/domain-mappings`.
 - Instance domain mapping lookup API path: `/api/formless/domain-mappings/lookup`.
 - Instance domain mapping apply evidence API path: `/api/formless/domain-mappings/apply-evidence`.
+- Instance domain mapping forget API path: `/api/formless/domain-mappings/forget`.
 - Instance domain mapping shared model: `src/shared/instance-domain-mappings.ts`.
 - Instance domain mapping Durable Object state: `src/worker/instance-domain-mappings-state.ts`.
 - Instance domain provider API path: `/api/formless/domain-provider`.
@@ -43,7 +44,9 @@ Last updated: 2026-05-27
 - Instance domain provider apply job API paths are `/api/formless/domain-provider/apply-jobs/:jobId` and `/api/formless/domain-provider/apply-jobs/:jobId/result`.
 - Instance domain provider delete API path: `/api/formless/domain-provider/delete`.
 - Instance domain provider delete job API paths are `/api/formless/domain-provider/delete-jobs/:jobId` and `/api/formless/domain-provider/delete-jobs/:jobId/result`.
+- Instance domain provider manual cleanup API path: `/api/formless/domain-provider/manual-cleanup`.
 - Instance domain provider redirect intent API path: `/api/formless/domain-provider/redirects`.
+- Instance domain provider redirect forget API path: `/api/formless/domain-provider/redirects/forget`.
 - Instance domain provider shared API model: `src/shared/domain-provider-api.ts`.
 - Instance domain provider Durable Object routes: `src/worker/domain-provider-api.ts`.
 - Instance domain provider planner: `src/shared/domain-provider-planner.ts`.
@@ -155,7 +158,9 @@ Last updated: 2026-05-27
 - Domain mapping applied state is keyed by host/profile and optional target install id.
 - Domain mapping audit events are append-only provider apply evidence.
 - Domain provider plan reads enabled domain mappings, redirect intents, provider config facts, and applied provider state.
-- Domain provider config status reports account, instance, worker, zone, Alchemy password, and Cloudflare API token readiness without returning secret values.
+- Domain provider config status reports non-secret Worker job readiness from account, instance, worker, and zone facts.
+- Domain provider config status reports Node runner mutation requirements through `runnerMutation`.
+- Domain provider config status keeps Alchemy password and Cloudflare API token configured flags as compatibility facts without using them as the Worker job gate.
 - Domain provider apply writes owner/admin guarded broker jobs and serializes mutation with one instance apply lock.
 - Domain provider apply jobs store reviewed plan, status, result summary, and runner id.
 - Domain provider apply job result writeback records current CustomDomain, RedirectRule, and DnsRecords applied resources.
@@ -163,6 +168,14 @@ Last updated: 2026-05-27
 - Domain provider redirect disablement does not delete provider resources.
 - Domain provider delete writes owner/admin guarded delete jobs from recorded applied resources only.
 - Successful domain provider delete removes current applied provider resource rows and appends `deleted` audit events.
+- Disabled desired domain mappings can be forgotten only when current provider applied evidence is absent.
+- Forgotten desired domain mappings are removed from normal mapping reads and recorded in desired cleanup audit rows.
+- Disabled redirect intents can be forgotten only when current provider applied resources are absent.
+- Forgotten redirect intents are removed from normal redirect intent reads and recorded in redirect cleanup audit rows.
+- Manual provider cleanup is owner/admin guarded and selects current evidence by exact host, resource kind, and logical id.
+- Manual provider cleanup clears only current applied evidence and appends `manually-removed` audit events.
+- Manual provider cleanup does not call Cloudflare or require runner mutation credentials.
+- Brokered provider delete treats already-missing provider resources as successful delete evidence for recorded targets.
 
 ## Push Sync
 
@@ -218,6 +231,7 @@ Last updated: 2026-05-27
 - Instance domain mapping tests: `src/shared/instance-domain-mappings.test.ts`, `src/worker/instance-domain-mappings.test.ts`.
 - Domain provider API tests: `src/worker/domain-provider-api.test.ts`.
 - Domain provider planner tests: `src/shared/domain-provider-planner.test.ts`.
+- Domain provider runner tests: `src/site/domain-provider-runner.test.ts`.
 - Owner setup tests: `src/worker/owner-setup.test.ts`.
 - Owner session tests: `src/worker/owner-session.test.ts`.
 - Storage tests: `src/worker/storage.test.ts`.

@@ -41,13 +41,21 @@ Last updated: 2026-05-27
 - Custom domains surface fetches provider config, resource counts, blockers, and redirect intent through `/api/formless/domain-provider`.
 - Custom domains surface creates desired redirects through `/api/formless/domain-provider/redirects`.
 - Custom domains surface disables desired redirects with `DELETE /api/formless/domain-provider/redirects`.
+- Custom domains surface forgets disabled and unapplied desired mappings through `/api/formless/domain-mappings/forget`.
+- Custom domains surface forgets disabled and unapplied redirect intents through `/api/formless/domain-provider/redirects/forget`.
 - Custom domains surface requests provider apply jobs through `/api/formless/domain-provider/apply`.
 - Custom domains surface requests provider delete jobs through `/api/formless/domain-provider/delete`.
+- Custom domains surface marks exact provider evidence manually removed through `/api/formless/domain-provider/manual-cleanup`.
 - Custom domains surface shows apply job status/result and delete job status/result.
 - Custom domains surface does not receive Cloudflare API tokens or Alchemy secret values.
 - Custom domains surface only lets `publicSite` mappings target installed Site apps.
+- Custom domains surface shows desired route status and provider applied evidence separately.
+- Custom domains surface shows `Forget route` for disabled desired mappings and redirects with no applied provider evidence.
+- Custom domains surface shows `Delete provider` and `Mark manually removed` for recorded provider evidence.
 - Custom domains surface leaves disabled desired mappings visible with applied provider state.
 - Custom domains surface leaves disabled redirects visible with applied provider state.
+- Custom domains surface keeps applied-without-desired provider rows visible until provider cleanup.
+- Custom domains surface shows Worker job readiness separately from Node runner mutation requirements.
 - Workbench runtime shell does not own app-local Schema, sync, reset, publish, archive, Export, or Restore controls.
 - Active app sidebar owns app screens, root/context navigation, and app settings.
 - App settings source: `src/app/app-surface.tsx`.

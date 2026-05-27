@@ -90,7 +90,7 @@ Why:
 - Current runtime pieces work locally and in Workers.
 - Productization decides whether Formless can support real users and deployments.
 - The Formless instance direction names the deployment model before onboarding PRDs. See `doc/directions/formless-instance.md`.
-- Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, core-media-only archive restore, claimable instance workspaces, profile-based custom domains, brokered domain provider apply, provider redirects, and explicit provider delete now exist.
+- Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, core-media-only archive restore, claimable instance workspaces, profile-based custom domains, brokered domain provider apply, provider redirects, explicit provider delete, and domain provider cleanup actions now exist.
 - Shared runtime topology now centralizes runtime profile and route policy facts before auth, permissions, agent routes, or job routes attach to them.
 
 Good next chunks:
