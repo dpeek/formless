@@ -9,9 +9,11 @@ import {
   isRuntimePublishedProfileClientShellRoute,
   isRuntimeReadRequestMethod,
   looksLikeRuntimeStaticAssetPath,
+  matchRuntimeRouteBase,
   parseRuntimeProfileKind,
   publishedSiteRedirectLocation,
   resolveRuntimeProfileKind,
+  runtimeRouteFromBase,
   runtimeProfileKindFromHost,
   runtimeRoutePolicyForProfileKind,
   runtimeTopologyRoutes,
@@ -58,6 +60,7 @@ describe("runtime topology", () => {
       installedAppApiRoutes: true,
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
+      ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: false,
       schemaKeyBrowserRoutes: false,
     });
@@ -66,6 +69,7 @@ describe("runtime topology", () => {
       installedAppApiRoutes: true,
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
+      ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: true,
     });
@@ -74,14 +78,17 @@ describe("runtime topology", () => {
       installedAppApiRoutes: true,
       installedAppBrowserRoutes: false,
       installedSitePublicRoutes: false,
+      ownerSessionBrowserRoutes: false,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: false,
     });
     expect(runtimeRoutePolicyForProfileKind("siteAuthoring")).toMatchObject({
+      ownerSessionBrowserRoutes: false,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: false,
     });
     expect(runtimeRoutePolicyForProfileKind("publishedSite")).toMatchObject({
+      ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: false,
     });
@@ -94,6 +101,33 @@ describe("runtime topology", () => {
     expect(runtimeTopologyRoutes.publicSitePackageAppKey).toBe("site");
     expect(runtimeTopologyRoutes.publicSitePreviewRouteBase).toBe("/pages");
     expect(runtimeTopologyRoutes.siteAdminRoute).toBe("/admin");
+  });
+
+  it("matches and builds runtime routes under shared route bases", () => {
+    expect(matchRuntimeRouteBase("/apps/personal", "/apps")).toEqual({
+      pathSuffix: "",
+      routeBase: "/apps",
+      routeId: "personal",
+      suffixSegments: [],
+    });
+    expect(matchRuntimeRouteBase("/apps/personal/schema", "/apps")).toEqual({
+      pathSuffix: "/schema",
+      routeBase: "/apps",
+      routeId: "personal",
+      suffixSegments: ["schema"],
+    });
+    expect(matchRuntimeRouteBase("/sites/personal/blog/post", "/sites")).toEqual({
+      pathSuffix: "/blog/post",
+      routeBase: "/sites",
+      routeId: "personal",
+      suffixSegments: ["blog", "post"],
+    });
+    expect(matchRuntimeRouteBase("/apps", "/apps")).toBeUndefined();
+    expect(matchRuntimeRouteBase("/app/personal", "/apps")).toBeUndefined();
+    expect(runtimeRouteFromBase("/apps", "personal")).toBe("/apps/personal");
+    expect(runtimeRouteFromBase("/sites", "personal", "/blog/post")).toBe(
+      "/sites/personal/blog/post",
+    );
   });
 
   it("classifies client-shell routes for general, published, and instance profiles", () => {

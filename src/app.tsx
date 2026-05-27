@@ -25,10 +25,16 @@ import {
   installedAppWorldMountFromInstall,
   installedAppWorldMountFromInstallId,
   installedSitePublicSurfaceFromRoute,
-  isInstalledSitePublicRoutePath,
-  isRuntimePublicSiteRoute,
+  normalizeRuntimeBrowserPath,
   resolveRuntimeProfile,
+  runtimeAppManagementHref,
+  runtimeBrowserRoutePatterns,
+  runtimeInstalledSitePublicHomeSlug,
+  runtimeInstalledSitePublicPath,
+  runtimeLocalPublishForWorld,
+  runtimeProfileNeedsInstalledAppRouteInstalls,
   runtimeScreenPathFromRoute,
+  shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
   type RuntimeProfile,
   type RuntimeWorldMount,
 } from "./app/runtime-profile.ts";
@@ -87,12 +93,12 @@ export function App({
     () => ({ appInstalls: installedAppRouteInstalls }),
     [installedAppRouteInstalls],
   );
-  const isPublicSiteRoute = isRuntimePublicSiteRoute(runtimeProfile, location, routeContext);
-  const isPotentialInstalledSitePublicRoute = isInstalledSitePublicRoutePath(
-    runtimeProfile,
-    location,
-  );
   const routeWorld = findRuntimeWorldMountByRoute(runtimeProfile, location, routeContext);
+  const browserRoutes = useMemo(
+    () => runtimeBrowserRoutePatterns(runtimeProfile),
+    [runtimeProfile],
+  );
+  const normalizedLocation = normalizeRuntimeBrowserPath(location);
   const routeApp = routeWorld?.app;
   const activeClientStorageName = useActiveClientStorageName();
   const activeSchemaKey = useActiveSchemaKey();
@@ -117,20 +123,15 @@ export function App({
   const activeScreenPath = routeWorld
     ? runtimeScreenPathFromRoute(routeWorld, location)
     : undefined;
-  const isInstanceShellRoute =
-    runtimeProfile.instanceShell === true && normalizeRoutePath(location) === "/";
-  const isOwnerLoginRoute =
-    isOwnerSessionRouteEnabled(runtimeProfile) && normalizeRoutePath(location) === "/login";
-  const isOwnerSetupRoute =
-    isOwnerSetupRouteEnabled(runtimeProfile) && normalizeRoutePath(location) === "/setup";
+  const isInstanceShellRoute = normalizedLocation === browserRoutes.instanceShellRoute;
 
   if (
-    isOwnerLoginRoute ||
-    isOwnerSetupRoute ||
-    isPublicSiteRoute ||
-    isPotentialInstalledSitePublicRoute ||
-    runtimeProfile.shell === "publishedSite" ||
-    (runtimeProfile.shell === "instance" && (isInstanceShellRoute || !routeWorld))
+    shouldRenderRuntimeRouteOutsideGeneratedAppFrame(
+      runtimeProfile,
+      location,
+      routeWorld,
+      routeContext,
+    )
   ) {
     return (
       <main className="min-h-dvh">
@@ -146,8 +147,8 @@ export function App({
   const generatedAppFrame = (
     <ActiveAppSurface
       activeScreenPath={activeScreenPath}
-      localPublish={localPublishForWorld(runtimeProfile, routeWorld)}
-      managementHref={appManagementHref(runtimeProfile, routeWorld)}
+      localPublish={runtimeLocalPublishForWorld(runtimeProfile, routeWorld)}
+      managementHref={runtimeAppManagementHref(runtimeProfile, routeWorld)}
       currentPath={location}
       screenModels={routeAppScreenModels}
       world={routeWorld}
@@ -197,9 +198,7 @@ function useRuntimeInstalledAppRouteInstalls(
   initialInstalls: readonly AppInstall[] | undefined,
   refreshKey: string,
 ): AppInstall[] | undefined {
-  const shouldLoad =
-    runtimeProfile.installedAppRoutes !== undefined ||
-    runtimeProfile.installedSitePublicRoutes !== undefined;
+  const shouldLoad = runtimeProfileNeedsInstalledAppRouteInstalls(runtimeProfile);
   const [installs, setInstalls] = useState<AppInstall[] | undefined>(() =>
     initialInstalls ? [...initialInstalls] : shouldLoad ? undefined : [],
   );
@@ -263,7 +262,7 @@ function WorkbenchFrame({
     routeWorld,
     installedAppRouteInstalls,
   );
-  const appManagementIsCurrent = normalizeRoutePath(currentPath) === "/";
+  const appManagementIsCurrent = normalizeRuntimeBrowserPath(currentPath) === "/";
 
   return (
     <div
@@ -347,9 +346,10 @@ export function selectRuntimeShellInstalledAppLinks({
   routeWorld: RuntimeWorldMount | undefined;
   runtimeProfile: RuntimeProfile;
 }): RuntimeShellInstalledAppLink[] {
-  const installedAppRoutes = runtimeProfile.installedAppRoutes;
-
-  if (runtimeProfile.shell !== "dev" || !installedAppRoutes) {
+  if (
+    runtimeProfile.shell !== "dev" ||
+    !runtimeBrowserRoutePatterns(runtimeProfile).installedAppHomeRoutePattern
+  ) {
     return [];
   }
 
@@ -362,14 +362,20 @@ export function selectRuntimeShellInstalledAppLinks({
           packageAppKey: routeWorld.app.key,
         }
       : undefined;
-  const links = installs
-    .filter((install) => installedAppWorldMountFromInstall(runtimeProfile, install) !== undefined)
-    .map((install) => ({
-      href: install.adminRoute,
-      installId: install.installId,
-      label: install.label,
-      packageAppKey: install.packageAppKey,
-    }));
+  const links = installs.flatMap((install) => {
+    const world = installedAppWorldMountFromInstall(runtimeProfile, install);
+
+    return world
+      ? [
+          {
+            href: world.route as `/apps/${string}`,
+            installId: install.installId,
+            label: install.label,
+            packageAppKey: install.packageAppKey,
+          },
+        ]
+      : [];
+  });
 
   if (currentInstall && !links.some((link) => link.installId === currentInstall.installId)) {
     links.push(currentInstall);
@@ -410,8 +416,9 @@ function AppRoutes({
 }) {
   const { HomeRoute, SchemaRoute, SitePageRoute } = routeComponents;
   const generatedWorlds = runtimeProfile.worlds.filter(hasGeneratedRoutes);
+  const browserRoutes = runtimeBrowserRoutePatterns(runtimeProfile);
   const hasLazyGeneratedRoutes =
-    generatedWorlds.length > 0 || runtimeProfile.installedAppRoutes !== undefined;
+    generatedWorlds.length > 0 || browserRoutes.installedAppHomeRoutePattern !== undefined;
   const routes = (
     <Switch>
       {runtimeProfile.defaultRedirect ? (
@@ -419,18 +426,18 @@ function AppRoutes({
           <Redirect replace to={runtimeProfile.defaultRedirect} />
         </Route>
       ) : null}
-      {isOwnerSetupRouteEnabled(runtimeProfile) ? (
-        <Route path="/setup">
+      {browserRoutes.ownerSetupRoute ? (
+        <Route path={browserRoutes.ownerSetupRoute}>
           <OwnerSetupRoute />
         </Route>
       ) : null}
-      {isOwnerSessionRouteEnabled(runtimeProfile) ? (
-        <Route path="/login">
+      {browserRoutes.ownerLoginRoute ? (
+        <Route path={browserRoutes.ownerLoginRoute}>
           <OwnerLoginRoute />
         </Route>
       ) : null}
-      {runtimeProfile.instanceShell ? (
-        <Route path="/">
+      {browserRoutes.instanceShellRoute ? (
+        <Route path={browserRoutes.instanceShellRoute}>
           <InstanceShellRoute />
         </Route>
       ) : null}
@@ -469,8 +476,8 @@ function AppRoutes({
           )}
         </Route>
       ))}
-      {runtimeProfile.installedAppRoutes?.schemaRoutes ? (
-        <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId/schema`}>
+      {browserRoutes.installedAppSchemaRoutePattern ? (
+        <Route path={browserRoutes.installedAppSchemaRoutePattern}>
           {(params) => (
             <InstalledAppSchemaRoute
               installedAppRouteInstalls={installedAppRouteInstalls}
@@ -481,8 +488,8 @@ function AppRoutes({
           )}
         </Route>
       ) : null}
-      {runtimeProfile.installedAppRoutes ? (
-        <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId`}>
+      {browserRoutes.installedAppHomeRoutePattern ? (
+        <Route path={browserRoutes.installedAppHomeRoutePattern}>
           {(params) => (
             <InstalledAppHomeRoute
               installedAppRouteInstalls={installedAppRouteInstalls}
@@ -494,8 +501,8 @@ function AppRoutes({
           )}
         </Route>
       ) : null}
-      {runtimeProfile.installedAppRoutes ? (
-        <Route path={`${runtimeProfile.installedAppRoutes.appRouteBase}/:installId/*`}>
+      {browserRoutes.installedAppScreenRoutePattern ? (
+        <Route path={browserRoutes.installedAppScreenRoutePattern}>
           {(params) => (
             <InstalledAppHomeRoute
               installedAppRouteInstalls={installedAppRouteInstalls}
@@ -507,21 +514,21 @@ function AppRoutes({
           )}
         </Route>
       ) : null}
-      {runtimeProfile.installedSitePublicRoutes ? (
-        <Route path={`${runtimeProfile.installedSitePublicRoutes.siteRouteBase}/:installId`}>
+      {browserRoutes.installedSitePublicHomeRoutePattern ? (
+        <Route path={browserRoutes.installedSitePublicHomeRoutePattern}>
           {(params) => (
             <InstalledSitePublicRoute
               installedAppRouteInstalls={installedAppRouteInstalls}
               installId={runtimeRouteParam(params, "installId")}
               routeComponents={routeComponents}
               runtimeProfile={runtimeProfile}
-              slug={runtimeProfile.installedSitePublicRoutes?.homeSlug ?? "home"}
+              slug={runtimeInstalledSitePublicHomeSlug(runtimeProfile) ?? "home"}
             />
           )}
         </Route>
       ) : null}
-      {runtimeProfile.installedSitePublicRoutes ? (
-        <Route path={`${runtimeProfile.installedSitePublicRoutes.siteRouteBase}/:installId/*`}>
+      {browserRoutes.installedSitePublicSlugRoutePattern ? (
+        <Route path={browserRoutes.installedSitePublicSlugRoutePattern}>
           {(params) => (
             <InstalledSitePublicRoute
               installedAppRouteInstalls={installedAppRouteInstalls}
@@ -648,7 +655,6 @@ function InstalledSitePublicRoute({
   slug: string;
 }) {
   const { SitePageRoute } = routeComponents;
-  const publicRoutes = runtimeProfile.installedSitePublicRoutes;
 
   if (!installId) {
     return <NotFoundRoute />;
@@ -658,9 +664,12 @@ function InstalledSitePublicRoute({
     return <RouteLoading />;
   }
 
-  const sitePath = publicRoutes
-    ? `${publicRoutes.siteRouteBase}/${installId}${slug === publicRoutes.homeSlug ? "" : `/${slug}`}`
-    : "";
+  const sitePath = runtimeInstalledSitePublicPath(runtimeProfile, installId, slug);
+
+  if (!sitePath) {
+    return <NotFoundRoute />;
+  }
+
   const surface = installedSitePublicSurfaceFromRoute(runtimeProfile, sitePath, {
     appInstalls: installedAppRouteInstalls,
   });
@@ -703,38 +712,4 @@ function runtimeRouteParam(params: unknown, name: string): string | undefined {
   const value = (params as Record<string, string | undefined>)[name];
 
   return value;
-}
-
-function isOwnerSetupRouteEnabled(runtimeProfile: RuntimeProfile) {
-  return isOwnerSessionRouteEnabled(runtimeProfile);
-}
-
-function isOwnerSessionRouteEnabled(runtimeProfile: RuntimeProfile) {
-  return (
-    runtimeProfile.kind === "instance" ||
-    runtimeProfile.kind === "dev" ||
-    runtimeProfile.kind === "publishedSite"
-  );
-}
-
-function appManagementHref(
-  runtimeProfile: RuntimeProfile,
-  routeWorld: RuntimeWorldMount | undefined,
-): "/" | undefined {
-  return runtimeProfile.shell === "instance" && routeWorld?.target ? "/" : undefined;
-}
-
-function localPublishForWorld(
-  runtimeProfile: RuntimeProfile,
-  routeWorld: RuntimeWorldMount | undefined,
-): RuntimeProfile["localPublish"] {
-  if (routeWorld?.app.key !== "site") {
-    return undefined;
-  }
-
-  return runtimeProfile.localPublish;
-}
-
-function normalizeRoutePath(path: string) {
-  return path.split("?")[0] ?? path;
 }

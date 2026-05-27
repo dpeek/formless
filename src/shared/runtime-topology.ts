@@ -15,6 +15,7 @@ export type RuntimeTopologyRoutePolicy = {
   installedAppApiRoutes: boolean;
   installedAppBrowserRoutes: boolean;
   installedSitePublicRoutes: boolean;
+  ownerSessionBrowserRoutes: boolean;
   schemaKeyApiRoutes: boolean;
   schemaKeyBrowserRoutes: boolean;
 };
@@ -45,6 +46,13 @@ export const runtimeTopologyRoutes = {
 } as const;
 
 export const PUBLISHED_SITE_REDIRECT_STATUS = 308;
+
+export type RuntimeRouteBaseMatch = {
+  pathSuffix: `/${string}` | "";
+  routeBase: `/${string}`;
+  routeId: string;
+  suffixSegments: readonly string[];
+};
 
 const clientRoutePaths = [
   runtimeTopologyRoutes.loginRoute,
@@ -133,6 +141,7 @@ export function runtimeRoutePolicyForProfileKind(
     installedAppApiRoutes: true,
     installedAppBrowserRoutes: instanceBrowserRoutes,
     installedSitePublicRoutes: instanceBrowserRoutes,
+    ownerSessionBrowserRoutes: instanceBrowserRoutes || profileKind === "publishedSite",
     schemaKeyApiRoutes: profileKind !== "instance",
     schemaKeyBrowserRoutes: profileKind === "dev",
   };
@@ -218,6 +227,42 @@ export function isRuntimeReadRequestMethod(method: string): boolean {
 
 export function stringRuntimeConfigValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function matchRuntimeRouteBase(
+  pathname: string,
+  routeBase: `/${string}`,
+): RuntimeRouteBaseMatch | undefined {
+  const normalizedBase = trimRuntimeRouteTrailingSlash(routeBase);
+
+  if (pathname !== normalizedBase && !pathname.startsWith(`${normalizedBase}/`)) {
+    return undefined;
+  }
+
+  const suffix = pathname.slice(normalizedBase.length).replace(/^\/+/, "");
+  const [routeId, ...suffixSegments] = suffix.split("/").filter(Boolean);
+
+  if (!routeId) {
+    return undefined;
+  }
+
+  return {
+    pathSuffix: suffixSegments.length === 0 ? "" : `/${suffixSegments.join("/")}`,
+    routeBase: normalizedBase as `/${string}`,
+    routeId,
+    suffixSegments,
+  };
+}
+
+export function runtimeRouteFromBase(
+  routeBase: `/${string}`,
+  routeId: string,
+  pathSuffix: `/${string}` | "" = "",
+): `/${string}` {
+  const normalizedBase = trimRuntimeRouteTrailingSlash(routeBase);
+  const prefix = normalizedBase === "/" ? "" : normalizedBase;
+
+  return `${prefix}/${routeId}${pathSuffix}` as `/${string}`;
 }
 
 export function isWorkersDevHost(hostname: string): boolean {

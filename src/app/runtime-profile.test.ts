@@ -14,6 +14,11 @@ import {
   installedAppWorldMountFromInstallId,
   installedSitePublicSurfaceFromRoute,
   isRuntimePublicSiteRoute,
+  runtimeAppManagementHref,
+  runtimeBrowserRoutePatterns,
+  runtimeInstalledSitePublicPath,
+  runtimeLocalPublishForWorld,
+  runtimeProfileNeedsInstalledAppRouteInstalls,
   readRuntimeProfileDocumentHint,
   readRuntimeProfileDocumentHints,
   resolveRuntimeProfile,
@@ -21,6 +26,7 @@ import {
   runtimeScreenPathFromRoute,
   runtimeScreenRoute,
   selectBrowserRuntimeProfileHint,
+  shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
 } from "./runtime-profile.ts";
 import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
 
@@ -74,10 +80,21 @@ describe("runtime profile resolver", () => {
     expect(findRuntimeWorldMountByRoute(profile, "/site")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/tasks/schema")).toBeUndefined();
     expect(runtimeRoutePolicy(profile)).toEqual({
+      instanceBrowserRoutes: true,
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
+      ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: false,
       schemaKeyBrowserRoutes: false,
+    });
+    expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      instanceShellRoute: "/",
+      installedAppHomeRoutePattern: "/apps/:installId",
+      installedAppScreenRoutePattern: "/apps/:installId/*",
+      installedSitePublicHomeRoutePattern: "/sites/:installId",
+      installedSitePublicSlugRoutePattern: "/sites/:installId/*",
+      ownerLoginRoute: "/login",
+      ownerSetupRoute: "/setup",
     });
   });
 
@@ -109,11 +126,24 @@ describe("runtime profile resolver", () => {
     expect(findRuntimeWorldMountByRoute(profile, "/rates")).toBeUndefined();
     expect(findRuntimeWorldMountByRoute(profile, "/rates/schema")).toBeUndefined();
     expect(runtimeRoutePolicy(profile)).toEqual({
+      instanceBrowserRoutes: true,
       installedAppBrowserRoutes: true,
       installedSitePublicRoutes: true,
+      ownerSessionBrowserRoutes: true,
       schemaKeyApiRoutes: true,
       schemaKeyBrowserRoutes: true,
     });
+    expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      instanceShellRoute: "/",
+      installedAppHomeRoutePattern: "/apps/:installId",
+      installedAppSchemaRoutePattern: "/apps/:installId/schema",
+      installedAppScreenRoutePattern: "/apps/:installId/*",
+      installedSitePublicHomeRoutePattern: "/sites/:installId",
+      installedSitePublicSlugRoutePattern: "/sites/:installId/*",
+      ownerLoginRoute: "/login",
+      ownerSetupRoute: "/setup",
+    });
+    expect(runtimeProfileNeedsInstalledAppRouteInstalls(profile)).toBe(true);
   });
 
   it("resolves installed admin route mounts from install records", () => {
@@ -215,6 +245,13 @@ describe("runtime profile resolver", () => {
     expect(
       findRuntimeWorldMountByRoute(profile, "/apps/task-workspace/schema", { appInstalls }),
     ).toBeUndefined();
+    expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/", undefined)).toBe(true);
+    expect(
+      shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/apps/task-workspace", world, {
+        appInstalls,
+      }),
+    ).toBe(false);
+    expect(runtimeAppManagementHref(profile, world)).toBe("/");
   });
 
   it("resolves installed Site public route surfaces from install ids", () => {
@@ -254,6 +291,15 @@ describe("runtime profile resolver", () => {
     ).toBeUndefined();
     expect(isRuntimePublicSiteRoute(profile, "/sites/task-workspace", { appInstalls })).toBe(false);
     expect(isRuntimePublicSiteRoute(profile, "/sites/rates", { appInstalls })).toBe(false);
+    expect(runtimeInstalledSitePublicPath(profile, "personal", "home")).toBe("/sites/personal");
+    expect(runtimeInstalledSitePublicPath(profile, "personal", "blog/post")).toBe(
+      "/sites/personal/blog/post",
+    );
+    expect(
+      shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/sites/personal", undefined, {
+        appInstalls,
+      }),
+    ).toBe(true);
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {
@@ -276,6 +322,8 @@ describe("runtime profile resolver", () => {
     expect(runtimeScreenPathFromRoute(world, "/")).toBe("/");
     expect(runtimeScreenPathFromRoute(world, "/setup")).toBe("/setup");
     expect(runtimeScreenPathFromRoute(world, "/schema")).toBeUndefined();
+    expect(runtimeBrowserRoutePatterns(profile)).toEqual({});
+    expect(runtimeProfileNeedsInstalledAppRouteInstalls(profile)).toBe(false);
   });
 
   it("resolves an installed app profile with install-scoped root paths", () => {
@@ -324,6 +372,7 @@ describe("runtime profile resolver", () => {
       homeSlug: "home",
       linkMode: "authoring",
     });
+    expect(runtimeBrowserRoutePatterns(profile)).toEqual({});
     expect(runtimeScreenRoute(world, "/")).toBe("/admin");
     expect(runtimeScreenRoute(world, "/header")).toBe("/admin/header");
     expect(runtimeScreenPathFromRoute(world, "/admin")).toBe("/");
@@ -339,17 +388,24 @@ describe("runtime profile resolver", () => {
   it("carries a local publish broker only when configured explicitly", () => {
     expect(createSiteAuthoringRuntimeProfile().localPublish).toBeUndefined();
 
-    expect(
-      createSiteAuthoringRuntimeProfile({
-        localPublish: {
-          endpoint: "http://127.0.0.1:43123/publish",
-          token: "local-broker-token",
-        },
-      }).localPublish,
-    ).toEqual({
+    const profile = createSiteAuthoringRuntimeProfile({
+      localPublish: {
+        endpoint: "http://127.0.0.1:43123/publish",
+        token: "local-broker-token",
+      },
+    });
+    const siteWorld = profile.worlds[0];
+    const estiiWorld = createAppRuntimeProfile("estii").worlds[0];
+
+    expect(profile.localPublish).toEqual({
       endpoint: "http://127.0.0.1:43123/publish",
       token: "local-broker-token",
     });
+    expect(runtimeLocalPublishForWorld(profile, siteWorld)).toEqual({
+      endpoint: "http://127.0.0.1:43123/publish",
+      token: "local-broker-token",
+    });
+    expect(runtimeLocalPublishForWorld(profile, estiiWorld)).toBeUndefined();
   });
 
   it("resolves the published Site profile without generated admin routes", () => {
@@ -371,6 +427,13 @@ describe("runtime profile resolver", () => {
       routePattern: "/*",
       homeSlug: "home",
     });
+    expect(runtimeBrowserRoutePatterns(profile)).toEqual({
+      ownerLoginRoute: "/login",
+      ownerSetupRoute: "/setup",
+    });
+    expect(shouldRenderRuntimeRouteOutsideGeneratedAppFrame(profile, "/projects", undefined)).toBe(
+      true,
+    );
   });
 
   it("uses explicit config first and host config only as a deterministic fallback", () => {
