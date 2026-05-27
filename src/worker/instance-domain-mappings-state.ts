@@ -2,6 +2,7 @@ import {
   buildInstanceDomainMappingAppliedState,
   buildInstanceDomainMapping,
   disableInstanceDomainMapping,
+  forgetInstanceDomainMapping,
   listInstanceDomainMappings,
   normalizeInstanceDomainHost,
   resolveInstanceDomainMappingProfile,
@@ -10,11 +11,14 @@ import {
   type CreateInstanceDomainMappingResult,
   type DisableInstanceDomainMappingInput,
   type DisableInstanceDomainMappingResult,
+  type ForgetInstanceDomainMappingInput,
+  type ForgetInstanceDomainMappingResult,
   type InstanceDomainMapping,
   type InstanceDomainMappingAppliedAction,
   type InstanceDomainMappingAppliedProvider,
   type InstanceDomainMappingAppliedState,
   type InstanceDomainMappingAuditEvent,
+  type InstanceDomainMappingDesiredCleanupEvent,
   type InstanceDomainMappingProfile,
   type InstanceDomainMappingSurface,
   type RecordInstanceDomainMappingApplyEvidenceRequest,
@@ -53,10 +57,18 @@ type InstanceDomainMappingAuditEventRow = InstanceDomainMappingAppliedStateRow &
   event_id: number;
 };
 
+type InstanceDomainMappingDesiredCleanupEventRow = InstanceDomainMappingRow & {
+  action: InstanceDomainMappingDesiredCleanupEvent["action"];
+  event_id: number;
+  reason: InstanceDomainMappingDesiredCleanupEvent["reason"];
+  recorded_at: string;
+};
+
 type DomainMappingTableName =
   | "instance_domain_mappings"
   | "instance_domain_mapping_applied_state"
-  | "instance_domain_mapping_audit_events";
+  | "instance_domain_mapping_audit_events"
+  | "instance_domain_mapping_desired_cleanup_events";
 
 export type RecordInstanceDomainMappingApplyEvidenceResult =
   | {
@@ -74,6 +86,13 @@ export type DeleteInstanceDomainMappingAppliedStateResult = {
   auditEvents: InstanceDomainMappingAuditEvent[];
 };
 
+export type ForgetStoredInstanceDomainMappingResult =
+  | (Extract<ForgetInstanceDomainMappingResult, { ok: true }> & {
+      desiredCleanupEvent: InstanceDomainMappingDesiredCleanupEvent;
+      desiredCleanupEvents: InstanceDomainMappingDesiredCleanupEvent[];
+    })
+  | Extract<ForgetInstanceDomainMappingResult, { ok: false }>;
+
 const domainMappingsTableSql = `
   CREATE TABLE IF NOT EXISTS instance_domain_mappings (
     host TEXT NOT NULL,
@@ -84,6 +103,22 @@ const domainMappingsTableSql = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (host, profile)
+  )
+`;
+
+const desiredCleanupEventsTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_domain_mapping_desired_cleanup_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    host TEXT NOT NULL,
+    profile TEXT NOT NULL CHECK (profile IN ('instance', 'app', 'publicSite')),
+    target_install_id TEXT,
+    surface TEXT CHECK (surface IS NULL OR surface = 'site'),
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action = 'forgotten'),
+    reason TEXT NOT NULL CHECK (reason = 'disabled-unapplied'),
+    recorded_at TEXT NOT NULL
   )
 `;
 
@@ -136,6 +171,7 @@ export function ensureInstanceDomainMappingTables(storage: DurableObjectStorage)
     ${domainMappingsTableSql};
     ${appliedStateTableSql};
     ${auditEventsTableSql};
+    ${desiredCleanupEventsTableSql};
   `);
   migrateProviderEvidenceColumns(storage);
   migrateAppliedActionChecks(storage);
@@ -161,6 +197,14 @@ export function readInstanceDomainMappingAuditEvents(
   ensureInstanceDomainMappingTables(storage);
 
   return readAuditEvents(storage);
+}
+
+export function readInstanceDomainMappingDesiredCleanupEvents(
+  storage: DurableObjectStorage,
+): InstanceDomainMappingDesiredCleanupEvent[] {
+  ensureInstanceDomainMappingTables(storage);
+
+  return readDesiredCleanupEvents(storage);
 }
 
 export function createInstanceDomainMapping(
@@ -239,6 +283,42 @@ export function disableStoredInstanceDomainMapping(
     return {
       ...result,
       mapping: readDomainMappingByKey(storage, result.mapping) ?? result.mapping,
+      mappings: readInstanceDomainMappings(storage),
+    };
+  });
+}
+
+export function forgetStoredInstanceDomainMapping(
+  storage: DurableObjectStorage,
+  input: Omit<ForgetInstanceDomainMappingInput, "appliedStates" | "existingMappings">,
+): ForgetStoredInstanceDomainMappingResult {
+  ensureInstanceDomainMappingTables(storage);
+
+  return storage.transactionSync(() => {
+    const result = forgetInstanceDomainMapping({
+      ...input,
+      appliedStates: readAppliedStates(storage),
+      existingMappings: readDomainMappings(storage),
+    });
+
+    if (!result.ok) {
+      return result;
+    }
+
+    storage.sql.exec(
+      `
+        DELETE FROM instance_domain_mappings
+        WHERE host = ? AND profile = ?
+      `,
+      result.mapping.host,
+      result.mapping.profile,
+    );
+    writeDesiredCleanupEvent(storage, { mapping: result.mapping, now: input.now });
+
+    return {
+      ...result,
+      desiredCleanupEvent: readLastDesiredCleanupEvent(storage),
+      desiredCleanupEvents: readDesiredCleanupEvents(storage),
       mappings: readInstanceDomainMappings(storage),
     };
   });
@@ -451,6 +531,35 @@ function readAuditEvents(storage: DurableObjectStorage): InstanceDomainMappingAu
   return events;
 }
 
+function readDesiredCleanupEvents(
+  storage: DurableObjectStorage,
+): InstanceDomainMappingDesiredCleanupEvent[] {
+  const events: InstanceDomainMappingDesiredCleanupEvent[] = [];
+
+  for (const row of storage.sql.exec<InstanceDomainMappingDesiredCleanupEventRow>(
+    `
+      SELECT
+        event_id,
+        host,
+        profile,
+        target_install_id,
+        surface,
+        enabled,
+        created_at,
+        updated_at,
+        action,
+        reason,
+        recorded_at
+      FROM instance_domain_mapping_desired_cleanup_events
+      ORDER BY event_id ASC
+    `,
+  )) {
+    events.push(desiredCleanupEventFromRow(row));
+  }
+
+  return events;
+}
+
 function writeAppliedState(
   storage: DurableObjectStorage,
   state: InstanceDomainMappingAppliedState,
@@ -548,6 +657,39 @@ function writeAuditEvent(storage: DurableObjectStorage, state: InstanceDomainMap
   );
 }
 
+function writeDesiredCleanupEvent(
+  storage: DurableObjectStorage,
+  input: { mapping: InstanceDomainMapping; now: string },
+) {
+  storage.sql.exec(
+    `
+      INSERT INTO instance_domain_mapping_desired_cleanup_events (
+        host,
+        profile,
+        target_install_id,
+        surface,
+        enabled,
+        created_at,
+        updated_at,
+        action,
+        reason,
+        recorded_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    input.mapping.host,
+    input.mapping.profile,
+    input.mapping.targetInstallId ?? null,
+    input.mapping.surface ?? null,
+    input.mapping.enabled ? 1 : 0,
+    input.mapping.createdAt,
+    input.mapping.updatedAt,
+    "forgotten",
+    "disabled-unapplied",
+    input.now,
+  );
+}
+
 function readLastAuditEvent(storage: DurableObjectStorage): InstanceDomainMappingAuditEvent {
   for (const row of storage.sql.exec<InstanceDomainMappingAuditEventRow>(
     `
@@ -579,6 +721,34 @@ function readLastAuditEvent(storage: DurableObjectStorage): InstanceDomainMappin
   throw new Error("Domain mapping audit event was not written.");
 }
 
+function readLastDesiredCleanupEvent(
+  storage: DurableObjectStorage,
+): InstanceDomainMappingDesiredCleanupEvent {
+  for (const row of storage.sql.exec<InstanceDomainMappingDesiredCleanupEventRow>(
+    `
+      SELECT
+        event_id,
+        host,
+        profile,
+        target_install_id,
+        surface,
+        enabled,
+        created_at,
+        updated_at,
+        action,
+        reason,
+        recorded_at
+      FROM instance_domain_mapping_desired_cleanup_events
+      WHERE event_id = last_insert_rowid()
+      LIMIT 1
+    `,
+  )) {
+    return desiredCleanupEventFromRow(row);
+  }
+
+  throw new Error("Domain mapping desired cleanup event was not written.");
+}
+
 function domainMappingFromRow(row: InstanceDomainMappingRow): InstanceDomainMapping {
   return {
     host: row.host,
@@ -590,6 +760,26 @@ function domainMappingFromRow(row: InstanceDomainMappingRow): InstanceDomainMapp
     enabled: row.enabled === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function desiredCleanupEventFromRow(
+  row: InstanceDomainMappingDesiredCleanupEventRow,
+): InstanceDomainMappingDesiredCleanupEvent {
+  return {
+    eventId: row.event_id,
+    host: row.host,
+    profile: row.profile,
+    ...(row.surface === null ? {} : { surface: row.surface }),
+    ...(row.target_install_id === null
+      ? {}
+      : { installId: row.target_install_id, targetInstallId: row.target_install_id }),
+    enabled: row.enabled === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    action: row.action,
+    reason: row.reason,
+    recordedAt: row.recorded_at,
   };
 }
 

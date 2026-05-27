@@ -4,6 +4,7 @@ import {
   parseRecordInstanceDomainMappingApplyEvidenceRequest,
   resolveInstanceDomainMappingProfile,
   type DeleteInstanceDomainMappingResponse,
+  type ForgetInstanceDomainMappingResponse,
   type InstanceDomainMapping,
   type InstanceDomainMappingLookupResponse,
   type InstanceDomainMappingsResponse,
@@ -15,8 +16,10 @@ import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
   createInstanceDomainMapping,
   disableStoredInstanceDomainMapping,
+  forgetStoredInstanceDomainMapping,
   readInstanceDomainMappingAppliedStates,
   readInstanceDomainMappingAuditEvents,
+  readInstanceDomainMappingDesiredCleanupEvents,
   readEnabledInstanceDomainMappingForHost,
   readInstanceDomainMappings,
   recordInstanceDomainMappingApplyEvidence,
@@ -24,6 +27,7 @@ import {
 
 export const INSTANCE_DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/lookup`;
+const INSTANCE_DOMAIN_MAPPINGS_FORGET_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/forget`;
 const INSTANCE_DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/apply-evidence`;
 
 type InstanceDomainMappingsApiEnv = AuthorityAdminGuardEnv & {
@@ -102,6 +106,10 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
   try {
     if (url.pathname === INSTANCE_DOMAIN_MAPPINGS_APPLY_EVIDENCE_API_PATH) {
       return handleApplyEvidenceRequest(request, storage, env);
+    }
+
+    if (url.pathname === INSTANCE_DOMAIN_MAPPINGS_FORGET_API_PATH) {
+      return handleForgetRequest(request, storage, env, url);
     }
 
     if (url.pathname === INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH) {
@@ -202,6 +210,59 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
   }
 }
 
+async function handleForgetRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
+  url: URL,
+): Promise<Response> {
+  if (request.method !== "DELETE") {
+    return methodNotAllowedResponse("DELETE");
+  }
+
+  const authorization = await authorizeInstanceWrite(request, env);
+
+  if (!authorization.authorized) {
+    return jsonResponse(
+      { error: authorization.error },
+      authorization.status,
+      authorization.headers,
+    );
+  }
+
+  const body = parseDeleteInstanceDomainMappingRequest({
+    host: url.searchParams.get("host") ?? "",
+    profile: url.searchParams.get("profile") ?? undefined,
+    surface:
+      url.searchParams.get("surface") ?? (url.searchParams.has("profile") ? undefined : "site"),
+  });
+  const result = forgetStoredInstanceDomainMapping(storage, {
+    ...body,
+    now: nowIsoString(),
+  });
+
+  if (!result.ok) {
+    return jsonResponse(
+      {
+        error: result.error.message,
+        code: result.error.code,
+        ...(result.error.field === undefined ? {} : { field: result.error.field }),
+        mappings: result.mappings,
+      },
+      domainMappingFailureStatus(result.error.code),
+    );
+  }
+
+  const response: ForgetInstanceDomainMappingResponse = {
+    desiredCleanupEvent: result.desiredCleanupEvent,
+    desiredCleanupEvents: result.desiredCleanupEvents,
+    mapping: result.mapping,
+    mappings: result.mappings,
+  };
+
+  return jsonResponse(response);
+}
+
 async function handleApplyEvidenceRequest(
   request: Request,
   storage: DurableObjectStorage,
@@ -299,12 +360,17 @@ function domainMappingsResponse(storage: DurableObjectStorage): InstanceDomainMa
   return {
     appliedStates: readInstanceDomainMappingAppliedStates(storage),
     auditEvents: readInstanceDomainMappingAuditEvents(storage),
+    desiredCleanupEvents: readInstanceDomainMappingDesiredCleanupEvents(storage),
     mappings: readInstanceDomainMappings(storage),
   };
 }
 
 function domainMappingFailureStatus(code: string) {
-  if (code === "duplicate-domain-mapping") {
+  if (
+    code === "domain-mapping-enabled" ||
+    code === "domain-mapping-has-applied-state" ||
+    code === "duplicate-domain-mapping"
+  ) {
     return 409;
   }
 

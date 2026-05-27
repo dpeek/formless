@@ -5,7 +5,9 @@ import {
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+  type ForgetInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderApplyJobResponse,
   type InstanceDomainProviderApplyResponse,
   type InstanceDomainProviderDeleteJobResponse,
@@ -18,6 +20,11 @@ import type { InstanceDomainMappingsResponse } from "../shared/instance-domain-m
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
+
+type DomainProviderFailureResponse = {
+  code?: string;
+  error: string;
+};
 
 const adminToken = "test-admin-token";
 const cloudflareToken = "secret-cloudflare-token";
@@ -533,6 +540,175 @@ describe("instance domain provider API routes", () => {
       "deleted",
     ]);
   });
+
+  it("forgets disabled redirect intents with no provider evidence and records cleanup audit", async () => {
+    await postAdminJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+      {
+        enabled: false,
+        fromHost: "Draft.Example.COM.",
+        toHost: "example.com",
+      },
+    );
+
+    const forgotten = await deleteAdminJson<ForgetInstanceDomainProviderRedirectIntentResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=draft.example.com`,
+    );
+    const after = await getJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+    );
+
+    expect(forgotten.response.status).toBe(200);
+    expect(forgotten.body.redirectIntent).toMatchObject({
+      enabled: false,
+      fromHost: "draft.example.com",
+      toHost: "example.com",
+    });
+    expect(forgotten.body.redirectIntents).toEqual([]);
+    expect(forgotten.body.redirectIntentCleanupEvent).toMatchObject({
+      action: "forgotten",
+      enabled: false,
+      fromHost: "draft.example.com",
+      reason: "disabled-unapplied",
+      toHost: "example.com",
+    });
+    expect(after.body.redirectIntents).toEqual([]);
+    expect(after.body.redirectIntentCleanupEvents).toEqual(
+      forgotten.body.redirectIntentCleanupEvents,
+    );
+  });
+
+  it("rejects redirect intent forget for enabled rows or rows with provider evidence", async () => {
+    await postAdminJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+      {
+        fromHost: "enabled.example.com",
+        toHost: "example.com",
+      },
+    );
+
+    const enabled = await deleteAdminJsonAllowingFailure<DomainProviderFailureResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=enabled.example.com`,
+    );
+
+    expect(enabled.response.status).toBe(409);
+    expect(enabled.body).toMatchObject({
+      code: "domain-provider-redirect-enabled",
+    });
+
+    await postAdminJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+      {
+        fromHost: "applied.example.com",
+        toHost: "example.com",
+      },
+    );
+
+    const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { host: "applied.example.com", runnerId: "runner-redirects" },
+    );
+
+    if (apply.body.status !== "ready") {
+      throw new Error("Apply did not create a redirect job.");
+    }
+
+    const dns = apply.body.job.plan.resources.find(
+      (resource) => resource.kind === "cloudflare-dns-records",
+    );
+    const redirect = apply.body.job.plan.resources.find(
+      (resource) => resource.kind === "cloudflare-redirect-rule",
+    );
+
+    if (!dns || !redirect) {
+      throw new Error("Expected DNS and redirect resources.");
+    }
+
+    await postAdminJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${apply.body.job.jobId}/result`,
+      {
+        resources: [
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: dns.logicalId,
+            dnsRecordIds: ["dns-1"],
+            host: "applied.example.com",
+            kind: "cloudflare-dns-records",
+            logicalId: dns.logicalId,
+            zoneId: dns.zone.id,
+            zoneName: dns.zone.name,
+          },
+          {
+            accountId: "account-123",
+            action: "created",
+            alchemyResourceId: redirect.logicalId,
+            host: "applied.example.com",
+            kind: "cloudflare-redirect-rule",
+            logicalId: redirect.logicalId,
+            preserveQueryString: redirect.props.preserveQueryString,
+            redirectRuleId: "rule-1",
+            redirectRulesetId: "ruleset-1",
+            statusCode: redirect.props.statusCode,
+            targetUrl: redirect.targetUrl,
+            zoneId: redirect.zone.id,
+            zoneName: redirect.zone.name,
+          },
+        ],
+        runnerId: "runner-redirects",
+        status: "succeeded",
+      },
+    );
+
+    await deleteAdminJson<InstanceDomainProviderRedirectsResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}?fromHost=applied.example.com`,
+    );
+
+    const applied = await deleteAdminJsonAllowingFailure<DomainProviderFailureResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=applied.example.com`,
+    );
+    const after = await getJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+    );
+
+    expect(applied.response.status).toBe(409);
+    expect(applied.body).toMatchObject({
+      code: "domain-provider-redirect-has-applied-resources",
+    });
+    expect(after.body.redirectIntents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ enabled: false, fromHost: "applied.example.com" }),
+      ]),
+    );
+    expect(after.body.appliedResources.map((resource) => resource.host)).toEqual([
+      "applied.example.com",
+      "applied.example.com",
+    ]);
+  });
+
+  it("requires owner or admin authorization for redirect intent forget", async () => {
+    await postAdminJson<InstanceDomainProviderRedirectsResponse>(
+      INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
+      {
+        enabled: false,
+        fromHost: "draft.example.com",
+        toHost: "example.com",
+      },
+    );
+
+    const rejected = await harness.fetch(
+      `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH}?fromHost=draft.example.com`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    expect(rejected.status).toBe(401);
+    expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await rejected.json()).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+  });
 });
 
 async function createHarness(bindings: Record<string, string>) {
@@ -577,7 +753,7 @@ async function postAdminJson<T>(path: string, body: unknown) {
   };
 }
 
-async function deleteAdminJson(path: string) {
+async function deleteAdminJson<T = unknown>(path: string) {
   const response = await harness.fetch(path, {
     headers: {
       Authorization: `Bearer ${adminToken}`,
@@ -588,7 +764,21 @@ async function deleteAdminJson(path: string) {
   expect(response.status).toBe(200);
 
   return {
-    body: (await response.json()) as unknown,
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
+async function deleteAdminJsonAllowingFailure<T>(path: string) {
+  const response = await harness.fetch(path, {
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+    },
+    method: "DELETE",
+  });
+
+  return {
+    body: (await response.json()) as T,
     response,
   };
 }

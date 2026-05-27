@@ -47,6 +47,25 @@ export type InstanceDomainMappingAuditEvent = InstanceDomainMappingAppliedState 
   eventId: number;
 };
 
+export type InstanceDomainMappingDesiredCleanupAction = "forgotten";
+
+export type InstanceDomainMappingDesiredCleanupReason = "disabled-unapplied";
+
+export type InstanceDomainMappingDesiredCleanupEvent = {
+  action: InstanceDomainMappingDesiredCleanupAction;
+  createdAt: string;
+  enabled: boolean;
+  eventId: number;
+  host: string;
+  installId?: AppInstallId;
+  profile: InstanceDomainMappingProfile;
+  reason: InstanceDomainMappingDesiredCleanupReason;
+  recordedAt: string;
+  surface?: InstanceDomainMappingSurface;
+  targetInstallId?: AppInstallId;
+  updatedAt: string;
+};
+
 export type CreateInstanceDomainMappingRequest = {
   host: string;
   profile?: string;
@@ -72,6 +91,13 @@ export type DeleteInstanceDomainMappingResponse = {
   mappings: InstanceDomainMapping[];
 };
 
+export type ForgetInstanceDomainMappingResponse = {
+  desiredCleanupEvent: InstanceDomainMappingDesiredCleanupEvent;
+  desiredCleanupEvents: InstanceDomainMappingDesiredCleanupEvent[];
+  mapping: InstanceDomainMapping;
+  mappings: InstanceDomainMapping[];
+};
+
 export type RecordInstanceDomainMappingApplyEvidenceRequest = {
   host: string;
   profile?: string;
@@ -92,6 +118,7 @@ export type RecordInstanceDomainMappingApplyEvidenceRequest = {
 export type InstanceDomainMappingsResponse = {
   appliedStates: InstanceDomainMappingAppliedState[];
   auditEvents: InstanceDomainMappingAuditEvent[];
+  desiredCleanupEvents: InstanceDomainMappingDesiredCleanupEvent[];
   mappings: InstanceDomainMapping[];
 };
 
@@ -108,6 +135,8 @@ export type RecordInstanceDomainMappingApplyEvidenceResponse = {
 
 export type InstanceDomainMappingRegistryErrorCode =
   | "domain-mapping-install-mismatch"
+  | "domain-mapping-enabled"
+  | "domain-mapping-has-applied-state"
   | "domain-mapping-not-found"
   | "duplicate-domain-mapping"
   | "invalid-applied-action"
@@ -172,6 +201,27 @@ export type DisableInstanceDomainMappingInput = {
 };
 
 export type DisableInstanceDomainMappingResult =
+  | {
+      ok: true;
+      mapping: InstanceDomainMapping;
+      mappings: InstanceDomainMapping[];
+    }
+  | {
+      ok: false;
+      error: InstanceDomainMappingRegistryError;
+      mappings: readonly InstanceDomainMapping[];
+    };
+
+export type ForgetInstanceDomainMappingInput = {
+  appliedStates: readonly InstanceDomainMappingAppliedState[];
+  existingMappings: readonly InstanceDomainMapping[];
+  host: string;
+  now: string;
+  profile?: string;
+  surface?: string;
+};
+
+export type ForgetInstanceDomainMappingResult =
   | {
       ok: true;
       mapping: InstanceDomainMapping;
@@ -463,6 +513,84 @@ export function disableInstanceDomainMapping(
         candidate.host === mapping.host && candidate.profile === mapping.profile
           ? mapping
           : candidate,
+      ),
+    ),
+  };
+}
+
+export function forgetInstanceDomainMapping(
+  input: ForgetInstanceDomainMappingInput,
+): ForgetInstanceDomainMappingResult {
+  const hostResult = normalizeInstanceDomainHost(input.host);
+
+  if (!hostResult.ok) {
+    return {
+      ok: false,
+      error: hostResult.error,
+      mappings: input.existingMappings,
+    };
+  }
+
+  const profileResult = resolveInstanceDomainMappingProfile(input);
+
+  if (!profileResult.ok) {
+    return {
+      ok: false,
+      error: profileResult.error,
+      mappings: input.existingMappings,
+    };
+  }
+
+  const existing = input.existingMappings.find(
+    (mapping) => mapping.host === hostResult.host && mapping.profile === profileResult.profile,
+  );
+
+  if (!existing) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "domain-mapping-not-found",
+        "host",
+        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" does not exist.`,
+      ),
+      mappings: input.existingMappings,
+    };
+  }
+
+  if (existing.enabled) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "domain-mapping-enabled",
+        "host",
+        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" must be disabled before it can be forgotten.`,
+      ),
+      mappings: input.existingMappings,
+    };
+  }
+
+  const appliedState = input.appliedStates.find(
+    (state) => state.host === hostResult.host && state.profile === profileResult.profile,
+  );
+
+  if (appliedState) {
+    return {
+      ok: false,
+      error: domainMappingError(
+        "domain-mapping-has-applied-state",
+        "host",
+        `Domain mapping for host "${hostResult.host}" and profile "${profileResult.profile}" has provider applied evidence and cannot be forgotten until provider cleanup clears it.`,
+      ),
+      mappings: input.existingMappings,
+    };
+  }
+
+  return {
+    ok: true,
+    mapping: existing,
+    mappings: listInstanceDomainMappings(
+      input.existingMappings.filter(
+        (mapping) => mapping.host !== existing.host || mapping.profile !== existing.profile,
       ),
     ),
   };

@@ -378,6 +378,9 @@ function parseDomainMappings(value: unknown, context: string): InstanceDomainMap
     auditEvents: Array.isArray(value.auditEvents)
       ? (value.auditEvents as InstanceDomainMappingsResponse["auditEvents"])
       : [],
+    desiredCleanupEvents: Array.isArray(value.desiredCleanupEvents)
+      ? (value.desiredCleanupEvents as InstanceDomainMappingsResponse["desiredCleanupEvents"])
+      : [],
     mappings: value.mappings as InstanceDomainMappingsResponse["mappings"],
   };
 }

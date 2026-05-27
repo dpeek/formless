@@ -17,6 +17,7 @@ export const INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH = `${INSTANCE_DOMAIN_P
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete`;
 export const INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/delete-jobs`;
 export const INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_API_PATH}/redirects`;
+export const INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH = `${INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH}/forget`;
 export const DOMAIN_PROVIDER_RUNNER_MUTATION_ENV_NAMES = [
   "CLOUDFLARE_API_TOKEN",
   "CF_API_TOKEN",
@@ -81,6 +82,18 @@ export type InstanceDomainProviderRedirectIntent = {
   updatedAt: string;
 };
 
+export type InstanceDomainProviderRedirectIntentCleanupAction = "forgotten";
+
+export type InstanceDomainProviderRedirectIntentCleanupReason = "disabled-unapplied";
+
+export type InstanceDomainProviderRedirectIntentCleanupEvent =
+  InstanceDomainProviderRedirectIntent & {
+    action: InstanceDomainProviderRedirectIntentCleanupAction;
+    eventId: number;
+    reason: InstanceDomainProviderRedirectIntentCleanupReason;
+    recordedAt: string;
+  };
+
 export type CreateInstanceDomainProviderRedirectIntentRequest = {
   enabled?: boolean;
   fromHost: string;
@@ -120,6 +133,7 @@ export type InstanceDomainProviderAuditEvent = InstanceDomainProviderAppliedReso
 export type InstanceDomainProviderRedirectsResponse = {
   appliedResources: InstanceDomainProviderAppliedResourceState[];
   auditEvents: InstanceDomainProviderAuditEvent[];
+  redirectIntentCleanupEvents: InstanceDomainProviderRedirectIntentCleanupEvent[];
   redirectIntents: InstanceDomainProviderRedirectIntent[];
 };
 
@@ -130,6 +144,13 @@ export type CreateInstanceDomainProviderRedirectIntentResponse = {
 
 export type DeleteInstanceDomainProviderRedirectIntentResponse = {
   redirectIntent: InstanceDomainProviderRedirectIntent;
+  redirectIntents: InstanceDomainProviderRedirectIntent[];
+};
+
+export type ForgetInstanceDomainProviderRedirectIntentResponse = {
+  redirectIntent: InstanceDomainProviderRedirectIntent;
+  redirectIntentCleanupEvent: InstanceDomainProviderRedirectIntentCleanupEvent;
+  redirectIntentCleanupEvents: InstanceDomainProviderRedirectIntentCleanupEvent[];
   redirectIntents: InstanceDomainProviderRedirectIntent[];
 };
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { CreateAppInstallResponse } from "../shared/protocol.ts";
 import type {
+  ForgetInstanceDomainMappingResponse,
   InstanceDomainMapping,
   InstanceDomainMappingLookupResponse,
   InstanceDomainMappingsResponse,
@@ -360,6 +361,127 @@ describe("instance domain mapping API routes", () => {
     expect(lookup.body.mapping).toBeNull();
     expect(after.body.appliedStates).toHaveLength(1);
     expect(after.body.auditEvents).toHaveLength(1);
+  });
+
+  it("forgets disabled desired mappings with no provider evidence and records cleanup audit", async () => {
+    await createAppInstall({ packageAppKey: "site", installId: "personal", label: "Personal" });
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "draft.example.com",
+      surface: "site",
+      installId: "personal",
+      enabled: false,
+    });
+
+    const forgotten = await deleteAdminJson<ForgetInstanceDomainMappingResponse>(
+      "/api/formless/domain-mappings/forget?host=draft.example.com&profile=publicSite",
+    );
+    const after = await getJson<InstanceDomainMappingsResponse>("/api/formless/domain-mappings");
+
+    expect(forgotten.response.status).toBe(200);
+    expect(forgotten.body.mapping).toMatchObject({
+      enabled: false,
+      host: "draft.example.com",
+      profile: "publicSite",
+      targetInstallId: "personal",
+    });
+    expect(forgotten.body.mappings).toEqual([]);
+    expect(forgotten.body.desiredCleanupEvent).toMatchObject({
+      action: "forgotten",
+      enabled: false,
+      host: "draft.example.com",
+      profile: "publicSite",
+      reason: "disabled-unapplied",
+      targetInstallId: "personal",
+    });
+    expect(after.body.mappings).toEqual([]);
+    expect(after.body.desiredCleanupEvents).toEqual(forgotten.body.desiredCleanupEvents);
+  });
+
+  it("rejects desired mapping forget for enabled rows or rows with provider evidence", async () => {
+    await createAppInstall({ packageAppKey: "site", installId: "personal", label: "Personal" });
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "enabled.example.com",
+      surface: "site",
+      installId: "personal",
+    });
+
+    const enabled = await deleteAdminJson<DomainMappingFailureResponse>(
+      "/api/formless/domain-mappings/forget?host=enabled.example.com&profile=publicSite",
+    );
+
+    expect(enabled.response.status).toBe(409);
+    expect(enabled.body).toMatchObject({
+      code: "domain-mapping-enabled",
+      mappings: [expect.objectContaining({ enabled: true, host: "enabled.example.com" })],
+    });
+
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "applied.example.com",
+      surface: "site",
+      installId: "personal",
+    });
+    await postAdminJson<RecordInstanceDomainMappingApplyEvidenceResponse>(
+      "/api/formless/domain-mappings/apply-evidence",
+      {
+        host: "applied.example.com",
+        surface: "site",
+        installId: "personal",
+        provider: "cloudflare-worker-custom-domain",
+        accountId: "account-123",
+        zoneId: "zone-1",
+        zoneName: "example.com",
+        workerName: "personal-worker",
+        workerDomainId: "domain-1",
+        action: "created",
+      },
+    );
+    await deleteAdminJson<CreateInstanceDomainMappingResponse>(
+      "/api/formless/domain-mappings?host=applied.example.com&profile=publicSite",
+    );
+
+    const applied = await deleteAdminJson<DomainMappingFailureResponse>(
+      "/api/formless/domain-mappings/forget?host=applied.example.com&profile=publicSite",
+    );
+    const after = await getJson<InstanceDomainMappingsResponse>("/api/formless/domain-mappings");
+
+    expect(applied.response.status).toBe(409);
+    expect(applied.body).toMatchObject({
+      code: "domain-mapping-has-applied-state",
+      mappings: expect.arrayContaining([
+        expect.objectContaining({ enabled: false, host: "applied.example.com" }),
+      ]),
+    });
+    expect(after.body.appliedStates).toEqual([
+      expect.objectContaining({ host: "applied.example.com", workerDomainId: "domain-1" }),
+    ]);
+    expect(after.body.mappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ enabled: false, host: "applied.example.com" }),
+      ]),
+    );
+  });
+
+  it("requires instance write authorization for desired mapping forget when configured", async () => {
+    await createAppInstall({ packageAppKey: "site", installId: "personal", label: "Personal" });
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "draft.example.com",
+      surface: "site",
+      installId: "personal",
+      enabled: false,
+    });
+
+    const rejected = await harness.fetch(
+      "/api/formless/domain-mappings/forget?host=draft.example.com&profile=publicSite",
+      {
+        method: "DELETE",
+      },
+    );
+
+    expect(rejected.status).toBe(401);
+    expect(rejected.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await rejected.json()).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
   });
 
   it("requires instance write authorization for apply evidence", async () => {

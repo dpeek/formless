@@ -6,6 +6,7 @@ import {
   INSTANCE_DOMAIN_PROVIDER_DELETE_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_DELETE_JOBS_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_PLAN_API_PATH,
+  INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH,
   type DomainProviderConfigIssue,
   type DomainProviderConfigStatus,
@@ -13,6 +14,7 @@ import {
   type CreateInstanceDomainProviderRedirectIntentResponse,
   type DeleteInstanceDomainProviderRedirectIntentRequest,
   type DeleteInstanceDomainProviderRedirectIntentResponse,
+  type ForgetInstanceDomainProviderRedirectIntentResponse,
   type InstanceDomainProviderAppliedResourceState,
   type InstanceDomainProviderAuditEvent,
   type InstanceDomainProviderApplyBlockedCode,
@@ -32,6 +34,7 @@ import {
   type InstanceDomainProviderDeleteResponse,
   type InstanceDomainProviderDeleteTarget,
   type InstanceDomainProviderPlanResponse,
+  type InstanceDomainProviderRedirectIntentCleanupEvent,
   type InstanceDomainProviderRedirectIntent,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
@@ -106,6 +109,24 @@ const redirectIntentsTableSql = `
     status_code INTEGER NOT NULL CHECK (status_code IN (301, 302, 303, 307, 308)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    CHECK ((to_host IS NOT NULL AND to_url IS NULL) OR (to_host IS NULL AND to_url IS NOT NULL))
+  )
+`;
+const redirectIntentCleanupEventsTableSql = `
+  CREATE TABLE IF NOT EXISTS instance_domain_provider_redirect_intent_cleanup_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_host TEXT NOT NULL,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    to_host TEXT,
+    to_url TEXT,
+    preserve_path INTEGER NOT NULL CHECK (preserve_path IN (0, 1)),
+    preserve_query_string INTEGER NOT NULL CHECK (preserve_query_string IN (0, 1)),
+    status_code INTEGER NOT NULL CHECK (status_code IN (301, 302, 303, 307, 308)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action = 'forgotten'),
+    reason TEXT NOT NULL CHECK (reason = 'disabled-unapplied'),
+    recorded_at TEXT NOT NULL,
     CHECK ((to_host IS NOT NULL AND to_url IS NULL) OR (to_host IS NULL AND to_url IS NOT NULL))
   )
 `;
@@ -214,6 +235,13 @@ type DomainProviderRedirectIntentRow = {
   updated_at: string;
 };
 
+type DomainProviderRedirectIntentCleanupEventRow = DomainProviderRedirectIntentRow & {
+  action: InstanceDomainProviderRedirectIntentCleanupEvent["action"];
+  event_id: number;
+  reason: InstanceDomainProviderRedirectIntentCleanupEvent["reason"];
+  recorded_at: string;
+};
+
 type DomainProviderAppliedResourceRow = {
   account_id: string;
   action: InstanceDomainProviderAppliedResourceState["action"];
@@ -292,6 +320,10 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
     }
 
     return jsonResponse(domainProviderPlanResponse(storage, env, options.options));
+  }
+
+  if (url.pathname === INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH) {
+    return handleForgetRedirectIntentRequest(request, storage, env, url);
   }
 
   if (url.pathname === INSTANCE_DOMAIN_PROVIDER_REDIRECTS_API_PATH) {
@@ -409,6 +441,51 @@ async function handleRedirectIntentsRequest(
   }
 
   return methodNotAllowedResponse("GET, POST, DELETE");
+}
+
+async function handleForgetRedirectIntentRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: DurableObjectDomainProviderEnv,
+  url: URL,
+): Promise<Response> {
+  if (request.method !== "DELETE") {
+    return methodNotAllowedResponse("DELETE");
+  }
+
+  const authorization = await authorizeInstanceWrite(request, env);
+
+  if (!authorization.authorized) {
+    return jsonResponse(
+      { error: authorization.error },
+      authorization.status,
+      authorization.headers,
+    );
+  }
+
+  const parsed = parseDeleteRedirectIntentRequest({
+    fromHost: url.searchParams.get("fromHost") ?? "",
+  });
+
+  if (!parsed.ok) {
+    return jsonResponse({ error: parsed.error }, 400);
+  }
+
+  const result = forgetRedirectIntent(storage, {
+    fromHost: parsed.request.fromHost,
+    now: nowIsoString(),
+  });
+
+  if (!result.ok) {
+    return jsonResponse({ code: result.code, error: result.error }, result.status);
+  }
+
+  return jsonResponse({
+    redirectIntent: result.redirectIntent,
+    redirectIntentCleanupEvent: result.redirectIntentCleanupEvent,
+    redirectIntentCleanupEvents: result.redirectIntentCleanupEvents,
+    redirectIntents: result.redirectIntents,
+  } satisfies ForgetInstanceDomainProviderRedirectIntentResponse);
 }
 
 async function applyWithAuthorization(
@@ -1066,6 +1143,7 @@ function domainProviderRedirectsResponse(
   return {
     appliedResources: readAppliedProviderResources(storage),
     auditEvents: readProviderAuditEvents(storage),
+    redirectIntentCleanupEvents: readRedirectIntentCleanupEvents(storage),
     redirectIntents: readDomainProviderRedirectIntents(storage),
   };
 }
@@ -1194,6 +1272,74 @@ function disableRedirectIntent(
   };
 }
 
+function forgetRedirectIntent(
+  storage: DurableObjectStorage,
+  input: { fromHost: string; now: string },
+):
+  | {
+      ok: true;
+      redirectIntent: InstanceDomainProviderRedirectIntent;
+      redirectIntentCleanupEvent: InstanceDomainProviderRedirectIntentCleanupEvent;
+      redirectIntentCleanupEvents: InstanceDomainProviderRedirectIntentCleanupEvent[];
+      redirectIntents: InstanceDomainProviderRedirectIntent[];
+    }
+  | { ok: false; code: string; error: string; status: number } {
+  ensureDomainProviderRedirectIntentsTable(storage);
+  ensureDomainProviderAppliedResourcesTables(storage);
+
+  return storage.transactionSync(() => {
+    const current = readRedirectIntentByHost(storage, input.fromHost);
+
+    if (!current) {
+      return {
+        ok: false,
+        code: "domain-provider-redirect-not-found",
+        error: `Domain provider redirect intent for "${input.fromHost}" does not exist.`,
+        status: 404,
+      };
+    }
+
+    if (current.enabled) {
+      return {
+        ok: false,
+        code: "domain-provider-redirect-enabled",
+        error: `Domain provider redirect intent for "${input.fromHost}" must be disabled before it can be forgotten.`,
+        status: 409,
+      };
+    }
+
+    const appliedResources = readAppliedProviderResources(storage).filter(
+      (resource) => resource.host === current.fromHost,
+    );
+
+    if (appliedResources.length > 0) {
+      return {
+        ok: false,
+        code: "domain-provider-redirect-has-applied-resources",
+        error: `Domain provider redirect intent for "${input.fromHost}" has provider applied evidence and cannot be forgotten until provider cleanup clears it.`,
+        status: 409,
+      };
+    }
+
+    storage.sql.exec(
+      `
+        DELETE FROM instance_domain_provider_redirect_intents
+        WHERE from_host = ?
+      `,
+      current.fromHost,
+    );
+    writeRedirectIntentCleanupEvent(storage, { intent: current, now: input.now });
+
+    return {
+      ok: true,
+      redirectIntent: current,
+      redirectIntentCleanupEvent: readLastRedirectIntentCleanupEvent(storage),
+      redirectIntentCleanupEvents: readRedirectIntentCleanupEvents(storage),
+      redirectIntents: readDomainProviderRedirectIntents(storage),
+    };
+  });
+}
+
 function readRedirectIntentByHost(
   storage: DurableObjectStorage,
   fromHost: string,
@@ -1224,6 +1370,107 @@ function readRedirectIntentByHost(
   return undefined;
 }
 
+function readRedirectIntentCleanupEvents(
+  storage: DurableObjectStorage,
+): InstanceDomainProviderRedirectIntentCleanupEvent[] {
+  ensureDomainProviderRedirectIntentCleanupEventsTable(storage);
+  const events: InstanceDomainProviderRedirectIntentCleanupEvent[] = [];
+
+  for (const row of storage.sql.exec<DomainProviderRedirectIntentCleanupEventRow>(
+    `
+      SELECT
+        event_id,
+        from_host,
+        enabled,
+        to_host,
+        to_url,
+        preserve_path,
+        preserve_query_string,
+        status_code,
+        created_at,
+        updated_at,
+        action,
+        reason,
+        recorded_at
+      FROM instance_domain_provider_redirect_intent_cleanup_events
+      ORDER BY event_id ASC
+    `,
+  )) {
+    events.push(redirectIntentCleanupEventFromRow(row));
+  }
+
+  return events;
+}
+
+function writeRedirectIntentCleanupEvent(
+  storage: DurableObjectStorage,
+  input: { intent: InstanceDomainProviderRedirectIntent; now: string },
+) {
+  ensureDomainProviderRedirectIntentCleanupEventsTable(storage);
+
+  storage.sql.exec(
+    `
+      INSERT INTO instance_domain_provider_redirect_intent_cleanup_events (
+        from_host,
+        enabled,
+        to_host,
+        to_url,
+        preserve_path,
+        preserve_query_string,
+        status_code,
+        created_at,
+        updated_at,
+        action,
+        reason,
+        recorded_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    input.intent.fromHost,
+    input.intent.enabled ? 1 : 0,
+    input.intent.toHost ?? null,
+    input.intent.toUrl ?? null,
+    input.intent.preservePath ? 1 : 0,
+    input.intent.preserveQueryString ? 1 : 0,
+    input.intent.statusCode,
+    input.intent.createdAt,
+    input.intent.updatedAt,
+    "forgotten",
+    "disabled-unapplied",
+    input.now,
+  );
+}
+
+function readLastRedirectIntentCleanupEvent(
+  storage: DurableObjectStorage,
+): InstanceDomainProviderRedirectIntentCleanupEvent {
+  for (const row of storage.sql.exec<DomainProviderRedirectIntentCleanupEventRow>(
+    `
+      SELECT
+        event_id,
+        from_host,
+        enabled,
+        to_host,
+        to_url,
+        preserve_path,
+        preserve_query_string,
+        status_code,
+        created_at,
+        updated_at,
+        action,
+        reason,
+        recorded_at
+      FROM instance_domain_provider_redirect_intent_cleanup_events
+      WHERE event_id = last_insert_rowid()
+      LIMIT 1
+    `,
+  )) {
+    return redirectIntentCleanupEventFromRow(row);
+  }
+
+  throw new Error("Domain provider redirect cleanup event was not written.");
+}
+
 function redirectIntentFromRow(
   row: DomainProviderRedirectIntentRow,
 ): InstanceDomainProviderRedirectIntent {
@@ -1237,6 +1484,18 @@ function redirectIntentFromRow(
     ...(row.to_host === null ? {} : { toHost: row.to_host }),
     ...(row.to_url === null ? {} : { toUrl: row.to_url }),
     updatedAt: row.updated_at,
+  };
+}
+
+function redirectIntentCleanupEventFromRow(
+  row: DomainProviderRedirectIntentCleanupEventRow,
+): InstanceDomainProviderRedirectIntentCleanupEvent {
+  return {
+    ...redirectIntentFromRow(row),
+    action: row.action,
+    eventId: row.event_id,
+    reason: row.reason,
+    recordedAt: row.recorded_at,
   };
 }
 
@@ -2184,6 +2443,10 @@ function ensureDomainProviderDeleteJobsTable(storage: DurableObjectStorage) {
 
 function ensureDomainProviderRedirectIntentsTable(storage: DurableObjectStorage) {
   storage.sql.exec(redirectIntentsTableSql);
+}
+
+function ensureDomainProviderRedirectIntentCleanupEventsTable(storage: DurableObjectStorage) {
+  storage.sql.exec(redirectIntentCleanupEventsTableSql);
 }
 
 function ensureDomainProviderAppliedResourcesTables(storage: DurableObjectStorage) {
