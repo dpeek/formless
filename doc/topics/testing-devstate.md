@@ -1,6 +1,6 @@
 # Testing And Devstate
 
-Last updated: 2026-05-26
+Last updated: 2026-05-27
 
 ## Current Facts
 
@@ -39,7 +39,9 @@ Last updated: 2026-05-26
 - Store tests: `src/client/store.test.ts`.
 - Browser replica projection tests: `src/client/projections.test.ts`.
 - Readiness tests: `src/client/readiness.test.ts`.
+- Runtime topology tests: `src/shared/runtime-topology.test.ts`.
 - Authority tests: `src/worker/authority.test.ts`.
+- Worker routing tests: `src/worker/routing.test.ts`.
 - Storage tests: `src/worker/storage.test.ts`.
 - Site tree tests: `src/site/tree.test.ts`.
 - Site media tests: `src/worker/media.test.ts`, `src/client/media.test.ts`.

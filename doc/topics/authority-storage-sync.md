@@ -5,6 +5,12 @@ Last updated: 2026-05-27
 ## Current Facts
 
 - Authority worker dispatch: `src/worker/index.ts`.
+- Shared runtime topology source: `src/shared/runtime-topology.ts`.
+- Worker runtime adapter source: `src/worker/routing.ts`.
+- Worker request topology type: `WorkerRuntimeRequestTopology`.
+- Worker dispatch resolves request topology once per request in `src/worker/index.ts`.
+- Request topology includes profile kind, route policy, path, API, client-shell, static asset, icon, indexing, read method, and HTML facts.
+- Worker dispatch passes request topology to media, icons, indexing, SSR, Authority schema-key gating, mapped app shell, and static asset adapters.
 - Authority storage identity policy: `src/shared/app-storage-identity.ts`.
 - Authority instances use `AppStorageIdentity.authorityName`.
 - Schema-key authority names stay `tasks`, `estii`, and `site`.

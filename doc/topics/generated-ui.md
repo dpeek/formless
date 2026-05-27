@@ -6,8 +6,10 @@ Last updated: 2026-05-27
 
 - App shell: `src/app.tsx`.
 - Active app surface: `src/app/app-surface.tsx`.
+- Shared runtime topology source: `src/shared/runtime-topology.ts`.
 - Runtime profile resolver: `src/app/runtime-profile.ts`.
 - Runtime profile kinds: `instance`, `dev`, `app`, `siteAuthoring`, `publishedSite`.
+- Browser runtime adapter uses shared topology for profile resolution, route policy, route patterns, installed app paths, installed Site public paths, document meta hints, and published Site route facts.
 - Product instance profile mounts instance shell, owner setup/login routes, installed app admin routes, and installed Site public routes.
 - Dev workbench profile mounts Tasks, Estii, Site, schema editors, public Site preview, instance shell, installed app admin routes, and installed Site public routes.
 - App profile mounts one selected schema app at `/`, app-relative screen subpaths, and `/schema`.
@@ -49,6 +51,8 @@ Last updated: 2026-05-27
 - Workbench runtime shell does not own app-local Schema, sync, reset, publish, archive, Export, or Restore controls.
 - Active app sidebar owns app screens, root/context navigation, and app settings.
 - App settings source: `src/app/app-surface.tsx`.
+- App shell routing uses browser runtime adapter route patterns for owner, generated app, installed app, installed Site public, and frame-selection routes.
+- Browser runtime adapter owns local publish visibility, app management href selection, and outside-frame route decisions.
 - App settings include sync status, profile-exposed Schema link, source seed reset, and local Site publish when configured.
 - App settings do not expose legacy store snapshot Export or Restore.
 - App settings do not expose portable archive backup, restore, or import controls.

@@ -14,6 +14,7 @@ Last updated: 2026-05-27
 - `/pages` redirects to `/pages/home`.
 - Site authoring profile uses generated admin at `/admin`.
 - Published Site profile renders public pages at top-level routes.
+- Published Site preview redirect policy source: `src/shared/runtime-topology.ts`.
 - Installed Site admin route: `/apps/:installId`.
 - Installed Site dev schema route: `/apps/:installId/schema`.
 - Installed Site public routes: `/sites/:installId`, `/sites/:installId/*`.
@@ -244,6 +245,7 @@ Last updated: 2026-05-27
 - Sitemap entries come from live routable page and dated post blocks.
 - Sitemap excludes settings records, preview routes, generated app routes, static-like paths, tombstones, and non-routable blocks.
 - Published profile redirects `/pages`, `/pages/home`, and `/pages/*` to clean public routes.
+- Worker published Site redirects use the shared runtime topology redirect policy through `src/worker/routing.ts`.
 - Published profile blocks generated app/admin shells from the public host.
 - Public document, redirect, indexing, icon, and media `HEAD` responses match `GET` status and headers without a body.
 - Public SSR uses embedded initial `SitePageTree` for hydration.

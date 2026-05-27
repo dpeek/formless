@@ -21,6 +21,8 @@ Icon catalog and picker shipped facts live across Generated UI, Schema runtime, 
 topic docs.
 Legacy Site-owned media and archive compatibility retirement shipped facts live across Site runtime,
 Site CLI and publish, Authority storage, and Instance media direction docs.
+Runtime topology shipped facts live across Generated UI, Authority storage, Site runtime, and
+Testing topic docs.
 
 ## Docs
 
