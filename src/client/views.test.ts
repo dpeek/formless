@@ -5,6 +5,7 @@ import {
   siteSourceSchema,
   taskSourceSchema as appSchema,
 } from "../test/schema-apps.ts";
+import { selectHomeCollectionShell } from "./collection-shell-model.ts";
 import {
   selectCollectionModels,
   selectPrimaryCollectionModels,
@@ -410,6 +411,51 @@ describe("home view model collections", () => {
     expect(model?.collection.queries.tabs).toBe(model?.queryTabs);
     expect(model?.collection.result).toBe(model?.result);
     expect(model?.collection.actions).toBe(model?.actions);
+  });
+
+  it("selects collection shell facts separately from result-kind facts", () => {
+    const schema = rateCardSchemaWithAggregateSummarySlots();
+    const collectionView = schema.views.rateHome;
+
+    if (collectionView?.type !== "collection") {
+      throw new Error("Missing rate home collection view.");
+    }
+
+    const entity = schema.entities[collectionView.entity];
+
+    if (!entity) {
+      throw new Error(`Missing entity "${collectionView.entity}".`);
+    }
+
+    const shell = selectHomeCollectionShell(
+      schema,
+      Object.entries(schema.views),
+      collectionView,
+      entity,
+    );
+
+    expect("result" in shell).toBe(false);
+    expect(shell).toMatchObject({
+      entityName: "rate",
+      context: {
+        name: "card",
+        entityName: "card",
+        queryName: "cardAll",
+        presentation: "tabs",
+      },
+      queries: {
+        defaultQueryName: "ratesForSelectedCard",
+        defaultTab: {
+          queryName: "ratesForSelectedCard",
+          count: { type: "count" },
+        },
+      },
+      actions: [{ type: "create", entityName: "resource" }],
+      summary: [
+        { aggregateName: "selectedCardCostTotal", label: "Cost total" },
+        { aggregateName: "selectedCardAverageMargin", label: "Average margin" },
+      ],
+    });
   });
 
   it("exposes selected collection context presentation", () => {

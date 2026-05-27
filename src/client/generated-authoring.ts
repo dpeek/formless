@@ -3,9 +3,8 @@ import type {
   HomeContextConfig,
   HomeContextNavigationConfig,
   HomeContextNavigationGroupConfig,
-  HomeScreenCollectionSectionModel,
-  HomeScreenModel,
-} from "./views.ts";
+} from "./collection-shell-model.ts";
+import type { HomeScreenCollectionSectionModel, HomeScreenModel } from "./views.ts";
 
 export type GeneratedContextOption = {
   id: string;
