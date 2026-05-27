@@ -36,7 +36,6 @@ import {
   GeneratedNumberFieldControl,
 } from "./field-control-primitives.tsx";
 import { dateValueToStoredDateValue, storedDateValueToDateValue } from "./date-value.ts";
-import { selectGeneratedFieldControl } from "./field-controls.ts";
 import {
   decodeNumberEditorInputValue,
   encodeNumberEditorInputValue,
@@ -51,8 +50,8 @@ import {
   quietValueOrInteractionClassName,
 } from "./field-presentation.tsx";
 import type { GeneratedFieldControl } from "./field-controls.ts";
+import { selectGeneratedRecordFieldAuthoringAdapter } from "./field-ui-adapters.ts";
 import {
-  selectGeneratedRecordFieldRendererKind,
   type GeneratedRecordFieldControlDensity,
   type GeneratedRecordFieldControlPresentation,
   type GeneratedRecordFieldRendererKind,
@@ -133,16 +132,15 @@ export function GeneratedRecordFieldControl({
   mediaPreviewHref?: string;
   uploadEnabled: boolean;
 }) {
-  const { commit: commitPolicy, editor, field, fieldName } = fieldConfig;
+  const { commit: commitPolicy, field, fieldName } = fieldConfig;
   const label = fieldConfig.label ?? fieldLabel(fieldName, field);
-  const fieldControl = selectGeneratedFieldControl({ editor, field, label });
   const controlDensity = density === "compact" && showLabel ? "default" : density;
   const labelClass =
     showLabel && presentation !== "heading" ? "text-xs font-medium text-slate-600" : "sr-only";
-  const rendererKind = selectGeneratedRecordFieldRendererKind({
+  const { fieldControl, rendererKind } = selectGeneratedRecordFieldAuthoringAdapter({
     density: controlDensity,
     fieldConfig,
-    fieldControl,
+    label,
     presentation,
     showLabel,
   });

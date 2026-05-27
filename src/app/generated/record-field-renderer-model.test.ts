@@ -30,6 +30,9 @@ describe("generated record field renderer model", () => {
     expect(recordRenderer("priority", "enum", { fieldPresentation: { trigger: "both" } })).toBe(
       "enum-icon",
     );
+    expect(recordRenderer("priority", "enum", { fieldPresentation: { list: "icon" } })).toBe(
+      "enum-icon",
+    );
     expect(recordRenderer("resource", "reference")).toBe("reference");
     expect(recordRenderer("color", "color")).toBe("color");
     expect(recordRenderer("icon", "icon")).toBe("icon");

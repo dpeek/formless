@@ -5,6 +5,7 @@ import {
   fieldInputAttributes,
   fieldCreateDefaultValue,
   fieldHasCreateDefault,
+  fieldSupportsEditor,
   fieldValueToInputValue,
   formatFieldDisplayPrimitive,
   getFieldTypeBehavior,
@@ -177,6 +178,11 @@ describe("field type behavior", () => {
   });
 
   it("centralizes generated editor control metadata without React", () => {
+    expect(fieldSupportsEditor(fields.title, "text")).toBe(true);
+    expect(fieldSupportsEditor(fields.title, "markdown")).toBe(true);
+    expect(fieldSupportsEditor(fields.title, "media")).toBe(true);
+    expect(fieldSupportsEditor(fields.estimate, "text")).toBe(false);
+    expect(fieldSupportsEditor(fields.estimate, "number")).toBe(true);
     expect(fieldEditorControl(fields.title, "text")).toEqual({ kind: "input", inputType: "text" });
     expect(fieldEditorControl(fields.title, "markdown")).toEqual({ kind: "textarea" });
     expect(fieldEditorControl(fields.icon, "icon")).toEqual({ kind: "icon" });

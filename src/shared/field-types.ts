@@ -199,6 +199,10 @@ export function isFieldCommitPolicy(value: unknown): value is FieldCommitPolicy 
   return fieldCommitPolicies.includes(value as FieldCommitPolicy);
 }
 
+export function fieldSupportsEditor(field: FieldSchema, editor: FieldEditor) {
+  return getFieldTypeBehavior(field).editors.includes(editor);
+}
+
 export function fieldHasCreateDefault(field: FieldSchema) {
   return getFieldTypeBehavior(field).hasCreateDefault(field);
 }
@@ -218,7 +222,7 @@ export function createInputValueToFieldValue(
 export function fieldEditorControl(field: FieldSchema, editor: FieldEditor) {
   const behavior = getFieldTypeBehavior(field);
 
-  if (!behavior.editors.includes(editor)) {
+  if (!fieldSupportsEditor(field, editor)) {
     throw new Error(`Editor "${editor}" is not valid for field type "${field.type}".`);
   }
 

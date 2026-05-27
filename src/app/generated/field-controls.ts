@@ -3,8 +3,8 @@ import {
   fieldEditorControl,
   fieldHasCreateDefault,
   fieldInputAttributes,
+  fieldSupportsEditor,
   fieldValueToInputValue,
-  getFieldTypeBehavior,
   type FieldEditorControl,
   type FieldInputAttributes,
 } from "../../shared/field-types.ts";
@@ -56,11 +56,12 @@ export type GeneratedFieldControl =
       field: Extract<FieldSchema, { type: "reference" }>;
     } & GeneratedFieldControlFacts);
 
-type GeneratedFieldControlFacts = {
+export type GeneratedFieldControlFacts = {
   control: FieldEditorControl;
   controlKind: GeneratedFieldControlKind;
   createDefaultChecked: boolean;
   createDefaultValue: string | undefined;
+  editor: FieldEditor;
   inputAttributes: FieldInputAttributes;
   label: string;
   required: boolean;
@@ -75,7 +76,7 @@ export function selectGeneratedFieldControl({
   field: FieldSchema;
   label: string;
 }): GeneratedFieldControl {
-  if (!getFieldTypeBehavior(field).editors.includes(editor)) {
+  if (!fieldSupportsEditor(field, editor)) {
     throw new Error(`Editor "${editor}" is not valid for field type "${field.type}".`);
   }
 
@@ -105,7 +106,7 @@ export function selectGeneratedFieldControl({
     throw new Error(`Editor "${editor}" is not valid for field type "text".`);
   }
 
-  return { kind: "text", field, editor, ...facts };
+  return { kind: "text", field, ...facts, editor };
 }
 
 function selectGeneratedFieldControlFacts(
@@ -127,6 +128,7 @@ function selectGeneratedFieldControlFacts(
     createDefaultChecked: defaultValue === true,
     createDefaultValue:
       createDefaultValue === "" && field.required ? undefined : createDefaultValue,
+    editor,
     inputAttributes: fieldInputAttributes(field),
     label,
     required: field.required,
