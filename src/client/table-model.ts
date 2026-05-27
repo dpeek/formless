@@ -1,6 +1,7 @@
 import { getFieldTypeBehavior } from "../shared/field-types.ts";
 import type {
   AppSchema,
+  CollectionTableFooterSlotSchema,
   EditRecordTableActionSchema,
   EditViewSchema,
   EntitySchema,
@@ -17,9 +18,11 @@ import type {
   RecordFieldConfig,
   TableActionConfig,
   TableColumnConfig,
+  TableFooterSlotConfig,
   TableOrderingConfig,
   ValueUnitFieldConfig,
 } from "./views.ts";
+import { selectAggregateSlot } from "./collection-shell-model.ts";
 import { selectResultOrderingConfig, type ResultOrderingConfig } from "./result-ordering-model.ts";
 import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 import { fieldLabel, humanizeFieldName } from "./view-labels.ts";
@@ -28,6 +31,25 @@ export type TableResultModel = {
   columns: TableColumnConfig[];
   ordering?: ResultOrderingConfig;
 };
+
+export function selectTableFooterSlots(
+  schema: AppSchema,
+  slots: CollectionTableFooterSlotSchema[],
+  columns: TableColumnConfig[],
+): TableFooterSlotConfig[] {
+  return slots.map((slot) => {
+    const column = columns.find((candidate) => tableFooterColumnName(candidate) === slot.column);
+
+    if (!column) {
+      throw new Error(`Missing table footer column "${slot.column}".`);
+    }
+
+    return {
+      ...selectAggregateSlot(schema, slot),
+      columnKey: column.key,
+    };
+  });
+}
 
 export function selectTableResultModel(
   schema: AppSchema,
@@ -184,6 +206,22 @@ function selectTableColumns(
   }
 
   return columnsWithOrderingHandle;
+}
+
+function tableFooterColumnName(column: TableColumnConfig) {
+  if (column.type === "field") {
+    return column.fieldName;
+  }
+
+  if (column.type === "computed") {
+    return column.computedValueName;
+  }
+
+  if (column.type === "invokeAction" || column.type === "orderingHandle") {
+    return "";
+  }
+
+  return `${column.sourceReferenceFieldName}.${column.fieldName}`;
 }
 
 function selectSyntheticOrderingMenuColumn(

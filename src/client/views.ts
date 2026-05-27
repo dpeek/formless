@@ -1,7 +1,6 @@
 import type {
   AppSchema,
   CollectionNavigationSchema,
-  CollectionTableFooterSlotSchema,
   CollectionViewSchema,
   ComputedValueSchema,
   CreateDefaultValueSchema,
@@ -24,16 +23,9 @@ import type {
   TableColumnDisplay,
   TableColumnFormat,
   TableColumnWidth,
-  TreeBranchChildVariantSchema,
-  TreeBranchVariantPolicySchema,
   ViewSchema,
 } from "../shared/schema.ts";
-import {
-  selectAggregateSlot,
-  selectHomeCollectionShell,
-  selectRecordFields,
-  selectToManyRelationship,
-} from "./collection-shell-model.ts";
+import { selectHomeCollectionShell } from "./collection-shell-model.ts";
 import type {
   HomeActionConfig,
   HomeCollectionShellConfig,
@@ -41,13 +33,11 @@ import type {
   HomeQueryTabConfig,
   HomeSummarySlotConfig,
 } from "./collection-shell-model.ts";
+import { selectHomeResultModel } from "./collection-result-model.ts";
 import {
-  selectResultOrderingConfig,
   type ResultOrderingConfig,
   type ResultOrderingScopeConfig,
 } from "./result-ordering-model.ts";
-import { selectTableResultModel } from "./table-model.ts";
-import { selectRecordUnionPresentation } from "./union-presentation-model.ts";
 
 export { selectRelatedCollectionModels } from "./collection-shell-model.ts";
 export type {
@@ -505,301 +495,6 @@ function selectHomeCollection(
 
   return {
     ...shell,
-    result: selectResult(schema, collectionView, entity),
+    result: selectHomeResultModel(schema, collectionView, entity),
   };
-}
-
-function selectResult(
-  schema: AppSchema,
-  collectionView: CollectionViewSchema,
-  entity: EntitySchema,
-): HomeResultConfig {
-  if (collectionView.result.type === "table") {
-    const tableView = schema.tableViews[collectionView.result.tableView];
-
-    if (!tableView) {
-      throw new Error(`Missing table view "${collectionView.result.tableView}".`);
-    }
-    const resultOrdering = selectResultOrderingConfig(collectionView.result.ordering, entity);
-    const tableResult = selectTableResultModel(schema, tableView, entity, resultOrdering);
-    const { columns, ordering } = tableResult;
-    const footer = selectTableFooterSlots(schema, collectionView.result.footer ?? [], columns);
-
-    return {
-      type: "table",
-      tableViewName: collectionView.result.tableView,
-      columns,
-      ...(ordering === undefined ? {} : { ordering }),
-      ...(footer.length === 0 ? {} : { footer }),
-    };
-  }
-
-  if (collectionView.result.type === "tree") {
-    const relationship = selectToManyRelationship(schema, collectionView.result.relationship);
-    const childField = entity.fields[collectionView.result.childField];
-
-    if (!childField || childField.type !== "reference") {
-      throw new Error(`Missing tree child field "${collectionView.result.childField}".`);
-    }
-
-    const childEntity = schema.entities[childField.to];
-    const childItemView = schema.itemViews[collectionView.result.childItemView];
-
-    if (!childEntity) {
-      throw new Error(`Missing child entity "${childField.to}".`);
-    }
-
-    if (!childItemView) {
-      throw new Error(`Missing child item view "${collectionView.result.childItemView}".`);
-    }
-
-    const placementItemViewName = collectionView.result.placementItemView;
-    const placementItemView =
-      placementItemViewName === undefined ? undefined : schema.itemViews[placementItemViewName];
-
-    if (placementItemViewName !== undefined && placementItemView === undefined) {
-      throw new Error(`Missing placement item view "${placementItemViewName}".`);
-    }
-
-    const ordering =
-      selectResultOrderingConfig(collectionView.result.ordering, entity) ??
-      selectImplicitTreeOrderingFallback(entity, relationship);
-    const childRecordUnion = selectRecordUnionPresentation(schema, childItemView, childEntity);
-    const placementRecordUnion =
-      placementItemView === undefined
-        ? undefined
-        : selectRecordUnionPresentation(schema, placementItemView, entity);
-    const branches = selectTreeBranchPolicyConfig(collectionView.result.branches, childRecordUnion);
-    const composition = selectTreeCompositionActionConfig(
-      collectionView.result.composition,
-      entity,
-    );
-
-    return {
-      type: "tree",
-      relationshipName: collectionView.result.relationship,
-      relationship,
-      childFieldName: collectionView.result.childField,
-      childField,
-      childEntityName: childField.to,
-      childEntity,
-      childItemViewName: collectionView.result.childItemView,
-      childRecordFields: selectRecordFields(childItemView, childEntity),
-      ...(childRecordUnion === undefined ? {} : { childRecordUnion }),
-      ...(placementItemViewName === undefined || placementItemView === undefined
-        ? {}
-        : {
-            placementItemViewName,
-            placementRecordFields: selectRecordFields(placementItemView, entity),
-            ...(placementRecordUnion === undefined ? {} : { placementRecordUnion }),
-          }),
-      ...(ordering === undefined ? {} : { ordering }),
-      ...(branches === undefined ? {} : { branches }),
-      ...(composition === undefined ? {} : { composition }),
-      maxDepth: collectionView.result.maxDepth ?? 8,
-    };
-  }
-
-  if (collectionView.result.type === "record") {
-    const itemView = schema.itemViews[collectionView.result.itemView];
-
-    if (!itemView) {
-      throw new Error(`Missing item view "${collectionView.result.itemView}".`);
-    }
-    const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
-
-    return {
-      type: "record",
-      itemViewName: collectionView.result.itemView,
-      recordFields: selectRecordFields(itemView, entity),
-      ...(recordUnion === undefined ? {} : { recordUnion }),
-    };
-  }
-
-  const itemView = schema.itemViews[collectionView.result.itemView];
-
-  if (!itemView) {
-    throw new Error(`Missing item view "${collectionView.result.itemView}".`);
-  }
-  const recordUnion = selectRecordUnionPresentation(schema, itemView, entity);
-
-  const ordering = selectResultOrderingConfig(collectionView.result.ordering, entity);
-
-  return {
-    type: "list",
-    itemViewName: collectionView.result.itemView,
-    recordFields: selectRecordFields(itemView, entity),
-    ...(recordUnion === undefined ? {} : { recordUnion }),
-    ...(ordering === undefined ? {} : { ordering }),
-  };
-}
-
-function selectTreeBranchPolicyConfig(
-  branches: Extract<CollectionViewSchema["result"], { type: "tree" }>["branches"],
-  childRecordUnion: RecordUnionPresentationConfig | undefined,
-): TreeBranchPolicyConfig | undefined {
-  if (branches === undefined) {
-    return undefined;
-  }
-
-  if (childRecordUnion === undefined) {
-    throw new Error("Tree branch policy requires a child record union.");
-  }
-
-  return {
-    variants: {
-      discriminatorFieldName: childRecordUnion.discriminatorFieldName,
-      discriminatorField: childRecordUnion.discriminatorField,
-      leafVariantValues: Object.entries(branches.variants)
-        .filter(([, policy]) => treeBranchVariantPolicyIsLeaf(policy))
-        .map(([variantValue]) => variantValue),
-      allowedChildVariantsByParentVariant: selectAllowedChildVariantsByParentVariant(
-        branches.variants,
-        childRecordUnion,
-      ),
-    },
-  };
-}
-
-function selectAllowedChildVariantsByParentVariant(
-  variants: Record<string, TreeBranchVariantPolicySchema>,
-  childRecordUnion: RecordUnionPresentationConfig,
-): Record<string, TreeAllowedChildVariantConfig[]> {
-  return Object.fromEntries(
-    Object.entries(variants)
-      .map(([parentVariantValue, policy]) => {
-        const childVariantPolicies =
-          typeof policy === "object"
-            ? (policy.children ?? [])
-            : ([] as TreeBranchChildVariantSchema[]);
-
-        return [
-          parentVariantValue,
-          childVariantPolicies.map((childVariantPolicy) => {
-            const childVariantValue = treeChildVariantPolicyValue(childVariantPolicy);
-            const unionVariant = childRecordUnion.union.variants[childVariantValue];
-
-            if (!unionVariant) {
-              throw new Error(`Missing tree child variant "${childVariantValue}".`);
-            }
-
-            return {
-              variantValue: childVariantValue,
-              label:
-                typeof childVariantPolicy === "string"
-                  ? unionVariant.label
-                  : (childVariantPolicy.label ?? unionVariant.label),
-              unionVariant,
-              ...(typeof childVariantPolicy === "string" ||
-              childVariantPolicy.placementValues === undefined
-                ? {}
-                : { placementValues: childVariantPolicy.placementValues }),
-            };
-          }),
-        ] as const;
-      })
-      .filter(([, childVariants]) => childVariants.length > 0),
-  );
-}
-
-function treeChildVariantPolicyValue(policy: TreeBranchChildVariantSchema) {
-  return typeof policy === "string" ? policy : policy.variant;
-}
-
-function treeBranchVariantPolicyIsLeaf(policy: TreeBranchVariantPolicySchema): boolean {
-  return policy === "leaf" || (typeof policy === "object" && policy.action === "leaf");
-}
-
-function selectTreeCompositionActionConfig(
-  composition: Extract<CollectionViewSchema["result"], { type: "tree" }>["composition"],
-  entity: EntitySchema,
-): TreeCompositionActionConfig | undefined {
-  if (composition === undefined) {
-    return undefined;
-  }
-
-  const createAction =
-    composition.createAction === undefined ? undefined : entity.actions?.[composition.createAction];
-  const removeAction =
-    composition.removeAction === undefined ? undefined : entity.actions?.[composition.removeAction];
-
-  return {
-    ...(composition.createAction !== undefined && createAction?.kind === "create-tree-child"
-      ? {
-          create: {
-            actionName: composition.createAction,
-            action: createAction,
-          },
-        }
-      : {}),
-    ...(composition.removeAction !== undefined && removeAction?.kind === "remove-tree-placement"
-      ? {
-          remove: {
-            actionName: composition.removeAction,
-            action: removeAction,
-          },
-        }
-      : {}),
-  };
-}
-
-// Compatibility fallback for tree results that predate result-level ordering.
-function selectImplicitTreeOrderingFallback(
-  entity: EntitySchema,
-  relationship: ToManyRelationshipSchema,
-): ResultOrderingConfig | undefined {
-  const orderField = entity.fields.order;
-  const scopeField = entity.fields[relationship.to.field];
-
-  if (!orderField || orderField.type !== "number" || !scopeField) {
-    return undefined;
-  }
-
-  return {
-    fieldName: "order",
-    field: orderField,
-    scope: [
-      {
-        kind: "field",
-        fieldName: relationship.to.field,
-        field: scopeField,
-      },
-    ],
-    presentations: ["moveMenu"],
-  };
-}
-
-function selectTableFooterSlots(
-  schema: AppSchema,
-  slots: CollectionTableFooterSlotSchema[],
-  columns: TableColumnConfig[],
-): TableFooterSlotConfig[] {
-  return slots.map((slot) => {
-    const column = columns.find((candidate) => tableFooterColumnName(candidate) === slot.column);
-
-    if (!column) {
-      throw new Error(`Missing table footer column "${slot.column}".`);
-    }
-
-    return {
-      ...selectAggregateSlot(schema, slot),
-      columnKey: column.key,
-    };
-  });
-}
-
-function tableFooterColumnName(column: TableColumnConfig) {
-  if (column.type === "field") {
-    return column.fieldName;
-  }
-
-  if (column.type === "computed") {
-    return column.computedValueName;
-  }
-
-  if (column.type === "invokeAction" || column.type === "orderingHandle") {
-    return "";
-  }
-
-  return `${column.sourceReferenceFieldName}.${column.fieldName}`;
 }
