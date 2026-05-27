@@ -1,6 +1,6 @@
 # Current
 
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 Current shipped behavior lives in topic docs.
 
@@ -28,6 +28,7 @@ Action kind module shipped facts live across Schema runtime, Authority storage, 
 topic docs.
 Generated field authoring shipped facts live across Schema runtime, Generated UI, and Testing topic
 docs.
+Collection result model slice shipped facts live in Generated UI topic docs.
 
 ## Docs
 

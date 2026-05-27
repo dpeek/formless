@@ -1,6 +1,6 @@
 # Generated UI
 
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 ## Current Facts
 
@@ -91,6 +91,13 @@ Last updated: 2026-05-27
 - View and screen model selection: `src/client/views.ts`.
 - Home collection model: `HomeViewModel.collection` / `HomeCollectionConfig` in `src/client/views.ts`.
 - Home collection model selects entity, context, query tabs, default query, result, actions, and summaries before rendering.
+- Home collection model composes shell facts from `src/client/collection-shell-model.ts` and result facts from `src/client/collection-result-model.ts`.
+- Collection shell model selection owns query tabs, default query, context, summaries, actions, related collections, and create facts.
+- Collection result dispatch selects list, record, table, and tree result models.
+- List and record result model selection: `src/client/list-result-model.ts`.
+- Table result and footer model selection: `src/client/table-model.ts`.
+- Tree result model selection: `src/client/tree-result-model.ts`.
+- Shared result ordering model selection: `src/client/result-ordering-model.ts`.
 - Home route renders through screen models.
 - One-section screens render like the old home workspace.
 - Multi-section stack screens render sections in schema order.
@@ -99,6 +106,11 @@ Last updated: 2026-05-27
 - Collection rendering supports query tabs, context selection, summaries, actions, and result rendering.
 - Collection rendering supports aggregate summary slots.
 - Collection rendering supports result ordering for list, table, and tree results.
+- Generated collection renderer passes selected result models to `RecordList`, `RecordTable`, and `RecordTree`.
+- `RecordList` consumes list and record result facts from `src/client/list-result-model.ts`.
+- `RecordTable` consumes table result facts from `src/client/collection-result-model.ts`.
+- `RecordTree` consumes tree result facts from `src/client/tree-result-model.ts`.
+- Generated ordering UI consumes result ordering facts from `src/client/result-ordering-model.ts`.
 - Collection context rendering supports tab selection and list/detail presentation.
 - List/detail context rendering keeps selected context state and renders selected context fields plus related results.
 - Generated list results render through `@dpeek/formless-ui/object-list`.

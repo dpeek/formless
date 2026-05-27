@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 Purpose: possible directions for what to work on next.
 
@@ -32,7 +32,7 @@ Good next chunks:
 - Improve reference workflows and scoped creation.
 - Expand schema-declared actions for non-Site use cases.
 - Expand query/read-model capability only when a real app chunk needs it.
-- Add boards, dashboards, charts, or richer result presentations after one concrete app needs them.
+- Reuse collection result model slices when adding boards, dashboards, charts, or richer result presentations after one concrete app needs them.
 
 Avoid:
 
@@ -127,6 +127,7 @@ Good next chunks:
 
 - Plugin view registry.
 - Custom result presentations backed by schema-declared views.
+- Extend collection result dispatch for schema-backed custom result presentations.
 - App marketplace shape after source app packaging is stable.
 - General media library after core image asset ownership rules need browser management.
 
