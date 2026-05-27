@@ -52,6 +52,11 @@ import {
 import type { GeneratedFieldControl } from "./field-controls.ts";
 import { selectGeneratedRecordFieldAuthoringAdapter } from "./field-ui-adapters.ts";
 import {
+  type GeneratedRecordFieldMediaEditorMode,
+  selectGeneratedRecordFieldEditability,
+  selectValueUnitRecordPatchValues,
+} from "./record-field-authoring.ts";
+import {
   type GeneratedRecordFieldControlDensity,
   type GeneratedRecordFieldControlPresentation,
   type GeneratedRecordFieldRendererKind,
@@ -128,7 +133,7 @@ export function GeneratedRecordFieldControl({
   showLabel?: boolean;
   unitDraft: string;
   mediaAssetOptions: ImageMediaAssetOption[];
-  mediaEditorMode: "asset" | "url";
+  mediaEditorMode: GeneratedRecordFieldMediaEditorMode;
   mediaPreviewHref?: string;
   uploadEnabled: boolean;
 }) {
@@ -1023,7 +1028,15 @@ function RecordValueUnitFieldRenderer({
             onUnitChange={onUnitDraftChange}
             onUnitCommit={(unit) => {
               onErrorChange(null);
-              onPatchValues(valueUnitPatch(fieldName, draft, numberFormat, valueUnit, unit));
+              onPatchValues(
+                selectValueUnitRecordPatchValues({
+                  draft,
+                  fieldName,
+                  numberFormat,
+                  unit,
+                  valueUnitConfig: valueUnit,
+                }),
+              );
             }}
             options={enumValueUnitOptions(valueUnit.unitField)}
             unit={unitDraft}
@@ -1353,14 +1366,16 @@ function RecordIconFieldRenderer({
   onIconSave: () => Promise<void>;
   previewSource: string;
 }) {
+  const editability = selectGeneratedRecordFieldEditability({ canPatch, isPending });
+
   return (
     <div className={recordSpecializedFieldContainerClassName(density, "icon")}>
-      <TextField isDisabled={!canPatch || isPending} isInvalid={error !== null}>
+      <TextField isDisabled={editability.controlDisabled} isInvalid={error !== null}>
         <Label className={labelClass}>{fieldControl.label}</Label>
         <div data-slot="control">
           <GeneratedIconPickerFieldControl
             ariaInvalid={error !== null ? true : undefined}
-            canEdit={canPatch}
+            canEdit={editability.canEdit}
             density={density}
             error={error}
             isPending={isPending}
@@ -1371,7 +1386,7 @@ function RecordIconFieldRenderer({
             onSave={onIconSave}
             open={iconDialogOpen}
             previewSource={previewSource}
-            readOnly={!canPatch || isPending}
+            readOnly={editability.controlDisabled}
             value={iconDialogDraft}
           />
         </div>
@@ -1580,7 +1595,8 @@ function MediaFieldControl({
   required: boolean;
   uploadEnabled: boolean;
 }) {
-  const uploadDisabled = !canPatch || isPending || !uploadEnabled;
+  const editability = selectGeneratedRecordFieldEditability({ canPatch, isPending, uploadEnabled });
+  const uploadDisabled = editability.uploadDisabled;
   const [previewFailed, setPreviewFailed] = useState(false);
   const previewHref = mediaEditorMode === "asset" ? mediaPreviewHref : draft;
   const previewState =
@@ -1670,7 +1686,7 @@ function MediaFieldControl({
           <NativeSelectContent
             aria-label={assetLabel}
             className={density === "compact" ? compactNativeSelectClassName : undefined}
-            disabled={!canPatch || isPending}
+            disabled={editability.controlDisabled}
             onChange={(event) => {
               const value = event.currentTarget.value;
 
@@ -1690,7 +1706,7 @@ function MediaFieldControl({
         </NativeSelect>
       ) : null}
       <TextField
-        isDisabled={!canPatch || isPending}
+        isDisabled={editability.controlDisabled}
         isInvalid={error !== null}
         isRequired={required}
       >
@@ -1703,7 +1719,7 @@ function MediaFieldControl({
               ? compactNativeInputClassName
               : "w-full rounded border border-slate-300 px-3 py-2"
           }
-          disabled={!canPatch || isPending}
+          disabled={editability.controlDisabled}
           onBlur={(event) => onUrlCommit(event.currentTarget.value)}
           onChange={(event) => onDraftChange(event.currentTarget.value)}
           onKeyDown={handleUrlKeyDown}
@@ -1720,25 +1736,6 @@ function MediaFieldControl({
 
 function mediaAssetLabel(label: string) {
   return label.toLowerCase().includes("asset") ? label : `${label} asset`;
-}
-
-function valueUnitPatch(
-  fieldName: string,
-  draft: string,
-  numberFormat: TableColumnFormat,
-  valueUnitConfig: NonNullable<RecordFieldConfig["valueUnit"]>,
-  unit: string,
-): Partial<RecordValues> {
-  const patch: Partial<RecordValues> = {
-    [valueUnitConfig.unitFieldName]: inputValueToFieldValue(valueUnitConfig.unitField, unit),
-  };
-  const amount = decodeNumberEditorInputValue(draft, numberFormat);
-
-  if (amount.kind === "valid") {
-    patch[fieldName] = amount.value;
-  }
-
-  return patch;
 }
 
 function enumValueUnitOptions(field: NonNullable<RecordFieldConfig["valueUnit"]>["unitField"]) {
