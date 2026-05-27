@@ -15,12 +15,15 @@ import { matchesQuery } from "../shared/query.ts";
 import type {
   AfterCreateHookSchema,
   AppSchema,
+  EntityActionCapabilities,
   EntityActionKind,
+  EntityActionSchemaForKind,
   EntityActionSchema,
   EntitySchema,
   ManyToManyRelationshipSchema,
   ToManyRelationshipSchema,
 } from "../shared/schema.ts";
+import { getEntityActionKindCapabilities } from "../shared/schema-actions.ts";
 import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
@@ -63,54 +66,64 @@ type EntityActionCreateAfterCreateHookContext<TAction extends EntityActionSchema
 
 type EntityActionKindRuntimeModule<TAction extends EntityActionSchema = EntityActionSchema> = {
   kind: TAction["kind"];
+  capabilities: EntityActionCapabilities;
   validateInput: (
     context: EntityActionRequestInputValidationContext<TAction>,
   ) => ActionRequestInput | undefined;
   execute: (context: EntityActionExecutionContext<TAction>) => WriteOutcome<ActionResponse>;
-  executeCreateAfterCreateHook?: (
+  executeCreateAfterCreateHook: (
     context: EntityActionCreateAfterCreateHookContext<TAction>,
   ) => void;
 };
 
-type EntityActionKindRuntimeModuleUnion = {
-  [Kind in EntityActionKind]: EntityActionKindRuntimeModule<
-    Extract<EntityActionSchema, { kind: Kind }>
-  >;
-}[EntityActionKind];
+type EntityActionKindRuntimeModuleMap = {
+  [Kind in EntityActionKind]: EntityActionKindRuntimeModule<EntityActionSchemaForKind<Kind>>;
+};
 
-const entityActionKindRuntimeModules = [
-  {
+const entityActionKindRuntimeModules = {
+  "clear-completed": {
     kind: "clear-completed",
+    capabilities: getEntityActionKindCapabilities("clear-completed"),
     validateInput: validateClearCompletedActionInput,
     execute: executeClearCompletedAction,
+    executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
-  {
+  "create-missing-join-records": {
     kind: "create-missing-join-records",
+    capabilities: getEntityActionKindCapabilities("create-missing-join-records"),
     validateInput: validateNoActionInput,
     execute: executeCreateMissingJoinRecordsAction,
     executeCreateAfterCreateHook: executeCreateMissingJoinRecordsAfterCreateHook,
   },
-  {
+  "create-selected-join-record": {
     kind: "create-selected-join-record",
+    capabilities: getEntityActionKindCapabilities("create-selected-join-record"),
     validateInput: validateCreateSelectedJoinRecordActionInput,
     execute: executeCreateSelectedJoinRecordAction,
+    executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
-  {
+  "remove-selected-join-records": {
     kind: "remove-selected-join-records",
+    capabilities: getEntityActionKindCapabilities("remove-selected-join-records"),
     validateInput: validateRemoveSelectedJoinRecordsActionInput,
     execute: executeRemoveSelectedJoinRecordsAction,
+    executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
-  {
+  "create-tree-child": {
     kind: "create-tree-child",
+    capabilities: getEntityActionKindCapabilities("create-tree-child"),
     validateInput: validateCreateTreeChildActionInput,
     execute: executeCreateTreeChildAction,
+    executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
-  {
+  "remove-tree-placement": {
     kind: "remove-tree-placement",
+    capabilities: getEntityActionKindCapabilities("remove-tree-placement"),
     validateInput: validateRemoveTreePlacementActionInput,
     execute: executeRemoveTreePlacementAction,
+    executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
-] satisfies EntityActionKindRuntimeModuleUnion[];
+} satisfies EntityActionKindRuntimeModuleMap;
 
 export function executeEntityAction(
   storage: DurableObjectStorage,
@@ -212,12 +225,6 @@ function executeCreateAfterCreateHook(
 
   const actionModule = getEntityActionKindRuntimeModule(action);
 
-  if (!actionModule.executeCreateAfterCreateHook) {
-    throw new Error(
-      `Create hook "${mutation.entity}.${mutation.mutationId}" references unsupported action "${hook.entity}.${hook.action}".`,
-    );
-  }
-
   actionModule.executeCreateAfterCreateHook({
     storage,
     mutation,
@@ -226,6 +233,14 @@ function executeCreateAfterCreateHook(
     action,
     createRecords,
   });
+}
+
+function rejectCreateAfterCreateHook<TAction extends EntityActionSchema>(
+  context: EntityActionCreateAfterCreateHookContext<TAction>,
+): never {
+  throw new Error(
+    `Create hook "${context.mutation.entity}.${context.mutation.mutationId}" references unsupported action "${context.hook.entity}.${context.hook.action}".`,
+  );
 }
 
 function executeClearCompletedAction(
@@ -1081,15 +1096,7 @@ function executeActionEffect(
 function getEntityActionKindRuntimeModule<TAction extends EntityActionSchema>(
   action: TAction,
 ): EntityActionKindRuntimeModule<TAction> {
-  const actionModule = entityActionKindRuntimeModules.find(
-    (candidate) => candidate.kind === action.kind,
-  );
-
-  if (!actionModule) {
-    throw new Error(`Unsupported action kind "${action.kind}".`);
-  }
-
-  return actionModule as EntityActionKindRuntimeModule<TAction>;
+  return entityActionKindRuntimeModules[action.kind] as EntityActionKindRuntimeModule<TAction>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
