@@ -254,6 +254,49 @@ describe("runtime profile resolver", () => {
     expect(runtimeAppManagementHref(profile, world)).toBe("/");
   });
 
+  it("resolves installed app browser routes from enabled appRoute records", () => {
+    const profile = createDevRuntimeProfile();
+    const appInstalls: AppInstall[] = [
+      {
+        ...appInstallFixture({ installId: "personal", label: "Personal Site" }),
+        routes: [
+          {
+            enabled: false,
+            id: "app-route:personal:admin",
+            path: "/apps/personal",
+            routeKind: "admin",
+          },
+          {
+            enabled: true,
+            id: "app-route:personal:admin-custom",
+            path: "/apps/personal-admin",
+            routeKind: "admin",
+          },
+          {
+            enabled: true,
+            id: "app-route:personal:schema",
+            path: "/apps/personal-admin/schema",
+            routeKind: "schema",
+          },
+        ],
+      },
+    ];
+    const world = findRuntimeWorldMountByRoute(profile, "/apps/personal-admin/settings", {
+      appInstalls,
+    });
+
+    if (!world?.target || world.target.kind !== "appInstall") {
+      throw new Error("Missing custom installed app route world.");
+    }
+
+    expect(world.route).toBe("/apps/personal-admin");
+    expect(world.schemaRoute).toBe("/apps/personal-admin/schema");
+    expect(world.target.installId).toBe("personal");
+    expect(
+      findRuntimeWorldMountByRoute(profile, "/apps/personal", { appInstalls }),
+    ).toBeUndefined();
+  });
+
   it("resolves installed Site public route surfaces from install ids", () => {
     const profile = createDevRuntimeProfile();
     const appInstalls = [
@@ -300,6 +343,40 @@ describe("runtime profile resolver", () => {
         appInstalls,
       }),
     ).toBe(true);
+  });
+
+  it("resolves installed Site public surfaces from enabled public appRoute records", () => {
+    const profile = createDevRuntimeProfile();
+    const appInstalls: AppInstall[] = [
+      {
+        ...appInstallFixture({ installId: "personal", label: "Personal Site" }),
+        routes: [
+          {
+            enabled: false,
+            id: "app-route:personal:publicSite",
+            path: "/sites/personal",
+            prefix: "/sites/personal/",
+            routeKind: "publicSite",
+          },
+          {
+            enabled: true,
+            id: "app-route:personal:publicSite-custom",
+            path: "/public/personal",
+            prefix: "/public/personal/",
+            routeKind: "publicSite",
+          },
+        ],
+      },
+    ];
+    const custom = installedSitePublicSurfaceFromRoute(profile, "/public/personal/blog/post", {
+      appInstalls,
+    });
+
+    expect(custom?.routeBase).toBe("/public/personal");
+    expect(custom?.slug).toBe("blog/post");
+    expect(
+      installedSitePublicSurfaceFromRoute(profile, "/sites/personal", { appInstalls }),
+    ).toBeUndefined();
   });
 
   it("resolves an app profile with one app mounted at root paths", () => {

@@ -8,14 +8,18 @@ import {
   findBundledAppPackage,
   listAppInstalls,
   type AppInstall,
+  type AppInstallRoute,
 } from "../shared/app-installs.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppInstallRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
+  type InstanceControlPlaneAppRouteKind,
+  type InstanceControlPlaneAppRouteValues,
 } from "../shared/instance-control-plane.ts";
 import {
   parseCreateAppInstallRequest,
@@ -49,6 +53,7 @@ import {
 
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
 const createAppInstallControlPlaneAction = "createAppInstall";
+export const INTERNAL_BACKFILL_APP_INSTALLS_PATH = "/_internal/backfill-app-installs";
 const instanceControlPlaneSourceSchema = parseAppSchema(instanceControlPlaneSchema);
 const instanceControlPlaneSource: StorageSource = {
   schema: instanceControlPlaneSourceSchema,
@@ -78,8 +83,14 @@ export async function handleInstanceControlPlaneApiRequest(
   request: Request,
   env: InstanceControlPlaneApiEnv,
 ): Promise<Response | undefined> {
-  if (!parseInstanceControlPlaneApiRoute(new URL(request.url).pathname)) {
+  const route = parseInstanceControlPlaneApiRoute(new URL(request.url).pathname);
+
+  if (!route) {
     return undefined;
+  }
+
+  if (isInternalControlPlanePath(route.path)) {
+    return jsonResponse({ error: "Not found." }, 404);
   }
 
   const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
@@ -100,6 +111,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
   }
 
   try {
+    if (route.path === INTERNAL_BACKFILL_APP_INSTALLS_PATH) {
+      return await handleInternalBackfillAppInstalls(request, storage);
+    }
+
     if (route.path === `/${createAppInstallControlPlaneAction}`) {
       return redirectControlPlaneActionRoute(request, createAppInstallControlPlaneAction);
     }
@@ -159,12 +174,55 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
 export function readControlPlaneAppInstalls(storage: DurableObjectStorage): AppInstall[] {
   ensureStorageTables(storage);
   initializeStorageFromSource(storage, instanceControlPlaneSource);
+  const records = getBootstrapRecords(storage).filter((record) => !record.deletedAt);
+  const routeRecords = records.filter((record) => record.entity === "appRoute");
 
   return listAppInstalls(
-    getBootstrapRecords(storage)
-      .filter((record) => record.entity === "appInstall" && !record.deletedAt)
-      .map((record) => appInstallFromControlPlaneValues(record.values)),
+    records
+      .filter((record) => record.entity === "appInstall" && record.values.status === "installed")
+      .map((record) =>
+        appInstallFromControlPlaneValues(
+          record.values,
+          routeRecords
+            .filter((routeRecord) => routeRecord.values.appInstall === record.id)
+            .map((routeRecord) => ({
+              id: routeRecord.id,
+              values: routeRecord.values as InstanceControlPlaneAppRouteValues,
+            })),
+        ),
+      ),
   );
+}
+
+async function handleInternalBackfillAppInstalls(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+
+  const installs = parseInternalBackfillAppInstalls(await readJson(request));
+  const existing = readControlPlaneAppInstalls(storage);
+  const backfilled: string[] = [];
+
+  for (const install of installs) {
+    if (existing.some((candidate) => candidate.installId === install.installId)) {
+      continue;
+    }
+
+    backfillAppInstallRecords(storage, install);
+    existing.push(install);
+    backfilled.push(install.installId);
+  }
+
+  return jsonResponse({
+    backfilled,
+    installs: readControlPlaneAppInstalls(storage),
+  });
 }
 
 async function handleCreateAppInstallAction(
@@ -342,7 +400,10 @@ function parseOptionalActionIdentity(value: unknown): string | undefined {
   return value.trim();
 }
 
-function appInstallFromControlPlaneValues(values: RecordValues): AppInstall {
+function appInstallFromControlPlaneValues(
+  values: RecordValues,
+  routeRecords: { id: string; values: InstanceControlPlaneAppRouteValues }[],
+): AppInstall {
   const packageAppKey = String(values.packageAppKey);
   const packageApp = findBundledAppPackage(packageAppKey);
 
@@ -351,6 +412,13 @@ function appInstallFromControlPlaneValues(values: RecordValues): AppInstall {
   }
 
   const installId = String(values.installId);
+  const routes = appInstallRoutesFromControlPlaneRoutes(routeRecords);
+  const hasRouteRecords = routes.length > 0;
+  const adminRoute =
+    enabledRoutePath(routes, "admin") ?? `${packageApp.adminRouteBase}/${installId}`;
+  const schemaRoute =
+    enabledRoutePath(routes, "schema") ?? `${packageApp.adminRouteBase}/${installId}/schema`;
+  const publicRoute = enabledAppInstallRoute(routes, "publicSite");
 
   return {
     installId,
@@ -359,15 +427,165 @@ function appInstallFromControlPlaneValues(values: RecordValues): AppInstall {
     status: "installed",
     createdAt: String(values.createdAt),
     updatedAt: String(values.updatedAt),
-    adminRoute: `${packageApp.adminRouteBase}/${installId}`,
-    schemaRoute: `${packageApp.adminRouteBase}/${installId}/schema`,
-    ...(packageApp.publicRouteBase === undefined
-      ? {}
-      : {
-          publicRoute: `${packageApp.publicRouteBase}/${installId}`,
-          publicRoutePrefix: `${packageApp.publicRouteBase}/${installId}/`,
-        }),
+    adminRoute,
+    schemaRoute,
+    ...(publicRoute
+      ? {
+          publicRoute: publicRoute.path,
+          publicRoutePrefix:
+            publicRoute.prefix ?? (`${publicRoute.path.replace(/\/+$/, "")}/` as `/${string}/`),
+        }
+      : packageApp.publicRouteBase === undefined || hasRouteRecords
+        ? {}
+        : {
+            publicRoute: `${packageApp.publicRouteBase}/${installId}`,
+            publicRoutePrefix: `${packageApp.publicRouteBase}/${installId}/`,
+          }),
+    ...(hasRouteRecords ? { routes } : {}),
   };
+}
+
+function backfillAppInstallRecords(storage: DurableObjectStorage, install: AppInstall) {
+  const appInstallRecord = instanceControlPlaneAppInstallRecord(install);
+  const now = install.updatedAt || install.createdAt || nowIsoString();
+  const routes = instanceControlPlaneRecordsForAppInstall({ install, now }).slice(1);
+  const records = [appInstallRecord, ...routes];
+
+  createRecordSetForActionOutcome(
+    storage,
+    `backfillAppInstall:${install.installId}`,
+    "appInstall",
+    "backfillAppInstall",
+    records.map((record) => ({
+      entity: record.entity,
+      id: record.id,
+      values: record.values,
+    })),
+    validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema),
+  );
+}
+
+function appInstallRoutesFromControlPlaneRoutes(
+  routeRecords: { id: string; values: InstanceControlPlaneAppRouteValues }[],
+): AppInstallRoute[] {
+  return routeRecords
+    .map((record) => appInstallRouteFromControlPlaneRoute(record.id, record.values))
+    .sort(compareAppInstallRoutes);
+}
+
+function appInstallRouteFromControlPlaneRoute(
+  id: string,
+  values: InstanceControlPlaneAppRouteValues,
+): AppInstallRoute {
+  return {
+    enabled: values.enabled,
+    id,
+    path: values.path,
+    ...(values.prefix === undefined ? {} : { prefix: values.prefix }),
+    routeKind: values.routeKind,
+  };
+}
+
+function compareAppInstallRoutes(left: AppInstallRoute, right: AppInstallRoute) {
+  const kindOrder =
+    appInstallRouteKindOrder(left.routeKind) - appInstallRouteKindOrder(right.routeKind);
+
+  return kindOrder === 0 ? left.path.localeCompare(right.path) : kindOrder;
+}
+
+function appInstallRouteKindOrder(kind: InstanceControlPlaneAppRouteKind) {
+  switch (kind) {
+    case "admin":
+      return 0;
+    case "schema":
+      return 1;
+    case "publicSite":
+      return 2;
+  }
+}
+
+function enabledRoutePath(
+  routes: readonly AppInstallRoute[],
+  routeKind: AppInstallRoute["routeKind"],
+): `/${string}` | undefined {
+  return enabledAppInstallRoute(routes, routeKind)?.path;
+}
+
+function enabledAppInstallRoute(
+  routes: readonly AppInstallRoute[],
+  routeKind: AppInstallRoute["routeKind"],
+): AppInstallRoute | undefined {
+  return routes.find((route) => route.enabled && route.routeKind === routeKind);
+}
+
+function parseInternalBackfillAppInstalls(value: unknown): AppInstall[] {
+  if (!isRecord(value) || !Array.isArray(value.installs)) {
+    throw new BadRequestError("Backfill app install request must include installs.");
+  }
+
+  return value.installs.map(parseInternalBackfillAppInstall);
+}
+
+function parseInternalBackfillAppInstall(value: unknown): AppInstall {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Backfill app install must be an object.");
+  }
+
+  const packageAppKey = parseRequiredString("packageAppKey", value.packageAppKey);
+  const packageApp = findBundledAppPackage(packageAppKey);
+
+  if (!packageApp) {
+    throw new BadRequestError(`Backfill app install package "${packageAppKey}" is unsupported.`);
+  }
+
+  return {
+    installId: parseRequiredString("installId", value.installId),
+    packageAppKey: packageApp.packageAppKey,
+    label: parseRequiredString("label", value.label),
+    status: "installed",
+    createdAt: parseRequiredString("createdAt", value.createdAt),
+    updatedAt: parseRequiredString("updatedAt", value.updatedAt),
+    adminRoute: parseRouteString("adminRoute", value.adminRoute),
+    schemaRoute: parseRouteString("schemaRoute", value.schemaRoute),
+    ...(typeof value.publicRoute === "string"
+      ? { publicRoute: parseRouteString("publicRoute", value.publicRoute) }
+      : {}),
+    ...(typeof value.publicRoutePrefix === "string"
+      ? { publicRoutePrefix: parseRoutePrefixString("publicRoutePrefix", value.publicRoutePrefix) }
+      : {}),
+  };
+}
+
+function parseRequiredString(field: string, value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new BadRequestError(`Backfill app install field "${field}" must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function parseRouteString(field: string, value: unknown): `/${string}` {
+  const route = parseRequiredString(field, value);
+
+  if (!route.startsWith("/")) {
+    throw new BadRequestError(`Backfill app install field "${field}" must be a route path.`);
+  }
+
+  return route as `/${string}`;
+}
+
+function parseRoutePrefixString(field: string, value: unknown): `/${string}/` {
+  const route = parseRouteString(field, value);
+
+  if (!route.endsWith("/")) {
+    throw new BadRequestError(`Backfill app install field "${field}" must be a route prefix.`);
+  }
+
+  return route as `/${string}/`;
+}
+
+function isInternalControlPlanePath(path: string) {
+  return path.startsWith("/_internal/");
 }
 
 function controlPlaneActorKindFromRequest(request: Request, url: URL): SchemaActionActorKind {

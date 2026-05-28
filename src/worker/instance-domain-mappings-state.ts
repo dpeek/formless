@@ -23,6 +23,7 @@ import {
   type InstanceDomainMappingSurface,
   type RecordInstanceDomainMappingApplyEvidenceRequest,
 } from "../shared/instance-domain-mappings.ts";
+import type { AppInstall } from "../shared/app-installs.ts";
 import { readInstanceAppInstalls } from "./instance-app-installs-state.ts";
 
 type InstanceDomainMappingRow = {
@@ -209,7 +210,9 @@ export function readInstanceDomainMappingDesiredCleanupEvents(
 
 export function createInstanceDomainMapping(
   storage: DurableObjectStorage,
-  input: Omit<CreateInstanceDomainMappingInput, "existingMappings" | "installs">,
+  input: Omit<CreateInstanceDomainMappingInput, "existingMappings" | "installs"> & {
+    installs?: readonly AppInstall[];
+  },
 ): CreateInstanceDomainMappingResult {
   ensureInstanceDomainMappingTables(storage);
 
@@ -217,7 +220,7 @@ export function createInstanceDomainMapping(
     const result = buildInstanceDomainMapping({
       ...input,
       existingMappings: readDomainMappings(storage),
-      installs: readInstanceAppInstalls(storage),
+      installs: input.installs ?? readInstanceAppInstalls(storage),
     });
 
     if (!result.ok) {

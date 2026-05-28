@@ -54,7 +54,7 @@ export async function handleOwnerSetupApiRequest(
 export async function handleOwnerSetupDurableObjectRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerSetupApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
 
@@ -222,7 +222,7 @@ async function handleOwnerSetupCapabilityRequest(
 async function handleOwnerSetupCompleteRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: OwnerSetupApiEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
@@ -238,9 +238,11 @@ async function handleOwnerSetupCompleteRequest(
   });
 
   if (result.ok) {
-    ensureDefaultAppInstalls(storage, {
+    await ensureDefaultAppInstalls(storage, {
+      env,
       now: completedAt,
       policy: "starter-site-if-empty",
+      requestUrl: request.url,
     });
   }
 

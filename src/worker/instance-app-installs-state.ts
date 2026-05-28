@@ -38,6 +38,10 @@ export function readInstanceAppInstalls(storage: DurableObjectStorage): AppInsta
   return listAppInstalls(readAppInstalls(storage));
 }
 
+export function readLegacyInstanceAppInstalls(storage: DurableObjectStorage): AppInstall[] {
+  return readInstanceAppInstalls(storage);
+}
+
 export function createInstanceAppInstall(
   storage: DurableObjectStorage,
   input: CreateAppInstallRequest & { now: string },

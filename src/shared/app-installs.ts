@@ -3,6 +3,15 @@ import { schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
 export type PackageAppKey = SchemaKey;
 export type AppInstallId = string;
 export type AppInstallStatus = "installed";
+export type AppInstallRouteKind = "admin" | "publicSite" | "schema";
+
+export type AppInstallRoute = {
+  enabled: boolean;
+  id: string;
+  path: `/${string}`;
+  prefix?: `/${string}/`;
+  routeKind: AppInstallRouteKind;
+};
 
 export type AppInstall = {
   installId: AppInstallId;
@@ -11,10 +20,11 @@ export type AppInstall = {
   status: AppInstallStatus;
   createdAt: string;
   updatedAt: string;
-  adminRoute: `/apps/${string}`;
-  schemaRoute: `/apps/${string}/schema`;
-  publicRoute?: `/sites/${string}`;
-  publicRoutePrefix?: `/sites/${string}/`;
+  adminRoute: `/${string}`;
+  schemaRoute: `/${string}`;
+  publicRoute?: `/${string}`;
+  publicRoutePrefix?: `/${string}/`;
+  routes?: AppInstallRoute[];
 };
 
 export type BundledAppPackage = {
@@ -315,6 +325,16 @@ export function createAppInstall(input: CreateAppInstallInput): CreateAppInstall
     install,
     installs: [...input.existingInstalls, install],
   };
+}
+
+export function appInstallInitializationPlan(install: AppInstall): AppInstallInitializationPlan {
+  const packageApp = findBundledAppPackage(install.packageAppKey);
+
+  if (!packageApp) {
+    throw new Error(`Package app "${install.packageAppKey}" is not installable.`);
+  }
+
+  return initializationPlanForInstall(packageApp, install);
 }
 
 export function appInstallRegistryError(

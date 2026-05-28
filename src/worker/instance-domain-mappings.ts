@@ -24,6 +24,7 @@ import {
   readInstanceDomainMappings,
   recordInstanceDomainMappingApplyEvidence,
 } from "./instance-domain-mappings-state.ts";
+import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
 
 export const INSTANCE_DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/lookup`;
@@ -95,7 +96,7 @@ async function lookupEnabledInstanceDomainMappingForRequestHost(
 export async function handleInstanceDomainMappingsDurableObjectRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: InstanceDomainMappingsApiEnv,
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
 
@@ -136,8 +137,10 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
       }
 
       const body = parseCreateInstanceDomainMappingRequest(await readJson(request));
+      const installs = await readBackfilledControlPlaneAppInstalls(storage, env, request.url);
       const result = createInstanceDomainMapping(storage, {
         ...body,
+        installs,
         now: nowIsoString(),
       });
 

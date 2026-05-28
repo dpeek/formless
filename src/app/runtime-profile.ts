@@ -10,7 +10,7 @@ import {
   installedAppStorageIdentity,
   type AppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
-import type { AppInstall } from "../shared/app-installs.ts";
+import type { AppInstall, AppInstallRoute } from "../shared/app-installs.ts";
 import {
   FORMLESS_RUNTIME_APP_INSTALL_ID_META_NAME,
   FORMLESS_RUNTIME_PACKAGE_APP_KEY_META_NAME,
@@ -48,7 +48,7 @@ export type RuntimeInstalledSitePublicRoutes = {
 };
 
 export type RuntimeInstalledSitePublicSurface = {
-  routeBase: `/sites/${string}`;
+  routeBase: `/${string}`;
   slug: string;
   target: AppStorageIdentity;
 };
@@ -480,13 +480,9 @@ export function installedSitePublicSurfaceFromRoute(
     return undefined;
   }
 
-  const routeMatch = matchRuntimeRouteBase(pathname, routes.siteRouteBase);
-
-  if (!routeMatch) {
-    return undefined;
-  }
-
-  const install = findInstalledAppByInstallId(context.appInstalls, routeMatch.routeId);
+  const install = (context.appInstalls ?? [])
+    .filter((candidate) => candidate.packageAppKey === routes.packageAppKey)
+    .find((candidate) => installedSitePublicRouteMatch(candidate, pathname));
 
   if (!install || install.packageAppKey !== routes.packageAppKey) {
     return undefined;
@@ -501,12 +497,15 @@ export function installedSitePublicSurfaceFromRoute(
     return undefined;
   }
 
+  const routeMatch = installedSitePublicRouteMatch(install, pathname);
+
+  if (!routeMatch) {
+    return undefined;
+  }
+
   return {
-    routeBase: runtimeRouteFromBase(routes.siteRouteBase, target.installId) as `/sites/${string}`,
-    slug:
-      routeMatch.suffixSegments.length === 0
-        ? routes.homeSlug
-        : routeMatch.suffixSegments.join("/"),
+    routeBase: routeMatch.routeBase,
+    slug: routeMatch.slug || routes.homeSlug,
     target,
   };
 }
@@ -571,10 +570,17 @@ export function installedAppWorldMountFromInstall(
     return undefined;
   }
 
-  const route = runtimeRouteFromBase(routes.appRouteBase, target.installId);
+  const fallbackRoute = runtimeRouteFromBase(routes.appRouteBase, target.installId);
+  const route =
+    enabledInstallRoutePath(install, "admin") ?? (install.routes ? undefined : fallbackRoute);
+  const schemaRoute =
+    enabledInstallRoutePath(install, "schema") ??
+    (install.routes
+      ? undefined
+      : (`${fallbackRoute}${runtimeTopologyRoutes.schemaRoute}` as const));
   const app = findSchemaAppDefinition(target.sourceSchemaKey);
 
-  if (!app) {
+  if (!app || !route) {
     return undefined;
   }
 
@@ -582,9 +588,7 @@ export function installedAppWorldMountFromInstall(
     app,
     generatedRoutes: true,
     route,
-    ...(routes.schemaRoutes
-      ? { schemaRoute: `${route}${runtimeTopologyRoutes.schemaRoute}` as const }
-      : {}),
+    ...(routes.schemaRoutes && schemaRoute ? { schemaRoute } : {}),
     target,
   };
 }
@@ -600,22 +604,31 @@ function installedAppWorldMountFromRoute(
     return undefined;
   }
 
-  const routeMatch = matchRuntimeRouteBase(pathname, routes.appRouteBase);
+  for (const install of context.appInstalls ?? []) {
+    const world = installedAppWorldMountFromInstall(profile, install);
 
-  if (!routeMatch) {
-    return undefined;
+    if (!world) {
+      continue;
+    }
+
+    if (world.schemaRoute && pathname === world.schemaRoute) {
+      return world;
+    }
+
+    const routeMatch = matchInstalledRoutePath(pathname, world.route);
+
+    if (!routeMatch) {
+      continue;
+    }
+
+    if (!world.schemaRoute && routeMatch.pathSuffix === runtimeTopologyRoutes.schemaRoute) {
+      return undefined;
+    }
+
+    return world;
   }
 
-  const world = installedAppWorldMountFromInstallId(profile, routeMatch.routeId, context);
-
-  if (
-    !world ||
-    (!world.schemaRoute && routeMatch.pathSuffix === runtimeTopologyRoutes.schemaRoute)
-  ) {
-    return undefined;
-  }
-
-  return world;
+  return undefined;
 }
 
 export function isInstalledAppRoutePath(profile: RuntimeProfile, pathname: string): boolean {
@@ -666,6 +679,68 @@ function findInstalledAppByInstallId(
   installId: string,
 ): AppInstall | undefined {
   return appInstalls?.find((install) => install.installId === installId);
+}
+
+function enabledInstallRoutePath(
+  install: AppInstall,
+  routeKind: AppInstallRoute["routeKind"],
+): `/${string}` | undefined {
+  return enabledInstallRoute(install, routeKind)?.path;
+}
+
+function enabledInstallRoute(
+  install: AppInstall,
+  routeKind: AppInstallRoute["routeKind"],
+): AppInstallRoute | undefined {
+  return install.routes?.find((route) => route.enabled && route.routeKind === routeKind);
+}
+
+function matchInstalledRoutePath(
+  pathname: string,
+  route: `/${string}`,
+): { pathSuffix: string } | undefined {
+  if (pathname === route) {
+    return { pathSuffix: "" };
+  }
+
+  const routePrefix = `${route}/`;
+
+  return pathname.startsWith(routePrefix)
+    ? { pathSuffix: pathname.slice(route.length) }
+    : undefined;
+}
+
+function installedSitePublicRouteMatch(
+  install: AppInstall,
+  pathname: string,
+): { routeBase: `/${string}`; slug: string } | undefined {
+  const route = enabledInstallRoute(install, "publicSite");
+
+  if (route) {
+    return publicSiteRouteMatch(pathname, route.path, route.prefix);
+  }
+
+  if (install.routes || !install.publicRoute) {
+    return undefined;
+  }
+
+  return publicSiteRouteMatch(pathname, install.publicRoute, install.publicRoutePrefix);
+}
+
+function publicSiteRouteMatch(
+  pathname: string,
+  routeBase: `/${string}`,
+  prefix?: `/${string}/`,
+): { routeBase: `/${string}`; slug: string } | undefined {
+  if (pathname === routeBase) {
+    return { routeBase, slug: "" };
+  }
+
+  const routePrefix = prefix ?? (`${routeBase.replace(/\/+$/, "")}/` as `/${string}/`);
+
+  return pathname.startsWith(routePrefix)
+    ? { routeBase, slug: pathname.slice(routePrefix.length) }
+    : undefined;
 }
 
 function browserRuntimeProfileConfig(): RuntimeProfileResolverInput {

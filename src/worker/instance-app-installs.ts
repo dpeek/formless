@@ -1,20 +1,27 @@
-import { findAppInstall, listBundledAppPackages, type AppInstall } from "../shared/app-installs.ts";
+import {
+  appInstallInitializationPlan,
+  findAppInstall,
+  listBundledAppPackages,
+  type AppInstall,
+} from "../shared/app-installs.ts";
+import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+} from "../shared/instance-control-plane.ts";
 import {
   parseCreateAppInstallRequest,
   type AppInstallsResponse,
+  type CreateAppInstallRequest,
   type CreateAppInstallResponse,
 } from "../shared/protocol.ts";
-import { nowIsoString } from "../shared/clock.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import {
-  createInstanceAppInstall,
-  readInstanceAppInstalls,
-} from "./instance-app-installs-state.ts";
+import { INTERNAL_BACKFILL_APP_INSTALLS_PATH } from "./instance-control-plane.ts";
+import { readLegacyInstanceAppInstalls } from "./instance-app-installs-state.ts";
 
 export const INSTANCE_APP_INSTALLS_API_PATH = "/api/formless/app-installs";
 
-type InstanceAppInstallsApiEnv = AuthorityAdminGuardEnv & {
+export type InstanceAppInstallsApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
 };
 
@@ -58,7 +65,7 @@ export async function lookupInstanceAppInstallForRequest(
 export async function handleInstanceAppInstallsDurableObjectRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: InstanceAppInstallsApiEnv,
 ): Promise<Response | undefined> {
   const pathname = new URL(request.url).pathname;
 
@@ -72,7 +79,7 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
     }
 
     if (request.method === "GET") {
-      return jsonResponse(appInstallsResponse(storage));
+      return jsonResponse(await appInstallsResponse(request, storage, env));
     }
 
     if (request.method === "POST") {
@@ -87,24 +94,31 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       }
 
       const body = parseCreateAppInstallRequest(await readJson(request));
-      const result = createInstanceAppInstall(storage, { ...body, now: nowIsoString() });
+      await readBackfilledControlPlaneAppInstalls(storage, env, request.url);
+      const created = await createControlPlaneAppInstall(request, env, body);
 
-      if (!result.ok) {
+      if (!created.response.ok) {
         return jsonResponse(
-          {
-            error: result.error.message,
-            code: result.error.code,
-            ...(result.error.field === undefined ? {} : { field: result.error.field }),
-            installs: result.installs,
-          },
-          installFailureStatus(result.error.code),
+          created.body,
+          installFailureStatus(
+            typeof created.body === "object" && created.body !== null && "code" in created.body
+              ? String(created.body.code)
+              : undefined,
+          ),
         );
       }
 
+      const installs = await readBackfilledControlPlaneAppInstalls(storage, env, request.url);
+      const install = findAppInstall(installs, body.installId);
+
+      if (!install) {
+        throw new Error(`Created install "${body.installId}" was not returned by control-plane.`);
+      }
+
       const response: CreateAppInstallResponse = {
-        initialization: result.initialization,
-        install: result.install,
-        installs: result.installs,
+        initialization: appInstallInitializationPlan(install),
+        install,
+        installs,
       };
 
       return jsonResponse(response, 201);
@@ -123,14 +137,77 @@ function isInstanceAppInstallsApiPath(pathname: string) {
   );
 }
 
-function appInstallsResponse(storage: DurableObjectStorage): AppInstallsResponse {
+async function appInstallsResponse(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: InstanceAppInstallsApiEnv,
+): Promise<AppInstallsResponse> {
   return {
     packages: listBundledAppPackages(),
-    installs: readInstanceAppInstalls(storage),
+    installs: await readBackfilledControlPlaneAppInstalls(storage, env, request.url),
   };
 }
 
-function installFailureStatus(code: string) {
+export async function readBackfilledControlPlaneAppInstalls(
+  storage: DurableObjectStorage,
+  env: InstanceAppInstallsApiEnv,
+  requestUrl: string,
+): Promise<AppInstall[]> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(
+      new URL(
+        `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${INTERNAL_BACKFILL_APP_INSTALLS_PATH}`,
+        requestUrl,
+      ),
+      {
+        body: JSON.stringify({ installs: readLegacyInstanceAppInstalls(storage) }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    ),
+  );
+
+  const body = (await response.json()) as { installs?: AppInstall[]; error?: string };
+
+  if (!response.ok || !Array.isArray(body.installs)) {
+    throw new Error(body.error ?? "Control-plane app install backfill failed.");
+  }
+
+  return body.installs;
+}
+
+async function createControlPlaneAppInstall(
+  request: Request,
+  env: InstanceAppInstallsApiEnv,
+  input: CreateAppInstallRequest,
+): Promise<{ body: unknown; response: Response }> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
+  const headers = new Headers(request.headers);
+
+  headers.set("Content-Type", "application/json");
+
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(
+      new URL(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/actions/createAppInstall`, request.url),
+      {
+        body: JSON.stringify({
+          actionId: `legacyAppInstallApi:${input.installId}:${crypto.randomUUID()}`,
+          input,
+        }),
+        headers,
+        method: "POST",
+      },
+    ),
+  );
+
+  return {
+    body: await response.json(),
+    response,
+  };
+}
+
+function installFailureStatus(code: string | undefined) {
   return code === "duplicate-install-id" ? 409 : 400;
 }
 

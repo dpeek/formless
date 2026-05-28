@@ -24,6 +24,7 @@ describe("worker launch fixture startup", () => {
     harness = await createFixtureHarness("multi-site");
 
     const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
     const legacySite = await harness.fetch("/api/site/bootstrap");
     const docs = await getJson<BootstrapResponse>("/api/app-installs/site/docs/bootstrap");
 
@@ -42,6 +43,12 @@ describe("worker launch fixture startup", () => {
       "/sites/projects",
       "/sites/site",
     ]);
+    expect(
+      controlPlane.records
+        .filter((record) => record.entity === "appInstall")
+        .map((record) => record.id),
+    ).toEqual(["docs", "projects", "site"]);
+    expect(controlPlane.records.filter((record) => record.entity === "appRoute")).toHaveLength(9);
     expect(legacySite.status).toBe(404);
     expect(docs.schema).toEqual(siteSourceSchema);
     expect(docs.cursor).toBe(siteSeedRecords.length);

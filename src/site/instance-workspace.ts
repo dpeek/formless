@@ -1582,9 +1582,11 @@ function appDeclarationFromInstall(install: AppInstall): FormlessInstanceWorkspa
     label: install.label,
     archivePath: `${DEFAULT_FORMLESS_INSTANCE_WORKSPACE_APP_ARCHIVE_ROOT}/${install.installId}`,
     routes: {
-      admin: install.adminRoute,
-      schema: install.schemaRoute,
-      ...(install.publicRoute === undefined ? {} : { public: install.publicRoute }),
+      admin: install.adminRoute as `/apps/${string}`,
+      schema: install.schemaRoute as `/apps/${string}/schema`,
+      ...(install.publicRoute === undefined
+        ? {}
+        : { public: install.publicRoute as `/sites/${string}` }),
     },
   };
 }

@@ -3,6 +3,7 @@ import type {
   AppInstallsResponse,
   BootstrapResponse,
   CreateAppInstallResponse,
+  MutationResponse,
 } from "../shared/protocol.ts";
 import {
   rateSeedRecords,
@@ -85,6 +86,50 @@ describe("instance app install API routes", () => {
       status: "installed",
     });
     expect(after.body.installs).toEqual(created.body.installs);
+  });
+
+  it("derives app install API responses from control-plane install and route records", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "site",
+      installId: "personal",
+      label: "Personal Site",
+    });
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    const patchedRoute = await postAdminJson<MutationResponse>(
+      "/api/formless/control-plane/mutations",
+      {
+        mutationId: "mutation-personal-admin-route",
+        entity: "appRoute",
+        op: "patch",
+        recordId: "app-route:personal:admin",
+        values: {
+          path: "/apps/personal-admin",
+          updatedAt: "2026-05-28T00:00:00.000Z",
+        },
+      },
+    );
+    const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(controlPlane.body.records.map((record) => `${record.entity}:${record.id}`)).toEqual([
+      "appInstall:personal",
+      "appRoute:app-route:personal:admin",
+      "appRoute:app-route:personal:schema",
+      "appRoute:app-route:personal:publicSite",
+    ]);
+    expect(patchedRoute.response.status).toBe(200);
+    expect(after.body.installs[0]).toEqual(
+      expect.objectContaining({
+        adminRoute: "/apps/personal-admin",
+        installId: "personal",
+        publicRoute: "/sites/personal",
+        schemaRoute: "/apps/personal/schema",
+      }),
+    );
+    expect(after.body.installs[0]?.routes?.map((route) => [route.routeKind, route.path])).toEqual([
+      ["admin", "/apps/personal-admin"],
+      ["schema", "/apps/personal/schema"],
+      ["publicSite", "/sites/personal"],
+    ]);
   });
 
   it("persists Tasks installs and bootstraps from the bundled Tasks source", async () => {

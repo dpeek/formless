@@ -54,12 +54,20 @@ Evidence:
 
 ## 4. App Install And Route Compatibility
 
-- [ ] 4.1 Backfill existing `app_installs` rows into `appInstall` and default `appRoute` control-plane records.
-- [ ] 4.2 Derive existing `/api/formless/app-installs` responses from control-plane install and route records while preserving response shape.
-- [ ] 4.3 Route existing create app install requests through control-plane records while preserving validation for unsupported packages, invalid ids, duplicates, and labels.
-- [ ] 4.4 Resolve installed app browser routes and installed Site public routes from enabled `appRoute` records.
-- [ ] 4.5 Keep install-scoped API prefixes, Authority names, browser replica names, broadcast names, and public Site reads derived from stable install identity.
-- [ ] 4.6 Add compatibility tests for default Site, Tasks, Estii, multi-site, mixed-app fixtures, installed app routes, public Site routes, and app install API responses.
+- [x] 4.1 Backfill existing `app_installs` rows into `appInstall` and default `appRoute` control-plane records.
+- [x] 4.2 Derive existing `/api/formless/app-installs` responses from control-plane install and route records while preserving response shape.
+- [x] 4.3 Route existing create app install requests through control-plane records while preserving validation for unsupported packages, invalid ids, duplicates, and labels.
+- [x] 4.4 Resolve installed app browser routes and installed Site public routes from enabled `appRoute` records.
+- [x] 4.5 Keep install-scoped API prefixes, Authority names, browser replica names, broadcast names, and public Site reads derived from stable install identity.
+- [x] 4.6 Add compatibility tests for default Site, Tasks, Estii, multi-site, mixed-app fixtures, installed app routes, public Site routes, and app install API responses.
+
+Evidence:
+
+- Files changed: `src/shared/app-installs.ts`, `src/worker/instance-control-plane.ts`, `src/worker/instance-app-installs.ts`, `src/worker/instance-app-installs-state.ts`, `src/worker/default-app-installs.ts`, `src/worker/owner-setup.ts`, `src/worker/instance-domain-mappings.ts`, `src/worker/instance-domain-mappings-state.ts`, `src/app/runtime-profile.ts`, `src/site/instance-workspace.ts`, `src/worker/instance-app-installs.test.ts`, `src/worker/launch-fixture-startup.test.ts`, `src/app/runtime-profile.test.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:38:45.987Z. `devstate check` first caught route type fallout from control-plane route widening, then the custom-domain compatibility watch caught target install validation still reading only the legacy table. After narrowing compatibility casts, routing domain mapping validation through the backfilled control-plane install list, and restarting stale watch services, final `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:56:23.181Z.
+- Smoke: `bun browser --ignore-https-errors open https://schema-owned-control-plane.formless.local` loaded the local instance shell; `bun browser snapshot -i --max-output 6000` returned App management, Installed apps, Install, and Custom domains controls.
+- Decisions: `/api/formless/app-installs` now backfills legacy `app_installs` rows through an internal control-plane-only route, reads installed install responses from control-plane `appInstall` and `appRoute` records, and forwards create requests to the control-plane `createAppInstall` action with per-request action ids to preserve duplicate validation. Runtime route selection and domain mapping target validation use enabled control-plane route/install metadata when present and fall back to legacy install-id-derived routes for existing callers.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
 
 ## 5. Deployment Runtime Projection
 

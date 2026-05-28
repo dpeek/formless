@@ -1,8 +1,9 @@
 import { findAppInstall, type AppInstall } from "../shared/app-installs.ts";
+import { createInstanceAppInstall } from "./instance-app-installs-state.ts";
 import {
-  createInstanceAppInstall,
-  readInstanceAppInstalls,
-} from "./instance-app-installs-state.ts";
+  readBackfilledControlPlaneAppInstalls,
+  type InstanceAppInstallsApiEnv,
+} from "./instance-app-installs.ts";
 
 export const DEFAULT_SITE_INSTALL_ID = "site";
 export const DEFAULT_SITE_INSTALL_LABEL = "Site";
@@ -17,11 +18,20 @@ export type EnsureDefaultAppInstallsResult = {
   installs: AppInstall[];
 };
 
-export function ensureDefaultAppInstalls(
+export async function ensureDefaultAppInstalls(
   storage: DurableObjectStorage,
-  input: { now: string; policy?: DefaultAppBootstrapPolicy },
-): EnsureDefaultAppInstallsResult {
-  const existingInstalls = readInstanceAppInstalls(storage);
+  input: {
+    env: InstanceAppInstallsApiEnv;
+    now: string;
+    policy?: DefaultAppBootstrapPolicy;
+    requestUrl: string;
+  },
+): Promise<EnsureDefaultAppInstallsResult> {
+  const existingInstalls = await readBackfilledControlPlaneAppInstalls(
+    storage,
+    input.env,
+    input.requestUrl,
+  );
   const existingSite = findAppInstall(existingInstalls, DEFAULT_SITE_INSTALL_ID);
   const policy = input.policy ?? "starter-site-if-empty";
 
@@ -58,6 +68,6 @@ export function ensureDefaultAppInstalls(
       created: true,
       install: result.install,
     },
-    installs: result.installs,
+    installs: await readBackfilledControlPlaneAppInstalls(storage, input.env, input.requestUrl),
   };
 }
