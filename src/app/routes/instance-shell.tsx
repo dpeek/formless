@@ -40,7 +40,15 @@ import {
   forgetInstanceDomainProviderRedirect,
   markInstanceDomainProviderResourceManuallyRemoved,
 } from "../../client/domain-provider.ts";
+import {
+  DeploymentRuntimeApiError,
+  fetchInstanceDeploymentStatus,
+} from "../../client/deployment-runtime.ts";
 import type { AppInstall, BundledAppPackage, PackageAppKey } from "../../shared/app-installs.ts";
+import {
+  deploymentStatusDisplaySummary,
+  type InstanceDeploymentStatusResponse,
+} from "../../shared/deployment-runtime.ts";
 import type {
   InstanceDomainProviderAppliedResourceState,
   InstanceDomainProviderApplyJob,
@@ -111,6 +119,7 @@ export type InstanceShellRouteState =
       domainProviderPlan?: InstanceDomainProviderPlanResponse;
       domainProviderPlanError?: string;
       domainProviderPlanLoading?: boolean;
+      deploymentStatus?: InstanceDeploymentStatusResponse;
       domainRedirectDeletingKey?: string;
       domainRedirectDraftError?: string;
       domainRedirectForgettingKey?: string;
@@ -147,13 +156,19 @@ export function InstanceShellRoute() {
 
     async function loadInstalls() {
       try {
-        const [appResponse, domainResponse, redirectResponse, providerPlanResponse] =
-          await Promise.all([
-            fetchInstanceAppInstalls({ signal: controller.signal }),
-            fetchInstanceDomainMappings({ signal: controller.signal }),
-            fetchInstanceDomainProviderRedirects({ signal: controller.signal }),
-            fetchInstanceDomainProviderPlan({ signal: controller.signal }),
-          ]);
+        const [
+          appResponse,
+          domainResponse,
+          redirectResponse,
+          providerPlanResponse,
+          deploymentStatus,
+        ] = await Promise.all([
+          fetchInstanceAppInstalls({ signal: controller.signal }),
+          fetchInstanceDomainMappings({ signal: controller.signal }),
+          fetchInstanceDomainProviderRedirects({ signal: controller.signal }),
+          fetchInstanceDomainProviderPlan({ signal: controller.signal }),
+          fetchOptionalInstanceDeploymentStatus(controller.signal),
+        ]);
 
         if (stopped) {
           return;
@@ -169,6 +184,7 @@ export function InstanceShellRoute() {
           domainProviderDeletingKey: undefined,
           domainProviderPlan: providerPlanResponse,
           domainProviderPlanLoading: false,
+          ...(deploymentStatus === undefined ? {} : { deploymentStatus }),
           domainRedirectDeletingKey: undefined,
           domainRedirectIntents: redirectResponse.redirectIntents,
           domainRedirectSubmitting: false,
@@ -263,6 +279,7 @@ export function InstanceShellRoute() {
         domainProviderPlan: state.domainProviderPlan,
         domainProviderPlanError: state.domainProviderPlanError,
         domainProviderPlanLoading: state.domainProviderPlanLoading,
+        deploymentStatus: state.deploymentStatus,
         domainRedirectDeletingKey: state.domainRedirectDeletingKey,
         domainRedirectDraftError: state.domainRedirectDraftError,
         domainRedirectForgettingKey: state.domainRedirectForgettingKey,
@@ -873,6 +890,20 @@ export function InstanceShellRoute() {
   );
 }
 
+async function fetchOptionalInstanceDeploymentStatus(
+  signal: AbortSignal,
+): Promise<InstanceDeploymentStatusResponse | undefined> {
+  try {
+    return await fetchInstanceDeploymentStatus({ signal });
+  } catch (error) {
+    if (error instanceof DeploymentRuntimeApiError && error.status === 404) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
 export function InstanceShellRouteView({
   domainDraft,
   domainRedirectDraft,
@@ -1101,6 +1132,7 @@ function CustomDomainsSection({
         applyDisabled={providerApplyDisabled}
         applying={providerApplying}
         deleteJob={state.domainProviderDeleteJob}
+        deploymentStatus={state.deploymentStatus}
         onApply={onSubmitProviderApply}
         onRefreshApplyJob={onRefreshApplyJob}
         onRefreshDeleteJob={onRefreshDeleteJob}
@@ -1361,6 +1393,7 @@ function DomainProviderControlPanel({
   applyError,
   applyJob,
   deleteJob,
+  deploymentStatus,
   onApply,
   onRefreshApplyJob,
   onRefreshDeleteJob,
@@ -1374,6 +1407,7 @@ function DomainProviderControlPanel({
   applyError?: string;
   applyJob?: InstanceDomainProviderApplyJob;
   deleteJob?: InstanceDomainProviderDeleteJob;
+  deploymentStatus?: InstanceDeploymentStatusResponse;
   onApply?: () => void;
   onRefreshApplyJob?: () => void;
   onRefreshDeleteJob?: () => void;
@@ -1382,6 +1416,11 @@ function DomainProviderControlPanel({
   planLoading: boolean;
   refreshError?: string;
 }) {
+  const deploymentSummary =
+    deploymentStatus === undefined
+      ? undefined
+      : deploymentStatusDisplaySummary(deploymentStatus.status);
+
   return (
     <div className="grid gap-3 rounded-md border border-border bg-overlay p-4 md:grid-cols-[minmax(0,1fr)_auto]">
       <div className="min-w-0 space-y-2">
@@ -1398,6 +1437,11 @@ function DomainProviderControlPanel({
             <p>{domainProviderBlockerSummary(plan)}</p>
             <p>{domainProviderIssueSummary(plan)}</p>
             <p>{domainProviderRunnerSummary(plan)}</p>
+            {deploymentSummary === undefined ? null : (
+              <p>
+                Deployment {deploymentSummary.label} · {deploymentSummary.detail}
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-xs text-muted-fg">Provider plan unavailable.</p>

@@ -163,6 +163,18 @@ describe("Formless instance workspace manifest", () => {
 
     expect(() =>
       parseFormlessInstanceWorkspaceManifest({
+        ...defaultFormlessInstanceWorkspaceManifest({ name: "personal-sites" }),
+        deploy: {
+          migrationPolicy: "existing",
+          alchemyStateToken: "secret",
+        },
+      }),
+    ).toThrow(
+      'formless.instance-workspace.json must not store secret field "formless.instance-workspace.json.deploy.alchemyStateToken".',
+    );
+
+    expect(() =>
+      parseFormlessInstanceWorkspaceManifest({
         version: 1,
         kind: "formless-instance-workspace",
         name: "personal-sites",

@@ -987,6 +987,26 @@ describe("Formless Site CLI", () => {
       packages: listBundledAppPackages(),
       installs: [installedSite("david", "David Peek")],
     });
+    responses.queueJson({
+      status: {
+        attemptId: "attempt.11111111-1111-4111-8111-111111111111",
+        checkedAt: "2026-05-28T00:00:00.000Z",
+        deployedAt: "2026-05-28T00:00:00.000Z",
+        latestDesiredState: {
+          hash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          revision: 2,
+          targetId: "instance.primary",
+          versionId: "desired-state.instance.primary.2",
+        },
+        state: "deployed",
+        targetId: "instance.primary",
+      },
+      target: {
+        kind: "instance",
+        label: "Primary instance target",
+        targetId: "instance.primary",
+      },
+    });
 
     await runFormlessCli(
       ["instance", "status", "--workspace", workspaceRoot],
@@ -1007,6 +1027,7 @@ describe("Formless Site CLI", () => {
         `Deploy metadata: ${packageJson.version}.`,
         "Owner setup: incomplete.",
         "Remote apps: david (site: David Peek).",
+        "Deployment: Deployed; Revision 2 deployed at 2026-05-28T00:00:00.000Z.",
       ].join("\n"),
     ]);
   });

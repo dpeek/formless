@@ -420,6 +420,26 @@ describe("instance shell route view", () => {
             },
             redirectIntents: [],
           },
+          deploymentStatus: {
+            status: {
+              attemptId: "attempt.11111111-1111-4111-8111-111111111111",
+              checkedAt: "2026-05-28T00:00:00.000Z",
+              deployedAt: "2026-05-28T00:00:00.000Z",
+              latestDesiredState: {
+                hash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                revision: 2,
+                targetId: "instance.primary",
+                versionId: "desired-state.instance.primary.2",
+              },
+              state: "deployed",
+              targetId: "instance.primary",
+            },
+            target: {
+              kind: "instance",
+              label: "Primary instance target",
+              targetId: "instance.primary",
+            },
+          },
           domainRedirectIntents: [],
           domainRedirectSubmitting: false,
           installing: false,
@@ -437,6 +457,8 @@ describe("instance shell route view", () => {
     expect(html).toContain("Blockers none");
     expect(html).toContain("Zones example.com");
     expect(html).toContain("Runner mutation checked by node-runner");
+    expect(html).toContain("Deployment Deployed");
+    expect(html).toContain("Revision 2 deployed");
     expect(html).toContain("Apply job: succeeded");
     expect(html).toContain("Delete job: succeeded");
     expect(html).toContain("Refresh plan");

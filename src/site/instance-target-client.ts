@@ -68,6 +68,7 @@ const DOMAIN_MAPPINGS_FORGET_API_PATH = `${DOMAIN_MAPPINGS_API_PATH}/forget`;
 export type FormlessInstanceTargetStatus = {
   appRegistry: AppInstallsResponse;
   deployMetadata: FormlessInstanceTargetDeployMetadata;
+  deployment?: InstanceDeploymentStatusResponse;
   ownerSetup: OwnerSetupStatusResponse;
   targetUrl: string;
 };
@@ -95,19 +96,23 @@ export class FormlessInstanceTargetRequestError extends Error {
 }
 
 export async function readFormlessInstanceTargetStatus(
-  input: { targetUrl: string },
+  input: { includeDeploymentStatus?: boolean; targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceTargetStatus> {
   const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
-  const [deployMetadata, ownerSetup, appRegistry] = await Promise.all([
+  const [deployMetadata, ownerSetup, appRegistry, deployment] = await Promise.all([
     readFormlessInstanceDeployMetadata({ targetUrl }, dependencies),
     readFormlessInstanceOwnerSetupStatus({ targetUrl }, dependencies),
     readFormlessInstanceAppRegistry({ targetUrl }, dependencies),
+    input.includeDeploymentStatus
+      ? readOptionalFormlessInstanceDeploymentStatus({ targetUrl }, dependencies)
+      : undefined,
   ]);
 
   return {
     appRegistry,
     deployMetadata,
+    ...(deployment === undefined ? {} : { deployment }),
     ownerSetup,
     targetUrl,
   };
@@ -232,6 +237,21 @@ export async function readFormlessInstanceDeploymentStatus(
     }),
     statusUrl,
   );
+}
+
+async function readOptionalFormlessInstanceDeploymentStatus(
+  input: { targetId?: string | null; targetUrl: string },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentStatusResponse | undefined> {
+  try {
+    return await readFormlessInstanceDeploymentStatus(input, dependencies);
+  } catch (error) {
+    if (error instanceof FormlessInstanceTargetRequestError && error.status === 404) {
+      return undefined;
+    }
+
+    throw error;
+  }
 }
 
 export async function startFormlessInstanceDeploymentAttempt(

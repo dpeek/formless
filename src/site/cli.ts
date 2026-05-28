@@ -33,6 +33,10 @@ import type {
   InstanceDomainProviderManualCleanupResponse,
   InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
+import {
+  deploymentStatusDisplaySummary,
+  type DeploymentStatus,
+} from "../shared/deployment-runtime.ts";
 import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import {
   runFormlessInstanceDomainProviderApply as runFormlessInstanceDomainProviderApplyCommand,
@@ -524,7 +528,10 @@ export async function runFormlessCli(
       return;
     }
     case "instanceStatus": {
-      const result = await getFormlessInstanceWorkspaceStatus(command, dependencies);
+      const result = await getFormlessInstanceWorkspaceStatus(
+        { ...command, includeDeploymentStatus: true },
+        dependencies,
+      );
       dependencies.log(formatInstanceWorkspaceStatusResult(result, dependencies.cwd));
       return;
     }
@@ -799,6 +806,7 @@ export async function initFormlessInstanceWorkspace(
 
 export async function getFormlessInstanceWorkspaceStatus(
   input: {
+    includeDeploymentStatus?: boolean;
     targetAlias?: string | null;
     workspacePath?: string;
   },
@@ -1473,6 +1481,9 @@ function formatInstanceWorkspaceStatusResult(
     result.remoteStatus
       ? `Remote apps: ${formatRemoteInstalls(result.remoteStatus.appRegistry.installs)}.`
       : null,
+    result.remoteStatus?.deployment
+      ? `Deployment: ${formatDeploymentStatus(result.remoteStatus.deployment.status)}.`
+      : null,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
@@ -2026,6 +2037,12 @@ function formatSecretState(state: FormlessInstanceWorkspaceStatusResult["secretS
     case "missing":
       return "missing";
   }
+}
+
+function formatDeploymentStatus(status: DeploymentStatus): string {
+  const summary = deploymentStatusDisplaySummary(status);
+
+  return `${summary.label}; ${summary.detail}`;
 }
 
 function formatCliPath(cwd: string, filePath: string): string {

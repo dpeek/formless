@@ -829,6 +829,96 @@ export type InstanceDeploymentStatusResponse = {
   target: DeploymentTarget;
 };
 
+export type DeploymentStatusDisplayTone = "danger" | "neutral" | "progress" | "success" | "warning";
+
+export type DeploymentStatusDisplaySummary = {
+  detail: string;
+  label: string;
+  state: DeploymentStatus["state"];
+  tone: DeploymentStatusDisplayTone;
+};
+
+export function deploymentStatusDisplaySummary(
+  status: DeploymentStatus,
+): DeploymentStatusDisplaySummary {
+  switch (status.state) {
+    case "no-target":
+      return {
+        detail: "No desired-state version has been recorded",
+        label: "No deployment state",
+        state: status.state,
+        tone: "neutral",
+      };
+    case "pending-changes":
+      return {
+        detail: status.latestSuccessfulDesiredState
+          ? `Desired revision ${status.latestDesiredState.revision} pending; deployed revision ${status.latestSuccessfulDesiredState.revision}`
+          : `Desired revision ${status.latestDesiredState.revision} pending`,
+        label: "Pending changes",
+        state: status.state,
+        tone: "warning",
+      };
+    case "in-progress":
+      return {
+        detail: `${deploymentAttemptModeLabel(status.mode)} revision ${status.desiredState.revision} by ${deploymentActorLabel(status.actor)}`,
+        label: "In progress",
+        state: status.state,
+        tone: "progress",
+      };
+    case "deployed":
+      return {
+        detail: `Revision ${status.latestDesiredState.revision} deployed at ${status.deployedAt}`,
+        label: "Deployed",
+        state: status.state,
+        tone: "success",
+      };
+    case "failed-current-version":
+      return {
+        detail: `Revision ${status.latestDesiredState.revision}: ${deploymentFailureLabel(status.summary)}`,
+        label: "Failed current version",
+        state: status.state,
+        tone: "danger",
+      };
+    case "failed-older-version":
+      return {
+        detail: `Revision ${status.failedDesiredState.revision}: ${deploymentFailureLabel(status.summary)}; latest revision ${status.latestDesiredState.revision}`,
+        label: "Failed older version",
+        state: status.state,
+        tone: "warning",
+      };
+    case "drift":
+      return {
+        detail: deploymentDriftLabel(status.report.summary),
+        label: "Drift detected",
+        state: status.state,
+        tone: "warning",
+      };
+  }
+}
+
+function deploymentAttemptModeLabel(mode: DeploymentAttemptMode): string {
+  switch (mode) {
+    case "apply":
+      return "Apply";
+    case "destroy":
+      return "Destroy";
+    case "plan":
+      return "Plan";
+  }
+}
+
+function deploymentActorLabel(actor: DeploymentActor): string {
+  return actor.displayName ?? actor.runnerId ?? actor.actorId;
+}
+
+function deploymentFailureLabel(summary: DeploymentFailureSummary): string {
+  return summary.code ? `${summary.displayMessage} (${summary.code})` : summary.displayMessage;
+}
+
+function deploymentDriftLabel(summary: DeploymentDriftSummary): string {
+  return `create ${summary.create}, update ${summary.update}, delete ${summary.delete}`;
+}
+
 function validateDeploymentTargetIdValue(
   value: unknown,
   context: string,

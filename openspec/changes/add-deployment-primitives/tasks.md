@@ -34,9 +34,9 @@
 
 ## 5. Status Integration
 
-- [ ] 5.1 Add deployment status to the existing remote status data path without exposing provider credentials or Alchemy secrets.
-- [ ] 5.2 Add display-summary helpers for deployment status states used by CLI and custom-domain surfaces.
-- [ ] 5.3 Keep browser clients and workspace manifests free of mutation credentials and Alchemy state tokens.
+- [x] 5.1 Add deployment status to the existing remote status data path without exposing provider credentials or Alchemy secrets.
+- [x] 5.2 Add display-summary helpers for deployment status states used by CLI and custom-domain surfaces.
+- [x] 5.3 Keep browser clients and workspace manifests free of mutation credentials and Alchemy state tokens.
 
 ## 6. Verification
 
@@ -123,3 +123,8 @@
 - 4.5 tests: Updated `src/site/domain-provider-runner.test.ts` to keep legacy unsupported-target apply result writeback stable and added deployment-aware bridged apply plan-writeback coverage; remote-plan, run-delete, forget, manual cleanup, and direct fallback command implementations were not changed.
 - 4.1-4.5 check: `devstate check` passed; evidence in `.devstate/status.md`.
 - 4.1-4.5 smoke: Not run; CLI/target-client behavior changed with no browser-visible app behavior.
+- 5.1: Added opt-in deployment status reads to the existing instance target status path and surfaced deployment status in `formless instance status` without admin tokens, provider credentials, or Alchemy secrets.
+- 5.2: Added shared deployment status display-summary helpers and used them in CLI status output and the custom-domain provider panel.
+- 5.3: Added a browser read-only deployment status client and tightened workspace manifest secret-key rejection for Alchemy state tokens and provider/mutation credential fields.
+- 5.1-5.3 check: `devstate check` passed; evidence in `.devstate/status.md`.
+- 5.1-5.3 smoke: `bun browser` opened `https://add-deployment-primitives.formless.local/`; custom-domain provider panel displayed `Deployment No deployment state · No desired-state version has been recorded`; console after reload showed only Vite connection and React DevTools informational output.

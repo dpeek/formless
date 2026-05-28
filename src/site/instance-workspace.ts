@@ -105,6 +105,7 @@ export type InitFormlessInstanceWorkspaceResult = {
 };
 
 export type FormlessInstanceWorkspaceStatusInput = {
+  includeDeploymentStatus?: boolean;
   targetAlias?: string | null;
   workspacePath?: string;
 };
@@ -441,7 +442,13 @@ export async function getFormlessInstanceWorkspaceStatus(
   const selectedTarget = selectWorkspaceTarget(manifest, input.targetAlias);
   const secretState = await readFormlessInstanceWorkspaceSecretState(workspaceRoot);
   const remoteStatus = selectedTarget
-    ? await readFormlessInstanceTargetStatus({ targetUrl: selectedTarget.url }, dependencies)
+    ? await readFormlessInstanceTargetStatus(
+        {
+          includeDeploymentStatus: input.includeDeploymentStatus,
+          targetUrl: selectedTarget.url,
+        },
+        dependencies,
+      )
     : undefined;
 
   return {
