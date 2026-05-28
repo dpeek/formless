@@ -90,7 +90,16 @@ Evidence:
 
 ## 6. Verification
 
-- [ ] 6.1 Run `devstate check` and read `./.devstate/status.md`; fix new red status before finishing.
-- [ ] 6.2 Run browser smoke with `bun browser ...` for the public subscribe form on a Site page.
-- [ ] 6.3 Record whether existing red devstate service failures were present before this change.
-- [ ] 6.4 Automatic finalization promotes shipped facts into shipped specs before the branch is marked ready for review; do not archive the change in the worker.
+- [x] 6.1 Run `devstate check` and read `./.devstate/status.md`; fix new red status before finishing.
+- [x] 6.2 Run browser smoke with `bun browser ...` for the public subscribe form on a Site page.
+- [x] 6.3 Record whether existing red devstate service failures were present before this change.
+- [x] 6.4 Automatic finalization promotes shipped facts into shipped specs before the branch is marked ready for review; do not archive the change in the worker.
+
+Evidence:
+
+- Files changed: `openspec/changes/add-public-subscribe-actions/tasks.md`.
+- Checks: `devstate check` passed with `FORMLESS_TURNSTILE_SITE_KEY=local-turnstile-site-key` and `FORMLESS_TURNSTILE_SECRET_KEY=local-turnstile-secret`; `./.devstate/status.md` read at `2026-05-28T07:00:16.245Z` with checks ok, web ready, and test watcher pass.
+- Initial status: `devstate start` read at `2026-05-28T06:55:12.169Z` with checks ok, web ready, and test watcher pass; no pre-existing red devstate service failure was present.
+- Smoke: restarted devstate with local Turnstile dev keys, reset the local Site source schema through `/api/site/reset/schema`, created and placed a smoke `subscribeForm` block under `rec_site_starter_page_home`, then ran `bun browser open https://add-public-subscribe-actions.formless.local/pages/home`; browser eval returned `formCount: 1`, `emailCount: 1`, `turnstileCount: 1`, `formAction: "/api/site/public/actions/subscribe"`, `siteKey: "local-turnstile-site-key"`, and `bodyIncludesSecret: false`.
+- Smoke: `bun browser fill input[name=email] smoke@example.com`, `bun browser click button[type=submit]`, and `bun browser get text body` showed `Complete the email and challenge.`, proving the public form submit handler stayed on the page and required challenge proof before posting.
+- Finalization note: required implementation sections are shipped; automatic finalization remains responsible for promoting shipped facts into `openspec/specs/*/spec.md` before review. This worker did not archive the change.
