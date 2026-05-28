@@ -3,6 +3,7 @@ import { parseEntities } from "./schema-fields.ts";
 import { assertExactKeys, isRecord } from "./schema-parse-helpers.ts";
 import { parseReadModels } from "./schema-read-models.ts";
 import { parseRelationships } from "./schema-relationships.ts";
+import { parseRuntimeMetadata } from "./schema-runtime.ts";
 import { parseScreens } from "./schema-screens.ts";
 import { parseTableViews } from "./schema-table-views.ts";
 import { parseUnions } from "./schema-unions.ts";
@@ -20,7 +21,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     "Schema",
     value,
     ["version", "entities", "queries", "itemViews", "tableViews", "views"],
-    ["relationships", "readModels", "screens", "unions"],
+    ["relationships", "readModels", "runtime", "screens", "unions"],
   );
 
   const version = value.version;
@@ -56,6 +57,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     unions,
   );
   const screens = parseScreens(value.screens, views);
+  const runtime = parseRuntimeMetadata(value.runtime, entities);
 
   return {
     version,
@@ -68,6 +70,7 @@ export function parseAppSchema(value: unknown): AppSchema {
     tableViews,
     views,
     screens,
+    ...(runtime === undefined ? {} : { runtime }),
   };
 }
 

@@ -5,9 +5,11 @@ import {
   sourceLikeSiteSchema,
   sourceLikeTaskSchema,
 } from "../test/schema-builders.ts";
+import type { AppSchema } from "../shared/schema.ts";
 import {
   applySchemaBuilderIntent,
   createSchemaBuilderDraft,
+  projectSchemaBuilderDraft,
   serializeSchemaBuilderDraft,
   validateSchemaBuilderDraft,
   type SchemaBuilderDraft,
@@ -85,7 +87,18 @@ describe("schema builder draft intents", () => {
   });
 
   it("preserves advanced schema sections when editing supported model metadata", () => {
-    const original = sourceLikeSiteSchema();
+    const original = {
+      ...sourceLikeSiteSchema(),
+      runtime: {
+        owner: "runtime",
+        builder: { editable: false },
+        controlPlane: {
+          entities: {
+            site: { immutableFields: ["key"] },
+          },
+        },
+      },
+    } satisfies AppSchema;
     const originalRelationships = cloneTestValue(original.relationships);
     const originalUnions = cloneTestValue(original.unions);
     const originalTableViews = cloneTestValue(original.tableViews);
@@ -99,6 +112,7 @@ describe("schema builder draft intents", () => {
       metadata: { format: "longText" },
     });
     const schema = serializeSchemaBuilderDraft(draft);
+    const projection = projectSchemaBuilderDraft(draft);
 
     expect(schema.entities.site?.fields.tagline).toEqual({
       type: "text",
@@ -111,6 +125,8 @@ describe("schema builder draft intents", () => {
     expect(schema.tableViews).toEqual(originalTableViews);
     expect(schema.views).toEqual(originalViews);
     expect(schema.entities.site?.constraints).toEqual(originalConstraints);
+    expect(schema.runtime).toEqual(original.runtime);
+    expect(projection).not.toHaveProperty("runtime");
   });
 
   it("updates a draft field type without creating generated surface editors", () => {

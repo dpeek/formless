@@ -9,6 +9,10 @@ import {
   isInstanceControlPlaneRouteSafePath,
 } from "./instance-control-plane.ts";
 import { parseAppSchema } from "./schema.ts";
+import {
+  isRuntimeControlPlaneImmutableField,
+  isRuntimeControlPlaneSecretReferenceField,
+} from "./schema-runtime.ts";
 
 describe("instance control-plane schema contracts", () => {
   it("defines the runtime-owned flat record schema", () => {
@@ -26,6 +30,8 @@ describe("instance control-plane schema contracts", () => {
     expect(schema.screens?.apps.path).toBe("/");
     expect(schema.screens?.domains.path).toBe("/domains");
     expect(schema.screens?.deployments.path).toBe("/deployments");
+    expect(schema.runtime?.owner).toBe("runtime");
+    expect(schema.runtime?.builder.editable).toBe(false);
   });
 
   it("records identity invariants outside mutable generated fields", () => {
@@ -42,6 +48,16 @@ describe("instance control-plane schema contracts", () => {
     ]);
     expect(isInstanceControlPlaneEntityName("appInstall")).toBe(true);
     expect(isInstanceControlPlaneEntityName("missing")).toBe(false);
+
+    const schema = parseAppSchema(instanceControlPlaneSchema);
+    expect(isRuntimeControlPlaneImmutableField(schema, "appInstall", "installId")).toBe(true);
+    expect(isRuntimeControlPlaneImmutableField(schema, "appInstall", "label")).toBe(false);
+    expect(
+      isRuntimeControlPlaneSecretReferenceField(schema, "providerConfigRef", "secretRef"),
+    ).toBe(true);
+    expect(schema.runtime?.controlPlane?.entities.deployAttempt?.history).toEqual({
+      kind: "actionCreated",
+    });
   });
 
   it("derives default app route records without nesting installed app data", () => {
@@ -103,5 +119,6 @@ describe("instance control-plane schema contracts", () => {
     expect(isInstanceControlPlaneRouteSafePath("/Apps/personal")).toBe(false);
     expect(isInstanceControlPlaneRouteSafePath("/apps//personal")).toBe(false);
     expect(isInstanceControlPlaneRouteSafePath("/api")).toBe(false);
+    expect(isInstanceControlPlaneRouteSafePath("/api/jobs")).toBe(false);
   });
 });

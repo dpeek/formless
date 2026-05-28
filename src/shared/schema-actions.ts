@@ -17,9 +17,11 @@ import type {
   CreateSelectedJoinRecordEntityActionSchema,
   CreateTreeChildEntityActionSchema,
   EntityActionCapabilities,
+  EntityActionExposureSchema,
   EntityActionJoinSchema,
   EntityActionJoinSourceSchema,
   EntityActionKind,
+  EntityActionRuntimeMetadata,
   EntityActionSchemaForKind,
   EntityActionSchema,
   EntityActionTargetSchema,
@@ -30,6 +32,7 @@ import type {
   RelationshipSchema,
   RemoveSelectedJoinRecordsEntityActionSchema,
   RemoveTreePlacementEntityActionSchema,
+  SchemaActionActorKind,
   SubscribeEntityActionSchema,
 } from "./schema-types.ts";
 
@@ -91,8 +94,30 @@ const entityActionKindModules = {
 
 const publicActionPolicyKeys = ["access", "publicInput"];
 
+const schemaActionActorKinds = [
+  "admin",
+  "cliDeployer",
+  "owner",
+  "runner",
+] as const satisfies readonly SchemaActionActorKind[];
+
 export function getEntityActionKindCapabilities(kind: EntityActionKind): EntityActionCapabilities {
   return entityActionKindModules[kind].capabilities;
+}
+
+export function isEntityActionExposedToActor(
+  action: EntityActionSchema,
+  actorKind: SchemaActionActorKind,
+) {
+  return action.exposure?.actors.includes(actorKind) ?? true;
+}
+
+export function isEntityActionVisibleToBrowser(action: EntityActionSchema) {
+  return (
+    action.exposure === undefined ||
+    action.exposure.actors.includes("admin") ||
+    action.exposure.actors.includes("owner")
+  );
 }
 
 export function parseEntityActionsForEntities(
@@ -198,7 +223,7 @@ function parseClearCompletedEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind"],
-    ["target", ...publicActionPolicyKeys],
+    ["exposure", "target", ...publicActionPolicyKeys],
   );
 
   if (entity.fields.done?.type !== "boolean") {
@@ -231,6 +256,7 @@ function parseClearCompletedEntityAction(
       value,
       getEntityActionKindCapabilities("clear-completed"),
     ),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }
 
@@ -244,7 +270,7 @@ function parseCreateMissingJoinRecordsEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "join"],
-    [...publicActionPolicyKeys],
+    ["exposure", ...publicActionPolicyKeys],
   );
 
   const join = parseEntityActionJoin(entityName, actionName, value.join, entity, queries);
@@ -259,6 +285,7 @@ function parseCreateMissingJoinRecordsEntityAction(
       value,
       getEntityActionKindCapabilities("create-missing-join-records"),
     ),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }
 
@@ -272,7 +299,7 @@ function parseCreateSelectedJoinRecordEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship"],
-    [...publicActionPolicyKeys],
+    ["exposure", ...publicActionPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -296,6 +323,7 @@ function parseCreateSelectedJoinRecordEntityAction(
       value,
       getEntityActionKindCapabilities("create-selected-join-record"),
     ),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }
 
@@ -303,13 +331,13 @@ function parseRemoveSelectedJoinRecordsEntityAction(
   context: EntityActionParseContext,
   value: Record<string, unknown>,
 ): RemoveSelectedJoinRecordsEntityActionSchema {
-  const { actionName, entityName, relationships } = context;
+  const { actionName, entity, entityName, relationships } = context;
 
   assertExactKeys(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship"],
-    [...publicActionPolicyKeys],
+    ["exposure", ...publicActionPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -327,6 +355,7 @@ function parseRemoveSelectedJoinRecordsEntityAction(
       value,
       getEntityActionKindCapabilities("remove-selected-join-records"),
     ),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }
 
@@ -340,7 +369,7 @@ function parseCreateTreeChildEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship", "childField"],
-    ["orderField", ...publicActionPolicyKeys],
+    ["exposure", "orderField", ...publicActionPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -406,6 +435,7 @@ function parseCreateTreeChildEntityAction(
       value,
       getEntityActionKindCapabilities("create-tree-child"),
     ),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }
 
@@ -413,13 +443,13 @@ function parseRemoveTreePlacementEntityAction(
   context: EntityActionParseContext,
   value: Record<string, unknown>,
 ): RemoveTreePlacementEntityActionSchema {
-  const { actionName, entityName, relationships } = context;
+  const { actionName, entity, entityName, relationships } = context;
 
   assertExactKeys(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship"],
-    [...publicActionPolicyKeys],
+    ["exposure", ...publicActionPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -437,6 +467,7 @@ function parseRemoveTreePlacementEntityAction(
       value,
       getEntityActionKindCapabilities("remove-tree-placement"),
     ),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }
 
@@ -444,19 +475,20 @@ function parseSubscribeEntityAction(
   context: EntityActionParseContext,
   value: Record<string, unknown>,
 ): SubscribeEntityActionSchema {
-  const { actionName, entityName } = context;
+  const { actionName, entity, entityName } = context;
 
   assertExactKeys(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind"],
-    [...publicActionPolicyKeys],
+    ["exposure", ...publicActionPolicyKeys],
   );
 
   return {
     label: value.label as string,
     kind: "subscribe",
     ...parseEntityActionPublicOptions(context, value, getEntityActionKindCapabilities("subscribe")),
+    ...parseEntityActionRuntimeMetadata(entityName, actionName, value, entity),
   };
 }
 
@@ -690,6 +722,134 @@ function parsePublicActionEnumInputValues(
       return [enumValue, { label }];
     }),
   );
+}
+
+function parseEntityActionRuntimeMetadata(
+  entityName: string,
+  actionName: string,
+  value: Record<string, unknown>,
+  entity: EntitySchema,
+): EntityActionRuntimeMetadata {
+  const exposure = parseEntityActionExposure(entityName, actionName, value.exposure, entity);
+
+  return exposure === undefined ? {} : { exposure };
+}
+
+function parseEntityActionExposure(
+  entityName: string,
+  actionName: string,
+  value: unknown,
+  entity: EntitySchema,
+): EntityActionExposureSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const context = `Entity action "${entityName}.${actionName}" exposure`;
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["actors"], ["responseFields"]);
+
+  const actors = parseActionActorKinds(`${context} actors`, value.actors);
+  const responseFields = parseActionResponseFields(
+    `${context} responseFields`,
+    value.responseFields,
+    entity,
+    actors,
+  );
+
+  return {
+    actors,
+    ...(responseFields === undefined ? {} : { responseFields }),
+  };
+}
+
+function parseActionActorKinds(context: string, value: unknown): SchemaActionActorKind[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${context} must be a non-empty array.`);
+  }
+
+  const actors = value.map((actor, index) => {
+    if (!isSchemaActionActorKind(actor)) {
+      throw new Error(`${context}[${index}] must be owner, admin, cliDeployer, or runner.`);
+    }
+
+    return actor;
+  });
+
+  if (new Set(actors).size !== actors.length) {
+    throw new Error(`${context} must be unique.`);
+  }
+
+  return actors;
+}
+
+function parseActionResponseFields(
+  context: string,
+  value: unknown,
+  entity: EntitySchema,
+  actors: SchemaActionActorKind[],
+): EntityActionExposureSchema["responseFields"] {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const fieldsByActor: Partial<Record<SchemaActionActorKind, string[]>> = {};
+
+  for (const [actor, fields] of Object.entries(value)) {
+    if (!isSchemaActionActorKind(actor)) {
+      throw new Error(`${context} has unsupported actor "${actor}".`);
+    }
+
+    if (!actors.includes(actor)) {
+      throw new Error(`${context}.${actor} must reference an exposed actor.`);
+    }
+
+    fieldsByActor[actor] = parseActionResponseFieldList(`${context}.${actor}`, fields, entity);
+  }
+
+  if (Object.keys(fieldsByActor).length === 0) {
+    throw new Error(`${context} must not be empty.`);
+  }
+
+  return fieldsByActor;
+}
+
+function parseActionResponseFieldList(
+  context: string,
+  value: unknown,
+  entity: EntitySchema,
+): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${context} must be a non-empty array.`);
+  }
+
+  const fields = value.map((fieldName, index) => {
+    const field = parseRequiredNonEmptyString(`${context}[${index}]`, fieldName);
+
+    if (!entity.fields[field]) {
+      throw new Error(`${context}[${index}] references unknown field "${field}".`);
+    }
+
+    return field;
+  });
+
+  if (new Set(fields).size !== fields.length) {
+    throw new Error(`${context} must be unique.`);
+  }
+
+  return fields;
+}
+
+function isSchemaActionActorKind(value: unknown): value is SchemaActionActorKind {
+  return schemaActionActorKinds.includes(value as SchemaActionActorKind);
 }
 
 function parseEntityActionJoin(

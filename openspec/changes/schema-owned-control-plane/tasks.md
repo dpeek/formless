@@ -17,14 +17,22 @@ Evidence:
 
 ## 2. Schema Runtime Capabilities
 
-- [ ] 2.1 Add parser support for runtime-owned control-plane schema metadata without exposing those sections to unsupported Builder edits.
-- [ ] 2.2 Add immutable field semantics for app install identity, package app key, storage identity, and other control-plane identity fields.
-- [ ] 2.3 Add route field validation support for route-safe shape, reserved paths, package capability, route kind, and enabled-route uniqueness.
-- [ ] 2.4 Add schema support for non-secret secret reference fields or metadata used by deployment records.
-- [ ] 2.5 Add actor-scoped schema action exposure for owner, admin, CLI deployer, and runner callers.
-- [ ] 2.6 Add action response filtering so actor-only deployment actions return only fields allowed for that actor.
-- [ ] 2.7 Add append-only or action-created history semantics for deployment attempt, evidence, cleanup, and drift records.
-- [ ] 2.8 Add schema parser and action capability tests for control-plane schema metadata, immutable fields, route validation, actor exposure, secret references, and append-only history.
+- [x] 2.1 Add parser support for runtime-owned control-plane schema metadata without exposing those sections to unsupported Builder edits.
+- [x] 2.2 Add immutable field semantics for app install identity, package app key, storage identity, and other control-plane identity fields.
+- [x] 2.3 Add route field validation support for route-safe shape, reserved paths, package capability, route kind, and enabled-route uniqueness.
+- [x] 2.4 Add schema support for non-secret secret reference fields or metadata used by deployment records.
+- [x] 2.5 Add actor-scoped schema action exposure for owner, admin, CLI deployer, and runner callers.
+- [x] 2.6 Add action response filtering so actor-only deployment actions return only fields allowed for that actor.
+- [x] 2.7 Add append-only or action-created history semantics for deployment attempt, evidence, cleanup, and drift records.
+- [x] 2.8 Add schema parser and action capability tests for control-plane schema metadata, immutable fields, route validation, actor exposure, secret references, and append-only history.
+
+Evidence:
+
+- Files changed: `src/shared/schema-types.ts`, `src/shared/schema-runtime.ts`, `src/shared/schema.ts`, `src/shared/schema-actions.ts`, `src/shared/schema-control-plane.test.ts`, `src/shared/instance-control-plane.ts`, `src/shared/instance-control-plane.test.ts`, `src/worker/authority-validation.ts`, `src/worker/actions.ts`, `src/worker/control-plane-schema-validation.test.ts`, `src/client/collection-shell-model.ts`, `src/client/schema-builder.test.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:08:16.855Z. `devstate check` after implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:22:08.009Z.
+- Smoke: `bun browser --ignore-https-errors open https://schema-owned-control-plane.formless.local` loaded the local instance shell; `bun browser snapshot -i --max-output 6000` returned App management, Installed apps, and Custom domains controls.
+- Decisions: runtime-owned metadata parses under `runtime.owner = "runtime"` with `builder.editable = false`; control-plane entity metadata owns immutable fields, route validation, secret reference fields, and action-created or append-only history. Actor-scoped action exposure defaults legacy actions to browser owner access when no exposure is declared and filters actor response change payload values when response fields are declared.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
 
 ## 3. Authority Control-Plane Storage
 

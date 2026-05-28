@@ -22,6 +22,7 @@ import {
   type EntityActionTargetCountConfig,
   type EntityActionUiConfig,
 } from "./action-ui.ts";
+import { isEntityActionVisibleToBrowser } from "../shared/schema-actions.ts";
 import {
   selectCreateUnionPresentation,
   selectRecordUnionPresentation,
@@ -343,9 +344,12 @@ function selectHomeActions(
   collectionView: CollectionViewSchema,
   entity: EntitySchema,
 ): HomeActionConfig[] {
-  return (collectionView.actions ?? []).map((slot) => {
+  const actions: HomeActionConfig[] = [];
+
+  for (const slot of collectionView.actions ?? []) {
     if (slot.type === "create") {
-      return selectCreateAction(schema, viewEntries, slot.createView, slot.label);
+      actions.push(selectCreateAction(schema, viewEntries, slot.createView, slot.label));
+      continue;
     }
 
     const action = entity.actions?.[slot.action];
@@ -354,17 +358,23 @@ function selectHomeActions(
       throw new Error(`Missing entity action "${slot.action}".`);
     }
 
+    if (!isEntityActionVisibleToBrowser(action)) {
+      continue;
+    }
+
     const label = slot.label ?? action.label;
 
-    return {
+    actions.push({
       type: "entity-action",
       label,
       entityName: collectionView.entity,
       actionName: slot.action,
       action,
       ui: selectEntityActionUi(schema, label, action, slot.count),
-    };
-  });
+    });
+  }
+
+  return actions;
 }
 
 function selectSummarySlots(

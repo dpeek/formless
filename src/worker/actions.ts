@@ -22,9 +22,13 @@ import type {
   EntityActionSchema,
   EntitySchema,
   ManyToManyRelationshipSchema,
+  SchemaActionActorKind,
   ToManyRelationshipSchema,
 } from "../shared/schema.ts";
-import { getEntityActionKindCapabilities } from "../shared/schema-actions.ts";
+import {
+  getEntityActionKindCapabilities,
+  isEntityActionExposedToActor,
+} from "../shared/schema-actions.ts";
 import { validateRecordValues } from "./authority-validation.ts";
 import { assertUniqueConstraints } from "./constraints.ts";
 import { BadRequestError } from "./errors.ts";
@@ -162,7 +166,11 @@ export function executeEntityAction(
   return executeEntityActionOutcome(storage, request, schema).response;
 }
 
-export function validateEntityActionRequest(value: unknown, schema: AppSchema): ActionRequest {
+export function validateEntityActionRequest(
+  value: unknown,
+  schema: AppSchema,
+  options: { actorKind?: SchemaActionActorKind } = {},
+): ActionRequest {
   if (!isRecord(value)) {
     throw new BadRequestError("Action request must be an object.");
   }
@@ -189,6 +197,12 @@ export function validateEntityActionRequest(value: unknown, schema: AppSchema): 
     throw new BadRequestError(`Unknown action "${value.action}" for entity "${value.entity}".`);
   }
 
+  const actorKind = options.actorKind ?? "owner";
+
+  if (!isEntityActionExposedToActor(action, actorKind)) {
+    throw new BadRequestError(`Action "${value.action}" is not exposed to actor "${actorKind}".`);
+  }
+
   const input = getEntityActionKindRuntimeModule(action).validateInput({
     actionName: value.action,
     entityName: value.entity,
@@ -202,6 +216,45 @@ export function validateEntityActionRequest(value: unknown, schema: AppSchema): 
     entity: value.entity,
     action: value.action,
     ...(input === undefined ? {} : { input }),
+  };
+}
+
+export function filterEntityActionResponseForActor(
+  response: ActionResponse,
+  schema: AppSchema,
+  request: ActionRequest,
+  actorKind: SchemaActionActorKind,
+): ActionResponse {
+  const action = schema.entities[request.entity]?.actions?.[request.action];
+
+  if (!action) {
+    throw new Error(`Unsupported action "${request.action}".`);
+  }
+
+  if (!isEntityActionExposedToActor(action, actorKind)) {
+    throw new BadRequestError(`Action "${request.action}" is not exposed to actor "${actorKind}".`);
+  }
+
+  const allowedFields = action.exposure?.responseFields?.[actorKind];
+  if (allowedFields === undefined) {
+    return response;
+  }
+
+  const allowedFieldSet = new Set(allowedFields);
+
+  return {
+    ...response,
+    changes: response.changes.map((change) => ({
+      ...change,
+      payload: {
+        ...change.payload,
+        values: Object.fromEntries(
+          Object.entries(change.payload.values).filter(([fieldName]) =>
+            allowedFieldSet.has(fieldName),
+          ),
+        ),
+      },
+    })),
   };
 }
 

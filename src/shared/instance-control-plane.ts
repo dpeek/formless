@@ -313,9 +313,6 @@ export const instanceControlPlaneSchema = {
         updatedAt: textField("Updated at"),
       },
       mutations: editableMutations,
-      constraints: {
-        uniqueRoutePath: { kind: "unique", fields: ["path"] },
-      },
     },
     deployTarget: {
       label: "Deploy target",
@@ -809,6 +806,62 @@ export const instanceControlPlaneSchema = {
       },
     },
   },
+  runtime: {
+    owner: "runtime",
+    builder: { editable: false },
+    controlPlane: {
+      entities: {
+        appInstall: {
+          immutableFields: [...instanceControlPlaneImmutableFields.appInstall],
+        },
+        appRoute: {
+          immutableFields: [...instanceControlPlaneImmutableFields.appRoute],
+          routeValidation: {
+            pathField: "path",
+            prefixField: "prefix",
+            enabledField: "enabled",
+            routeKindField: "routeKind",
+            packageCapabilityField: "packageCapability",
+            appInstallField: "appInstall",
+            reservedPaths: [...instanceControlPlaneReservedRoutePaths],
+            routeKindCapabilities: {
+              admin: "generatedApp",
+              publicSite: "publicSite",
+              schema: "schema",
+            },
+          },
+        },
+        deployAttempt: {
+          immutableFields: [...instanceControlPlaneImmutableFields.deployAttempt],
+          history: { kind: "actionCreated" },
+        },
+        deployDesiredResource: {
+          immutableFields: [...instanceControlPlaneImmutableFields.deployDesiredResource],
+        },
+        deployDriftReport: {
+          immutableFields: [...instanceControlPlaneImmutableFields.deployDriftReport],
+          history: { kind: "actionCreated" },
+        },
+        deployEvidenceSummary: {
+          immutableFields: [...instanceControlPlaneImmutableFields.deployEvidenceSummary],
+          history: { kind: "actionCreated" },
+        },
+        deployTarget: {
+          immutableFields: [...instanceControlPlaneImmutableFields.deployTarget],
+        },
+        domainMapping: {
+          immutableFields: [...instanceControlPlaneImmutableFields.domainMapping],
+        },
+        providerConfigRef: {
+          immutableFields: [...instanceControlPlaneImmutableFields.providerConfigRef],
+          secretReferenceFields: ["secretRef"],
+        },
+        redirectIntent: {
+          immutableFields: [...instanceControlPlaneImmutableFields.redirectIntent],
+        },
+      },
+    },
+  },
 } satisfies AppSchema;
 
 export function isInstanceControlPlaneEntityName(
@@ -870,8 +923,8 @@ export function isInstanceControlPlaneRouteSafePath(path: string): path is `/${s
     return false;
   }
 
-  return !instanceControlPlaneReservedRoutePaths.includes(
-    path as (typeof instanceControlPlaneReservedRoutePaths)[number],
+  return !instanceControlPlaneReservedRoutePaths.some(
+    (reservedPath) => path === reservedPath || path.startsWith(`${reservedPath}/`),
   );
 }
 

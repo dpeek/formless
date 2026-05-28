@@ -721,7 +721,18 @@ export type EntityActionCapabilities = {
   publicExecution: boolean;
 };
 
-export type EntityActionBaseSchema = {
+export type SchemaActionActorKind = "admin" | "cliDeployer" | "owner" | "runner";
+
+export type EntityActionExposureSchema = {
+  actors: SchemaActionActorKind[];
+  responseFields?: Partial<Record<SchemaActionActorKind, string[]>>;
+};
+
+export type EntityActionRuntimeMetadata = {
+  exposure?: EntityActionExposureSchema;
+};
+
+export type EntityActionBaseSchema = EntityActionRuntimeMetadata & {
   label: string;
   access?: ActionAccessPolicySchema;
   publicInput?: PublicActionInputContractSchema;
@@ -795,6 +806,42 @@ export type EntitySchema = {
   actions?: Record<string, EntityActionSchema>;
 };
 
+export type RuntimeSchemaRouteValidationSchema = {
+  pathField: string;
+  prefixField?: string;
+  enabledField: string;
+  routeKindField: string;
+  packageCapabilityField: string;
+  appInstallField?: string;
+  reservedPaths?: string[];
+  routeKindCapabilities: Record<string, string>;
+};
+
+export type RuntimeSchemaHistorySchema = {
+  kind: "actionCreated" | "appendOnly";
+};
+
+export type RuntimeSchemaControlPlaneEntitySchema = {
+  immutableFields?: string[];
+  secretReferenceFields?: string[];
+  routeValidation?: RuntimeSchemaRouteValidationSchema;
+  history?: RuntimeSchemaHistorySchema;
+};
+
+export type RuntimeSchemaControlPlaneSchema = {
+  entities: Record<string, RuntimeSchemaControlPlaneEntitySchema>;
+};
+
+export type RuntimeSchemaBuilderPolicy = {
+  editable: false;
+};
+
+export type RuntimeSchemaMetadata = {
+  owner: "runtime";
+  builder: RuntimeSchemaBuilderPolicy;
+  controlPlane?: RuntimeSchemaControlPlaneSchema;
+};
+
 export type AppSchema = {
   version: number;
   entities: Record<string, EntitySchema>;
@@ -806,4 +853,5 @@ export type AppSchema = {
   tableViews: Record<string, TableViewSchema>;
   views: Record<string, ViewSchema>;
   screens?: Record<string, ScreenSchema>;
+  runtime?: RuntimeSchemaMetadata;
 };
