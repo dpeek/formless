@@ -11,6 +11,7 @@ import {
   taskSeedRecords,
   taskSourceSchema,
 } from "../test/schema-apps.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -56,20 +57,28 @@ describe("instance app install API routes", () => {
         defaultInstallId: "site",
         label: "Site",
         packageAppKey: "site",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       }),
       expect.objectContaining({
         defaultInstallId: "tasks",
         label: "Tasks",
         packageAppKey: "tasks",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
       }),
       expect.objectContaining({
         defaultInstallId: "estii",
         label: "Estii",
         packageAppKey: "estii",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
       }),
     ]);
     expect(before.body.installs).toEqual([]);
+    expect(before.response.headers.get("Cache-Control")).toBe("no-store");
     expect(created.response.status).toBe(201);
+    expect(created.response.headers.get("Cache-Control")).toBe("no-store");
     expect(created.body.initialization).toEqual({
       installId: "site",
       packageAppKey: "site",
@@ -81,8 +90,10 @@ describe("instance app install API routes", () => {
       installId: "site",
       label: "Site",
       packageAppKey: "site",
+      packageRevision: 1,
       publicRoute: "/sites/site",
       schemaRoute: "/apps/site/schema",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       status: "installed",
     });
     expect(after.body.installs).toEqual(created.body.installs);
@@ -153,7 +164,9 @@ describe("instance app install API routes", () => {
         installId: "tasks",
         label: "Tasks",
         packageAppKey: "tasks",
+        packageRevision: 1,
         schemaRoute: "/apps/tasks/schema",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
         status: "installed",
       }),
     );
@@ -185,7 +198,9 @@ describe("instance app install API routes", () => {
         installId: "rates",
         label: "Rates",
         packageAppKey: "estii",
+        packageRevision: 1,
         schemaRoute: "/apps/rates/schema",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
         status: "installed",
       }),
     );

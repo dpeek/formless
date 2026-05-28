@@ -9,6 +9,7 @@ import {
 } from "../shared/archive.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
 import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
@@ -425,9 +426,11 @@ function siteInstall(installId: string): AppInstall {
     installId,
     label: "Personal",
     packageAppKey: "site",
+    packageRevision: 1,
     publicRoute: `/sites/${installId}`,
     publicRoutePrefix: `/sites/${installId}/`,
     schemaRoute: `/apps/${installId}/schema`,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     status: "installed",
     updatedAt: now,
   };

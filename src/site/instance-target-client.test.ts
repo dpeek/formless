@@ -1,14 +1,120 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
+} from "../shared/deploy-metadata.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
+import {
+  readFormlessInstanceAppRegistry,
   readFormlessInstanceControlPlaneRecords,
   readFormlessInstanceDeploymentCommandContext,
+  readFormlessInstanceDeployMetadata,
 } from "./instance-target-client.ts";
 
 type CapturedTargetRequest = {
   headers: Record<string, string>;
   url: string;
 };
+
+describe("Formless instance target client", () => {
+  it("parses deployed upgrade metadata facts", async () => {
+    const result = await readFormlessInstanceDeployMetadata(
+      { targetUrl: "https://instance.example" },
+      {
+        fetch: async () =>
+          Response.json(
+            {
+              packageApps: [
+                {
+                  packageAppKey: "site",
+                  packageRevision: 1,
+                  sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+                },
+              ],
+              packageVersion: "0.1.8",
+              runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+              storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+              version: "0.1.8",
+            },
+            { headers: { "Cache-Control": "no-store" } },
+          ),
+      },
+    );
+
+    expect(result).toEqual({
+      cacheControl: "no-store",
+      metadataUrl: "https://instance.example/api/formless/deploy",
+      packageApps: [
+        {
+          packageAppKey: "site",
+          packageRevision: 1,
+          sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+        },
+      ],
+      packageVersion: "0.1.8",
+      runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+      storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+      version: "0.1.8",
+    });
+  });
+
+  it("parses app registry package facts and fills legacy install facts from packages", async () => {
+    const result = await readFormlessInstanceAppRegistry(
+      { targetUrl: "https://instance.example" },
+      {
+        fetch: async () =>
+          Response.json({
+            packages: [
+              {
+                adminRouteBase: "/apps",
+                defaultInstallId: "site",
+                description: "Site package",
+                label: "Site",
+                packageAppKey: "site",
+                packageRevision: 1,
+                publicRouteBase: "/sites",
+                seedRecordsKey: "site",
+                sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+                sourceSchemaKey: "site",
+                supportsMultipleInstalls: true,
+              },
+            ],
+            installs: [
+              {
+                adminRoute: "/apps/site",
+                createdAt: "2026-05-28T00:00:00.000Z",
+                installId: "site",
+                label: "Site",
+                packageAppKey: "site",
+                publicRoute: "/sites/site",
+                publicRoutePrefix: "/sites/site/",
+                schemaRoute: "/apps/site/schema",
+                status: "installed",
+                updatedAt: "2026-05-28T00:00:00.000Z",
+              },
+            ],
+          }),
+      },
+    );
+
+    expect(result.installs).toEqual([
+      expect.objectContaining({
+        installId: "site",
+        packageAppKey: "site",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+      }),
+    ]);
+    expect(result.packages).toEqual([
+      expect.objectContaining({
+        packageAppKey: "site",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+      }),
+    ]);
+  });
+});
 
 describe("Formless instance target control-plane client", () => {
   it("reads app, route, domain, and deployment records with a CLI deployer actor", async () => {

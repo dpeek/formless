@@ -4,6 +4,7 @@ import {
   listLaunchFixtureNames,
   resolveLaunchFixture,
 } from "./launch-fixtures.ts";
+import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 
 const now = "2026-05-23T00:00:00.000Z";
 
@@ -44,9 +45,11 @@ describe("launch fixture registry", () => {
             installId: "site",
             label: "Site",
             packageAppKey: "site",
+            packageRevision: 1,
             publicRoute: "/sites/site",
             publicRoutePrefix: "/sites/site/",
             schemaRoute: "/apps/site/schema",
+            sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
             status: "installed",
             updatedAt: now,
           },

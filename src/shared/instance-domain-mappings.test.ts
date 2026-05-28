@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { AppInstall } from "./app-installs.ts";
+import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   buildInstanceDomainMappingAppliedState,
   buildInstanceDomainMapping,
@@ -397,7 +398,9 @@ function siteInstall(installId: string): AppInstall {
   return {
     installId,
     packageAppKey: "site",
+    packageRevision: 1,
     label: "Personal Site",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     status: "installed",
     createdAt: now,
     updatedAt: now,
@@ -412,7 +415,9 @@ function tasksInstall(installId: string): AppInstall {
   return {
     installId,
     packageAppKey: "tasks",
+    packageRevision: 1,
     label: "Tasks",
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
     status: "installed",
     createdAt: now,
     updatedAt: now,

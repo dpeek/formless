@@ -10,7 +10,10 @@ import {
 } from "@dpeek/formless-deploy/client";
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
   type FormlessDeployMetadata,
+  type FormlessDeployPackageAppMetadata,
 } from "../shared/deploy-metadata.ts";
 import {
   INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
@@ -59,6 +62,13 @@ import {
   type InstanceDomainProviderPlanResponse,
 } from "../shared/domain-provider-api.ts";
 import type { DomainProviderApplyPolicy } from "../shared/domain-provider-protocol.ts";
+import {
+  listBundledAppPackages,
+  packageAppFactsForKey,
+  type AppInstall,
+  type BundledAppPackage,
+  type PackageAppKey,
+} from "../shared/app-installs.ts";
 import type {
   DeleteInstanceDomainMappingRequest,
   ForgetInstanceDomainMappingResponse,
@@ -67,6 +77,11 @@ import type {
   RecordInstanceDomainMappingApplyEvidenceResponse,
 } from "../shared/instance-domain-mappings.ts";
 import type { AppInstallsResponse, OwnerSetupStatusResponse } from "../shared/protocol.ts";
+import {
+  isSourceSchemaHash,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "../shared/upgrade-migrations.ts";
 import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
@@ -107,6 +122,10 @@ export type FormlessInstanceDeploymentCommandContext = {
 export type FormlessInstanceTargetDeployMetadata = {
   cacheControl: string;
   metadataUrl: string;
+  packageApps: FormlessDeployPackageAppMetadata[];
+  packageVersion: string | null;
+  runtimeProtocolVersion: number;
+  storageMigrationSet: string;
   version: string | null;
 };
 
@@ -166,6 +185,10 @@ export async function readFormlessInstanceDeployMetadata(
   return {
     cacheControl: response.headers.get("Cache-Control") ?? "",
     metadataUrl,
+    packageApps: metadata.packageApps,
+    packageVersion: metadata.packageVersion,
+    runtimeProtocolVersion: metadata.runtimeProtocolVersion,
+    storageMigrationSet: metadata.storageMigrationSet,
     version: metadata.version,
   };
 }
@@ -756,8 +779,33 @@ function parseDeployMetadata(value: unknown, context: string): FormlessDeployMet
     throw new Error(`${context} failed: deploy metadata version must be a string or null.`);
   }
 
+  if (
+    "packageVersion" in value &&
+    value.packageVersion !== null &&
+    typeof value.packageVersion !== "string"
+  ) {
+    throw new Error(`${context} failed: deploy metadata packageVersion must be a string or null.`);
+  }
+
+  const version = value.version as string | null;
+
   return {
-    version: value.version,
+    packageApps: parseDeployPackageApps(value.packageApps, context),
+    packageVersion:
+      "packageVersion" in value && value.packageVersion !== undefined
+        ? (value.packageVersion as string | null)
+        : version,
+    runtimeProtocolVersion: parseOptionalPositiveInteger(
+      value.runtimeProtocolVersion,
+      FORMLESS_RUNTIME_PROTOCOL_VERSION,
+      `${context} deploy metadata runtimeProtocolVersion`,
+    ),
+    storageMigrationSet: parseOptionalString(
+      value.storageMigrationSet,
+      FORMLESS_STORAGE_MIGRATION_SET_ID,
+      `${context} deploy metadata storageMigrationSet`,
+    ),
+    version,
   };
 }
 
@@ -777,10 +825,293 @@ function parseAppRegistry(value: unknown, context: string): AppInstallsResponse 
     throw new Error(`${context} failed: app registry must include packages and installs arrays.`);
   }
 
+  const packages = value.packages.map((appPackage, index) =>
+    parseBundledPackageApp(appPackage, `${context} packages[${index}]`),
+  );
+  const packagesByKey = new Map(
+    packages.map((appPackage) => [appPackage.packageAppKey, appPackage]),
+  );
+
   return {
-    installs: value.installs as AppInstallsResponse["installs"],
-    packages: value.packages as AppInstallsResponse["packages"],
+    installs: value.installs.map((install, index) =>
+      parseAppInstall(install, packagesByKey, `${context} installs[${index}]`),
+    ),
+    packages,
   };
+}
+
+function parseDeployPackageApps(
+  value: unknown,
+  context: string,
+): FormlessDeployPackageAppMetadata[] {
+  const packageApps = Array.isArray(value)
+    ? value
+    : listBundledAppPackages().map((appPackage) => ({
+        packageAppKey: appPackage.packageAppKey,
+        packageRevision: appPackage.packageRevision,
+        sourceSchemaHash: appPackage.sourceSchemaHash,
+      }));
+
+  return packageApps.map((appPackage, index) =>
+    parseDeployPackageApp(appPackage, `${context} packageApps[${index}]`),
+  );
+}
+
+function parseDeployPackageApp(value: unknown, context: string): FormlessDeployPackageAppMetadata {
+  if (!isRecord(value)) {
+    throw new Error(`${context} failed: deploy package app metadata must be an object.`);
+  }
+
+  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
+  const facts = packageAppFactsForKey(packageAppKey);
+
+  if (!facts) {
+    throw new Error(`${context} failed: package app "${packageAppKey}" is unsupported.`);
+  }
+
+  return {
+    packageAppKey,
+    packageRevision: parseOptionalPositiveInteger(
+      value.packageRevision,
+      facts.packageRevision,
+      `${context} packageRevision`,
+    ),
+    sourceSchemaHash: parseOptionalSourceSchemaHash(
+      value.sourceSchemaHash,
+      facts.sourceSchemaHash,
+      `${context} sourceSchemaHash`,
+    ),
+  };
+}
+
+function parseBundledPackageApp(value: unknown, context: string): BundledAppPackage {
+  if (!isRecord(value)) {
+    throw new Error(`${context} failed: bundled package metadata must be an object.`);
+  }
+
+  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
+  const localPackage = listBundledAppPackages().find(
+    (appPackage) => appPackage.packageAppKey === packageAppKey,
+  );
+
+  if (!localPackage) {
+    throw new Error(`${context} failed: package app "${packageAppKey}" is unsupported.`);
+  }
+
+  const publicRouteBase = parseOptionalRouteBase(
+    value.publicRouteBase,
+    localPackage.publicRouteBase,
+  );
+
+  return {
+    packageAppKey,
+    packageRevision: parseOptionalPositiveInteger(
+      value.packageRevision,
+      localPackage.packageRevision,
+      `${context} packageRevision`,
+    ),
+    sourceSchemaHash: parseOptionalSourceSchemaHash(
+      value.sourceSchemaHash,
+      localPackage.sourceSchemaHash,
+      `${context} sourceSchemaHash`,
+    ),
+    label: parseRequiredString(value.label, localPackage.label, `${context} label`),
+    description: parseRequiredString(
+      value.description,
+      localPackage.description,
+      `${context} description`,
+    ),
+    defaultInstallId: parseRequiredString(
+      value.defaultInstallId,
+      localPackage.defaultInstallId,
+      `${context} defaultInstallId`,
+    ),
+    supportsMultipleInstalls:
+      typeof value.supportsMultipleInstalls === "boolean"
+        ? value.supportsMultipleInstalls
+        : localPackage.supportsMultipleInstalls,
+    sourceSchemaKey: parseRequiredPackageAppKey(
+      value.sourceSchemaKey,
+      localPackage.sourceSchemaKey,
+      `${context} sourceSchemaKey`,
+    ),
+    seedRecordsKey: parseRequiredPackageAppKey(
+      value.seedRecordsKey,
+      localPackage.seedRecordsKey,
+      `${context} seedRecordsKey`,
+    ),
+    adminRouteBase: parseRouteBase(value.adminRouteBase, localPackage.adminRouteBase),
+    ...(publicRouteBase === undefined ? {} : { publicRouteBase }),
+  };
+}
+
+function parseAppInstall(
+  value: unknown,
+  packagesByKey: ReadonlyMap<PackageAppKey, BundledAppPackage>,
+  context: string,
+): AppInstall {
+  if (!isRecord(value)) {
+    throw new Error(`${context} failed: app install metadata must be an object.`);
+  }
+
+  const packageAppKey = parsePackageAppKey(value.packageAppKey, `${context} packageAppKey`);
+  const packageApp =
+    packagesByKey.get(packageAppKey) ??
+    listBundledAppPackages().find((candidate) => candidate.packageAppKey === packageAppKey);
+
+  if (!packageApp) {
+    throw new Error(`${context} failed: package app "${packageAppKey}" is unsupported.`);
+  }
+
+  if (value.status !== "installed") {
+    throw new Error(`${context} failed: app install status must be "installed".`);
+  }
+
+  const installId = parseRequiredString(value.installId, undefined, `${context} installId`);
+
+  return {
+    installId,
+    packageAppKey,
+    packageRevision: parseOptionalPositiveInteger(
+      value.packageRevision,
+      packageApp.packageRevision,
+      `${context} packageRevision`,
+    ),
+    sourceSchemaHash: parseOptionalSourceSchemaHash(
+      value.sourceSchemaHash,
+      packageApp.sourceSchemaHash,
+      `${context} sourceSchemaHash`,
+    ),
+    label: parseRequiredString(value.label, undefined, `${context} label`),
+    status: "installed",
+    createdAt: parseRequiredString(value.createdAt, undefined, `${context} createdAt`),
+    updatedAt: parseRequiredString(value.updatedAt, undefined, `${context} updatedAt`),
+    adminRoute: parseRequiredString(
+      value.adminRoute,
+      `${packageApp.adminRouteBase}/${installId}`,
+      `${context} adminRoute`,
+    ) as `/apps/${string}`,
+    schemaRoute: parseRequiredString(
+      value.schemaRoute,
+      `${packageApp.adminRouteBase}/${installId}/schema`,
+      `${context} schemaRoute`,
+    ) as `/apps/${string}/schema`,
+    ...(packageApp.publicRouteBase === undefined
+      ? {}
+      : {
+          publicRoute: parseRequiredString(
+            value.publicRoute,
+            `${packageApp.publicRouteBase}/${installId}`,
+            `${context} publicRoute`,
+          ) as `/sites/${string}`,
+          publicRoutePrefix: parseRequiredString(
+            value.publicRoutePrefix,
+            `${packageApp.publicRouteBase}/${installId}/`,
+            `${context} publicRoutePrefix`,
+          ) as `/sites/${string}/`,
+        }),
+  };
+}
+
+function parsePackageAppKey(value: unknown, context: string): PackageAppKey {
+  if (typeof value !== "string" || !packageAppFactsForKey(value)) {
+    throw new Error(`${context} failed: package app key is unsupported.`);
+  }
+
+  return value as PackageAppKey;
+}
+
+function parseRequiredPackageAppKey(
+  value: unknown,
+  fallback: PackageAppKey,
+  context: string,
+): PackageAppKey {
+  return value === undefined ? fallback : parsePackageAppKey(value, context);
+}
+
+function parseOptionalPositiveInteger(
+  value: unknown,
+  fallback: PackageAppRevision,
+  context: string,
+): PackageAppRevision {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (!Number.isInteger(value) || typeof value !== "number" || value <= 0) {
+    throw new Error(`${context} failed: value must be a positive integer.`);
+  }
+
+  return value;
+}
+
+function parseOptionalSourceSchemaHash(
+  value: unknown,
+  fallback: SourceSchemaHash,
+  context: string,
+): SourceSchemaHash {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (!isSourceSchemaHash(value)) {
+    throw new Error(`${context} failed: source schema hash must be a sha256 digest.`);
+  }
+
+  return value;
+}
+
+function parseRequiredString(
+  value: unknown,
+  fallback: string | undefined,
+  context: string,
+): string {
+  if (value === undefined && fallback !== undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${context} failed: value must be a string.`);
+  }
+
+  return value;
+}
+
+function parseOptionalString(value: unknown, fallback: string, context: string): string {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${context} failed: value must be a string.`);
+  }
+
+  return value;
+}
+
+function parseRouteBase(value: unknown, fallback: BundledAppPackage["adminRouteBase"]): "/apps" {
+  const routeBase = parseRequiredString(value, fallback, "app registry adminRouteBase");
+
+  if (routeBase !== "/apps") {
+    throw new Error('app registry adminRouteBase failed: value must be "/apps".');
+  }
+
+  return routeBase;
+}
+
+function parseOptionalRouteBase(
+  value: unknown,
+  fallback: BundledAppPackage["publicRouteBase"],
+): "/sites" | undefined {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (value !== "/sites") {
+    throw new Error('app registry publicRouteBase failed: value must be "/sites".');
+  }
+
+  return value;
 }
 
 function parseDomainMappings(value: unknown, context: string): InstanceDomainMappingsResponse {

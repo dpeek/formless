@@ -357,7 +357,11 @@ async function fetchTargetDeployVersion(
       },
     );
 
-    return typeof metadata.version === "string" ? metadata.version : null;
+    return typeof metadata.packageVersion === "string"
+      ? metadata.packageVersion
+      : typeof metadata.version === "string"
+        ? metadata.version
+        : null;
   } catch {
     return null;
   }

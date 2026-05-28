@@ -26,6 +26,10 @@ import type {
 } from "./cloudflare-domain-client.ts";
 import { listBundledAppPackages, type BundledAppPackage } from "../shared/app-installs.ts";
 import {
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
+} from "../shared/deploy-metadata.ts";
+import {
   STORE_SNAPSHOT_KIND,
   STORE_SNAPSHOT_VERSION,
   type StoreSnapshot,
@@ -5069,6 +5073,9 @@ function cliDeps(
         return {
           cacheControl: "no-store",
           metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),
+          packageVersion: input.expectedVersion,
+          runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+          storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
           url: input.url,
           version: input.expectedVersion,
         };

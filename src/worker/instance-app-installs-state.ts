@@ -8,15 +8,27 @@ import {
   type CreateAppInstallResult,
 } from "../shared/app-installs.ts";
 import type { CreateAppInstallRequest } from "../shared/protocol.ts";
+import {
+  bundledSourceSchemaHashFixtures,
+  isSourceSchemaHash,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "../shared/upgrade-migrations.ts";
 import { findWorkerSchemaAppDefinition } from "./schema-apps.ts";
 
 type AppInstallRow = {
   install_id: string;
   package_app_key: string;
+  package_revision: number | null;
+  source_schema_hash: string | null;
   label: string;
   status: string;
   created_at: string;
   updated_at: string;
+};
+
+type TableInfoRow = {
+  name: string;
 };
 
 export function ensureInstanceAppInstallTables(storage: DurableObjectStorage) {
@@ -24,12 +36,15 @@ export function ensureInstanceAppInstallTables(storage: DurableObjectStorage) {
     CREATE TABLE IF NOT EXISTS app_installs (
       install_id TEXT PRIMARY KEY,
       package_app_key TEXT NOT NULL,
+      package_revision INTEGER NOT NULL DEFAULT 1,
+      source_schema_hash TEXT,
       label TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status = 'installed'),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
   `);
+  ensureInstanceAppInstallPackageFactColumns(storage);
 }
 
 export function readInstanceAppInstalls(storage: DurableObjectStorage): AppInstall[] {
@@ -80,15 +95,19 @@ export function createInstanceAppInstall(
         INSERT INTO app_installs (
           install_id,
           package_app_key,
+          package_revision,
+          source_schema_hash,
           label,
           status,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
       result.install.installId,
       result.install.packageAppKey,
+      result.install.packageRevision,
+      result.install.sourceSchemaHash,
       result.install.label,
       result.install.status,
       result.install.createdAt,
@@ -130,14 +149,18 @@ export function restoreInstanceAppInstall(
         INSERT INTO app_installs (
           install_id,
           package_app_key,
+          package_revision,
+          source_schema_hash,
           label,
           status,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(install_id) DO UPDATE SET
           package_app_key = excluded.package_app_key,
+          package_revision = excluded.package_revision,
+          source_schema_hash = excluded.source_schema_hash,
           label = excluded.label,
           status = excluded.status,
           created_at = excluded.created_at,
@@ -145,6 +168,8 @@ export function restoreInstanceAppInstall(
       `,
       input.install.installId,
       input.install.packageAppKey,
+      input.install.packageRevision,
+      input.install.sourceSchemaHash,
       input.install.label,
       input.install.status,
       input.install.createdAt,
@@ -160,7 +185,15 @@ function readAppInstalls(storage: DurableObjectStorage): AppInstall[] {
 
   for (const row of storage.sql.exec<AppInstallRow>(
     `
-      SELECT install_id, package_app_key, label, status, created_at, updated_at
+      SELECT
+        install_id,
+        package_app_key,
+        package_revision,
+        source_schema_hash,
+        label,
+        status,
+        created_at,
+        updated_at
       FROM app_installs
       ORDER BY created_at ASC, install_id ASC
     `,
@@ -169,6 +202,40 @@ function readAppInstalls(storage: DurableObjectStorage): AppInstall[] {
   }
 
   return installs;
+}
+
+function ensureInstanceAppInstallPackageFactColumns(storage: DurableObjectStorage) {
+  const columns = new Set<string>();
+
+  for (const row of storage.sql.exec<TableInfoRow>("PRAGMA table_info(app_installs)")) {
+    columns.add(row.name);
+  }
+
+  if (!columns.has("package_revision")) {
+    storage.sql.exec(
+      "ALTER TABLE app_installs ADD COLUMN package_revision INTEGER NOT NULL DEFAULT 1",
+    );
+  }
+
+  if (!columns.has("source_schema_hash")) {
+    storage.sql.exec("ALTER TABLE app_installs ADD COLUMN source_schema_hash TEXT");
+  }
+
+  storage.sql.exec(
+    `
+      UPDATE app_installs
+      SET source_schema_hash = CASE package_app_key
+        WHEN 'site' THEN ?
+        WHEN 'tasks' THEN ?
+        WHEN 'estii' THEN ?
+        ELSE source_schema_hash
+      END
+      WHERE source_schema_hash IS NULL OR source_schema_hash = ''
+    `,
+    bundledSourceSchemaHashFixtures.site,
+    bundledSourceSchemaHashFixtures.tasks,
+    bundledSourceSchemaHashFixtures.estii,
+  );
 }
 
 function appInstallFromRow(row: AppInstallRow): AppInstall {
@@ -181,6 +248,8 @@ function appInstallFromRow(row: AppInstallRow): AppInstall {
   return {
     installId: row.install_id,
     packageAppKey: packageApp.packageAppKey,
+    packageRevision: packageRevisionFromRow(row.package_revision, packageApp.packageRevision),
+    sourceSchemaHash: sourceSchemaHashFromRow(row.source_schema_hash, packageApp.sourceSchemaHash),
     label: row.label,
     status: "installed",
     createdAt: row.created_at,
@@ -194,4 +263,18 @@ function appInstallFromRow(row: AppInstallRow): AppInstall {
           publicRoutePrefix: `${packageApp.publicRouteBase}/${row.install_id}/`,
         }),
   };
+}
+
+function packageRevisionFromRow(
+  value: number | null,
+  fallback: PackageAppRevision,
+): PackageAppRevision {
+  return Number.isInteger(value) && value !== null && value > 0 ? value : fallback;
+}
+
+function sourceSchemaHashFromRow(
+  value: string | null,
+  fallback: SourceSchemaHash,
+): SourceSchemaHash {
+  return isSourceSchemaHash(value) ? value : fallback;
 }

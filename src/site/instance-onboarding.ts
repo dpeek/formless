@@ -3,6 +3,8 @@ import path from "node:path";
 
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
 import { parseOwnerSetupToken } from "../shared/protocol.ts";
@@ -144,6 +146,9 @@ export type CheckFormlessInstanceDeployMetadataInput = {
 export type CheckFormlessInstanceDeployMetadataResult = {
   cacheControl: string;
   metadataUrl: string;
+  packageVersion: string | null;
+  runtimeProtocolVersion: number;
+  storageMigrationSet: string;
   url: string;
   version: string;
 };
@@ -681,18 +686,22 @@ export async function checkFormlessInstanceDeployMetadata(
   }
 
   const metadata = parseFormlessDeployMetadata(text, url);
+  const packageVersion = metadata.packageVersion ?? metadata.version;
 
-  if (metadata.version !== expectedVersion) {
+  if (packageVersion !== expectedVersion) {
     throw new Error(
-      `Formless instance health check failed for ${url}: expected deploy version ${expectedVersion}, got ${metadata.version ?? "<missing>"}.`,
+      `Formless instance health check failed for ${url}: expected deploy version ${expectedVersion}, got ${packageVersion ?? "<missing>"}.`,
     );
   }
 
   return {
     cacheControl,
     metadataUrl,
+    packageVersion: metadata.packageVersion,
+    runtimeProtocolVersion: metadata.runtimeProtocolVersion,
+    storageMigrationSet: metadata.storageMigrationSet,
     url,
-    version: metadata.version,
+    version: packageVersion,
   };
 }
 
@@ -1253,8 +1262,53 @@ function parseFormlessDeployMetadata(text: string, url: string): FormlessDeployM
     );
   }
 
+  if (
+    "packageVersion" in parsed &&
+    parsed.packageVersion !== null &&
+    typeof parsed.packageVersion !== "string"
+  ) {
+    throw new Error(
+      `Formless instance health check failed for ${url}: deploy metadata packageVersion must be a string or null.`,
+    );
+  }
+
+  if (
+    "runtimeProtocolVersion" in parsed &&
+    (!Number.isInteger(parsed.runtimeProtocolVersion) ||
+      typeof parsed.runtimeProtocolVersion !== "number" ||
+      parsed.runtimeProtocolVersion <= 0)
+  ) {
+    throw new Error(
+      `Formless instance health check failed for ${url}: deploy metadata runtimeProtocolVersion must be a positive integer.`,
+    );
+  }
+
+  if (
+    "storageMigrationSet" in parsed &&
+    (typeof parsed.storageMigrationSet !== "string" || parsed.storageMigrationSet.trim() === "")
+  ) {
+    throw new Error(
+      `Formless instance health check failed for ${url}: deploy metadata storageMigrationSet must be a string.`,
+    );
+  }
+
+  const version = parsed.version as string | null;
+
   return {
-    version: parsed.version,
+    packageApps: Array.isArray(parsed.packageApps) ? (parsed.packageApps as never[]) : [],
+    packageVersion:
+      "packageVersion" in parsed && parsed.packageVersion !== undefined
+        ? (parsed.packageVersion as string | null)
+        : version,
+    runtimeProtocolVersion:
+      "runtimeProtocolVersion" in parsed && parsed.runtimeProtocolVersion !== undefined
+        ? (parsed.runtimeProtocolVersion as number)
+        : FORMLESS_RUNTIME_PROTOCOL_VERSION,
+    storageMigrationSet:
+      "storageMigrationSet" in parsed && parsed.storageMigrationSet !== undefined
+        ? (parsed.storageMigrationSet as string)
+        : FORMLESS_STORAGE_MIGRATION_SET_ID,
+    version,
   };
 }
 

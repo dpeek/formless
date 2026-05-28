@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
+} from "../shared/deploy-metadata.ts";
+import {
   checkFormlessInstanceDeployMetadata,
   createFormlessInstanceOwnerSetupCapability,
   deployFormlessInstanceWithAlchemy,
@@ -765,6 +769,9 @@ describe("Formless instance deploy metadata health check", () => {
     expect(result).toEqual({
       cacheControl: "no-store",
       metadataUrl: "https://brother-instance.dpeek.workers.dev/api/formless/deploy",
+      packageVersion: "0.1.8",
+      runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+      storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
       url: "https://brother-instance.dpeek.workers.dev",
       version: "0.1.8",
     });
@@ -1382,12 +1389,18 @@ function normalizeHeaders(headers: HeadersInit | undefined): Record<string, stri
 function fakeHealthyDeployment(input: CheckFormlessInstanceDeployMetadataInput): Promise<{
   cacheControl: string;
   metadataUrl: string;
+  packageVersion: string;
+  runtimeProtocolVersion: number;
+  storageMigrationSet: string;
   url: string;
   version: string;
 }> {
   return Promise.resolve({
     cacheControl: "no-store",
     metadataUrl: new URL("/api/formless/deploy", `${input.url}/`).toString(),
+    packageVersion: input.expectedVersion,
+    runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+    storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
     url: input.url,
     version: input.expectedVersion,
   });

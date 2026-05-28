@@ -68,6 +68,7 @@ import {
   type TableColumnConfig,
   type TableOrderingConfig,
 } from "./client/views.ts";
+import { bundledSourceSchemaHashFixtures } from "./shared/upgrade-migrations.ts";
 import type { BootstrapResponse, StoredRecord } from "./shared/protocol.ts";
 import type { SitePageTree } from "./shared/protocol.ts";
 import type { SchemaKey } from "./shared/schema-apps.ts";
@@ -504,7 +505,9 @@ function appInstallFixture({
     installId,
     label,
     packageAppKey,
+    packageRevision: 1,
     schemaRoute: `/apps/${installId}/schema`,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures[packageAppKey],
     status: "installed",
     updatedAt: "2026-05-25T00:00:00.000Z",
     ...(packageAppKey === "site"

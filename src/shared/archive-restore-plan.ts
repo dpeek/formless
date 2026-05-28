@@ -910,6 +910,8 @@ function appInstallForArchive(app: ArchivedAppInstall, appPackage: BundledAppPac
   return {
     installId: app.installId,
     packageAppKey: appPackage.packageAppKey,
+    packageRevision: appPackage.packageRevision,
+    sourceSchemaHash: appPackage.sourceSchemaHash,
     label: app.label,
     status: "installed",
     createdAt: app.createdAt,

@@ -29,6 +29,7 @@ import {
   shouldRenderRuntimeRouteOutsideGeneratedAppFrame,
 } from "./runtime-profile.ts";
 import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 
 function appInstallFixture({
   installId,
@@ -45,7 +46,9 @@ function appInstallFixture({
     installId,
     label,
     packageAppKey,
+    packageRevision: 1,
     schemaRoute: `/apps/${installId}/schema`,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures[packageAppKey],
     status: "installed",
     updatedAt: "2026-05-25T00:00:00.000Z",
     ...(packageAppKey === "site"

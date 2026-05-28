@@ -14,11 +14,19 @@ Evidence:
 
 ## 2. Runtime Metadata And Package App Facts
 
-- [ ] 2.1 Extend bundled package app definitions with package revision and source schema hash facts while keeping `schema.version` as the schema language version.
-- [ ] 2.2 Extend app install metadata storage and response parsing with installed package revision and source schema hash facts.
-- [ ] 2.3 Add compatibility reads for existing installs that do not yet have package revision/hash columns.
-- [ ] 2.4 Extend deploy metadata response with package version, runtime protocol version, storage migration set identity, and package app revision/hash facts.
-- [ ] 2.5 Update metadata and app install tests for no-secret responses, no-store caching, legacy install compatibility, and stable install identity.
+- [x] 2.1 Extend bundled package app definitions with package revision and source schema hash facts while keeping `schema.version` as the schema language version.
+- [x] 2.2 Extend app install metadata storage and response parsing with installed package revision and source schema hash facts.
+- [x] 2.3 Add compatibility reads for existing installs that do not yet have package revision/hash columns.
+- [x] 2.4 Extend deploy metadata response with package version, runtime protocol version, storage migration set identity, and package app revision/hash facts.
+- [x] 2.5 Update metadata and app install tests for no-secret responses, no-store caching, legacy install compatibility, and stable install identity.
+
+Evidence:
+
+- `grug` 2026-05-28: added package revision/source schema hash facts to bundled package app metadata, created app install metadata, installed-app storage rows, archive restore app install materialization, target registry parsing, and deploy metadata.
+- Added legacy install-table compatibility in `src/worker/instance-app-installs-state.ts`; missing `package_revision` and `source_schema_hash` columns are added/read with current package facts for existing rows.
+- Added deploy metadata upgrade facts: package version, runtime protocol version, storage migration set identity, and bundled package app revision/hash facts. Metadata remains `Cache-Control: no-store` and test coverage asserts secret env values are not emitted.
+- Added focused tests in `src/worker/instance-app-installs-state.test.ts`, `src/site/instance-target-client.test.ts`, plus updated app install, deploy metadata, onboarding, fixture, archive, domain, and runtime profile tests for stable install identity and package facts.
+- `devstate check` 2026-05-28 before and after `git rebase --autostash main`: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changed metadata/API contracts and no visible browser app workflow changed.
 
 ## 3. SQL Migration Runner
 

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 import { listBundledAppPackages, type AppInstall } from "../../shared/app-installs.ts";
+import { bundledSourceSchemaHashFixtures } from "../../shared/upgrade-migrations.ts";
 import { InstallAppDialogForm, InstanceShellRouteView } from "./instance-shell.tsx";
 
 describe("instance shell route view", () => {
@@ -548,6 +549,8 @@ function appInstall(input: {
     installId: input.installId,
     label: input.label,
     packageAppKey: input.packageAppKey,
+    packageRevision: 1,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures[input.packageAppKey],
     ...(input.packageAppKey === "site"
       ? {
           publicRoute: `/sites/${input.installId}` as `/sites/${string}`,

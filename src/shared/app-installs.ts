@@ -1,4 +1,9 @@
 import { schemaAppDefinitions, type SchemaKey } from "./schema-apps.ts";
+import {
+  bundledSourceSchemaHashFixtures,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "./upgrade-migrations.ts";
 
 export type PackageAppKey = SchemaKey;
 export type AppInstallId = string;
@@ -16,6 +21,8 @@ export type AppInstallRoute = {
 export type AppInstall = {
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
   label: string;
   status: AppInstallStatus;
   createdAt: string;
@@ -29,6 +36,8 @@ export type AppInstall = {
 
 export type BundledAppPackage = {
   packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
   label: string;
   description: string;
   defaultInstallId: AppInstallId;
@@ -118,10 +127,13 @@ const reservedInstallIds = new Set([
   "sitemap",
   "static",
 ]);
+const currentBundledPackageAppRevision = 1 satisfies PackageAppRevision;
 
 export const bundledAppPackages = [
   {
     packageAppKey: "site",
+    packageRevision: currentBundledPackageAppRevision,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     label: schemaAppDefinitions.site.label,
     description: "Public website app backed by the bundled Site schema and starter records.",
     defaultInstallId: "site",
@@ -133,6 +145,8 @@ export const bundledAppPackages = [
   },
   {
     packageAppKey: "tasks",
+    packageRevision: currentBundledPackageAppRevision,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
     label: schemaAppDefinitions.tasks.label,
     description: "Task tracking app backed by the bundled Tasks schema and starter records.",
     defaultInstallId: "tasks",
@@ -143,6 +157,8 @@ export const bundledAppPackages = [
   },
   {
     packageAppKey: "estii",
+    packageRevision: currentBundledPackageAppRevision,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
     label: schemaAppDefinitions.estii.label,
     description: "Rate-card app backed by the bundled Estii schema and starter records.",
     defaultInstallId: "estii",
@@ -159,6 +175,22 @@ export function listBundledAppPackages(): BundledAppPackage[] {
 
 export function findBundledAppPackage(packageAppKey: string): BundledAppPackage | undefined {
   return bundledAppPackages.find((appPackage) => appPackage.packageAppKey === packageAppKey);
+}
+
+export function packageAppFactsForKey(packageAppKey: string):
+  | {
+      packageRevision: PackageAppRevision;
+      sourceSchemaHash: SourceSchemaHash;
+    }
+  | undefined {
+  const packageApp = findBundledAppPackage(packageAppKey);
+
+  return packageApp
+    ? {
+        packageRevision: packageApp.packageRevision,
+        sourceSchemaHash: packageApp.sourceSchemaHash,
+      }
+    : undefined;
 }
 
 export function listAppInstalls(installs: readonly AppInstall[]): AppInstall[] {
@@ -358,6 +390,8 @@ function appInstallFromPackage(input: {
   return {
     installId: input.installId,
     packageAppKey: input.packageApp.packageAppKey,
+    packageRevision: input.packageApp.packageRevision,
+    sourceSchemaHash: input.packageApp.sourceSchemaHash,
     label: input.label,
     status: "installed",
     createdAt: input.now,

@@ -10,6 +10,7 @@ import {
   type AppInstall,
   type CreateAppInstallResult,
 } from "./app-installs.ts";
+import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 
 const now = "2026-05-22T08:00:00.000Z";
 
@@ -24,9 +25,11 @@ describe("app install registry", () => {
         defaultInstallId: "site",
         label: "Site",
         packageAppKey: "site",
+        packageRevision: 1,
         publicRouteBase: "/sites",
         seedRecordsKey: "site",
         sourceSchemaKey: "site",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
         supportsMultipleInstalls: true,
       }),
       expect.objectContaining({
@@ -34,8 +37,10 @@ describe("app install registry", () => {
         defaultInstallId: "tasks",
         label: "Tasks",
         packageAppKey: "tasks",
+        packageRevision: 1,
         seedRecordsKey: "tasks",
         sourceSchemaKey: "tasks",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
         supportsMultipleInstalls: true,
       }),
       expect.objectContaining({
@@ -43,8 +48,10 @@ describe("app install registry", () => {
         defaultInstallId: "estii",
         label: "Estii",
         packageAppKey: "estii",
+        packageRevision: 1,
         seedRecordsKey: "estii",
         sourceSchemaKey: "estii",
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
         supportsMultipleInstalls: true,
       }),
     ]);
@@ -110,9 +117,11 @@ describe("app install registry", () => {
       installId: "personal",
       label: "Personal Site",
       packageAppKey: "site",
+      packageRevision: 1,
       publicRoute: "/sites/personal",
       publicRoutePrefix: "/sites/personal/",
       schemaRoute: "/apps/personal/schema",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       status: "installed",
       updatedAt: now,
     });
@@ -142,7 +151,9 @@ describe("app install registry", () => {
       installId: "tasks",
       label: "Tasks",
       packageAppKey: "tasks",
+      packageRevision: 1,
       schemaRoute: "/apps/tasks/schema",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
       status: "installed",
       updatedAt: now,
     });
@@ -171,7 +182,9 @@ describe("app install registry", () => {
       installId: "estii",
       label: "Estii",
       packageAppKey: "estii",
+      packageRevision: 1,
       schemaRoute: "/apps/estii/schema",
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.estii,
       status: "installed",
       updatedAt: now,
     });
@@ -314,9 +327,11 @@ function siteInstallFixture(input: {
     installId: input.installId,
     label: input.label,
     packageAppKey: "site",
+    packageRevision: 1,
     publicRoute: `/sites/${input.installId}`,
     publicRoutePrefix: `/sites/${input.installId}/`,
     schemaRoute: `/apps/${input.installId}/schema`,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     status: "installed",
     updatedAt: createdAt,
   };

@@ -1,7 +1,10 @@
 import {
   FORMLESS_DEPLOY_METADATA_PATH,
+  FORMLESS_RUNTIME_PROTOCOL_VERSION,
+  FORMLESS_STORAGE_MIGRATION_SET_ID,
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
+import { listBundledAppPackages } from "../shared/app-installs.ts";
 
 export type DeployMetadataEnv = {
   FORMLESS_DEPLOY_VERSION?: string;
@@ -27,6 +30,14 @@ export function handleDeployMetadataRequest(
   }
 
   const metadata: FormlessDeployMetadata = {
+    packageApps: listBundledAppPackages().map((appPackage) => ({
+      packageAppKey: appPackage.packageAppKey,
+      packageRevision: appPackage.packageRevision,
+      sourceSchemaHash: appPackage.sourceSchemaHash,
+    })),
+    packageVersion: stringConfigValue(env.FORMLESS_DEPLOY_VERSION) ?? null,
+    runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+    storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
     version: stringConfigValue(env.FORMLESS_DEPLOY_VERSION) ?? null,
   };
 

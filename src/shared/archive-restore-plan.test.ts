@@ -8,6 +8,7 @@ import {
   type InstanceArchive,
 } from "./archive.ts";
 import { listBundledAppPackages, type AppInstall } from "./app-installs.ts";
+import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   planAppArchiveRestore,
   planInstanceArchiveRestore,
@@ -600,9 +601,11 @@ function siteInstall(installId: string): AppInstall {
     installId,
     label: "Personal",
     packageAppKey: "site",
+    packageRevision: 1,
     publicRoute: `/sites/${installId}`,
     publicRoutePrefix: `/sites/${installId}/`,
     schemaRoute: `/apps/${installId}/schema`,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     status: "installed",
     updatedAt: now,
   };
