@@ -33,6 +33,7 @@ import {
 import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
+import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
   private readonly bindings: Env;
@@ -77,6 +78,17 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceDomainProviderResponse) {
       return instanceDomainProviderResponse;
+    }
+
+    const instanceDeploymentRuntimeResponse =
+      await handleInstanceDeploymentRuntimeDurableObjectRequest(
+        request,
+        this.ctx.storage,
+        this.bindings,
+      );
+
+    if (instanceDeploymentRuntimeResponse) {
+      return instanceDeploymentRuntimeResponse;
     }
 
     const instanceAppInstallsResponse = await handleInstanceAppInstallsDurableObjectRequest(

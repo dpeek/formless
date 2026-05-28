@@ -9,6 +9,7 @@ import {
   mediaObjectStoreFromR2Bucket,
 } from "@dpeek/formless-media/worker";
 import { handleInstanceDomainProviderApiRequest } from "./domain-provider-api.ts";
+import { handleInstanceDeploymentRuntimeApiRequest } from "./deployment-runtime-api.ts";
 import {
   handleInstanceAppInstallsApiRequest,
   lookupInstanceAppInstallForRequest,
@@ -148,6 +149,15 @@ export default {
 
     if (instanceDomainProviderResponse) {
       return instanceDomainProviderResponse;
+    }
+
+    const instanceDeploymentRuntimeResponse = await handleInstanceDeploymentRuntimeApiRequest(
+      request,
+      env,
+    );
+
+    if (instanceDeploymentRuntimeResponse) {
+      return instanceDeploymentRuntimeResponse;
     }
 
     const instanceDomainMappingsResponse = await handleInstanceDomainMappingsApiRequest(

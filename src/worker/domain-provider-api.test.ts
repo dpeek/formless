@@ -17,6 +17,10 @@ import {
   type InstanceDomainProviderPlanResponse,
   type InstanceDomainProviderRedirectsResponse,
 } from "../shared/domain-provider-api.ts";
+import {
+  INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+  type InstanceDeploymentStatusResponse,
+} from "../shared/deployment-runtime.ts";
 import type { CreateInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import type { InstanceDomainMappingsResponse } from "../shared/instance-domain-mappings.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -330,6 +334,19 @@ describe("instance domain provider API routes", () => {
       status: "succeeded",
     });
 
+    const deployed = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(deployed.body.status).toMatchObject({
+      latestDesiredState: {
+        targetId: "instance.primary",
+        versionId: "desired.instance.primary.1",
+      },
+      state: "deployed",
+      targetId: "instance.primary",
+    });
+
     const mappings = await getJson<InstanceDomainMappingsResponse>("/api/formless/domain-mappings");
 
     expect(mappings.body.appliedStates).toEqual([
@@ -368,6 +385,32 @@ describe("instance domain provider API routes", () => {
       throw new Error("Delete did not create a job.");
     }
 
+    expect(Object.keys(deleteJob.body.job).sort()).toEqual([
+      "createdAt",
+      "jobId",
+      "plan",
+      "runnerId",
+      "status",
+      "targets",
+      "updatedAt",
+    ]);
+    expect(JSON.stringify(deleteJob.body)).not.toContain("lease:");
+
+    const cleanupStatus = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(cleanupStatus.body.status).toMatchObject({
+      actor: {
+        actorId: "domain-provider.delete",
+        kind: "runner",
+        runnerId: "runner-delete",
+      },
+      mode: "destroy",
+      state: "in-progress",
+      targetId: "instance.primary",
+    });
+
     expect(deleteJob.body.targets).toEqual([
       expect.objectContaining({
         host: "admin.example.com",
@@ -397,11 +440,123 @@ describe("instance domain provider API routes", () => {
       result: { evidenceCount: 1 },
       status: "succeeded",
     });
+    expect(afterProviderDelete.body.mappings).toEqual([
+      expect.objectContaining({ enabled: false, host: "admin.example.com" }),
+    ]);
     expect(afterProviderDelete.body.appliedStates).toEqual([]);
     expect(afterProviderDelete.body.auditEvents.map((event) => event.action)).toEqual([
       "created",
       "deleted",
     ]);
+
+    const cleanupDeployed = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(cleanupDeployed.body.status).toMatchObject({
+      latestDesiredState: {
+        revision: 2,
+        targetId: "instance.primary",
+        versionId: "desired.instance.primary.2",
+      },
+      state: "deployed",
+      targetId: "instance.primary",
+    });
+  });
+
+  it("bridges apply job creation to a deployment attempt without changing apply response shape", async () => {
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "bridge.example.com",
+      profile: "instance",
+    });
+
+    const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
+      INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
+      { runnerId: "runner-bridge" },
+    );
+
+    expect(apply.response.status).toBe(202);
+    expect(apply.body).toMatchObject({
+      code: "domain-provider-apply-job-ready",
+      status: "ready",
+    });
+
+    if (apply.body.status !== "ready") {
+      throw new Error("Apply did not create a job.");
+    }
+
+    expect(Object.keys(apply.body.job).sort()).toEqual([
+      "createdAt",
+      "jobId",
+      "plan",
+      "runnerId",
+      "status",
+      "updatedAt",
+    ]);
+    expect(JSON.stringify(apply.body)).not.toContain("lease:");
+
+    const deployment = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(deployment.body.status).toMatchObject({
+      actor: {
+        actorId: "domain-provider.apply",
+        kind: "runner",
+        runnerId: "runner-bridge",
+      },
+      mode: "apply",
+      state: "in-progress",
+      targetId: "instance.primary",
+    });
+
+    if (deployment.body.status.state !== "in-progress") {
+      throw new Error("Domain provider apply did not start a deployment attempt.");
+    }
+
+    expect(deployment.body.status.attemptId).toMatch(/^attempt\.[a-f0-9-]{36}$/);
+    expect(deployment.body.status.desiredState).toMatchObject({
+      revision: 1,
+      targetId: "instance.primary",
+      versionId: "desired.instance.primary.1",
+    });
+
+    const failure = await postAdminJson<InstanceDomainProviderApplyJobResponse>(
+      `${INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH}/${apply.body.job.jobId}/result`,
+      {
+        error: "Cloudflare rejected the custom domain.",
+        runnerId: "runner-bridge",
+        status: "failed",
+      },
+    );
+    const failedDeployment = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(failure.body.job).toMatchObject({
+      result: {
+        error: "Cloudflare rejected the custom domain.",
+        evidenceCount: 0,
+      },
+      status: "failed",
+    });
+    expect(Object.keys(failure.body.job).sort()).toEqual([
+      "createdAt",
+      "jobId",
+      "plan",
+      "result",
+      "runnerId",
+      "status",
+      "updatedAt",
+    ]);
+    expect(failedDeployment.body.status).toMatchObject({
+      state: "failed-current-version",
+      summary: {
+        code: "domain-provider-apply-failed",
+        displayMessage: "Cloudflare rejected the custom domain.",
+      },
+      targetId: "instance.primary",
+    });
   });
 
   it("marks manually removed CustomDomain evidence without Cloudflare credentials", async () => {

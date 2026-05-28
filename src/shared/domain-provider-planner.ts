@@ -16,7 +16,7 @@ import {
 import { normalizeInstanceDomainHost } from "./instance-domain-mappings.ts";
 
 export function planDomainProviderResources(input: DomainProviderPlanInput): DomainProviderPlan {
-  const instanceId = normalizeLogicalIdPart(input.instanceId, "instance");
+  const instanceId = normalizeDomainProviderLogicalIdPart(input.instanceId, "instance");
   const policy = input.policy ?? "create-only";
   const zones = normalizeZones(input.zones);
   const blockers: DomainProviderPlanIssue[] = [];
@@ -94,36 +94,57 @@ function enabledProfileMappings(
 function enabledRedirectIntents(
   intents: readonly DomainProviderRedirectIntent[],
   blockers: DomainProviderPlanIssue[],
-): NormalizedRedirectIntent[] {
-  const redirects: NormalizedRedirectIntent[] = [];
+): NormalizedDomainProviderRedirectIntent[] {
+  const redirects: NormalizedDomainProviderRedirectIntent[] = [];
 
   for (const intent of intents) {
     if (intent.enabled === false) {
       continue;
     }
 
-    const target = normalizeRedirectTarget(intent);
+    const normalized = normalizeDomainProviderRedirectIntent(intent);
 
-    if (!target.ok) {
-      blockers.push(target.blocker);
+    if (!normalized.ok) {
+      blockers.push(normalized.blocker);
       continue;
     }
 
-    redirects.push({
+    redirects.push(normalized.redirect);
+  }
+
+  return redirects.sort((left, right) => compareText(left.fromHost, right.fromHost));
+}
+
+export function normalizeDomainProviderRedirectIntent(intent: DomainProviderRedirectIntent):
+  | {
+      ok: true;
+      redirect: NormalizedDomainProviderRedirectIntent;
+    }
+  | {
+      ok: false;
+      blocker: DomainProviderPlanIssue;
+    } {
+  const target = normalizeRedirectTarget(intent);
+
+  if (!target.ok) {
+    return target;
+  }
+
+  return {
+    ok: true,
+    redirect: {
       fromHost: normalizeHostOrThrow(intent.fromHost),
       preservePath: intent.preservePath ?? true,
       preserveQueryString: intent.preserveQueryString ?? true,
       statusCode: intent.statusCode ?? 301,
       targetHost: target.host,
       targetUrlBase: target.urlBase,
-    });
-  }
-
-  return redirects.sort((left, right) => compareText(left.fromHost, right.fromHost));
+    },
+  };
 }
 
 function redirectBlockers(
-  redirects: readonly NormalizedRedirectIntent[],
+  redirects: readonly NormalizedDomainProviderRedirectIntent[],
   profileHosts: ReadonlySet<string>,
 ): DomainProviderPlanIssue[] {
   const blockers: DomainProviderPlanIssue[] = [];
@@ -171,7 +192,7 @@ function customDomainResource(input: {
   workerName: string;
   zone: DomainProviderZone;
 }): DomainProviderCustomDomainResource {
-  const logicalId = logicalResourceId(
+  const logicalId = domainProviderLogicalResourceId(
     input.instanceId,
     "custom-domain",
     input.mapping.host,
@@ -200,16 +221,16 @@ function customDomainResource(input: {
 
 function redirectRuleResource(input: {
   instanceId: string;
-  redirect: NormalizedRedirectIntent;
+  redirect: NormalizedDomainProviderRedirectIntent;
   zone: DomainProviderZone;
 }): DomainProviderRedirectRuleResource {
-  const logicalId = logicalResourceId(
+  const logicalId = domainProviderLogicalResourceId(
     input.instanceId,
     "redirect-rule",
     input.redirect.fromHost,
     input.redirect.targetHost,
   );
-  const targetUrl = redirectTargetUrl(input.redirect);
+  const targetUrl = domainProviderRedirectTargetUrl(input.redirect);
 
   return {
     kind: "cloudflare-redirect-rule",
@@ -232,12 +253,16 @@ function redirectRuleResource(input: {
 
 function redirectDnsResource(input: {
   instanceId: string;
-  redirect: NormalizedRedirectIntent;
+  redirect: NormalizedDomainProviderRedirectIntent;
   zone: DomainProviderZone;
 }): DomainProviderDnsRecordsResource {
   return {
     kind: "cloudflare-dns-records",
-    logicalId: logicalResourceId(input.instanceId, "redirect-dns", input.redirect.fromHost),
+    logicalId: domainProviderLogicalResourceId(
+      input.instanceId,
+      "redirect-dns",
+      input.redirect.fromHost,
+    ),
     fromHost: input.redirect.fromHost,
     zone: input.zone,
     props: {
@@ -325,7 +350,9 @@ function invalidRedirectTarget(
   };
 }
 
-function redirectTargetUrl(redirect: NormalizedRedirectIntent): string {
+export function domainProviderRedirectTargetUrl(
+  redirect: NormalizedDomainProviderRedirectIntent,
+): string {
   if (!redirect.preservePath) {
     return redirect.targetUrlBase;
   }
@@ -381,7 +408,7 @@ function normalizeHost(value: string): string {
   return value.trim().toLowerCase().replace(/\.+$/, "");
 }
 
-function logicalResourceId(
+export function domainProviderLogicalResourceId(
   instanceId: string,
   kind: string,
   host: string,
@@ -389,11 +416,11 @@ function logicalResourceId(
 ): string {
   return [instanceId, kind, host, ...parts]
     .filter((part): part is string => part !== undefined && part !== "")
-    .map((part) => normalizeLogicalIdPart(part, "value"))
+    .map((part) => normalizeDomainProviderLogicalIdPart(part, "value"))
     .join("-");
 }
 
-function normalizeLogicalIdPart(value: string, fallback: string): string {
+export function normalizeDomainProviderLogicalIdPart(value: string, fallback: string): string {
   const normalized = value
     .trim()
     .toLowerCase()
@@ -432,7 +459,7 @@ function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
-type NormalizedRedirectIntent = {
+export type NormalizedDomainProviderRedirectIntent = {
   fromHost: string;
   preservePath: boolean;
   preserveQueryString: boolean;
