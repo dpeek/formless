@@ -32,8 +32,6 @@ Read this when editing `lib/media/*`.
 - `src/worker.ts`: Worker/runtime adapter entrypoint; no React import.
 - `src/*.test.ts` and `src/*.test.tsx`: package-local contract and adapter coverage.
 
-Compatibility shims remain at `src/media/core.ts`, `src/media/r2.ts`, `src/client/media.ts`, and `src/worker/media.ts`.
-
 ## Read Path
 
 1. Read this file.

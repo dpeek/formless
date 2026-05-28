@@ -5,9 +5,9 @@ import { createWorkerHarness } from "./miniflare-test.ts";
 import {
   CORE_IMAGE_KEY_PREFIX,
   CORE_MEDIA_ROUTE_PREFIX,
-  SITE_IMAGE_UPLOAD_MAX_BYTES,
-  SITE_MEDIA_CACHE_CONTROL,
-} from "./media.ts";
+  MEDIA_IMAGE_UPLOAD_MAX_BYTES,
+  MEDIA_OBJECT_CACHE_CONTROL,
+} from "@dpeek/formless-media/worker";
 import { createOwnerSessionCookie } from "./owner-session.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -133,7 +133,7 @@ describe("media worker routes", () => {
 
     expect(served.status).toBe(200);
     expect(served.headers.get("Content-Type")).toBe("image/png");
-    expect(served.headers.get("Cache-Control")).toBe(SITE_MEDIA_CACHE_CONTROL);
+    expect(served.headers.get("Cache-Control")).toBe(MEDIA_OBJECT_CACHE_CONTROL);
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(pngBytes);
   });
 
@@ -210,7 +210,7 @@ describe("media worker routes", () => {
       await uploadCoreImage(harness, imageFile("icon.svg", "image/svg+xml", textBytes("<svg />"))),
       await uploadCoreImage(
         harness,
-        imageFile("huge.jpg", "image/jpeg", new Uint8Array(SITE_IMAGE_UPLOAD_MAX_BYTES + 1)),
+        imageFile("huge.jpg", "image/jpeg", new Uint8Array(MEDIA_IMAGE_UPLOAD_MAX_BYTES + 1)),
       ),
     ];
 
@@ -296,7 +296,7 @@ describe("media worker routes", () => {
 
     await bucket.put(key, pngBytes, {
       httpMetadata: {
-        cacheControl: SITE_MEDIA_CACHE_CONTROL,
+        cacheControl: MEDIA_OBJECT_CACHE_CONTROL,
         contentType: "image/png",
       },
     });
@@ -314,7 +314,7 @@ describe("media worker routes", () => {
 
     await bucket.put(key, pngBytes, {
       httpMetadata: {
-        cacheControl: SITE_MEDIA_CACHE_CONTROL,
+        cacheControl: MEDIA_OBJECT_CACHE_CONTROL,
         contentType: "image/png",
       },
     });
@@ -338,7 +338,7 @@ describe("media worker routes", () => {
 
     await bucket.put("site/images/public.png", pngBytes, {
       httpMetadata: {
-        cacheControl: SITE_MEDIA_CACHE_CONTROL,
+        cacheControl: MEDIA_OBJECT_CACHE_CONTROL,
         contentType: "image/png",
       },
     });
