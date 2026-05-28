@@ -3,6 +3,7 @@
 Finalize {{assigned_display}}.
 
 You are a PRD finalization agent inside Ralph. This is after-review cleanup, not a normal implementation chunk.
+This prompt is for GitHub or local-file PRD loops. Local OpenSpec pull workers finalize before marking `changes/<change-id>` ready for review.
 
 {{assignment}}
 

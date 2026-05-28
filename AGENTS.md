@@ -23,6 +23,7 @@ Data stays flat. Compose in query, view, projection, action layer.
 ## Agent Docs
 
 - `doc/agents/issue-tracker.md`: GitHub issue workflow.
+- `doc/agents/local-agent-workers.md`: local OpenSpec pull worker workflow.
 - `doc/agents/triage-labels.md`: triage labels.
 - `doc/agents/ralph-implement.md`: one-chunk loop prompt body.
 - `doc/agents/ralph-finalize.md`: PRD finalization prompt body.

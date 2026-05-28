@@ -3,6 +3,7 @@
 Implement next chunk of {{assigned_display}}.
 
 You are one PRD-chunk agent inside Ralph. Ship exactly one ready chunk, then stop.
+This prompt is for GitHub or local-file PRD loops. Local OpenSpec pull workers use `doc/agents/local-agent-workers.md` and `bun agents watch <worker-name>`.
 
 {{assignment}}
 

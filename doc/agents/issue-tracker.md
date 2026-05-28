@@ -20,6 +20,8 @@ Use `gh` CLI from repo root.
 ## PRDs
 
 - New PRD workstreams live in GitHub Issues.
+- Local OpenSpec worker workstreams live in committed `openspec/changes/<change-id>/` directories and use `doc/agents/local-agent-workers.md`.
+- GitHub Issues are not required for local OpenSpec worker queue, locks, or status.
 - Use `PRD` title prefix or PRD label when one exists.
 - Put `Branch name: <short-name>` near top of issue body.
 - Branch names: short, lower-case, issue-independent. Example: `site-publish`.
@@ -65,6 +67,7 @@ Use `gh` CLI from repo root.
 - Commit with `Fixes #<issue>`.
 - Do not merge unless user asks.
 - Run with `bun ralph finalize --issue <number>` or `bun ralph finalise --issue <number>`.
+- Local OpenSpec worker finalization is part of `bun agents watch <worker-name>` before the branch is marked ready for review.
 
 ## PRD Body Skeleton
 

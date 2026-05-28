@@ -26,6 +26,7 @@
     "work": "bun run scripts/ralph-loop.ts --worktree --dangerous --allow-dirty-start --pick",
     "done": "bun run scripts/ralph-loop.ts finalize --worktree --dangerous --allow-dirty-start",
     "ralph": "bun run scripts/ralph-loop.ts",
+    "agents": "bun run scripts/agents.ts",
     "browser": "agent-browser",
     "smoke:object-list": "bun run scripts/object-list-smoke.ts",
     "check": "vp check --fix",
