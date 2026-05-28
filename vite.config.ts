@@ -5,12 +5,14 @@ import { cloudflare, type PluginConfig, type WorkerConfig } from "@cloudflare/vi
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite-plus";
+import { defaultExclude as defaultTestExclude } from "vite-plus/test/config";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const installedNodeModulesRoot = packageInstallNodeModulesRoot(packageRoot);
 const siteProjectRoot = process.env.FORMLESS_SITE_PROJECT_ROOT;
 const wranglerPersistPath = process.env.FORMLESS_WRANGLER_PERSIST;
 const workerRuntimeVars = runtimeWorkerVars(process.env);
+const ignoredScratchGlobs = ["tmp/**", "**/tmp/**"];
 const serverFsAllow = [
   packageRoot,
   ...(installedNodeModulesRoot ? [installedNodeModulesRoot] : []),
@@ -116,8 +118,11 @@ export default defineConfig({
       "use-sync-external-store/shim/with-selector.js",
     ],
   },
-  fmt: {},
-  lint: { options: { typeAware: true, typeCheck: true } },
+  fmt: { ignorePatterns: ignoredScratchGlobs },
+  lint: { ignorePatterns: ignoredScratchGlobs, options: { typeAware: true, typeCheck: true } },
+  test: {
+    exclude: [...defaultTestExclude, ...ignoredScratchGlobs],
+  },
 });
 
 function packageInstallNodeModulesRoot(root: string): string | null {
