@@ -24,7 +24,7 @@ import {
   type MediaObjectStore,
   type MediaWriteResponse,
 } from "@dpeek/formless-media/worker";
-import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
+import type { BootstrapResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";
 import {
@@ -36,8 +36,11 @@ import {
   ensureStorageTables,
   getBootstrapRecords,
   getCurrentCursor,
-  resetStorage,
-  restoreStorageSnapshot,
+  mapWriteOutcome,
+  resetStorageToSourceSeedOutcome,
+  restoreStorageSnapshotOutcome,
+  type StorageSource,
+  type WriteOutcome,
 } from "./storage.ts";
 
 export type ArchiveRestoreMediaRead = ArchiveRestoreMediaFile & {
@@ -127,6 +130,21 @@ export type ArchiveRestoreExecutionResult =
       errors: ArchiveRestoreExecutionError[];
       ok: false;
       plan?: ArchiveRestorePlan;
+    };
+
+export type ArchiveAppDataRestoreInput = {
+  data: AppArchiveData;
+  identity: InstalledAppStorageIdentity;
+};
+
+type ArchiveAppDataRestorePlan =
+  | {
+      kind: "storeSnapshot";
+      snapshot: StoreSnapshot;
+    }
+  | {
+      kind: "sourceRecords";
+      source: StorageSource;
     };
 
 export function archiveRestoreInstanceRegistryTarget(
@@ -324,28 +342,31 @@ export async function applyPortableArchiveRestore(
 
 export function restoreArchiveAppDataToStorage(
   storage: DurableObjectStorage,
-  data: AppArchiveData,
+  input: ArchiveAppDataRestoreInput,
 ): BootstrapResponse {
-  ensureStorageTables(storage);
+  return restoreArchiveAppDataToStorageOutcome(storage, input).response;
+}
 
-  if (data.kind === "storeSnapshot") {
-    return restoreStorageSnapshot(storage, data.snapshot);
+export function restoreArchiveAppDataToStorageOutcome(
+  storage: DurableObjectStorage,
+  input: ArchiveAppDataRestoreInput,
+): WriteOutcome<BootstrapResponse> {
+  ensureStorageTables(storage);
+  const plan = planArchiveAppDataRestore(input);
+
+  if (plan.kind === "storeSnapshot") {
+    return restoreStorageSnapshotOutcome(storage, plan.snapshot);
   }
 
-  const schemaKey = data.schemaKey;
-
-  const restored = resetStorage(storage, {
-    changeMutationPrefix: `archive-restore:${schemaKey}`,
-    records: sourceArchiveRecordsToStoredRecords(data.records),
-    schema: data.schema,
-  });
-
-  return {
-    cursor: getCurrentCursor(storage),
-    records: getBootstrapRecords(storage),
-    schema: restored.schema,
-    schemaUpdatedAt: restored.updatedAt,
-  };
+  return mapWriteOutcome(
+    resetStorageToSourceSeedOutcome(storage, plan.source),
+    ({ schema, updatedAt }) => ({
+      cursor: getCurrentCursor(storage),
+      records: getBootstrapRecords(storage),
+      schema,
+      schemaUpdatedAt: updatedAt,
+    }),
+  );
 }
 
 export async function restoreArchiveMediaObjectToStore(
@@ -543,6 +564,39 @@ function sourceArchiveRecordsToStoredRecords(
     values: record.values,
     createdAt: record.createdAt,
   }));
+}
+
+function planArchiveAppDataRestore(input: ArchiveAppDataRestoreInput): ArchiveAppDataRestorePlan {
+  assertArchiveAppDataMatchesIdentity(input.data, input.identity);
+
+  if (input.data.kind === "storeSnapshot") {
+    return {
+      kind: "storeSnapshot",
+      snapshot: input.data.snapshot,
+    };
+  }
+
+  return {
+    kind: "sourceRecords",
+    source: {
+      changeMutationPrefix: `archive-restore:${input.data.schemaKey}`,
+      records: sourceArchiveRecordsToStoredRecords(input.data.records),
+      schema: input.data.schema,
+    },
+  };
+}
+
+function assertArchiveAppDataMatchesIdentity(
+  data: AppArchiveData,
+  identity: InstalledAppStorageIdentity,
+) {
+  const schemaKey = data.kind === "storeSnapshot" ? data.snapshot.schemaKey : data.schemaKey;
+
+  if (schemaKey !== identity.sourceSchemaKey) {
+    throw new Error(
+      `Archive app data schemaKey must be "${identity.sourceSchemaKey}" for installed app "${identity.installId}".`,
+    );
+  }
 }
 
 function stepReports(steps: readonly ArchiveRestorePlanStep[]): ArchiveRestoreStepReport[] {

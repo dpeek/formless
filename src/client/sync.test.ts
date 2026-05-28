@@ -412,6 +412,60 @@ describe("client sync", () => {
     }
   });
 
+  it("applies WebSocket hello catch-up payloads with schema timestamps", async () => {
+    const sockets = fakeSocketFactory();
+    const nextSchema = schemaWithSummary();
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [record("record-1", "First")],
+      cursor: 1,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    const stop = startPushSync("tasks", { socketFactory: sockets.create });
+
+    try {
+      sockets.instances[0]?.open();
+
+      await waitFor(() => sockets.instances[0]?.sentMessages.length === 1);
+      expect(parseSocketClientMessage(sockets.instances[0]?.sentMessages[0])).toEqual({
+        type: "hello",
+        cursor: 1,
+        schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      });
+
+      sockets.instances[0]?.receive({
+        type: "sync",
+        payload: {
+          changes: [change(2, "record-2", "Second")],
+          cursor: 2,
+          schema: nextSchema,
+          schemaUpdatedAt: "2026-04-28T00:01:00.000Z",
+        },
+      });
+
+      await waitFor(() => getClientStoreSnapshot().cursor === 2);
+
+      const snapshot = await readLocalSnapshot("tasks");
+      const storeSnapshot = getClientStoreSnapshot();
+
+      expect(snapshot.schema).toEqual(nextSchema);
+      expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:01:00.000Z");
+      expect(snapshot.records.map((storedRecord) => storedRecord.id)).toEqual([
+        "record-1",
+        "record-2",
+      ]);
+      expect(snapshot.cursor).toBe(2);
+      expect(storeSnapshot.schema).toEqual(nextSchema);
+      expect(storeSnapshot.recordsById["record-2"]).toEqual(record("record-2", "Second"));
+      expect(storeSnapshot.cursor).toBe(2);
+    } finally {
+      stop();
+    }
+  });
+
   it("notifies callers after pushed sync messages are applied", async () => {
     const sockets = fakeSocketFactory();
     let syncedCount = 0;
@@ -684,6 +738,42 @@ describe("client sync", () => {
 
     expect(snapshot.records).toEqual([record("record-1", "First", true)]);
     expect(snapshot.cursor).toBe(2);
+  });
+
+  it("merges HTTP catch-up tombstones without replacing current schema metadata", async () => {
+    const activeRecord = record("record-1", "Done", true);
+    const openRecord = record("record-2", "Open", false);
+    const tombstone = {
+      ...activeRecord,
+      deletedAt: "2026-04-28T00:01:00.000Z",
+    };
+
+    await saveBootstrapResponse("tasks", {
+      schema: appSchema,
+      schemaUpdatedAt: "2026-04-28T00:00:00.000Z",
+      records: [activeRecord, openRecord],
+      cursor: 3,
+    });
+    await refreshClientStoreFromDb("tasks");
+
+    await syncClient(
+      "tasks",
+      jsonFetcher("/api/tasks/sync?after=3&schemaUpdatedAt=2026-04-28T00%3A00%3A00.000Z", {
+        changes: [mutationChange(4, "mutation-http-delete-catchup", tombstone, "delete")],
+        cursor: 4,
+      } satisfies SyncResponse),
+    );
+
+    const snapshot = await readLocalSnapshot("tasks");
+    const storeSnapshot = getClientStoreSnapshot();
+
+    expect(snapshot.schema).toEqual(appSchema);
+    expect(snapshot.schemaUpdatedAt).toBe("2026-04-28T00:00:00.000Z");
+    expect(snapshot.records).toContainEqual(tombstone);
+    expect(storeSnapshot.recordsById[activeRecord.id]).toEqual(tombstone);
+    expect(storeSnapshot.recordIdsByEntity.task).toEqual([openRecord.id]);
+    expect(snapshot.cursor).toBe(4);
+    expect(storeSnapshot.cursor).toBe(4);
   });
 
   it("submits actions and merges tombstones into local state", async () => {

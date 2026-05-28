@@ -1,5 +1,14 @@
 import { buildSitePageTree } from "../site/tree.ts";
-import type { SitePageTreeResponse } from "../shared/protocol.ts";
+import type {
+  ActionResponse,
+  BootstrapResponse,
+  MutationResponse,
+  SchemaResponse,
+  SchemaUpdateResponse,
+  SitePageTreeResponse,
+  StoreSnapshot,
+  SyncResponse,
+} from "../shared/protocol.ts";
 import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import {
@@ -96,11 +105,26 @@ export type WriteAuthorityOperation =
 export type AuthorityOperation = ReadAuthorityOperation | WriteAuthorityOperation;
 
 export type AuthorityWriteNotifier = {
-  apply<T>(write: () => WriteOutcome<T>): T;
+  apply<T>(write: () => WriteOutcome<T>): WriteOutcome<T>;
 };
 
+type AuthorityErrorResponse = {
+  error: string;
+};
+
+export type AuthorityOperationResponseBody =
+  | ActionResponse
+  | AuthorityErrorResponse
+  | BootstrapResponse
+  | MutationResponse
+  | SchemaResponse
+  | SchemaUpdateResponse
+  | SitePageTreeResponse
+  | StoreSnapshot
+  | SyncResponse;
+
 export type AuthorityOperationResult = {
-  body: unknown;
+  body: AuthorityOperationResponseBody;
   headers?: HeadersInit;
   status?: number;
 };
@@ -255,20 +279,18 @@ export function executeAuthorityOperation(
       const currentSchema = initializeStorageFromSource(input.storage, input.source).schema;
       const records = getBootstrapRecords(input.storage);
       const nextSchema = validateSchemaUpdateRequest(input.body, currentSchema, records);
-      const response = input.writes.apply(() =>
-        writeActiveSchemaOutcome(input.storage, nextSchema),
-      );
 
-      return { body: response };
+      return writeOperationResult(
+        input.writes.apply(() => writeActiveSchemaOutcome(input.storage, nextSchema)),
+      );
     }
 
     case "restoreSnapshot": {
       const snapshot = validateStoreSnapshotRestore(input.body, input.app.key);
-      const response = input.writes.apply(() =>
-        restoreStorageSnapshotOutcome(input.storage, snapshot),
-      );
 
-      return { body: response };
+      return writeOperationResult(
+        input.writes.apply(() => restoreStorageSnapshotOutcome(input.storage, snapshot)),
+      );
     }
 
     case "mutation": {
@@ -276,89 +298,94 @@ export function executeAuthorityOperation(
       const validatedMutation = validateMutationRequest(input.body, schema, input.storage);
 
       if ("outcome" in validatedMutation) {
-        return {
-          body: input.writes.apply(() => validatedMutation.outcome),
-        };
+        return writeOperationResult(input.writes.apply(() => validatedMutation.outcome));
       }
 
       const mutation = validatedMutation.mutation;
 
       if (mutation.op === "create") {
-        const response = input.writes.apply(() =>
-          createStoredRecordOutcome(
+        return writeOperationResult(
+          input.writes.apply(() =>
+            createStoredRecordOutcome(
+              input.storage,
+              mutation,
+              (context) => {
+                executeCreateAfterCreateHooks(
+                  context.storage,
+                  context.mutation,
+                  schema,
+                  context.createRecords,
+                );
+              },
+              (entity, values, options) => {
+                assertUniqueConstraints(input.storage, schema, entity, values, options);
+              },
+            ),
+          ),
+        );
+      }
+
+      if (mutation.op === "delete") {
+        return writeOperationResult(
+          input.writes.apply(() => deleteStoredRecordOutcome(input.storage, mutation)),
+        );
+      }
+
+      return writeOperationResult(
+        input.writes.apply(() =>
+          patchStoredRecordOutcome(
             input.storage,
             mutation,
-            (context) => {
-              executeCreateAfterCreateHooks(
-                context.storage,
-                context.mutation,
-                schema,
-                context.createRecords,
-              );
-            },
+            "recordValues" in mutation ? mutation.recordValues : undefined,
             (entity, values, options) => {
               assertUniqueConstraints(input.storage, schema, entity, values, options);
             },
           ),
-        );
-
-        return { body: response };
-      }
-
-      if (mutation.op === "delete") {
-        const response = input.writes.apply(() =>
-          deleteStoredRecordOutcome(input.storage, mutation),
-        );
-
-        return { body: response };
-      }
-
-      const response = input.writes.apply(() =>
-        patchStoredRecordOutcome(
-          input.storage,
-          mutation,
-          "recordValues" in mutation ? mutation.recordValues : undefined,
-          (entity, values, options) => {
-            assertUniqueConstraints(input.storage, schema, entity, values, options);
-          },
         ),
       );
-
-      return { body: response };
     }
 
     case "action": {
       const { schema } = initializeStorageFromSource(input.storage, input.source);
       const action = validateEntityActionRequest(input.body, schema);
-      const response = input.writes.apply(() =>
-        executeEntityActionOutcome(input.storage, action, schema),
-      );
 
-      return { body: response };
+      return writeOperationResult(
+        input.writes.apply(() => executeEntityActionOutcome(input.storage, action, schema)),
+      );
     }
 
     case "resetSchema": {
-      const response = input.writes.apply(() =>
-        mapWriteOutcome(
-          resetStorageSchemaToSourceOutcome(input.storage, input.source, validateSourceSchemaReset),
-          ({ schema, updatedAt }) => bootstrapResponse(input.storage, schema, updatedAt),
+      return writeOperationResult(
+        input.writes.apply(() =>
+          mapWriteOutcome(
+            resetStorageSchemaToSourceOutcome(
+              input.storage,
+              input.source,
+              validateSourceSchemaReset,
+            ),
+            ({ schema, updatedAt }) => bootstrapResponse(input.storage, schema, updatedAt),
+          ),
         ),
       );
-
-      return { body: response };
     }
 
     case "resetSeed": {
-      const response = input.writes.apply(() =>
-        mapWriteOutcome(
-          resetStorageToSourceSeedOutcome(input.storage, input.source),
-          ({ schema, updatedAt }) => bootstrapResponse(input.storage, schema, updatedAt),
+      return writeOperationResult(
+        input.writes.apply(() =>
+          mapWriteOutcome(
+            resetStorageToSourceSeedOutcome(input.storage, input.source),
+            ({ schema, updatedAt }) => bootstrapResponse(input.storage, schema, updatedAt),
+          ),
         ),
       );
-
-      return { body: response };
     }
   }
+}
+
+function writeOperationResult<T extends AuthorityOperationResponseBody>(
+  outcome: WriteOutcome<T>,
+): AuthorityOperationResult {
+  return { body: outcome.response };
 }
 
 function operationMetadata<
@@ -377,7 +404,7 @@ function bootstrapResponse(
   storage: DurableObjectStorage,
   schema: AppSchema,
   schemaUpdatedAt: string,
-) {
+): BootstrapResponse {
   return {
     schema,
     schemaUpdatedAt,

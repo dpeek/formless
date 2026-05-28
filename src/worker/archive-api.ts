@@ -8,11 +8,10 @@ import type {
   InstalledAppStorageIdentity,
 } from "../shared/app-storage-identity.ts";
 import type { BootstrapResponse } from "../shared/protocol.ts";
-import type { WorkerSchemaAppDefinition } from "./schema-apps.ts";
 import {
   applyPortableArchiveRestore,
   dryRunPortableArchiveRestore,
-  restoreArchiveAppDataToStorage,
+  restoreArchiveAppDataToStorageOutcome,
   restoreArchiveMediaObjectToStore,
   type ArchiveRestoreApplyTarget,
   type ArchiveRestoreMediaRead,
@@ -24,7 +23,6 @@ import {
   restoreInstanceAppInstall,
 } from "./instance-app-installs-state.ts";
 import { mediaObjectStoreFromR2Bucket } from "@dpeek/formless-media/worker";
-import { committedWrite } from "./storage.ts";
 import type { AuthorityWriteNotifier } from "./authority-operations.ts";
 
 export const INSTANCE_ARCHIVE_RESTORE_API_PATH = "/api/formless/archive/restore";
@@ -100,7 +98,6 @@ export async function handleInstanceArchiveDurableObjectRequest(
 export async function handleArchiveAppDataRestoreDurableObjectRequest(
   request: Request,
   input: {
-    app: WorkerSchemaAppDefinition;
     env: AuthorityAdminGuardEnv;
     identity: AppStorageIdentity;
     path: string;
@@ -127,10 +124,24 @@ export async function handleArchiveAppDataRestoreDurableObjectRequest(
       );
     }
 
-    const data = parseAppArchiveData("Archive app data", await readJson(request), input.app.key);
-    const response = input.writes.apply(() =>
-      committedWrite(restoreArchiveAppDataToStorage(input.storage, data)),
+    const identity = input.identity;
+
+    if (identity.kind !== "appInstall") {
+      return jsonResponse(
+        { error: "Archive app data restore requires an installed app storage identity." },
+        400,
+      );
+    }
+
+    const data = parseAppArchiveData(
+      "Archive app data",
+      await readJson(request),
+      identity.sourceSchemaKey,
     );
+    const outcome = input.writes.apply(() =>
+      restoreArchiveAppDataToStorageOutcome(input.storage, { data, identity }),
+    );
+    const response: BootstrapResponse = outcome.response;
 
     return jsonResponse(response);
   } catch (error) {

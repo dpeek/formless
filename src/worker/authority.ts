@@ -117,7 +117,6 @@ export class FormlessAuthority extends DurableObject<Env> {
       const archiveAppDataRestoreResponse = await handleArchiveAppDataRestoreDurableObjectRequest(
         request,
         {
-          app: route.app,
           env: this.bindings,
           identity: route.identity,
           path: route.path,
@@ -231,14 +230,14 @@ class AuthorityWriteModule {
     this.webSockets = webSockets;
   }
 
-  apply<T>(write: () => WriteOutcome<T>): T {
+  apply<T>(write: () => WriteOutcome<T>): WriteOutcome<T> {
     const outcome = write();
 
     if (outcome.kind === "committed") {
       this.notifyCommittedWrite();
     }
 
-    return outcome.response;
+    return outcome;
   }
 
   private notifyCommittedWrite() {

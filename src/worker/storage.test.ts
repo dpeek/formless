@@ -6,11 +6,14 @@ import { createWorkerHarness } from "./miniflare-test.ts";
 import type {
   ActionResponse,
   BootstrapResponse,
+  ChangeRow,
   MutationResponse,
   StoredRecord,
   StoreSnapshot,
+  SyncResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
+import type { WriteOutcome } from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -108,6 +111,41 @@ describe("storage", () => {
     expect(await getJson<number>("/cursor")).toBe(0);
   });
 
+  it("clears record, change, and action execution tables before writing source seed rows", async () => {
+    const completed = await createRecord("mutation-before-reset", "Done", true);
+    const action = await postJson<ActionResponse>("/tombstone-records", {
+      actionId: "action-before-reset",
+      recordIds: [completed.record.id],
+    });
+    const sourceRecord = record("seed-reset-task", "Seed reset", {
+      createdAt: "2026-05-28T00:00:03.000Z",
+      values: { title: "Seed reset", done: false, priority: "normal" },
+    });
+
+    await postJson("/source-seed", {
+      changeMutationPrefix: "reset-seed",
+      records: [sourceRecord],
+    });
+    const changes = await getJson<ChangeRow[]>("/changes?after=0");
+
+    expect(action.cursor).toBe(2);
+    expect(
+      await getJson<ActionResponse | null>("/action-response?actionId=action-before-reset"),
+    ).toBeNull();
+    expect(await getJson<StoredRecord[]>("/records")).toEqual([sourceRecord]);
+    expect(changes).toEqual([
+      expect.objectContaining({
+        seq: 1,
+        mutationId: "reset-seed:seed-reset-task",
+        op: "create",
+        recordId: sourceRecord.id,
+        payload: sourceRecord,
+        createdAt: sourceRecord.createdAt,
+      }),
+    ]);
+    expect(await getJson<number>("/cursor")).toBe(1);
+  });
+
   it("creates records, records changes, and advances the cursor", async () => {
     expect(await getJson<number>("/cursor")).toBe(0);
 
@@ -130,6 +168,59 @@ describe("storage", () => {
       op: "create",
       recordId: response.record.id,
     });
+  });
+
+  it("commits source seed records as ordered write-log changes read by sync", async () => {
+    const sourceRecords = [
+      record("seed-task-1", "Seed one", { createdAt: "2026-05-28T00:00:01.000Z" }),
+      record("seed-task-2", "Seed two", { createdAt: "2026-05-28T00:00:02.000Z" }),
+    ];
+
+    await postJson("/source-seed", {
+      changeMutationPrefix: "seed-task",
+      records: sourceRecords,
+    });
+    const initialSync = await getJson<SyncResponse>("/sync?after=0");
+
+    if (!initialSync.schemaUpdatedAt) {
+      throw new Error("Expected initial sync to include schema metadata.");
+    }
+
+    const catchUp = await getJson<SyncResponse>(
+      `/sync?after=1&schemaUpdatedAt=${encodeURIComponent(initialSync.schemaUpdatedAt)}`,
+    );
+
+    expect(initialSync.cursor).toBe(2);
+    expect(initialSync.schema).toBeTruthy();
+    expect(initialSync.changes.map((change) => change.seq)).toEqual([1, 2]);
+    expect(initialSync.changes.map((change) => change.mutationId)).toEqual([
+      "seed-task:seed-task-1",
+      "seed-task:seed-task-2",
+    ]);
+    expect(initialSync.changes.map((change) => change.op)).toEqual(["create", "create"]);
+    expect(initialSync.changes.map((change) => change.payload)).toEqual(sourceRecords);
+    expect(catchUp).toEqual({
+      changes: [initialSync.changes[1]],
+      cursor: 2,
+    });
+  });
+
+  it("classifies committed and replayed mutation outcomes without duplicate changes", async () => {
+    const body = {
+      mutationId: "mutation-outcome",
+      entity: "task",
+      op: "create",
+      values: { title: "Outcome", done: false },
+    };
+
+    const first = await postJson<WriteOutcome<MutationResponse>>("/create-outcome", body);
+    const replay = await postJson<WriteOutcome<MutationResponse>>("/create-outcome", body);
+
+    expect(first.kind).toBe("committed");
+    expect(replay.kind).toBe("replay");
+    expect(replay.response).toEqual(first.response);
+    expect(first.response.cursor).toBe(1);
+    expect(await getJson<ChangeRow[]>("/changes?after=0")).toEqual(first.response.changes);
   });
 
   it("preserves number values through records and change rows", async () => {
@@ -230,7 +321,12 @@ describe("storage", () => {
   });
 
   it("patches records, writes a patch change, and preserves typed values", async () => {
-    const created = await createRecord("mutation-1", "First");
+    const created = await postJson<MutationResponse>("/create", {
+      mutationId: "mutation-1",
+      entity: "task",
+      op: "create",
+      values: { title: "First", done: false, estimate: 5, priority: "high" },
+    });
     const patched = await postJson<MutationResponse>("/patch", {
       mutationId: "mutation-2",
       entity: "task",
@@ -244,7 +340,7 @@ describe("storage", () => {
     expect(patched.cursor).toBe(2);
     expect(patched.record).toMatchObject({
       id: created.record.id,
-      values: { title: "Second", done: true },
+      values: { title: "Second", done: true, estimate: 5, priority: "high" },
     });
     expect(records).toEqual([patched.record]);
     expect(changes).toHaveLength(1);
@@ -253,6 +349,67 @@ describe("storage", () => {
       op: "patch",
       payload: patched.record,
     });
+  });
+
+  it("prunes retired values during source schema reset and records patch changes", async () => {
+    const sourceSchema = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
+    const task = taskSchema();
+
+    await postJson("/schema", {
+      ...task,
+      entities: {
+        ...task.entities,
+        task: {
+          ...task.entities.task,
+          fields: {
+            ...task.entities.task.fields,
+            notes: { type: "text", required: false },
+          },
+        },
+      },
+    } satisfies AppSchema);
+    const created = await postJson<MutationResponse>("/create", {
+      mutationId: "mutation-retired-values",
+      entity: "task",
+      op: "create",
+      values: {
+        title: "Retired values",
+        done: false,
+        priority: "high",
+        estimate: 8,
+        notes: "Prune on source schema reset",
+      },
+    });
+
+    const reset = await postJson<{ schema: AppSchema; updatedAt: string }>(
+      "/reset-schema-to-source",
+      {},
+    );
+    const resetRecord = (await getJson<StoredRecord[]>("/records")).find(
+      (record) => record.id === created.record.id,
+    );
+    const changes = await getJson<ChangeRow[]>(`/changes?after=${created.cursor}`);
+
+    expect(reset.schema).toEqual(sourceSchema.schema);
+    expect(reset.schema.entities.task.fields).not.toHaveProperty("notes");
+    expect(reset.schema.entities.task.fields).not.toHaveProperty("estimate");
+    expect(resetRecord?.values).toEqual({
+      title: "Retired values",
+      done: false,
+      priority: "high",
+    });
+    expect(changes).toEqual([
+      expect.objectContaining({
+        seq: created.cursor + 1,
+        mutationId: `schema-reset:${reset.updatedAt}:${created.record.id}`,
+        op: "patch",
+        entity: "task",
+        recordId: created.record.id,
+        payload: resetRecord,
+        createdAt: reset.updatedAt,
+      }),
+    ]);
+    expect(await getJson<number>("/cursor")).toBe(created.cursor + 1);
   });
 
   it("replays patch mutationIds without inserting duplicate changes", async () => {
@@ -318,6 +475,29 @@ describe("storage", () => {
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
   });
 
+  it("classifies committed and replayed action outcomes without duplicate action rows", async () => {
+    const completed = await createRecord("mutation-1", "Done", true);
+
+    const first = await postJson<WriteOutcome<ActionResponse>>("/tombstone-records-outcome", {
+      actionId: "action-outcome",
+      recordIds: [completed.record.id],
+    });
+    const replay = await postJson<WriteOutcome<ActionResponse>>("/tombstone-records-outcome", {
+      actionId: "action-outcome",
+      recordIds: [],
+    });
+
+    expect(first.kind).toBe("committed");
+    expect(replay.kind).toBe("replay");
+    expect(replay.response).toEqual(first.response);
+    expect(first.response.cursor).toBe(2);
+    expect(first.response.changes.map((change) => change.seq)).toEqual([2]);
+    expect(
+      await getJson<ActionResponse | null>("/action-response?actionId=action-outcome"),
+    ).toEqual(first.response);
+    expect(await getJson<ChangeRow[]>("/changes?after=0")).toHaveLength(2);
+  });
+
   it("tombstones requested records for action replay", async () => {
     const completed = await createRecord("mutation-1", "Done", true);
     const active = await createRecord("mutation-2", "Open");
@@ -363,6 +543,49 @@ describe("storage", () => {
     expect(await getJson<unknown[]>("/changes?after=0")).toHaveLength(2);
   });
 
+  it("materializes action-created records before persisting action replay state", async () => {
+    const first = await postJson<ActionResponse>("/create-records-for-action", {
+      actionId: "action-create-followup",
+      entity: "task",
+      action: "createFollowupTask",
+      values: [{ title: "Follow up", done: false, priority: "normal" }],
+    });
+    const replay = await postJson<ActionResponse>("/create-records-for-action", {
+      actionId: "action-create-followup",
+      entity: "task",
+      action: "createFollowupTask",
+      values: [{ title: "Ignored replay", done: true, priority: "high" }],
+    });
+    const records = await getJson<StoredRecord[]>("/records");
+
+    expect(first).toMatchObject({
+      actionId: "action-create-followup",
+      cursor: 1,
+      changes: [
+        {
+          seq: 1,
+          mutationId: "action-create-followup",
+          op: "action",
+          entity: "task",
+          recordId: first.changes[0]?.payload.id,
+          payload: first.changes[0]?.payload,
+          createdAt: first.changes[0]?.createdAt,
+        },
+      ],
+    });
+    expect(first.changes[0]?.payload.values).toEqual({
+      title: "Follow up",
+      done: false,
+      priority: "normal",
+    });
+    expect(records).toEqual([first.changes[0]?.payload]);
+    expect(
+      await getJson<ActionResponse | null>("/action-response?actionId=action-create-followup"),
+    ).toEqual(first);
+    expect(replay).toEqual(first);
+    expect(await getJson<ChangeRow[]>("/changes?after=0")).toHaveLength(1);
+  });
+
   it("exports the active store as a schema-keyed snapshot", async () => {
     const schema = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
     const completed = await createRecord("mutation-1", "Done", true);
@@ -399,7 +622,7 @@ describe("storage", () => {
     const response = await postJson<BootstrapResponse>(
       "/snapshot/restore",
       snapshot({
-        sourceCursor: 99,
+        sourceCursor: 0,
         records: [restoredRecord],
       }),
     );
@@ -407,6 +630,7 @@ describe("storage", () => {
 
     expect(response.schemaUpdatedAt).toEqual(expect.any(String));
     expect(response.schemaUpdatedAt).not.toBe("2026-04-28T00:00:00.000Z");
+    expect(response.cursor).toBeGreaterThan(beforeCursor);
     expect(response.cursor).toBe(beforeCursor + 2);
     expect(response.records).toEqual([
       restoredRecord,
@@ -677,6 +901,7 @@ async function writeStorageHarness() {
       import { parseAppSchema } from "${process.cwd()}/src/shared/schema.ts";
       import {
         createStoredRecord,
+        createStoredRecordOutcome,
         deleteStoredRecord,
         ensureStorageTables,
         exportStorageSnapshot,
@@ -688,8 +913,11 @@ async function writeStorageHarness() {
         getStoredRecord,
         patchStoredRecord,
         resetStorage,
+        resetStorageSchemaToSource,
         restoreStorageSnapshot,
+        createRecordsForAction,
         tombstoneRecordsForAction,
+        tombstoneRecordsForActionOutcome,
         writeActiveSchema,
       } from "${process.cwd()}/src/worker/storage.ts";
 
@@ -720,6 +948,17 @@ async function writeStorageHarness() {
             return Response.json(getChangesAfter(this.ctx.storage, Number(url.searchParams.get("after") ?? 0)));
           }
 
+          if (request.method === "GET" && url.pathname === "/sync") {
+            const { schema, updatedAt } = getActiveSchema(this.ctx.storage, seedSchema);
+            const schemaFields = url.searchParams.get("schemaUpdatedAt") === updatedAt ? {} : { schema, schemaUpdatedAt: updatedAt };
+
+            return Response.json({
+              changes: getChangesAfter(this.ctx.storage, Number(url.searchParams.get("after") ?? 0)),
+              cursor: getCurrentCursor(this.ctx.storage),
+              ...schemaFields,
+            });
+          }
+
           if (request.method === "GET" && url.pathname === "/snapshot") {
             return Response.json(exportStorageSnapshot(this.ctx.storage, "tasks"));
           }
@@ -730,6 +969,10 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/create") {
             return Response.json(createStoredRecord(this.ctx.storage, await request.json()));
+          }
+
+          if (request.method === "POST" && url.pathname === "/create-outcome") {
+            return Response.json(createStoredRecordOutcome(this.ctx.storage, await request.json()));
           }
 
           if (request.method === "POST" && url.pathname === "/create-with-side-effects") {
@@ -769,6 +1012,17 @@ async function writeStorageHarness() {
             return Response.json(tombstoneRecordsForAction(this.ctx.storage, body.actionId, "task", "clearCompletedTasks", records));
           }
 
+          if (request.method === "POST" && url.pathname === "/tombstone-records-outcome") {
+            const body = await request.json();
+            const records = body.recordIds.map((recordId) => getStoredRecord(this.ctx.storage, recordId)).filter(Boolean);
+            return Response.json(tombstoneRecordsForActionOutcome(this.ctx.storage, body.actionId, "task", "clearCompletedTasks", records));
+          }
+
+          if (request.method === "POST" && url.pathname === "/create-records-for-action") {
+            const body = await request.json();
+            return Response.json(createRecordsForAction(this.ctx.storage, body.actionId, body.entity, body.action, body.values));
+          }
+
           if (request.method === "POST" && url.pathname === "/snapshot/restore") {
             try {
               return Response.json(restoreStorageSnapshot(this.ctx.storage, await request.json()));
@@ -786,6 +1040,24 @@ async function writeStorageHarness() {
 
           if (request.method === "POST" && url.pathname === "/reset") {
             return Response.json(resetStorage(this.ctx.storage, { schema: seedSchema }));
+          }
+
+          if (request.method === "POST" && url.pathname === "/reset-schema-to-source") {
+            return Response.json(resetStorageSchemaToSource(
+              this.ctx.storage,
+              { schema: seedSchema, records: [], changeMutationPrefix: "seed-task" },
+              () => undefined,
+            ));
+          }
+
+          if (request.method === "POST" && url.pathname === "/source-seed") {
+            const body = await request.json();
+
+            return Response.json(resetStorage(this.ctx.storage, {
+              schema: seedSchema,
+              records: body.records,
+              changeMutationPrefix: body.changeMutationPrefix,
+            }));
           }
 
           return Response.json({ error: "Not found." }, { status: 404 });

@@ -8,6 +8,7 @@ import {
   type InstanceArchive,
 } from "../shared/archive.ts";
 import type {
+  ActionResponse,
   AppInstallsResponse,
   BootstrapResponse,
   SitePageTreeResponse,
@@ -116,6 +117,83 @@ describe("instance archive restore API", () => {
     expect(installs.body.installs[0]).not.toHaveProperty("publicRoute");
     expect(bootstrap.body.schema).toEqual(taskSourceSchema);
     expect(bootstrap.body.records).toEqual([taskRecord()]);
+  });
+
+  it("replaces installed app archive data with monotonic cursors and cleared action replay", async () => {
+    const initial = await postArchiveRestore(
+      tasksAppArchive({
+        dryRun: false,
+        records: [taskRecord({ done: true, id: "task-before-replace", title: "Before replace" })],
+      }),
+    );
+    const before = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
+    const firstAction = await postInstalledAppJson<ActionResponse>(
+      "/api/app-installs/tasks/work/actions",
+      {
+        actionId: "action-archive-clear",
+        entity: "task",
+        action: "clearCompletedTasks",
+      },
+    );
+    const replacementRecord = taskRecord({
+      done: true,
+      id: "task-after-replace",
+      title: "After replace",
+    });
+    const replaced = await postArchiveRestore(
+      tasksAppArchive({
+        dryRun: false,
+        installCollisions: "replace",
+        records: [replacementRecord],
+      }),
+    );
+    const after = await getJson<BootstrapResponse>("/api/app-installs/tasks/work/bootstrap");
+    const secondAction = await postInstalledAppJson<ActionResponse>(
+      "/api/app-installs/tasks/work/actions",
+      {
+        actionId: "action-archive-clear",
+        entity: "task",
+        action: "clearCompletedTasks",
+      },
+    );
+
+    expect(initial.response.status).toBe(200);
+    expect(before.body.cursor).toBe(1);
+    expect(firstAction.cursor).toBe(2);
+    expect(firstAction.changes).toHaveLength(1);
+    expect(replaced.response.status).toBe(200);
+    expect(replaced.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: { replacedInstalls: ["work"] },
+      },
+    });
+    expect(after.body.cursor).toBeGreaterThan(firstAction.cursor);
+    expect(after.body.records).toHaveLength(2);
+    expect(after.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "task-before-replace",
+          deletedAt: expect.any(String),
+        }),
+        replacementRecord,
+      ]),
+    );
+    expect(secondAction.cursor).toBeGreaterThan(after.body.cursor);
+    expect(secondAction.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mutationId: "action-archive-clear",
+          op: "action",
+          recordId: replacementRecord.id,
+          payload: expect.objectContaining({
+            id: replacementRecord.id,
+            deletedAt: expect.any(String),
+          }),
+        }),
+      ]),
+    );
   });
 
   it("restores installed Estii app archives without Site media", async () => {
@@ -307,6 +385,21 @@ async function getJson<T>(path: string) {
   };
 }
 
+async function postInstalledAppJson<T>(path: string, body: unknown) {
+  const response = await harness.fetch(path, {
+    body: JSON.stringify(body),
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  expect(response.status).toBe(200);
+
+  return (await response.json()) as T;
+}
+
 function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {
   return {
     kind: INSTANCE_ARCHIVE_KIND,
@@ -345,13 +438,17 @@ function appArchive(input: { dryRun: boolean }): AppArchive {
   };
 }
 
-function tasksAppArchive(input: { dryRun: boolean }): AppArchive {
+function tasksAppArchive(input: {
+  dryRun: boolean;
+  installCollisions?: "reject" | "replace";
+  records?: StoredRecord[];
+}): AppArchive {
   return {
     kind: APP_ARCHIVE_KIND,
     version: ARCHIVE_VERSION,
     exportedAt: "2026-05-12T00:00:00.000Z",
     capabilities: ["app-store-snapshots", "core-media-assets"],
-    restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
+    restorePolicy: { dryRun: input.dryRun, installCollisions: input.installCollisions ?? "reject" },
     app: {
       installId: "work",
       packageAppKey: "tasks",
@@ -371,7 +468,7 @@ function tasksAppArchive(input: { dryRun: boolean }): AppArchive {
         schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
         sourceCursor: 1,
         schema: taskSourceSchema,
-        records: [taskRecord()],
+        records: input.records ?? [taskRecord()],
       },
     },
     media: { objects: [] },
@@ -539,14 +636,14 @@ function siteRecord(): StoredRecord {
   };
 }
 
-function taskRecord(): StoredRecord {
+function taskRecord(overrides: { done?: boolean; id?: string; title?: string } = {}): StoredRecord {
   return {
-    id: "task-restored",
+    id: overrides.id ?? "task-restored",
     createdAt: "2026-05-12T00:00:00.000Z",
     entity: "task",
     values: {
-      title: "Restored task",
-      done: false,
+      title: overrides.title ?? "Restored task",
+      done: overrides.done ?? false,
       priority: "normal",
     },
   };

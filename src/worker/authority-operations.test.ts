@@ -1,11 +1,71 @@
-import { describe, expect, it } from "vite-plus/test";
+import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
+import type { MutationResponse } from "../shared/protocol.ts";
+import type { SchemaKey } from "../shared/schema-apps.ts";
 import {
   selectAuthorityOperation,
   type AuthorityOperationKind,
   type AuthorityOperationMode,
 } from "./authority-operations.ts";
 import { BadRequestError } from "./errors.ts";
+import { createWorkerHarness } from "./miniflare-test.ts";
+import { PUBLIC_SITE_TREE_CACHE_CONTROL } from "./site-cache.ts";
+
+type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
+
+type ExecuteOperationInput = {
+  appKey?: SchemaKey;
+  body?: unknown;
+  method: string;
+  path: string;
+  search?: string;
+};
+
+type ExecuteOperationSuccess<TBody> = {
+  result: {
+    body: TBody;
+    headers?: Record<string, string>;
+    status?: number;
+  };
+  writes: Array<{
+    kind: "committed" | "replay";
+    response: unknown;
+  }>;
+};
+
+type ExecuteOperationFailure = {
+  error: string;
+  writes: Array<{
+    kind: "committed" | "replay";
+    response: unknown;
+  }>;
+};
+
+let harness: Harness;
+let operationHarnessDir: string | undefined;
+let operationHarnessName: string;
+
+beforeAll(async () => {
+  harness = await createWorkerHarness(await writeAuthorityOperationHarness(), {
+    AUTHORITY_OPERATION_HARNESS: { className: "AuthorityOperationHarness", useSQLite: true },
+  });
+});
+
+beforeEach(() => {
+  operationHarnessName = randomUUID();
+});
+
+afterAll(async () => {
+  await harness.dispose();
+
+  if (operationHarnessDir) {
+    await rm(operationHarnessDir, { recursive: true, force: true });
+    operationHarnessDir = undefined;
+  }
+});
 
 describe("authority operation selection", () => {
   it("selects read operation metadata from HTTP route facts", () => {
@@ -90,6 +150,189 @@ describe("authority operation selection", () => {
   });
 });
 
+describe("authority operation execution", () => {
+  it("returns protocol mutation bodies from committed and replayed write outcomes", async () => {
+    const mutation = {
+      mutationId: "mutation-operation-outcome-body",
+      entity: "task",
+      op: "create",
+      values: {
+        title: "Operation outcome body",
+        done: false,
+      },
+    };
+
+    const first = await executeOperation<MutationResponse>({
+      method: "POST",
+      path: "/mutations",
+      body: mutation,
+    });
+    const replay = await executeOperation<MutationResponse>({
+      method: "POST",
+      path: "/mutations",
+      body: mutation,
+    });
+
+    expect(first.response.status).toBe(200);
+    expect(first.body.writes.map((write) => write.kind)).toEqual(["committed"]);
+    expect(first.body.result.body).toEqual(first.body.writes[0]?.response);
+    expect(first.body.result.body).not.toHaveProperty("kind");
+    expect(first.body.result.body).not.toHaveProperty("response");
+    expect(replay.response.status).toBe(200);
+    expect(replay.body.writes.map((write) => write.kind)).toEqual(["replay"]);
+    expect(replay.body.result.body).toEqual(first.body.result.body);
+    expect(replay.body.result.body).toEqual(replay.body.writes[0]?.response);
+  });
+
+  it("does not enter write notification when validation fails before execution", async () => {
+    const invalid = await executeOperationFailure({
+      method: "POST",
+      path: "/mutations",
+      body: {
+        mutationId: "mutation-operation-invalid",
+        entity: "missing",
+        op: "create",
+        values: {},
+      },
+    });
+
+    expect(invalid.response.status).toBe(400);
+    expect(invalid.body).toEqual({
+      error: 'Unknown entity "missing".',
+      writes: [],
+    });
+  });
+
+  it("preserves operation-level cache headers and statuses", async () => {
+    const missingSiteTree = await executeOperation<{ error: string }>({
+      appKey: "site",
+      method: "GET",
+      path: "/tree/missing-page",
+    });
+
+    expect(missingSiteTree.response.status).toBe(200);
+    expect(missingSiteTree.body.result).toEqual({
+      body: { error: "Site page not found." },
+      headers: { "Cache-Control": PUBLIC_SITE_TREE_CACHE_CONTROL },
+      status: 404,
+    });
+    expect(missingSiteTree.body.writes).toEqual([]);
+  });
+});
+
 function selectOperation(method: string, path: string, searchParams = new URLSearchParams()) {
   return selectAuthorityOperation({ method, path, searchParams });
+}
+
+async function executeOperation<TBody>(input: ExecuteOperationInput) {
+  const response = await fetchOperationHarness(input);
+  const body = (await response.json()) as ExecuteOperationSuccess<TBody>;
+
+  return { response, body };
+}
+
+async function executeOperationFailure(input: ExecuteOperationInput) {
+  const response = await fetchOperationHarness(input);
+  const body = (await response.json()) as ExecuteOperationFailure;
+
+  return { response, body };
+}
+
+async function fetchOperationHarness(input: ExecuteOperationInput) {
+  return harness.fetch("/execute", {
+    body: JSON.stringify(input),
+    headers: {
+      "Content-Type": "application/json",
+      "x-operation-harness-name": operationHarnessName,
+    },
+    method: "POST",
+  });
+}
+
+async function writeAuthorityOperationHarness() {
+  const tempRoot = resolve("tmp", "test");
+  await mkdir(tempRoot, { recursive: true });
+  operationHarnessDir = await mkdtemp(join(tempRoot, ".authority-operation-harness-"));
+  const harnessPath = join(operationHarnessDir, "authority-operation-harness.ts");
+
+  await writeFile(
+    harnessPath,
+    `
+      import { DurableObject } from "cloudflare:workers";
+      import { schemaKeyStorageIdentity } from "${process.cwd()}/src/shared/app-storage-identity.ts";
+      import {
+        executeAuthorityOperation,
+        selectAuthorityOperation,
+      } from "${process.cwd()}/src/worker/authority-operations.ts";
+      import { BadRequestError } from "${process.cwd()}/src/worker/errors.ts";
+      import { workerSchemaAppDefinitions } from "${process.cwd()}/src/worker/schema-apps.ts";
+      import { ensureStorageTables } from "${process.cwd()}/src/worker/storage.ts";
+
+      export class AuthorityOperationHarness extends DurableObject {
+        constructor(ctx, env) {
+          super(ctx, env);
+          ensureStorageTables(ctx.storage);
+        }
+
+        async fetch(request) {
+          const input = await request.json();
+          const appKey = input.appKey ?? "tasks";
+          const app = workerSchemaAppDefinitions[appKey];
+          const operation = selectAuthorityOperation({
+            method: input.method,
+            path: input.path,
+            searchParams: new URLSearchParams(input.search ?? ""),
+          });
+
+          if (!app || !operation) {
+            return Response.json({ error: "Unsupported operation.", writes: [] }, { status: 404 });
+          }
+
+          const writes = [];
+          const writeNotifier = {
+            apply(write) {
+              const outcome = write();
+              writes.push({ kind: outcome.kind, response: outcome.response });
+              return outcome;
+            },
+          };
+
+          try {
+            const result = executeAuthorityOperation({
+              app,
+              body: input.body,
+              identity: schemaKeyStorageIdentity(appKey),
+              operation,
+              source: {
+                schema: app.sourceSchema,
+                records: app.seedRecords,
+                changeMutationPrefix: app.seedChangeMutationPrefix,
+              },
+              storage: this.ctx.storage,
+              writes: writeNotifier,
+            });
+
+            return Response.json({ result, writes });
+          } catch (error) {
+            const status = error instanceof BadRequestError ? 400 : 500;
+            const message = error instanceof Error ? error.message : "Unknown error.";
+
+            return Response.json({ error: message, writes }, { status });
+          }
+        }
+      }
+
+      export default {
+        fetch(request, env) {
+          const id = env.AUTHORITY_OPERATION_HARNESS.idFromName(
+            request.headers.get("x-operation-harness-name") ?? "default",
+          );
+
+          return env.AUTHORITY_OPERATION_HARNESS.get(id).fetch(request);
+        },
+      };
+    `,
+  );
+
+  return harnessPath;
 }

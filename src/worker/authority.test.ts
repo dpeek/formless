@@ -1745,6 +1745,64 @@ describe("authority", () => {
     socket.close();
   });
 
+  it("returns delete catch-up rows over HTTP and WebSocket while omitting current schema", async () => {
+    const schemaUpdate = await postJson<SchemaUpdateResponse>("/api/schema", {
+      schema: schemaWithMutations(deleteEnabledMutations()),
+    });
+    const created = await postMutation("mutation-sync-delete-catchup-source", {
+      title: "Delete catch-up source",
+      done: false,
+    });
+    const deleted = await postJson<MutationResponse>("/api/mutations", {
+      mutationId: "mutation-sync-delete-catchup",
+      entity: "task",
+      op: "delete",
+      recordId: created.record.id,
+    });
+    const httpSync = await getJson<SyncResponse>(
+      `/api/sync?after=${created.cursor}&schemaUpdatedAt=${encodeURIComponent(
+        schemaUpdate.updatedAt,
+      )}`,
+    );
+    const socket = await openSyncSocket();
+
+    try {
+      expect(httpSync).toEqual({
+        changes: deleted.changes,
+        cursor: deleted.cursor,
+      });
+      expect(httpSync.changes).toEqual([
+        {
+          seq: deleted.cursor,
+          mutationId: "mutation-sync-delete-catchup",
+          op: "delete",
+          entity: "task",
+          recordId: created.record.id,
+          payload: {
+            ...created.record,
+            deletedAt: expect.any(String),
+          },
+          createdAt: expect.any(String),
+        },
+      ]);
+
+      socket.send(
+        JSON.stringify({
+          type: "hello",
+          cursor: created.cursor,
+          schemaUpdatedAt: schemaUpdate.updatedAt,
+        }),
+      );
+
+      await expect(readSyncSocketMessage(socket)).resolves.toEqual({
+        type: "sync",
+        payload: httpSync,
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
   it("omits schema from sync WebSocket messages when the client schema timestamp is current", async () => {
     const schemaResponse = await getJson<SchemaResponse>("/api/schema");
     const socket = await openSyncSocket();
@@ -1823,6 +1881,79 @@ describe("authority", () => {
       }
     } finally {
       siteSocket.close();
+    }
+  });
+
+  it("keeps write responses protocol-shaped and no-store while outcome kind drives broadcasts", async () => {
+    const schemaResponse = await getJson<SchemaResponse>("/api/schema");
+    const socket = await openSyncSocket();
+
+    try {
+      await primeSyncSocket(socket, taskSeedRecords.length, schemaResponse.updatedAt);
+
+      const mutation = {
+        mutationId: "mutation-authority-outcome-policy",
+        entity: "task",
+        op: "create",
+        values: {
+          title: "Authority outcome policy",
+          done: false,
+        },
+      };
+      const committedMessage = readSyncSocketMessage(socket);
+      const committedResponse = await harness.fetch(apiPath("/api/mutations"), {
+        body: JSON.stringify(mutation),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const committed = (await committedResponse.json()) as MutationResponse;
+
+      expect(committedResponse.status).toBe(200);
+      expect(committedResponse.headers.get("Cache-Control")).toBe("no-store");
+      expect(committed).not.toHaveProperty("kind");
+      expect(committed).not.toHaveProperty("response");
+      await expect(committedMessage).resolves.toEqual({
+        type: "sync",
+        payload: {
+          changes: committed.changes,
+          cursor: committed.cursor,
+        },
+      });
+
+      const replayCapture = captureSyncSocketMessages(socket);
+      const replayResponse = await harness.fetch(apiPath("/api/mutations"), {
+        body: JSON.stringify(mutation),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      expect(replayResponse.status).toBe(200);
+      expect(replayResponse.headers.get("Cache-Control")).toBe("no-store");
+      expect((await replayResponse.json()) as MutationResponse).toEqual(committed);
+      await expectNoCapturedMessages(replayCapture);
+      replayCapture.stop();
+
+      const invalidCapture = captureSyncSocketMessages(socket);
+      const invalidResponse = await harness.fetch(apiPath("/api/mutations"), {
+        body: JSON.stringify({
+          mutationId: "mutation-authority-invalid-no-broadcast",
+          entity: "missing",
+          op: "create",
+          values: {},
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      expect(invalidResponse.status).toBe(400);
+      expect(invalidResponse.headers.get("Cache-Control")).toBe("no-store");
+      expect((await invalidResponse.json()) as { error: string }).toEqual({
+        error: 'Unknown entity "missing".',
+      });
+      await expectNoCapturedMessages(invalidCapture);
+      invalidCapture.stop();
+    } finally {
+      socket.close();
     }
   });
 

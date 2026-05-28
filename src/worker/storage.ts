@@ -19,6 +19,17 @@ import {
   type EntitySchema,
 } from "../shared/schema.ts";
 import { nowIsoString } from "../shared/clock.ts";
+import {
+  appendActionWriteLogChange,
+  appendMutationWriteLogChange,
+  appendWriteLogChange,
+  commitActionWriteLog,
+  readActionReplayResponse,
+  readCommittedMutationResponse,
+  readCurrentWriteLogCursor,
+  readMutationReplayResponse,
+  readWriteLogChangesAfter,
+} from "./storage-write-log.ts";
 
 type RecordRow = {
   id: string;
@@ -28,28 +39,9 @@ type RecordRow = {
   deleted_at: string | null;
 };
 
-type ChangeSqlRow = {
-  seq: number;
-  mutation_id: string;
-  op: "create" | "patch" | "delete" | "action";
-  entity: string;
-  record_id: string;
-  payload_json: string;
-  created_at: string;
-};
-
-type CursorRow = {
-  cursor: number | null;
-};
-
 type SchemaRow = {
   schema_json: string;
   updated_at: string;
-};
-
-type ActionExecutionRow = {
-  action_id: string;
-  cursor: number;
 };
 
 export type StoredSchema = {
@@ -99,6 +91,26 @@ export type RecordConstraintValidator = (
 export type ActionRecordCreatePlan = {
   entity: string;
   values: RecordValues | ((createdRecords: StoredRecord[]) => RecordValues);
+};
+
+type SourceDataPlan = {
+  schema: AppSchema;
+  records: StoredRecord[];
+  changeMutationPrefix: string;
+};
+
+type SourceSchemaResetPlan = {
+  schema: AppSchema;
+  changedAt: string;
+  prunedRecords: StoredRecord[];
+};
+
+type SnapshotRestorePlan = {
+  restoredAt: string;
+  restoreMutationId: string;
+  recordsToRestore: StoredRecord[];
+  recordsToTombstone: StoredRecord[];
+  changedRecords: StoredRecord[];
 };
 
 type ApplyCreateMutationSideEffects = (context: {
@@ -245,10 +257,11 @@ export function resetStorageSchemaToSourceOutcome(
 
     const records = getBootstrapRecords(storage);
     validate(current.schema, source.schema, records);
-    const updatedAt = nowIsoString();
-    pruneStoredRecordValuesToSchema(storage, source.schema, updatedAt);
+    const plan = planSourceSchemaReset(records, source.schema, nowIsoString());
+    materializeSourceSchemaResetRecordPrunes(storage, plan.prunedRecords);
+    appendSourceSchemaResetChanges(storage, plan);
 
-    return committedWrite(writeActiveSchemaAt(storage, source.schema, updatedAt));
+    return committedWrite(writeActiveSchemaAt(storage, plan.schema, plan.changedAt));
   });
 }
 
@@ -264,9 +277,10 @@ export function resetStorageToSourceSeedOutcome(
   source: StorageSource,
 ): WriteOutcome<StoredSchema> {
   return storage.transactionSync(() => {
-    clearStorage(storage);
+    const plan = planSourceDataWrite(source);
+    clearStorageForSourceSeedReset(storage);
 
-    return committedWrite(writeSourceData(storage, source));
+    return committedWrite(writePlannedSourceData(storage, plan));
   });
 }
 
@@ -318,30 +332,11 @@ export function restoreStorageSnapshotOutcome(
 
     const restoredAt = nowIsoString();
     const currentRecords = getBootstrapRecords(storage);
-    const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
-    const snapshotRecordIds = new Set(snapshot.records.map((record) => record.id));
-    const restoreMutationId = `snapshot-restore:${restoredAt}`;
+    const plan = planSnapshotRestore(snapshot.records, currentRecords, restoredAt);
     const storedSchema = writeActiveSchemaAt(storage, snapshot.schema, restoredAt);
 
-    for (const record of snapshot.records) {
-      upsertSnapshotRecord(storage, record);
-
-      const currentRecord = currentRecordsById.get(record.id);
-      if (!storedRecordsEqual(currentRecord, record)) {
-        insertRestoreChange(storage, restoreMutationId, record, restoredAt);
-      }
-    }
-
-    for (const record of currentRecords) {
-      if (snapshotRecordIds.has(record.id) || record.deletedAt) {
-        continue;
-      }
-
-      const tombstonedRecord = { ...record, deletedAt: restoredAt };
-      upsertSnapshotRecord(storage, tombstonedRecord);
-      insertRestoreChange(storage, restoreMutationId, tombstonedRecord, restoredAt);
-    }
-
+    materializeSnapshotRestoreRecords(storage, plan);
+    appendSnapshotRestoreChanges(storage, plan);
     storage.sql.exec("DELETE FROM action_executions");
 
     return committedWrite({
@@ -353,7 +348,7 @@ export function restoreStorageSnapshotOutcome(
   });
 }
 
-function clearStorage(storage: DurableObjectStorage) {
+function clearStorageForSourceSeedReset(storage: DurableObjectStorage) {
   storage.sql.exec("DELETE FROM changes");
   storage.sql.exec("DELETE FROM records");
   storage.sql.exec("DELETE FROM action_executions");
@@ -362,28 +357,34 @@ function clearStorage(storage: DurableObjectStorage) {
 }
 
 function writeSourceData(storage: DurableObjectStorage, source: StorageSource): StoredSchema {
-  const storedSchema = writeActiveSchema(storage, source.schema);
+  return writePlannedSourceData(storage, planSourceDataWrite(source));
+}
 
-  for (const record of source.records) {
-    insertSeedRecord(storage, record, source.changeMutationPrefix);
-  }
+function planSourceDataWrite(source: StorageSource): SourceDataPlan {
+  return {
+    schema: source.schema,
+    records: source.records,
+    changeMutationPrefix: source.changeMutationPrefix,
+  };
+}
+
+function writePlannedSourceData(storage: DurableObjectStorage, plan: SourceDataPlan): StoredSchema {
+  const storedSchema = writeActiveSchemaAt(storage, plan.schema, nowIsoString());
+
+  materializeSourceRecords(storage, plan.records);
+  appendSourceRecordChanges(storage, plan);
 
   return storedSchema;
 }
 
-function pruneStoredRecordValuesToSchema(
-  storage: DurableObjectStorage,
+function planSourceSchemaReset(
+  records: StoredRecord[],
   schema: AppSchema,
   changedAt: string,
-) {
-  const rows = storage.sql
-    .exec<RecordRow>(
-      "SELECT id, entity, values_json, created_at, deleted_at FROM records ORDER BY created_at ASC",
-    )
-    .toArray();
+): SourceSchemaResetPlan {
+  const prunedRecords: StoredRecord[] = [];
 
-  for (const row of rows) {
-    const record = recordFromRow(row);
+  for (const record of records) {
     const entity = schema.entities[record.entity];
 
     if (!entity) {
@@ -396,30 +397,41 @@ function pruneStoredRecordValuesToSchema(
       continue;
     }
 
-    const prunedRecord = { ...record, values };
+    prunedRecords.push({ ...record, values });
+  }
 
+  return { schema, changedAt, prunedRecords };
+}
+
+function materializeSourceSchemaResetRecordPrunes(
+  storage: DurableObjectStorage,
+  records: StoredRecord[],
+) {
+  for (const record of records) {
     storage.sql.exec(
       `
         UPDATE records
         SET values_json = ?
         WHERE id = ?
       `,
-      JSON.stringify(values),
+      JSON.stringify(record.values),
       record.id,
     );
+  }
+}
 
-    storage.sql.exec(
-      `
-        INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      `schema-reset:${changedAt}:${record.id}`,
-      "patch",
-      record.entity,
-      record.id,
-      JSON.stringify(prunedRecord),
-      changedAt,
-    );
+function appendSourceSchemaResetChanges(
+  storage: DurableObjectStorage,
+  plan: SourceSchemaResetPlan,
+) {
+  for (const record of plan.prunedRecords) {
+    appendWriteLogChange(storage, {
+      mutationId: `schema-reset:${plan.changedAt}:${record.id}`,
+      op: "patch",
+      entity: record.entity,
+      record,
+      createdAt: plan.changedAt,
+    });
   }
 }
 
@@ -435,11 +447,13 @@ function pruneRecordValuesToEntity(values: RecordValues, entity: EntitySchema): 
   return pruned;
 }
 
-function insertSeedRecord(
-  storage: DurableObjectStorage,
-  record: StoredRecord,
-  changeMutationPrefix: string,
-) {
+function materializeSourceRecords(storage: DurableObjectStorage, records: StoredRecord[]) {
+  for (const record of records) {
+    materializeSourceRecord(storage, record);
+  }
+}
+
+function materializeSourceRecord(storage: DurableObjectStorage, record: StoredRecord) {
   storage.sql.exec(
     `
       INSERT INTO records (id, entity, values_json, created_at, deleted_at)
@@ -451,19 +465,53 @@ function insertSeedRecord(
     record.createdAt,
     record.deletedAt ?? null,
   );
+}
 
-  storage.sql.exec(
-    `
-      INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    `${changeMutationPrefix}:${record.id}`,
-    "create",
-    record.entity,
-    record.id,
-    JSON.stringify(record),
-    record.createdAt,
-  );
+function appendSourceRecordChanges(storage: DurableObjectStorage, plan: SourceDataPlan) {
+  for (const record of plan.records) {
+    appendWriteLogChange(storage, {
+      mutationId: `${plan.changeMutationPrefix}:${record.id}`,
+      op: "create",
+      entity: record.entity,
+      record,
+      createdAt: record.createdAt,
+    });
+  }
+}
+
+function planSnapshotRestore(
+  snapshotRecords: StoredRecord[],
+  currentRecords: StoredRecord[],
+  restoredAt: string,
+): SnapshotRestorePlan {
+  const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
+  const snapshotRecordIds = new Set(snapshotRecords.map((record) => record.id));
+  const recordsToTombstone: StoredRecord[] = [];
+  const changedRecords: StoredRecord[] = [];
+
+  for (const record of snapshotRecords) {
+    if (!storedRecordsEqual(currentRecordsById.get(record.id), record)) {
+      changedRecords.push(record);
+    }
+  }
+
+  for (const record of currentRecords) {
+    if (snapshotRecordIds.has(record.id) || record.deletedAt) {
+      continue;
+    }
+
+    const tombstonedRecord = { ...record, deletedAt: restoredAt };
+    recordsToTombstone.push(tombstonedRecord);
+    changedRecords.push(tombstonedRecord);
+  }
+
+  return {
+    restoredAt,
+    restoreMutationId: `snapshot-restore:${restoredAt}`,
+    recordsToRestore: snapshotRecords,
+    recordsToTombstone,
+    changedRecords,
+  };
 }
 
 function upsertSnapshotRecord(storage: DurableObjectStorage, record: StoredRecord) {
@@ -485,24 +533,29 @@ function upsertSnapshotRecord(storage: DurableObjectStorage, record: StoredRecor
   );
 }
 
-function insertRestoreChange(
+function materializeSnapshotRestoreRecords(
   storage: DurableObjectStorage,
-  mutationId: string,
-  record: StoredRecord,
-  createdAt: string,
+  plan: SnapshotRestorePlan,
 ) {
-  storage.sql.exec(
-    `
-      INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    mutationId,
-    "action",
-    record.entity,
-    record.id,
-    JSON.stringify(record),
-    createdAt,
-  );
+  for (const record of plan.recordsToRestore) {
+    upsertSnapshotRecord(storage, record);
+  }
+
+  for (const record of plan.recordsToTombstone) {
+    upsertSnapshotRecord(storage, record);
+  }
+}
+
+function appendSnapshotRestoreChanges(storage: DurableObjectStorage, plan: SnapshotRestorePlan) {
+  for (const record of plan.changedRecords) {
+    appendWriteLogChange(storage, {
+      mutationId: plan.restoreMutationId,
+      op: "action",
+      entity: record.entity,
+      record,
+      createdAt: plan.restoredAt,
+    });
+  }
 }
 
 export function getBootstrapRecords(storage: DurableObjectStorage): StoredRecord[] {
@@ -535,23 +588,11 @@ export function getActiveRecordsByEntity(
 }
 
 export function getCurrentCursor(storage: DurableObjectStorage) {
-  return storage.sql.exec<CursorRow>("SELECT MAX(seq) AS cursor FROM changes").one().cursor ?? 0;
+  return readCurrentWriteLogCursor(storage);
 }
 
 export function getChangesAfter(storage: DurableObjectStorage, after: number): ChangeRow[] {
-  const rows = storage.sql
-    .exec<ChangeSqlRow>(
-      `
-        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
-        FROM changes
-        WHERE seq > ?
-        ORDER BY seq ASC
-      `,
-      after,
-    )
-    .toArray();
-
-  return rows.map(changeFromRow);
+  return readWriteLogChangesAfter(storage, after);
 }
 
 export function createStoredRecord(
@@ -572,49 +613,61 @@ export function createStoredRecordOutcome(
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = getMutationResponseById(storage, mutation.mutationId);
+    const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
     }
 
     const createdAt = nowIsoString();
-    const record = insertCreatedRecordChange(
+    const record = materializeCreatedMutationRecord(
       storage,
-      mutation.mutationId,
-      mutation.op,
-      mutation.entity,
-      mutation.values,
-      createdAt,
+      {
+        entity: mutation.entity,
+        values: mutation.values,
+        createdAt,
+      },
       validateConstraints,
     );
+
+    appendMutationWriteLogChange(storage, {
+      mutationId: mutation.mutationId,
+      op: mutation.op,
+      entity: mutation.entity,
+      record,
+      createdAt,
+    });
 
     applySideEffects?.({
       storage,
       mutation,
       record,
       createRecords: (entity, recordValuesToCreate) => {
-        insertCreatedRecordChanges(
+        const sideEffectCreatedAt = nowIsoString();
+        const records = materializeCreatedMutationRecords(
           storage,
-          mutation.mutationId,
-          "action",
           entity,
           recordValuesToCreate,
-          nowIsoString(),
+          sideEffectCreatedAt,
           validateConstraints,
         );
+
+        appendMutationRecordChanges(storage, {
+          mutationId: mutation.mutationId,
+          op: "action",
+          entity,
+          records,
+          createdAt: sideEffectCreatedAt,
+        });
       },
     });
 
-    const changes = findChangesByMutationId(storage, mutation.mutationId);
-    const cursor = changes.at(-1)?.seq ?? getCurrentCursor(storage);
-
-    return committedWrite({
-      record,
-      changes,
-      cursor,
-      mutationId: mutation.mutationId,
-    });
+    return committedWrite(
+      readCommittedMutationResponse(storage, {
+        mutationId: mutation.mutationId,
+        record,
+      }),
+    );
   });
 }
 
@@ -636,7 +689,7 @@ export function patchStoredRecordOutcome(
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = getMutationResponseById(storage, mutation.mutationId);
+    const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
@@ -649,48 +702,30 @@ export function patchStoredRecordOutcome(
     }
 
     const changedAt = nowIsoString();
-    const record: StoredRecord = {
-      ...existingRecord,
-      values: values ?? mergeRecordValues(existingRecord.values, mutation.values),
-    };
-
-    validateConstraints?.(mutation.entity, record.values, { ignoreRecordId: record.id });
-
-    storage.sql.exec(
-      `
-        UPDATE records
-        SET values_json = ?
-        WHERE id = ?
-      `,
-      JSON.stringify(record.values),
-      record.id,
+    const record = materializePatchedMutationRecord(
+      storage,
+      {
+        entity: mutation.entity,
+        existingRecord,
+        values: values ?? mergeRecordValues(existingRecord.values, mutation.values),
+      },
+      validateConstraints,
     );
 
-    storage.sql.exec(
-      `
-        INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      mutation.mutationId,
-      mutation.op,
-      mutation.entity,
-      record.id,
-      JSON.stringify(record),
-      changedAt,
-    );
-
-    const change = findLatestChangeForRecord(storage, mutation.mutationId, record.id);
-
-    if (!change) {
-      throw new Error(`Could not read patch change for record "${record.id}".`);
-    }
-
-    return committedWrite({
-      record,
-      changes: [change],
-      cursor: getCurrentCursor(storage),
+    appendMutationWriteLogChange(storage, {
       mutationId: mutation.mutationId,
+      op: mutation.op,
+      entity: mutation.entity,
+      record,
+      createdAt: changedAt,
     });
+
+    return committedWrite(
+      readCommittedMutationResponse(storage, {
+        mutationId: mutation.mutationId,
+        record,
+      }),
+    );
   });
 }
 
@@ -706,7 +741,7 @@ export function deleteStoredRecordOutcome(
   mutation: DeleteMutation,
 ): WriteOutcome<MutationResponse> {
   return storage.transactionSync(() => {
-    const existingResponse = getMutationResponseById(storage, mutation.mutationId);
+    const existingResponse = readMutationReplayResponse(storage, mutation.mutationId);
 
     if (existingResponse) {
       return replayedWrite(existingResponse);
@@ -718,55 +753,24 @@ export function deleteStoredRecordOutcome(
       throw new Error(`Record "${mutation.recordId}" does not exist.`);
     }
 
-    if (existingRecord.entity !== mutation.entity) {
-      throw new Error("Delete entity must match the stored record entity.");
-    }
-
-    if (existingRecord.deletedAt) {
-      throw new Error(`Record "${mutation.recordId}" is already tombstoned.`);
-    }
-
     const deletedAt = nowIsoString();
-    const record: StoredRecord = {
-      ...existingRecord,
-      deletedAt,
-    };
+    assertDeleteMutationCanMaterialize(mutation, existingRecord);
+    const record = materializeDeletedMutationRecord(storage, existingRecord, deletedAt);
 
-    storage.sql.exec(
-      `
-        UPDATE records
-        SET deleted_at = ?
-        WHERE id = ?
-      `,
-      deletedAt,
-      record.id,
-    );
-
-    storage.sql.exec(
-      `
-        INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-      mutation.mutationId,
-      mutation.op,
-      mutation.entity,
-      record.id,
-      JSON.stringify(record),
-      deletedAt,
-    );
-
-    const change = findLatestChangeForRecord(storage, mutation.mutationId, record.id);
-
-    if (!change) {
-      throw new Error(`Could not read delete change for record "${record.id}".`);
-    }
-
-    return committedWrite({
-      record,
-      changes: [change],
-      cursor: getCurrentCursor(storage),
+    appendMutationWriteLogChange(storage, {
       mutationId: mutation.mutationId,
+      op: mutation.op,
+      entity: mutation.entity,
+      record,
+      createdAt: deletedAt,
     });
+
+    return committedWrite(
+      readCommittedMutationResponse(storage, {
+        mutationId: mutation.mutationId,
+        record,
+      }),
+    );
   });
 }
 
@@ -790,73 +794,30 @@ export function tombstoneRecordsForActionOutcome(
   recordsToTombstone: StoredRecord[],
 ): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
-    const existingExecution = findActionExecution(storage, actionId);
+    const existingResponse = getActionResponseById(storage, actionId);
 
-    if (existingExecution) {
-      return replayedWrite({
-        actionId,
-        changes: findChangesByMutationId(storage, actionId),
-        cursor: existingExecution.cursor,
-      });
+    if (existingResponse) {
+      return replayedWrite(existingResponse);
     }
 
     const deletedAt = nowIsoString();
-    const changes: ChangeRow[] = [];
+    const records = materializeActionTombstoneRecords(storage, recordsToTombstone, deletedAt);
 
-    for (const existingRecord of recordsToTombstone) {
-      const record: StoredRecord = {
-        ...existingRecord,
-        deletedAt,
-      };
-
-      storage.sql.exec(
-        `
-          UPDATE records
-          SET deleted_at = ?
-          WHERE id = ?
-        `,
-        deletedAt,
-        record.id,
-      );
-
-      storage.sql.exec(
-        `
-          INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-        actionId,
-        "action",
-        entity,
-        record.id,
-        JSON.stringify(record),
-        deletedAt,
-      );
-
-      const change = findLatestChangeForRecord(storage, actionId, record.id);
-      if (change) {
-        changes.push(change);
-      }
-    }
-
-    const cursor = getCurrentCursor(storage);
-
-    storage.sql.exec(
-      `
-        INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `,
+    appendActionRecordChanges(storage, {
       actionId,
       entity,
-      action,
-      cursor,
-      deletedAt,
-    );
-
-    return committedWrite({
-      actionId,
-      changes,
-      cursor,
+      records,
+      createdAt: deletedAt,
     });
+
+    return committedWrite(
+      commitActionWriteLog(storage, {
+        actionId,
+        entity,
+        action,
+        createdAt: deletedAt,
+      }),
+    );
   });
 }
 
@@ -889,78 +850,36 @@ export function createRecordsForActionOutcome(
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
-    const existingExecution = findActionExecution(storage, actionId);
+    const existingResponse = getActionResponseById(storage, actionId);
 
-    if (existingExecution) {
-      return replayedWrite({
-        actionId,
-        changes: findChangesByMutationId(storage, actionId),
-        cursor: existingExecution.cursor,
-      });
+    if (existingResponse) {
+      return replayedWrite(existingResponse);
     }
 
     const createdAt = nowIsoString();
-    const changes: ChangeRow[] = [];
-
-    for (const values of recordValuesToCreate) {
-      validateConstraints?.(entity, values);
-
-      const record: StoredRecord = {
-        id: createRecordId(),
-        entity,
-        values,
-        createdAt,
-      };
-
-      storage.sql.exec(
-        `
-          INSERT INTO records (id, entity, values_json, created_at)
-          VALUES (?, ?, ?, ?)
-        `,
-        record.id,
-        record.entity,
-        JSON.stringify(record.values),
-        record.createdAt,
-      );
-
-      storage.sql.exec(
-        `
-          INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-        actionId,
-        "action",
-        entity,
-        record.id,
-        JSON.stringify(record),
-        createdAt,
-      );
-
-      const change = findLatestChangeForRecord(storage, actionId, record.id);
-      if (change) {
-        changes.push(change);
-      }
-    }
-
-    const cursor = getCurrentCursor(storage);
-
-    storage.sql.exec(
-      `
-        INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `,
-      actionId,
+    const records = materializeCreatedActionRecords(
+      storage,
       entity,
-      action,
-      cursor,
+      recordValuesToCreate,
       createdAt,
+      validateConstraints,
     );
 
-    return committedWrite({
+    appendActionRecordChanges(storage, {
       actionId,
-      changes,
-      cursor,
+      entity,
+      records,
+      createdAt,
     });
+
+    return committedWrite(
+      commitActionWriteLog(storage, {
+        actionId,
+        entity,
+        action,
+        createdAt,
+      }),
+    );
   });
 }
 
@@ -973,90 +892,276 @@ export function createRecordSetForActionOutcome(
   validateConstraints?: RecordConstraintValidator,
 ): WriteOutcome<ActionResponse> {
   return storage.transactionSync(() => {
-    const existingExecution = findActionExecution(storage, actionId);
+    const existingResponse = getActionResponseById(storage, actionId);
 
-    if (existingExecution) {
-      return replayedWrite({
-        actionId,
-        changes: findChangesByMutationId(storage, actionId),
-        cursor: existingExecution.cursor,
-      });
+    if (existingResponse) {
+      return replayedWrite(existingResponse);
     }
 
     const createdAt = nowIsoString();
-    const createdRecords: StoredRecord[] = [];
-
-    for (const plan of plans) {
-      const values =
-        typeof plan.values === "function" ? plan.values([...createdRecords]) : plan.values;
-      const record = insertCreatedRecordChange(
-        storage,
-        actionId,
-        "action",
-        plan.entity,
-        values,
-        createdAt,
-        validateConstraints,
-      );
-
-      createdRecords.push(record);
-    }
-
-    const cursor = getCurrentCursor(storage);
-
-    storage.sql.exec(
-      `
-        INSERT INTO action_executions (action_id, entity, action, cursor, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `,
-      actionId,
-      entity,
-      action,
-      cursor,
+    const records = materializeCreatedActionRecordSet(
+      storage,
+      plans,
       createdAt,
+      validateConstraints,
     );
 
-    return committedWrite({
+    appendActionRecordChanges(storage, {
       actionId,
-      changes: findChangesByMutationId(storage, actionId),
-      cursor,
+      records,
+      createdAt,
     });
+
+    return committedWrite(
+      commitActionWriteLog(storage, {
+        actionId,
+        entity,
+        action,
+        createdAt,
+      }),
+    );
   });
 }
 
-function insertCreatedRecordChanges(
+function materializeActionTombstoneRecords(
   storage: DurableObjectStorage,
-  mutationId: string,
-  op: "create" | "action",
+  recordsToTombstone: StoredRecord[],
+  deletedAt: string,
+): StoredRecord[] {
+  return recordsToTombstone.map((record) =>
+    materializeActionTombstoneRecord(storage, record, deletedAt),
+  );
+}
+
+function materializeActionTombstoneRecord(
+  storage: DurableObjectStorage,
+  existingRecord: StoredRecord,
+  deletedAt: string,
+): StoredRecord {
+  const record: StoredRecord = {
+    ...existingRecord,
+    deletedAt,
+  };
+
+  storage.sql.exec(
+    `
+      UPDATE records
+      SET deleted_at = ?
+      WHERE id = ?
+    `,
+    deletedAt,
+    record.id,
+  );
+
+  return record;
+}
+
+function materializeCreatedActionRecords(
+  storage: DurableObjectStorage,
   entity: string,
   recordValuesToCreate: RecordValues[],
   createdAt: string,
   validateConstraints?: RecordConstraintValidator,
 ): StoredRecord[] {
   return recordValuesToCreate.map((values) =>
-    insertCreatedRecordChange(
+    materializeCreatedActionRecord(
       storage,
-      mutationId,
-      op,
-      entity,
-      values,
-      createdAt,
+      {
+        entity,
+        values,
+        createdAt,
+      },
       validateConstraints,
     ),
   );
 }
 
-function insertCreatedRecordChange(
+function materializeCreatedActionRecordSet(
   storage: DurableObjectStorage,
-  mutationId: string,
-  op: "create" | "action",
+  plans: ActionRecordCreatePlan[],
+  createdAt: string,
+  validateConstraints?: RecordConstraintValidator,
+): StoredRecord[] {
+  const createdRecords: StoredRecord[] = [];
+
+  for (const plan of plans) {
+    const values =
+      typeof plan.values === "function" ? plan.values([...createdRecords]) : plan.values;
+    const record = materializeCreatedActionRecord(
+      storage,
+      {
+        entity: plan.entity,
+        values,
+        createdAt,
+      },
+      validateConstraints,
+    );
+
+    createdRecords.push(record);
+  }
+
+  return createdRecords;
+}
+
+function materializeCreatedActionRecord(
+  storage: DurableObjectStorage,
+  input: {
+    entity: string;
+    values: RecordValues;
+    createdAt: string;
+  },
+  validateConstraints?: RecordConstraintValidator,
+): StoredRecord {
+  validateConstraints?.(input.entity, input.values);
+
+  return insertCreatedRecord(storage, input.entity, input.values, input.createdAt);
+}
+
+function materializeCreatedMutationRecords(
+  storage: DurableObjectStorage,
+  entity: string,
+  recordValuesToCreate: RecordValues[],
+  createdAt: string,
+  validateConstraints?: RecordConstraintValidator,
+): StoredRecord[] {
+  return recordValuesToCreate.map((values) =>
+    materializeCreatedMutationRecord(
+      storage,
+      {
+        entity,
+        values,
+        createdAt,
+      },
+      validateConstraints,
+    ),
+  );
+}
+
+function materializeCreatedMutationRecord(
+  storage: DurableObjectStorage,
+  input: {
+    entity: string;
+    values: RecordValues;
+    createdAt: string;
+  },
+  validateConstraints?: RecordConstraintValidator,
+): StoredRecord {
+  validateConstraints?.(input.entity, input.values);
+
+  return insertCreatedRecord(storage, input.entity, input.values, input.createdAt);
+}
+
+function materializePatchedMutationRecord(
+  storage: DurableObjectStorage,
+  input: {
+    entity: string;
+    existingRecord: StoredRecord;
+    values: RecordValues;
+  },
+  validateConstraints?: RecordConstraintValidator,
+): StoredRecord {
+  const record: StoredRecord = {
+    ...input.existingRecord,
+    values: input.values,
+  };
+
+  validateConstraints?.(input.entity, record.values, { ignoreRecordId: record.id });
+
+  storage.sql.exec(
+    `
+      UPDATE records
+      SET values_json = ?
+      WHERE id = ?
+    `,
+    JSON.stringify(record.values),
+    record.id,
+  );
+
+  return record;
+}
+
+function assertDeleteMutationCanMaterialize(
+  mutation: DeleteMutation,
+  existingRecord: StoredRecord,
+) {
+  if (existingRecord.entity !== mutation.entity) {
+    throw new Error("Delete entity must match the stored record entity.");
+  }
+
+  if (existingRecord.deletedAt) {
+    throw new Error(`Record "${mutation.recordId}" is already tombstoned.`);
+  }
+}
+
+function materializeDeletedMutationRecord(
+  storage: DurableObjectStorage,
+  existingRecord: StoredRecord,
+  deletedAt: string,
+): StoredRecord {
+  const record: StoredRecord = {
+    ...existingRecord,
+    deletedAt,
+  };
+
+  storage.sql.exec(
+    `
+      UPDATE records
+      SET deleted_at = ?
+      WHERE id = ?
+    `,
+    deletedAt,
+    record.id,
+  );
+
+  return record;
+}
+
+function appendMutationRecordChanges(
+  storage: DurableObjectStorage,
+  input: {
+    mutationId: string;
+    op: ChangeRow["op"];
+    entity: string;
+    records: StoredRecord[];
+    createdAt: string;
+  },
+) {
+  for (const record of input.records) {
+    appendMutationWriteLogChange(storage, {
+      mutationId: input.mutationId,
+      op: input.op,
+      entity: input.entity,
+      record,
+      createdAt: input.createdAt,
+    });
+  }
+}
+
+function appendActionRecordChanges(
+  storage: DurableObjectStorage,
+  input: {
+    actionId: string;
+    entity?: string;
+    records: StoredRecord[];
+    createdAt: string;
+  },
+) {
+  for (const record of input.records) {
+    appendActionWriteLogChange(storage, {
+      actionId: input.actionId,
+      entity: input.entity ?? record.entity,
+      record,
+      createdAt: input.createdAt,
+    });
+  }
+}
+
+function insertCreatedRecord(
+  storage: DurableObjectStorage,
   entity: string,
   values: RecordValues,
   createdAt: string,
-  validateConstraints?: RecordConstraintValidator,
 ): StoredRecord {
-  validateConstraints?.(entity, values);
-
   const record: StoredRecord = {
     id: createRecordId(),
     entity,
@@ -1075,19 +1180,6 @@ function insertCreatedRecordChange(
     record.createdAt,
   );
 
-  storage.sql.exec(
-    `
-      INSERT INTO changes (mutation_id, op, entity, record_id, payload_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    mutationId,
-    op,
-    entity,
-    record.id,
-    JSON.stringify(record),
-    createdAt,
-  );
-
   return record;
 }
 
@@ -1095,17 +1187,7 @@ export function getActionResponseById(
   storage: DurableObjectStorage,
   actionId: string,
 ): ActionResponse | undefined {
-  const existingExecution = findActionExecution(storage, actionId);
-
-  if (!existingExecution) {
-    return undefined;
-  }
-
-  return {
-    actionId,
-    changes: findChangesByMutationId(storage, actionId),
-    cursor: existingExecution.cursor,
-  };
+  return readActionReplayResponse(storage, actionId);
 }
 
 function mergeRecordValues(values: RecordValues, patch: Partial<RecordValues>): RecordValues {
@@ -1174,75 +1256,11 @@ export function getMutationResponseById(
   storage: DurableObjectStorage,
   mutationId: string,
 ): MutationResponse | undefined {
-  const changes = findChangesByMutationId(storage, mutationId);
-  const change = changes[0];
-
-  if (!change) {
-    return undefined;
-  }
-
-  return {
-    record: change.payload,
-    changes,
-    cursor: changes.at(-1)?.seq ?? change.seq,
-    mutationId,
-  };
-}
-
-function findChangesByMutationId(storage: DurableObjectStorage, mutationId: string): ChangeRow[] {
-  const rows = storage.sql
-    .exec<ChangeSqlRow>(
-      `
-        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
-        FROM changes
-        WHERE mutation_id = ?
-        ORDER BY seq ASC
-      `,
-      mutationId,
-    )
-    .toArray();
-
-  return rows.map(changeFromRow);
-}
-
-function findLatestChangeForRecord(
-  storage: DurableObjectStorage,
-  mutationId: string,
-  recordId: string,
-): ChangeRow | undefined {
-  const row = storage.sql
-    .exec<ChangeSqlRow>(
-      `
-        SELECT seq, mutation_id, op, entity, record_id, payload_json, created_at
-        FROM changes
-        WHERE mutation_id = ? AND record_id = ?
-        ORDER BY seq DESC
-        LIMIT 1
-      `,
-      mutationId,
-      recordId,
-    )
-    .next();
-
-  return row.done ? undefined : changeFromRow(row.value);
+  return readMutationReplayResponse(storage, mutationId);
 }
 
 function writeOutcomeResponse<T>(outcome: WriteOutcome<T>): T {
   return outcome.response;
-}
-
-function findActionExecution(
-  storage: DurableObjectStorage,
-  actionId: string,
-): ActionExecutionRow | undefined {
-  const row = storage.sql
-    .exec<ActionExecutionRow>(
-      "SELECT action_id, cursor FROM action_executions WHERE action_id = ?",
-      actionId,
-    )
-    .next();
-
-  return row.done ? undefined : row.value;
 }
 
 function readStoredSchema(storage: DurableObjectStorage): StoredSchema | undefined {
@@ -1275,39 +1293,11 @@ function recordFromRow(row: RecordRow): StoredRecord {
   return record;
 }
 
-function changeFromRow(row: ChangeSqlRow): ChangeRow {
-  return {
-    seq: row.seq,
-    mutationId: row.mutation_id,
-    op: row.op,
-    entity: row.entity,
-    recordId: row.record_id,
-    payload: parseStoredRecord(row.payload_json),
-    createdAt: row.created_at,
-  };
-}
-
 function parseJsonRecord(value: string): RecordValues {
   const parsed = JSON.parse(value) as unknown;
 
   if (!isRecordValues(parsed)) {
     throw new Error("Stored record values are invalid.");
-  }
-
-  return parsed;
-}
-
-function parseStoredRecord(value: string): StoredRecord {
-  const parsed = JSON.parse(value) as StoredRecord;
-
-  if (
-    typeof parsed.id !== "string" ||
-    typeof parsed.entity !== "string" ||
-    !isRecordValues(parsed.values) ||
-    typeof parsed.createdAt !== "string" ||
-    ("deletedAt" in parsed && typeof parsed.deletedAt !== "string")
-  ) {
-    throw new Error("Stored change payload is invalid.");
   }
 
   return parsed;
