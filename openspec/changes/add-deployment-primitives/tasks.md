@@ -82,6 +82,22 @@ Promotion notes:
 - Global docs/specs: no files under `openspec/specs/` are promoted in this
   implementation section; promotion is reserved for reviewed finalization or a
   requested doc-steward pass.
+- Finalization rebase: `git rebase main` was a no-op; branch was already current
+  with local `main`.
+- Finalization promotion: promoted deployment runtime facts to
+  `openspec/specs/deployment-runtime/spec.md`; merged custom-domain deployment
+  projection and compatibility bridge facts into
+  `openspec/specs/custom-domains/spec.md`; merged deployment-aware domain runner
+  CLI facts into `openspec/specs/site-cli-publish/spec.md`.
+- Finalization validation: `openspec validate add-deployment-primitives --strict`,
+  `openspec validate deployment-runtime --type spec --strict`,
+  `openspec validate custom-domains --type spec --strict`,
+  `openspec validate site-cli-publish --type spec --strict`, and
+  `openspec validate --specs --strict` passed.
+- Finalization check: `devstate check` passed; evidence in
+  `.devstate/status.md`.
+- Finalization smoke: Not run; finalization changed OpenSpec specs and change
+  artifacts only, with no new app behavior.
 - 7 check: `devstate check` passed; evidence in `.devstate/status.md`.
 - 7 smoke: Not run; change artifact-only section with no visible app behavior.
 

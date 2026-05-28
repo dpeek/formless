@@ -197,3 +197,34 @@ The system SHALL keep deployment, remote provider apply, and fallback Cloudflare
 - WHEN `formless instance token adopt` or `rotate` runs
 - THEN ignored workspace secret state stores the automation admin token
 - AND the reviewable workspace manifest does not store the secret
+
+### Requirement: Deployment-Aware Domain Runner CLI
+
+The Site CLI SHALL keep existing instance domain runner commands while reporting
+generic deployment protocol facts when the target supports them.
+
+#### Scenario: Remote runner apply shows deployment attempt
+
+- GIVEN a claimed instance workspace targets an instance with deployment runtime
+  status
+- WHEN `formless instance domains run-apply` starts an apply
+- THEN CLI output includes the desired-state version, attempt id, target,
+  resource counts, and writeback status
+- AND the command uses runner-held provider credentials rather than browser,
+  archive, or workspace manifest credentials
+
+#### Scenario: Remote runner failure writes exact version
+
+- GIVEN `formless instance domains run-apply` creates a deployment attempt
+- WHEN provider apply fails before success writeback
+- THEN the CLI writes failure details for the exact desired-state version
+- AND the command exits with a failure after writeback is attempted
+
+#### Scenario: Existing command surface remains stable
+
+- GIVEN users run existing domain remote-plan, run-apply, run-delete,
+  forget-route, forget-redirect, or mark-manually-removed commands
+- WHEN those commands execute
+- THEN the commands remain available with their existing credential boundary
+- AND direct Cloudflare fallback plan/apply commands remain labeled fallback and
+  explicit

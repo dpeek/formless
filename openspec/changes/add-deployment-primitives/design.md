@@ -165,11 +165,14 @@ Rollback is compatibility-preserving: the old domain provider API surface stays
 available, so a bad deployment-runtime implementation can be disabled or ignored
 without removing domain mapping state.
 
-## Open Questions
+## Resolved During Implementation
 
-- Whether deployment desired-state versions are materialized on every intent
-  write or generated lazily on first read.
-- Exact lease TTL and heartbeat interval.
-- Whether failed plan-only attempts should acquire a lease or remain lease-free.
-- How much Alchemy plan output can be stored without implying Formless owns the
-  canonical provider diff.
+- Deployment desired-state versions are materialized lazily when desired state is
+  read or when compatibility jobs start attempts; unchanged source fingerprints
+  and hashes reuse the latest version.
+- Mutating attempt leases use a fixed 15 minute expiry and heartbeats extend the
+  expiry by the same duration.
+- Plan attempts do not acquire deployment leases; apply and destroy attempts do.
+- Alchemy writeback stores plan summaries, result summaries, evidence summaries,
+  provider ids needed for audit or cleanup, and Alchemy app/stage/scope
+  pointers. Full provider current state remains outside Formless.

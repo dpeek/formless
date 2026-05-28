@@ -125,6 +125,57 @@ separate from profile mappings.
 - THEN provider resources are not deleted by disablement
 - AND the disabled redirect remains visible until cleanup
 
+### Requirement: Deployment Projection
+
+The system SHALL project enabled custom-domain route and redirect intent into
+the generic deployment runtime without changing custom-domain route semantics.
+
+#### Scenario: Project enabled route mappings
+
+- GIVEN enabled exact-host `instance`, `app`, or `publicSite` mappings exist
+- WHEN deployment desired state is built for a target
+- THEN enabled mappings are projected into deployment graph resources
+- AND disabled mappings do not create desired provider resources
+
+#### Scenario: Project redirect intent
+
+- GIVEN enabled redirect intent exists
+- WHEN deployment desired state is built for a target
+- THEN enabled redirect intent is projected into redirect rule and redirect DNS
+  graph resources
+- AND disabled redirect intent does not create desired provider resources
+
+### Requirement: Domain Provider Deployment Bridge
+
+The system SHALL keep existing domain provider jobs compatible while recording
+generic deployment attempt history.
+
+#### Scenario: Apply job records deployment attempt
+
+- GIVEN an authorized request starts an existing domain provider apply job
+- WHEN the job is created
+- THEN the runtime associates the job with a deployment attempt for the current
+  desired-state version
+- AND existing apply job responses continue to include the reviewed domain
+  provider plan and job status
+
+#### Scenario: Apply result records deployment evidence
+
+- GIVEN an existing domain provider apply job has a deployment attempt link
+- WHEN the job writes a successful result
+- THEN custom-domain applied provider evidence and generic deployment resource
+  evidence summaries are recorded
+- AND current domain mapping route behavior remains unchanged
+
+#### Scenario: Delete job remains explicit cleanup
+
+- GIVEN an existing domain provider delete job removes recorded provider
+  resources
+- WHEN the job is created and completed
+- THEN cleanup remains explicit and limited to selected recorded resources
+- AND generic deployment attempt history records the cleanup result without
+  deleting desired route intent
+
 ### Requirement: Cleanup And Forget
 
 The system SHALL make route cleanup and provider cleanup explicit.
