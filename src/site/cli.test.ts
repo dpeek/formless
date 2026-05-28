@@ -1374,6 +1374,9 @@ describe("Formless Site CLI", () => {
         url: "https://personal.dpeek.workers.dev/api/formless/domain-mappings",
       },
     ]);
+    expect(requests.some((request) => request.url.includes("/api/formless/deployments/"))).toBe(
+      false,
+    );
     expect(logs).toEqual([
       [
         "Instance domain direct Cloudflare fallback plan dry run.",
@@ -1484,6 +1487,545 @@ describe("Formless Site CLI", () => {
         "www.dpeek.com: cloudflare-worker-custom-domain; profile publicSite:david; zone dpeek.com (zone-1); alchemy primary-custom-domain-www-dpeek-com-publicsite-david",
       ].join("\n"),
     ]);
+  });
+
+  it("reports deployment-aware remote provider apply output", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const logs: string[] = [];
+    const plan = planDomainProviderResources({
+      instanceId: "primary",
+      mappings: [{ enabled: true, host: "www.dpeek.com", profile: "instance" }],
+      workerName: "personal",
+      zones: [{ id: "zone-1", name: "dpeek.com" }],
+    });
+    const desiredState = {
+      hash: `sha256:${"a".repeat(64)}`,
+      revision: 3,
+      targetId: "instance.primary",
+      versionId: "desired.instance.primary.3",
+    };
+    const attemptId = "attempt.11111111-1111-4111-8111-111111111111";
+    const leaseId = "lease.11111111-1111-4111-8111-111111111111";
+    const leaseToken = "lease:cli-success";
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+    responses.queueJson(
+      {
+        code: "domain-provider-apply-job-ready",
+        config: {
+          accountId: "account-123",
+          alchemyPassword: { configured: true, envNames: ["ALCHEMY_PASSWORD"] },
+          applyReady: true,
+          cloudflareApiToken: {
+            configured: true,
+            envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+          },
+          instanceId: "primary",
+          issues: [],
+          planReady: true,
+          workerName: "personal",
+          zones: [{ id: "zone-1", name: "dpeek.com" }],
+        },
+        job: {
+          createdAt: "2026-05-27T00:00:00.000Z",
+          jobId: "job-deployment-cli",
+          plan,
+          runnerId: "runner-deploy",
+          status: "ready",
+          updatedAt: "2026-05-27T00:00:00.000Z",
+        },
+        plan,
+        status: "ready",
+      },
+      202,
+    );
+    responses.queueJson({
+      desiredState: {
+        ...desiredState,
+        createdAt: "2026-05-27T00:00:00.000Z",
+        display: {
+          resourceCount: 1,
+          resourcesByKind: { "cloudflare-worker-custom-domain": 1 },
+          title: "Primary instance target",
+        },
+        resourceGraph: { resources: [], targetId: desiredState.targetId },
+        schemaVersion: 1,
+        source: { fingerprint: "source-1", intentRevision: 1 },
+      },
+      target: { kind: "instance", targetId: desiredState.targetId },
+    });
+    responses.queueJson({
+      status: {
+        checkedAt: "2026-05-27T00:00:00.000Z",
+        state: "no-target",
+        targetId: desiredState.targetId,
+      },
+      target: { kind: "instance", targetId: desiredState.targetId },
+    });
+    responses.queueJson(
+      {
+        attempt: {
+          ...desiredState,
+          actor: {
+            actorId: "domain-provider.apply",
+            displayName: "Domain provider apply",
+            kind: "runner",
+            runnerId: "runner-deploy",
+          },
+          attemptId,
+          idempotencyKey: "domain-provider-runner:job-deployment-cli",
+          leaseId,
+          mode: "apply",
+          startedAt: "2026-05-27T00:00:00.000Z",
+          status: "started",
+          updatedAt: "2026-05-27T00:00:00.000Z",
+        },
+        lease: {
+          actor: {
+            actorId: "domain-provider.apply",
+            displayName: "Domain provider apply",
+            kind: "runner",
+            runnerId: "runner-deploy",
+          },
+          acquiredAt: "2026-05-27T00:00:00.000Z",
+          attemptId,
+          expiresAt: "2026-05-27T00:16:00.000Z",
+          leaseId,
+          mode: "apply",
+          status: "active",
+          targetId: desiredState.targetId,
+          token: leaseToken,
+        },
+        replayed: false,
+      },
+      201,
+    );
+    responses.queueJson({
+      attempt: {
+        ...desiredState,
+        attemptId,
+        mode: "apply",
+        status: "started",
+      },
+      plan: {
+        ...desiredState,
+        attemptId,
+        kind: "plan",
+        recordedAt: "2026-05-27T00:00:00.000Z",
+        summary: {
+          blockers: [],
+          changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+          warnings: [],
+        },
+      },
+    });
+    responses.queueJson({
+      job: {
+        createdAt: "2026-05-27T00:00:00.000Z",
+        jobId: "job-deployment-cli",
+        plan,
+        result: { evidenceCount: 1 },
+        runnerId: "runner-deploy",
+        status: "succeeded",
+        updatedAt: "2026-05-27T00:00:01.000Z",
+      },
+    });
+    responses.queueJson({
+      attempt: {
+        ...desiredState,
+        attemptId,
+        completedAt: "2026-05-27T00:00:01.000Z",
+        mode: "apply",
+        status: "succeeded",
+      },
+      lease: {
+        attemptId,
+        leaseId,
+        status: "released",
+        targetId: desiredState.targetId,
+        token: leaseToken,
+      },
+      result: {
+        ...desiredState,
+        alchemy: { app: "formless-domain-primary", scope: "instance.primary", stage: "production" },
+        attemptId,
+        completedAt: "2026-05-27T00:00:01.000Z",
+        evidence: [],
+        kind: "success",
+        runnerId: "runner-deploy",
+      },
+    });
+
+    await runFormlessCli(
+      [
+        "instance",
+        "domains",
+        "run-apply",
+        "--workspace",
+        workspaceRoot,
+        "--policy",
+        "create-only",
+        "--host",
+        "www.dpeek.com",
+        "--runner-id",
+        "runner-deploy",
+        "--admin-token",
+        "admin-token",
+      ],
+      cliDeps(tempDir, {
+        domainProviderApplyRuntime: async () => ({
+          factories: {
+            CustomDomain: async (_id, props) => ({
+              ...props,
+              createdAt: 1,
+              id: "custom-domain-cli",
+              updatedAt: 2,
+            }),
+            DnsRecords: async () => {
+              throw new Error("DNS records are outside this test.");
+            },
+            RedirectRule: async () => {
+              throw new Error("Redirect rules are outside this test.");
+            },
+          },
+          password: "alchemy-password",
+          runner: async (_appName, _options, apply) => apply(),
+          stateStore: () => {
+            throw new Error("state store is passed to Alchemy, not called by this test.");
+          },
+        }),
+        fetch: responses.fetcher(requests),
+        logs,
+      }),
+    );
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply",
+      "GET https://personal.dpeek.workers.dev/api/formless/deployments/desired-state",
+      "GET https://personal.dpeek.workers.dev/api/formless/deployments/status",
+      "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/start",
+      "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/plan",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply-jobs/job-deployment-cli/result",
+      "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/success",
+    ]);
+    expect(requests[6]?.headers.authorization).toBe("Bearer admin-token");
+    expect(
+      capturedRequestJson<{ desiredState: typeof desiredState; mode: string }>(requests[6]),
+    ).toMatchObject({
+      desiredState,
+      mode: "apply",
+    });
+    expect(
+      capturedRequestJson<{ attemptId: string; desiredState: typeof desiredState }>(requests[7]),
+    ).toMatchObject({
+      attemptId,
+      desiredState,
+    });
+    expect(
+      capturedRequestJson<{
+        attemptId: string;
+        desiredState: typeof desiredState;
+        leaseToken: string;
+      }>(requests[9]),
+    ).toMatchObject({
+      attemptId,
+      desiredState,
+      leaseToken,
+    });
+    expect(logs).toEqual([
+      [
+        "Instance domain Alchemy apply complete.",
+        "Target: https://personal.dpeek.workers.dev.",
+        "Job: job-deployment-cli.",
+        "Desired-state version: desired.instance.primary.3 (revision 3).",
+        "Deployment attempt: attempt.11111111-1111-4111-8111-111111111111.",
+        "Deployment target: instance.primary.",
+        "Deployment resources: 1 (custom domains 1, redirect rules 0, DNS records 0).",
+        "Deployment writeback: succeeded.",
+        "Job status: succeeded.",
+        "Runner: runner-deploy.",
+        "Policy: create-only.",
+        "Resources: 1.",
+        "Evidence writes: 1.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("writes deployment failure facts when remote provider apply fails after attempt start", async () => {
+    const tempDir = await makeTempDir();
+    const workspaceRoot = path.join(tempDir, "personal-sites");
+    const requests: CapturedFetchRequest[] = [];
+    const responses = responseQueue();
+    const plan = planDomainProviderResources({
+      instanceId: "primary",
+      mappings: [{ enabled: true, host: "fail.dpeek.com", profile: "instance" }],
+      workerName: "personal",
+      zones: [{ id: "zone-1", name: "dpeek.com" }],
+    });
+    const desiredState = {
+      hash: `sha256:${"b".repeat(64)}`,
+      revision: 4,
+      targetId: "instance.primary",
+      versionId: "desired.instance.primary.4",
+    };
+    const attemptId = "attempt.22222222-2222-4222-8222-222222222222";
+    const leaseId = "lease.22222222-2222-4222-8222-222222222222";
+    const leaseToken = "lease:cli-failure";
+
+    await writeWorkspaceManifest(workspaceRoot);
+
+    responses.queueJson({ version: packageJson.version });
+    responses.queueJson({ setupComplete: true });
+    responses.queueJson({
+      packages: listBundledAppPackages(),
+      installs: [installedSite("david", "David Peek")],
+    });
+    responses.queueJson(
+      {
+        code: "domain-provider-apply-job-ready",
+        config: {
+          accountId: "account-123",
+          alchemyPassword: { configured: true, envNames: ["ALCHEMY_PASSWORD"] },
+          applyReady: true,
+          cloudflareApiToken: {
+            configured: true,
+            envNames: ["CLOUDFLARE_API_TOKEN", "CF_API_TOKEN"],
+          },
+          instanceId: "primary",
+          issues: [],
+          planReady: true,
+          workerName: "personal",
+          zones: [{ id: "zone-1", name: "dpeek.com" }],
+        },
+        job: {
+          createdAt: "2026-05-27T00:00:00.000Z",
+          jobId: "job-deployment-failure",
+          plan,
+          runnerId: "runner-fail",
+          status: "ready",
+          updatedAt: "2026-05-27T00:00:00.000Z",
+        },
+        plan,
+        status: "ready",
+      },
+      202,
+    );
+    responses.queueJson({
+      desiredState: {
+        ...desiredState,
+        createdAt: "2026-05-27T00:00:00.000Z",
+        display: {
+          resourceCount: 1,
+          resourcesByKind: { "cloudflare-worker-custom-domain": 1 },
+          title: "Primary instance target",
+        },
+        resourceGraph: { resources: [], targetId: desiredState.targetId },
+        schemaVersion: 1,
+        source: { fingerprint: "source-failure", intentRevision: 2 },
+      },
+      target: { kind: "instance", targetId: desiredState.targetId },
+    });
+    responses.queueJson({
+      status: {
+        checkedAt: "2026-05-27T00:00:00.000Z",
+        state: "no-target",
+        targetId: desiredState.targetId,
+      },
+      target: { kind: "instance", targetId: desiredState.targetId },
+    });
+    responses.queueJson(
+      {
+        attempt: {
+          ...desiredState,
+          actor: {
+            actorId: "domain-provider.apply",
+            displayName: "Domain provider apply",
+            kind: "runner",
+            runnerId: "runner-fail",
+          },
+          attemptId,
+          idempotencyKey: "domain-provider-runner:job-deployment-failure",
+          leaseId,
+          mode: "apply",
+          startedAt: "2026-05-27T00:00:00.000Z",
+          status: "started",
+          updatedAt: "2026-05-27T00:00:00.000Z",
+        },
+        lease: {
+          actor: {
+            actorId: "domain-provider.apply",
+            displayName: "Domain provider apply",
+            kind: "runner",
+            runnerId: "runner-fail",
+          },
+          acquiredAt: "2026-05-27T00:00:00.000Z",
+          attemptId,
+          expiresAt: "2026-05-27T00:16:00.000Z",
+          leaseId,
+          mode: "apply",
+          status: "active",
+          targetId: desiredState.targetId,
+          token: leaseToken,
+        },
+        replayed: false,
+      },
+      201,
+    );
+    responses.queueJson({
+      attempt: {
+        ...desiredState,
+        attemptId,
+        mode: "apply",
+        status: "started",
+      },
+      plan: {
+        ...desiredState,
+        attemptId,
+        kind: "plan",
+        recordedAt: "2026-05-27T00:00:00.000Z",
+        summary: {
+          blockers: [],
+          changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+          warnings: [],
+        },
+      },
+    });
+    responses.queueJson({
+      job: {
+        createdAt: "2026-05-27T00:00:00.000Z",
+        jobId: "job-deployment-failure",
+        plan,
+        result: { error: "Alchemy apply failed.", evidenceCount: 0 },
+        runnerId: "runner-fail",
+        status: "failed",
+        updatedAt: "2026-05-27T00:00:01.000Z",
+      },
+    });
+    responses.queueJson({
+      attempt: {
+        ...desiredState,
+        attemptId,
+        completedAt: "2026-05-27T00:00:01.000Z",
+        mode: "apply",
+        status: "failed",
+      },
+      lease: {
+        attemptId,
+        leaseId,
+        status: "released",
+        targetId: desiredState.targetId,
+        token: leaseToken,
+      },
+      result: {
+        ...desiredState,
+        actor: {
+          actorId: "domain-provider.apply",
+          displayName: "Domain provider apply",
+          kind: "runner",
+          runnerId: "runner-fail",
+        },
+        attemptId,
+        completedAt: "2026-05-27T00:00:01.000Z",
+        kind: "failure",
+        runnerId: "runner-fail",
+        summary: {
+          code: "domain-provider-apply-failed",
+          displayMessage: "Alchemy apply failed.",
+        },
+      },
+    });
+
+    await expect(
+      runFormlessCli(
+        [
+          "instance",
+          "domains",
+          "run-apply",
+          "--workspace",
+          workspaceRoot,
+          "--policy",
+          "create-only",
+          "--host",
+          "fail.dpeek.com",
+          "--runner-id",
+          "runner-fail",
+          "--admin-token",
+          "admin-token",
+        ],
+        cliDeps(tempDir, {
+          domainProviderApplyRuntime: async () => ({
+            factories: {
+              CustomDomain: async () => {
+                throw new Error("CustomDomain is outside this test.");
+              },
+              DnsRecords: async () => {
+                throw new Error("DNS records are outside this test.");
+              },
+              RedirectRule: async () => {
+                throw new Error("Redirect rules are outside this test.");
+              },
+            },
+            password: "alchemy-password",
+            runner: async () => {
+              throw new Error("Alchemy apply failed.");
+            },
+            stateStore: () => {
+              throw new Error("state store is passed to Alchemy, not called by this test.");
+            },
+          }),
+          fetch: responses.fetcher(requests),
+        }),
+      ),
+    ).rejects.toThrow("Alchemy apply failed.");
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://personal.dpeek.workers.dev/api/formless/deploy",
+      "GET https://personal.dpeek.workers.dev/api/formless/setup",
+      "GET https://personal.dpeek.workers.dev/api/formless/app-installs",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply",
+      "GET https://personal.dpeek.workers.dev/api/formless/deployments/desired-state",
+      "GET https://personal.dpeek.workers.dev/api/formless/deployments/status",
+      "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/start",
+      "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/plan",
+      "POST https://personal.dpeek.workers.dev/api/formless/domain-provider/apply-jobs/job-deployment-failure/result",
+      "POST https://personal.dpeek.workers.dev/api/formless/deployments/attempts/failure",
+    ]);
+    expect(
+      capturedRequestJson<{ error: string; runnerId: string; status: string }>(requests[8]),
+    ).toEqual({
+      error: "Alchemy apply failed.",
+      runnerId: "runner-fail",
+      status: "failed",
+    });
+    expect(
+      capturedRequestJson<{
+        attemptId: string;
+        desiredState: typeof desiredState;
+        leaseToken: string;
+        summary: { code: string; displayMessage: string };
+      }>(requests[9]),
+    ).toMatchObject({
+      attemptId,
+      desiredState,
+      leaseToken,
+      summary: {
+        code: "domain-provider-apply-failed",
+        displayMessage: "Alchemy apply failed.",
+      },
+    });
   });
 
   it("starts remote provider delete jobs before requiring runner secrets", async () => {
@@ -1874,6 +2416,9 @@ describe("Formless Site CLI", () => {
       "POST https://personal.dpeek.workers.dev/api/formless/domain-mappings/apply-evidence",
       "POST https://personal.dpeek.workers.dev/api/formless/domain-mappings/apply-evidence",
     ]);
+    expect(requests.some((request) => request.url.includes("/api/formless/deployments/"))).toBe(
+      false,
+    );
     expect(requests[1]?.headers.authorization).toBe("Bearer admin-token");
     expect(
       capturedRequestJson<{
@@ -4132,6 +4677,7 @@ function cliDeps(
     cloudflareDomainClient?: CloudflareDomainClient;
     commands?: CapturedCommand[];
     deploy?: (input: DeployFormlessInstanceInput) => Promise<{ url: string }>;
+    domainProviderApplyRuntime?: FormlessCliDependencies["domainProviderApplyRuntime"];
     env?: NodeJS.ProcessEnv;
     fetch?: typeof fetch;
     healthInputs?: CheckFormlessInstanceDeployMetadataInput[];
@@ -4172,6 +4718,9 @@ function cliDeps(
           url: input.plan.expectedUrl.url,
         })),
     },
+    ...(options.domainProviderApplyRuntime === undefined
+      ? {}
+      : { domainProviderApplyRuntime: options.domainProviderApplyRuntime }),
     env: options.env ?? {},
     fetch: options.fetch ?? fetch,
     healthCheck: {

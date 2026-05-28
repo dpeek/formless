@@ -41,6 +41,7 @@ import type { ForgetInstanceDomainMappingResponse } from "../shared/instance-dom
 import {
   runFormlessInstanceDomainProviderApply as runFormlessInstanceDomainProviderApplyCommand,
   runFormlessInstanceDomainProviderDelete as runFormlessInstanceDomainProviderDeleteCommand,
+  type RunFormlessInstanceDomainProviderApplyDependencies,
   type RunFormlessInstanceDomainProviderApplyResult,
   type RunFormlessInstanceDomainProviderDeleteInput,
   type RunFormlessInstanceDomainProviderDeleteResult,
@@ -365,6 +366,7 @@ export type FormlessCliDependencies = {
   cloudflareDomainClient: () => CloudflareDomainClient;
   cwd: string;
   deploymentAdapter: FormlessInstanceDeploymentAdapter;
+  domainProviderApplyRuntime?: RunFormlessInstanceDomainProviderApplyDependencies["runtime"];
   env: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   healthCheck: FormlessInstanceDeploymentHealthCheckAdapter;
@@ -1031,7 +1033,7 @@ export async function runFormlessInstanceDomainProviderApplyFromWorkspace(
   },
   dependencies: Pick<
     FormlessCliDependencies,
-    "cwd" | "env" | "fetch" | "randomToken"
+    "cwd" | "domainProviderApplyRuntime" | "env" | "fetch" | "randomToken"
   > = nodeFormlessCliDependencies(),
 ): Promise<RunFormlessInstanceDomainProviderApplyResult> {
   const status = await getFormlessInstanceWorkspaceStatus(
@@ -1075,6 +1077,9 @@ export async function runFormlessInstanceDomainProviderApplyFromWorkspace(
       createRunnerId: () => `formless-cli-${dependencies.randomToken()}`,
       env: dependencies.env,
       fetch: dependencies.fetch,
+      ...(dependencies.domainProviderApplyRuntime === undefined
+        ? {}
+        : { runtime: dependencies.domainProviderApplyRuntime }),
     },
   );
 }

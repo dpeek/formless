@@ -40,11 +40,11 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Add worker API tests for desired-state reads, attempt idempotency, stale revision rejection, lease conflict, heartbeat, completion, failure, and drift writeback.
-- [ ] 6.2 Add CLI tests for deployment-aware run-apply output and failure writeback.
-- [ ] 6.3 Add regression tests proving direct Cloudflare fallback commands remain explicit fallback commands and do not use deployment-runtime mutation paths.
-- [ ] 6.4 Run `devstate check` and read `./.devstate/status.md`; fix any red status before finishing.
-- [ ] 6.5 Run browser smoke only if visible app behavior changes, and record why it was or was not required.
+- [x] 6.1 Add worker API tests for desired-state reads, attempt idempotency, stale revision rejection, lease conflict, heartbeat, completion, failure, and drift writeback.
+- [x] 6.2 Add CLI tests for deployment-aware run-apply output and failure writeback.
+- [x] 6.3 Add regression tests proving direct Cloudflare fallback commands remain explicit fallback commands and do not use deployment-runtime mutation paths.
+- [x] 6.4 Run `devstate check` and read `./.devstate/status.md`; fix any red status before finishing.
+- [x] 6.5 Run browser smoke only if visible app behavior changes, and record why it was or was not required.
 
 ## 7. Promotion Notes
 
@@ -128,3 +128,8 @@
 - 5.3: Added a browser read-only deployment status client and tightened workspace manifest secret-key rejection for Alchemy state tokens and provider/mutation credential fields.
 - 5.1-5.3 check: `devstate check` passed; evidence in `.devstate/status.md`.
 - 5.1-5.3 smoke: `bun browser` opened `https://add-deployment-primitives.formless.local/`; custom-domain provider panel displayed `Deployment No deployment state · No desired-state version has been recorded`; console after reload showed only Vite connection and React DevTools informational output.
+- 6.1: Added `src/worker/deployment-runtime-api.test.ts` lifecycle status regression coverage for desired-state read, stale start rejection, idempotent replay, active lease conflict, heartbeat, success/deployed status, drift status, and failure/current-version status.
+- 6.2: Added `src/site/cli.test.ts` deployment-aware `instance domains run-apply` coverage for desired-state/attempt/resource/writeback output and exact-version deployment failure writeback after attempt start; added `src/site/cli.ts` runtime injection hook for deterministic CLI tests.
+- 6.3: Added `src/site/cli.test.ts` fallback assertions proving direct Cloudflare plan/apply output remains explicitly labeled fallback and does not call `/api/formless/deployments/*` mutation paths.
+- 6.4 check: `devstate check` passed; evidence in `.devstate/status.md`.
+- 6.5 smoke: Not run; verification/test-only change plus CLI test injection, with no visible app behavior change.

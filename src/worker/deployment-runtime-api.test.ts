@@ -573,6 +573,156 @@ describe("instance deployment runtime API routes", () => {
     });
   });
 
+  it("covers worker deployment API lifecycle status from exact writebacks", async () => {
+    const desiredState = (
+      await getJson<InstanceDeploymentDesiredStateResponse>(
+        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+      )
+    ).body.desiredState;
+    const desired = desiredStateRef(desiredState);
+    const stale = await postAttemptStart(
+      attemptStartRequest(
+        { ...desired, versionId: "desired.instance.primary.stale" },
+        {
+          idempotencyKey: "apply:primary:lifecycle:stale",
+          mode: "apply",
+        },
+      ),
+    );
+
+    expect(stale.response.status).toBe(409);
+    expect(stale.body).toMatchObject({ code: "deployment-desired-state-stale" });
+
+    const startRequest = attemptStartRequest(desired, {
+      idempotencyKey: "apply:primary:lifecycle:success",
+      mode: "apply",
+    });
+    const started = await postAttemptStart(startRequest);
+    const replayed = await postAttemptStart(startRequest);
+    const conflicted = await postAttemptStart(
+      attemptStartRequest(desired, {
+        idempotencyKey: "apply:primary:lifecycle:conflict",
+        mode: "destroy",
+      }),
+    );
+
+    expect(started.response.status).toBe(201);
+    expect(replayed.response.status).toBe(200);
+    expect(replayed.body).toEqual({ ...started.body, replayed: true });
+    expect(conflicted.response.status).toBe(409);
+    expect(conflicted.body).toMatchObject({ code: "deployment-attempt-active-lease" });
+
+    const heartbeat = await postAttemptHeartbeat({
+      attemptId: started.body.attempt.attemptId,
+      desiredState: desired,
+      leaseToken: started.body.lease?.token ?? "",
+    });
+    const active = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(heartbeat.response.status).toBe(200);
+    expect(active.body.status).toMatchObject({
+      attemptId: started.body.attempt.attemptId,
+      state: "in-progress",
+    });
+
+    const success = await postAttemptSuccess({
+      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
+      attemptId: started.body.attempt.attemptId,
+      desiredState: desired,
+      evidence: [
+        {
+          action: "created",
+          alchemyResourceId: "alchemy:custom-domain:admin.example.com",
+          displayName: "admin.example.com",
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "custom-domain:admin.example.com",
+          providerFamily: "cloudflare",
+          providerResourceIds: ["cf-custom-domain-lifecycle"],
+          targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+        },
+      ],
+      leaseToken: started.body.lease?.token ?? "",
+      runnerId: "runner.primary",
+    });
+    const deployed = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(success.response.status).toBe(200);
+    expect(success.body.attempt.status).toBe("succeeded");
+    expect(deployed.body.status).toMatchObject({
+      attemptId: started.body.attempt.attemptId,
+      state: "deployed",
+    });
+
+    const drift = await postDeploymentDrift({
+      actor: {
+        actorId: "runner:primary",
+        kind: "runner",
+        runnerId: "runner.primary",
+      },
+      desiredState: desired,
+      status: "drifted",
+      summary: {
+        affectedLogicalIds: ["custom-domain:admin.example.com"],
+        create: 0,
+        delete: 0,
+        update: 1,
+      },
+    });
+    const driftStatus = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(drift.response.status).toBe(200);
+    expect(driftStatus.body.status).toMatchObject({
+      report: {
+        summary: {
+          affectedLogicalIds: ["custom-domain:admin.example.com"],
+          update: 1,
+        },
+      },
+      state: "drift",
+    });
+
+    const failureStarted = await postAttemptStart(
+      attemptStartRequest(desired, {
+        idempotencyKey: "apply:primary:lifecycle:failure",
+        mode: "apply",
+      }),
+    );
+    const failure = await postAttemptFailure({
+      actor: {
+        actorId: "runner:primary",
+        kind: "runner",
+        runnerId: "runner.primary",
+      },
+      attemptId: failureStarted.body.attempt.attemptId,
+      desiredState: desired,
+      leaseToken: failureStarted.body.lease?.token ?? "",
+      runnerId: "runner.primary",
+      summary: {
+        code: "provider-error",
+        displayMessage: "Provider apply failed.",
+      },
+    });
+    const failed = await getJson<InstanceDeploymentStatusResponse>(
+      INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    );
+
+    expect(failure.response.status).toBe(200);
+    expect(failed.body.status).toMatchObject({
+      attemptId: failureStarted.body.attempt.attemptId,
+      state: "failed-current-version",
+      summary: {
+        code: "provider-error",
+        displayMessage: "Provider apply failed.",
+      },
+    });
+  });
+
   it("writes plan, success, failure, and drift facts for exact desired-state versions", async () => {
     const desiredState = (
       await getJson<InstanceDeploymentDesiredStateResponse>(
