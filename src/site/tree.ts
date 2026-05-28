@@ -4,12 +4,15 @@ import type {
   SiteMediaNode,
   SitePageFrame,
   SiteSettingsNode,
+  SitePublicActionNode,
   SitePageTreeProjection,
   SitePlacementNode,
   SiteTreeWarning,
   StoredRecord,
 } from "../shared/protocol.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
+import type { AppSchema, EntityActionSchema } from "../shared/schema.ts";
+import { getEntityActionKindCapabilities } from "../shared/schema-actions.ts";
 import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
 import {
   resolveSiteRoute,
@@ -31,6 +34,8 @@ export type {
 export type BuildSitePageTreeOptions = {
   generatedAt?: string;
   maxDepth?: number;
+  target?: Pick<AppStorageIdentity, "apiRoutePrefix">;
+  turnstileSiteKey?: string;
 };
 
 type SiteTreeIndexes = {
@@ -42,11 +47,14 @@ type SiteTreeIndexes = {
 type SiteTreeBuildContext = {
   schema: AppSchema;
   indexes: SiteTreeIndexes;
+  publicActionApiRoutePrefix: `/${string}`;
+  turnstileSiteKey?: string;
   warnings: SiteTreeWarning[];
   maxDepth: number;
 };
 
 const DEFAULT_MAX_DEPTH = 16;
+const DEFAULT_SITE_PUBLIC_API_ROUTE_PREFIX = "/api/site";
 const PRIMARY_IMAGE_SLOT = "primaryImage";
 const LIST_BLOCK_ITEM_TYPES = {
   postList: "post",
@@ -82,6 +90,11 @@ export function buildSitePageTree(
   const context = {
     schema,
     indexes,
+    publicActionApiRoutePrefix:
+      options.target?.apiRoutePrefix ?? DEFAULT_SITE_PUBLIC_API_ROUTE_PREFIX,
+    ...(options.turnstileSiteKey === undefined
+      ? {}
+      : { turnstileSiteKey: options.turnstileSiteKey }),
     warnings,
     maxDepth: normalizeMaxDepth(options.maxDepth),
   };
@@ -339,12 +352,19 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
   const type = stringValue(record.values.type) ?? "";
   const linkProjection = projectedLinkFields(record, type, context);
   const mediaProjection = projectedMediaFields(record, type, context);
+  const publicActionProjection = projectedPublicActionFields(record, type, context);
 
   return {
     id: record.id,
     type,
     label: stringValue(record.values.label) ?? "",
     ...optionalStringField("body", record.values.body),
+    ...(type === "subscribeForm"
+      ? optionalStringField("actionName", record.values.actionName)
+      : {}),
+    ...(type === "subscribeForm"
+      ? optionalStringField("buttonLabel", record.values.buttonLabel)
+      : {}),
     ...optionalStringField(
       "href",
       linkProjection === null ? record.values.href : linkProjection.href,
@@ -359,8 +379,89 @@ function projectBlock(record: StoredRecord, context: SiteTreeBuildContext): Site
     ...(mediaProjection ? { media: mediaProjection } : {}),
     ...optionalNumberField("width", record.values.width),
     ...optionalNumberField("height", record.values.height),
+    ...(publicActionProjection ? { publicAction: publicActionProjection } : {}),
     placements: [],
   };
+}
+
+function projectedPublicActionFields(
+  record: StoredRecord,
+  type: string,
+  context: SiteTreeBuildContext,
+): SitePublicActionNode | undefined {
+  if (type !== "subscribeForm") {
+    return undefined;
+  }
+
+  const actionName = stringValue(record.values.actionName);
+
+  if (!actionName) {
+    context.warnings.push({
+      code: "missing-public-action",
+      recordId: record.id,
+      message: `Subscribe form block "${record.id}" does not declare an action name.`,
+    });
+    return undefined;
+  }
+
+  const action = selectPublicSubscribeAction(context.schema, actionName);
+
+  if (action.kind !== "available") {
+    context.warnings.push({
+      code: action.code,
+      recordId: record.id,
+      message: action.message,
+    });
+    return undefined;
+  }
+
+  return {
+    actionName,
+    route: `${context.publicActionApiRoutePrefix}/public/actions/${encodeURIComponent(actionName)}`,
+    challenge: {
+      kind: "turnstile",
+      ...(context.turnstileSiteKey === undefined ? {} : { siteKey: context.turnstileSiteKey }),
+    },
+  };
+}
+
+function selectPublicSubscribeAction(
+  schema: AppSchema,
+  actionName: string,
+): { kind: "available" } | { kind: "unavailable"; code: string; message: string } {
+  const candidates = Object.values(schema.entities)
+    .map((entity) => entity.actions?.[actionName])
+    .filter((action): action is EntityActionSchema => action !== undefined);
+
+  if (candidates.length === 0) {
+    return {
+      kind: "unavailable",
+      code: "missing-public-action",
+      message: `Subscribe form action "${actionName}" does not exist.`,
+    };
+  }
+
+  const publicSubscribeActions = candidates.filter((action) => {
+    const capabilities = getEntityActionKindCapabilities(action.kind);
+
+    return (
+      action.kind === "subscribe" &&
+      action.access?.actor === "anonymous" &&
+      action.access?.challenge.kind === "turnstile" &&
+      action.access?.origin.kind === "same-origin" &&
+      capabilities.publicExecution
+    );
+  });
+
+  if (publicSubscribeActions.length !== 1) {
+    return {
+      kind: "unavailable",
+      code: "invalid-public-action",
+      message: `Subscribe form action "${actionName}" is not publicly executable.`,
+    };
+  }
+
+  return { kind: "available" };
 }
 
 function projectedMediaFields(

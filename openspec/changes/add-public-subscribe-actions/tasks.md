@@ -53,12 +53,22 @@ Evidence:
 
 ## 4. Site Subscribe Form
 
-- [ ] 4.1 Add `subscribeForm` to the Site block type enum, union variant, create/edit/root item views, and branch child policy.
-- [ ] 4.2 Add Site public tree projection for subscribe form action facts, target route, and warning behavior when the action is missing or not public.
-- [ ] 4.3 Add public renderer support for email input, submit state, Turnstile widget site key, success state, and failure state.
-- [ ] 4.4 Add client-side submit handling that posts email, source block id, idempotency key, and Turnstile token to the target public action route.
-- [ ] 4.5 Add renderer and Site tree tests proving secrets and subscriber data are not exposed in public output.
-- [ ] 4.6 Add generated Site authoring tests proving subscribe forms can be created under page and group branches.
+- [x] 4.1 Add `subscribeForm` to the Site block type enum, union variant, create/edit/root item views, and branch child policy.
+- [x] 4.2 Add Site public tree projection for subscribe form action facts, target route, and warning behavior when the action is missing or not public.
+- [x] 4.3 Add public renderer support for email input, submit state, Turnstile widget site key, success state, and failure state.
+- [x] 4.4 Add client-side submit handling that posts email, source block id, idempotency key, and Turnstile token to the target public action route.
+- [x] 4.5 Add renderer and Site tree tests proving secrets and subscriber data are not exposed in public output.
+- [x] 4.6 Add generated Site authoring tests proving subscribe forms can be created under page and group branches.
+
+Evidence:
+
+- Files changed: `schema/apps/site/schema.json`, `src/shared/protocol.ts`, `src/site/tree.ts`, `src/worker/authority-operations.ts`, `src/app/site-renderer/blocks.tsx`, `src/app/site-renderer/subscribe-form.ts`, `src/site/tree.test.ts`, `src/app/site-renderer/renderer.test.tsx`, `src/app/site-renderer/subscribe-form.test.ts`, `src/shared/schema.test.ts`, `src/client/views.test.ts`, `src/client/collection-result-model.test.ts`, `src/app.test.tsx`.
+- Decision: `subscribeForm` is a flat Site block variant with `label`, `body`, `actionName`, and `buttonLabel`; page and group branches may create it, and the variant is a leaf.
+- Decision: Site public tree projection emits only public subscribe action facts: action name, target public action route, Turnstile challenge kind, and optional public site key. Turnstile configuration remains owned by section 5.
+- Decision: missing action names, missing actions, and non-public action bindings add public tree warnings and omit working form action facts.
+- Checks: `devstate check` passed after `git rebase main --autostash`; `./.devstate/status.md` read at `2026-05-28T06:40:13.662Z` with checks ok, web ready, and test watcher pass.
+- Initial status: `devstate start` read at `2026-05-28T06:27:09.833Z` with checks ok, web ready, and test watcher pass; no pre-existing red service failure was present.
+- Smoke: `bun browser open https://add-public-subscribe-actions.formless.local/pages/home` loaded the public Site preview; `bun browser get text body` returned Site body text including `Home`, `About`, `Blog`, `Projects`, `Resume`, and `Your site starts here`; `bun browser get count '[data-site-theme]'` returned `2`.
 
 ## 5. Configuration And Deployment Boundary
 

@@ -1019,6 +1019,7 @@ describe("home view model collections", () => {
         "project",
         "postList",
         "projectList",
+        "subscribeForm",
       ],
       group: [
         "group",
@@ -1030,6 +1031,7 @@ describe("home view model collections", () => {
         "project",
         "postList",
         "projectList",
+        "subscribeForm",
       ],
       post: ["markdown", "image"],
       project: ["image"],
@@ -1071,6 +1073,7 @@ describe("home view model collections", () => {
     expect(treeResult.branches?.variants.leafVariantValues).not.toContain("feature");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("postList");
     expect(treeResult.branches?.variants.leafVariantValues).toContain("projectList");
+    expect(treeResult.branches?.variants.leafVariantValues).toContain("subscribeForm");
     expect(treeResult.childRecordUnion?.variants).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

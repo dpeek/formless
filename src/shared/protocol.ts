@@ -333,6 +333,17 @@ export type SiteMediaNode = {
   kind: "image";
 };
 
+export type SitePublicActionNode = {
+  actionName: string;
+  route: string;
+  challenge: SitePublicActionChallengeNode;
+};
+
+export type SitePublicActionChallengeNode = {
+  kind: "turnstile";
+  siteKey?: string;
+};
+
 export type SiteTreeRoute =
   | {
       kind: "page";
@@ -359,6 +370,8 @@ export type SiteBlockNode = {
   type: string;
   label: string;
   body?: string;
+  actionName?: string;
+  buttonLabel?: string;
   href?: string;
   date?: string;
   icon?: string;
@@ -372,6 +385,7 @@ export type SiteBlockNode = {
     key: string;
     items: SiteBlockNode[];
   };
+  publicAction?: SitePublicActionNode;
 };
 
 export type SitePlacementNode = {

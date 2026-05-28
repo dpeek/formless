@@ -114,7 +114,7 @@ describe("collection result model", () => {
     });
     expect(result.childRecordUnion?.unionName).toBe("blockByType");
     expect(result.branches?.variants.leafVariantValues).toEqual(
-      expect.arrayContaining(["postList", "projectList", "header", "footer"]),
+      expect.arrayContaining(["postList", "projectList", "subscribeForm", "header", "footer"]),
     );
     expect(
       result.branches?.variants.allowedChildVariantsByParentVariant.feature?.map((child) => ({

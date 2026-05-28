@@ -4589,6 +4589,7 @@ describe("personal site sample schema", () => {
         project: { label: "Project" },
         postList: { label: "Post list" },
         projectList: { label: "Project list" },
+        subscribeForm: { label: "Subscribe form" },
         group: { label: "Group" },
         header: { label: "Header" },
         headerPrimary: { label: "Header primary" },
@@ -4613,6 +4614,16 @@ describe("personal site sample schema", () => {
       required: false,
       label: "Body",
       format: "markdown",
+    });
+    expect(schema.entities.block?.fields.actionName).toEqual({
+      type: "text",
+      required: false,
+      label: "Action name",
+    });
+    expect(schema.entities.block?.fields.buttonLabel).toEqual({
+      type: "text",
+      required: false,
+      label: "Button label",
     });
     expect(schema.entities.block?.fields.href).toMatchObject({
       type: "text",
@@ -4641,6 +4652,8 @@ describe("personal site sample schema", () => {
       "type",
       "label",
       "body",
+      "actionName",
+      "buttonLabel",
       "href",
       "mediaAssetId",
       "date",
@@ -4725,6 +4738,10 @@ describe("personal site sample schema", () => {
         project: { label: "Project", fields: ["label", "date", "body", "href"] },
         postList: { label: "Post list", fields: ["label"] },
         projectList: { label: "Project list", fields: ["label"] },
+        subscribeForm: {
+          label: "Subscribe form",
+          fields: ["label", "body", "actionName", "buttonLabel"],
+        },
         header: { label: "Header", fields: ["label"] },
         headerPrimary: { label: "Header primary", fields: ["label"] },
         headerSecondary: { label: "Header secondary", fields: ["label"] },
@@ -5258,6 +5275,7 @@ describe("personal site sample schema", () => {
       "feature",
       "postList",
       "projectList",
+      "subscribeForm",
       "header",
       "headerPrimary",
       "headerSecondary",
@@ -5275,6 +5293,7 @@ describe("personal site sample schema", () => {
       "project",
       "postList",
       "projectList",
+      "subscribeForm",
     ]);
     expect(groupChildren).toEqual([
       "group",
@@ -5286,6 +5305,7 @@ describe("personal site sample schema", () => {
       "project",
       "postList",
       "projectList",
+      "subscribeForm",
     ]);
     expect(branchVariants.post).toEqual({
       children: [
@@ -5322,6 +5342,7 @@ describe("personal site sample schema", () => {
     });
     expect(branchVariants.postList).toBe("leaf");
     expect(branchVariants.projectList).toBe("leaf");
+    expect(branchVariants.subscribeForm).toBe("leaf");
     expect(branchVariants.header).toEqual({
       action: "leaf",
       children: ["headerPrimary", "headerSecondary"],
@@ -5361,10 +5382,15 @@ describe("personal site sample schema", () => {
     expect(blockTypeField.values).toMatchObject({
       postList: { label: "Post list" },
       projectList: { label: "Project list" },
+      subscribeForm: { label: "Subscribe form" },
     });
     expect(schema.unions?.blockByType?.variants).toMatchObject({
       postList: { label: "Post list", fields: ["label"] },
       projectList: { label: "Project list", fields: ["label"] },
+      subscribeForm: {
+        label: "Subscribe form",
+        fields: ["label", "body", "actionName", "buttonLabel"],
+      },
     });
 
     const blockCreate = schema.views.blockCreate;
@@ -5417,6 +5443,14 @@ describe("personal site sample schema", () => {
           fields: {
             mediaAssetId: { editor: "media", commit: "field-commit" },
             href: { editor: "href", commit: "field-commit" },
+          },
+        },
+        subscribeForm: {
+          presentation: "fields",
+          fields: {
+            body: { editor: "markdown", commit: "field-commit" },
+            actionName: { editor: "text", commit: "field-commit" },
+            buttonLabel: { editor: "text", commit: "field-commit" },
           },
         },
       },
@@ -5481,6 +5515,14 @@ describe("personal site sample schema", () => {
         alignment: { editor: "enum" },
       },
     });
+    expect(blockCreate.variants?.subscribeForm).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown" },
+        actionName: { editor: "text" },
+        buttonLabel: { editor: "text" },
+      },
+    });
     expect(blockEdit.variants?.page).toMatchObject({
       presentation: "fields",
       fields: {
@@ -5513,6 +5555,14 @@ describe("personal site sample schema", () => {
         alignment: { editor: "enum", commit: "immediate" },
       },
     });
+    expect(blockEdit.variants?.subscribeForm).toMatchObject({
+      presentation: "fields",
+      fields: {
+        body: { editor: "markdown", commit: "field-commit" },
+        actionName: { editor: "text", commit: "field-commit" },
+        buttonLabel: { editor: "text", commit: "field-commit" },
+      },
+    });
 
     for (const blockType of plannedRemovedBlockTypes) {
       expect(blockCreate.variants).not.toHaveProperty(blockType);
@@ -5539,6 +5589,7 @@ describe("personal site sample schema", () => {
               "project",
               "postList",
               "projectList",
+              "subscribeForm",
             ],
           },
           group: {
@@ -5552,6 +5603,7 @@ describe("personal site sample schema", () => {
               "project",
               "postList",
               "projectList",
+              "subscribeForm",
             ],
           },
           post: {
@@ -5589,6 +5641,7 @@ describe("personal site sample schema", () => {
           },
           postList: "leaf",
           projectList: "leaf",
+          subscribeForm: "leaf",
           header: {
             action: "leaf",
             children: ["headerPrimary", "headerSecondary"],

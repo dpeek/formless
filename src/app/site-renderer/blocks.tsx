@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { MarkdownRenderer } from "@dpeek/formless-ui/markdown-renderer";
 
 import {
@@ -18,6 +18,11 @@ import {
   slottedImagePlacements,
 } from "./media.tsx";
 import { PagePlacementFlow, useSitePageLinkMode, useSitePageRouteBase } from "./page.tsx";
+import {
+  createSiteSubscribeIdempotencyKey,
+  submitSiteSubscribeForm,
+  TURNSTILE_RESPONSE_FIELD_NAME,
+} from "./subscribe-form.ts";
 import type { SiteBlockNode, SitePlacementNode } from "../../shared/protocol.ts";
 
 const FEATURE_MEDIA_SLOT = "media";
@@ -77,6 +82,8 @@ function SiteBlockRenderer({
       return <SiteLinkBlock block={block} placement={placement} />;
     case "image":
       return <ImageBlock block={block} />;
+    case "subscribeForm":
+      return <SubscribeFormBlock block={block} />;
     case "postList":
     case "projectList":
       return <ContentListBlock block={block} />;
@@ -228,6 +235,124 @@ function MarkdownBlock({ block }: { block: SiteBlockNode }) {
   );
 }
 
+function SubscribeFormBlock({ block }: { block: SiteBlockNode }) {
+  const emailInputId = useId();
+  const idempotencyKey = useRef(createSiteSubscribeIdempotencyKey(block.id));
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [error, setError] = useState<string | undefined>();
+  const action = block.publicAction;
+  const siteKey = action?.challenge.kind === "turnstile" ? action.challenge.siteKey : undefined;
+
+  if (!action || !siteKey) {
+    return (
+      <section className="max-w-xl space-y-3" data-block-type={block.type}>
+        <SubscribeFormHeading block={block} />
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">Subscribe form unavailable.</p>
+      </section>
+    );
+  }
+
+  const publicAction = action;
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const email = stringFormValue(formData.get("email"));
+    const turnstileToken = stringFormValue(formData.get(TURNSTILE_RESPONSE_FIELD_NAME));
+
+    if (!email || !turnstileToken) {
+      setStatus("error");
+      setError("Complete the email and challenge.");
+      return;
+    }
+
+    setStatus("submitting");
+    setError(undefined);
+
+    try {
+      await submitSiteSubscribeForm({
+        email,
+        idempotencyKey: idempotencyKey.current,
+        route: publicAction.route,
+        siteBlockId: block.id,
+        turnstileToken,
+      });
+      setStatus("success");
+    } catch (submitError) {
+      setStatus("error");
+      setError(submitError instanceof Error ? submitError.message : "Subscribe request failed.");
+    }
+  }
+
+  const disabled = status === "submitting" || status === "success";
+
+  return (
+    <section className="max-w-xl space-y-4" data-block-type={block.type}>
+      <SubscribeFormHeading block={block} />
+      <form
+        action={publicAction.route}
+        className="space-y-3"
+        data-site-subscribe-form={block.id}
+        data-site-subscribe-route={publicAction.route}
+        method="post"
+        onSubmit={onSubmit}
+      >
+        <label className="grid gap-1 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+          <span>Email</span>
+          <input
+            className="min-h-11 rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-950 shadow-sm outline-none transition focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 dark:disabled:bg-zinc-900"
+            disabled={disabled}
+            id={emailInputId}
+            name="email"
+            required
+            type="email"
+          />
+        </label>
+        <div
+          className="cf-turnstile"
+          data-response-field-name={TURNSTILE_RESPONSE_FIELD_NAME}
+          data-sitekey={siteKey}
+          data-site-turnstile
+        />
+        <button
+          className="inline-flex min-h-11 items-center justify-center rounded-md bg-zinc-950 px-4 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-300"
+          disabled={disabled}
+          type="submit"
+        >
+          {status === "submitting" ? "Subscribing..." : block.buttonLabel || "Subscribe"}
+        </button>
+        {status === "success" ? (
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            You're subscribed.
+          </p>
+        ) : null}
+        {status === "error" ? (
+          <p className="text-sm font-medium text-red-700 dark:text-red-300">
+            {error ?? "Subscribe request failed."}
+          </p>
+        ) : null}
+      </form>
+      <script async defer src="https://challenges.cloudflare.com/turnstile/v0/api.js" />
+    </section>
+  );
+}
+
+function SubscribeFormHeading({ block }: { block: SiteBlockNode }) {
+  return (
+    <div className="space-y-2">
+      <h2 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">{block.label}</h2>
+      {block.body ? (
+        <MarkdownRenderer
+          className={`text-base leading-7 text-zinc-700 dark:text-zinc-300 ${siteMarkdownLinkClassName}`}
+          content={block.body}
+          minHeadingLevel={3}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function ContentListBlock({ block }: { block: SiteBlockNode }) {
   const items = block.query?.items ?? [];
 
@@ -364,6 +489,10 @@ function placementIdSet(placements: SitePlacementNode[]): Set<string> {
 
 function isDefaultPlacement(placement: SitePlacementNode): boolean {
   return !placement.slot;
+}
+
+function stringFormValue(value: FormDataEntryValue | null): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
 
 function featureMediaSide(block: SiteBlockNode): "left" | "right" {

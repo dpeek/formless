@@ -3038,7 +3038,7 @@ describe("generated collection home", () => {
     expect(emptyRootHtml).toContain("No records yet.");
     expect(emptyRootHtml).toContain('data-formless-tree-add-parent="page-1"');
     expect(emptyRootHtml).toContain(
-      'data-formless-tree-add-variants="group hero feature markdown image link project postList projectList"',
+      'data-formless-tree-add-variants="group hero feature markdown image link project postList projectList subscribeForm"',
     );
     expect(emptyRootHtml).toContain('aria-label="Add child"');
     expect(emptyRootHtml).toContain('data-formless-tree-add-trigger="page-1"');
@@ -3136,6 +3136,9 @@ describe("generated collection home", () => {
     );
 
     expect(nestedHtml).toContain('data-formless-tree-add-parent="group-1"');
+    expect(nestedHtml).toContain(
+      'data-formless-tree-add-variants="group hero feature markdown image link project postList projectList subscribeForm"',
+    );
     expect(nestedHtml).not.toContain('data-formless-tree-add-parent="link-1"');
     expect(nestedHtml).toContain('data-formless-tree-placement-slot="actions"');
     expect(nestedHtml).toContain('data-formless-tree-remove-placement="placement-1"');

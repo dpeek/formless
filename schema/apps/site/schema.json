@@ -80,6 +80,9 @@
             "projectList": {
               "label": "Project list"
             },
+            "subscribeForm": {
+              "label": "Subscribe form"
+            },
             "group": {
               "label": "Group"
             },
@@ -128,6 +131,16 @@
           "required": false,
           "label": "Body",
           "format": "markdown"
+        },
+        "actionName": {
+          "type": "text",
+          "required": false,
+          "label": "Action name"
+        },
+        "buttonLabel": {
+          "type": "text",
+          "required": false,
+          "label": "Button label"
         },
         "href": {
           "type": "text",
@@ -664,6 +677,10 @@
           "label": "Project list",
           "fields": ["label"]
         },
+        "subscribeForm": {
+          "label": "Subscribe form",
+          "fields": ["label", "body", "actionName", "buttonLabel"]
+        },
         "group": {
           "label": "Group",
           "fields": ["label"]
@@ -1100,6 +1117,23 @@
             }
           }
         },
+        "subscribeForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "actionName": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -1226,6 +1260,23 @@
             "alignment": {
               "editor": "enum",
               "commit": "immediate"
+            }
+          }
+        },
+        "subscribeForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "actionName": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
             }
           }
         },
@@ -1703,7 +1754,8 @@
                 "link",
                 "project",
                 "postList",
-                "projectList"
+                "projectList",
+                "subscribeForm"
               ]
             },
             "group": {
@@ -1716,7 +1768,8 @@
                 "link",
                 "project",
                 "postList",
-                "projectList"
+                "projectList",
+                "subscribeForm"
               ]
             },
             "post": {
@@ -1762,6 +1815,7 @@
             },
             "postList": "leaf",
             "projectList": "leaf",
+            "subscribeForm": "leaf",
             "header": {
               "action": "leaf",
               "children": ["headerPrimary", "headerSecondary"]
@@ -1983,6 +2037,20 @@
             }
           }
         },
+        "subscribeForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown"
+            },
+            "actionName": {
+              "editor": "text"
+            },
+            "buttonLabel": {
+              "editor": "text"
+            }
+          }
+        },
         "image": {
           "presentation": "fields",
           "fields": {
@@ -2185,6 +2253,23 @@
             "alignment": {
               "editor": "enum",
               "commit": "immediate"
+            }
+          }
+        },
+        "subscribeForm": {
+          "presentation": "fields",
+          "fields": {
+            "body": {
+              "editor": "markdown",
+              "commit": "field-commit"
+            },
+            "actionName": {
+              "editor": "text",
+              "commit": "field-commit"
+            },
+            "buttonLabel": {
+              "editor": "text",
+              "commit": "field-commit"
             }
           }
         },

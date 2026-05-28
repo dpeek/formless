@@ -132,6 +132,62 @@ describe("public Site renderer characterization", () => {
     expect(html).not.toContain("Unsupported block");
   });
 
+  it("renders subscribe forms with public action route and Turnstile widget facts", () => {
+    const html = renderSite(
+      pageNode("home", [
+        placement(
+          "subscribe-placement",
+          blockNode("subscribe-block", "subscribeForm", "Join the list", {
+            body: "Get **product notes**.",
+            buttonLabel: "Join",
+            publicAction: {
+              actionName: "subscribe",
+              route: "/api/site/public/actions/subscribe",
+              challenge: {
+                kind: "turnstile",
+                siteKey: "public-site-key",
+              },
+            },
+          }),
+        ),
+      ]),
+    );
+
+    expect(html).toContain('data-block-type="subscribeForm"');
+    expect(html).toContain('data-site-subscribe-form="subscribe-block"');
+    expect(html).toContain('data-site-subscribe-route="/api/site/public/actions/subscribe"');
+    expect(html).toContain('action="/api/site/public/actions/subscribe"');
+    expect(html).toContain('name="email"');
+    expect(html).toContain('type="email"');
+    expect(html).toContain("Join");
+    expect(html).toContain('class="cf-turnstile"');
+    expect(html).toContain('data-sitekey="public-site-key"');
+    expect(html).toContain('data-response-field-name="cf-turnstile-response"');
+    expect(html).toContain("https://challenges.cloudflare.com/turnstile/v0/api.js");
+    expect(html).toContain('data-web-markdown-renderer="shared"');
+    expect(html).not.toContain("server-secret-value");
+    expect(html).not.toContain("reader@example.com");
+  });
+
+  it("does not render a working subscribe form without projected public action facts", () => {
+    const html = renderSite(
+      pageNode("home", [
+        placement(
+          "subscribe-placement",
+          blockNode("subscribe-block", "subscribeForm", "Join the list", {
+            actionName: "missingSubscribeAction",
+          }),
+        ),
+      ]),
+    );
+
+    expect(html).toContain("Join the list");
+    expect(html).toContain("Subscribe form unavailable.");
+    expect(html).not.toContain('data-site-subscribe-form="subscribe-block"');
+    expect(html).not.toContain('name="email"');
+    expect(html).not.toContain("turnstile/v0/api.js");
+  });
+
   it("keeps public Site link icons stored-SVG backed outside header navigation", () => {
     const icon = requiredIconCatalogSvg("github");
     const headerLink = linkNode("header-icon-link", "Header GitHub", "https://example.com/header", {

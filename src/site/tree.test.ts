@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { siteSourceSchema } from "../test/schema-apps.ts";
 import { testSiteSeedRecords } from "../test/site-records.ts";
+import { installedAppStorageIdentity } from "../shared/app-storage-identity.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
   buildSitePageTree,
@@ -952,6 +953,138 @@ describe("site page tree projection", () => {
       "2026-05-03",
       "2026-05-01",
     ]);
+  });
+
+  it("projects subscribe form action facts without subscriber data or secrets", () => {
+    const target = installedAppStorageIdentity({ packageAppKey: "site", installId: "site" });
+
+    if (!target) {
+      throw new Error("Missing installed Site identity.");
+    }
+
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_subscribe", {
+        type: "subscribeForm",
+        label: "Join the list",
+        body: "Get product notes.",
+        actionName: "subscribe",
+        buttonLabel: "Join",
+      }),
+      placementRecord(
+        "rec_site_place_home_subscribe",
+        "rec_site_content_home",
+        "rec_site_block_subscribe",
+        {
+          order: 4000,
+        },
+      ),
+      {
+        id: "rec_site_email_reader",
+        entity: "emailAddress",
+        values: {
+          address: "reader@example.com",
+          normalizedAddress: "reader@example.com",
+        },
+        createdAt: "2026-05-06T00:00:01.000Z",
+      },
+      {
+        id: "rec_site_subscription_reader",
+        entity: "subscription",
+        values: {
+          emailAddress: "rec_site_email_reader",
+          audience: "audience-default",
+          status: "subscribed",
+        },
+        createdAt: "2026-05-06T00:00:02.000Z",
+      },
+      {
+        id: "rec_site_turnstile_secret",
+        entity: "turnstileSecret",
+        values: {
+          secret: "server-secret-value",
+        },
+        createdAt: "2026-05-06T00:00:03.000Z",
+      },
+    ];
+    const tree = requireTree(
+      buildSitePageTree(siteSourceSchema, records, "home", {
+        generatedAt,
+        target,
+        turnstileSiteKey: "public-site-key",
+      }),
+    );
+    const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_subscribe");
+
+    expect(subscribeForm).toMatchObject({
+      id: "rec_site_block_subscribe",
+      type: "subscribeForm",
+      label: "Join the list",
+      body: "Get product notes.",
+      actionName: "subscribe",
+      buttonLabel: "Join",
+      publicAction: {
+        actionName: "subscribe",
+        route: "/api/app-installs/site/site/public/actions/subscribe",
+        challenge: {
+          kind: "turnstile",
+          siteKey: "public-site-key",
+        },
+      },
+    });
+    expect(JSON.stringify(tree)).not.toContain("server-secret-value");
+    expect(JSON.stringify(tree)).not.toContain("reader@example.com");
+  });
+
+  it("warns and omits working subscribe form actions when action bindings are missing or not public", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_missing_subscribe", {
+        type: "subscribeForm",
+        label: "Missing subscribe action",
+        actionName: "missingSubscribeAction",
+      }),
+      blockRecord("rec_site_block_private_subscribe", {
+        type: "subscribeForm",
+        label: "Private subscribe action",
+        actionName: "addTreeChild",
+      }),
+      placementRecord(
+        "rec_site_place_home_missing_subscribe",
+        "rec_site_content_home",
+        "rec_site_block_missing_subscribe",
+        {
+          order: 4000,
+        },
+      ),
+      placementRecord(
+        "rec_site_place_home_private_subscribe",
+        "rec_site_content_home",
+        "rec_site_block_private_subscribe",
+        {
+          order: 5000,
+        },
+      ),
+    ];
+    const result = buildSitePageTree(siteSourceSchema, records, "home", { generatedAt });
+    const tree = requireTree(result);
+    const missing = childForPlacement(tree.page, "rec_site_place_home_missing_subscribe");
+    const privateAction = childForPlacement(tree.page, "rec_site_place_home_private_subscribe");
+
+    expect(missing.publicAction).toBeUndefined();
+    expect(privateAction.publicAction).toBeUndefined();
+    expect(result.meta.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing-public-action",
+          recordId: "rec_site_block_missing_subscribe",
+        }),
+        expect.objectContaining({
+          code: "invalid-public-action",
+          recordId: "rec_site_block_private_subscribe",
+        }),
+      ]),
+    );
   });
 
   it("omits tombstoned and undated posts from postList projection", () => {
