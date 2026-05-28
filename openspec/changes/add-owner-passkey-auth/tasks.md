@@ -15,11 +15,21 @@ Evidence:
 
 ## 2. Instance Auth Storage
 
-- [ ] 2.1 Add durable instance auth tables for auth configuration, passkey credentials, and one-time WebAuthn challenges.
-- [ ] 2.2 Add storage functions for reading/writing auth config with canonical origin, relying-party id, relying-party name, and timestamps.
-- [ ] 2.3 Add storage functions for creating, reading, consuming, expiring, and deleting registration and login challenges.
-- [ ] 2.4 Add storage functions for creating passkey credentials, preventing duplicate credential ids, and updating verification counters/facts.
-- [ ] 2.5 Add worker storage tests for config validation, challenge replay, challenge expiry, duplicate credentials, and credential counter updates.
+- [x] 2.1 Add durable instance auth tables for auth configuration, passkey credentials, and one-time WebAuthn challenges.
+- [x] 2.2 Add storage functions for reading/writing auth config with canonical origin, relying-party id, relying-party name, and timestamps.
+- [x] 2.3 Add storage functions for creating, reading, consuming, expiring, and deleting registration and login challenges.
+- [x] 2.4 Add storage functions for creating passkey credentials, preventing duplicate credential ids, and updating verification counters/facts.
+- [x] 2.5 Add worker storage tests for config validation, challenge replay, challenge expiry, duplicate credentials, and credential counter updates.
+
+Evidence:
+
+- Files changed: `src/worker/instance-auth-state.ts`, `src/worker/instance-auth-state.test.ts`.
+- Checks: `devstate check` passed; `./.devstate/status.md` shows checks ok and services running at 2026-05-28T06:55:37.498Z.
+- Storage decision: instance auth storage owns `instance_auth_config`, `instance_auth_challenges`, and `instance_auth_passkey_credentials`; WebAuthn public keys are stored as base64url public material and converted back to `WebAuthnCredential` bytes for verification.
+- Challenge decision: registration challenges store setup token hash scope, login challenges store owner id scope, and consumption sets `consumed_at`; replay, expiry, explicit delete, and expired-row cleanup are covered by worker storage tests.
+- Credential decision: duplicate credential ids are rejected without mutating the existing record; verification updates reject counter regression and persist user verification, origin, RP id, device type, backup state, counter, and timestamps.
+- Browser smoke: not run; this section added storage functions and worker storage tests only, with no app route behavior changed.
+- Promotion note: finalization should promote instance-auth storage tables, one-time challenge behavior, duplicate credential id behavior, and counter/fact update behavior.
 
 ## 3. WebAuthn Ceremony APIs
 
