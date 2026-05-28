@@ -22,6 +22,18 @@ type AppInstallFailureResponse = {
   field?: string;
 };
 
+type PackageMigrationApplyResponse = {
+  applied: unknown[];
+  changes: unknown[];
+  cursor: number;
+  install: CreateAppInstallResponse["install"];
+  installs: CreateAppInstallResponse["installs"];
+  packageAppKey: string;
+  packageRevision: number;
+  skipped: unknown[];
+  sourceSchemaHash: string;
+};
+
 const adminToken = "test-admin-token";
 
 let harness: Harness;
@@ -175,6 +187,40 @@ describe("instance app install API routes", () => {
     expect(bootstrap.body.schema).toEqual(taskSourceSchema);
     expect(bootstrap.body.records).toEqual(taskSeedRecords);
     expect(bootstrap.body.cursor).toBe(taskSeedRecords.length);
+  });
+
+  it("applies installed app package migrations through Authority and updates install facts", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      packageAppKey: "tasks",
+      installId: "tasks",
+      label: "Tasks",
+    });
+
+    const applied = await postAdminJson<PackageMigrationApplyResponse>(
+      "/api/formless/app-installs/tasks/tasks/package-migrations/apply",
+      {},
+    );
+    const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(applied.response.status).toBe(200);
+    expect(applied.body).toMatchObject({
+      applied: [],
+      changes: [],
+      packageAppKey: "tasks",
+      packageRevision: 1,
+      skipped: [],
+      sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
+    });
+    expect(applied.body.cursor).toBe(taskSeedRecords.length);
+    expect(applied.body.install).toEqual(
+      expect.objectContaining({
+        installId: "tasks",
+        packageAppKey: "tasks",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
+      }),
+    );
+    expect(after.body.installs).toEqual(applied.body.installs);
   });
 
   it("persists Estii installs and bootstraps from the bundled Estii source", async () => {

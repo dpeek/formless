@@ -14,12 +14,21 @@ import {
   type CreateAppInstallRequest,
   type CreateAppInstallResponse,
 } from "../shared/protocol.ts";
+import {
+  isSourceSchemaHash,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "../shared/upgrade-migrations.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
-import { INTERNAL_BACKFILL_APP_INSTALLS_PATH } from "./instance-control-plane.ts";
+import {
+  INTERNAL_BACKFILL_APP_INSTALLS_PATH,
+  INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH,
+} from "./instance-control-plane.ts";
 import { readLegacyInstanceAppInstalls } from "./instance-app-installs-state.ts";
 
 export const INSTANCE_APP_INSTALLS_API_PATH = "/api/formless/app-installs";
+export const INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX = "/package-migrations/apply";
 
 export type InstanceAppInstallsApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
@@ -74,6 +83,52 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
   }
 
   try {
+    const migrationApplyRoute = parsePackageMigrationApplyRoute(pathname);
+
+    if (migrationApplyRoute) {
+      if (request.method !== "POST") {
+        return methodNotAllowedResponse("POST");
+      }
+
+      const authorization = await authorizeInstanceWrite(request, env);
+
+      if (!authorization.authorized) {
+        return jsonResponse(
+          { error: authorization.error },
+          authorization.status,
+          authorization.headers,
+        );
+      }
+
+      const install = findAppInstall(
+        await readBackfilledControlPlaneAppInstalls(storage, env, request.url),
+        migrationApplyRoute.installId,
+      );
+
+      if (!install || install.packageAppKey !== migrationApplyRoute.packageAppKey) {
+        return jsonResponse({ error: "App install not found." }, 404);
+      }
+
+      const migrationResponse = await applyInstalledAppPackageMigrations(request, env, install);
+      const installs = await updateControlPlaneAppInstallPackageFacts(request, env, {
+        installId: install.installId,
+        packageAppKey: install.packageAppKey,
+        packageRevision: migrationResponse.packageRevision,
+        sourceSchemaHash: migrationResponse.sourceSchemaHash,
+      });
+      const updatedInstall = findAppInstall(installs, install.installId);
+
+      if (!updatedInstall) {
+        throw new Error(`Migrated install "${install.installId}" was not returned by control-plane.`);
+      }
+
+      return jsonResponse({
+        ...migrationResponse,
+        install: updatedInstall,
+        installs,
+      });
+    }
+
     if (pathname !== INSTANCE_APP_INSTALLS_API_PATH) {
       return jsonResponse({ error: "Not found." }, 404);
     }
@@ -137,6 +192,112 @@ function isInstanceAppInstallsApiPath(pathname: string) {
   );
 }
 
+function parsePackageMigrationApplyRoute(pathname: string):
+  | {
+      installId: string;
+      packageAppKey: string;
+    }
+  | undefined {
+  const prefix = `${INSTANCE_APP_INSTALLS_API_PATH}/`;
+
+  if (
+    !pathname.startsWith(prefix) ||
+    !pathname.endsWith(INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX)
+  ) {
+    return undefined;
+  }
+
+  const route = pathname.slice(
+    prefix.length,
+    -INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX.length,
+  );
+  const [packageAppKey, installId, ...extra] = route.split("/").filter(Boolean);
+
+  if (!packageAppKey || !installId || extra.length > 0) {
+    return undefined;
+  }
+
+  return {
+    installId,
+    packageAppKey,
+  };
+}
+
+async function applyInstalledAppPackageMigrations(
+  request: Request,
+  env: InstanceAppInstallsApiEnv,
+  install: AppInstall,
+): Promise<{
+  applied: unknown[];
+  changes: unknown[];
+  cursor: number;
+  packageAppKey: string;
+  packageRevision: PackageAppRevision;
+  schemaUpdatedAt: string;
+  skipped: unknown[];
+  sourceSchemaHash: SourceSchemaHash;
+}> {
+  const requestUrl = new URL(request.url);
+  const applyUrl = new URL(
+    `/api/app-installs/${install.packageAppKey}/${install.installId}${INSTANCE_APP_INSTALL_PACKAGE_MIGRATIONS_PATH_SUFFIX}`,
+    requestUrl.origin,
+  );
+  const id = env.FORMLESS_AUTHORITY.idFromName(`app:${install.installId}`);
+  const headers = new Headers(request.headers);
+
+  headers.set("Content-Type", "application/json");
+
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(applyUrl, {
+      body: JSON.stringify({
+        currentPackageRevision: install.packageRevision,
+        currentSourceSchemaHash: install.sourceSchemaHash,
+      }),
+      headers,
+      method: "POST",
+    }),
+  );
+  const body = (await response.json()) as {
+    error?: string;
+    applied?: unknown[];
+    changes?: unknown[];
+    cursor?: number;
+    packageAppKey?: string;
+    packageRevision?: number;
+    schemaUpdatedAt?: string;
+    skipped?: unknown[];
+    sourceSchemaHash?: unknown;
+  };
+
+  if (!response.ok) {
+    throw new Error(body.error ?? "Package app migration apply failed.");
+  }
+
+  if (
+    !Array.isArray(body.applied) ||
+    !Array.isArray(body.changes) ||
+    typeof body.cursor !== "number" ||
+    body.packageAppKey !== install.packageAppKey ||
+    !isPackageAppRevision(body.packageRevision) ||
+    typeof body.schemaUpdatedAt !== "string" ||
+    !Array.isArray(body.skipped) ||
+    !isSourceSchemaHash(body.sourceSchemaHash)
+  ) {
+    throw new Error("Package app migration response is invalid.");
+  }
+
+  return {
+    applied: body.applied,
+    changes: body.changes,
+    cursor: body.cursor,
+    packageAppKey: body.packageAppKey,
+    packageRevision: body.packageRevision,
+    schemaUpdatedAt: body.schemaUpdatedAt,
+    skipped: body.skipped,
+    sourceSchemaHash: body.sourceSchemaHash,
+  };
+}
+
 async function appInstallsResponse(
   request: Request,
   storage: DurableObjectStorage,
@@ -177,6 +338,39 @@ export async function readBackfilledControlPlaneAppInstalls(
   return body.installs;
 }
 
+async function updateControlPlaneAppInstallPackageFacts(
+  request: Request,
+  env: InstanceAppInstallsApiEnv,
+  input: {
+    installId: string;
+    packageAppKey: string;
+    packageRevision: PackageAppRevision;
+    sourceSchemaHash: SourceSchemaHash;
+  },
+): Promise<AppInstall[]> {
+  const id = env.FORMLESS_AUTHORITY.idFromName(INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY);
+  const response = await env.FORMLESS_AUTHORITY.get(id).fetch(
+    new Request(
+      new URL(
+        `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}${INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH}`,
+        request.url,
+      ),
+      {
+        body: JSON.stringify(input),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    ),
+  );
+  const body = (await response.json()) as { installs?: AppInstall[]; error?: string };
+
+  if (!response.ok || !Array.isArray(body.installs)) {
+    throw new Error(body.error ?? "Control-plane app install package fact update failed.");
+  }
+
+  return body.installs;
+}
+
 async function createControlPlaneAppInstall(
   request: Request,
   env: InstanceAppInstallsApiEnv,
@@ -209,6 +403,10 @@ async function createControlPlaneAppInstall(
 
 function installFailureStatus(code: string | undefined) {
   return code === "duplicate-install-id" ? 409 : 400;
+}
+
+function isPackageAppRevision(value: unknown): value is PackageAppRevision {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
 async function readJson(request: Request): Promise<unknown> {

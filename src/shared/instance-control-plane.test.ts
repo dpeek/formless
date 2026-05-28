@@ -10,6 +10,7 @@ import {
   isInstanceControlPlaneRouteSafePath,
 } from "./instance-control-plane.ts";
 import { parseAppSchema } from "./schema.ts";
+import { bundledSourceSchemaHashFixtures } from "./upgrade-migrations.ts";
 import {
   isRuntimeControlPlaneImmutableField,
   isRuntimeControlPlaneSecretReferenceField,
@@ -172,6 +173,8 @@ describe("instance control-plane schema contracts", () => {
       values: {
         installId: "personal",
         packageAppKey: "site",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
         label: "Personal Site",
         status: "installed",
         storageIdentity: "app:personal",

@@ -45,11 +45,19 @@ Evidence:
 
 ## 4. Authority Package App Migrations
 
-- [ ] 4.1 Add package app migration registry entries and execution helpers for schema/data migrations between package revisions.
-- [ ] 4.2 Add Authority-backed migration execution that validates schema changes, materializes flat record creates/patches/tombstones, appends change rows, and advances cursors.
-- [ ] 4.3 Add applied package migration state per installed app storage identity with revision/hash update behavior after successful migration.
-- [ ] 4.4 Add rollback-safe failure behavior so invalid migrated records leave stored schema, records, write log, and package facts unchanged.
-- [ ] 4.5 Add Authority tests for successful record migration catch-up, invalid field/reference/unique/delete validation failures, idempotent replay, and browser sync visibility.
+- [x] 4.1 Add package app migration registry entries and execution helpers for schema/data migrations between package revisions.
+- [x] 4.2 Add Authority-backed migration execution that validates schema changes, materializes flat record creates/patches/tombstones, appends change rows, and advances cursors.
+- [x] 4.3 Add applied package migration state per installed app storage identity with revision/hash update behavior after successful migration.
+- [x] 4.4 Add rollback-safe failure behavior so invalid migrated records leave stored schema, records, write log, and package facts unchanged.
+- [x] 4.5 Add Authority tests for successful record migration catch-up, invalid field/reference/unique/delete validation failures, idempotent replay, and browser sync visibility.
+
+Evidence:
+
+- `grug` 2026-05-28: added `src/worker/package-app-migrations.ts` for package app migration registry validation, package-family helpers, and revision-chain selection. Current bundled packages remain at revision `1`, so the production registry is empty until a real package revision advances.
+- Added Authority storage package migration state in `src/worker/storage.ts`: `formless_applied_package_app_migrations`, `formless_package_app_state`, atomic apply, schema parsing before storage, flat create/patch/tombstone materialization, change-row append, cursor response, checksum skip/replay checks, and rollback on validation failure.
+- Added `/package-migrations/apply` Authority operation and `/api/formless/app-installs/:packageAppKey/:installId/package-migrations/apply` instance coordination. The instance route calls the installed app Authority, then updates app install package revision/hash facts only after successful migration evidence.
+- Added tests in `src/worker/storage.test.ts` for successful migration catch-up through sync, idempotent replay, applied state, package facts, and rollback for invalid field, reference, unique, and delete plans. Added `src/worker/instance-app-installs.test.ts` coverage for installed app migration apply updating install facts through Authority.
+- `devstate check` 2026-05-28 before and after `git rebase main`: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes worker storage/API migration behavior and no visible browser app workflow changed.
 
 ## 5. Target Upgrade Status Reads
 

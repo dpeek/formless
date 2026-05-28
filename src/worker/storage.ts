@@ -1,4 +1,5 @@
 import { createRecordId } from "../shared/ids.ts";
+import { validateAuthorityFieldValue } from "../shared/field-types.ts";
 import { STORE_SNAPSHOT_KIND, STORE_SNAPSHOT_VERSION } from "../shared/protocol.ts";
 import type {
   ActionResponse,
@@ -17,8 +18,23 @@ import {
   stringifySchema,
   type AppSchema,
   type EntitySchema,
+  type FieldSchema,
+  type UniqueConstraintSchema,
 } from "../shared/schema.ts";
 import { nowIsoString } from "../shared/clock.ts";
+import type { PackageAppKey } from "../shared/app-installs.ts";
+import type {
+  PackageAppRevision,
+  SourceSchemaHash,
+  UpgradeMigrationChecksum,
+  UpgradeMigrationId,
+} from "../shared/upgrade-migrations.ts";
+import type {
+  AuthorityPackageAppMigration,
+  PackageAppMigrationPlan,
+  PackageAppMigrationRecordPatch,
+  PackageAppMigrationRecordTombstone,
+} from "./package-app-migrations.ts";
 import {
   appendActionWriteLogChange,
   appendMutationWriteLogChange,
@@ -49,8 +65,27 @@ type SchemaRow = {
   updated_at: string;
 };
 
+type AppliedPackageAppMigrationRow = {
+  package_app_key: string;
+  migration_id: string;
+  checksum: UpgradeMigrationChecksum;
+  from_package_revision: number;
+  to_package_revision: number;
+  source_schema_hash: SourceSchemaHash;
+  applied_at: string;
+};
+
+type PackageAppStateRow = {
+  package_app_key: string;
+  package_revision: number;
+  source_schema_hash: SourceSchemaHash;
+  updated_at: string;
+};
+
 const authoritySqlMigrationFamily = storageSqlMigrationFamily("authority-storage");
 const authoritySqlMigrations = createSqlStorageMigrationRegistry([]);
+const appliedPackageAppMigrationsTableName = "formless_applied_package_app_migrations";
+const packageAppStateTableName = "formless_package_app_state";
 
 export type StoredSchema = {
   schema: AppSchema;
@@ -118,6 +153,44 @@ export type ActionRecordWritePlan =
       values: ActionRecordWriteValues;
     };
 
+export type AppliedPackageAppMigration = {
+  packageAppKey: PackageAppKey;
+  migrationId: UpgradeMigrationId;
+  checksum: UpgradeMigrationChecksum;
+  fromPackageRevision: PackageAppRevision;
+  toPackageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
+  appliedAt: string;
+};
+
+export type PackageAppMigrationState = {
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
+  updatedAt: string;
+};
+
+export type ApplyPackageAppMigrationsInput = {
+  currentPackageRevision: PackageAppRevision;
+  currentSourceSchemaHash: SourceSchemaHash;
+  migrations: readonly AuthorityPackageAppMigration[];
+  packageAppKey: PackageAppKey;
+  targetPackageRevision: PackageAppRevision;
+  targetSourceSchemaHash: SourceSchemaHash;
+  now?: string;
+};
+
+export type ApplyPackageAppMigrationsResponse = {
+  applied: AppliedPackageAppMigration[];
+  changes: ChangeRow[];
+  cursor: number;
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  schemaUpdatedAt: string;
+  skipped: AppliedPackageAppMigration[];
+  sourceSchemaHash: SourceSchemaHash;
+};
+
 type SourceDataPlan = {
   schema: AppSchema;
   records: StoredRecord[];
@@ -136,6 +209,19 @@ type SnapshotRestorePlan = {
   recordsToRestore: StoredRecord[];
   recordsToTombstone: StoredRecord[];
   changedRecords: StoredRecord[];
+};
+
+type PackageAppMigrationRecordChange = {
+  entity: string;
+  op: ChangeRow["op"];
+  record: StoredRecord;
+};
+
+type PackageAppMigrationMaterializationPlan = {
+  changes: PackageAppMigrationRecordChange[];
+  records: StoredRecord[];
+  schema: AppSchema;
+  tombstones: PackageAppMigrationRecordTombstone[];
 };
 
 type ApplyCreateMutationSideEffects = (context: {
@@ -202,6 +288,77 @@ export function ensureStorageTables(storage: DurableObjectStorage) {
       created_at TEXT NOT NULL
     );
   `);
+
+  ensurePackageAppMigrationTables(storage);
+}
+
+export function ensurePackageAppMigrationTables(storage: DurableObjectStorage) {
+  storage.sql.exec(`
+    CREATE TABLE IF NOT EXISTS ${appliedPackageAppMigrationsTableName} (
+      package_app_key TEXT NOT NULL,
+      migration_id TEXT NOT NULL,
+      checksum TEXT NOT NULL CHECK (length(checksum) = 71 AND checksum LIKE 'sha256:%'),
+      from_package_revision INTEGER NOT NULL,
+      to_package_revision INTEGER NOT NULL,
+      source_schema_hash TEXT NOT NULL CHECK (length(source_schema_hash) = 71 AND source_schema_hash LIKE 'sha256:%'),
+      applied_at TEXT NOT NULL,
+      PRIMARY KEY (package_app_key, migration_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ${packageAppStateTableName} (
+      package_app_key TEXT PRIMARY KEY,
+      package_revision INTEGER NOT NULL,
+      source_schema_hash TEXT NOT NULL CHECK (length(source_schema_hash) = 71 AND source_schema_hash LIKE 'sha256:%'),
+      updated_at TEXT NOT NULL
+    );
+  `);
+}
+
+export function readAppliedPackageAppMigrations(
+  storage: DurableObjectStorage,
+  packageAppKey: PackageAppKey,
+): AppliedPackageAppMigration[] {
+  ensurePackageAppMigrationTables(storage);
+
+  return storage.sql
+    .exec<AppliedPackageAppMigrationRow>(
+      `
+        SELECT
+          package_app_key,
+          migration_id,
+          checksum,
+          from_package_revision,
+          to_package_revision,
+          source_schema_hash,
+          applied_at
+        FROM ${appliedPackageAppMigrationsTableName}
+        WHERE package_app_key = ?
+        ORDER BY applied_at ASC, migration_id ASC
+      `,
+      packageAppKey,
+    )
+    .toArray()
+    .map(appliedPackageAppMigrationFromRow);
+}
+
+export function readPackageAppMigrationState(
+  storage: DurableObjectStorage,
+  packageAppKey: PackageAppKey,
+): PackageAppMigrationState | undefined {
+  ensurePackageAppMigrationTables(storage);
+
+  const row = storage.sql
+    .exec<PackageAppStateRow>(
+      `
+        SELECT package_app_key, package_revision, source_schema_hash, updated_at
+        FROM ${packageAppStateTableName}
+        WHERE package_app_key = ?
+      `,
+      packageAppKey,
+    )
+    .next();
+
+  return row.done ? undefined : packageAppStateFromRow(row.value);
 }
 
 export function getActiveSchema(
@@ -374,6 +531,139 @@ export function restoreStorageSnapshotOutcome(
       schemaUpdatedAt: storedSchema.updatedAt,
       records: getBootstrapRecords(storage),
       cursor: getCurrentCursor(storage),
+    });
+  });
+}
+
+export function applyPackageAppMigrationsOutcome(
+  storage: DurableObjectStorage,
+  input: ApplyPackageAppMigrationsInput,
+): WriteOutcome<ApplyPackageAppMigrationsResponse> {
+  return storage.transactionSync(() => {
+    ensurePackageAppMigrationTables(storage);
+
+    const startedCursor = getCurrentCursor(storage);
+    const appliedById = new Map(
+      readAppliedPackageAppMigrations(storage, input.packageAppKey).map((migration) => [
+        migration.migrationId,
+        migration,
+      ]),
+    );
+    const state =
+      readPackageAppMigrationState(storage, input.packageAppKey) ??
+      fallbackPackageAppMigrationState(input);
+    const skipped = skippedAppliedPackageAppMigrations(input.migrations, appliedById);
+    const applied: AppliedPackageAppMigration[] = [];
+    let storedSchema = readStoredSchema(storage);
+
+    if (!storedSchema) {
+      throw new Error("Cannot apply package app migrations before storage is initialized.");
+    }
+
+    if (state.packageRevision > input.targetPackageRevision) {
+      throw new Error(
+        `Stored package app "${input.packageAppKey}" revision ${state.packageRevision} is newer than target revision ${input.targetPackageRevision}.`,
+      );
+    }
+
+    validateAppliedPackageMigrationChecksums(input.migrations, appliedById);
+
+    if (state.packageRevision < input.targetPackageRevision) {
+      let currentRevision = state.packageRevision;
+      let currentSourceSchemaHash = state.sourceSchemaHash;
+
+      for (const migration of input.migrations) {
+        if (migration.family.packageAppKey !== input.packageAppKey) {
+          continue;
+        }
+
+        if (migration.toPackageRevision <= currentRevision) {
+          continue;
+        }
+
+        if (migration.fromPackageRevision !== currentRevision) {
+          throw new Error(
+            `Missing package app migration for "${input.packageAppKey}" from revision ${currentRevision} to ${input.targetPackageRevision}.`,
+          );
+        }
+
+        if (migration.toPackageRevision > input.targetPackageRevision) {
+          throw new Error(
+            `Package app migration "${migration.id}" advances past target revision ${input.targetPackageRevision}.`,
+          );
+        }
+
+        const appliedAt = input.now ?? nowIsoString();
+        const plan = migration.migrate({
+          currentSchema: storedSchema.schema,
+          fromPackageRevision: migration.fromPackageRevision,
+          packageAppKey: input.packageAppKey,
+          records: getBootstrapRecords(storage),
+          sourceSchemaHash: currentSourceSchemaHash,
+          toPackageRevision: migration.toPackageRevision,
+        });
+        const materialization = planPackageAppMigrationMaterialization({
+          changedAt: appliedAt,
+          currentRecords: getBootstrapRecords(storage),
+          currentSchema: storedSchema.schema,
+          migration,
+          plan,
+        });
+
+        storedSchema = materializePackageAppMigration(storage, {
+          changedAt: appliedAt,
+          materialization,
+          migration,
+          storedSchema,
+        });
+
+        const appliedMigration = {
+          appliedAt,
+          checksum: migration.checksum,
+          fromPackageRevision: migration.fromPackageRevision,
+          migrationId: migration.id,
+          packageAppKey: input.packageAppKey,
+          sourceSchemaHash: input.targetSourceSchemaHash,
+          toPackageRevision: migration.toPackageRevision,
+        } satisfies AppliedPackageAppMigration;
+
+        recordAppliedPackageAppMigration(storage, appliedMigration);
+        appliedById.set(migration.id, appliedMigration);
+        applied.push(appliedMigration);
+        currentRevision = migration.toPackageRevision;
+        currentSourceSchemaHash = input.targetSourceSchemaHash;
+      }
+
+      if (currentRevision !== input.targetPackageRevision) {
+        throw new Error(
+          `Missing package app migration for "${input.packageAppKey}" from revision ${currentRevision} to ${input.targetPackageRevision}.`,
+        );
+      }
+    }
+
+    const finishedAt = input.now ?? nowIsoString();
+    upsertPackageAppMigrationState(storage, {
+      packageAppKey: input.packageAppKey,
+      packageRevision: input.targetPackageRevision,
+      sourceSchemaHash: input.targetSourceSchemaHash,
+      updatedAt: finishedAt,
+    });
+
+    const finalSchema = readStoredSchema(storage);
+
+    if (!finalSchema) {
+      throw new Error("Package app migration left storage without an active schema.");
+    }
+
+    return committedWrite({
+      applied,
+      changes: getChangesAfter(storage, startedCursor),
+      cursor: getCurrentCursor(storage),
+      packageAppKey: input.packageAppKey,
+      packageRevision: input.targetPackageRevision,
+      schemaUpdatedAt: finalSchema.updatedAt,
+      skipped,
+      sourceSchemaHash: input.targetSourceSchemaHash,
     });
   });
 }
@@ -585,6 +875,350 @@ function appendSnapshotRestoreChanges(storage: DurableObjectStorage, plan: Snaps
       record,
       createdAt: plan.restoredAt,
     });
+  }
+}
+
+function planPackageAppMigrationMaterialization(input: {
+  changedAt: string;
+  currentRecords: StoredRecord[];
+  currentSchema: AppSchema;
+  migration: AuthorityPackageAppMigration;
+  plan: PackageAppMigrationPlan;
+}): PackageAppMigrationMaterializationPlan {
+  const schema = input.plan.schema ? parseAppSchema(input.plan.schema) : input.currentSchema;
+  const recordsById = new Map(input.currentRecords.map((record) => [record.id, record]));
+  const changes: PackageAppMigrationRecordChange[] = [];
+
+  for (const create of input.plan.creates ?? []) {
+    const recordId = create.recordId ?? createRecordId();
+
+    if (recordsById.has(recordId)) {
+      throw new Error(
+        `Package app migration "${input.migration.id}" creates duplicate record "${recordId}".`,
+      );
+    }
+
+    const record = {
+      id: recordId,
+      entity: create.entity,
+      values: create.values,
+      createdAt: create.createdAt ?? input.changedAt,
+    } satisfies StoredRecord;
+
+    recordsById.set(record.id, record);
+    changes.push({ entity: create.entity, op: "create", record });
+  }
+
+  for (const patch of input.plan.patches ?? []) {
+    const existingRecord = activePackageAppMigrationRecord(recordsById, patch);
+    const values = patchPackageAppMigrationRecordValues(existingRecord.values, patch);
+    const record = {
+      ...existingRecord,
+      values,
+    } satisfies StoredRecord;
+
+    recordsById.set(record.id, record);
+    changes.push({ entity: patch.entity, op: "patch", record });
+  }
+
+  for (const tombstone of input.plan.tombstones ?? []) {
+    const existingRecord = activePackageAppMigrationRecord(recordsById, tombstone);
+    const record = {
+      ...existingRecord,
+      deletedAt: input.changedAt,
+    } satisfies StoredRecord;
+
+    recordsById.set(record.id, record);
+    changes.push({ entity: tombstone.entity, op: "delete", record });
+  }
+
+  const records = [...recordsById.values()];
+
+  validatePackageAppMigrationRecords(schema, records, input.plan.tombstones ?? []);
+
+  return {
+    changes,
+    records,
+    schema,
+    tombstones: input.plan.tombstones ?? [],
+  };
+}
+
+function materializePackageAppMigration(
+  storage: DurableObjectStorage,
+  input: {
+    changedAt: string;
+    materialization: PackageAppMigrationMaterializationPlan;
+    migration: AuthorityPackageAppMigration;
+    storedSchema: StoredSchema;
+  },
+): StoredSchema {
+  const schemaChanged = !schemasEqual(input.storedSchema.schema, input.materialization.schema);
+  const storedSchema = schemaChanged
+    ? writeActiveSchemaAt(storage, input.materialization.schema, input.changedAt)
+    : input.storedSchema;
+  const mutationId = `package-migration:${input.migration.id}`;
+
+  for (const change of input.materialization.changes) {
+    upsertPackageAppMigrationRecord(storage, change.record);
+    appendWriteLogChange(storage, {
+      mutationId,
+      op: change.op,
+      entity: change.entity,
+      record: change.record,
+      createdAt: input.changedAt,
+    });
+  }
+
+  return storedSchema;
+}
+
+function activePackageAppMigrationRecord(
+  recordsById: Map<string, StoredRecord>,
+  input: PackageAppMigrationRecordPatch | PackageAppMigrationRecordTombstone,
+): StoredRecord {
+  const record = recordsById.get(input.recordId);
+
+  if (!record) {
+    throw new Error(`Package app migration references unknown record "${input.recordId}".`);
+  }
+
+  if (record.entity !== input.entity) {
+    throw new Error(
+      `Package app migration record "${input.recordId}" entity must be "${record.entity}".`,
+    );
+  }
+
+  if (record.deletedAt) {
+    throw new Error(`Package app migration record "${input.recordId}" is already tombstoned.`);
+  }
+
+  return record;
+}
+
+function patchPackageAppMigrationRecordValues(
+  values: RecordValues,
+  patch: PackageAppMigrationRecordPatch,
+): RecordValues {
+  const patched = { ...values };
+
+  for (const fieldName of patch.unsetValues ?? []) {
+    delete patched[fieldName];
+  }
+
+  for (const [fieldName, fieldValue] of Object.entries(patch.values ?? {})) {
+    if (fieldValue !== undefined) {
+      patched[fieldName] = fieldValue;
+    }
+  }
+
+  return patched;
+}
+
+function upsertPackageAppMigrationRecord(storage: DurableObjectStorage, record: StoredRecord) {
+  storage.sql.exec(
+    `
+      INSERT INTO records (id, entity, values_json, created_at, deleted_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        entity = excluded.entity,
+        values_json = excluded.values_json,
+        created_at = excluded.created_at,
+        deleted_at = excluded.deleted_at
+    `,
+    record.id,
+    record.entity,
+    JSON.stringify(record.values),
+    record.createdAt,
+    record.deletedAt ?? null,
+  );
+}
+
+function validatePackageAppMigrationRecords(
+  schema: AppSchema,
+  records: StoredRecord[],
+  tombstones: readonly PackageAppMigrationRecordTombstone[],
+) {
+  const recordsById = new Map<string, StoredRecord>();
+
+  for (const record of records) {
+    if (recordsById.has(record.id)) {
+      throw new Error(`Package app migration produced duplicate record id "${record.id}".`);
+    }
+
+    recordsById.set(record.id, record);
+  }
+
+  assertPackageAppMigrationDeletes(schema, records, tombstones);
+
+  for (const record of records) {
+    if (record.deletedAt) {
+      continue;
+    }
+
+    validateActivePackageAppMigrationRecord(schema, record, recordsById);
+  }
+
+  assertPackageAppMigrationUniqueConstraints(schema, records);
+}
+
+function validateActivePackageAppMigrationRecord(
+  schema: AppSchema,
+  record: StoredRecord,
+  recordsById: Map<string, StoredRecord>,
+) {
+  const entity = schema.entities[record.entity];
+
+  if (!entity) {
+    throw new Error(
+      `Package app migration record "${record.id}" references unknown entity "${record.entity}".`,
+    );
+  }
+
+  for (const fieldName of Object.keys(record.values)) {
+    if (!Object.hasOwn(entity.fields, fieldName)) {
+      throw new Error(
+        `Package app migration record "${record.id}" includes unknown field "${record.entity}.${fieldName}".`,
+      );
+    }
+  }
+
+  for (const [fieldName, field] of Object.entries(entity.fields)) {
+    const fieldValue = record.values[fieldName];
+    const fieldWasProvided = fieldName in record.values;
+    const result = validatePackageAppMigrationFieldValue(
+      fieldName,
+      field,
+      fieldValue,
+      fieldWasProvided,
+    );
+
+    if (result.kind === "omit") {
+      continue;
+    }
+
+    if (field.type === "reference") {
+      if (typeof result.value !== "string") {
+        throw new Error("Reference field validation returned a non-string value.");
+      }
+
+      const targetRecord = recordsById.get(result.value);
+
+      if (!targetRecord) {
+        throw new Error(
+          `Field "${fieldName}" references unknown ${field.to} record "${result.value}".`,
+        );
+      }
+
+      if (targetRecord.entity !== field.to) {
+        throw new Error(`Field "${fieldName}" must reference a ${field.to} record.`);
+      }
+
+      if (targetRecord.deletedAt) {
+        throw new Error(
+          `Field "${fieldName}" cannot reference tombstoned record "${result.value}".`,
+        );
+      }
+    }
+  }
+}
+
+function validatePackageAppMigrationFieldValue(
+  fieldName: string,
+  field: FieldSchema,
+  value: unknown,
+  provided: boolean,
+) {
+  try {
+    return validateAuthorityFieldValue(fieldName, field, value, provided);
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : "Field value is invalid.");
+  }
+}
+
+function assertPackageAppMigrationUniqueConstraints(schema: AppSchema, records: StoredRecord[]) {
+  for (const [entityName, entity] of Object.entries(schema.entities)) {
+    const activeRecords = records.filter(
+      (record) => record.entity === entityName && !record.deletedAt,
+    );
+
+    for (const [constraintName, constraint] of Object.entries(entity.constraints ?? {})) {
+      if (constraint.kind !== "unique") {
+        continue;
+      }
+
+      assertPackageAppMigrationUniqueConstraint(
+        entityName,
+        constraintName,
+        constraint,
+        activeRecords,
+      );
+    }
+  }
+}
+
+function assertPackageAppMigrationUniqueConstraint(
+  entityName: string,
+  constraintName: string,
+  constraint: UniqueConstraintSchema,
+  records: StoredRecord[],
+) {
+  const seen = new Set<string>();
+
+  for (const record of records) {
+    const key = JSON.stringify(
+      constraint.fields.map((fieldName) => record.values[fieldName] ?? null),
+    );
+
+    if (seen.has(key)) {
+      throw new Error(`Unique constraint "${entityName}.${constraintName}" would be violated.`);
+    }
+
+    seen.add(key);
+  }
+}
+
+function assertPackageAppMigrationDeletes(
+  schema: AppSchema,
+  records: StoredRecord[],
+  tombstones: readonly PackageAppMigrationRecordTombstone[],
+) {
+  const tombstonedIds = new Set(tombstones.map((tombstone) => tombstone.recordId));
+
+  if (tombstonedIds.size === 0) {
+    return;
+  }
+
+  for (const targetRecordId of tombstonedIds) {
+    const targetRecord = records.find((record) => record.id === targetRecordId);
+
+    if (!targetRecord) {
+      continue;
+    }
+
+    for (const record of records) {
+      if (record.deletedAt) {
+        continue;
+      }
+
+      const entity = schema.entities[record.entity];
+
+      if (!entity) {
+        continue;
+      }
+
+      for (const [fieldName, field] of Object.entries(entity.fields)) {
+        if (
+          field.type === "reference" &&
+          field.to === targetRecord.entity &&
+          record.values[fieldName] === targetRecord.id
+        ) {
+          throw new Error(
+            `Cannot delete record "${targetRecord.id}" because active ${record.entity} record "${record.id}" references it through field "${record.entity}.${fieldName}".`,
+          );
+        }
+      }
+    }
   }
 }
 
@@ -1386,6 +2020,120 @@ export function getMutationResponseById(
   mutationId: string,
 ): MutationResponse | undefined {
   return readMutationReplayResponse(storage, mutationId);
+}
+
+function fallbackPackageAppMigrationState(
+  input: ApplyPackageAppMigrationsInput,
+): PackageAppMigrationState {
+  return {
+    packageAppKey: input.packageAppKey,
+    packageRevision: input.currentPackageRevision,
+    sourceSchemaHash: input.currentSourceSchemaHash,
+    updatedAt: input.now ?? nowIsoString(),
+  };
+}
+
+function skippedAppliedPackageAppMigrations(
+  migrations: readonly AuthorityPackageAppMigration[],
+  appliedById: Map<UpgradeMigrationId, AppliedPackageAppMigration>,
+): AppliedPackageAppMigration[] {
+  return migrations
+    .map((migration) => appliedById.get(migration.id))
+    .filter((migration): migration is AppliedPackageAppMigration => migration !== undefined);
+}
+
+function validateAppliedPackageMigrationChecksums(
+  migrations: readonly AuthorityPackageAppMigration[],
+  appliedById: Map<UpgradeMigrationId, AppliedPackageAppMigration>,
+) {
+  for (const migration of migrations) {
+    const applied = appliedById.get(migration.id);
+
+    if (applied && applied.checksum !== migration.checksum) {
+      throw new Error(
+        `Applied package app migration "${migration.id}" for package "${migration.family.packageAppKey}" has checksum "${applied.checksum}", expected "${migration.checksum}".`,
+      );
+    }
+  }
+}
+
+function recordAppliedPackageAppMigration(
+  storage: DurableObjectStorage,
+  migration: AppliedPackageAppMigration,
+) {
+  storage.sql.exec(
+    `
+      INSERT INTO ${appliedPackageAppMigrationsTableName} (
+        package_app_key,
+        migration_id,
+        checksum,
+        from_package_revision,
+        to_package_revision,
+        source_schema_hash,
+        applied_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    migration.packageAppKey,
+    migration.migrationId,
+    migration.checksum,
+    migration.fromPackageRevision,
+    migration.toPackageRevision,
+    migration.sourceSchemaHash,
+    migration.appliedAt,
+  );
+}
+
+function upsertPackageAppMigrationState(
+  storage: DurableObjectStorage,
+  state: PackageAppMigrationState,
+) {
+  storage.sql.exec(
+    `
+      INSERT INTO ${packageAppStateTableName} (
+        package_app_key,
+        package_revision,
+        source_schema_hash,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(package_app_key) DO UPDATE SET
+        package_revision = excluded.package_revision,
+        source_schema_hash = excluded.source_schema_hash,
+        updated_at = excluded.updated_at
+    `,
+    state.packageAppKey,
+    state.packageRevision,
+    state.sourceSchemaHash,
+    state.updatedAt,
+  );
+}
+
+function appliedPackageAppMigrationFromRow(
+  row: AppliedPackageAppMigrationRow,
+): AppliedPackageAppMigration {
+  return {
+    appliedAt: row.applied_at,
+    checksum: row.checksum,
+    fromPackageRevision: row.from_package_revision,
+    migrationId: row.migration_id,
+    packageAppKey: row.package_app_key as PackageAppKey,
+    sourceSchemaHash: row.source_schema_hash,
+    toPackageRevision: row.to_package_revision,
+  };
+}
+
+function packageAppStateFromRow(row: PackageAppStateRow): PackageAppMigrationState {
+  return {
+    packageAppKey: row.package_app_key as PackageAppKey,
+    packageRevision: row.package_revision,
+    sourceSchemaHash: row.source_schema_hash,
+    updatedAt: row.updated_at,
+  };
+}
+
+function schemasEqual(left: AppSchema, right: AppSchema) {
+  return stringifySchema(left) === stringifySchema(right);
 }
 
 function writeOutcomeResponse<T>(outcome: WriteOutcome<T>): T {

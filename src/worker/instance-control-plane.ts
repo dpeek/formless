@@ -10,6 +10,7 @@ import {
   type AppInstall,
   type AppInstallId,
   type AppInstallRoute,
+  type PackageAppKey,
 } from "../shared/app-installs.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import {
@@ -46,6 +47,11 @@ import {
 } from "../shared/protocol.ts";
 import { parseAppSchema, type SchemaActionActorKind } from "../shared/schema.ts";
 import {
+  isSourceSchemaHash,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "../shared/upgrade-migrations.ts";
+import {
   authorizeAuthorityOperation,
   type AuthorityAdminGuardEnv,
 } from "./authority-admin-guard.ts";
@@ -73,6 +79,8 @@ import {
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
 const createAppInstallControlPlaneAction = "createAppInstall";
 export const INTERNAL_BACKFILL_APP_INSTALLS_PATH = "/_internal/backfill-app-installs";
+export const INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH =
+  "/_internal/update-app-install-package-facts";
 export const INTERNAL_SYNC_DOMAIN_INTENT_PATH = "/_internal/sync-domain-intent";
 export const INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH = "/_internal/sync-deployment-projection";
 export const INTERNAL_RECORD_DEPLOYMENT_ATTEMPT_PATH = "/_internal/record-deployment-attempt";
@@ -137,6 +145,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
   try {
     if (route.path === INTERNAL_BACKFILL_APP_INSTALLS_PATH) {
       return await handleInternalBackfillAppInstalls(request, storage);
+    }
+
+    if (route.path === INTERNAL_UPDATE_APP_INSTALL_PACKAGE_FACTS_PATH) {
+      return await handleInternalUpdateAppInstallPackageFacts(request, storage);
     }
 
     if (route.path === INTERNAL_SYNC_DOMAIN_INTENT_PATH) {
@@ -265,6 +277,56 @@ async function handleInternalBackfillAppInstalls(
 
   return jsonResponse({
     backfilled,
+    installs: readControlPlaneAppInstalls(storage),
+  });
+}
+
+async function handleInternalUpdateAppInstallPackageFacts(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+
+  const parsed = parseInternalAppInstallPackageFactsUpdate(await readJson(request));
+  const install = findAppInstall(readControlPlaneAppInstalls(storage), parsed.installId);
+
+  if (!install) {
+    throw new BadRequestError(`Install id "${parsed.installId}" is not installed.`);
+  }
+
+  if (install.packageAppKey !== parsed.packageAppKey) {
+    throw new BadRequestError(
+      `Install id "${parsed.installId}" uses package "${install.packageAppKey}", not "${parsed.packageAppKey}".`,
+    );
+  }
+
+  const now = nowIsoString();
+  noopWriteNotifier.apply(() =>
+    patchStoredRecordOutcome(
+      storage,
+      {
+        entity: "appInstall",
+        mutationId: `updateAppInstallPackageFacts:${parsed.installId}:${parsed.packageRevision}:${parsed.sourceSchemaHash}`,
+        op: "patch",
+        recordId: parsed.installId,
+        values: {
+          packageRevision: parsed.packageRevision,
+          sourceSchemaHash: parsed.sourceSchemaHash,
+          updatedAt: now,
+        },
+      },
+      undefined,
+      validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema),
+    ),
+  );
+
+  return jsonResponse({
+    install: findAppInstall(readControlPlaneAppInstalls(storage), parsed.installId),
     installs: readControlPlaneAppInstalls(storage),
   });
 }
@@ -572,6 +634,16 @@ function appInstallFromControlPlaneValues(
   return {
     installId,
     packageAppKey: packageApp.packageAppKey,
+    packageRevision: parsePackageRevision(
+      "packageRevision",
+      values.packageRevision,
+      packageApp.packageRevision,
+    ),
+    sourceSchemaHash: parseSourceSchemaHash(
+      "sourceSchemaHash",
+      values.sourceSchemaHash,
+      packageApp.sourceSchemaHash,
+    ),
     label: String(values.label),
     status: "installed",
     createdAt: String(values.createdAt),
@@ -1311,6 +1383,39 @@ function parseInternalBackfillAppInstalls(value: unknown): AppInstall[] {
   return value.installs.map(parseInternalBackfillAppInstall);
 }
 
+function parseInternalAppInstallPackageFactsUpdate(value: unknown): {
+  installId: AppInstallId;
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
+} {
+  if (!isRecord(value)) {
+    throw new BadRequestError("App install package facts update must be an object.");
+  }
+
+  const packageAppKey = parseRequiredString("packageAppKey", value.packageAppKey);
+  const packageApp = findBundledAppPackage(packageAppKey);
+
+  if (!packageApp) {
+    throw new BadRequestError(`App install package "${packageAppKey}" is unsupported.`);
+  }
+
+  return {
+    installId: parseRequiredString("installId", value.installId),
+    packageAppKey: packageApp.packageAppKey,
+    packageRevision: parsePackageRevision(
+      "packageRevision",
+      value.packageRevision,
+      packageApp.packageRevision,
+    ),
+    sourceSchemaHash: parseSourceSchemaHash(
+      "sourceSchemaHash",
+      value.sourceSchemaHash,
+      packageApp.sourceSchemaHash,
+    ),
+  };
+}
+
 function parseInternalDomainIntentSyncRequest(value: unknown): {
   mappings?: InstanceDomainMapping[];
   now: string;
@@ -1352,6 +1457,16 @@ function parseInternalBackfillAppInstall(value: unknown): AppInstall {
   return {
     installId: parseRequiredString("installId", value.installId),
     packageAppKey: packageApp.packageAppKey,
+    packageRevision: parsePackageRevision(
+      "packageRevision",
+      value.packageRevision,
+      packageApp.packageRevision,
+    ),
+    sourceSchemaHash: parseSourceSchemaHash(
+      "sourceSchemaHash",
+      value.sourceSchemaHash,
+      packageApp.sourceSchemaHash,
+    ),
     label: parseRequiredString("label", value.label),
     status: "installed",
     createdAt: parseRequiredString("createdAt", value.createdAt),
@@ -1429,6 +1544,38 @@ function parseInternalRedirectIntent(value: unknown): InstanceDomainProviderRedi
 function parseRequiredString(field: string, value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new BadRequestError(`Field "${field}" must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function parsePackageRevision(
+  field: string,
+  value: unknown,
+  fallback: PackageAppRevision,
+): PackageAppRevision {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new BadRequestError(`Field "${field}" must be a positive integer.`);
+  }
+
+  return value;
+}
+
+function parseSourceSchemaHash(
+  field: string,
+  value: unknown,
+  fallback: SourceSchemaHash,
+): SourceSchemaHash {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (!isSourceSchemaHash(value)) {
+    throw new BadRequestError(`Field "${field}" must be a sha256 source schema hash.`);
   }
 
   return value;

@@ -201,6 +201,50 @@ export function restoreInstanceAppInstall(
   });
 }
 
+export function updateInstanceAppInstallPackageFacts(
+  storage: DurableObjectStorage,
+  input: {
+    installId: string;
+    packageAppKey: string;
+    packageRevision: PackageAppRevision;
+    sourceSchemaHash: SourceSchemaHash;
+    now: string;
+  },
+): AppInstall[] {
+  ensureInstanceAppInstallTables(storage);
+
+  return storage.transactionSync(() => {
+    const existing = findAppInstall(readAppInstalls(storage), input.installId);
+
+    if (!existing) {
+      throw new Error(`Install id "${input.installId}" is not installed.`);
+    }
+
+    if (existing.packageAppKey !== input.packageAppKey) {
+      throw new Error(
+        `Install id "${input.installId}" uses package "${existing.packageAppKey}", not "${input.packageAppKey}".`,
+      );
+    }
+
+    storage.sql.exec(
+      `
+        UPDATE app_installs
+        SET package_revision = ?,
+          source_schema_hash = ?,
+          updated_at = ?
+        WHERE install_id = ? AND package_app_key = ?
+      `,
+      input.packageRevision,
+      input.sourceSchemaHash,
+      input.now,
+      input.installId,
+      input.packageAppKey,
+    );
+
+    return readInstanceAppInstalls(storage);
+  });
+}
+
 function readAppInstalls(storage: DurableObjectStorage): AppInstall[] {
   const installs: AppInstall[] = [];
 

@@ -13,7 +13,13 @@ import type {
   AppStorageIdentity,
   InstanceControlPlaneStorageIdentity,
 } from "../shared/app-storage-identity.ts";
+import { findBundledAppPackage, type PackageAppKey } from "../shared/app-installs.ts";
 import type { AppSchema, SchemaActionActorKind } from "../shared/schema.ts";
+import {
+  isSourceSchemaHash,
+  type PackageAppRevision,
+  type SourceSchemaHash,
+} from "../shared/upgrade-migrations.ts";
 import {
   executeCreateAfterCreateHooks,
   executeEntityActionOutcome,
@@ -40,13 +46,19 @@ import {
   initializeStorageFromSource,
   mapWriteOutcome,
   patchStoredRecordOutcome,
+  applyPackageAppMigrationsOutcome,
   resetStorageSchemaToSourceOutcome,
   resetStorageToSourceSeedOutcome,
   restoreStorageSnapshotOutcome,
+  type ApplyPackageAppMigrationsResponse,
   type StorageSource,
   type WriteOutcome,
   writeActiveSchemaOutcome,
 } from "./storage.ts";
+import {
+  packageAppMigrationRegistry,
+  selectPackageAppMigrationChain,
+} from "./package-app-migrations.ts";
 
 export type AuthorityOperationMode = "read" | "write";
 
@@ -61,7 +73,8 @@ export type AuthorityOperationKind =
   | "mutation"
   | "action"
   | "resetSchema"
-  | "resetSeed";
+  | "resetSeed"
+  | "applyPackageMigrations";
 
 export type AuthorityOperationMetadata = {
   kind: AuthorityOperationKind;
@@ -104,7 +117,8 @@ export type WriteAuthorityOperation =
   | WriteOperation<"mutation">
   | WriteOperation<"action">
   | WriteOperation<"resetSchema">
-  | WriteOperation<"resetSeed">;
+  | WriteOperation<"resetSeed">
+  | WriteOperation<"applyPackageMigrations">;
 
 export type AuthorityOperation = ReadAuthorityOperation | WriteAuthorityOperation;
 
@@ -118,6 +132,7 @@ type AuthorityErrorResponse = {
 
 export type AuthorityOperationResponseBody =
   | ActionResponse
+  | ApplyPackageAppMigrationsResponse
   | AuthorityErrorResponse
   | BootstrapResponse
   | MutationResponse
@@ -206,6 +221,13 @@ export function selectAuthorityOperation(
 
   if (input.method === "POST" && input.path === "/reset/seed") {
     return { kind: "resetSeed", metadata: metadata("resetSeed", "write") };
+  }
+
+  if (input.method === "POST" && input.path === "/package-migrations/apply") {
+    return {
+      kind: "applyPackageMigrations",
+      metadata: metadata("applyPackageMigrations", "write"),
+    };
   }
 
   return undefined;
@@ -396,6 +418,30 @@ export function executeAuthorityOperation(
         ),
       );
     }
+
+    case "applyPackageMigrations": {
+      initializeStorageFromSource(input.storage, input.source);
+
+      const packageFacts = parsePackageAppMigrationApplyRequest(input.body, input.app.key);
+      const migrations = selectPackageAppMigrations({
+        currentPackageRevision: packageFacts.currentPackageRevision,
+        packageAppKey: input.app.key,
+        targetPackageRevision: packageFacts.targetPackageRevision,
+      });
+
+      return writeOperationResult(
+        input.writes.apply(() =>
+          applyPackageAppMigrationsOutcome(input.storage, {
+            currentPackageRevision: packageFacts.currentPackageRevision,
+            currentSourceSchemaHash: packageFacts.currentSourceSchemaHash,
+            migrations,
+            packageAppKey: input.app.key,
+            targetPackageRevision: packageFacts.targetPackageRevision,
+            targetSourceSchemaHash: packageFacts.targetSourceSchemaHash,
+          }),
+        ),
+      );
+    }
   }
 }
 
@@ -428,6 +474,83 @@ function bootstrapResponse(
     records: getBootstrapRecords(storage),
     cursor: getCurrentCursor(storage),
   };
+}
+
+function parsePackageAppMigrationApplyRequest(value: unknown, packageAppKey: string) {
+  const packageApp = findBundledAppPackage(packageAppKey);
+
+  if (!packageApp) {
+    throw new BadRequestError(`Package app "${packageAppKey}" is not installable.`);
+  }
+
+  const body = isRecord(value) ? value : {};
+
+  return {
+    currentPackageRevision: parseOptionalPackageRevision(
+      body.currentPackageRevision,
+      packageApp.packageRevision,
+      "currentPackageRevision",
+    ),
+    currentSourceSchemaHash: parseOptionalSourceSchemaHash(
+      body.currentSourceSchemaHash,
+      packageApp.sourceSchemaHash,
+      "currentSourceSchemaHash",
+    ),
+    targetPackageRevision: packageApp.packageRevision,
+    targetSourceSchemaHash: packageApp.sourceSchemaHash,
+  };
+}
+
+function selectPackageAppMigrations(input: {
+  currentPackageRevision: PackageAppRevision;
+  packageAppKey: PackageAppKey;
+  targetPackageRevision: PackageAppRevision;
+}) {
+  try {
+    return selectPackageAppMigrationChain(packageAppMigrationRegistry, {
+      fromPackageRevision: input.currentPackageRevision,
+      packageAppKey: input.packageAppKey,
+      toPackageRevision: input.targetPackageRevision,
+    });
+  } catch (error) {
+    throw new BadRequestError(
+      error instanceof Error ? error.message : "Package app migration chain is invalid.",
+    );
+  }
+}
+
+function parseOptionalPackageRevision(
+  value: unknown,
+  fallback: PackageAppRevision,
+  fieldName: string,
+): PackageAppRevision {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new BadRequestError(`Package migration ${fieldName} must be a positive integer.`);
+  }
+
+  return value;
+}
+
+function parseOptionalSourceSchemaHash(
+  value: unknown,
+  fallback: SourceSchemaHash,
+  fieldName: string,
+): SourceSchemaHash {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (!isSourceSchemaHash(value)) {
+    throw new BadRequestError(
+      `Package migration ${fieldName} must be a sha256 source schema hash.`,
+    );
+  }
+
+  return value;
 }
 
 function parseCursor(value: string | null) {
@@ -467,4 +590,8 @@ function parseSiteTreeSlug(path: string): string {
 
     throw new BadRequestError("Site tree slug must be valid URL path text.");
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

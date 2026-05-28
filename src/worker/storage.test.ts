@@ -13,7 +13,12 @@ import type {
   SyncResponse,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
-import type { WriteOutcome } from "./storage.ts";
+import type {
+  AppliedPackageAppMigration,
+  ApplyPackageAppMigrationsResponse,
+  PackageAppMigrationState,
+  WriteOutcome,
+} from "./storage.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 
@@ -715,6 +720,121 @@ describe("storage", () => {
 
     expect(await getJson<ActionResponse | null>("/action-response?actionId=action-1")).toBeNull();
   });
+
+  it("applies package app record migrations as sync-visible Authority changes", async () => {
+    await seedPackageMigrationRecords();
+    const beforeCursor = await getJson<number>("/cursor");
+
+    const first = await postJson<WriteOutcome<ApplyPackageAppMigrationsResponse>>(
+      "/package-migrations/apply",
+      { kind: "success" },
+    );
+    const records = await getJson<StoredRecord[]>("/records");
+    const sync = await getJson<SyncResponse>(`/sync?after=${beforeCursor}`);
+    const applied = await getJson<AppliedPackageAppMigration[]>("/applied-package-migrations");
+    const state = await getJson<PackageAppMigrationState>("/package-migration-state");
+
+    expect(first.kind).toBe("committed");
+    expect(first.response.applied).toEqual([
+      expect.objectContaining({
+        migrationId: "2026-05-28-test-package-app-success",
+        packageAppKey: "tasks",
+        fromPackageRevision: 1,
+        toPackageRevision: 2,
+        sourceSchemaHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      }),
+    ]);
+    expect(first.response.changes.map((change) => change.op)).toEqual([
+      "create",
+      "patch",
+      "delete",
+    ]);
+    expect(first.response.cursor).toBe(beforeCursor + 3);
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        id: "migration-created",
+        values: expect.objectContaining({ migrationTag: "created" }),
+      }),
+    );
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        id: "migration-open",
+        values: expect.objectContaining({ title: "Migrated open", migrationTag: "patched" }),
+      }),
+    );
+    expect(records).toContainEqual(
+      expect.objectContaining({ id: "migration-done", deletedAt: expect.any(String) }),
+    );
+    expect(sync.changes).toEqual(first.response.changes);
+    expect(sync.cursor).toBe(first.response.cursor);
+    expect(sync.schema?.entities.task.fields).toHaveProperty("migrationTag");
+    expect(applied).toEqual(first.response.applied);
+    expect(state).toMatchObject({
+      packageAppKey: "tasks",
+      packageRevision: 2,
+      sourceSchemaHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    });
+  });
+
+  it("replays applied package app migrations without duplicate changes", async () => {
+    await seedPackageMigrationRecords();
+
+    const first = await postJson<WriteOutcome<ApplyPackageAppMigrationsResponse>>(
+      "/package-migrations/apply",
+      { kind: "success" },
+    );
+    const replay = await postJson<WriteOutcome<ApplyPackageAppMigrationsResponse>>(
+      "/package-migrations/apply",
+      { kind: "success" },
+    );
+
+    expect(replay.kind).toBe("committed");
+    expect(replay.response.applied).toEqual([]);
+    expect(replay.response.skipped).toEqual(first.response.applied);
+    expect(replay.response.changes).toEqual([]);
+    expect(await getJson<ChangeRow[]>("/changes?after=0")).toHaveLength(
+      packageMigrationRecords().length + first.response.changes.length,
+    );
+  });
+
+  it("rolls back invalid package app migration field, reference, unique, and delete plans", async () => {
+    for (const [kind, message] of [
+      ["invalid-field", "unknownMigrationField"],
+      ["invalid-reference", 'references unknown task record "missing-task"'],
+      ["invalid-unique", 'Unique constraint "task.uniqueTitle" would be violated.'],
+      ["invalid-delete", 'Cannot delete record "migration-open"'],
+    ]) {
+      storageHarnessName = randomUUID();
+      await seedPackageMigrationRecords();
+
+      const beforeSchema = await getJson<{ schema: AppSchema; updatedAt: string }>("/schema");
+      const beforeRecords = await getJson<StoredRecord[]>("/records");
+      const beforeChanges = await getJson<ChangeRow[]>("/changes?after=0");
+      const beforeState = await getJson<PackageAppMigrationState | null>(
+        "/package-migration-state",
+      );
+      const response = await fetchStorage("/package-migrations/apply", {
+        body: JSON.stringify({ kind }),
+        method: "POST",
+      });
+
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: expect.stringContaining(message),
+      });
+      expect(await getJson<{ schema: AppSchema; updatedAt: string }>("/schema")).toEqual(
+        beforeSchema,
+      );
+      expect(await getJson<StoredRecord[]>("/records")).toEqual(beforeRecords);
+      expect(await getJson<ChangeRow[]>("/changes?after=0")).toEqual(beforeChanges);
+      expect(await getJson<PackageAppMigrationState | null>("/package-migration-state")).toEqual(
+        beforeState,
+      );
+      expect(await getJson<AppliedPackageAppMigration[]>("/applied-package-migrations")).toEqual(
+        [],
+      );
+    }
+  });
 });
 
 async function createRecord(mutationId: string, text: string, done = false) {
@@ -724,6 +844,30 @@ async function createRecord(mutationId: string, text: string, done = false) {
     op: "create",
     values: { title: text, done },
   });
+}
+
+async function seedPackageMigrationRecords() {
+  await postJson("/source-seed", {
+    changeMutationPrefix: "migration-seed",
+    records: packageMigrationRecords(),
+  });
+}
+
+function packageMigrationRecords(): StoredRecord[] {
+  return [
+    record("migration-open", "Open", {
+      createdAt: "2026-05-28T00:00:01.000Z",
+      values: { title: "Open", done: false, priority: "normal" },
+    }),
+    record("migration-done", "Done", {
+      createdAt: "2026-05-28T00:00:02.000Z",
+      values: { title: "Done", done: true, priority: "normal" },
+    }),
+    record("migration-child", "Child", {
+      createdAt: "2026-05-28T00:00:03.000Z",
+      values: { title: "Child", done: false, priority: "normal" },
+    }),
+  ];
 }
 
 function snapshot(overrides: Partial<StoreSnapshot> = {}): StoreSnapshot {
@@ -912,6 +1056,9 @@ async function writeStorageHarness() {
         getCurrentCursor,
         getStoredRecord,
         patchStoredRecord,
+        applyPackageAppMigrationsOutcome,
+        readAppliedPackageAppMigrations,
+        readPackageAppMigrationState,
         resetStorage,
         resetStorageSchemaToSource,
         restoreStorageSnapshot,
@@ -920,8 +1067,157 @@ async function writeStorageHarness() {
         tombstoneRecordsForActionOutcome,
         writeActiveSchema,
       } from "${process.cwd()}/src/worker/storage.ts";
+      import { packageAppMigrationFamily } from "${process.cwd()}/src/worker/package-app-migrations.ts";
 
       const seedSchema = parseAppSchema(rawSeedSchema);
+      const sourceSchemaHash = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+      const targetSchemaHash = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
+      const packageFamily = packageAppMigrationFamily("tasks");
+
+      function packageMigration(kind) {
+        return {
+          id: \`2026-05-28-test-package-app-\${kind}\`,
+          owner: "formless-test",
+          family: packageFamily,
+          checksum: checksumForPackageMigration(kind),
+          safety: "auto-with-backup",
+          summary: \`Test package app migration \${kind}.\`,
+          fromPackageRevision: 1,
+          toPackageRevision: 2,
+          migrate: () => packageMigrationPlan(kind),
+        };
+      }
+
+      function checksumForPackageMigration(kind) {
+        if (kind === "invalid-field") {
+          return "sha256:4444444444444444444444444444444444444444444444444444444444444444";
+        }
+
+        if (kind === "invalid-reference") {
+          return "sha256:5555555555555555555555555555555555555555555555555555555555555555";
+        }
+
+        if (kind === "invalid-unique") {
+          return "sha256:6666666666666666666666666666666666666666666666666666666666666666";
+        }
+
+        if (kind === "invalid-delete") {
+          return "sha256:7777777777777777777777777777777777777777777777777777777777777777";
+        }
+
+        return "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+      }
+
+      function packageMigrationPlan(kind) {
+        if (kind === "invalid-field") {
+          return {
+            schema: schemaWithMigrationTag(),
+            patches: [
+              {
+                entity: "task",
+                recordId: "migration-open",
+                values: { unknownMigrationField: "bad" },
+              },
+            ],
+          };
+        }
+
+        if (kind === "invalid-reference") {
+          return {
+            schema: schemaWithParentReference(),
+            patches: [
+              {
+                entity: "task",
+                recordId: "migration-open",
+                values: { parent: "missing-task" },
+              },
+            ],
+          };
+        }
+
+        if (kind === "invalid-unique") {
+          return {
+            schema: schemaWithUniqueTitle(),
+            creates: [
+              {
+                entity: "task",
+                recordId: "migration-duplicate-title",
+                values: { title: "Open", done: false, priority: "normal" },
+              },
+            ],
+          };
+        }
+
+        if (kind === "invalid-delete") {
+          return {
+            schema: schemaWithParentReference(),
+            patches: [
+              {
+                entity: "task",
+                recordId: "migration-child",
+                values: { parent: "migration-open" },
+              },
+            ],
+            tombstones: [{ entity: "task", recordId: "migration-open" }],
+          };
+        }
+
+        return {
+          schema: schemaWithMigrationTag(),
+          creates: [
+            {
+              entity: "task",
+              recordId: "migration-created",
+              values: {
+                title: "Created by migration",
+                done: false,
+                priority: "normal",
+                migrationTag: "created",
+              },
+            },
+          ],
+          patches: [
+            {
+              entity: "task",
+              recordId: "migration-open",
+              values: { title: "Migrated open", migrationTag: "patched" },
+            },
+          ],
+          tombstones: [{ entity: "task", recordId: "migration-done" }],
+        };
+      }
+
+      function schemaWithMigrationTag() {
+        const schema = structuredClone(seedSchema);
+        schema.entities.task.fields.migrationTag = {
+          type: "text",
+          required: false,
+          label: "Migration tag",
+        };
+        return schema;
+      }
+
+      function schemaWithParentReference() {
+        const schema = schemaWithMigrationTag();
+        schema.entities.task.fields.parent = {
+          type: "reference",
+          required: false,
+          label: "Parent",
+          to: "task",
+        };
+        return schema;
+      }
+
+      function schemaWithUniqueTitle() {
+        const schema = schemaWithMigrationTag();
+        schema.entities.task.constraints = {
+          uniqueTitle: {
+            kind: "unique",
+            fields: ["title"],
+          },
+        };
+        return schema;
+      }
 
       export class StorageHarness extends DurableObject {
         constructor(ctx, env) {
@@ -965,6 +1261,14 @@ async function writeStorageHarness() {
 
           if (request.method === "GET" && url.pathname === "/action-response") {
             return Response.json(getActionResponseById(this.ctx.storage, url.searchParams.get("actionId") ?? "") ?? null);
+          }
+
+          if (request.method === "GET" && url.pathname === "/applied-package-migrations") {
+            return Response.json(readAppliedPackageAppMigrations(this.ctx.storage, "tasks"));
+          }
+
+          if (request.method === "GET" && url.pathname === "/package-migration-state") {
+            return Response.json(readPackageAppMigrationState(this.ctx.storage, "tasks") ?? null);
           }
 
           if (request.method === "POST" && url.pathname === "/create") {
@@ -1026,6 +1330,29 @@ async function writeStorageHarness() {
           if (request.method === "POST" && url.pathname === "/snapshot/restore") {
             try {
               return Response.json(restoreStorageSnapshot(this.ctx.storage, await request.json()));
+            } catch (error) {
+              return Response.json(
+                { error: error instanceof Error ? error.message : "Unknown error." },
+                { status: 500 },
+              );
+            }
+          }
+
+          if (request.method === "POST" && url.pathname === "/package-migrations/apply") {
+            const body = await request.json();
+
+            try {
+              const result = applyPackageAppMigrationsOutcome(this.ctx.storage, {
+                currentPackageRevision: 1,
+                currentSourceSchemaHash: sourceSchemaHash,
+                migrations: [packageMigration(body.kind ?? "success")],
+                now: "2026-05-28T00:00:00.000Z",
+                packageAppKey: "tasks",
+                targetPackageRevision: 2,
+                targetSourceSchemaHash: targetSchemaHash,
+              });
+
+              return Response.json(result);
             } catch (error) {
               return Response.json(
                 { error: error instanceof Error ? error.message : "Unknown error." },

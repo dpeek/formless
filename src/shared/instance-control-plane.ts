@@ -1,5 +1,6 @@
 import type { AppInstall, AppInstallId, PackageAppKey } from "./app-installs.ts";
 import type { AppSchema, EntityMutationPolicy, FieldEditor, FieldSchema } from "./schema.ts";
+import type { PackageAppRevision, SourceSchemaHash } from "./upgrade-migrations.ts";
 
 export const INSTANCE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
 export const INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY = "instance:control-plane";
@@ -34,6 +35,8 @@ export type InstanceControlPlaneAppInstallStatus = "disabled" | "failed" | "inst
 export type InstanceControlPlaneAppInstallValues = {
   installId: AppInstallId;
   packageAppKey: PackageAppKey;
+  packageRevision?: PackageAppRevision;
+  sourceSchemaHash?: SourceSchemaHash;
   label: string;
   status: InstanceControlPlaneAppInstallStatus;
   storageIdentity: `app:${AppInstallId}`;
@@ -278,6 +281,8 @@ export const instanceControlPlaneSchema = {
           site: "Site",
           tasks: "Tasks",
         }),
+        packageRevision: optionalNumberField("Package revision"),
+        sourceSchemaHash: optionalTextField("Source schema hash"),
         label: textField("Label"),
         status: enumField("Status", {
           disabled: "Disabled",
@@ -590,6 +595,8 @@ export const instanceControlPlaneSchema = {
       { field: "packageAppKey", display: "readOnly" },
       { field: "status", display: "readOnly" },
       { field: "storageIdentity", display: "readOnly" },
+      { field: "packageRevision", display: "readOnly" },
+      { field: "sourceSchemaHash", display: "readOnly" },
     ]),
     appRouteTable: tableView("appRoute", [
       { field: "appInstall", display: "readOnly" },
@@ -665,6 +672,8 @@ export const instanceControlPlaneSchema = {
     appInstallCreate: createView("appInstall", [
       "installId",
       "packageAppKey",
+      "packageRevision",
+      "sourceSchemaHash",
       "label",
       "status",
       "storageIdentity",
@@ -917,6 +926,8 @@ export function instanceControlPlaneAppInstallRecord(
     values: {
       installId: install.installId,
       packageAppKey: install.packageAppKey,
+      packageRevision: install.packageRevision,
+      sourceSchemaHash: install.sourceSchemaHash,
       label: install.label,
       status: install.status,
       storageIdentity: instanceControlPlaneStorageIdentityForInstall(install.installId),
@@ -1038,6 +1049,10 @@ function booleanField(label: string, defaultValue: boolean): FieldSchema {
 
 function numberField(label: string): FieldSchema {
   return { type: "number", required: true, label, integer: true, min: 0 };
+}
+
+function optionalNumberField(label: string): FieldSchema {
+  return { type: "number", required: false, label, integer: true, min: 0 };
 }
 
 function enumField(
@@ -1214,6 +1229,7 @@ function editorForField(field: string): FieldEditor {
 
   if (
     field === "revision" ||
+    field === "packageRevision" ||
     field === "createCount" ||
     field === "updateCount" ||
     field === "deleteCount"
