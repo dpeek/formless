@@ -34,7 +34,7 @@ Alternative: wait for a full vertical app extraction. That would delay useful pa
 
 ### Package slices have a small public surface
 
-A package slice keeps its source under `lib/<package>/`, with one package-local `CONTEXT.md`, one `package.json`, one `tsconfig.json`, and `src/` public entrypoints. `CONTEXT.md` names ownership, non-ownership, source map, read path, and test rules. Versioned contract details live beside exported declarations in `src/types.ts`.
+A package slice keeps its source under `lib/<package>/`, with one package-local `AGENTS.md`, one `package.json`, one `tsconfig.json`, and `src/` public entrypoints. `AGENTS.md` names ownership, non-ownership, source map, read path, and test rules. Versioned contract details live beside exported declarations in `src/types.ts`.
 
 Package exports expose only documented public entrypoints. The root export is runtime-neutral. Optional adapter subpaths split browser/client HTTP, React-specific controls, and Worker/runtime adapters. External runtime code imports only those public exports and does not deep-import unexported package internals.
 
@@ -44,7 +44,7 @@ Package tests stay inside the package, use fake providers or stores with fixed i
 
 `lib/media/src/types.ts` owns documented exported types and constants for media assets, upload/list/restore shapes, storage keys, metadata invariants, delivery facts, and provider seams. It avoids imports unless impractical and must not import runtime code.
 
-Alternative: keep contract docs in `CONTEXT.md`. That makes the contract less discoverable to TypeScript consumers and easier to drift from exported types.
+Alternative: keep contract docs in `AGENTS.md`. That makes the contract less discoverable to TypeScript consumers and easier to drift from exported types.
 
 ### Public subpaths define runtime boundaries
 

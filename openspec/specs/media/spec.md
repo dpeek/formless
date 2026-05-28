@@ -16,7 +16,7 @@ The system SHALL provide a Media package under `lib/media/`.
 
 - GIVEN the Media package is scaffolded
 - WHEN package files are present
-- THEN it contains `CONTEXT.md`, `package.json`, `tsconfig.json`,
+- THEN it contains `AGENTS.md`, `package.json`, `tsconfig.json`,
   `src/types.ts`, `src/index.ts`, `src/client.ts`, `src/react.tsx`, and
   `src/worker.ts`
 

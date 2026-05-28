@@ -37,7 +37,7 @@ with a minimal package-local contract and adapter layout.
 
 - GIVEN a capability is extracted as a package
 - WHEN the package is scaffolded
-- THEN the package contains package-local `CONTEXT.md`, `package.json`,
+- THEN the package contains package-local `AGENTS.md`, `package.json`,
   `tsconfig.json`, and `src/` files for public contract and supported adapters
 - AND the package does not require a bundled app schema
 
@@ -49,24 +49,24 @@ Package documentation SHALL stay minimal and source-faithful.
 
 - GIVEN a package slice is created
 - WHEN package docs are added
-- THEN the package has one `CONTEXT.md`
+- THEN the package has one `AGENTS.md`
 - AND versioned public contract documentation lives with exported declarations
   in `src/types.ts`
 
-#### Scenario: Package context stays operational
+#### Scenario: Package AGENTS stays operational
 
-- GIVEN `CONTEXT.md` documents a package slice
+- GIVEN `AGENTS.md` documents a package slice
 - WHEN the package changes
 - THEN it records package ownership, non-ownership, source map, read path, and
   test rules
 - AND it does not duplicate the versioned contract declarations owned by
   `src/types.ts`
 
-#### Scenario: Agent reads package context
+#### Scenario: Agent reads package AGENTS
 
 - GIVEN an agent works inside a package slice
-- WHEN it gathers package context
-- THEN it reads `CONTEXT.md`, then `src/types.ts`, then only the relevant
+- WHEN it gathers package AGENTS
+- THEN it reads `AGENTS.md`, then `src/types.ts`, then only the relevant
   adapter file for the task
 
 ### Requirement: Public Contract File

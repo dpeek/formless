@@ -23,7 +23,7 @@ The system SHALL organize extracted capability slices under `lib/<package>/` wit
 #### Scenario: Capability package scaffold
 
 - **WHEN** a capability is extracted as a package
-- **THEN** the package contains package-local `CONTEXT.md`, `package.json`, `tsconfig.json`, and `src/` files for public contract and supported adapters
+- **THEN** the package contains package-local `AGENTS.md`, `package.json`, `tsconfig.json`, and `src/` files for public contract and supported adapters
 - **AND** the package does not require a bundled app schema
 
 ### Requirement: Minimal package documentation
@@ -33,19 +33,19 @@ Package documentation SHALL stay minimal and source-faithful.
 #### Scenario: Package docs are introduced
 
 - **WHEN** a package slice is created
-- **THEN** the package has one `CONTEXT.md`
+- **THEN** the package has one `AGENTS.md`
 - **AND** versioned public contract documentation lives with exported declarations in `src/types.ts`
 
-#### Scenario: Package context stays operational
+#### Scenario: Package AGENTS stays operational
 
-- **WHEN** `CONTEXT.md` documents a package slice
+- **WHEN** `AGENTS.md` documents a package slice
 - **THEN** it records package ownership, non-ownership, source map, read path, and test rules
 - **AND** it does not duplicate the versioned contract declarations owned by `src/types.ts`
 
-#### Scenario: Agent reads package context
+#### Scenario: Agent reads package AGENTS
 
 - **WHEN** an agent works inside a package slice
-- **THEN** it reads `CONTEXT.md`, then `src/types.ts`, then only the relevant adapter file for the task
+- **THEN** it reads `AGENTS.md`, then `src/types.ts`, then only the relevant adapter file for the task
 
 ### Requirement: Public contract file
 

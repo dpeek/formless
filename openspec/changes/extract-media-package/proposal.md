@@ -30,7 +30,7 @@ Media is a stable cross-runtime capability and a good first extraction candidate
 ## Impact
 
 - Adds `openspec/specs/package-slices/spec.md` and `openspec/specs/media/spec.md` when finalized.
-- Adds a future `lib/media/` package with `CONTEXT.md`, `package.json`, `tsconfig.json`, `src/types.ts`, `src/index.ts`, `src/client.ts`, `src/react.tsx`, `src/worker.ts`, and package-local tests.
+- Adds a future `lib/media/` package with `AGENTS.md`, `package.json`, `tsconfig.json`, `src/types.ts`, `src/index.ts`, `src/client.ts`, `src/react.tsx`, `src/worker.ts`, and package-local tests.
 - Affects imports currently rooted in `src/media`, `src/client/media.ts`, and `src/worker/media.ts`.
 - Affects existing Media-related tests by relocating them to package-local fast deterministic tests or keeping integration coverage at app level.
 - Does not add video support, media library management UI, archive format redesign, schema redesign, or broad package extraction beyond the convention needed for Media.
