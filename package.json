@@ -49,6 +49,8 @@
     "@dpeek/formless-media": "^0.1.0",
     "@dpeek/formless-ui": "^0.1.3",
     "@internationalized/date": "^3.12.1",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.1",
     "@tailwindcss/vite": "^4.2.4",
     "@vitejs/plugin-react": "^6.0.1",
     "alchemy": "^0.93.9",
