@@ -4,9 +4,23 @@ import {
   type AppInstallId,
   type PackageAppKey,
 } from "./app-installs.ts";
+import {
+  INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+} from "./instance-control-plane.ts";
 import { findSchemaAppDefinition, getSchemaAppDefinition, type SchemaKey } from "./schema-apps.ts";
 
 export type AppStorageIdentity = SchemaKeyStorageIdentity | InstalledAppStorageIdentity;
+
+export type InstanceControlPlaneStorageIdentity = {
+  kind: "instanceControlPlane";
+  schemaKey: typeof INSTANCE_CONTROL_PLANE_SCHEMA_KEY;
+  authorityName: typeof INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY;
+  apiRoutePrefix: typeof INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX;
+  browserDatabaseName: string;
+  broadcastChannelName: string;
+};
 
 export type SchemaKeyStorageIdentity = {
   kind: "schemaKey";
@@ -88,8 +102,51 @@ export function installedAppStorageIdentity(input: {
   };
 }
 
+export function instanceControlPlaneStorageIdentity(
+  options: { projectId?: string } = {},
+): InstanceControlPlaneStorageIdentity {
+  const storageName = browserStorageName(
+    INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    options.projectId,
+  );
+
+  return {
+    kind: "instanceControlPlane",
+    schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+    authorityName: INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+    apiRoutePrefix: INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
+    browserDatabaseName: storageName,
+    broadcastChannelName: storageName,
+  };
+}
+
 export function parseAuthorityApiRoute(pathname: string): AuthorityApiRoute | undefined {
   return parseInstalledAppApiRoute(pathname) ?? parseSchemaKeyApiRoute(pathname);
+}
+
+export function parseInstanceControlPlaneApiRoute(pathname: string):
+  | {
+      identity: InstanceControlPlaneStorageIdentity;
+      path: `/${string}`;
+    }
+  | undefined {
+  if (
+    pathname !== INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX &&
+    !pathname.startsWith(`${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/`)
+  ) {
+    return undefined;
+  }
+
+  const suffix = pathname.slice(INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX.length);
+
+  if (!suffix.startsWith("/") || suffix === "/") {
+    return undefined;
+  }
+
+  return {
+    identity: instanceControlPlaneStorageIdentity(),
+    path: suffix as `/${string}`,
+  };
 }
 
 function parseInstalledAppApiRoute(pathname: string): AuthorityApiRoute | undefined {

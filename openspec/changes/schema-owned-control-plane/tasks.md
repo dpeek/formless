@@ -36,13 +36,21 @@ Evidence:
 
 ## 3. Authority Control-Plane Storage
 
-- [ ] 3.1 Add the instance control-plane app storage identity and bootstrap it from the instance control-plane schema.
-- [ ] 3.2 Expose owner/admin, CLI deployer, and runner-safe control-plane query and action routes through the instance protocol.
-- [ ] 3.3 Ensure control-plane writes use Authority validation, write-log idempotency, action execution records, and monotonic change cursors.
-- [ ] 3.4 Implement package app install creation as a transaction that writes `appInstall` and default `appRoute` records and initializes install-scoped app storage.
-- [ ] 3.5 Enforce secret, provider-truth, and installed-app-data exclusion from control-plane record values, change rows, sync responses, snapshots, and exports.
-- [ ] 3.6 Add storage tests proving control-plane records are isolated from installed app storage identities.
-- [ ] 3.7 Add auth and actor policy tests for browser, CLI deployer, and runner access.
+- [x] 3.1 Add the instance control-plane app storage identity and bootstrap it from the instance control-plane schema.
+- [x] 3.2 Expose owner/admin, CLI deployer, and runner-safe control-plane query and action routes through the instance protocol.
+- [x] 3.3 Ensure control-plane writes use Authority validation, write-log idempotency, action execution records, and monotonic change cursors.
+- [x] 3.4 Implement package app install creation as a transaction that writes `appInstall` and default `appRoute` records and initializes install-scoped app storage.
+- [x] 3.5 Enforce secret, provider-truth, and installed-app-data exclusion from control-plane record values, change rows, sync responses, snapshots, and exports.
+- [x] 3.6 Add storage tests proving control-plane records are isolated from installed app storage identities.
+- [x] 3.7 Add auth and actor policy tests for browser, CLI deployer, and runner access.
+
+Evidence:
+
+- Files changed: `src/shared/app-storage-identity.ts`, `src/shared/app-storage-identity.test.ts`, `src/shared/instance-control-plane.ts`, `src/shared/instance-control-plane.test.ts`, `src/worker/instance-control-plane.ts`, `src/worker/instance-control-plane.test.ts`, `src/worker/authority.ts`, `src/worker/index.ts`, `src/worker/authority-operations.ts`, `src/worker/authority-validation.ts`, `src/worker/schema-apps.ts`, `src/worker/storage.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:24:55.179Z. `devstate check` initially caught type/lint issues in the new control-plane handler and validator; post-rebase `devstate check` caught two new test issues in `src/worker/instance-control-plane.test.ts`. After fixes, the final `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:36:17.841Z.
+- Smoke: not run; section 3 adds instance protocol and storage behavior without generated instance UI changes.
+- Decisions: `/api/formless/control-plane/*` targets the dedicated `instance:control-plane` Authority storage identity and bootstraps from `instanceControlPlaneSchema`. The first custom control-plane action is `POST /api/formless/control-plane/actions/createAppInstall`; it writes fixed-id `appInstall` and default `appRoute` records with action write-log idempotency, then initializes install-scoped app storage before route records become usable. Generic control-plane writes stay owner/admin-only for now; actor-scoped schema actions read the actor from `X-Formless-Control-Plane-Actor`, `X-Formless-Actor-Kind`, or `actorKind`.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
 
 ## 4. App Install And Route Compatibility
 

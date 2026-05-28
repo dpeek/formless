@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  instanceControlPlaneStorageIdentity,
   installedAppStorageIdentity,
   parseAuthorityApiRoute,
+  parseInstanceControlPlaneApiRoute,
   schemaKeyStorageIdentity,
 } from "./app-storage-identity.ts";
 
@@ -147,6 +149,21 @@ describe("app storage identity", () => {
     expect(personal.broadcastChannelName).not.toBe(docs.broadcastChannelName);
   });
 
+  it("maps the runtime-owned instance control-plane storage identity", () => {
+    expect(instanceControlPlaneStorageIdentity()).toEqual({
+      apiRoutePrefix: "/api/formless/control-plane",
+      authorityName: "instance:control-plane",
+      broadcastChannelName: "formless:instance:control-plane",
+      browserDatabaseName: "formless:instance:control-plane",
+      kind: "instanceControlPlane",
+      schemaKey: "instance-control-plane",
+    });
+    expect(instanceControlPlaneStorageIdentity({ projectId: "instance-123" })).toMatchObject({
+      broadcastChannelName: "formless:instance-123:instance:control-plane",
+      browserDatabaseName: "formless:instance-123:instance:control-plane",
+    });
+  });
+
   it("exposes no Site-owned media scope on storage identities", () => {
     const schemaSite = schemaKeyStorageIdentity("site");
     const personal = installedAppStorageIdentity({
@@ -215,6 +232,20 @@ describe("app storage identity", () => {
       },
       path: "/bootstrap",
     });
+  });
+
+  it("parses instance control-plane API route identities separately from app storage routes", () => {
+    expect(parseInstanceControlPlaneApiRoute("/api/formless/control-plane/bootstrap")).toEqual({
+      identity: instanceControlPlaneStorageIdentity(),
+      path: "/bootstrap",
+    });
+    expect(
+      parseInstanceControlPlaneApiRoute("/api/formless/control-plane/actions/createAppInstall"),
+    ).toEqual({
+      identity: instanceControlPlaneStorageIdentity(),
+      path: "/actions/createAppInstall",
+    });
+    expect(parseAuthorityApiRoute("/api/formless/control-plane/bootstrap")).toBeUndefined();
   });
 
   it("leaves unknown or incomplete API routes unclaimed", () => {

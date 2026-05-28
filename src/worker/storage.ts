@@ -90,6 +90,7 @@ export type RecordConstraintValidator = (
 
 export type ActionRecordCreatePlan = {
   entity: string;
+  id?: string;
   values: RecordValues | ((createdRecords: StoredRecord[]) => RecordValues);
 };
 
@@ -1042,6 +1043,7 @@ function materializeCreatedActionRecordSet(
       storage,
       {
         entity: plan.entity,
+        id: plan.id,
         values,
         createdAt,
       },
@@ -1119,6 +1121,7 @@ function materializeCreatedActionRecord(
   storage: DurableObjectStorage,
   input: {
     entity: string;
+    id?: string;
     values: RecordValues;
     createdAt: string;
   },
@@ -1126,7 +1129,7 @@ function materializeCreatedActionRecord(
 ): StoredRecord {
   validateConstraints?.(input.entity, input.values);
 
-  return insertCreatedRecord(storage, input.entity, input.values, input.createdAt);
+  return insertCreatedRecord(storage, input.entity, input.values, input.createdAt, input.id);
 }
 
 function materializeCreatedMutationRecords(
@@ -1273,9 +1276,10 @@ function insertCreatedRecord(
   entity: string,
   values: RecordValues,
   createdAt: string,
+  id = createRecordId(),
 ): StoredRecord {
   const record: StoredRecord = {
-    id: createRecordId(),
+    id,
     entity,
     values,
     createdAt,

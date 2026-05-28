@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppInstallRecord,
   instanceControlPlaneDefaultRoutesForInstall,
   instanceControlPlaneEntityNames,
   instanceControlPlaneImmutableFields,
@@ -62,6 +63,35 @@ describe("instance control-plane schema contracts", () => {
 
   it("derives default app route records without nesting installed app data", () => {
     const now = "2026-05-28T00:00:00.000Z";
+
+    expect(
+      instanceControlPlaneAppInstallRecord({
+        adminRoute: "/apps/personal",
+        createdAt: now,
+        installId: "personal",
+        label: "Personal Site",
+        packageAppKey: "site",
+        publicRoute: "/sites/personal",
+        publicRoutePrefix: "/sites/personal/",
+        schemaRoute: "/apps/personal/schema",
+        status: "installed",
+        updatedAt: now,
+      }),
+    ).toEqual({
+      createdAt: now,
+      entity: "appInstall",
+      id: "personal",
+      updatedAt: now,
+      values: {
+        installId: "personal",
+        packageAppKey: "site",
+        label: "Personal Site",
+        status: "installed",
+        storageIdentity: "app:personal",
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
 
     expect(
       instanceControlPlaneDefaultRoutesForInstall({

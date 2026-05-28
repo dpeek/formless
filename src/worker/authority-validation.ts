@@ -244,6 +244,7 @@ function validateSnapshotRecords(snapshot: StoreSnapshot) {
 
   for (const record of snapshot.records) {
     validateSnapshotRecord(record, snapshot.schema, recordsById);
+    assertControlPlaneRecordValuesAreDisplaySafe(record.values, snapshot.schema, record.entity);
   }
 }
 
@@ -435,6 +436,11 @@ export function validateRecordValues(
   }
 
   if (runtimeOptions) {
+    assertControlPlaneRecordValuesAreDisplaySafe(
+      validated,
+      runtimeOptions.schema,
+      runtimeOptions.entityName,
+    );
     validateRuntimeControlPlaneValues(
       validated,
       runtimeOptions.schema,
@@ -485,6 +491,140 @@ function assertImmutableFieldsNotPatched(
       throw new BadRequestError(`Field "${entityName}.${fieldName}" is immutable.`);
     }
   }
+}
+
+function assertControlPlaneRecordValuesAreDisplaySafe(
+  values: RecordValues,
+  schema: AppSchema,
+  entityName: string,
+) {
+  const metadata = runtimeControlPlaneEntityMetadata(schema, entityName);
+
+  if (!metadata) {
+    return;
+  }
+
+  for (const [fieldName, value] of Object.entries(values)) {
+    const isSecretReferenceField = metadata.secretReferenceFields?.includes(fieldName) ?? false;
+
+    if (!isSecretReferenceField && isForbiddenControlPlaneFieldName(fieldName)) {
+      throw new BadRequestError(
+        `Field "${entityName}.${fieldName}" cannot store control-plane secrets or provider truth.`,
+      );
+    }
+
+    if (typeof value === "string") {
+      assertControlPlaneStringValueIsDisplaySafe(entityName, fieldName, value);
+    }
+  }
+}
+
+function assertControlPlaneStringValueIsDisplaySafe(
+  entityName: string,
+  fieldName: string,
+  value: string,
+) {
+  if (containsForbiddenControlPlaneSecretValue(value)) {
+    throw new BadRequestError(
+      `Field "${entityName}.${fieldName}" cannot store control-plane secret values.`,
+    );
+  }
+
+  const parsed = parseMaybeJson(value);
+
+  if (parsed !== undefined) {
+    assertControlPlaneJsonValueIsDisplaySafe(entityName, fieldName, parsed);
+  }
+}
+
+function assertControlPlaneJsonValueIsDisplaySafe(
+  entityName: string,
+  fieldName: string,
+  value: unknown,
+) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertControlPlaneJsonValueIsDisplaySafe(entityName, fieldName, item);
+    }
+
+    return;
+  }
+
+  if (typeof value === "string") {
+    assertControlPlaneStringValueIsDisplaySafe(entityName, fieldName, value);
+    return;
+  }
+
+  if (!isRecord(value)) {
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (isForbiddenControlPlaneFieldName(key)) {
+      throw new BadRequestError(
+        `Field "${entityName}.${fieldName}" cannot store control-plane secrets or provider truth.`,
+      );
+    }
+
+    assertControlPlaneJsonValueIsDisplaySafe(entityName, fieldName, item);
+  }
+}
+
+function parseMaybeJson(value: string): Record<string, unknown> | unknown[] | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+
+    return Array.isArray(parsed) || isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isForbiddenControlPlaneFieldName(fieldName: string) {
+  const normalized = normalizeControlPlaneSecretText(fieldName);
+
+  return (
+    normalized.includes("api_token") ||
+    normalized.includes("access_token") ||
+    normalized.includes("auth_token") ||
+    normalized.includes("password") ||
+    normalized.includes("secret_value") ||
+    normalized.includes("raw_lease_token") ||
+    normalized.includes("lease_token") ||
+    normalized.includes("alchemy_state_token") ||
+    normalized.includes("provider_truth") ||
+    normalized.includes("provider_state") ||
+    normalized.includes("provider_resource_json") ||
+    normalized.includes("provider_resources_json")
+  );
+}
+
+function containsForbiddenControlPlaneSecretValue(value: string) {
+  const normalized = normalizeControlPlaneSecretText(value);
+
+  return (
+    normalized.includes("cf_api_token") ||
+    normalized.includes("cloudflare_api_token") ||
+    normalized.includes("alchemy_password") ||
+    normalized.includes("alchemy_state_token") ||
+    normalized.includes("raw_lease_token") ||
+    normalized.includes("lease_token") ||
+    value.includes("-----BEGIN PRIVATE KEY-----")
+  );
+}
+
+function normalizeControlPlaneSecretText(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
 }
 
 function validateRuntimeControlPlaneValues(

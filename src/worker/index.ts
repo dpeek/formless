@@ -14,6 +14,7 @@ import {
   handleInstanceAppInstallsApiRequest,
   lookupInstanceAppInstallForRequest,
 } from "./instance-app-installs.ts";
+import { handleInstanceControlPlaneApiRequest } from "./instance-control-plane.ts";
 import {
   handleInstanceDomainMappingsApiRequest,
   lookupEnabledInstanceRoutableDomainMappingForRequestHost,
@@ -142,6 +143,12 @@ export default {
 
     if (instanceAppInstallsResponse) {
       return instanceAppInstallsResponse;
+    }
+
+    const instanceControlPlaneResponse = await handleInstanceControlPlaneApiRequest(request, env);
+
+    if (instanceControlPlaneResponse) {
+      return instanceControlPlaneResponse;
     }
 
     const instanceDomainProviderResponse = await handleInstanceDomainProviderApiRequest(

@@ -15,7 +15,8 @@ import {
 import { parseAppSchema, type AppSchema } from "../shared/schema.ts";
 import type { RecordValues, StoredRecord } from "../shared/protocol.ts";
 
-export type WorkerSchemaAppDefinition = SchemaAppDefinition & {
+export type WorkerSchemaAppDefinition = Omit<SchemaAppDefinition, "key"> & {
+  key: string;
   sourceSchema: AppSchema;
   seedRecords: StoredRecord[];
 };

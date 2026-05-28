@@ -9,11 +9,15 @@ import type {
   StoreSnapshot,
   SyncResponse,
 } from "../shared/protocol.ts";
-import type { AppStorageIdentity } from "../shared/app-storage-identity.ts";
-import type { AppSchema } from "../shared/schema.ts";
+import type {
+  AppStorageIdentity,
+  InstanceControlPlaneStorageIdentity,
+} from "../shared/app-storage-identity.ts";
+import type { AppSchema, SchemaActionActorKind } from "../shared/schema.ts";
 import {
   executeCreateAfterCreateHooks,
   executeEntityActionOutcome,
+  filterEntityActionResponseForActor,
   validateEntityActionRequest,
 } from "./actions.ts";
 import {
@@ -136,9 +140,10 @@ type AuthorityOperationSelectionInput = {
 };
 
 type AuthorityOperationExecutionInput = {
+  actorKind?: SchemaActionActorKind;
   app: WorkerSchemaAppDefinition;
   body?: unknown;
-  identity: AppStorageIdentity;
+  identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity;
   operation: AuthorityOperation;
   source: StorageSource;
   storage: DurableObjectStorage;
@@ -351,10 +356,14 @@ export function executeAuthorityOperation(
 
     case "action": {
       const { schema } = initializeStorageFromSource(input.storage, input.source);
-      const action = validateEntityActionRequest(input.body, schema);
+      const actorKind = input.actorKind ?? "owner";
+      const action = validateEntityActionRequest(input.body, schema, { actorKind });
 
       return writeOperationResult(
-        input.writes.apply(() => executeEntityActionOutcome(input.storage, action, schema)),
+        mapWriteOutcome(
+          input.writes.apply(() => executeEntityActionOutcome(input.storage, action, schema)),
+          (response) => filterEntityActionResponseForActor(response, schema, action, actorKind),
+        ),
       );
     }
 

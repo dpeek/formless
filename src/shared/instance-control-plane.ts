@@ -1,4 +1,4 @@
-import type { AppInstallId, PackageAppKey } from "./app-installs.ts";
+import type { AppInstall, AppInstallId, PackageAppKey } from "./app-installs.ts";
 import type { AppSchema, EntityMutationPolicy, FieldEditor, FieldSchema } from "./schema.ts";
 
 export const INSTANCE_CONTROL_PLANE_SCHEMA_KEY = "instance-control-plane";
@@ -874,6 +874,43 @@ export function instanceControlPlaneStorageIdentityForInstall(
   installId: AppInstallId,
 ): `app:${AppInstallId}` {
   return `app:${installId}`;
+}
+
+export function instanceControlPlaneAppInstallRecord(
+  install: AppInstall,
+): InstanceControlPlaneRecord<"appInstall", InstanceControlPlaneAppInstallValues> {
+  return {
+    createdAt: install.createdAt,
+    entity: "appInstall",
+    id: install.installId,
+    updatedAt: install.updatedAt,
+    values: {
+      installId: install.installId,
+      packageAppKey: install.packageAppKey,
+      label: install.label,
+      status: install.status,
+      storageIdentity: instanceControlPlaneStorageIdentityForInstall(install.installId),
+      createdAt: install.createdAt,
+      updatedAt: install.updatedAt,
+    },
+  };
+}
+
+export function instanceControlPlaneRecordsForAppInstall(input: {
+  install: AppInstall;
+  now: string;
+}): [
+  InstanceControlPlaneRecord<"appInstall", InstanceControlPlaneAppInstallValues>,
+  ...InstanceControlPlaneRecord<"appRoute", InstanceControlPlaneAppRouteValues>[],
+] {
+  return [
+    instanceControlPlaneAppInstallRecord(input.install),
+    ...instanceControlPlaneDefaultRoutesForInstall({
+      installId: input.install.installId,
+      packageAppKey: input.install.packageAppKey,
+      now: input.now,
+    }),
+  ];
 }
 
 export function instanceControlPlaneAppRouteId(

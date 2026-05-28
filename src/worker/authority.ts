@@ -25,6 +25,7 @@ import { findWorkerSchemaAppDefinition, type WorkerSchemaAppDefinition } from ".
 import { executeAuthorityOperation, selectAuthorityOperation } from "./authority-operations.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { handleInstanceAppInstallsDurableObjectRequest } from "./instance-app-installs.ts";
+import { handleInstanceControlPlaneDurableObjectRequest } from "./instance-control-plane.ts";
 import {
   initializeInstanceAppInstallsFromConfiguredLaunchFixture,
   launchFixtureStorageSourceForAuthorityName,
@@ -105,6 +106,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceAppInstallsResponse) {
       return instanceAppInstallsResponse;
+    }
+
+    const instanceControlPlaneResponse = await handleInstanceControlPlaneDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (instanceControlPlaneResponse) {
+      return instanceControlPlaneResponse;
     }
 
     const instanceArchiveResponse = await handleInstanceArchiveDurableObjectRequest(
