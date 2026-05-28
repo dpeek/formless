@@ -71,12 +71,20 @@ Evidence:
 
 ## 5. Deployment Runtime Projection
 
-- [ ] 5.1 Change desired-state materialization to project from control-plane records for the selected target.
-- [ ] 5.2 Preserve exact desired-state version ids, stable hashes, source fingerprints, resource graph shape, and no-secret response shape.
-- [ ] 5.3 Route deployment attempt start, heartbeat, plan, success, failure, and drift writeback through schema-declared actions where available.
-- [ ] 5.4 Store display-safe attempt, evidence summary, and drift history as control-plane records while keeping raw lease tokens and provider truth external.
-- [ ] 5.5 Add regression tests comparing old route/domain-derived desired-state output with schema-projected output.
-- [ ] 5.6 Add failure tests for stale desired-state references, actor mismatches, hidden secret values, and provider-truth payloads.
+- [x] 5.1 Change desired-state materialization to project from control-plane records for the selected target.
+- [x] 5.2 Preserve exact desired-state version ids, stable hashes, source fingerprints, resource graph shape, and no-secret response shape.
+- [x] 5.3 Route deployment attempt start, heartbeat, plan, success, failure, and drift writeback through schema-declared actions where available.
+- [x] 5.4 Store display-safe attempt, evidence summary, and drift history as control-plane records while keeping raw lease tokens and provider truth external.
+- [x] 5.5 Add regression tests comparing old route/domain-derived desired-state output with schema-projected output.
+- [x] 5.6 Add failure tests for stale desired-state references, actor mismatches, hidden secret values, and provider-truth payloads.
+
+Evidence:
+
+- Files changed: `src/worker/deployment-control-plane-client.ts`, `src/worker/deployment-runtime-api.ts`, `src/worker/deployment-runtime-projection.ts`, `src/worker/deployment-runtime-state.ts`, `src/worker/domain-provider-api.ts`, `src/worker/instance-control-plane.ts`, `src/worker/deployment-runtime-api.test.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:59:33.542Z. `devstate check` first caught two parser narrowing type errors in `src/worker/instance-control-plane.ts`; after fixing them, `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T07:14:36.049Z.
+- Smoke: not run; section 5 changes deployment runtime API and control-plane record writeback behavior without changing visible generated instance UI.
+- Decisions: desired-state reads still compute the legacy route/domain projection, sync its display-safe resources into `deployTarget` and `deployDesiredResource` control-plane records, then materialize desired state from those control-plane records so version ids, hashes, source fingerprints, resource graph shape, and no-secret response behavior stay stable during migration. Deployment start, heartbeat, plan, success, failure, and drift endpoints now mirror display-safe attempt, evidence, and drift records into the control-plane storage identity; raw lease tokens remain only in deployment runtime lease tables and provider truth remains rejected from evidence payloads.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
 
 ## 6. Custom-Domain Migration And Compatibility
 

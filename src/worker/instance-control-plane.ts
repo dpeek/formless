@@ -21,11 +21,20 @@ import {
   type InstanceControlPlaneAppRouteKind,
   type InstanceControlPlaneAppRouteValues,
 } from "../shared/instance-control-plane.ts";
+import type {
+  DeploymentAttempt,
+  DeploymentDriftReport,
+  DeploymentJsonValue,
+  DeploymentResource,
+  DeploymentResourceEvidenceSummary,
+  DeploymentTarget,
+} from "../shared/deployment-runtime.ts";
 import {
   parseCreateAppInstallRequest,
   type ActionResponse,
   type CreateAppInstallRequest,
   type RecordValues,
+  type StoredRecord,
 } from "../shared/protocol.ts";
 import { parseAppSchema, type SchemaActionActorKind } from "../shared/schema.ts";
 import {
@@ -47,13 +56,19 @@ import {
   ensureStorageTables,
   getActionResponseById,
   getBootstrapRecords,
+  getStoredRecord,
   initializeStorageFromSource,
+  patchStoredRecordOutcome,
   type StorageSource,
 } from "./storage.ts";
 
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
 const createAppInstallControlPlaneAction = "createAppInstall";
 export const INTERNAL_BACKFILL_APP_INSTALLS_PATH = "/_internal/backfill-app-installs";
+export const INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH = "/_internal/sync-deployment-projection";
+export const INTERNAL_RECORD_DEPLOYMENT_ATTEMPT_PATH = "/_internal/record-deployment-attempt";
+export const INTERNAL_RECORD_DEPLOYMENT_EVIDENCE_PATH = "/_internal/record-deployment-evidence";
+export const INTERNAL_RECORD_DEPLOYMENT_DRIFT_PATH = "/_internal/record-deployment-drift";
 const instanceControlPlaneSourceSchema = parseAppSchema(instanceControlPlaneSchema);
 const instanceControlPlaneSource: StorageSource = {
   schema: instanceControlPlaneSourceSchema,
@@ -113,6 +128,22 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
   try {
     if (route.path === INTERNAL_BACKFILL_APP_INSTALLS_PATH) {
       return await handleInternalBackfillAppInstalls(request, storage);
+    }
+
+    if (route.path === INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH) {
+      return await handleInternalSyncDeploymentProjection(request, storage);
+    }
+
+    if (route.path === INTERNAL_RECORD_DEPLOYMENT_ATTEMPT_PATH) {
+      return await handleInternalRecordDeploymentAttempt(request, storage);
+    }
+
+    if (route.path === INTERNAL_RECORD_DEPLOYMENT_EVIDENCE_PATH) {
+      return await handleInternalRecordDeploymentEvidence(request, storage);
+    }
+
+    if (route.path === INTERNAL_RECORD_DEPLOYMENT_DRIFT_PATH) {
+      return await handleInternalRecordDeploymentDrift(request, storage);
     }
 
     if (route.path === `/${createAppInstallControlPlaneAction}`) {
@@ -222,6 +253,91 @@ async function handleInternalBackfillAppInstalls(
   return jsonResponse({
     backfilled,
     installs: readControlPlaneAppInstalls(storage),
+  });
+}
+
+async function handleInternalSyncDeploymentProjection(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+
+  const parsed = parseInternalDeploymentProjectionRequest(await readJson(request));
+
+  syncDeploymentProjectionRecords(storage, parsed);
+
+  return jsonResponse({
+    records: activeControlPlaneRecords(storage),
+  });
+}
+
+async function handleInternalRecordDeploymentAttempt(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+
+  const parsed = parseInternalDeploymentAttemptRecordRequest(await readJson(request));
+
+  upsertDeploymentAttemptRecord(storage, parsed);
+
+  return jsonResponse({
+    records: activeControlPlaneRecords(storage),
+  });
+}
+
+async function handleInternalRecordDeploymentEvidence(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+
+  const parsed = parseInternalDeploymentEvidenceRecordRequest(await readJson(request));
+
+  upsertDeploymentAttemptRecord(storage, {
+    attempt: parsed.attempt,
+    target: parsed.target,
+  });
+  createDeploymentEvidenceRecords(storage, parsed);
+
+  return jsonResponse({
+    records: activeControlPlaneRecords(storage),
+  });
+}
+
+async function handleInternalRecordDeploymentDrift(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+
+  const parsed = parseInternalDeploymentDriftRecordRequest(await readJson(request));
+
+  upsertDeploymentTargetRecord(storage, parsed.target, parsed.now);
+  createDeploymentDriftRecord(storage, parsed);
+
+  return jsonResponse({
+    records: activeControlPlaneRecords(storage),
   });
 }
 
@@ -465,6 +581,271 @@ function backfillAppInstallRecords(storage: DurableObjectStorage, install: AppIn
   );
 }
 
+function syncDeploymentProjectionRecords(
+  storage: DurableObjectStorage,
+  input: {
+    now: string;
+    resources: DeploymentResource[];
+    sourceFingerprint: string;
+    target: DeploymentTarget;
+  },
+) {
+  const targetRecordId = upsertDeploymentTargetRecord(storage, input.target, input.now);
+  const nextResourceRecordIds = new Set<string>();
+
+  for (const resource of input.resources) {
+    const recordId = deploymentDesiredResourceRecordId(input.target.targetId, resource.logicalId);
+    const existing = getStoredRecord(storage, recordId);
+    const values = deploymentDesiredResourceValues({
+      createdAt: stringRecordValue(existing?.values.createdAt) ?? input.now,
+      resource,
+      sourceFingerprint: input.sourceFingerprint,
+      targetRecordId,
+      updatedAt: input.now,
+    });
+
+    upsertControlPlaneRecord(storage, {
+      action: "syncDeploymentProjection",
+      entity: "deployDesiredResource",
+      id: recordId,
+      values,
+    });
+    nextResourceRecordIds.add(recordId);
+  }
+
+  for (const record of activeControlPlaneRecords(storage)) {
+    if (
+      record.entity !== "deployDesiredResource" ||
+      record.values.deployTarget !== targetRecordId ||
+      nextResourceRecordIds.has(record.id) ||
+      record.values.enabled !== true
+    ) {
+      continue;
+    }
+
+    upsertControlPlaneRecord(storage, {
+      action: "disableDeploymentProjectionResource",
+      entity: "deployDesiredResource",
+      id: record.id,
+      values: {
+        ...record.values,
+        enabled: false,
+        updatedAt: input.now,
+      },
+    });
+  }
+}
+
+function upsertDeploymentTargetRecord(
+  storage: DurableObjectStorage,
+  target: DeploymentTarget,
+  now: string,
+) {
+  const existing = getStoredRecord(storage, target.targetId);
+  const values: RecordValues = {
+    targetId: target.targetId,
+    targetKind: target.kind,
+    label: target.label ?? target.targetId,
+    enabled: true,
+    createdAt: stringRecordValue(existing?.values.createdAt) ?? now,
+    updatedAt: now,
+  };
+
+  upsertControlPlaneRecord(storage, {
+    action: "syncDeploymentTarget",
+    entity: "deployTarget",
+    id: target.targetId,
+    values,
+  });
+
+  return target.targetId;
+}
+
+function upsertDeploymentAttemptRecord(
+  storage: DurableObjectStorage,
+  input: { attempt: DeploymentAttempt; target: DeploymentTarget },
+) {
+  upsertDeploymentTargetRecord(storage, input.target, input.attempt.updatedAt);
+
+  const existing = getStoredRecord(storage, input.attempt.attemptId);
+  const values: RecordValues = {
+    deployTarget: input.attempt.targetId,
+    versionId: input.attempt.versionId,
+    desiredStateHash: input.attempt.hash,
+    revision: input.attempt.revision,
+    mode: input.attempt.mode,
+    status: input.attempt.status,
+    actorKind: controlPlaneDeploymentActorKind(input.attempt.actor.kind),
+    actorId: input.attempt.actor.actorId,
+    ...(input.attempt.runnerId === undefined ? {} : { runnerId: input.attempt.runnerId }),
+    idempotencyKey: input.attempt.idempotencyKey,
+    startedAt: input.attempt.startedAt,
+    updatedAt: input.attempt.updatedAt,
+    ...(input.attempt.completedAt === undefined ? {} : { completedAt: input.attempt.completedAt }),
+  };
+
+  upsertControlPlaneRecord(storage, {
+    action: existing ? "updateDeploymentAttempt" : "startDeploymentAttempt",
+    entity: "deployAttempt",
+    id: input.attempt.attemptId,
+    values,
+  });
+}
+
+function createDeploymentEvidenceRecords(
+  storage: DurableObjectStorage,
+  input: {
+    attempt: DeploymentAttempt;
+    evidence: DeploymentResourceEvidenceSummary[];
+    now: string;
+    target: DeploymentTarget;
+  },
+) {
+  const desiredResources = new Map(
+    activeControlPlaneRecords(storage)
+      .filter(
+        (record) =>
+          record.entity === "deployDesiredResource" &&
+          record.values.deployTarget === input.target.targetId,
+      )
+      .map((record) => [String(record.values.logicalId), record.id]),
+  );
+
+  for (const evidence of input.evidence) {
+    const recordId = deploymentEvidenceRecordId(input.attempt.attemptId, evidence.logicalId);
+
+    if (getStoredRecord(storage, recordId)) {
+      continue;
+    }
+
+    const values: RecordValues = {
+      deployAttempt: input.attempt.attemptId,
+      ...(desiredResources.get(evidence.logicalId) === undefined
+        ? {}
+        : { deployDesiredResource: desiredResources.get(evidence.logicalId) ?? "" }),
+      action: evidence.action,
+      logicalId: evidence.logicalId,
+      kind: evidence.kind,
+      providerFamily: evidence.providerFamily,
+      providerResourceIdsJson: JSON.stringify(evidence.providerResourceIds),
+      ...(evidence.displayName === undefined ? {} : { displayName: evidence.displayName }),
+      ...(evidence.alchemyResourceId === undefined
+        ? {}
+        : { alchemyResourceId: evidence.alchemyResourceId }),
+      recordedAt: input.now,
+    };
+
+    upsertControlPlaneRecord(storage, {
+      action: "recordDeploymentSuccess",
+      entity: "deployEvidenceSummary",
+      id: recordId,
+      values,
+    });
+  }
+}
+
+function createDeploymentDriftRecord(
+  storage: DurableObjectStorage,
+  input: { now: string; report: DeploymentDriftReport; target: DeploymentTarget },
+) {
+  if (getStoredRecord(storage, input.report.reportId)) {
+    return;
+  }
+
+  const values: RecordValues = {
+    deployTarget: input.report.targetId,
+    versionId: input.report.versionId,
+    desiredStateHash: input.report.hash,
+    revision: input.report.revision,
+    status: input.report.status,
+    actorKind: controlPlaneDeploymentActorKind(input.report.actor.kind),
+    actorId: input.report.actor.actorId,
+    affectedLogicalIdsJson: JSON.stringify(input.report.summary.affectedLogicalIds),
+    createCount: input.report.summary.create,
+    updateCount: input.report.summary.update,
+    deleteCount: input.report.summary.delete,
+    reportedAt: input.report.reportedAt,
+  };
+
+  upsertControlPlaneRecord(storage, {
+    action: "recordDeploymentDrift",
+    entity: "deployDriftReport",
+    id: input.report.reportId,
+    values,
+  });
+}
+
+function upsertControlPlaneRecord(
+  storage: DurableObjectStorage,
+  input: {
+    action: string;
+    entity: string;
+    id: string;
+    values: RecordValues;
+  },
+) {
+  const existing = getStoredRecord(storage, input.id);
+  const validate = validateControlPlaneRecordWrite(storage, instanceControlPlaneSource.schema);
+
+  if (!existing || existing.deletedAt) {
+    createRecordSetForActionOutcome(
+      storage,
+      `controlPlane:${input.action}:create:${input.id}:${recordValuesHash(input.values)}`,
+      input.entity,
+      input.action,
+      [{ entity: input.entity, id: input.id, values: input.values }],
+      validate,
+    );
+    return;
+  }
+
+  if (recordValuesEqual(existing.values, input.values)) {
+    return;
+  }
+
+  patchStoredRecordOutcome(
+    storage,
+    {
+      mutationId: `controlPlane:${input.action}:patch:${input.id}:${recordValuesHash(
+        input.values,
+      )}`,
+      entity: input.entity,
+      op: "patch",
+      recordId: input.id,
+      values: input.values,
+    },
+    input.values,
+    validate,
+  );
+}
+
+function deploymentDesiredResourceValues(input: {
+  createdAt: string;
+  resource: DeploymentResource;
+  sourceFingerprint: string;
+  targetRecordId: string;
+  updatedAt: string;
+}): RecordValues {
+  return {
+    deployTarget: input.targetRecordId,
+    logicalId: input.resource.logicalId,
+    kind: input.resource.kind,
+    providerFamily: input.resource.providerFamily,
+    inputsJson: JSON.stringify(input.resource.inputs),
+    ...(input.resource.dependencies.length === 0
+      ? {}
+      : { dependenciesJson: JSON.stringify(input.resource.dependencies) }),
+    enabled: true,
+    sourceFingerprint: input.sourceFingerprint,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+  };
+}
+
+function activeControlPlaneRecords(storage: DurableObjectStorage): StoredRecord[] {
+  return getBootstrapRecords(storage).filter((record) => !record.deletedAt);
+}
+
 function appInstallRoutesFromControlPlaneRoutes(
   routeRecords: { id: string; values: InstanceControlPlaneAppRouteValues }[],
 ): AppInstallRoute[] {
@@ -518,6 +899,257 @@ function enabledAppInstallRoute(
   return routes.find((route) => route.enabled && route.routeKind === routeKind);
 }
 
+function parseInternalDeploymentProjectionRequest(value: unknown): {
+  now: string;
+  resources: DeploymentResource[];
+  sourceFingerprint: string;
+  target: DeploymentTarget;
+} {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Deployment projection request must be an object.");
+  }
+
+  const target = parseDeploymentTarget(value.target);
+  const resources = parseDeploymentResources(value.resources);
+  const sourceFingerprint = parseRequiredString("sourceFingerprint", value.sourceFingerprint);
+  const now = typeof value.now === "string" && value.now.trim() !== "" ? value.now : nowIsoString();
+
+  return { now, resources, sourceFingerprint, target };
+}
+
+function parseInternalDeploymentAttemptRecordRequest(value: unknown): {
+  attempt: DeploymentAttempt;
+  target: DeploymentTarget;
+} {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Deployment attempt record request must be an object.");
+  }
+
+  return {
+    attempt: parseDeploymentAttempt(value.attempt),
+    target: parseDeploymentTarget(value.target),
+  };
+}
+
+function parseInternalDeploymentEvidenceRecordRequest(value: unknown): {
+  attempt: DeploymentAttempt;
+  evidence: DeploymentResourceEvidenceSummary[];
+  now: string;
+  target: DeploymentTarget;
+} {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Deployment evidence record request must be an object.");
+  }
+
+  const now = typeof value.now === "string" && value.now.trim() !== "" ? value.now : nowIsoString();
+
+  return {
+    attempt: parseDeploymentAttempt(value.attempt),
+    evidence: parseDeploymentEvidence(value.evidence),
+    now,
+    target: parseDeploymentTarget(value.target),
+  };
+}
+
+function parseInternalDeploymentDriftRecordRequest(value: unknown): {
+  now: string;
+  report: DeploymentDriftReport;
+  target: DeploymentTarget;
+} {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Deployment drift record request must be an object.");
+  }
+
+  const now = typeof value.now === "string" && value.now.trim() !== "" ? value.now : nowIsoString();
+
+  return {
+    now,
+    report: parseDeploymentDriftReport(value.report),
+    target: parseDeploymentTarget(value.target),
+  };
+}
+
+function parseDeploymentTarget(value: unknown): DeploymentTarget {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Deployment target must be an object.");
+  }
+
+  const targetId = parseRequiredString("target.targetId", value.targetId);
+  const kind = parseRequiredString("target.kind", value.kind);
+
+  if (kind !== "instance") {
+    throw new BadRequestError(`Deployment target kind "${kind}" is unsupported.`);
+  }
+
+  return {
+    targetId,
+    kind,
+    ...(typeof value.label === "string" && value.label.trim() !== "" ? { label: value.label } : {}),
+  };
+}
+
+function parseDeploymentResources(value: unknown): DeploymentResource[] {
+  if (!Array.isArray(value)) {
+    throw new BadRequestError("Deployment resources must be an array.");
+  }
+
+  return value.map(parseDeploymentResource);
+}
+
+function parseDeploymentResource(value: unknown): DeploymentResource {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Deployment resource must be an object.");
+  }
+
+  const dependencies = Array.isArray(value.dependencies)
+    ? value.dependencies.map((dependency) => {
+        if (!isRecord(dependency)) {
+          throw new BadRequestError("Deployment resource dependency must be an object.");
+        }
+
+        return {
+          logicalId: parseRequiredString("dependency.logicalId", dependency.logicalId),
+          ...(typeof dependency.reason === "string" && dependency.reason.trim() !== ""
+            ? { reason: dependency.reason }
+            : {}),
+        };
+      })
+    : [];
+  const inputs = isRecord(value.inputs)
+    ? (value.inputs as Record<string, DeploymentJsonValue>)
+    : {};
+
+  return {
+    dependencies,
+    inputs,
+    kind: parseRequiredString("resource.kind", value.kind) as DeploymentResource["kind"],
+    logicalId: parseRequiredString("resource.logicalId", value.logicalId),
+    providerFamily: parseRequiredString(
+      "resource.providerFamily",
+      value.providerFamily,
+    ) as DeploymentResource["providerFamily"],
+    targetId: parseRequiredString("resource.targetId", value.targetId),
+  };
+}
+
+function parseDeploymentAttempt(value: unknown): DeploymentAttempt {
+  if (!isRecord(value) || !isRecord(value.actor)) {
+    throw new BadRequestError("Deployment attempt must be an object.");
+  }
+
+  return {
+    actor: {
+      actorId: parseRequiredString("attempt.actor.actorId", value.actor.actorId),
+      kind: parseRequiredString(
+        "attempt.actor.kind",
+        value.actor.kind,
+      ) as DeploymentAttempt["actor"]["kind"],
+      ...(typeof value.actor.displayName === "string" && value.actor.displayName.trim() !== ""
+        ? { displayName: value.actor.displayName }
+        : {}),
+      ...(typeof value.actor.runnerId === "string" && value.actor.runnerId.trim() !== ""
+        ? { runnerId: value.actor.runnerId }
+        : {}),
+    },
+    attemptId: parseRequiredString("attempt.attemptId", value.attemptId),
+    ...(typeof value.completedAt === "string" && value.completedAt.trim() !== ""
+      ? { completedAt: value.completedAt }
+      : {}),
+    hash: parseRequiredString("attempt.hash", value.hash),
+    idempotencyKey: parseRequiredString("attempt.idempotencyKey", value.idempotencyKey),
+    ...(typeof value.leaseId === "string" && value.leaseId.trim() !== ""
+      ? { leaseId: value.leaseId }
+      : {}),
+    mode: parseRequiredString("attempt.mode", value.mode) as DeploymentAttempt["mode"],
+    revision: numberRecordValue(value.revision, "attempt.revision"),
+    ...(typeof value.runnerId === "string" && value.runnerId.trim() !== ""
+      ? { runnerId: value.runnerId }
+      : {}),
+    startedAt: parseRequiredString("attempt.startedAt", value.startedAt),
+    status: parseRequiredString("attempt.status", value.status) as DeploymentAttempt["status"],
+    targetId: parseRequiredString("attempt.targetId", value.targetId),
+    updatedAt: parseRequiredString("attempt.updatedAt", value.updatedAt),
+    versionId: parseRequiredString("attempt.versionId", value.versionId),
+  };
+}
+
+function parseDeploymentEvidence(value: unknown): DeploymentResourceEvidenceSummary[] {
+  if (!Array.isArray(value)) {
+    throw new BadRequestError("Deployment evidence must be an array.");
+  }
+
+  return value.map((entry) => {
+    if (!isRecord(entry)) {
+      throw new BadRequestError("Deployment evidence entry must be an object.");
+    }
+
+    return {
+      action: parseRequiredString(
+        "evidence.action",
+        entry.action,
+      ) as DeploymentResourceEvidenceSummary["action"],
+      ...(typeof entry.alchemyResourceId === "string" && entry.alchemyResourceId.trim() !== ""
+        ? { alchemyResourceId: entry.alchemyResourceId }
+        : {}),
+      ...(typeof entry.displayName === "string" && entry.displayName.trim() !== ""
+        ? { displayName: entry.displayName }
+        : {}),
+      kind: parseRequiredString(
+        "evidence.kind",
+        entry.kind,
+      ) as DeploymentResourceEvidenceSummary["kind"],
+      logicalId: parseRequiredString("evidence.logicalId", entry.logicalId),
+      providerFamily: parseRequiredString(
+        "evidence.providerFamily",
+        entry.providerFamily,
+      ) as DeploymentResourceEvidenceSummary["providerFamily"],
+      providerResourceIds: stringArrayRecordValue(
+        entry.providerResourceIds,
+        "evidence.providerResourceIds",
+      ),
+      targetId: parseRequiredString("evidence.targetId", entry.targetId),
+    };
+  });
+}
+
+function parseDeploymentDriftReport(value: unknown): DeploymentDriftReport {
+  if (!isRecord(value) || !isRecord(value.actor) || !isRecord(value.summary)) {
+    throw new BadRequestError("Deployment drift report must be an object.");
+  }
+
+  return {
+    actor: {
+      actorId: parseRequiredString("drift.actor.actorId", value.actor.actorId),
+      kind: parseRequiredString(
+        "drift.actor.kind",
+        value.actor.kind,
+      ) as DeploymentDriftReport["actor"]["kind"],
+      ...(typeof value.actor.displayName === "string" && value.actor.displayName.trim() !== ""
+        ? { displayName: value.actor.displayName }
+        : {}),
+      ...(typeof value.actor.runnerId === "string" && value.actor.runnerId.trim() !== ""
+        ? { runnerId: value.actor.runnerId }
+        : {}),
+    },
+    hash: parseRequiredString("drift.hash", value.hash),
+    reportedAt: parseRequiredString("drift.reportedAt", value.reportedAt),
+    reportId: parseRequiredString("drift.reportId", value.reportId),
+    revision: numberRecordValue(value.revision, "drift.revision"),
+    status: parseRequiredString("drift.status", value.status) as DeploymentDriftReport["status"],
+    summary: {
+      affectedLogicalIds: stringArrayRecordValue(
+        value.summary.affectedLogicalIds,
+        "drift.summary.affectedLogicalIds",
+      ),
+      create: numberRecordValue(value.summary.create, "drift.summary.create"),
+      delete: numberRecordValue(value.summary.delete, "drift.summary.delete"),
+      update: numberRecordValue(value.summary.update, "drift.summary.update"),
+    },
+    targetId: parseRequiredString("drift.targetId", value.targetId),
+    versionId: parseRequiredString("drift.versionId", value.versionId),
+  };
+}
+
 function parseInternalBackfillAppInstalls(value: unknown): AppInstall[] {
   if (!isRecord(value) || !Array.isArray(value.installs)) {
     throw new BadRequestError("Backfill app install request must include installs.");
@@ -558,17 +1190,37 @@ function parseInternalBackfillAppInstall(value: unknown): AppInstall {
 
 function parseRequiredString(field: string, value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
-    throw new BadRequestError(`Backfill app install field "${field}" must be a non-empty string.`);
+    throw new BadRequestError(`Field "${field}" must be a non-empty string.`);
   }
 
   return value;
+}
+
+function numberRecordValue(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new BadRequestError(`Field "${field}" must be a non-negative integer.`);
+  }
+
+  return value;
+}
+
+function stringArrayRecordValue(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new BadRequestError(`Field "${field}" must be a string array.`);
+  }
+
+  return value;
+}
+
+function stringRecordValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 function parseRouteString(field: string, value: unknown): `/${string}` {
   const route = parseRequiredString(field, value);
 
   if (!route.startsWith("/")) {
-    throw new BadRequestError(`Backfill app install field "${field}" must be a route path.`);
+    throw new BadRequestError(`Field "${field}" must be a route path.`);
   }
 
   return route as `/${string}`;
@@ -578,10 +1230,58 @@ function parseRoutePrefixString(field: string, value: unknown): `/${string}/` {
   const route = parseRouteString(field, value);
 
   if (!route.endsWith("/")) {
-    throw new BadRequestError(`Backfill app install field "${field}" must be a route prefix.`);
+    throw new BadRequestError(`Field "${field}" must be a route prefix.`);
   }
 
   return route as `/${string}/`;
+}
+
+function deploymentDesiredResourceRecordId(targetId: string, logicalId: string) {
+  return `deploy-resource:${targetId}:${logicalId}`;
+}
+
+function deploymentEvidenceRecordId(attemptId: string, logicalId: string) {
+  return `deploy-evidence:${attemptId}:${logicalId}`;
+}
+
+function controlPlaneDeploymentActorKind(kind: string) {
+  switch (kind) {
+    case "runner":
+      return "runner";
+    case "cli":
+    case "ci":
+      return "cliDeployer";
+    case "system":
+      return "system";
+    default:
+      return "runner";
+  }
+}
+
+function recordValuesEqual(left: RecordValues, right: RecordValues) {
+  const leftEntries = Object.entries(left);
+  const rightKeys = new Set(Object.keys(right));
+
+  return (
+    leftEntries.length === rightKeys.size &&
+    leftEntries.every(
+      ([fieldName, fieldValue]) => rightKeys.has(fieldName) && right[fieldName] === fieldValue,
+    )
+  );
+}
+
+function recordValuesHash(values: RecordValues) {
+  const stable = JSON.stringify(
+    Object.fromEntries(Object.entries(values).sort(([left], [right]) => left.localeCompare(right))),
+  );
+  let hash = 2166136261;
+
+  for (let index = 0; index < stable.length; index += 1) {
+    hash ^= stable.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function isInternalControlPlanePath(path: string) {

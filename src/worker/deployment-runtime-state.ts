@@ -288,6 +288,7 @@ export type ReadLatestDeploymentStatusInput = {
 type DeploymentAttemptWritebackError = {
   code:
     | DeploymentLeaseOperationError["code"]
+    | "deployment-attempt-actor-mismatch"
     | "deployment-attempt-mode-mismatch"
     | "deployment-attempt-not-active"
     | "deployment-attempt-not-found"
@@ -924,6 +925,15 @@ export function writeDeploymentAttemptFailure(
       return {
         code: "deployment-lease-token-missing",
         error: `Deployment attempt "${active.attempt.attemptId}" requires a lease token for failure writeback.`,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    if (!deploymentActorsEqual(active.attempt.actor, input.actor)) {
+      return {
+        code: "deployment-attempt-actor-mismatch",
+        error: `Deployment attempt "${active.attempt.attemptId}" actor does not match the failure writeback actor.`,
         ok: false,
         status: 409,
       };
@@ -2033,6 +2043,12 @@ function desiredStateStaleResult(targetId: DeploymentTargetId): {
     ok: false,
     status: 409,
   };
+}
+
+function deploymentActorsEqual(left: DeploymentActor, right: DeploymentActor): boolean {
+  return (
+    left.actorId === right.actorId && left.kind === right.kind && left.runnerId === right.runnerId
+  );
 }
 
 function isMutatingDeploymentAttemptMode(

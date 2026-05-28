@@ -49,6 +49,12 @@ import { nowIsoString } from "../shared/clock.ts";
 import { authorizeInstanceWrite, type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
+  recordDeploymentAttemptInControlPlane,
+  recordDeploymentDriftInControlPlane,
+  recordDeploymentEvidenceInControlPlane,
+  type DeploymentControlPlaneClientEnv,
+} from "./deployment-control-plane-client.ts";
+import {
   heartbeatDeploymentAttemptLease,
   INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
   materializeDeploymentDesiredStateVersion,
@@ -66,6 +72,7 @@ type InstanceDeploymentRuntimeApiEnv = AuthorityAdminGuardEnv & {
 };
 
 type DurableObjectDeploymentRuntimeEnv = AuthorityAdminGuardEnv & {
+  FORMLESS_AUTHORITY?: DeploymentControlPlaneClientEnv["FORMLESS_AUTHORITY"];
   FORMLESS_DOMAIN_PROVIDER_INSTANCE_ID?: string;
   FORMLESS_DOMAIN_PROVIDER_WORKER_NAME?: string;
 };
@@ -172,12 +179,16 @@ async function handleDesiredStateRequest(
     );
   }
 
-  const projection = buildPrimaryInstanceDeploymentDesiredStateProjection(storage, {
+  const now = nowIsoString();
+  const projection = await buildPrimaryInstanceDeploymentDesiredStateProjection(storage, {
     env,
+    now,
+    requestUrl: request.url,
+    target: target.target,
     targetId: target.target.targetId,
   });
   const desiredState = await materializeDeploymentDesiredStateVersion(storage, {
-    now: nowIsoString(),
+    now,
     resourceGraph: projection.resourceGraph,
     source: projection.source,
     targetId: target.target.targetId,
@@ -253,17 +264,25 @@ async function handleAttemptStartRequest(
     );
   }
 
+  const now = nowIsoString();
   const result = startDeploymentAttempt(storage, {
     actor: parsed.request.actor,
     desiredState: parsed.request.desiredState,
     idempotencyKey: parsed.request.idempotencyKey,
     mode: parsed.request.mode,
-    now: nowIsoString(),
+    now,
   });
 
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
+
+  await recordDeploymentAttemptInControlPlane({
+    attempt: result.attempt,
+    env,
+    requestUrl: request.url,
+    target: primaryInstanceDeploymentTarget,
+  });
 
   return jsonResponse(
     {
@@ -307,16 +326,24 @@ async function handleAttemptHeartbeatRequest(
     );
   }
 
+  const now = nowIsoString();
   const result = heartbeatDeploymentAttemptLease(storage, {
     attemptId: parsed.request.attemptId,
     desiredState: parsed.request.desiredState,
     leaseToken: parsed.request.leaseToken,
-    now: nowIsoString(),
+    now,
   });
 
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
+
+  await recordDeploymentAttemptInControlPlane({
+    attempt: result.attempt,
+    env,
+    requestUrl: request.url,
+    target: primaryInstanceDeploymentTarget,
+  });
 
   return jsonResponse({
     attempt: result.attempt,
@@ -355,10 +382,11 @@ async function handleAttemptPlanWritebackRequest(
     return jsonResponse(targetError, 404);
   }
 
+  const now = nowIsoString();
   const result = writeDeploymentAttemptPlan(storage, {
     attemptId: parsed.request.attemptId,
     desiredState: parsed.request.desiredState,
-    now: nowIsoString(),
+    now,
     runnerId: parsed.request.runnerId,
     summary: parsed.request.summary,
   });
@@ -366,6 +394,13 @@ async function handleAttemptPlanWritebackRequest(
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
+
+  await recordDeploymentAttemptInControlPlane({
+    attempt: result.attempt,
+    env,
+    requestUrl: request.url,
+    target: primaryInstanceDeploymentTarget,
+  });
 
   return jsonResponse({
     attempt: result.attempt,
@@ -404,19 +439,35 @@ async function handleAttemptSuccessWritebackRequest(
     return jsonResponse(targetError, 404);
   }
 
+  const now = nowIsoString();
   const result = writeDeploymentAttemptSuccess(storage, {
     alchemy: parsed.request.alchemy,
     attemptId: parsed.request.attemptId,
     desiredState: parsed.request.desiredState,
     evidence: parsed.request.evidence,
     leaseToken: parsed.request.leaseToken,
-    now: nowIsoString(),
+    now,
     runnerId: parsed.request.runnerId,
   });
 
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
+
+  await recordDeploymentAttemptInControlPlane({
+    attempt: result.attempt,
+    env,
+    requestUrl: request.url,
+    target: primaryInstanceDeploymentTarget,
+  });
+  await recordDeploymentEvidenceInControlPlane({
+    attempt: result.attempt,
+    env,
+    evidence: parsed.request.evidence,
+    now,
+    requestUrl: request.url,
+    target: primaryInstanceDeploymentTarget,
+  });
 
   return jsonResponse({
     attempt: result.attempt,
@@ -456,12 +507,13 @@ async function handleAttemptFailureWritebackRequest(
     return jsonResponse(targetError, 404);
   }
 
+  const now = nowIsoString();
   const result = writeDeploymentAttemptFailure(storage, {
     actor: parsed.request.actor,
     attemptId: parsed.request.attemptId,
     desiredState: parsed.request.desiredState,
     leaseToken: parsed.request.leaseToken,
-    now: nowIsoString(),
+    now,
     runnerId: parsed.request.runnerId,
     summary: parsed.request.summary,
   });
@@ -469,6 +521,13 @@ async function handleAttemptFailureWritebackRequest(
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
+
+  await recordDeploymentAttemptInControlPlane({
+    attempt: result.attempt,
+    env,
+    requestUrl: request.url,
+    target: primaryInstanceDeploymentTarget,
+  });
 
   return jsonResponse({
     attempt: result.attempt,
@@ -508,10 +567,11 @@ async function handleDriftWritebackRequest(
     return jsonResponse(targetError, 404);
   }
 
+  const now = nowIsoString();
   const result = writeDeploymentDriftReport(storage, {
     actor: parsed.request.actor,
     desiredState: parsed.request.desiredState,
-    now: nowIsoString(),
+    now,
     status: parsed.request.status,
     summary: parsed.request.summary,
   });
@@ -519,6 +579,14 @@ async function handleDriftWritebackRequest(
   if (!result.ok) {
     return jsonResponse({ code: result.code, error: result.error }, result.status);
   }
+
+  await recordDeploymentDriftInControlPlane({
+    env,
+    now,
+    report: result.report,
+    requestUrl: request.url,
+    target: primaryInstanceDeploymentTarget,
+  });
 
   return jsonResponse({
     report: result.report,
@@ -1455,6 +1523,26 @@ function parseDeploymentEvidenceSummary(
     };
   }
 
+  const unexpectedKeys = unexpectedRecordKeys(value, [
+    "action",
+    "alchemyResourceId",
+    "displayName",
+    "kind",
+    "logicalId",
+    "providerFamily",
+    "providerResourceIds",
+    "targetId",
+  ]);
+
+  if (unexpectedKeys.length > 0) {
+    return {
+      body: {
+        error: `${context} has unsupported field "${unexpectedKeys[0]}".`,
+      },
+      ok: false,
+    };
+  }
+
   const logicalId = requiredTrimmedString(value.logicalId, `${context} logical id`);
 
   if (!logicalId.ok) {
@@ -1512,6 +1600,19 @@ function parseDeploymentEvidenceSummary(
 
   if (!providerResourceIds.ok) {
     return providerResourceIds;
+  }
+
+  const forbiddenProviderResourceId = providerResourceIds.values.find(
+    containsForbiddenDeploymentSecretValue,
+  );
+
+  if (forbiddenProviderResourceId !== undefined) {
+    return {
+      body: {
+        error: `${context} provider resource ids cannot include secret values.`,
+      },
+      ok: false,
+    };
   }
 
   const displayName = optionalTrimmedString(value.displayName, `${context} display name`);
@@ -1898,6 +1999,32 @@ function deploymentValidationErrorBody(error: DeploymentRuntimeValidationError) 
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Bad request.";
+}
+
+function unexpectedRecordKeys(value: Record<string, unknown>, allowedKeys: readonly string[]) {
+  const allowed = new Set(allowedKeys);
+
+  return Object.keys(value)
+    .filter((key) => !allowed.has(key))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function containsForbiddenDeploymentSecretValue(value: string) {
+  const normalized = value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+
+  return (
+    normalized.includes("cf_api_token") ||
+    normalized.includes("cloudflare_api_token") ||
+    normalized.includes("alchemy_password") ||
+    normalized.includes("alchemy_state_token") ||
+    normalized.includes("raw_lease_token") ||
+    normalized.includes("lease_token") ||
+    value.includes("-----BEGIN PRIVATE KEY-----")
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

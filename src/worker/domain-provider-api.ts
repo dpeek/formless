@@ -701,8 +701,15 @@ async function startDomainProviderDeploymentAttempt(
     now: string;
   },
 ): Promise<DomainProviderDeploymentAttemptStartResult> {
-  const projection = buildPrimaryInstanceDeploymentDesiredStateProjection(storage, {
+  const projection = await buildPrimaryInstanceDeploymentDesiredStateProjection(storage, {
     env: input.env,
+    now: input.now,
+    requestUrl: "https://formless.local/api/formless/deployments/desired-state",
+    target: {
+      kind: "instance",
+      label: "Primary instance target",
+      targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+    },
     targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
   });
   const desiredState = await materializeDeploymentDesiredStateVersion(storage, {

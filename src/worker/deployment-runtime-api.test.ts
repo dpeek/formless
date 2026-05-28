@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import type { CreateAppInstallResponse } from "../shared/protocol.ts";
+import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
+import type { BootstrapResponse } from "../shared/protocol.ts";
 import {
   INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
   INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,
@@ -327,6 +329,49 @@ describe("instance deployment runtime API routes", () => {
     expect(serialized).not.toContain("disabled.example.com");
     expect(serialized).not.toContain("secret-cloudflare-token");
     expect(serialized).not.toContain("secret-alchemy-password");
+  });
+
+  it("projects desired state from control-plane desired resource records", async () => {
+    await createAppInstall({ packageAppKey: "tasks", installId: "tasks", label: "Tasks" });
+    await postAdminJson<CreateInstanceDomainMappingResponse>("/api/formless/domain-mappings", {
+      host: "app.example.com",
+      profile: "app",
+      targetInstallId: "tasks",
+    });
+    await createRedirectIntent({
+      fromHost: "www.example.com",
+      toHost: "example.com",
+    });
+
+    const desired = await getJson<InstanceDeploymentDesiredStateResponse>(
+      INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+    );
+    const controlPlane = await getJson<BootstrapResponse>(
+      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
+    );
+    const desiredResourceRecords = controlPlane.body.records.filter(
+      (record) => record.entity === "deployDesiredResource",
+    );
+    const projectedResources = desiredResourceRecords.map((record) => ({
+      dependencies:
+        typeof record.values.dependenciesJson === "string"
+          ? JSON.parse(record.values.dependenciesJson)
+          : [],
+      inputs: JSON.parse(String(record.values.inputsJson)),
+      kind: record.values.kind,
+      logicalId: record.values.logicalId,
+      providerFamily: record.values.providerFamily,
+      targetId: record.values.deployTarget,
+    }));
+
+    expect(projectedResources).toEqual(desired.body.desiredState.resourceGraph.resources);
+    expect(desiredResourceRecords.map((record) => record.values.sourceFingerprint)).toEqual([
+      desired.body.desiredState.source.fingerprint,
+      desired.body.desiredState.source.fingerprint,
+      desired.body.desiredState.source.fingerprint,
+    ]);
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-cloudflare-token");
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain("secret-alchemy-password");
   });
 
   it("uses no-store cache policy for method and target errors", async () => {
@@ -877,6 +922,27 @@ describe("instance deployment runtime API routes", () => {
       code: "deployment-lease-token-missing",
     });
 
+    const actorMismatchFailure = await postAttemptFailure({
+      actor: {
+        actorId: "runner:other",
+        kind: "runner",
+        runnerId: "runner.other",
+      },
+      attemptId: failureStarted.body.attempt.attemptId,
+      desiredState: desired,
+      leaseToken: failureStarted.body.lease?.token ?? "",
+      runnerId: "runner.other",
+      summary: {
+        code: "provider-error",
+        displayMessage: "Provider apply failed.",
+      },
+    });
+
+    expect(actorMismatchFailure.response.status).toBe(409);
+    expect(actorMismatchFailure.body).toMatchObject({
+      code: "deployment-attempt-actor-mismatch",
+    });
+
     const failure = await postAttemptFailure({
       actor: {
         actorId: "runner:primary",
@@ -952,6 +1018,32 @@ describe("instance deployment runtime API routes", () => {
     });
     expect(drift.body.report.reportId).toMatch(/^drift\.[a-f0-9-]{36}$/);
 
+    const controlPlane = await getJson<BootstrapResponse>(
+      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
+    );
+
+    expect(
+      controlPlane.body.records
+        .filter((record) => record.entity === "deployAttempt")
+        .map((record) => ({
+          id: record.id,
+          status: record.values.status,
+        })),
+    ).toEqual(
+      expect.arrayContaining([
+        { id: planStarted.body.attempt.attemptId, status: "planned" },
+        { id: applyStarted.body.attempt.attemptId, status: "succeeded" },
+        { id: failureStarted.body.attempt.attemptId, status: "failed" },
+      ]),
+    );
+    expect(
+      controlPlane.body.records.filter((record) => record.entity === "deployEvidenceSummary"),
+    ).toHaveLength(1);
+    expect(
+      controlPlane.body.records.filter((record) => record.entity === "deployDriftReport"),
+    ).toHaveLength(1);
+    expect(JSON.stringify(controlPlane.body.records)).not.toContain(success.body.lease.token);
+
     const staleDrift = await postDeploymentDrift({
       actor: {
         actorId: "runner:primary",
@@ -1003,6 +1095,63 @@ describe("instance deployment runtime API routes", () => {
       code: "invalid-attempt-mode",
       field: "mode",
     });
+  });
+
+  it("rejects hidden secret values and provider-truth fields in writeback evidence", async () => {
+    const desiredState = (
+      await getJson<InstanceDeploymentDesiredStateResponse>(
+        INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+      )
+    ).body.desiredState;
+    const desired = desiredStateRef(desiredState);
+    const secretStarted = await postAttemptStart(
+      attemptStartRequest(desired, {
+        idempotencyKey: "apply:primary:secret-evidence",
+        mode: "apply",
+      }),
+    );
+    const secretEvidence = await postAttemptSuccess({
+      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
+      attemptId: secretStarted.body.attempt.attemptId,
+      desiredState: desired,
+      evidence: [
+        {
+          action: "created",
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "custom-domain:secret.example.com",
+          providerFamily: "cloudflare",
+          providerResourceIds: ["CLOUDFLARE_API_TOKEN=hidden"],
+          targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+        },
+      ],
+      leaseToken: secretStarted.body.lease?.token ?? "",
+    });
+    const providerTruthEvidence = await postAttemptSuccess({
+      alchemy: { app: "formless", scope: "instance.primary", stage: "prod" },
+      attemptId: secretStarted.body.attempt.attemptId,
+      desiredState: desired,
+      evidence: [
+        {
+          action: "created",
+          kind: "cloudflare-worker-custom-domain",
+          logicalId: "custom-domain:truth.example.com",
+          providerFamily: "cloudflare",
+          providerResourceIds: ["cf-custom-domain-truth"],
+          providerResourceJson: "{}",
+          targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+        },
+      ],
+      leaseToken: secretStarted.body.lease?.token ?? "",
+    } as unknown as InstanceDeploymentAttemptSuccessWritebackRequest);
+
+    expect(secretEvidence.response.status).toBe(400);
+    expect(secretEvidence.body.error).toBe(
+      "Deployment resource evidence[0] provider resource ids cannot include secret values.",
+    );
+    expect(providerTruthEvidence.response.status).toBe(400);
+    expect(providerTruthEvidence.body.error).toBe(
+      'Deployment resource evidence[0] has unsupported field "providerResourceJson".',
+    );
   });
 });
 
