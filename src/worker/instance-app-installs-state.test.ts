@@ -32,6 +32,10 @@ describe("instance app install state", () => {
     expect(read.status).toBe(200);
 
     const body = (await read.json()) as {
+      appliedMigrations: Array<{
+        migrationId: string;
+        storageFamily: string;
+      }>;
       columns: string[];
       installs: Array<{
         installId: string;
@@ -45,6 +49,12 @@ describe("instance app install state", () => {
       }>;
     };
 
+    expect(body.appliedMigrations).toEqual([
+      expect.objectContaining({
+        migrationId: "2026-05-28-instance-app-installs-package-facts",
+        storageFamily: "instance-app-installs",
+      }),
+    ]);
     expect(body.columns).toEqual(
       expect.arrayContaining(["package_revision", "source_schema_hash"]),
     );
@@ -74,6 +84,12 @@ async function writeAppInstallStateHarness() {
     `
       import { DurableObject } from "cloudflare:workers";
       import { readInstanceAppInstalls } from "${process.cwd()}/src/worker/instance-app-installs-state.ts";
+      import {
+        readAppliedSqlMigrations,
+        storageSqlMigrationFamily,
+      } from "${process.cwd()}/src/worker/sql-migrations.ts";
+
+      const migrationFamily = storageSqlMigrationFamily("instance-app-installs");
 
       export default {
         fetch(request, env) {
@@ -120,6 +136,7 @@ async function writeAppInstallStateHarness() {
           if (url.pathname === "/read") {
             const installs = readInstanceAppInstalls(this.ctx.storage);
             return Response.json({
+              appliedMigrations: readAppliedSqlMigrations(this.ctx.storage, migrationFamily),
               columns: this.ctx.storage.sql
                 .exec("PRAGMA table_info(app_installs)")
                 .toArray()

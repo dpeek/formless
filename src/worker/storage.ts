@@ -30,6 +30,11 @@ import {
   readMutationReplayResponse,
   readWriteLogChangesAfter,
 } from "./storage-write-log.ts";
+import {
+  createSqlStorageMigrationRegistry,
+  runSqlStorageMigrations,
+  storageSqlMigrationFamily,
+} from "./sql-migrations.ts";
 
 type RecordRow = {
   id: string;
@@ -43,6 +48,9 @@ type SchemaRow = {
   schema_json: string;
   updated_at: string;
 };
+
+const authoritySqlMigrationFamily = storageSqlMigrationFamily("authority-storage");
+const authoritySqlMigrations = createSqlStorageMigrationRegistry([]);
 
 export type StoredSchema = {
   schema: AppSchema;
@@ -156,6 +164,11 @@ export function mapWriteOutcome<T, U>(
 }
 
 export function ensureStorageTables(storage: DurableObjectStorage) {
+  runSqlStorageMigrations(storage, {
+    family: authoritySqlMigrationFamily,
+    migrations: authoritySqlMigrations,
+  });
+
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS records (
       id TEXT PRIMARY KEY,

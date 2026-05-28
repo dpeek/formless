@@ -25,6 +25,11 @@ import {
 } from "../shared/instance-domain-mappings.ts";
 import type { AppInstall } from "../shared/app-installs.ts";
 import { readInstanceAppInstalls } from "./instance-app-installs-state.ts";
+import {
+  createSqlStorageMigrationRegistry,
+  runSqlStorageMigrations,
+  storageSqlMigrationFamily,
+} from "./sql-migrations.ts";
 
 type InstanceDomainMappingRow = {
   host: string;
@@ -165,17 +170,37 @@ const auditEventsTableSql = `
   )
 `;
 
-export function ensureInstanceDomainMappingTables(storage: DurableObjectStorage) {
-  migrateLegacySurfaceTables(storage);
+const instanceDomainMappingsSqlMigrationFamily = storageSqlMigrationFamily(
+  "instance-domain-mappings",
+);
+const instanceDomainMappingsSqlMigrations = createSqlStorageMigrationRegistry([
+  {
+    id: "2026-05-28-instance-domain-mappings-legacy-shape",
+    owner: "formless",
+    family: instanceDomainMappingsSqlMigrationFamily,
+    checksum: "sha256:8a591d823d01a311ed46153c902666b559a107523162bee816cebb8aba4f113b",
+    safety: "auto-safe",
+    summary:
+      "Rewrite legacy domain mapping surface tables and action checks into the current table shape.",
+    apply: (storage) => {
+      migrateLegacySurfaceTables(storage);
+      migrateProviderEvidenceColumns(storage);
+      migrateAppliedActionChecks(storage);
+    },
+  },
+]);
 
+export function ensureInstanceDomainMappingTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     ${domainMappingsTableSql};
     ${appliedStateTableSql};
     ${auditEventsTableSql};
     ${desiredCleanupEventsTableSql};
   `);
-  migrateProviderEvidenceColumns(storage);
-  migrateAppliedActionChecks(storage);
+  runSqlStorageMigrations(storage, {
+    family: instanceDomainMappingsSqlMigrationFamily,
+    migrations: instanceDomainMappingsSqlMigrations,
+  });
 }
 
 export function readInstanceDomainMappings(storage: DurableObjectStorage): InstanceDomainMapping[] {

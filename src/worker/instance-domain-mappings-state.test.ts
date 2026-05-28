@@ -31,11 +31,21 @@ describe("instance domain mapping state migrations", () => {
     expect(migrated.status).toBe(200);
 
     const body = (await migrated.json()) as {
+      appliedMigrations: Array<{
+        migrationId: string;
+        storageFamily: string;
+      }>;
       appliedStateSql: string;
       auditEventsSql: string;
       mappings: unknown[];
     };
 
+    expect(body.appliedMigrations).toEqual([
+      expect.objectContaining({
+        migrationId: "2026-05-28-instance-domain-mappings-legacy-shape",
+        storageFamily: "instance-domain-mappings",
+      }),
+    ]);
     expect(body.appliedStateSql).toContain("'manually-removed'");
     expect(body.auditEventsSql).toContain("'manually-removed'");
     expect(body.mappings).toEqual([]);
@@ -54,6 +64,12 @@ async function writeDomainMappingStateHarness() {
         ensureInstanceDomainMappingTables,
         readInstanceDomainMappings,
       } from "${process.cwd()}/src/worker/instance-domain-mappings-state.ts";
+      import {
+        readAppliedSqlMigrations,
+        storageSqlMigrationFamily,
+      } from "${process.cwd()}/src/worker/sql-migrations.ts";
+
+      const migrationFamily = storageSqlMigrationFamily("instance-domain-mappings");
 
       export default {
         fetch(request, env) {
@@ -74,6 +90,7 @@ async function writeDomainMappingStateHarness() {
           if (url.pathname === "/ensure") {
             ensureInstanceDomainMappingTables(this.ctx.storage);
             return Response.json({
+              appliedMigrations: readAppliedSqlMigrations(this.ctx.storage, migrationFamily),
               appliedStateSql: tableSql(
                 this.ctx.storage,
                 "instance_domain_mapping_applied_state",

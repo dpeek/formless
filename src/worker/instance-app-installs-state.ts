@@ -15,6 +15,11 @@ import {
   type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
 import { findWorkerSchemaAppDefinition } from "./schema-apps.ts";
+import {
+  createSqlStorageMigrationRegistry,
+  runSqlStorageMigrations,
+  storageSqlMigrationFamily,
+} from "./sql-migrations.ts";
 
 type AppInstallRow = {
   install_id: string;
@@ -31,6 +36,19 @@ type TableInfoRow = {
   name: string;
 };
 
+const instanceAppInstallsSqlMigrationFamily = storageSqlMigrationFamily("instance-app-installs");
+const instanceAppInstallsSqlMigrations = createSqlStorageMigrationRegistry([
+  {
+    id: "2026-05-28-instance-app-installs-package-facts",
+    owner: "formless",
+    family: instanceAppInstallsSqlMigrationFamily,
+    checksum: "sha256:0d3e904259214f8c83da95033fc8be3ca8f1502b44471fb47fa6f11000102f12",
+    safety: "auto-safe",
+    summary: "Backfill app install package revision and source schema hash columns.",
+    apply: ensureInstanceAppInstallPackageFactColumns,
+  },
+]);
+
 export function ensureInstanceAppInstallTables(storage: DurableObjectStorage) {
   storage.sql.exec(`
     CREATE TABLE IF NOT EXISTS app_installs (
@@ -44,7 +62,10 @@ export function ensureInstanceAppInstallTables(storage: DurableObjectStorage) {
       updated_at TEXT NOT NULL
     );
   `);
-  ensureInstanceAppInstallPackageFactColumns(storage);
+  runSqlStorageMigrations(storage, {
+    family: instanceAppInstallsSqlMigrationFamily,
+    migrations: instanceAppInstallsSqlMigrations,
+  });
 }
 
 export function readInstanceAppInstalls(storage: DurableObjectStorage): AppInstall[] {

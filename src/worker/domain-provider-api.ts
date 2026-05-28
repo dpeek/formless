@@ -101,6 +101,11 @@ import {
   type DomainProviderRedirectIntentCleanupEventRow,
   type DomainProviderRedirectIntentRow,
 } from "./domain-provider-redirect-intents-state.ts";
+import {
+  createSqlStorageMigrationRegistry,
+  runSqlStorageMigrations,
+  storageSqlMigrationFamily,
+} from "./sql-migrations.ts";
 
 export { readDomainProviderRedirectIntents } from "./domain-provider-redirect-intents-state.ts";
 
@@ -206,6 +211,45 @@ const providerAuditEventsTableSql = `
     updated_at TEXT NOT NULL
   )
 `;
+
+const domainProviderApplyJobsSqlMigrationFamily = storageSqlMigrationFamily(
+  "instance-domain-provider-apply-jobs",
+);
+const domainProviderDeleteJobsSqlMigrationFamily = storageSqlMigrationFamily(
+  "instance-domain-provider-delete-jobs",
+);
+const domainProviderAppliedResourcesSqlMigrationFamily = storageSqlMigrationFamily(
+  "instance-domain-provider-applied-resources",
+);
+const domainProviderSqlMigrations = createSqlStorageMigrationRegistry([
+  {
+    id: "2026-05-28-domain-provider-apply-job-deployment-columns",
+    owner: "formless",
+    family: domainProviderApplyJobsSqlMigrationFamily,
+    checksum: "sha256:dcc2cc25b39e1b20f656a932203178bc5ea9c90cff20ed143c22e6bcafe9a717",
+    safety: "auto-safe",
+    summary: "Add deployment linkage columns to domain provider apply jobs.",
+    apply: migrateDomainProviderApplyJobDeploymentColumns,
+  },
+  {
+    id: "2026-05-28-domain-provider-delete-job-deployment-columns",
+    owner: "formless",
+    family: domainProviderDeleteJobsSqlMigrationFamily,
+    checksum: "sha256:e8d9708c9716840a49b7cb9b6505712a897b8e8e03aae02121ad53709de3f468",
+    safety: "auto-safe",
+    summary: "Add deployment linkage columns to domain provider delete jobs.",
+    apply: migrateDomainProviderDeleteJobDeploymentColumns,
+  },
+  {
+    id: "2026-05-28-domain-provider-applied-action-checks",
+    owner: "formless",
+    family: domainProviderAppliedResourcesSqlMigrationFamily,
+    checksum: "sha256:8c55d0aba3c55d9e0b9026382c40d66610a501fbea8faddd2bfd90d9fee37b10",
+    safety: "auto-safe",
+    summary: "Rewrite domain provider applied action checks to include manual removals.",
+    apply: migrateDomainProviderAppliedActionChecks,
+  },
+]);
 
 type InstanceDomainProviderApiEnv = AuthorityAdminGuardEnv & {
   ALCHEMY_PASSWORD?: string;
@@ -3434,12 +3478,18 @@ function ensureDomainProviderApplyLockTable(storage: DurableObjectStorage) {
 
 function ensureDomainProviderApplyJobsTable(storage: DurableObjectStorage) {
   storage.sql.exec(applyJobsTableSql);
-  migrateDomainProviderApplyJobDeploymentColumns(storage);
+  runSqlStorageMigrations(storage, {
+    family: domainProviderApplyJobsSqlMigrationFamily,
+    migrations: domainProviderSqlMigrations,
+  });
 }
 
 function ensureDomainProviderDeleteJobsTable(storage: DurableObjectStorage) {
   storage.sql.exec(deleteJobsTableSql);
-  migrateDomainProviderDeleteJobDeploymentColumns(storage);
+  runSqlStorageMigrations(storage, {
+    family: domainProviderDeleteJobsSqlMigrationFamily,
+    migrations: domainProviderSqlMigrations,
+  });
 }
 
 function ensureDomainProviderRedirectIntentCleanupEventsTable(storage: DurableObjectStorage) {
@@ -3451,7 +3501,10 @@ function ensureDomainProviderAppliedResourcesTables(storage: DurableObjectStorag
     ${appliedResourcesTableSql};
     ${providerAuditEventsTableSql};
   `);
-  migrateDomainProviderAppliedActionChecks(storage);
+  runSqlStorageMigrations(storage, {
+    family: domainProviderAppliedResourcesSqlMigrationFamily,
+    migrations: domainProviderSqlMigrations,
+  });
 }
 
 function migrateDomainProviderAppliedActionChecks(storage: DurableObjectStorage) {

@@ -30,11 +30,18 @@ Evidence:
 
 ## 3. SQL Migration Runner
 
-- [ ] 3.1 Add shared Durable Object SQLite applied-migration table helpers keyed by storage identity family.
-- [ ] 3.2 Add an idempotent SQL migration runner that applies pending migrations in registry order and records id, checksum, package version, and applied timestamp.
-- [ ] 3.3 Move existing one-off SQLite table shape migrations behind the shared runner without changing migrated table output.
-- [ ] 3.4 Ensure storage initialization runs required SQL migrations before code depends on migrated table shape.
-- [ ] 3.5 Add migration harness tests for pending migration apply, applied migration skip, checksum mismatch handling, introspective legacy table rewrite, and rerun no-op behavior.
+- [x] 3.1 Add shared Durable Object SQLite applied-migration table helpers keyed by storage identity family.
+- [x] 3.2 Add an idempotent SQL migration runner that applies pending migrations in registry order and records id, checksum, package version, and applied timestamp.
+- [x] 3.3 Move existing one-off SQLite table shape migrations behind the shared runner without changing migrated table output.
+- [x] 3.4 Ensure storage initialization runs required SQL migrations before code depends on migrated table shape.
+- [x] 3.5 Add migration harness tests for pending migration apply, applied migration skip, checksum mismatch handling, introspective legacy table rewrite, and rerun no-op behavior.
+
+Evidence:
+
+- `grug` 2026-05-28: added `src/worker/sql-migrations.ts` with `formless_applied_sql_migrations`, storage-family keyed applied-state helpers, registry validation reuse, checksum mismatch rejection, ordered apply, skip, package version, and applied timestamp recording.
+- Routed Authority storage initialization, instance app install package fact backfill, instance domain mapping legacy rewrites, and domain provider job/action table rewrites through the shared runner before reads or writes depend on migrated shape.
+- Added `src/worker/sql-migrations.test.ts` for pending apply order, applied skip, checksum mismatch before mutation, introspective legacy rewrite, and rerun no-op behavior. Updated existing app install and domain mapping migration harness tests to assert applied SQL migration evidence.
+- `devstate check` 2026-05-28 before and after `git rebase main`: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes worker storage initialization and migration internals only.
 
 ## 4. Authority Package App Migrations
 
