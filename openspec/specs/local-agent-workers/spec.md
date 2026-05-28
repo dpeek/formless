@@ -67,6 +67,20 @@ The system SHALL use `changes/<change-id>` as the implementation branch for a cl
 - **WHEN** `changes/add-thing` exists and `add-thing` is claimable or assigned to the worker
 - **THEN** the supervisor checks out that branch in the worker worktree instead of creating a worker-named branch
 
+### Requirement: Named worker worktrees
+
+The system SHALL use `./tmp/worktree/<worker-name>` as the default local worktree path for a worker.
+
+#### Scenario: Worker prepares a claimed change
+
+- **WHEN** `igor` claims `add-thing` without a worktree override
+- **THEN** the supervisor uses `./tmp/worktree/igor` and checks out `changes/add-thing`
+
+#### Scenario: Worker reuses its worktree
+
+- **WHEN** `igor` later works on `other-thing`
+- **THEN** the supervisor reuses `./tmp/worktree/igor` and checks out `changes/other-thing`
+
 ### Requirement: Worker identity stays runtime metadata
 
 The system SHALL record worker names in runtime status, leases, and logs, not in the required branch name.

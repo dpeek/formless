@@ -195,12 +195,8 @@ export function changeIdFromBranch(branch: string): string | null {
   return match ? validateChangeId(match[1] ?? "") : null;
 }
 
-export function worktreeDirForChange(repoRoot: string, changeId: string): string {
-  const root = path.resolve(repoRoot);
-  return path.join(
-    path.dirname(root),
-    `${path.basename(root)}-change-${validateChangeId(changeId)}`,
-  );
+export function worktreeDirForWorker(repoRoot: string, workerName: string): string {
+  return path.join(path.resolve(repoRoot), "tmp", "worktree", validateWorkerName(workerName));
 }
 
 export function agentStatePaths(gitCommonDir: string): AgentStatePaths {
@@ -498,16 +494,26 @@ export function planChangeBranch(
   changeId: string,
   options: {
     runCommand?: CommandRunner;
+    workerName: string;
     worktreeDir?: string | null;
-  } = {},
+  },
 ): BranchPlan {
   const branch = branchNameForChange(changeId);
   const exists = branchExists(cwd, branch, options.runCommand ?? defaultCommandRunner);
   return {
     action: exists ? "resume" : "create",
     branch,
-    worktreeDir: path.resolve(options.worktreeDir ?? worktreeDirForChange(cwd, changeId)),
+    worktreeDir: path.resolve(options.worktreeDir ?? worktreeDirForWorker(cwd, options.workerName)),
   };
+}
+
+function gitTopLevel(cwd: string, runCommand: CommandRunner): string | null {
+  const result = runCommand(cwd, "git", ["rev-parse", "--show-toplevel"]);
+  return result.code === 0 ? path.resolve(result.stdout.trim()) : null;
+}
+
+function gitCurrentBranch(cwd: string, runCommand: CommandRunner): string {
+  return runOrThrow(cwd, "git", ["branch", "--show-current"], runCommand).trim();
 }
 
 export function ensureChangeBranch(
@@ -516,19 +522,40 @@ export function ensureChangeBranch(
   options: {
     baseRef?: string;
     runCommand?: CommandRunner;
+    workerName: string;
     worktreeDir?: string | null;
-  } = {},
+  },
 ): BranchPlan {
   const runCommand = options.runCommand ?? defaultCommandRunner;
   const plan = planChangeBranch(cwd, changeId, {
     runCommand,
+    workerName: options.workerName,
     worktreeDir: options.worktreeDir,
   });
 
   if (existsSync(plan.worktreeDir)) {
+    if (gitTopLevel(plan.worktreeDir, runCommand) !== path.resolve(plan.worktreeDir)) {
+      throw new Error(`Worktree path exists but is not a git worktree: ${plan.worktreeDir}`);
+    }
+
+    const currentBranch = gitCurrentBranch(plan.worktreeDir, runCommand);
+    if (currentBranch === plan.branch) {
+      return plan;
+    }
+
+    if (!branchExists(cwd, plan.branch, runCommand)) {
+      runOrThrow(
+        cwd,
+        "git",
+        ["branch", plan.branch, options.baseRef ?? defaultBaseRef],
+        runCommand,
+      );
+    }
+    runOrThrow(plan.worktreeDir, "git", ["checkout", plan.branch], runCommand);
     return plan;
   }
 
+  mkdirSync(path.dirname(plan.worktreeDir), { recursive: true });
   const args =
     plan.action === "create"
       ? ["worktree", "add", "-b", plan.branch, plan.worktreeDir, options.baseRef ?? defaultBaseRef]
@@ -1083,6 +1110,7 @@ async function runIdleMaintenance(input: {
     const branchPlan = ensureChangeBranch(input.cwd, changeId, {
       baseRef: input.options.baseRef,
       runCommand: input.runCommand,
+      workerName: input.options.workerName,
       worktreeDir: input.options.worktreeDir,
     });
     const result = input.runCommand(branchPlan.worktreeDir, "git", [
@@ -1151,6 +1179,7 @@ async function runWatchOnce(input: {
       const branchPlan = ensureChangeBranch(input.cwd, ownedLease.changeId, {
         baseRef: input.options.baseRef,
         runCommand: input.runCommand,
+        workerName: input.options.workerName,
         worktreeDir: input.options.worktreeDir,
       });
       writeLine(input.stdout, `[agents] resume ${ownedLease.changeId}`);
@@ -1197,6 +1226,7 @@ async function runWatchOnce(input: {
   if (input.options.dryRun) {
     const branchPlan = planChangeBranch(input.cwd, change.changeId, {
       runCommand: input.runCommand,
+      workerName: input.options.workerName,
       worktreeDir: input.options.worktreeDir,
     });
     showDryRunClaim({
@@ -1241,6 +1271,7 @@ async function runWatchOnce(input: {
     branchPlan = ensureChangeBranch(input.cwd, change.changeId, {
       baseRef: input.options.baseRef,
       runCommand: input.runCommand,
+      workerName: input.options.workerName,
       worktreeDir: input.options.worktreeDir,
     });
   } catch (error) {

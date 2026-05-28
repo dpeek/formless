@@ -14,6 +14,7 @@ Use the `openspec-apply-change` skill when checking task and context state. Use 
 
 - Change: `{{change_id}}`.
 - Branch: `changes/{{change_id}}`.
+- Worker worktree: `./tmp/worktree/{{worker_name}}`.
 - Update only owning change artifacts under `openspec/changes/{{change_id}}/` and relevant shipped specs under `openspec/specs/`.
 - Do not use GitHub as queue, lock, or status store.
 

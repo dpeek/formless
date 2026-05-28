@@ -43,9 +43,11 @@ The state root is shared by worktrees from the same clone and is not tracked.
 
 ## Branches
 
+- Default worker worktree: `./tmp/worktree/<worker-name>`.
 - Implementation branch: `changes/<change-id>`.
 - If the branch does not exist, the supervisor creates it from local `main`.
-- If the branch exists, the supervisor resumes it.
+- If the branch exists, the supervisor resumes it in the worker worktree.
+- A worker reuses its named worktree across changes by checking out the active `changes/<change-id>` branch.
 - A handoff keeps the same branch and changes only lease/status owner metadata.
 
 ## Work Loop

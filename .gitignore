@@ -1,8 +1,6 @@
 node_modules
 bin
 .wrangler
-.worker-test-*
-.storage-harness-*
 .playwright-cli
 dist
 .DS_Store

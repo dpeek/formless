@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
@@ -26,7 +26,9 @@ export async function createWorkerHarness(
   durableObjects: DurableObjectBindings,
   options: WorkerHarnessOptions = {},
 ) {
-  const tempDir = await mkdtemp(resolve(".worker-test-"));
+  const tempRoot = resolve("tmp", "test");
+  await mkdir(tempRoot, { recursive: true });
+  const tempDir = await mkdtemp(join(tempRoot, ".worker-test-"));
   const scriptPath = join(tempDir, "worker.mjs");
 
   await build({

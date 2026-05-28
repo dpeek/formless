@@ -14,6 +14,7 @@ Use the `openspec-apply-change` skill when available. The durable fallback is `o
 
 - Change: `{{change_id}}`.
 - Branch: `changes/{{change_id}}`.
+- Worker worktree: `./tmp/worktree/{{worker_name}}`.
 - Queue source: committed `openspec/changes/{{change_id}}/` on local `main`.
 - Update only owning change artifacts under `openspec/changes/{{change_id}}/`.
 - Do not use GitHub as queue, lock, or status store.

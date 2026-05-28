@@ -17,6 +17,7 @@ import {
   releaseChangeLease,
   resolveAgentStatePaths,
   runAgentsCli,
+  worktreeDirForWorker,
   writeWorkerStatus,
   type CommandRunner,
 } from "./agents.ts";
@@ -172,13 +173,26 @@ describe("local agent worker discovery", () => {
     const existingBranch: CommandRunner = () => ({ code: 0, stderr: "", stdout: "" });
 
     expect(branchNameForChange("add-thing")).toBe("changes/add-thing");
-    expect(planChangeBranch("/repo", "add-thing", { runCommand: missingBranch })).toMatchObject({
+    expect(worktreeDirForWorker("/repo", "igor")).toBe("/repo/tmp/worktree/igor");
+    expect(
+      planChangeBranch("/repo", "add-thing", {
+        runCommand: missingBranch,
+        workerName: "igor",
+      }),
+    ).toMatchObject({
       action: "create",
       branch: "changes/add-thing",
+      worktreeDir: "/repo/tmp/worktree/igor",
     });
-    expect(planChangeBranch("/repo", "add-thing", { runCommand: existingBranch })).toMatchObject({
+    expect(
+      planChangeBranch("/repo", "add-thing", {
+        runCommand: existingBranch,
+        workerName: "igor",
+      }),
+    ).toMatchObject({
       action: "resume",
       branch: "changes/add-thing",
+      worktreeDir: "/repo/tmp/worktree/igor",
     });
   });
 });
@@ -232,6 +246,7 @@ describe("local agent worker dry-run", () => {
       expect(stdout).toContain("[agents] worker igor");
       expect(stdout).toContain("[agents] would claim local-agent-pull-workers");
       expect(stdout).toContain("changes/local-agent-pull-workers create");
+      expect(stdout).toContain(`${root}/tmp/worktree/igor`);
       expect(stdout).toContain('"state":"dry-run"');
       expect(stdout).toContain("codex exec");
     } finally {
