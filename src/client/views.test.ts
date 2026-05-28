@@ -2057,6 +2057,7 @@ describe("home view model collections", () => {
     expect(models.map((model) => ({ screenName: model.screenName, path: model.path }))).toEqual([
       { screenName: "siteSettings", path: "/settings" },
       { screenName: "siteEditor", path: "/" },
+      { screenName: "siteSubscribers", path: "/subscribers" },
     ]);
     expect(models.map(summarizeScreenModel)).toEqual([
       {
@@ -2084,6 +2085,32 @@ describe("home view model collections", () => {
             label: "Site",
             viewName: "siteCompositionHome",
             entityName: "blockPlacement",
+          },
+        ],
+      },
+      {
+        screenName: "siteSubscribers",
+        label: "Subscribers",
+        primary: true,
+        layoutType: "stack",
+        sections: [
+          {
+            id: "subscriptions",
+            label: "Subscriptions",
+            viewName: "subscriptionHome",
+            entityName: "subscription",
+          },
+          {
+            id: "emailAddresses",
+            label: "Email addresses",
+            viewName: "emailAddressHome",
+            entityName: "emailAddress",
+          },
+          {
+            id: "audiences",
+            label: "Audiences",
+            viewName: "audienceHome",
+            entityName: "audience",
           },
         ],
       },

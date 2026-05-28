@@ -277,6 +277,241 @@
           "relationship": "blockPlacements"
         }
       }
+    },
+    "contact": {
+      "label": "Contact",
+      "fields": {
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": false
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      }
+    },
+    "emailAddress": {
+      "label": "Email address",
+      "fields": {
+        "contact": {
+          "type": "reference",
+          "required": true,
+          "label": "Contact",
+          "to": "contact",
+          "displayField": "label"
+        },
+        "address": {
+          "type": "text",
+          "required": true,
+          "label": "Address"
+        },
+        "normalizedAddress": {
+          "type": "text",
+          "required": true,
+          "label": "Normalized address"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": false
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueNormalizedAddress": {
+          "kind": "unique",
+          "fields": ["normalizedAddress"]
+        }
+      }
+    },
+    "audience": {
+      "label": "Audience",
+      "fields": {
+        "key": {
+          "type": "text",
+          "required": true,
+          "label": "Key"
+        },
+        "label": {
+          "type": "text",
+          "required": true,
+          "label": "Label"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": false
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueAudienceKey": {
+          "kind": "unique",
+          "fields": ["key"]
+        }
+      }
+    },
+    "subscription": {
+      "label": "Subscription",
+      "fields": {
+        "emailAddress": {
+          "type": "reference",
+          "required": true,
+          "label": "Email address",
+          "to": "emailAddress",
+          "displayField": "address"
+        },
+        "audience": {
+          "type": "reference",
+          "required": true,
+          "label": "Audience",
+          "to": "audience",
+          "displayField": "label"
+        },
+        "status": {
+          "type": "enum",
+          "required": true,
+          "label": "Status",
+          "default": "subscribed",
+          "values": {
+            "subscribed": {
+              "label": "Subscribed"
+            },
+            "unsubscribed": {
+              "label": "Unsubscribed"
+            }
+          }
+        },
+        "consentedAt": {
+          "type": "text",
+          "required": true,
+          "label": "Consented at"
+        },
+        "sourceKind": {
+          "type": "enum",
+          "required": true,
+          "label": "Source kind",
+          "default": "publicAction",
+          "values": {
+            "publicAction": {
+              "label": "Public action"
+            }
+          }
+        },
+        "sourceTargetKind": {
+          "type": "enum",
+          "required": true,
+          "label": "Target kind",
+          "values": {
+            "schemaKey": {
+              "label": "Schema key"
+            },
+            "appInstall": {
+              "label": "App install"
+            }
+          }
+        },
+        "sourcePackageAppKey": {
+          "type": "text",
+          "required": true,
+          "label": "Package app key"
+        },
+        "sourceSchemaKey": {
+          "type": "text",
+          "required": true,
+          "label": "Source schema key"
+        },
+        "sourceInstallId": {
+          "type": "text",
+          "required": false,
+          "label": "Install id"
+        },
+        "sourceApiRoutePrefix": {
+          "type": "text",
+          "required": true,
+          "label": "API route prefix"
+        },
+        "sourceActionName": {
+          "type": "text",
+          "required": true,
+          "label": "Action"
+        },
+        "sourceHost": {
+          "type": "text",
+          "required": true,
+          "label": "Host"
+        },
+        "sourcePath": {
+          "type": "text",
+          "required": true,
+          "label": "Path"
+        },
+        "sourceSiteBlockId": {
+          "type": "text",
+          "required": false,
+          "label": "Site block"
+        }
+      },
+      "mutations": {
+        "create": {
+          "enabled": false
+        },
+        "patch": {
+          "enabled": true
+        },
+        "delete": {
+          "enabled": false
+        }
+      },
+      "constraints": {
+        "uniqueEmailAudience": {
+          "kind": "unique",
+          "fields": ["emailAddress", "audience"]
+        }
+      },
+      "actions": {
+        "subscribe": {
+          "label": "Subscribe",
+          "kind": "subscribe",
+          "access": {
+            "actor": "anonymous",
+            "challenge": {
+              "kind": "turnstile"
+            },
+            "origin": {
+              "kind": "same-origin"
+            }
+          },
+          "publicInput": {
+            "fields": {
+              "email": {
+                "type": "text",
+                "required": true,
+                "label": "Email"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "relationships": {
@@ -327,6 +562,78 @@
         "field": "block"
       },
       "inverse": "placementBlock"
+    },
+    "emailAddressContact": {
+      "kind": "toOne",
+      "label": "Contact",
+      "from": {
+        "entity": "emailAddress",
+        "field": "contact"
+      },
+      "to": {
+        "entity": "contact"
+      },
+      "inverse": "contactEmailAddresses"
+    },
+    "contactEmailAddresses": {
+      "kind": "toMany",
+      "label": "Email addresses",
+      "from": {
+        "entity": "contact"
+      },
+      "to": {
+        "entity": "emailAddress",
+        "field": "contact"
+      },
+      "inverse": "emailAddressContact"
+    },
+    "subscriptionEmailAddress": {
+      "kind": "toOne",
+      "label": "Email address",
+      "from": {
+        "entity": "subscription",
+        "field": "emailAddress"
+      },
+      "to": {
+        "entity": "emailAddress"
+      },
+      "inverse": "emailAddressSubscriptions"
+    },
+    "emailAddressSubscriptions": {
+      "kind": "toMany",
+      "label": "Subscriptions",
+      "from": {
+        "entity": "emailAddress"
+      },
+      "to": {
+        "entity": "subscription",
+        "field": "emailAddress"
+      },
+      "inverse": "subscriptionEmailAddress"
+    },
+    "subscriptionAudience": {
+      "kind": "toOne",
+      "label": "Audience",
+      "from": {
+        "entity": "subscription",
+        "field": "audience"
+      },
+      "to": {
+        "entity": "audience"
+      },
+      "inverse": "audienceSubscriptions"
+    },
+    "audienceSubscriptions": {
+      "kind": "toMany",
+      "label": "Subscriptions",
+      "from": {
+        "entity": "audience"
+      },
+      "to": {
+        "entity": "subscription",
+        "field": "audience"
+      },
+      "inverse": "subscriptionAudience"
     }
   },
   "unions": {
@@ -592,6 +899,27 @@
         },
         "op": "eq",
         "value": "image"
+      }
+    },
+    "emailAddressAll": {
+      "label": "All",
+      "entity": "emailAddress",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "audienceAll": {
+      "label": "All",
+      "entity": "audience",
+      "expression": {
+        "kind": "all"
+      }
+    },
+    "subscriptionAll": {
+      "label": "All",
+      "entity": "subscription",
+      "expression": {
+        "kind": "all"
       }
     },
     "placementsForSelectedBlock": {
@@ -1083,6 +1411,85 @@
           "align": "end"
         }
       ]
+    },
+    "emailAddressTable": {
+      "entity": "emailAddress",
+      "columns": [
+        {
+          "type": "field",
+          "field": "address",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "normalizedAddress",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "contact",
+          "width": "md"
+        }
+      ]
+    },
+    "audienceTable": {
+      "entity": "audience",
+      "columns": [
+        {
+          "type": "field",
+          "field": "label",
+          "width": "lg"
+        },
+        {
+          "type": "field",
+          "field": "key",
+          "width": "md"
+        }
+      ]
+    },
+    "subscriptionTable": {
+      "entity": "subscription",
+      "columns": [
+        {
+          "type": "referenceField",
+          "referenceField": "emailAddress",
+          "field": "address",
+          "label": "Email",
+          "width": "lg"
+        },
+        {
+          "type": "referenceField",
+          "referenceField": "audience",
+          "field": "label",
+          "label": "Audience",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "status",
+          "width": "sm"
+        },
+        {
+          "type": "field",
+          "field": "consentedAt",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "sourceHost",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "sourcePath",
+          "width": "md"
+        },
+        {
+          "type": "field",
+          "field": "sourceSiteBlockId",
+          "width": "md"
+        }
+      ]
     }
   },
   "views": {
@@ -1166,6 +1573,69 @@
           "createView": "blockCreate"
         }
       ]
+    },
+    "emailAddressHome": {
+      "type": "collection",
+      "label": "Email addresses",
+      "entity": "emailAddress",
+      "navigation": {
+        "primary": false
+      },
+      "queries": [
+        {
+          "query": "emailAddressAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "emailAddressAll",
+      "result": {
+        "type": "table",
+        "tableView": "emailAddressTable"
+      }
+    },
+    "audienceHome": {
+      "type": "collection",
+      "label": "Audiences",
+      "entity": "audience",
+      "navigation": {
+        "primary": false
+      },
+      "queries": [
+        {
+          "query": "audienceAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "audienceAll",
+      "result": {
+        "type": "table",
+        "tableView": "audienceTable"
+      }
+    },
+    "subscriptionHome": {
+      "type": "collection",
+      "label": "Subscriptions",
+      "entity": "subscription",
+      "navigation": {
+        "primary": false
+      },
+      "queries": [
+        {
+          "query": "subscriptionAll",
+          "count": {
+            "type": "count"
+          }
+        }
+      ],
+      "defaultQuery": "subscriptionAll",
+      "result": {
+        "type": "table",
+        "tableView": "subscriptionTable"
+      }
     },
     "siteCompositionHome": {
       "type": "collection",
@@ -1830,6 +2300,34 @@
             "id": "site",
             "type": "collection",
             "view": "siteCompositionHome"
+          }
+        ]
+      }
+    },
+    "siteSubscribers": {
+      "type": "workspace",
+      "label": "Subscribers",
+      "path": "/subscribers",
+      "navigation": {
+        "primary": true
+      },
+      "layout": {
+        "type": "stack",
+        "sections": [
+          {
+            "id": "subscriptions",
+            "type": "collection",
+            "view": "subscriptionHome"
+          },
+          {
+            "id": "emailAddresses",
+            "type": "collection",
+            "view": "emailAddressHome"
+          },
+          {
+            "id": "audiences",
+            "type": "collection",
+            "view": "audienceHome"
           }
         ]
       }

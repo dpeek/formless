@@ -93,6 +93,22 @@ export type ActionRecordCreatePlan = {
   values: RecordValues | ((createdRecords: StoredRecord[]) => RecordValues);
 };
 
+export type ActionRecordWriteValues =
+  | RecordValues
+  | ((writtenRecords: StoredRecord[]) => RecordValues);
+
+export type ActionRecordWritePlan =
+  | {
+      kind: "create";
+      entity: string;
+      values: ActionRecordWriteValues;
+    }
+  | {
+      kind: "patch";
+      record: StoredRecord;
+      values: ActionRecordWriteValues;
+    };
+
 type SourceDataPlan = {
   schema: AppSchema;
   records: StoredRecord[];
@@ -923,6 +939,41 @@ export function createRecordSetForActionOutcome(
   });
 }
 
+export function writeRecordSetForActionOutcome(
+  storage: DurableObjectStorage,
+  actionId: string,
+  entity: string,
+  action: string,
+  plans: ActionRecordWritePlan[],
+  validateConstraints?: RecordConstraintValidator,
+): WriteOutcome<ActionResponse> {
+  return storage.transactionSync(() => {
+    const existingResponse = getActionResponseById(storage, actionId);
+
+    if (existingResponse) {
+      return replayedWrite(existingResponse);
+    }
+
+    const changedAt = nowIsoString();
+    const records = materializeActionRecordWrites(storage, plans, changedAt, validateConstraints);
+
+    appendActionRecordChanges(storage, {
+      actionId,
+      records,
+      createdAt: changedAt,
+    });
+
+    return committedWrite(
+      commitActionWriteLog(storage, {
+        actionId,
+        entity,
+        action,
+        createdAt: changedAt,
+      }),
+    );
+  });
+}
+
 function materializeActionTombstoneRecords(
   storage: DurableObjectStorage,
   recordsToTombstone: StoredRecord[],
@@ -1001,6 +1052,67 @@ function materializeCreatedActionRecordSet(
   }
 
   return createdRecords;
+}
+
+function materializeActionRecordWrites(
+  storage: DurableObjectStorage,
+  plans: ActionRecordWritePlan[],
+  changedAt: string,
+  validateConstraints?: RecordConstraintValidator,
+): StoredRecord[] {
+  const writtenRecords: StoredRecord[] = [];
+
+  for (const plan of plans) {
+    const values =
+      typeof plan.values === "function" ? plan.values([...writtenRecords]) : plan.values;
+
+    if (plan.kind === "create") {
+      const record = materializeCreatedActionRecord(
+        storage,
+        {
+          entity: plan.entity,
+          values,
+          createdAt: changedAt,
+        },
+        validateConstraints,
+      );
+
+      writtenRecords.push(record);
+      continue;
+    }
+
+    writtenRecords.push(
+      materializePatchedActionRecord(storage, plan.record, values, validateConstraints),
+    );
+  }
+
+  return writtenRecords;
+}
+
+function materializePatchedActionRecord(
+  storage: DurableObjectStorage,
+  existingRecord: StoredRecord,
+  values: RecordValues,
+  validateConstraints?: RecordConstraintValidator,
+): StoredRecord {
+  const record: StoredRecord = {
+    ...existingRecord,
+    values,
+  };
+
+  validateConstraints?.(record.entity, record.values, { ignoreRecordId: record.id });
+
+  storage.sql.exec(
+    `
+      UPDATE records
+      SET values_json = ?
+      WHERE id = ?
+    `,
+    JSON.stringify(record.values),
+    record.id,
+  );
+
+  return record;
 }
 
 function materializeCreatedActionRecord(

@@ -32,6 +32,7 @@ import {
   createRecordSetForActionOutcome,
   createRecordsForActionOutcome,
   type ActionRecordCreatePlan,
+  type ActionRecordWritePlan,
   type CreateMutationCausedRecordWriter,
   getActionResponseById,
   getActiveRecordsByEntity,
@@ -39,6 +40,7 @@ import {
   replayedWrite,
   tombstoneRecordsForActionOutcome,
   type WriteOutcome,
+  writeRecordSetForActionOutcome,
 } from "./storage.ts";
 
 type EntityActionRequestInputValidationContext<TAction extends EntityActionSchema> = {
@@ -416,13 +418,226 @@ function executeSubscribeAction(
 function executeSubscribePublicAction(
   context: PublicEntityActionExecutionContext<Extract<EntityActionSchema, { kind: "subscribe" }>>,
 ) {
-  return createRecordsForActionOutcome(
+  const contactEntity = requireSubscribeEntity(context.schema, "contact");
+  const emailAddressEntity = requireSubscribeEntity(context.schema, "emailAddress");
+  const audienceEntity = requireSubscribeEntity(context.schema, "audience");
+  const subscriptionEntity = requireSubscribeEntity(context.schema, "subscription");
+  const email = parseSubscribeEmail(context.request.input.email);
+  const existingEmailAddress = findActiveRecordByField(
+    context.storage,
+    "emailAddress",
+    "normalizedAddress",
+    email.normalizedAddress,
+  );
+  const existingContact = findExistingEmailContact(context.storage, existingEmailAddress);
+  const existingAudience = findActiveRecordByField(
+    context.storage,
+    "audience",
+    "key",
+    defaultAudienceKey,
+  );
+  const existingSubscription =
+    existingEmailAddress && existingAudience
+      ? findActiveSubscription(context.storage, existingEmailAddress.id, existingAudience.id)
+      : undefined;
+  const sourceValues = subscribeSourceValues(context.request.envelope);
+  const plans: ActionRecordWritePlan[] = [];
+  const contactRecordIndex = existingContact
+    ? undefined
+    : pushPlan(plans, {
+        kind: "create",
+        entity: "contact",
+        values: () =>
+          validateRecordValues({ label: email.normalizedAddress }, contactEntity, context.storage),
+      });
+  const emailAddressRecordIndex = existingEmailAddress
+    ? undefined
+    : pushPlan(plans, {
+        kind: "create",
+        entity: "emailAddress",
+        values: (writtenRecords) =>
+          validateRecordValues(
+            {
+              contact:
+                existingContact?.id ?? requireWrittenRecord(writtenRecords, contactRecordIndex).id,
+              address: email.address,
+              normalizedAddress: email.normalizedAddress,
+            },
+            emailAddressEntity,
+            context.storage,
+          ),
+      });
+
+  if (existingEmailAddress && !existingContact) {
+    plans.push({
+      kind: "patch",
+      record: existingEmailAddress,
+      values: (writtenRecords) =>
+        validateRecordValues(
+          {
+            ...existingEmailAddress.values,
+            contact: requireWrittenRecord(writtenRecords, contactRecordIndex).id,
+          },
+          emailAddressEntity,
+          context.storage,
+        ),
+    });
+  }
+
+  const audienceRecordIndex = existingAudience
+    ? undefined
+    : pushPlan(plans, {
+        kind: "create",
+        entity: "audience",
+        values: () =>
+          validateRecordValues(
+            { key: defaultAudienceKey, label: "Default audience" },
+            audienceEntity,
+            context.storage,
+          ),
+      });
+  const subscriptionValues = (writtenRecords: StoredRecord[]) =>
+    validateRecordValues(
+      {
+        ...existingSubscription?.values,
+        emailAddress:
+          existingEmailAddress?.id ??
+          requireWrittenRecord(writtenRecords, emailAddressRecordIndex).id,
+        audience:
+          existingAudience?.id ?? requireWrittenRecord(writtenRecords, audienceRecordIndex).id,
+        status: "subscribed",
+        consentedAt: context.request.envelope.receivedAt,
+        ...sourceValues,
+      },
+      subscriptionEntity,
+      context.storage,
+    );
+
+  if (existingSubscription) {
+    plans.push({
+      kind: "patch",
+      record: existingSubscription,
+      values: subscriptionValues,
+    });
+  } else {
+    plans.push({
+      kind: "create",
+      entity: "subscription",
+      values: subscriptionValues,
+    });
+  }
+
+  return writeRecordSetForActionOutcome(
     context.storage,
     context.request.actionId,
     context.request.entity,
     context.request.action,
-    [],
+    plans,
+    (entity, recordValues, options) => {
+      assertUniqueConstraints(context.storage, context.schema, entity, recordValues, options);
+    },
   );
+}
+
+const defaultAudienceKey = "default";
+
+function requireSubscribeEntity(schema: AppSchema, entityName: string): EntitySchema {
+  const entity = schema.entities[entityName];
+
+  if (!entity) {
+    throw new Error(`Subscribe action requires entity "${entityName}".`);
+  }
+
+  return entity;
+}
+
+function parseSubscribeEmail(value: RecordValues[string] | undefined) {
+  if (typeof value !== "string") {
+    throw new BadRequestError('Subscribe action public input "email" must be text.');
+  }
+
+  const address = value.trim();
+  const normalizedAddress = address.toLowerCase();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedAddress)) {
+    throw new BadRequestError('Subscribe action public input "email" must be an email address.');
+  }
+
+  return { address, normalizedAddress };
+}
+
+function findExistingEmailContact(
+  storage: DurableObjectStorage,
+  emailAddress: StoredRecord | undefined,
+) {
+  const contactId = emailAddress?.values.contact;
+
+  if (typeof contactId !== "string") {
+    return undefined;
+  }
+
+  const contact = getStoredRecord(storage, contactId);
+
+  return contact?.entity === "contact" && !contact.deletedAt ? contact : undefined;
+}
+
+function findActiveSubscription(
+  storage: DurableObjectStorage,
+  emailAddressId: string,
+  audienceId: string,
+) {
+  return getActiveRecordsByEntity(storage, "subscription").find(
+    (record) =>
+      record.values.emailAddress === emailAddressId && record.values.audience === audienceId,
+  );
+}
+
+function findActiveRecordByField(
+  storage: DurableObjectStorage,
+  entity: string,
+  field: string,
+  value: RecordValues[string],
+) {
+  return getActiveRecordsByEntity(storage, entity).find((record) => record.values[field] === value);
+}
+
+function subscribeSourceValues(envelope: PublicActionExecutionEnvelope): RecordValues {
+  const values: RecordValues = {
+    sourceKind: "publicAction",
+    sourceTargetKind: envelope.source.target.kind,
+    sourcePackageAppKey: envelope.source.target.packageAppKey,
+    sourceSchemaKey: envelope.source.target.sourceSchemaKey,
+    sourceApiRoutePrefix: envelope.source.target.apiRoutePrefix,
+    sourceActionName: envelope.source.actionName,
+    sourceHost: envelope.source.host,
+    sourcePath: envelope.source.path,
+  };
+
+  if (envelope.source.target.kind === "appInstall") {
+    values.sourceInstallId = envelope.source.target.installId;
+  }
+
+  if (envelope.source.siteBlockId !== undefined) {
+    values.sourceSiteBlockId = envelope.source.siteBlockId;
+  }
+
+  return values;
+}
+
+function pushPlan(plans: ActionRecordWritePlan[], plan: ActionRecordWritePlan) {
+  plans.push(plan);
+
+  return plans.length - 1;
+}
+
+function requireWrittenRecord(records: StoredRecord[], index: number | undefined) {
+  const record = index === undefined ? undefined : records[index];
+
+  if (!record) {
+    throw new Error("Subscribe action could not resolve a planned record.");
+  }
+
+  return record;
 }
 
 function executeCreateMissingJoinRecordsAfterCreateHook(

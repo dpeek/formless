@@ -34,12 +34,22 @@ Evidence:
 
 ## 3. Contact Subscription Model
 
-- [ ] 3.1 Add contact, email address, audience, and subscription entities to the first owning schema with flat reference relationships and minimal fields.
-- [ ] 3.2 Add unique constraints for normalized email address and email-address audience subscription membership.
-- [ ] 3.3 Seed or lazily create the default audience for Site subscribe forms.
-- [ ] 3.4 Implement subscribe action execution to normalize email, upsert contact/email/subscription records, resubscribe unsubscribed records, and preserve source context.
-- [ ] 3.5 Add generated admin views for email addresses, audiences, and subscription status inspection.
-- [ ] 3.6 Add tests for new email subscribe, duplicate subscribe, resubscribe, source context, and raw network data not being required.
+- [x] 3.1 Add contact, email address, audience, and subscription entities to the first owning schema with flat reference relationships and minimal fields.
+- [x] 3.2 Add unique constraints for normalized email address and email-address audience subscription membership.
+- [x] 3.3 Seed or lazily create the default audience for Site subscribe forms.
+- [x] 3.4 Implement subscribe action execution to normalize email, upsert contact/email/subscription records, resubscribe unsubscribed records, and preserve source context.
+- [x] 3.5 Add generated admin views for email addresses, audiences, and subscription status inspection.
+- [x] 3.6 Add tests for new email subscribe, duplicate subscribe, resubscribe, source context, and raw network data not being required.
+
+Evidence:
+
+- Files changed: `schema/apps/site/schema.json`, `src/worker/actions.ts`, `src/worker/storage.ts`, `src/worker/public-actions.test.ts`, `src/shared/schema.test.ts`, `src/client/views.test.ts`.
+- Decision: the Site package schema owns the first contact subscription slice with flat `contact`, `emailAddress`, `audience`, and `subscription` records; `subscription.subscribe` is the schema-declared anonymous public action.
+- Decision: the default Site audience is lazily created with key `default`; `emailAddress.normalizedAddress` and `subscription.emailAddress` plus `subscription.audience` enforce duplicate prevention.
+- Decision: subscribe execution stores Site/action source context fields and does not require raw IP address or user-agent fields.
+- Checks: `devstate check` passed; `./.devstate/status.md` read at `2026-05-28T06:25:09.713Z` with checks ok, web ready, and test watcher pass.
+- Initial status: `devstate start` read at `2026-05-28T06:15:28.067Z` with checks ok, web ready, and test watcher pass; no pre-existing red service failure was present.
+- Smoke: browser subscribe form smoke not run because this section adds the stored subscription model and public action record effects; section 4 owns rendered subscribe form behavior.
 
 ## 4. Site Subscribe Form
 

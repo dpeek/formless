@@ -1,8 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import type { BootstrapResponse, PublicActionResponse } from "../shared/protocol.ts";
-import type { AppSchema, SubscribeEntityActionSchema } from "../shared/schema.ts";
-import { siteSourceSchema } from "../test/schema-apps.ts";
+import type {
+  BootstrapResponse,
+  MutationResponse,
+  PublicActionResponse,
+  StoredRecord,
+} from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -46,8 +49,6 @@ afterAll(async () => {
 
 describe("public action runtime", () => {
   it("executes schema-key public subscribe actions without opening generic writes", async () => {
-    await installPublicSubscribeSchema("/api/site");
-
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
     const mutation = await harness.fetch("/api/site/mutations", {
       body: "{}",
@@ -69,6 +70,7 @@ describe("public action runtime", () => {
     );
     const body = (await accepted.json()) as PublicActionResponse;
     const after = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const records = contactSubscriptionRecords(after.records);
 
     expect(mutation.status).toBe(401);
     expect(action.status).toBe(401);
@@ -76,11 +78,45 @@ describe("public action runtime", () => {
     expect(accepted.status).toBe(200);
     expect(body).toEqual({
       actionId: expect.stringMatching(/^public:subscribe:/),
-      cursor: before.cursor,
+      cursor: after.cursor,
       status: "accepted",
     });
     expect(JSON.stringify(body)).not.toContain(turnstileSecret);
-    expect(after.records).toEqual(before.records);
+    expect(JSON.stringify(body)).not.toContain("ada@example.com");
+    expect(after.records.length).toBe(before.records.length + 4);
+    expect(records.contacts).toHaveLength(1);
+    expect(records.emailAddresses).toHaveLength(1);
+    expect(records.audiences).toHaveLength(1);
+    expect(records.subscriptions).toHaveLength(1);
+    expect(records.contacts[0]?.values).toEqual({
+      label: "ada@example.com",
+    });
+    expect(records.emailAddresses[0]?.values).toEqual({
+      contact: records.contacts[0]?.id,
+      address: "ada@example.com",
+      normalizedAddress: "ada@example.com",
+    });
+    expect(records.audiences[0]?.values).toEqual({
+      key: "default",
+      label: "Default audience",
+    });
+    expect(records.subscriptions[0]?.values).toMatchObject({
+      emailAddress: records.emailAddresses[0]?.id,
+      audience: records.audiences[0]?.id,
+      status: "subscribed",
+      sourceKind: "publicAction",
+      sourceTargetKind: "schemaKey",
+      sourcePackageAppKey: "site",
+      sourceSchemaKey: "site",
+      sourceApiRoutePrefix: "/api/site",
+      sourceActionName: "subscribe",
+      sourceHost: "example.com",
+      sourcePath: "/api/site/public/actions/subscribe",
+      sourceSiteBlockId: "rec_site_subscribe_form",
+    });
+    expect(records.subscriptions[0]?.values.consentedAt).toEqual(expect.any(String));
+    expect(records.subscriptions[0]?.values).not.toHaveProperty("sourceIp");
+    expect(records.subscriptions[0]?.values).not.toHaveProperty("sourceUserAgent");
     expect(turnstileRequests).toEqual([
       {
         secret: turnstileSecret,
@@ -91,8 +127,6 @@ describe("public action runtime", () => {
   });
 
   it("supports installed app public action routes with accepted replay idempotency", async () => {
-    await installPublicSubscribeSchema(`/api/app-installs/site/${installId}`);
-
     const first = await postPublicAction(
       `/api/app-installs/site/${installId}/public/actions/subscribe`,
       publicSubscribeBody({ idempotencyKey: "installed-replay" }),
@@ -103,10 +137,19 @@ describe("public action runtime", () => {
     );
     const firstBody = (await first.json()) as PublicActionResponse;
     const replayBody = (await replay.json()) as PublicActionResponse;
+    const after = await getJson<BootstrapResponse>(`/api/app-installs/site/${installId}/bootstrap`);
+    const records = contactSubscriptionRecords(after.records);
 
     expect(first.status).toBe(200);
     expect(replay.status).toBe(200);
     expect(replayBody).toEqual(firstBody);
+    expect(records.emailAddresses).toHaveLength(1);
+    expect(records.subscriptions).toHaveLength(1);
+    expect(records.subscriptions[0]?.values).toMatchObject({
+      sourceTargetKind: "appInstall",
+      sourceInstallId: installId,
+      sourceApiRoutePrefix: `/api/app-installs/site/${installId}`,
+    });
     expect(turnstileRequests).toEqual([
       {
         secret: turnstileSecret,
@@ -117,8 +160,6 @@ describe("public action runtime", () => {
   });
 
   it("rejects undeclared public input before challenge verification or idempotency reservation", async () => {
-    await installPublicSubscribeSchema("/api/site");
-
     const rejected = await postPublicAction(
       "/api/site/public/actions/subscribe",
       publicSubscribeBody({
@@ -140,7 +181,6 @@ describe("public action runtime", () => {
   });
 
   it("fails closed when Turnstile verification fails", async () => {
-    await installPublicSubscribeSchema("/api/site");
     turnstileResponse = { success: false, "error-codes": ["invalid-input-response"] };
 
     const before = await getJson<BootstrapResponse>("/api/site/bootstrap");
@@ -171,8 +211,6 @@ describe("public action runtime", () => {
     });
 
     try {
-      await installPublicSubscribeSchema("/api/site", missingConfigHarness);
-
       const response = await postPublicAction(
         "/api/site/public/actions/subscribe",
         publicSubscribeBody({ idempotencyKey: "missing-config" }),
@@ -187,6 +225,62 @@ describe("public action runtime", () => {
     } finally {
       await missingConfigHarness.dispose();
     }
+  });
+
+  it("keeps one email address and one subscription for duplicate subscribes", async () => {
+    const first = await postPublicAction(
+      "/api/site/public/actions/subscribe",
+      publicSubscribeBody({
+        idempotencyKey: "duplicate-first",
+        input: { email: "Ada@Example.com" },
+      }),
+    );
+    const duplicate = await postPublicAction(
+      "/api/site/public/actions/subscribe",
+      publicSubscribeBody({
+        idempotencyKey: "duplicate-second",
+        input: { email: "ada@example.com" },
+      }),
+    );
+    const after = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const records = contactSubscriptionRecords(after.records);
+
+    expect(first.status).toBe(200);
+    expect(duplicate.status).toBe(200);
+    expect(records.emailAddresses).toHaveLength(1);
+    expect(records.emailAddresses[0]?.values.normalizedAddress).toBe("ada@example.com");
+    expect(records.subscriptions).toHaveLength(1);
+    expect(records.subscriptions[0]?.values.status).toBe("subscribed");
+  });
+
+  it("resubscribes an existing unsubscribed membership", async () => {
+    const first = await postPublicAction(
+      "/api/site/public/actions/subscribe",
+      publicSubscribeBody({ idempotencyKey: "resubscribe-first" }),
+    );
+    const beforePatch = contactSubscriptionRecords(
+      (await getJson<BootstrapResponse>("/api/site/bootstrap")).records,
+    );
+    const subscription = beforePatch.subscriptions[0];
+
+    if (!subscription) {
+      throw new Error("Expected subscription record.");
+    }
+
+    await patchSubscriptionStatus(subscription.id, "unsubscribed");
+
+    const resubscribe = await postPublicAction(
+      "/api/site/public/actions/subscribe",
+      publicSubscribeBody({ idempotencyKey: "resubscribe-second" }),
+    );
+    const after = await getJson<BootstrapResponse>("/api/site/bootstrap");
+    const records = contactSubscriptionRecords(after.records);
+
+    expect(first.status).toBe(200);
+    expect(resubscribe.status).toBe(200);
+    expect(records.subscriptions).toHaveLength(1);
+    expect(records.subscriptions[0]?.id).toBe(subscription.id);
+    expect(records.subscriptions[0]?.values.status).toBe("subscribed");
   });
 
   it("routes mapped public Site host public actions without exposing admin shell or schema-key APIs", async () => {
@@ -218,7 +312,6 @@ describe("public action runtime", () => {
         },
         mappedHarness,
       );
-      await installPublicSubscribeSchema(`/api/app-installs/site/${installId}`, mappedHarness);
 
       const accepted = await fetchHost(
         mappedHarness,
@@ -308,59 +401,6 @@ async function resetInstalledApp(packageAppKey: "site", appInstallId: string) {
   expect(response.status).toBe(200);
 }
 
-async function installPublicSubscribeSchema(pathPrefix: string, target: Harness = harness) {
-  await postAdminJson(
-    `${pathPrefix}/schema`,
-    {
-      schema: siteSchemaWithPublicSubscribe(),
-    },
-    target,
-  );
-}
-
-function siteSchemaWithPublicSubscribe(schema: AppSchema = siteSourceSchema): AppSchema {
-  const block = schema.entities.block;
-
-  if (!block) {
-    throw new Error("Site schema is missing block entity.");
-  }
-
-  return {
-    ...schema,
-    entities: {
-      ...schema.entities,
-      block: {
-        ...block,
-        actions: {
-          ...block.actions,
-          subscribe: publicSubscribeAction(),
-        },
-      },
-    },
-  };
-}
-
-function publicSubscribeAction(): SubscribeEntityActionSchema {
-  return {
-    label: "Subscribe",
-    kind: "subscribe",
-    access: {
-      actor: "anonymous",
-      challenge: { kind: "turnstile" },
-      origin: { kind: "same-origin" },
-    },
-    publicInput: {
-      fields: {
-        email: {
-          type: "text",
-          required: true,
-          label: "Email",
-        },
-      },
-    },
-  };
-}
-
 function publicSubscribeBody(input: {
   idempotencyKey: string;
   input?: Record<string, unknown>;
@@ -374,6 +414,25 @@ function publicSubscribeBody(input: {
   };
 }
 
+function contactSubscriptionRecords(records: StoredRecord[]) {
+  return {
+    contacts: records.filter((record) => record.entity === "contact"),
+    emailAddresses: records.filter((record) => record.entity === "emailAddress"),
+    audiences: records.filter((record) => record.entity === "audience"),
+    subscriptions: records.filter((record) => record.entity === "subscription"),
+  };
+}
+
+async function patchSubscriptionStatus(recordId: string, status: "subscribed" | "unsubscribed") {
+  return postAdminJson<MutationResponse>("/api/site/mutations", {
+    mutationId: `test-subscription-status-${status}`,
+    entity: "subscription",
+    op: "patch",
+    recordId,
+    values: { status },
+  });
+}
+
 async function getJson<T>(path: string, target: Harness = harness) {
   const response = await target.fetch(path);
 
@@ -382,7 +441,7 @@ async function getJson<T>(path: string, target: Harness = harness) {
   return (await response.json()) as T;
 }
 
-async function postAdminJson(path: string, body: unknown, target: Harness = harness) {
+async function postAdminJson<T = unknown>(path: string, body: unknown, target: Harness = harness) {
   const response = await target.fetch(path, {
     body: JSON.stringify(body),
     headers: adminHeaders({ "Content-Type": "application/json" }),
@@ -391,7 +450,7 @@ async function postAdminJson(path: string, body: unknown, target: Harness = harn
 
   expect([200, 201]).toContain(response.status);
 
-  return response.json();
+  return (await response.json()) as T;
 }
 
 function postPublicAction(path: string, body: unknown, target: Harness = harness) {

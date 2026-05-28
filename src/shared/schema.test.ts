@@ -4284,7 +4284,13 @@ describe("source schemas", () => {
     expect(parsedSchemas.map((schema) => Object.keys(schema.tableViews))).toEqual([
       [],
       ["rateTable"],
-      ["blockTable", "blockPlacementTable"],
+      [
+        "blockTable",
+        "blockPlacementTable",
+        "emailAddressTable",
+        "audienceTable",
+        "subscriptionTable",
+      ],
     ]);
     expect(
       parsedSchemas.map((schema) =>
@@ -4312,6 +4318,18 @@ describe("source schemas", () => {
         "field",
         "field",
         "invokeAction",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
+        "referenceField",
+        "referenceField",
+        "field",
+        "field",
+        "field",
+        "field",
+        "field",
       ],
     ]);
 
@@ -4507,7 +4525,15 @@ describe("personal site sample schema", () => {
   it("parses the block model, relationships, and source app view", () => {
     const schema = parseAppSchema(rawSiteSchema);
 
-    expect(Object.keys(schema.entities)).toEqual(["site", "block", "blockPlacement"]);
+    expect(Object.keys(schema.entities)).toEqual([
+      "site",
+      "block",
+      "blockPlacement",
+      "contact",
+      "emailAddress",
+      "audience",
+      "subscription",
+    ]);
     expect(schema.entities.site?.fields).toEqual({
       key: {
         type: "text",
@@ -4668,6 +4694,28 @@ describe("personal site sample schema", () => {
         relationship: "blockPlacements",
       },
     });
+    expect(schema.entities.emailAddress?.constraints?.uniqueNormalizedAddress).toEqual({
+      kind: "unique",
+      fields: ["normalizedAddress"],
+    });
+    expect(schema.entities.subscription?.constraints?.uniqueEmailAudience).toEqual({
+      kind: "unique",
+      fields: ["emailAddress", "audience"],
+    });
+    expect(schema.entities.subscription?.actions?.subscribe).toMatchObject({
+      label: "Subscribe",
+      kind: "subscribe",
+      access: {
+        actor: "anonymous",
+        challenge: { kind: "turnstile" },
+        origin: { kind: "same-origin" },
+      },
+      publicInput: {
+        fields: {
+          email: { type: "text", required: true, label: "Email" },
+        },
+      },
+    });
     expect(schema.unions?.blockByType).toMatchObject({
       entity: "block",
       discriminator: "type",
@@ -4738,6 +4786,9 @@ describe("personal site sample schema", () => {
       "blockLinks",
       "blockGroups",
       "blockImages",
+      "emailAddressAll",
+      "audienceAll",
+      "subscriptionAll",
       "placementsForSelectedBlock",
     ]);
     expect(schema.queries.sitePrimary?.expression).toMatchObject({
@@ -4776,7 +4827,13 @@ describe("personal site sample schema", () => {
         { ref: { kind: "value", name: "type" }, op: "eq", value: "footer" },
       ],
     });
-    expect(Object.keys(schema.tableViews)).toEqual(["blockTable", "blockPlacementTable"]);
+    expect(Object.keys(schema.tableViews)).toEqual([
+      "blockTable",
+      "blockPlacementTable",
+      "emailAddressTable",
+      "audienceTable",
+      "subscriptionTable",
+    ]);
     expect(schema.itemViews.siteSettingsForm).toMatchObject({
       entity: "site",
       fields: {
@@ -4960,6 +5017,24 @@ describe("personal site sample schema", () => {
       result: { type: "record", itemView: "siteSettingsForm" },
     });
     expect(schema.views.siteSettingsHome).not.toHaveProperty("actions");
+    expect(schema.views.subscriptionHome).toMatchObject({
+      type: "collection",
+      label: "Subscriptions",
+      entity: "subscription",
+      result: { type: "table", tableView: "subscriptionTable" },
+    });
+    expect(schema.views.emailAddressHome).toMatchObject({
+      type: "collection",
+      label: "Email addresses",
+      entity: "emailAddress",
+      result: { type: "table", tableView: "emailAddressTable" },
+    });
+    expect(schema.views.audienceHome).toMatchObject({
+      type: "collection",
+      label: "Audiences",
+      entity: "audience",
+      result: { type: "table", tableView: "audienceTable" },
+    });
     expect(schema.views.siteCompositionHome).toMatchObject({
       type: "collection",
       label: "Site",
@@ -5087,6 +5162,19 @@ describe("personal site sample schema", () => {
         navigation: { primary: true },
         layout: {
           sections: [{ id: "site", type: "collection", view: "siteCompositionHome" }],
+        },
+      },
+      siteSubscribers: {
+        type: "workspace",
+        label: "Subscribers",
+        path: "/subscribers",
+        navigation: { primary: true },
+        layout: {
+          sections: [
+            { id: "subscriptions", type: "collection", view: "subscriptionHome" },
+            { id: "emailAddresses", type: "collection", view: "emailAddressHome" },
+            { id: "audiences", type: "collection", view: "audienceHome" },
+          ],
         },
       },
     });
