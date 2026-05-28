@@ -72,10 +72,21 @@ Evidence:
 
 ## 5. Configuration And Deployment Boundary
 
-- [ ] 5.1 Add runtime configuration for Turnstile site key and secret with server-only secret handling.
-- [ ] 5.2 Add clear behavior for missing Turnstile config in local/test and production-like runtimes.
-- [ ] 5.3 Keep automatic Cloudflare Turnstile widget provisioning out of this change unless existing deploy configuration already provides the required account/token boundary.
-- [ ] 5.4 Document promotion notes for public action routes, action access policy, contact subscription records, and Turnstile configuration.
+- [x] 5.1 Add runtime configuration for Turnstile site key and secret with server-only secret handling.
+- [x] 5.2 Add clear behavior for missing Turnstile config in local/test and production-like runtimes.
+- [x] 5.3 Keep automatic Cloudflare Turnstile widget provisioning out of this change unless existing deploy configuration already provides the required account/token boundary.
+- [x] 5.4 Document promotion notes for public action routes, action access policy, contact subscription records, and Turnstile configuration.
+
+Evidence:
+
+- Files changed: `src/shared/turnstile-config.ts`, `src/worker/public-actions.ts`, `src/worker/index.ts`, `src/worker/authority.ts`, `src/worker/authority-operations.ts`, `src/site/tree.ts`, `src/site/tree.test.ts`, `src/worker/public-actions.test.ts`, `vite.config.ts`.
+- Decision: `FORMLESS_TURNSTILE_SITE_KEY` is the public runtime widget key passed to Site tree projection and local worker dev vars; `FORMLESS_TURNSTILE_SECRET_KEY` is read only by the server-side public action verifier.
+- Decision: missing or blank Site key configuration emits `missing-public-action-challenge-config` and omits working subscribe form action facts; missing or blank secret configuration continues to fail public action verification closed with 503 before writes.
+- Decision: this section does not provision Cloudflare Turnstile widgets or call Cloudflare widget APIs; operators provide the site key and secret through runtime configuration.
+- Promotion notes: public action routes remain `POST /api/:schemaKey/public/actions/:actionName` and `POST /api/app-installs/:packageAppKey/:installId/public/actions/:actionName`; anonymous public action policy stays action-owned through `access` plus `publicInput`; contact subscription records stay flat Site-owned records for the first slice; Turnstile configuration promotes as `FORMLESS_TURNSTILE_SITE_KEY` for public widget rendering and `FORMLESS_TURNSTILE_SECRET_KEY` for server-only verification.
+- Checks: `devstate check` passed; `./.devstate/status.md` read at `2026-05-28T06:51:32.815Z` with checks ok, web ready, and test watcher pass.
+- Initial status: `devstate start` read at `2026-05-28T06:42:18.814Z` with checks ok, web ready, and test watcher pass; no pre-existing red service failure was present.
+- Smoke: `bun browser open https://add-public-subscribe-actions.formless.local/pages/home` loaded the public Site preview; `bun browser get text body` returned Site body text including `Home`, `About`, `Blog`, `Projects`, `Resume`, and `Your site starts here`; `bun browser get count '[data-site-theme]'` returned `2`.
 
 ## 6. Verification
 

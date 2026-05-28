@@ -32,10 +32,11 @@ import {
 } from "./routing.ts";
 import { handleSiteIconRequest } from "./site-icons.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
+import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 
 export { FormlessAuthority } from "./authority.ts";
 
-export type Env = {
+export type Env = TurnstileRuntimeEnv & {
   ALCHEMY_PASSWORD?: string;
   ASSETS?: Fetcher;
   CF_API_TOKEN?: string;
@@ -54,7 +55,6 @@ export type Env = {
   FORMLESS_MEDIA: R2Bucket;
   FORMLESS_OWNER_SESSION_SECRET?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
-  FORMLESS_TURNSTILE_SECRET_KEY?: string;
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
 };
 

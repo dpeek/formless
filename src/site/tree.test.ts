@@ -1036,6 +1036,40 @@ describe("site page tree projection", () => {
     expect(JSON.stringify(tree)).not.toContain("reader@example.com");
   });
 
+  it("warns and omits working subscribe form actions when Turnstile site key config is missing", () => {
+    const records = [
+      ...baseTreeRecords(),
+      blockRecord("rec_site_block_subscribe", {
+        type: "subscribeForm",
+        label: "Join the list",
+        body: "Get product notes.",
+        actionName: "subscribe",
+        buttonLabel: "Join",
+      }),
+      placementRecord(
+        "rec_site_place_home_subscribe",
+        "rec_site_content_home",
+        "rec_site_block_subscribe",
+        {
+          order: 4000,
+        },
+      ),
+    ];
+    const result = buildSitePageTree(siteSourceSchema, records, "home", { generatedAt });
+    const tree = requireTree(result);
+    const subscribeForm = childForPlacement(tree.page, "rec_site_place_home_subscribe");
+
+    expect(subscribeForm.publicAction).toBeUndefined();
+    expect(result.meta.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing-public-action-challenge-config",
+          recordId: "rec_site_block_subscribe",
+        }),
+      ]),
+    );
+  });
+
   it("warns and omits working subscribe form actions when action bindings are missing or not public", () => {
     const records = [
       ...baseTreeRecords(),

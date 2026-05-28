@@ -142,6 +142,7 @@ type AuthorityOperationExecutionInput = {
   operation: AuthorityOperation;
   source: StorageSource;
   storage: DurableObjectStorage;
+  turnstileSiteKey?: string;
   writes: AuthorityWriteNotifier;
 };
 
@@ -244,6 +245,7 @@ export function executeAuthorityOperation(
       const { schema } = initializeStorageFromSource(input.storage, input.source);
       const projection = buildSitePageTree(schema, getBootstrapRecords(input.storage), slug, {
         target: input.identity,
+        turnstileSiteKey: input.turnstileSiteKey,
       });
 
       if (!projection.tree) {

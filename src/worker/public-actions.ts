@@ -17,12 +17,12 @@ import type {
 } from "../shared/schema.ts";
 import { getEntityActionKindCapabilities } from "../shared/schema-actions.ts";
 import { nowIsoString } from "../shared/clock.ts";
+import { turnstileSecretKeyFromEnv, type TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 import { executePublicEntityActionOutcome, type PublicEntityActionRequest } from "./actions.ts";
 import { BadRequestError } from "./errors.ts";
 import { getActionResponseById, type WriteOutcome } from "./storage.ts";
 
-export type PublicActionEnv = {
-  FORMLESS_TURNSTILE_SECRET_KEY?: string;
+export type PublicActionEnv = TurnstileRuntimeEnv & {
   FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
 };
 
@@ -424,7 +424,7 @@ async function verifyTurnstileChallenge(input: {
   idempotencyKey: string;
   token: string;
 }): Promise<PublicActionChallengeVerification> {
-  const secret = input.env.FORMLESS_TURNSTILE_SECRET_KEY?.trim();
+  const secret = turnstileSecretKeyFromEnv(input.env);
 
   if (!secret) {
     throw new PublicActionError("Public action challenge is unavailable.", 503);

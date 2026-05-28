@@ -4,6 +4,7 @@ import type {
   BootstrapResponse,
   MutationResponse,
   PublicActionResponse,
+  SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
@@ -12,6 +13,7 @@ type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
 type DispatchFetchInit = Parameters<Harness["mf"]["dispatchFetch"]>[1];
 
 const adminToken = "test-admin-token";
+const turnstileSiteKey = "test-turnstile-site-key";
 const turnstileSecret = "test-turnstile-secret";
 const mappedHost = "subscribe.example.com";
 const installId = "personal";
@@ -24,6 +26,7 @@ beforeAll(async () => {
   harness = await createPublicActionHarness({
     bindings: {
       FORMLESS_ADMIN_TOKEN: adminToken,
+      FORMLESS_TURNSTILE_SITE_KEY: turnstileSiteKey,
       FORMLESS_TURNSTILE_SECRET_KEY: turnstileSecret,
     },
     turnstileVerify: turnstileVerifyResponse,
@@ -225,6 +228,46 @@ describe("public action runtime", () => {
     } finally {
       await missingConfigHarness.dispose();
     }
+  });
+
+  it("projects configured Turnstile site key without exposing the secret", async () => {
+    const block = await postAdminJson<MutationResponse>("/api/site/mutations", {
+      mutationId: "mutation-create-configured-subscribe-form",
+      entity: "block",
+      op: "create",
+      values: {
+        type: "subscribeForm",
+        label: "Join the list",
+        actionName: "subscribe",
+        buttonLabel: "Join",
+      },
+    });
+    await postAdminJson<MutationResponse>("/api/site/mutations", {
+      mutationId: "mutation-place-configured-subscribe-form",
+      entity: "blockPlacement",
+      op: "create",
+      values: {
+        parent: "rec_site_starter_page_home",
+        block: block.record.id,
+        order: 4500,
+        label: "Join the list",
+      },
+    });
+
+    const tree = await getJson<SitePageTreeResponse>("/api/site/tree/home");
+    const subscribePlacement = tree.page.placements.find(
+      (placement) => placement.block.id === block.record.id,
+    );
+
+    expect(subscribePlacement?.block.publicAction).toEqual({
+      actionName: "subscribe",
+      route: "/api/site/public/actions/subscribe",
+      challenge: {
+        kind: "turnstile",
+        siteKey: turnstileSiteKey,
+      },
+    });
+    expect(JSON.stringify(tree)).not.toContain(turnstileSecret);
   });
 
   it("keeps one email address and one subscription for duplicate subscribes", async () => {

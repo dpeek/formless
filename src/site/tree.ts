@@ -415,12 +415,21 @@ function projectedPublicActionFields(
     return undefined;
   }
 
+  if (context.turnstileSiteKey === undefined) {
+    context.warnings.push({
+      code: "missing-public-action-challenge-config",
+      recordId: record.id,
+      message: `Subscribe form action "${actionName}" requires Turnstile site key configuration.`,
+    });
+    return undefined;
+  }
+
   return {
     actionName,
     route: `${context.publicActionApiRoutePrefix}/public/actions/${encodeURIComponent(actionName)}`,
     challenge: {
       kind: "turnstile",
-      ...(context.turnstileSiteKey === undefined ? {} : { siteKey: context.turnstileSiteKey }),
+      siteKey: context.turnstileSiteKey,
     },
   };
 }

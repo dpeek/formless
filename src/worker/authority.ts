@@ -39,6 +39,7 @@ import {
   PublicActionError,
   selectPublicActionRoute,
 } from "./public-actions.ts";
+import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
   private readonly bindings: Env;
@@ -194,6 +195,7 @@ export class FormlessAuthority extends DurableObject<Env> {
           operation,
           source,
           storage: this.ctx.storage,
+          turnstileSiteKey: turnstileSiteKeyFromEnv(this.bindings),
           writes,
         });
 
