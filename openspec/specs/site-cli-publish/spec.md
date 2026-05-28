@@ -117,6 +117,26 @@ The system SHALL export, restore, and import Site and instance data as portable 
 - THEN the restore is a dry-run
 - AND no remote app or instance data is mutated
 
+### Requirement: Site CLI Media Package Boundary
+
+The system SHALL keep Site CLI save, publish, import, and archive behavior stable
+while consuming Media contracts from public package subpaths.
+
+#### Scenario: Archive workflows use Media contract
+
+- GIVEN Site CLI publish, save, import, export, or restore workflows validate or
+  move core media payloads
+- WHEN they need media asset, storage key, delivery, or restore result shapes
+- THEN they use public Media package contracts
+
+#### Scenario: Existing archive behavior remains stable
+
+- GIVEN Site CLI workflows move referenced owned image media
+- WHEN media is represented in an archive
+- THEN media is represented with core media objects and the `core-media-assets`
+  capability
+- AND records do not receive provider-specific URLs
+
 ### Requirement: Site Project Import
 
 The system SHALL import a standalone Site project as an installed Site app archive while preserving external URLs and representing owned image media as core media assets.

@@ -151,6 +151,27 @@ The system SHALL render Site images from core media assets when available, fall 
 - AND scripts, event handlers, `javascript:` URLs, `foreignObject`, and external
   asset references are rejected
 
+### Requirement: Site Media Package Boundary
+
+The system SHALL render Site images through Media package public contracts while
+keeping Site usage metadata in Site records.
+
+#### Scenario: Site resolves core media through Media helpers
+
+- GIVEN a Site image block references a core media asset id
+- WHEN Site runtime resolves public image delivery
+- THEN Site runtime resolves delivery facts through Media package public helpers
+  or adapters
+- AND public rendering continues to prefer core media delivery before manual
+  href fallback
+
+#### Scenario: Site usage metadata stays outside Media
+
+- GIVEN Site authoring or public rendering uses alt text, caption, crop, slot,
+  focal point, poster override, width, height, or fallback href
+- WHEN Site records are stored or rendered
+- THEN those facts remain Site-owned flat record values
+
 ### Requirement: Metadata And Indexing
 
 The system SHALL generate public document metadata, robots output, and sitemap output from live public Site records.

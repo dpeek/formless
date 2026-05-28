@@ -24,7 +24,7 @@ import {
   coreMediaHrefForKey,
   imageMediaContentTypeForKey,
   isRestorableImageMediaKey,
-} from "../media/core.ts";
+} from "@dpeek/formless-media";
 
 export type ArchiveRestoreMediaFile = {
   archivePath: string;

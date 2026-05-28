@@ -1,8 +1,13 @@
 import { FormlessAuthority } from "./authority.ts";
 import { parseAuthorityApiRoute } from "../shared/app-storage-identity.ts";
 import { handleInstanceArchiveApiRequest } from "./archive-api.ts";
+import { authorizeInstanceWrite } from "./authority-admin-guard.ts";
 import { handleClientAssetRequest } from "./client-shell.ts";
 import { handleDeployMetadataRequest } from "./deploy-metadata.ts";
+import {
+  handleMediaRequest as handleMediaPackageRequest,
+  mediaObjectStoreFromR2Bucket,
+} from "@dpeek/formless-media/worker";
 import { handleInstanceDomainProviderApiRequest } from "./domain-provider-api.ts";
 import {
   handleInstanceAppInstallsApiRequest,
@@ -14,7 +19,6 @@ import {
 } from "./instance-domain-mappings.ts";
 import { mappedAppHostFromDomainMapping } from "./mapped-app-host.ts";
 import { mappedSiteHostFromDomainMapping } from "./mapped-site-host.ts";
-import { handleMediaRequest } from "./media.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
@@ -74,7 +78,12 @@ export default {
           : env.FORMLESS_RUNTIME_PROFILE,
     );
     const requestTopology = resolveWorkerRuntimeRequestTopology(request, effectiveRuntimeProfile);
-    const mediaResponse = await handleMediaRequest(request, env, requestTopology);
+    const mediaResponse = await handleMediaPackageRequest(request, {
+      authorizeWrite: (writeRequest) => authorizeInstanceWrite(writeRequest, env),
+      pathname: requestTopology.pathname,
+      provider: "r2",
+      store: mediaObjectStoreFromR2Bucket(env.FORMLESS_MEDIA),
+    });
 
     if (mediaResponse) {
       return mediaResponse;

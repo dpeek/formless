@@ -17,9 +17,8 @@ import { AutosizeTextInput } from "@dpeek/formless-ui/text-input";
 import { ValueUnitInput } from "@dpeek/formless-ui/value-unit-input";
 import type { DateValue } from "@internationalized/date";
 import type { FocusEvent, KeyboardEvent } from "react";
-import { useEffect, useRef, useState } from "react";
-import { SITE_IMAGE_UPLOAD_ACCEPT } from "../../client/media.ts";
-import type { ImageMediaAssetOption } from "../../client/media.ts";
+import { useRef } from "react";
+import { MediaFieldControl, type ImageMediaAssetOption } from "@dpeek/formless-media/react";
 import { useReferenceOptions } from "../../client/store.ts";
 import { fieldLabel, type RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
@@ -365,6 +364,7 @@ export function GeneratedRecordFieldControl({
     return (
       <RecordMediaFieldRenderer
         canPatch={canPatch}
+        commitPolicy={commitPolicy}
         density={controlDensity}
         draft={draft}
         error={error}
@@ -1398,6 +1398,7 @@ function RecordIconFieldRenderer({
 
 function RecordMediaFieldRenderer({
   canPatch,
+  commitPolicy,
   density,
   draft,
   error,
@@ -1417,6 +1418,7 @@ function RecordMediaFieldRenderer({
   uploadEnabled,
 }: {
   canPatch: boolean;
+  commitPolicy: RecordFieldConfig["commit"];
   density: GeneratedRecordFieldControlDensity;
   draft: string;
   error: string | null;
@@ -1435,30 +1437,43 @@ function RecordMediaFieldRenderer({
   onValueCommit: (value: FieldValue) => void;
   uploadEnabled: boolean;
 }) {
+  const editability = selectGeneratedRecordFieldEditability({ canPatch, isPending, uploadEnabled });
+
   return (
     <div className={recordSpecializedFieldContainerClassName(density, fieldKind)}>
-      <Label className={labelClass}>{fieldControl.label}</Label>
-      <MediaFieldControl
-        canPatch={canPatch}
-        density={density}
-        draft={draft}
-        error={error}
-        fieldKind={fieldKind}
-        mediaAssetOptions={mediaAssetOptions}
-        mediaEditorMode={mediaEditorMode}
-        mediaPreviewHref={mediaPreviewHref}
-        isPending={isPending}
-        label={fieldControl.label}
-        onDraftChange={onDraftChange}
-        onFileSelect={onImageFileSelect}
-        onMediaAssetSelect={onMediaAssetSelect}
-        onUrlCommit={(value) => {
-          onValueCommit(inputValueToFieldValue(field, value));
-        }}
-        onUrlRevert={onDraftRevert}
-        required={fieldControl.required}
-        uploadEnabled={uploadEnabled}
-      />
+      <TextField
+        isDisabled={editability.controlDisabled}
+        isInvalid={error !== null}
+        isRequired={fieldControl.required}
+      >
+        <Label className={labelClass}>{fieldControl.label}</Label>
+        <MediaFieldControl
+          controlDisabled={editability.controlDisabled}
+          density={density}
+          draft={draft}
+          fieldKind={fieldKind}
+          invalid={error !== null}
+          mediaAssetOptions={mediaAssetOptions}
+          mediaEditorMode={mediaEditorMode}
+          mediaPreviewHref={mediaPreviewHref}
+          label={fieldControl.label}
+          onDraftChange={onDraftChange}
+          onFileSelect={onImageFileSelect}
+          onMediaAssetSelect={onMediaAssetSelect}
+          onUrlBlur={(value) => {
+            if (commitPolicy === "field-commit") {
+              onValueCommit(inputValueToFieldValue(field, value));
+            }
+          }}
+          onUrlEnter={(value) => {
+            onValueCommit(inputValueToFieldValue(field, value));
+          }}
+          onUrlEscape={onDraftRevert}
+          required={fieldControl.required}
+          uploadDisabled={editability.uploadDisabled}
+        />
+        {error ? <FieldError>{error}</FieldError> : null}
+      </TextField>
     </div>
   );
 }
@@ -1556,186 +1571,6 @@ function recordSpecializedFieldContainerClassName(
 
 function recordNumberFieldContainerClassName(density: GeneratedRecordFieldControlDensity) {
   return density === "compact" ? "w-full min-w-0 space-y-1" : "min-w-36 flex-none space-y-1";
-}
-
-function MediaFieldControl({
-  canPatch,
-  density,
-  draft,
-  error,
-  fieldKind,
-  mediaAssetOptions,
-  mediaEditorMode,
-  mediaPreviewHref,
-  isPending,
-  label,
-  onDraftChange,
-  onFileSelect,
-  onMediaAssetSelect,
-  onUrlCommit,
-  onUrlRevert,
-  required,
-  uploadEnabled,
-}: {
-  canPatch: boolean;
-  density: GeneratedRecordFieldControlDensity;
-  draft: string;
-  error: string | null;
-  fieldKind: "image" | "media";
-  mediaAssetOptions: ImageMediaAssetOption[];
-  mediaEditorMode: "asset" | "url";
-  mediaPreviewHref?: string;
-  isPending: boolean;
-  label: string;
-  onDraftChange: (value: string) => void;
-  onFileSelect: (file: File | undefined) => void;
-  onMediaAssetSelect: (assetId: string) => void;
-  onUrlCommit: (value: string) => void;
-  onUrlRevert: () => void;
-  required: boolean;
-  uploadEnabled: boolean;
-}) {
-  const editability = selectGeneratedRecordFieldEditability({ canPatch, isPending, uploadEnabled });
-  const uploadDisabled = editability.uploadDisabled;
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const previewHref = mediaEditorMode === "asset" ? mediaPreviewHref : draft;
-  const previewState =
-    draft === "" ? "empty" : previewHref === undefined || previewFailed ? "broken" : "image";
-  const assetLabel = mediaEditorMode === "asset" ? mediaAssetLabel(label) : label;
-  const inputLabel = mediaEditorMode === "asset" ? `${assetLabel} id` : `${label} URL`;
-  const unknownAssetSelected =
-    mediaEditorMode === "asset" &&
-    draft !== "" &&
-    !mediaAssetOptions.some((asset) => asset.id === draft);
-  const previewClassName =
-    density === "compact"
-      ? `relative flex h-16 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 ${
-          uploadDisabled
-            ? "cursor-not-allowed opacity-70"
-            : "cursor-pointer hover:border-slate-300 hover:bg-slate-100"
-        }`
-      : `relative flex aspect-[4/3] max-h-72 w-full items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 ${
-          uploadDisabled
-            ? "cursor-not-allowed opacity-70"
-            : "cursor-pointer hover:border-slate-300 hover:bg-slate-100"
-        }`;
-
-  useEffect(() => {
-    setPreviewFailed(false);
-  }, [previewHref]);
-
-  function handleUrlKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      onUrlCommit(event.currentTarget.value);
-      return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onUrlRevert();
-    }
-  }
-
-  return (
-    <div
-      className={density === "compact" ? "w-full min-w-0 space-y-2" : "w-full min-w-0 space-y-3"}
-      data-web-field-kind={fieldKind}
-      data-web-media-field-mode={fieldKind === "media" ? mediaEditorMode : undefined}
-    >
-      <label
-        className={previewClassName}
-        data-web-image-field-preview={previewState}
-        data-web-image-field-upload="trigger"
-        data-web-media-field-preview={fieldKind === "media" ? previewState : undefined}
-        data-web-media-field-upload={fieldKind === "media" ? "trigger" : undefined}
-        title={`Upload ${label}`}
-      >
-        {previewState === "empty" ? (
-          <span aria-hidden="true" className="text-2xl leading-none text-slate-500">
-            +
-          </span>
-        ) : previewState === "broken" ? (
-          <span className="px-3 text-center text-xs font-medium text-slate-500">Missing image</span>
-        ) : (
-          <img
-            alt={`${label} preview`}
-            className="h-full w-full object-contain"
-            loading="lazy"
-            onError={() => setPreviewFailed(true)}
-            src={previewHref ?? ""}
-          />
-        )}
-        <input
-          accept={SITE_IMAGE_UPLOAD_ACCEPT}
-          aria-label={`Upload ${label}`}
-          className="sr-only"
-          disabled={uploadDisabled}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-
-            event.currentTarget.value = "";
-            onFileSelect(file);
-          }}
-          type="file"
-        />
-      </label>
-      {mediaEditorMode === "asset" ? (
-        <NativeSelect>
-          <Label className="sr-only">{assetLabel}</Label>
-          <NativeSelectContent
-            aria-label={assetLabel}
-            className={density === "compact" ? compactNativeSelectClassName : undefined}
-            disabled={editability.controlDisabled}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-
-              onDraftChange(value);
-              onMediaAssetSelect(value);
-            }}
-            value={draft}
-          >
-            {!required || draft === "" ? <option value="" /> : null}
-            {unknownAssetSelected ? <option value={draft}>Current asset: {draft}</option> : null}
-            {mediaAssetOptions.map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {asset.label}
-              </option>
-            ))}
-          </NativeSelectContent>
-        </NativeSelect>
-      ) : null}
-      <TextField
-        isDisabled={editability.controlDisabled}
-        isInvalid={error !== null}
-        isRequired={required}
-      >
-        <Label className="sr-only">{inputLabel}</Label>
-        <Input
-          aria-invalid={error !== null ? true : undefined}
-          aria-label={inputLabel}
-          className={
-            density === "compact"
-              ? compactNativeInputClassName
-              : "w-full rounded border border-slate-300 px-3 py-2"
-          }
-          disabled={editability.controlDisabled}
-          onBlur={(event) => onUrlCommit(event.currentTarget.value)}
-          onChange={(event) => onDraftChange(event.currentTarget.value)}
-          onKeyDown={handleUrlKeyDown}
-          placeholder={inputLabel}
-          required={required}
-          type="text"
-          value={draft}
-        />
-        {error ? <FieldError>{error}</FieldError> : null}
-      </TextField>
-    </div>
-  );
-}
-
-function mediaAssetLabel(label: string) {
-  return label.toLowerCase().includes("asset") ? label : `${label} asset`;
 }
 
 function enumValueUnitOptions(field: NonNullable<RecordFieldConfig["valueUnit"]>["unitField"]) {

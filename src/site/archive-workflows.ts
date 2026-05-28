@@ -30,7 +30,7 @@ import {
   imageMediaContentTypeForKey,
   isRestorableImageMediaKey,
   type MediaAsset,
-} from "../media/core.ts";
+} from "@dpeek/formless-media";
 import type { AppInstallsResponse, StoreSnapshot, StoredRecord } from "../shared/protocol.ts";
 import {
   readSiteProjectAppArchiveEntry,

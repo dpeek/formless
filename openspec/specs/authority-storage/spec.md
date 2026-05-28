@@ -62,6 +62,27 @@ storage APIs.
   metadata
 - AND write operations can be guarded by owner session cookies
 
+### Requirement: Media Storage Adapter Boundary
+
+The system SHALL keep Authority app storage separate from instance media storage
+while consuming Media package Worker adapters through public subpaths.
+
+#### Scenario: App storage avoids media internals
+
+- GIVEN Authority storage handles bootstrap, schema, sync, mutations, actions,
+  reset, snapshot, or record restore
+- WHEN storage code needs media object handling
+- THEN it does not deep-import Media package internals
+- AND media object handling stays behind public Media package Worker/runtime
+  contracts
+
+#### Scenario: Media remains outside Authority records
+
+- GIVEN app records are committed or restored through Authority storage
+- WHEN owned media exists for the instance
+- THEN owned media object bytes and provider storage metadata remain outside
+  Authority app records
+
 ### Requirement: Source Bootstrap
 
 The system SHALL initialize an empty Authority from the source schema and source seed records.

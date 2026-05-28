@@ -158,6 +158,28 @@ The system SHALL render generated field displays and editors from field behavior
 - AND unknown tokens fall back to visible text or neutral styling
 - AND empty `valueOrInteraction` date controls stay quiet until hover or focus
 
+### Requirement: Media Field Package Adapter
+
+The system SHALL keep generated field layout and commit behavior in generated UI
+while delegating media-specific controls to the Media React adapter.
+
+#### Scenario: Media editor uses package control
+
+- GIVEN a text field declares the `media` editor
+- WHEN generated UI renders the field
+- THEN generated UI uses the Media React adapter for asset selection, upload,
+  preview, and broken-asset behavior
+- AND the field value remains a flat text value committed by generated UI
+
+#### Scenario: Image editor preserves fallback input
+
+- GIVEN a text field declares the `image` editor
+- WHEN generated UI renders the field
+- THEN generated UI preserves upload with preview and manual URL fallback
+  behavior
+- AND generic field labels, validation placement, layout, and commit policy
+  remain owned by generated UI
+
 ### Requirement: Create Edit And Delete Flows
 
 The system SHALL honor generated create, edit, `visibleWhen`, create default, union variant, and delete policies across record surfaces.

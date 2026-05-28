@@ -23,7 +23,7 @@ import {
   readInstanceAppInstalls,
   restoreInstanceAppInstall,
 } from "./instance-app-installs-state.ts";
-import { mediaObjectStoreFromR2Bucket } from "../media/r2.ts";
+import { mediaObjectStoreFromR2Bucket } from "@dpeek/formless-media/worker";
 import { committedWrite } from "./storage.ts";
 import type { AuthorityWriteNotifier } from "./authority-operations.ts";
 

@@ -6,7 +6,7 @@ import {
   type StoredRecord,
 } from "./protocol.ts";
 import { parseAppSchema, type AppSchema } from "./schema.ts";
-import type { MediaAsset } from "../media/core.ts";
+import type { MediaAsset } from "@dpeek/formless-media";
 
 export const INSTANCE_ARCHIVE_KIND = "formless.instanceArchive";
 export const APP_ARCHIVE_KIND = "formless.appArchive";

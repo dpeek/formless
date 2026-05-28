@@ -45,6 +45,7 @@
     "@cf-wasm/resvg": "0.3.4",
     "@cloudflare/vite-plugin": "^1.33.2",
     "@dnd-kit/react": "^0.4.0",
+    "@dpeek/formless-media": "^0.1.0",
     "@dpeek/formless-ui": "^0.1.3",
     "@internationalized/date": "^3.12.1",
     "@tailwindcss/vite": "^4.2.4",

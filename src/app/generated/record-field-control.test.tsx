@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
+import type { ImageMediaAssetOption } from "@dpeek/formless-media/react";
 import type { CreateFieldConfig, RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import { resolveIconCatalogSvg } from "../../shared/icon-catalog.ts";
@@ -188,28 +190,62 @@ describe("generated record field presentation rendering", () => {
     expect(html).toContain('data-web-icon-field-edit="trigger"');
     expect(html).not.toContain('data-web-svg-source="textarea"');
   });
+
+  it("keeps media field labels and validation placement in generated UI", () => {
+    const html = renderRecordControl(mediaFieldConfig, {
+      draft: "hero.webp",
+      error: "Upload failed.",
+      mediaAssetOptions: [{ href: "/media/hero.webp", id: "hero.webp", label: "Hero" }],
+      mediaEditorMode: "asset",
+      mediaPreviewHref: "/media/hero.webp",
+      recordValue: "hero.webp",
+      showLabel: true,
+      uploadEnabled: true,
+    });
+
+    expect(html).toContain(">Hero image</label>");
+    expect(html).toContain("Upload failed.");
+    expect(html).toContain('data-web-media-field-mode="asset"');
+    expect(html).toContain('aria-label="Hero image asset"');
+  });
+
+  it("keeps media URL commit policy in generated UI", () => {
+    const source = readFileSync(new URL("./record-field-control.tsx", import.meta.url), "utf8");
+    const mediaRendererSource = source.slice(source.indexOf("function RecordMediaFieldRenderer"));
+
+    expect(mediaRendererSource).toContain('commitPolicy === "field-commit"');
+    expect(mediaRendererSource).toContain("onUrlEnter");
+    expect(mediaRendererSource).toContain("onUrlEscape={onDraftRevert}");
+  });
 });
 
 function renderRecordControl(
   fieldConfig: RecordFieldConfig,
   options: {
     draft: string;
+    error?: string | null;
     iconDialogDraft?: string;
     iconDialogOpen?: boolean;
+    mediaAssetOptions?: ImageMediaAssetOption[];
+    mediaEditorMode?: "asset" | "url";
+    mediaPreviewHref?: string;
     recordValue: FieldValue | undefined;
+    showLabel?: boolean;
+    uploadEnabled?: boolean;
   },
 ) {
   return renderToStaticMarkup(
     <GeneratedRecordFieldControl
       canPatch={true}
       draft={options.draft}
-      error={null}
+      error={options.error ?? null}
       fieldConfig={fieldConfig}
       iconDialogDraft={options.iconDialogDraft ?? ""}
       iconDialogOpen={options.iconDialogOpen ?? false}
       isPending={false}
-      mediaAssetOptions={[]}
-      mediaEditorMode="url"
+      mediaAssetOptions={options.mediaAssetOptions ?? []}
+      mediaEditorMode={options.mediaEditorMode ?? "url"}
+      mediaPreviewHref={options.mediaPreviewHref}
       numberFormat="plain"
       onDraftChange={() => undefined}
       onDraftRevert={() => undefined}
@@ -225,8 +261,9 @@ function renderRecordControl(
       onUnitDraftRevert={() => undefined}
       onValueCommit={() => undefined}
       recordValue={options.recordValue}
+      showLabel={options.showLabel ?? false}
       unitDraft=""
-      uploadEnabled={false}
+      uploadEnabled={options.uploadEnabled ?? false}
     />,
   );
 }
@@ -262,6 +299,8 @@ const dueDateField = {
   required: false,
 } satisfies FieldSchema;
 
+const imageTextField = { type: "text", required: false, format: "href" } satisfies FieldSchema;
+
 const priorityFieldConfig = {
   fieldName: "priority",
   field: priorityField,
@@ -287,4 +326,12 @@ const dueDateFieldConfig = {
   commit: "field-commit",
   label: "Due date",
   presentation: { visibility: "valueOrInteraction" },
+} satisfies RecordFieldConfig;
+
+const mediaFieldConfig = {
+  fieldName: "mediaAsset",
+  field: imageTextField,
+  editor: "media",
+  commit: "field-commit",
+  label: "Hero image",
 } satisfies RecordFieldConfig;

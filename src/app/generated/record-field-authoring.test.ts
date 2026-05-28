@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vite-plus/test";
-import { siteImageUploadPatchValues } from "../../client/media.ts";
 import type { RecordFieldConfig } from "../../client/views.ts";
 import type { AppSchema, FieldSchema } from "../../shared/schema.ts";
 import {
@@ -10,6 +9,7 @@ import {
   selectGeneratedRecordFieldEditability,
   selectGeneratedRecordFieldMediaAuthoring,
   selectGeneratedRecordFieldPatchValues,
+  siteImageUploadPatchValues,
   selectValueUnitRecordPatchValues,
   upsertMediaAssetOption,
 } from "./record-field-authoring.ts";

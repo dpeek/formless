@@ -18,13 +18,12 @@ import {
   type ArchiveRestorePlanError,
   type ArchiveRestorePlanStep,
 } from "../shared/archive-restore-plan.ts";
+import { CORE_IMAGE_KEY_PREFIX, coreMediaHrefForKey } from "@dpeek/formless-media";
 import {
-  CORE_IMAGE_KEY_PREFIX,
-  coreMediaHrefForKey,
   restoreImageMedia,
   type MediaObjectStore,
   type MediaWriteResponse,
-} from "../media/core.ts";
+} from "@dpeek/formless-media/worker";
 import type { BootstrapResponse, StoredRecord } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
 import type { SchemaKey } from "../shared/schema-apps.ts";

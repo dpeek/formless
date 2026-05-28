@@ -10,7 +10,7 @@ import type {
   StoredRecord,
 } from "../shared/protocol.ts";
 import type { AppSchema } from "../shared/schema.ts";
-import { coreImageMediaDeliveryFactsForAssetId } from "../media/core.ts";
+import { coreImageMediaDeliveryFactsForAssetId } from "@dpeek/formless-media";
 import {
   resolveSiteRoute,
   routeInfoForResolution,

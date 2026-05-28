@@ -7,7 +7,7 @@ import {
   imageMediaContentTypeForKey,
   imageMediaExtensionForContentType,
   isRestorableImageMediaKey,
-} from "../media/core.ts";
+} from "@dpeek/formless-media";
 
 const SITE_MEDIA_ROUTE_PREFIX = "/api/site/media/";
 const INSTALLED_SITE_MEDIA_ROUTE_PREFIX = "/api/app-installs/site/";

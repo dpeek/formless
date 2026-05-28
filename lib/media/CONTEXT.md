@@ -1,0 +1,53 @@
+# Formless Media Agents
+
+Package scope: `@dpeek/formless-media`.
+
+Read this when editing `lib/media/*`.
+
+## Owns
+
+- Public media contract declarations and constants in `src/types.ts`.
+- Runtime-neutral media helpers exported from the package root.
+- Browser/client image upload, list, response parsing, asset-option, and image-dimension adapters.
+- Media-specific React picker, upload trigger, preview, missing-image, and URL fallback control behavior.
+- Worker/runtime media request routing, image upload/list/restore/delivery orchestration, and provider object-store adapters.
+
+## Does Not Own
+
+- App schema parsing.
+- App records or Authority app storage.
+- Generic generated form layout, labels, validation placement, or commit policy.
+- Generic UI primitives.
+- Site usage metadata such as alt text, caption, crop, slot, focal point, poster override, width, height, or fallback href.
+- Provider-specific URLs in app records.
+
+## Map
+
+- `package.json`: public exports for `.`, `./client`, `./react`, and `./worker`.
+- `tsconfig.json`: package-local TypeScript project extending the repo config.
+- `src/types.ts`: import-free versioned public contract declarations.
+- `src/index.ts`: runtime-neutral root entrypoint and pure helpers.
+- `src/client.ts`: browser/client HTTP adapter entrypoint; no React import.
+- `src/react.tsx`: Media React adapter entrypoint; no generated UI import.
+- `src/worker.ts`: Worker/runtime adapter entrypoint; no React import.
+- `src/*.test.ts` and `src/*.test.tsx`: package-local contract and adapter coverage.
+
+Compatibility shims remain at `src/media/core.ts`, `src/media/r2.ts`, `src/client/media.ts`, and `src/worker/media.ts`.
+
+## Read Path
+
+1. Read this file.
+2. Read `src/types.ts` for public contract facts.
+3. Read only the relevant entrypoint for the task: `src/index.ts`, `src/client.ts`, `src/react.tsx`, or `src/worker.ts`.
+4. Read matching package-local tests when changing behavior.
+
+## Rules
+
+- Keep app records flat.
+- Keep provider storage details outside app records.
+- Keep root and type entrypoints runtime-neutral.
+- Import this package from public subpaths only: `@dpeek/formless-media`, `@dpeek/formless-media/client`, `@dpeek/formless-media/react`, or `@dpeek/formless-media/worker`.
+- Do not deep-import `lib/media/src/*` from external runtime code.
+- Keep package tests fast and local. Use fake fetchers, fake stores, fixed ids, and fixed payloads.
+- Do not call live networks, Cloudflare APIs, or a dev server from package tests.
+- During normal agent work, use repo `devstate`.

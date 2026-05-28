@@ -32,6 +32,14 @@ Use `lib/<package>` for reusable capability slices, not only full vertical app s
 
 Alternative: wait for a full vertical app extraction. That would delay useful package contracts because Media is not an app and does not own app records.
 
+### Package slices have a small public surface
+
+A package slice keeps its source under `lib/<package>/`, with one package-local `CONTEXT.md`, one `package.json`, one `tsconfig.json`, and `src/` public entrypoints. `CONTEXT.md` names ownership, non-ownership, source map, read path, and test rules. Versioned contract details live beside exported declarations in `src/types.ts`.
+
+Package exports expose only documented public entrypoints. The root export is runtime-neutral. Optional adapter subpaths split browser/client HTTP, React-specific controls, and Worker/runtime adapters. External runtime code imports only those public exports and does not deep-import unexported package internals.
+
+Package tests stay inside the package, use fake providers or stores with fixed ids and clocks, and avoid live networks, Cloudflare APIs, dev servers, and browser smoke unless app-visible behavior changes.
+
 ### `types.ts` is the public versioned contract
 
 `lib/media/src/types.ts` owns documented exported types and constants for media assets, upload/list/restore shapes, storage keys, metadata invariants, delivery facts, and provider seams. It avoids imports unless impractical and must not import runtime code.
@@ -87,6 +95,9 @@ Alternative: rely on existing app-level tests. That would keep package contract 
 6. Add deterministic package tests and run `devstate check`.
 7. Run browser smoke only if visible app behavior changes.
 
-## Open Questions
+## Implementation Resolution
 
-- Whether old `src/media`, `src/client/media.ts`, and `src/worker/media.ts` remain as one-change compatibility shims depends on the final import scan during implementation.
+- The final import scan kept `src/media/core.ts`, `src/media/r2.ts`,
+  `src/client/media.ts`, and `src/worker/media.ts` as compatibility shims.
+- App, archive, Site runtime, generated UI, client, and Worker consumers import
+  Media through public `@dpeek/formless-media` package subpaths.

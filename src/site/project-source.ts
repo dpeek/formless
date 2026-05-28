@@ -7,7 +7,7 @@ import {
   coreMediaKeyFromAssetId,
   coreMediaKeyFromHref,
   isRestorableImageMediaKey,
-} from "../media/core.ts";
+} from "@dpeek/formless-media";
 import { buildSiteSeedRecordsFromSnapshot, validateSiteSeedRecords } from "./seed-promotion.ts";
 import { buildSiteSourceSnapshot, type SiteSourceSnapshotOptions } from "./source-snapshot.ts";
 import {

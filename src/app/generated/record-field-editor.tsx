@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   listCoreImageMediaAssets,
-  siteImageUploadPatchValues,
   uploadCoreImageMediaFile,
   type ImageMediaAssetOption,
-} from "../../client/media.ts";
+} from "@dpeek/formless-media/client";
 import { useRecord, useSchema } from "../../client/store.ts";
 import { setSyncStatus } from "../../client/sync-status.ts";
 import { submitPatchMutation } from "../../client/sync.ts";
@@ -18,6 +17,7 @@ import {
   selectGeneratedRecordFieldDraftValues,
   selectGeneratedRecordFieldMediaAuthoring,
   selectGeneratedRecordFieldPatchValues,
+  siteImageUploadPatchValues,
   upsertMediaAssetOption,
 } from "./record-field-authoring.ts";
 import { inputValueToFieldValue } from "./format.ts";

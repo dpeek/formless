@@ -1,5 +1,8 @@
-import type { ImageMediaAssetOption, UploadedImageMedia } from "../../client/media.ts";
-import { coreImageMediaAssetOptionForId } from "../../client/media.ts";
+import {
+  coreImageMediaAssetOptionForId,
+  type ImageMediaAssetOption,
+  type UploadedImageMedia,
+} from "@dpeek/formless-media/client";
 import type { RecordFieldConfig } from "../../client/views.ts";
 import type { FieldValue, RecordValues } from "../../shared/protocol.ts";
 import type { AppSchema, FieldSchema, TableColumnFormat } from "../../shared/schema.ts";
@@ -194,6 +197,37 @@ export function imageMediaAssetOptionFromUpload(
     label: upload.asset?.label ?? mediaAssetId,
     ...(uploadedWidth === undefined ? {} : { width: uploadedWidth }),
   };
+}
+
+export function siteImageUploadPatchValues({
+  heightFieldName,
+  hrefFieldName,
+  mediaAssetFieldName,
+  upload,
+  widthFieldName,
+}: {
+  heightFieldName?: string;
+  hrefFieldName?: string;
+  mediaAssetFieldName?: string;
+  upload: UploadedImageMedia;
+  widthFieldName?: string;
+}): Partial<RecordValues> {
+  const values: Partial<RecordValues> = {};
+
+  if (upload.dimensions && widthFieldName && heightFieldName) {
+    values[widthFieldName] = upload.dimensions.width;
+    values[heightFieldName] = upload.dimensions.height;
+  }
+
+  const mediaAssetId = upload.assetId ?? upload.asset?.id;
+
+  if (mediaAssetFieldName && mediaAssetId) {
+    values[mediaAssetFieldName] = mediaAssetId;
+  } else if (hrefFieldName) {
+    values[hrefFieldName] = upload.href;
+  }
+
+  return values;
 }
 
 export function upsertMediaAssetOption(
