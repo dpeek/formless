@@ -26,11 +26,11 @@
 
 ## 4. CLI And Target Client
 
-- [ ] 4.1 Add instance target client helpers for deployment desired-state reads, attempt start, heartbeat, plan writeback, success writeback, failure writeback, drift writeback, and latest status.
-- [ ] 4.2 Update domain provider runner apply to write generic deployment attempt facts when the target supports them.
-- [ ] 4.3 Update domain provider runner failure handling to write failure details for the exact desired-state version after an attempt is created.
-- [ ] 4.4 Update `formless instance domains run-apply` output with desired-state version, attempt id, resource counts, and writeback status when available.
-- [ ] 4.5 Keep existing domain remote-plan, run-apply, run-delete, forget, manual cleanup, and direct fallback command surfaces stable.
+- [x] 4.1 Add instance target client helpers for deployment desired-state reads, attempt start, heartbeat, plan writeback, success writeback, failure writeback, drift writeback, and latest status.
+- [x] 4.2 Update domain provider runner apply to write generic deployment attempt facts when the target supports them.
+- [x] 4.3 Update domain provider runner failure handling to write failure details for the exact desired-state version after an attempt is created.
+- [x] 4.4 Update `formless instance domains run-apply` output with desired-state version, attempt id, resource counts, and writeback status when available.
+- [x] 4.5 Keep existing domain remote-plan, run-apply, run-delete, forget, manual cleanup, and direct fallback command surfaces stable.
 
 ## 5. Status Integration
 
@@ -116,3 +116,10 @@
 - 3.4-3.6 files: `src/worker/domain-provider-api.ts`, `src/worker/domain-provider-api.test.ts`.
 - 3.4-3.6 check: `devstate check` passed; evidence in `.devstate/status.md`.
 - 3.4-3.6 smoke: Not run; worker API/storage compatibility change with no visible browser behavior.
+- 4.1: Added deployment runtime target helpers in `src/site/instance-target-client.ts` for desired-state reads, latest status reads, attempt start, heartbeat, plan/success/failure writeback, and drift writeback with admin-token headers for mutating calls.
+- 4.2: Updated `src/site/domain-provider-runner.ts` so remote apply detects bridged deployment attempts when `/api/formless/deployments/status` is available, writes deployment plan summaries for the exact attempt/version, and falls back without changing legacy domain apply on unsupported targets.
+- 4.3: Updated remote apply failure handling to attempt exact-version deployment failure writeback for runner-owned deployment attempts while preserving existing domain apply job failure writeback.
+- 4.4: Updated `formless instance domains run-apply` formatting in `src/site/cli.ts` to include desired-state version, attempt id, target id, resource counts, and writeback status when deployment facts are available.
+- 4.5 tests: Updated `src/site/domain-provider-runner.test.ts` to keep legacy unsupported-target apply result writeback stable and added deployment-aware bridged apply plan-writeback coverage; remote-plan, run-delete, forget, manual cleanup, and direct fallback command implementations were not changed.
+- 4.1-4.5 check: `devstate check` passed; evidence in `.devstate/status.md`.
+- 4.1-4.5 smoke: Not run; CLI/target-client behavior changed with no browser-visible app behavior.

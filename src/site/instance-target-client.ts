@@ -3,6 +3,30 @@ import {
   type FormlessDeployMetadata,
 } from "../shared/deploy-metadata.ts";
 import {
+  INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
+  INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,
+  INSTANCE_DEPLOYMENT_ATTEMPT_PLAN_API_PATH,
+  INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH,
+  INSTANCE_DEPLOYMENT_ATTEMPT_SUCCESS_API_PATH,
+  INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+  INSTANCE_DEPLOYMENT_DRIFT_API_PATH,
+  INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+  type InstanceDeploymentAttemptFailureWritebackRequest,
+  type InstanceDeploymentAttemptFailureWritebackResponse,
+  type InstanceDeploymentAttemptHeartbeatRequest,
+  type InstanceDeploymentAttemptHeartbeatResponse,
+  type InstanceDeploymentAttemptPlanWritebackRequest,
+  type InstanceDeploymentAttemptPlanWritebackResponse,
+  type InstanceDeploymentAttemptStartRequest,
+  type InstanceDeploymentAttemptStartResponse,
+  type InstanceDeploymentAttemptSuccessWritebackRequest,
+  type InstanceDeploymentAttemptSuccessWritebackResponse,
+  type InstanceDeploymentDesiredStateResponse,
+  type InstanceDeploymentDriftWritebackRequest,
+  type InstanceDeploymentDriftWritebackResponse,
+  type InstanceDeploymentStatusResponse,
+} from "../shared/deployment-runtime.ts";
+import {
   INSTANCE_DOMAIN_PROVIDER_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
   INSTANCE_DOMAIN_PROVIDER_APPLY_JOBS_API_PATH,
@@ -57,6 +81,18 @@ export type FormlessInstanceTargetDeployMetadata = {
 export type FormlessInstanceTargetClientDependencies = {
   fetch: typeof fetch;
 };
+
+export class FormlessInstanceTargetRequestError extends Error {
+  readonly responseBody: string;
+  readonly status: number;
+
+  constructor(message: string, input: { responseBody: string; status: number }) {
+    super(message);
+    this.name = "FormlessInstanceTargetRequestError";
+    this.responseBody = input.responseBody;
+    this.status = input.status;
+  }
+}
 
 export async function readFormlessInstanceTargetStatus(
   input: { targetUrl: string },
@@ -157,6 +193,158 @@ export async function readFormlessInstanceDomainProviderPlan(
       headers: { accept: "application/json" },
     }),
     providerUrl.toString(),
+  );
+}
+
+export async function readFormlessInstanceDeploymentDesiredState(
+  input: { targetId?: string | null; targetUrl: string },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentDesiredStateResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const desiredStateUrl = deploymentReadUrl(
+    targetUrl,
+    INSTANCE_DEPLOYMENT_DESIRED_STATE_API_PATH,
+    input.targetId,
+  );
+
+  return parseDeploymentDesiredStateResponse(
+    await fetchJson(dependencies.fetch, desiredStateUrl, {
+      headers: { accept: "application/json" },
+    }),
+    desiredStateUrl,
+  );
+}
+
+export async function readFormlessInstanceDeploymentStatus(
+  input: { targetId?: string | null; targetUrl: string },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentStatusResponse> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const statusUrl = deploymentReadUrl(
+    targetUrl,
+    INSTANCE_DEPLOYMENT_STATUS_API_PATH,
+    input.targetId,
+  );
+
+  return parseDeploymentStatusResponse(
+    await fetchJson(dependencies.fetch, statusUrl, {
+      headers: { accept: "application/json" },
+    }),
+    statusUrl,
+  );
+}
+
+export async function startFormlessInstanceDeploymentAttempt(
+  input: {
+    adminToken?: string | null;
+    request: InstanceDeploymentAttemptStartRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentAttemptStartResponse> {
+  return parseDeploymentAttemptStartResponse(
+    await postDeploymentJson(dependencies, {
+      adminToken: input.adminToken,
+      body: input.request,
+      path: INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH,
+      targetUrl: input.targetUrl,
+    }),
+    INSTANCE_DEPLOYMENT_ATTEMPT_START_API_PATH,
+  );
+}
+
+export async function heartbeatFormlessInstanceDeploymentAttempt(
+  input: {
+    adminToken?: string | null;
+    request: InstanceDeploymentAttemptHeartbeatRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentAttemptHeartbeatResponse> {
+  return parseDeploymentAttemptHeartbeatResponse(
+    await postDeploymentJson(dependencies, {
+      adminToken: input.adminToken,
+      body: input.request,
+      path: INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,
+      targetUrl: input.targetUrl,
+    }),
+    INSTANCE_DEPLOYMENT_ATTEMPT_HEARTBEAT_API_PATH,
+  );
+}
+
+export async function writeFormlessInstanceDeploymentAttemptPlan(
+  input: {
+    adminToken?: string | null;
+    request: InstanceDeploymentAttemptPlanWritebackRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentAttemptPlanWritebackResponse> {
+  return parseDeploymentAttemptPlanWritebackResponse(
+    await postDeploymentJson(dependencies, {
+      adminToken: input.adminToken,
+      body: input.request,
+      path: INSTANCE_DEPLOYMENT_ATTEMPT_PLAN_API_PATH,
+      targetUrl: input.targetUrl,
+    }),
+    INSTANCE_DEPLOYMENT_ATTEMPT_PLAN_API_PATH,
+  );
+}
+
+export async function writeFormlessInstanceDeploymentAttemptSuccess(
+  input: {
+    adminToken?: string | null;
+    request: InstanceDeploymentAttemptSuccessWritebackRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentAttemptSuccessWritebackResponse> {
+  return parseDeploymentAttemptSuccessWritebackResponse(
+    await postDeploymentJson(dependencies, {
+      adminToken: input.adminToken,
+      body: input.request,
+      path: INSTANCE_DEPLOYMENT_ATTEMPT_SUCCESS_API_PATH,
+      targetUrl: input.targetUrl,
+    }),
+    INSTANCE_DEPLOYMENT_ATTEMPT_SUCCESS_API_PATH,
+  );
+}
+
+export async function writeFormlessInstanceDeploymentAttemptFailure(
+  input: {
+    adminToken?: string | null;
+    request: InstanceDeploymentAttemptFailureWritebackRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentAttemptFailureWritebackResponse> {
+  return parseDeploymentAttemptFailureWritebackResponse(
+    await postDeploymentJson(dependencies, {
+      adminToken: input.adminToken,
+      body: input.request,
+      path: INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
+      targetUrl: input.targetUrl,
+    }),
+    INSTANCE_DEPLOYMENT_ATTEMPT_FAILURE_API_PATH,
+  );
+}
+
+export async function writeFormlessInstanceDeploymentDrift(
+  input: {
+    adminToken?: string | null;
+    request: InstanceDeploymentDriftWritebackRequest;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<InstanceDeploymentDriftWritebackResponse> {
+  return parseDeploymentDriftWritebackResponse(
+    await postDeploymentJson(dependencies, {
+      adminToken: input.adminToken,
+      body: input.request,
+      path: INSTANCE_DEPLOYMENT_DRIFT_API_PATH,
+      targetUrl: input.targetUrl,
+    }),
+    INSTANCE_DEPLOYMENT_DRIFT_API_PATH,
   );
 }
 
@@ -426,7 +614,13 @@ async function readJsonResponse(response: Response, context: string): Promise<un
   const text = await response.text();
 
   if (!response.ok) {
-    throw new Error(`${context} failed: HTTP ${response.status} ${text}`);
+    throw new FormlessInstanceTargetRequestError(
+      `${context} failed: HTTP ${response.status} ${text}`,
+      {
+        responseBody: text,
+        status: response.status,
+      },
+    );
   }
 
   try {
@@ -500,6 +694,99 @@ function parseDomainProviderPlan(
   }
 
   return value as InstanceDomainProviderPlanResponse;
+}
+
+function parseDeploymentDesiredStateResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentDesiredStateResponse {
+  if (!isRecord(value) || !isRecord(value.desiredState) || !isRecord(value.target)) {
+    throw new Error(`${context} failed: deployment desired-state response is invalid.`);
+  }
+
+  return value as InstanceDeploymentDesiredStateResponse;
+}
+
+function parseDeploymentStatusResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentStatusResponse {
+  if (!isRecord(value) || !isRecord(value.status) || !isRecord(value.target)) {
+    throw new Error(`${context} failed: deployment status response is invalid.`);
+  }
+
+  return value as InstanceDeploymentStatusResponse;
+}
+
+function parseDeploymentAttemptStartResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentAttemptStartResponse {
+  if (!isRecord(value) || !isRecord(value.attempt) || typeof value.replayed !== "boolean") {
+    throw new Error(`${context} failed: deployment attempt start response is invalid.`);
+  }
+
+  return value as InstanceDeploymentAttemptStartResponse;
+}
+
+function parseDeploymentAttemptHeartbeatResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentAttemptHeartbeatResponse {
+  if (!isRecord(value) || !isRecord(value.attempt) || !isRecord(value.lease)) {
+    throw new Error(`${context} failed: deployment attempt heartbeat response is invalid.`);
+  }
+
+  return value as InstanceDeploymentAttemptHeartbeatResponse;
+}
+
+function parseDeploymentAttemptPlanWritebackResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentAttemptPlanWritebackResponse {
+  if (!isRecord(value) || !isRecord(value.attempt) || !isRecord(value.plan)) {
+    throw new Error(`${context} failed: deployment attempt plan writeback response is invalid.`);
+  }
+
+  return value as InstanceDeploymentAttemptPlanWritebackResponse;
+}
+
+function parseDeploymentAttemptSuccessWritebackResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentAttemptSuccessWritebackResponse {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.attempt) ||
+    !isRecord(value.lease) ||
+    !isRecord(value.result)
+  ) {
+    throw new Error(`${context} failed: deployment attempt success writeback response is invalid.`);
+  }
+
+  return value as InstanceDeploymentAttemptSuccessWritebackResponse;
+}
+
+function parseDeploymentAttemptFailureWritebackResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentAttemptFailureWritebackResponse {
+  if (!isRecord(value) || !isRecord(value.attempt) || !isRecord(value.result)) {
+    throw new Error(`${context} failed: deployment attempt failure writeback response is invalid.`);
+  }
+
+  return value as InstanceDeploymentAttemptFailureWritebackResponse;
+}
+
+function parseDeploymentDriftWritebackResponse(
+  value: unknown,
+  context: string,
+): InstanceDeploymentDriftWritebackResponse {
+  if (!isRecord(value) || !isRecord(value.report)) {
+    throw new Error(`${context} failed: deployment drift writeback response is invalid.`);
+  }
+
+  return value as InstanceDeploymentDriftWritebackResponse;
 }
 
 function parseDomainProviderApplyResponse(
@@ -610,6 +897,43 @@ function parseApplyEvidenceResponse(
 
 function apiUrl(targetUrl: string, apiPath: string): string {
   return new URL(apiPath, `${targetUrl}/`).toString();
+}
+
+function deploymentReadUrl(targetUrl: string, apiPath: string, targetId?: string | null): string {
+  const url = new URL(apiUrl(targetUrl, apiPath));
+
+  if (targetId && targetId.trim() !== "") {
+    url.searchParams.set("targetId", targetId);
+  }
+
+  return url.toString();
+}
+
+async function postDeploymentJson(
+  dependencies: FormlessInstanceTargetClientDependencies,
+  input: {
+    adminToken?: string | null;
+    body: unknown;
+    path: string;
+    targetUrl: string;
+  },
+): Promise<unknown> {
+  const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
+  const url = apiUrl(targetUrl, input.path);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+
+  if (input.adminToken && input.adminToken.trim() !== "") {
+    headers.authorization = `Bearer ${input.adminToken.trim()}`;
+  }
+
+  return postJson(dependencies.fetch, url, {
+    body: JSON.stringify(input.body),
+    headers,
+    method: "POST",
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

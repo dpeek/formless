@@ -8,6 +8,8 @@ import {
   type DomainProviderAlchemyRuntime,
 } from "./domain-provider-runner.ts";
 
+type CapturedRunnerRequest = { body: unknown; url: string };
+
 describe("domain provider Alchemy runner", () => {
   it("requests a Worker apply job, runs CustomDomain resources, and posts evidence", async () => {
     const plan = planDomainProviderResources({
@@ -150,7 +152,12 @@ describe("domain provider Alchemy runner", () => {
         },
       },
     ]);
-    expect(requests[1]?.body).toEqual({
+    expect(
+      requestBodyForUrl(
+        requests,
+        "https://instance.example/api/formless/domain-provider/apply-jobs/job-1/result",
+      ),
+    ).toEqual({
       resources: [
         expect.objectContaining({
           accountId: "account-123",
@@ -163,6 +170,213 @@ describe("domain provider Alchemy runner", () => {
       ],
       runnerId: "runner-1",
       status: "succeeded",
+    });
+  });
+
+  it("writes deployment plan facts and reports bridged apply attempts when supported", async () => {
+    const plan = planDomainProviderResources({
+      instanceId: "primary",
+      mappings: [
+        {
+          enabled: true,
+          host: "admin.example.com",
+          profile: "instance",
+        },
+      ],
+      workerName: "formless-primary",
+      zones: [{ id: "zone-1", name: "example.com" }],
+    });
+    const desiredState = {
+      hash: `sha256:${"a".repeat(64)}`,
+      revision: 3,
+      targetId: "primary",
+      versionId: "version.primary.3",
+    };
+    const attemptId = "attempt.11111111-1111-4111-8111-111111111111";
+    const requests: CapturedRunnerRequest[] = [];
+    const runtime: DomainProviderAlchemyRuntime = {
+      factories: {
+        CustomDomain: async (_id, props) => ({
+          ...props,
+          createdAt: 1,
+          id: "custom-domain-123",
+          updatedAt: 2,
+        }),
+        DnsRecords: async () => {
+          throw new Error("DNS records are outside this test.");
+        },
+        RedirectRule: async () => {
+          throw new Error("Redirect rules are outside this test.");
+        },
+      },
+      password: "alchemy-password",
+      runner: async (_appName, _options, apply) => apply(),
+      stateStore: () => {
+        throw new Error("state store is passed to Alchemy, not called by this test");
+      },
+    };
+    const result = await runFormlessInstanceDomainProviderApply(
+      {
+        adminToken: "admin-token",
+        runnerId: "runner-deploy",
+        targetUrl: "https://instance.example",
+      },
+      {
+        createRunnerId: () => "unused-runner",
+        env: {},
+        fetch: async (input, init) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+
+          requests.push({ body, url });
+
+          if (url === "https://instance.example/api/formless/domain-provider/apply") {
+            return Response.json(
+              {
+                code: "domain-provider-apply-job-ready",
+                config: {
+                  accountId: "account-123",
+                  alchemyPassword: { configured: true, envNames: ["ALCHEMY_PASSWORD"] },
+                  applyReady: true,
+                  cloudflareApiToken: {
+                    configured: true,
+                    envNames: ["CLOUDFLARE_API_TOKEN"],
+                  },
+                  instanceId: "primary",
+                  issues: [],
+                  planReady: true,
+                  workerName: "formless-primary",
+                  zones: [{ id: "zone-1", name: "example.com" }],
+                },
+                job: {
+                  createdAt: "2026-05-27T00:00:00.000Z",
+                  jobId: "job-deployment",
+                  plan,
+                  runnerId: "runner-deploy",
+                  status: "ready",
+                  updatedAt: "2026-05-27T00:00:00.000Z",
+                },
+                plan,
+                status: "ready",
+              },
+              { status: 202 },
+            );
+          }
+
+          if (url === "https://instance.example/api/formless/deployments/desired-state") {
+            return Response.json({
+              desiredState: {
+                ...desiredState,
+                createdAt: "2026-05-27T00:00:00.000Z",
+                display: {
+                  resourceCount: 1,
+                  resourcesByKind: {
+                    "cloudflare-dns-records": 0,
+                    "cloudflare-redirect-rule": 0,
+                    "cloudflare-worker-custom-domain": 1,
+                  },
+                },
+                resourceGraph: { resources: [], targetId: "primary" },
+                schemaVersion: 1,
+                source: { fingerprint: "source-1", intentRevision: 1 },
+              },
+              target: { kind: "instance", targetId: "primary" },
+            });
+          }
+
+          if (url === "https://instance.example/api/formless/deployments/status") {
+            return Response.json({
+              status: {
+                actor: {
+                  actorId: "domain-provider.apply",
+                  kind: "runner",
+                  runnerId: "runner-deploy",
+                },
+                attemptId,
+                checkedAt: "2026-05-27T00:00:00.000Z",
+                desiredState,
+                mode: "apply",
+                startedAt: "2026-05-27T00:00:00.000Z",
+                state: "in-progress",
+                targetId: "primary",
+              },
+              target: { kind: "instance", targetId: "primary" },
+            });
+          }
+
+          if (url === "https://instance.example/api/formless/deployments/attempts/plan") {
+            return Response.json({
+              attempt: {
+                ...desiredState,
+                actor: {
+                  actorId: "domain-provider.apply",
+                  kind: "runner",
+                  runnerId: "runner-deploy",
+                },
+                attemptId,
+                idempotencyKey: "domain-provider-apply:job-deployment",
+                mode: "apply",
+                startedAt: "2026-05-27T00:00:00.000Z",
+                status: "started",
+                updatedAt: "2026-05-27T00:00:00.000Z",
+              },
+              plan: {
+                ...desiredState,
+                attemptId,
+                kind: "plan",
+                recordedAt: "2026-05-27T00:00:00.000Z",
+                summary: body?.summary,
+              },
+            });
+          }
+
+          if (
+            url ===
+            "https://instance.example/api/formless/domain-provider/apply-jobs/job-deployment/result"
+          ) {
+            return Response.json({
+              job: {
+                createdAt: "2026-05-27T00:00:00.000Z",
+                jobId: "job-deployment",
+                plan,
+                result: { evidenceCount: 1 },
+                runnerId: "runner-deploy",
+                status: "succeeded",
+                updatedAt: "2026-05-27T00:00:01.000Z",
+              },
+            });
+          }
+
+          return Response.json({ error: "Unexpected request." }, { status: 404 });
+        },
+        runtime: async () => runtime,
+      },
+    );
+
+    expect(result.deployment).toMatchObject({
+      attemptId,
+      desiredState,
+      resourceCount: 1,
+      resourcesByKind: {
+        "cloudflare-worker-custom-domain": 1,
+      },
+      source: "domain-provider-job",
+      targetId: "primary",
+      writebackStatus: "succeeded",
+    });
+    expect(
+      requestBodyForUrl(
+        requests,
+        "https://instance.example/api/formless/deployments/attempts/plan",
+      ),
+    ).toMatchObject({
+      attemptId,
+      desiredState,
+      runnerId: "runner-deploy",
+      summary: {
+        changes: { create: 1, delete: 0, noChange: 0, update: 0 },
+      },
     });
   });
 
@@ -272,7 +486,12 @@ describe("domain provider Alchemy runner", () => {
       ),
     ).rejects.toThrow("Domain provider runner requires ALCHEMY_PASSWORD.");
 
-    expect(requests[1]).toEqual({
+    expect(
+      requestForUrl(
+        requests,
+        "https://instance.example/api/formless/domain-provider/apply-jobs/job-missing-secrets/result",
+      ),
+    ).toEqual({
       body: {
         error: "Domain provider runner requires ALCHEMY_PASSWORD.",
         runnerId: "runner-missing-secrets",
@@ -433,7 +652,12 @@ describe("domain provider Alchemy runner", () => {
 
     expect(result.evidenceCount).toBe(2);
     expect(preflightPlans).toEqual([plan]);
-    expect(requests[1]?.body).toEqual({
+    expect(
+      requestBodyForUrl(
+        requests,
+        "https://instance.example/api/formless/domain-provider/apply-jobs/job-redirects/result",
+      ),
+    ).toEqual({
       resources: [
         expect.objectContaining({
           dnsRecordIds: ["dns-1"],
@@ -747,3 +971,20 @@ describe("domain provider Alchemy runner", () => {
     });
   });
 });
+
+function requestForUrl(
+  requests: readonly CapturedRunnerRequest[],
+  url: string,
+): CapturedRunnerRequest {
+  const request = requests.find((candidate) => candidate.url === url);
+
+  if (!request) {
+    throw new Error(`Expected request to ${url}.`);
+  }
+
+  return request;
+}
+
+function requestBodyForUrl(requests: readonly CapturedRunnerRequest[], url: string): unknown {
+  return requestForUrl(requests, url).body;
+}

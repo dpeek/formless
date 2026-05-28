@@ -1,6 +1,18 @@
 import type { AlchemyOptions } from "alchemy";
 import type { CustomDomain, DnsRecords, RedirectRule } from "alchemy/cloudflare";
 
+import type {
+  DeploymentActor,
+  DeploymentDesiredStateVersion,
+  DeploymentDesiredStateVersionRef,
+  DeploymentEvidenceAction,
+  DeploymentFailureSummary,
+  DeploymentPlanSummary,
+  DeploymentResourceEvidenceSummary,
+  DeploymentResourceKind,
+  DeploymentStatus,
+  DeploymentTargetId,
+} from "../shared/deployment-runtime.ts";
 import {
   type InstanceDomainProviderApplyJobResourceEvidence,
   type InstanceDomainProviderApplyReadyResponse,
@@ -11,6 +23,7 @@ import type {
   DomainProviderApplyPolicy,
   DomainProviderCustomDomainResource,
   DomainProviderDnsRecordsResource,
+  DomainProviderPlan,
   DomainProviderRedirectRuleResource,
   DomainProviderResource,
   DomainProviderResourceKind,
@@ -27,11 +40,18 @@ import {
   createFetchCloudflareDomainClient,
 } from "./cloudflare-domain-client.ts";
 import {
+  FormlessInstanceTargetRequestError,
   completeFormlessInstanceDomainProviderApplyJob,
   completeFormlessInstanceDomainProviderDeleteJob,
+  readFormlessInstanceDeploymentDesiredState,
+  readFormlessInstanceDeploymentStatus,
   requestFormlessInstanceDomainProviderApply,
   requestFormlessInstanceDomainProviderDelete,
+  startFormlessInstanceDeploymentAttempt,
   type FormlessInstanceTargetClientDependencies,
+  writeFormlessInstanceDeploymentAttemptFailure,
+  writeFormlessInstanceDeploymentAttemptPlan,
+  writeFormlessInstanceDeploymentAttemptSuccess,
 } from "./instance-target-client.ts";
 
 export const ALCHEMY_STATE_TOKEN_ENV_NAME = "ALCHEMY_STATE_TOKEN";
@@ -66,9 +86,24 @@ export type RunFormlessInstanceDomainProviderApplyResult = {
   alchemy: AlchemyDomainProviderApplyResult;
   apply: InstanceDomainProviderApplyReadyResponse;
   completion: Awaited<ReturnType<typeof completeFormlessInstanceDomainProviderApplyJob>>;
+  deployment?: RunFormlessInstanceDomainProviderDeploymentFacts;
   evidenceCount: number;
   runnerId: string;
   targetUrl: string;
+};
+
+export type RunFormlessInstanceDomainProviderDeploymentFacts = {
+  attemptId: string;
+  desiredState: DeploymentDesiredStateVersionRef;
+  resourceCount: number;
+  resourcesByKind: Record<DeploymentResourceKind, number>;
+  source: "domain-provider-job" | "runner";
+  targetId: DeploymentTargetId;
+  writebackStatus: "planned" | "started" | "succeeded";
+};
+
+type DeploymentApplyContext = RunFormlessInstanceDomainProviderDeploymentFacts & {
+  leaseToken?: string;
 };
 
 export type RunFormlessInstanceDomainProviderDeleteResult = {
@@ -113,6 +148,26 @@ export async function runFormlessInstanceDomainProviderApply(
     throw new Error(`Domain provider apply did not create a runnable job: ${apply.code}.`);
   }
 
+  let deployment = await prepareDeploymentApplyContext(
+    {
+      adminToken: input.adminToken,
+      apply,
+      runnerId,
+      targetUrl,
+    },
+    dependencies,
+  );
+  deployment = await writeDeploymentApplyPlanIfAvailable(
+    {
+      adminToken: input.adminToken,
+      apply,
+      deployment,
+      runnerId,
+      targetUrl,
+    },
+    dependencies,
+  );
+
   const accountId = requireApplyAccountId(apply);
 
   try {
@@ -151,29 +206,67 @@ export async function runFormlessInstanceDomainProviderApply(
       },
       dependencies,
     );
+    deployment = await writeDeploymentApplySuccessIfNeeded(
+      {
+        adminToken: input.adminToken,
+        alchemy,
+        deployment,
+        plan: apply.job.plan,
+        resources,
+        runnerId,
+        targetUrl,
+      },
+      dependencies,
+    );
 
     return {
       alchemy,
       apply,
       completion,
+      ...(deployment === undefined ? {} : { deployment }),
       evidenceCount: resources.length,
       runnerId,
       targetUrl,
     };
   } catch (error) {
-    await completeFormlessInstanceDomainProviderApplyJob(
-      {
-        adminToken: input.adminToken,
-        jobId: apply.job.jobId,
-        result: {
-          error: errorMessage(error),
-          runnerId,
-          status: "failed",
+    let writebackError: unknown;
+
+    try {
+      await completeFormlessInstanceDomainProviderApplyJob(
+        {
+          adminToken: input.adminToken,
+          jobId: apply.job.jobId,
+          result: {
+            error: errorMessage(error),
+            runnerId,
+            status: "failed",
+          },
+          targetUrl,
         },
-        targetUrl,
-      },
-      dependencies,
-    );
+        dependencies,
+      );
+    } catch (completionError) {
+      writebackError = completionError;
+    }
+
+    try {
+      await writeDeploymentApplyFailureIfNeeded(
+        {
+          adminToken: input.adminToken,
+          deployment,
+          error,
+          runnerId,
+          targetUrl,
+        },
+        dependencies,
+      );
+    } catch (deploymentError) {
+      writebackError ??= deploymentError;
+    }
+
+    if (writebackError !== undefined) {
+      throw writebackError;
+    }
 
     throw error;
   }
@@ -263,6 +356,189 @@ export async function runFormlessInstanceDomainProviderDelete(
 
     throw error;
   }
+}
+
+async function prepareDeploymentApplyContext(
+  input: {
+    adminToken?: string | null;
+    apply: InstanceDomainProviderApplyReadyResponse;
+    runnerId: string;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<DeploymentApplyContext | undefined> {
+  try {
+    const desiredState = await readFormlessInstanceDeploymentDesiredState(
+      { targetUrl: input.targetUrl },
+      dependencies,
+    );
+    const desiredStateRef = deploymentDesiredStateRef(desiredState.desiredState);
+    const status = await readFormlessInstanceDeploymentStatus(
+      { targetUrl: input.targetUrl },
+      dependencies,
+    );
+    const bridgedAttempt = bridgedApplyAttemptFromStatus(status.status, input.runnerId);
+
+    if (bridgedAttempt) {
+      return {
+        attemptId: bridgedAttempt.attemptId,
+        desiredState: bridgedAttempt.desiredState,
+        resourceCount: desiredState.desiredState.display.resourceCount,
+        resourcesByKind: desiredState.desiredState.display.resourcesByKind,
+        source: "domain-provider-job",
+        targetId: bridgedAttempt.desiredState.targetId,
+        writebackStatus: "started",
+      };
+    }
+
+    const started = await startFormlessInstanceDeploymentAttempt(
+      {
+        adminToken: input.adminToken,
+        request: {
+          actor: domainProviderRunnerDeploymentActor(input.runnerId),
+          desiredState: desiredStateRef,
+          idempotencyKey: `domain-provider-runner:${input.apply.job.jobId}`,
+          mode: "apply",
+        },
+        targetUrl: input.targetUrl,
+      },
+      dependencies,
+    );
+
+    if (!started.lease) {
+      throw new Error("Deployment runtime apply attempt did not acquire a lease.");
+    }
+
+    return {
+      attemptId: started.attempt.attemptId,
+      desiredState: desiredStateRef,
+      leaseToken: started.lease.token,
+      resourceCount: desiredState.desiredState.display.resourceCount,
+      resourcesByKind: desiredState.desiredState.display.resourcesByKind,
+      source: "runner",
+      targetId: desiredStateRef.targetId,
+      writebackStatus: "started",
+    };
+  } catch (error) {
+    if (isDeploymentRuntimeUnsupportedError(error)) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function writeDeploymentApplyPlanIfAvailable(
+  input: {
+    adminToken?: string | null;
+    apply: InstanceDomainProviderApplyReadyResponse;
+    deployment: DeploymentApplyContext | undefined;
+    runnerId: string;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<DeploymentApplyContext | undefined> {
+  if (!input.deployment) {
+    return undefined;
+  }
+
+  await writeFormlessInstanceDeploymentAttemptPlan(
+    {
+      adminToken: input.adminToken,
+      request: {
+        attemptId: input.deployment.attemptId,
+        desiredState: input.deployment.desiredState,
+        runnerId: input.runnerId,
+        summary: deploymentPlanSummaryFromDomainProviderPlan(input.apply.job.plan),
+      },
+      targetUrl: input.targetUrl,
+    },
+    dependencies,
+  );
+
+  return {
+    ...input.deployment,
+    writebackStatus: "planned",
+  };
+}
+
+async function writeDeploymentApplySuccessIfNeeded(
+  input: {
+    adminToken?: string | null;
+    alchemy: AlchemyDomainProviderApplyResult;
+    deployment: DeploymentApplyContext | undefined;
+    plan: DomainProviderPlan;
+    resources: readonly InstanceDomainProviderApplyJobResourceEvidence[];
+    runnerId: string;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<DeploymentApplyContext | undefined> {
+  if (!input.deployment) {
+    return undefined;
+  }
+
+  const deployment = input.deployment;
+
+  if (deployment.leaseToken) {
+    await writeFormlessInstanceDeploymentAttemptSuccess(
+      {
+        adminToken: input.adminToken,
+        request: {
+          alchemy: {
+            app: `formless-domain-${input.plan.instanceId}`,
+            scope: deployment.targetId,
+            stage: input.alchemy.stage,
+          },
+          attemptId: deployment.attemptId,
+          desiredState: deployment.desiredState,
+          evidence: input.resources.map((resource) =>
+            deploymentEvidenceSummaryFromApplyEvidence(resource, deployment.targetId),
+          ),
+          leaseToken: deployment.leaseToken,
+          runnerId: input.runnerId,
+        },
+        targetUrl: input.targetUrl,
+      },
+      dependencies,
+    );
+  }
+
+  return {
+    ...deployment,
+    writebackStatus: "succeeded",
+  };
+}
+
+async function writeDeploymentApplyFailureIfNeeded(
+  input: {
+    adminToken?: string | null;
+    deployment: DeploymentApplyContext | undefined;
+    error: unknown;
+    runnerId: string;
+    targetUrl: string;
+  },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<void> {
+  if (!input.deployment?.leaseToken) {
+    return;
+  }
+
+  await writeFormlessInstanceDeploymentAttemptFailure(
+    {
+      adminToken: input.adminToken,
+      request: {
+        actor: domainProviderRunnerDeploymentActor(input.runnerId),
+        attemptId: input.deployment.attemptId,
+        desiredState: input.deployment.desiredState,
+        leaseToken: input.deployment.leaseToken,
+        runnerId: input.runnerId,
+        summary: deploymentFailureSummaryFromError(input.error),
+      },
+      targetUrl: input.targetUrl,
+    },
+    dependencies,
+  );
 }
 
 async function destroyDomainProviderDeleteTargets(input: {
@@ -517,6 +793,108 @@ function dnsRecordsEvidence(
   };
 }
 
+function bridgedApplyAttemptFromStatus(
+  status: DeploymentStatus,
+  runnerId: string,
+): { attemptId: string; desiredState: DeploymentDesiredStateVersionRef } | undefined {
+  if (
+    status.state !== "in-progress" ||
+    status.mode !== "apply" ||
+    status.actor.runnerId !== runnerId
+  ) {
+    return undefined;
+  }
+
+  return {
+    attemptId: status.attemptId,
+    desiredState: status.desiredState,
+  };
+}
+
+function deploymentDesiredStateRef(
+  desiredState: DeploymentDesiredStateVersion,
+): DeploymentDesiredStateVersionRef {
+  return {
+    hash: desiredState.hash,
+    revision: desiredState.revision,
+    targetId: desiredState.targetId,
+    versionId: desiredState.versionId,
+  };
+}
+
+function deploymentPlanSummaryFromDomainProviderPlan(
+  plan: DomainProviderPlan,
+): DeploymentPlanSummary {
+  return {
+    blockers: plan.blockers.map((blocker) => ({
+      code: blocker.code,
+      ...(blocker.host === undefined ? {} : { logicalId: blocker.host }),
+      message: blocker.message,
+    })),
+    changes: {
+      create: plan.resources.length,
+      delete: 0,
+      noChange: 0,
+      update: 0,
+    },
+    displayText: `${plan.resources.length} domain provider resource${
+      plan.resources.length === 1 ? "" : "s"
+    } planned.`,
+    warnings: [],
+  };
+}
+
+function deploymentEvidenceSummaryFromApplyEvidence(
+  evidence: InstanceDomainProviderApplyJobResourceEvidence,
+  targetId: DeploymentTargetId,
+): DeploymentResourceEvidenceSummary {
+  return {
+    action: deploymentEvidenceActionFromApplyAction(evidence.action),
+    alchemyResourceId: evidence.alchemyResourceId,
+    displayName: evidence.host,
+    kind: evidence.kind,
+    logicalId: evidence.logicalId,
+    providerFamily: "cloudflare",
+    providerResourceIds: providerResourceIdsFromApplyEvidence(evidence),
+    targetId,
+  };
+}
+
+function deploymentEvidenceActionFromApplyAction(
+  action: InstanceDomainProviderApplyJobResourceEvidence["action"],
+): DeploymentEvidenceAction {
+  return action === "overridden" ? "updated" : action;
+}
+
+function providerResourceIdsFromApplyEvidence(
+  evidence: InstanceDomainProviderApplyJobResourceEvidence,
+): string[] {
+  switch (evidence.kind) {
+    case "cloudflare-worker-custom-domain":
+      return [evidence.workerDomainId];
+    case "cloudflare-redirect-rule":
+      return [evidence.redirectRulesetId, evidence.redirectRuleId];
+    case "cloudflare-dns-records":
+      return evidence.dnsRecordIds;
+  }
+}
+
+function deploymentFailureSummaryFromError(error: unknown): DeploymentFailureSummary {
+  return {
+    code: "domain-provider-apply-failed",
+    displayMessage: errorMessage(error),
+  };
+}
+
+function domainProviderRunnerDeploymentActor(runnerId: string): DeploymentActor {
+  return {
+    actorId: "domain-provider.apply",
+    displayName: "Domain provider apply",
+    kind: "runner",
+    runnerId,
+  };
+}
+
 function parseCustomDomainOutput(output: unknown, logicalId: string): Pick<CustomDomain, "id"> {
   if (!isRecord(output) || typeof output.id !== "string" || output.id.trim() === "") {
     throw new Error(`Alchemy CustomDomain "${logicalId}" did not return a provider id.`);
@@ -633,6 +1011,12 @@ function isProviderNotFoundError(error: unknown): boolean {
     message.includes("does not exist") ||
     message.includes("could not find")
   );
+}
+
+function isDeploymentRuntimeUnsupportedError(
+  error: unknown,
+): error is FormlessInstanceTargetRequestError {
+  return error instanceof FormlessInstanceTargetRequestError && error.status === 404;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

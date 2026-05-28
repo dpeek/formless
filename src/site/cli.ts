@@ -1687,12 +1687,35 @@ function formatInstanceDomainProviderRunApplyResult(
     "Instance domain Alchemy apply complete.",
     `Target: ${result.targetUrl}.`,
     `Job: ${result.apply.job.jobId}.`,
+    ...(result.deployment === undefined
+      ? []
+      : [
+          `Desired-state version: ${result.deployment.desiredState.versionId} (revision ${result.deployment.desiredState.revision}).`,
+          `Deployment attempt: ${result.deployment.attemptId}.`,
+          `Deployment target: ${result.deployment.targetId}.`,
+          `Deployment resources: ${formatDeploymentResourceCounts(result.deployment)}.`,
+          `Deployment writeback: ${result.deployment.writebackStatus}.`,
+        ]),
     `Job status: ${result.completion.job.status}.`,
     `Runner: ${result.runnerId}.`,
     `Policy: ${result.apply.plan.policy}.`,
     `Resources: ${result.alchemy.resources.length}.`,
     `Evidence writes: ${result.evidenceCount}.`,
   ].join("\n");
+}
+
+function formatDeploymentResourceCounts(
+  deployment: RunFormlessInstanceDomainProviderApplyResult["deployment"],
+): string {
+  if (deployment === undefined) {
+    return "none";
+  }
+
+  return `${deployment.resourceCount} (custom domains ${
+    deployment.resourcesByKind["cloudflare-worker-custom-domain"] ?? 0
+  }, redirect rules ${
+    deployment.resourcesByKind["cloudflare-redirect-rule"] ?? 0
+  }, DNS records ${deployment.resourcesByKind["cloudflare-dns-records"] ?? 0})`;
 }
 
 function formatInstanceDomainProviderRunDeleteResult(
