@@ -1,11 +1,11 @@
 ## Context
 
-`add-deployment-primitives` introduces a generic deployment runtime with
-desired-state versions, attempts, leases, evidence summaries, drift reports, and
-external deployer writeback. App installs already have a similar control-plane
-shape: stable instance-local identity, package-backed initialization, route
-metadata, owner/editor UI, archives, and CLI workflows. Both areas are currently
-served by custom instance tables and hand-built protocol surfaces.
+The promoted `deployment-runtime` capability defines generic desired-state
+versions, attempts, leases, evidence summaries, drift reports, and external
+deployer writeback. App installs already have a similar control-plane shape:
+stable instance-local identity, package-backed initialization, route metadata,
+owner/editor UI, archives, and CLI workflows. Both areas are currently served
+by custom instance tables and hand-built protocol surfaces.
 
 Formless already has a runtime schema language for flat records, relationships,
 queries, read models, views, screens, mutations, actions, generated UI, and
@@ -60,6 +60,11 @@ model, action, and generated UI contracts.
 Alternative: keep adding custom tables per resource family. That is quicker per
 feature, but it duplicates schema capabilities and hides instance state from the
 same protocols used by generated apps.
+
+Section 1 implementation uses storage identity `instance:control-plane`,
+schema key `instance-control-plane`, and API prefix
+`/api/formless/control-plane` as the stable runtime-owned control-plane
+contract names.
 
 ### Keep app install identity immutable
 
@@ -188,7 +193,7 @@ deployment runtime change.
 
 ## Migration Plan
 
-1. Land after `add-deployment-primitives` has established deployment runtime
+1. Land after the promoted `deployment-runtime` capability has established
    desired-state, attempts, leases, writeback, and status contracts.
 2. Add instance control-plane schema contracts for `appInstall`, `appRoute`, and
    deployment intent records.
@@ -213,14 +218,21 @@ deployment runtime change.
 
 ## Open Questions
 
-- Exact instance control-plane storage identity name.
-- Whether `appInstall` record id equals install id or stores install id as an
-  immutable field.
-- Whether default route records are fully explicit or generated from install
-  records until edited.
 - Which route path edits are allowed in the first implementation.
 - Whether raw lease tokens stay in a small runtime table or are stored only as
   hashes referenced by schema records.
 - Whether deployment history records are append-only by schema metadata or by
   action-only write policy.
 - Which control-plane entities are visible in Builder mode, if any.
+
+## Resolved Section 1 Decisions
+
+- The instance control-plane storage identity is `instance:control-plane`; the
+  source-owned schema key is `instance-control-plane`; the future protocol
+  prefix is `/api/formless/control-plane`.
+- `appInstall` stores `installId`, `packageAppKey`, and `storageIdentity` as
+  immutable fields. Later storage work may choose whether the record id equals
+  `installId`, but the immutable field is always present.
+- Default route records are explicit `appRoute` records. Site installs receive
+  admin, schema, and public Site route records; Tasks and Estii receive admin
+  and schema route records only.

@@ -11,6 +11,8 @@ deployment schema, projection, protocol, and adapter contracts.
 - **THEN** it contains package-local `AGENTS.md`, `package.json`,
   `tsconfig.json`, and `src/` entrypoints for public contracts and supported
   adapters
+- **AND** the package is published as `@dpeek/formless-deploy` with root,
+  `./client`, `./react`, and `./worker` public subpaths
 - **AND** it follows package slice import and documentation boundaries
 
 #### Scenario: Deploy package exports

@@ -1,0 +1,17 @@
+{
+  "name": "@dpeek/formless-deploy",
+  "version": "0.1.0",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./react": "./src/react.tsx",
+    "./worker": "./src/worker.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

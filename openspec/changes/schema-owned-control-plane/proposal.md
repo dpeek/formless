@@ -53,6 +53,9 @@ archives, and CLI protocols to instance management data.
   storage and API identity.
 - `runtime-topology`: Installed app and public Site route resolution can read
   enabled app route records that reference app install records.
+- `deployment-runtime`: Desired-state projection reads schema-owned
+  control-plane intent while preserving exact version, attempt, lease, evidence,
+  drift, and no-secret runtime contracts.
 - `app-schema`: Add schema contracts needed for runtime-owned control-plane
   schemas, immutable identity fields, privileged action exposure, append-only
   history records, and secret references.

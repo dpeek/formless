@@ -11,6 +11,10 @@ records.
 - **THEN** it defines flat records for app installs, app routes, deploy targets,
   provider config references, domain mappings, redirect intent, desired
   resources, deployment attempts, evidence summaries, and drift reports
+- **AND** those records use entity keys `appInstall`, `appRoute`,
+  `deployTarget`, `providerConfigRef`, `domainMapping`, `redirectIntent`,
+  `deployDesiredResource`, `deployAttempt`, `deployEvidenceSummary`, and
+  `deployDriftReport`
 - **AND** relationships between those records are represented through normal
   reference fields
 
@@ -34,6 +38,8 @@ records.
   install identity, package app key, label, status, created time, and updated
   time
 - **AND** install identity and package app key are immutable after creation
+- **AND** the record stores display-safe storage identity such as
+  `app:<installId>` without embedding installed app records
 
 #### Scenario: Installed app data boundary
 
@@ -55,6 +61,8 @@ records that reference `appInstall` records.
   record
 - **AND** a public Site route record is created only when the package supports
   public Site routes
+- **AND** each route record stores route kind, path, optional prefix, surface,
+  package capability, enabled state, created time, and updated time
 
 #### Scenario: Route targets app install
 

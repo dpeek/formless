@@ -1,12 +1,19 @@
 ## 1. Control-Plane Contracts
 
-- [ ] 1.1 Reconcile this change against the promoted `add-deployment-primitives` specs and update capability references if `deployment-runtime` has landed.
-- [ ] 1.2 Define instance control-plane schema record types for `appInstall`, `appRoute`, deploy targets, provider config refs, domain mappings, redirects, desired resources, attempts, evidence summaries, and drift reports.
-- [ ] 1.3 Define app install identity invariants, immutable fields, package app key references, route record shapes, route kinds, enabled state, and route path validation rules.
-- [ ] 1.4 Add runtime-owned instance control-plane schema definition with install, route, domain, deployment, evidence, and drift screens/views/actions.
-- [ ] 1.5 Add `lib/deploy` package scaffold with `AGENTS.md`, `package.json`, `tsconfig.json`, and public root/client/react/worker entrypoints.
-- [ ] 1.6 Define public deploy package types, action ids, actor kinds, secret reference shapes, projection inputs, display-safe evidence types, and projection helpers.
-- [ ] 1.7 Add deterministic projection and hash fixtures for current app route, domain mapping, and redirect intent cases.
+- [x] 1.1 Reconcile this change against the promoted `add-deployment-primitives` specs and update capability references if `deployment-runtime` has landed.
+- [x] 1.2 Define instance control-plane schema record types for `appInstall`, `appRoute`, deploy targets, provider config refs, domain mappings, redirects, desired resources, attempts, evidence summaries, and drift reports.
+- [x] 1.3 Define app install identity invariants, immutable fields, package app key references, route record shapes, route kinds, enabled state, and route path validation rules.
+- [x] 1.4 Add runtime-owned instance control-plane schema definition with install, route, domain, deployment, evidence, and drift screens/views/actions.
+- [x] 1.5 Add `lib/deploy` package scaffold with `AGENTS.md`, `package.json`, `tsconfig.json`, and public root/client/react/worker entrypoints.
+- [x] 1.6 Define public deploy package types, action ids, actor kinds, secret reference shapes, projection inputs, display-safe evidence types, and projection helpers.
+- [x] 1.7 Add deterministic projection and hash fixtures for current app route, domain mapping, and redirect intent cases.
+
+Evidence:
+
+- Files changed: `src/shared/instance-control-plane.ts`, `src/shared/instance-control-plane.test.ts`, `lib/deploy/AGENTS.md`, `lib/deploy/package.json`, `lib/deploy/tsconfig.json`, `lib/deploy/src/types.ts`, `lib/deploy/src/index.ts`, `lib/deploy/src/client.ts`, `lib/deploy/src/react.tsx`, `lib/deploy/src/worker.ts`, `lib/deploy/src/index.test.ts`, `openspec/changes/schema-owned-control-plane/proposal.md`, `openspec/changes/schema-owned-control-plane/design.md`, `openspec/changes/schema-owned-control-plane/specs/instance-control-plane/spec.md`, `openspec/changes/schema-owned-control-plane/specs/package-slices/spec.md`, `openspec/changes/schema-owned-control-plane/specs/deployment-runtime/spec.md`.
+- Checks: `devstate start` ran before implementation; initial status had checks pass and a watch-test service timeout. `devstate check` after implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:05:51.625Z.
+- Smoke: not run; section 1 adds contracts, schema data, package helpers, and tests without wiring generated instance UI behavior.
+- Promotion notes: added a change-local `deployment-runtime` delta because the promoted capability exists; final promoted spec updates remain in section 8.
 
 ## 2. Schema Runtime Capabilities
 
