@@ -54,6 +54,8 @@ export type Env = {
   FORMLESS_MEDIA: R2Bucket;
   FORMLESS_OWNER_SESSION_SECRET?: string;
   FORMLESS_RUNTIME_PROFILE?: string;
+  FORMLESS_TURNSTILE_SECRET_KEY?: string;
+  FORMLESS_TURNSTILE_SITEVERIFY?: Fetcher;
 };
 
 export default {

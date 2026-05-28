@@ -73,6 +73,96 @@ export type ActionRequest = {
   input?: ActionRequestInput;
 };
 
+export type PublicActionRequest = {
+  input: RecordValues;
+  proof: PublicActionProofInput;
+  source?: PublicActionRequestSource;
+  idempotencyKey?: string;
+};
+
+export type PublicActionProofInput = {
+  turnstileToken: string;
+};
+
+export type PublicActionRequestSource = {
+  siteBlockId?: string;
+};
+
+export type PublicActionActor = {
+  mode: "anonymous";
+};
+
+export type PublicActionProof = {
+  kind: "turnstile";
+  token: string;
+  verification?: PublicActionChallengeVerification;
+};
+
+export type PublicActionChallengeVerification = {
+  kind: "turnstile";
+  success: boolean;
+  verifiedAt: string;
+  challengeTs?: string;
+  hostname?: string;
+};
+
+export type PublicActionStorageTarget =
+  | {
+      kind: "schemaKey";
+      packageAppKey: string;
+      sourceSchemaKey: string;
+      apiRoutePrefix: string;
+    }
+  | {
+      kind: "appInstall";
+      installId: string;
+      packageAppKey: string;
+      sourceSchemaKey: string;
+      apiRoutePrefix: string;
+    };
+
+export type PublicActionSource = {
+  actionName: string;
+  host: string;
+  path: string;
+  target: PublicActionStorageTarget;
+  siteBlockId?: string;
+};
+
+export type PublicActionExecutionEnvelope = {
+  actionId: string;
+  actor: PublicActionActor;
+  proof: PublicActionProof;
+  source: PublicActionSource;
+  input: RecordValues;
+  idempotencyKey: string;
+  receivedAt: string;
+};
+
+export type PublicActionEffects = {
+  response: ActionResponse;
+};
+
+export type PublicActionAuditFacts = {
+  actionId: string;
+  accepted: boolean;
+  receivedAt: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+};
+
+export type PublicActionExecutionResult = {
+  envelope: PublicActionExecutionEnvelope;
+  effects?: PublicActionEffects;
+  audit: PublicActionAuditFacts;
+};
+
+export type PublicActionResponse = {
+  actionId: string;
+  cursor: number;
+  status: "accepted";
+};
+
 export type ChangeRow = {
   seq: number;
   mutationId: string;

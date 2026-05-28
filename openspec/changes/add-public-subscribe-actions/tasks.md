@@ -14,13 +14,23 @@ Evidence:
 
 ## 2. Public Action Runtime
 
-- [ ] 2.1 Add public action request and execution envelope types for actor, proof, source, input, idempotency, effects, and audit facts.
-- [ ] 2.2 Add target-scoped public action route selection for schema-key and installed-app API prefixes.
-- [ ] 2.3 Implement public action request parsing with public-safe validation errors and undeclared-field rejection.
-- [ ] 2.4 Add a Turnstile verification boundary that keeps secrets server-side and fails closed when verification or configuration fails.
-- [ ] 2.5 Add public action idempotency so replayed accepted requests return the existing outcome without duplicate records.
-- [ ] 2.6 Add worker tests proving generic `/mutations` and `/actions` remain protected while public action routes can execute only eligible actions.
-- [ ] 2.7 Add mapped public Site host tests for public action routing without exposing admin shell or schema-key admin APIs.
+- [x] 2.1 Add public action request and execution envelope types for actor, proof, source, input, idempotency, effects, and audit facts.
+- [x] 2.2 Add target-scoped public action route selection for schema-key and installed-app API prefixes.
+- [x] 2.3 Implement public action request parsing with public-safe validation errors and undeclared-field rejection.
+- [x] 2.4 Add a Turnstile verification boundary that keeps secrets server-side and fails closed when verification or configuration fails.
+- [x] 2.5 Add public action idempotency so replayed accepted requests return the existing outcome without duplicate records.
+- [x] 2.6 Add worker tests proving generic `/mutations` and `/actions` remain protected while public action routes can execute only eligible actions.
+- [x] 2.7 Add mapped public Site host tests for public action routing without exposing admin shell or schema-key admin APIs.
+
+Evidence:
+
+- Files changed: `src/shared/protocol.ts`, `src/worker/public-actions.ts`, `src/worker/actions.ts`, `src/worker/authority.ts`, `src/worker/index.ts`, `src/worker/public-actions.test.ts`.
+- Decision: public action routes are `POST /api/:schemaKey/public/actions/:actionName` and `POST /api/app-installs/:packageAppKey/:installId/public/actions/:actionName`; generic `/mutations` and `/actions` still use the existing owner/admin write guard.
+- Decision: public responses return only `{ actionId, cursor, status: "accepted" }`; committed record changes stay server-side so later subscription records are not exposed by the public submit response.
+- Decision: this section commits an idempotent no-record public `subscribe` action execution; contact, email, audience, and subscription record effects are owned by section 3.
+- Checks: `devstate check` passed; `./.devstate/status.md` read at `2026-05-28T06:13:03.822Z` with checks ok, web ready, and test watcher pass.
+- Initial status: `devstate start` read at `2026-05-28T06:00:59.645Z` with checks ok, web ready, and test watcher pass; no pre-existing red service failure was present.
+- Smoke: browser subscribe form smoke not run because this section adds the public action API runtime only; section 4 owns rendered subscribe form behavior.
 
 ## 3. Contact Subscription Model
 

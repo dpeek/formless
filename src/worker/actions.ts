@@ -7,6 +7,7 @@ import type {
   RemoveSelectedJoinRecordsActionInput,
   RemoveTreePlacementActionInput,
   CreateMutation,
+  PublicActionExecutionEnvelope,
   RecordValues,
   StoredRecord,
 } from "../shared/protocol.ts";
@@ -55,6 +56,21 @@ type EntityActionExecutionContext<TAction extends EntityActionSchema> = {
   action: TAction;
 };
 
+export type PublicEntityActionRequest = {
+  actionId: string;
+  entity: string;
+  action: string;
+  input: RecordValues;
+  envelope: PublicActionExecutionEnvelope;
+};
+
+type PublicEntityActionExecutionContext<TAction extends EntityActionSchema> = {
+  storage: DurableObjectStorage;
+  request: PublicEntityActionRequest;
+  schema: AppSchema;
+  action: TAction;
+};
+
 type EntityActionCreateAfterCreateHookContext<TAction extends EntityActionSchema> = {
   storage: DurableObjectStorage;
   mutation: CreateMutation;
@@ -71,6 +87,9 @@ type EntityActionKindRuntimeModule<TAction extends EntityActionSchema = EntityAc
     context: EntityActionRequestInputValidationContext<TAction>,
   ) => ActionRequestInput | undefined;
   execute: (context: EntityActionExecutionContext<TAction>) => WriteOutcome<ActionResponse>;
+  executePublic?: (
+    context: PublicEntityActionExecutionContext<TAction>,
+  ) => WriteOutcome<ActionResponse>;
   executeCreateAfterCreateHook: (
     context: EntityActionCreateAfterCreateHookContext<TAction>,
   ) => void;
@@ -128,6 +147,7 @@ const entityActionKindRuntimeModules = {
     capabilities: getEntityActionKindCapabilities("subscribe"),
     validateInput: validateNoActionInput,
     execute: executeSubscribeAction,
+    executePublic: executeSubscribePublicAction,
     executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
 } satisfies EntityActionKindRuntimeModuleMap;
@@ -200,6 +220,30 @@ export function executeEntityActionOutcome(
   }
 
   return getEntityActionKindRuntimeModule(action).execute({ storage, request, schema, action });
+}
+
+export function executePublicEntityActionOutcome(
+  storage: DurableObjectStorage,
+  request: PublicEntityActionRequest,
+  schema: AppSchema,
+): WriteOutcome<ActionResponse> {
+  const action = schema.entities[request.entity]?.actions?.[request.action];
+
+  if (!action) {
+    throw new Error(`Unsupported action "${request.action}".`);
+  }
+
+  const actionModule = getEntityActionKindRuntimeModule(action);
+
+  if (
+    action.access?.actor !== "anonymous" ||
+    !actionModule.capabilities.publicExecution ||
+    !actionModule.executePublic
+  ) {
+    throw new BadRequestError(`Action "${request.action}" is not available for public execution.`);
+  }
+
+  return actionModule.executePublic({ storage, request, schema, action });
 }
 
 export function executeCreateAfterCreateHooks(
@@ -367,6 +411,18 @@ function executeSubscribeAction(
   _context: EntityActionExecutionContext<Extract<EntityActionSchema, { kind: "subscribe" }>>,
 ): never {
   throw new BadRequestError('Action kind "subscribe" must use public action execution.');
+}
+
+function executeSubscribePublicAction(
+  context: PublicEntityActionExecutionContext<Extract<EntityActionSchema, { kind: "subscribe" }>>,
+) {
+  return createRecordsForActionOutcome(
+    context.storage,
+    context.request.actionId,
+    context.request.entity,
+    context.request.action,
+    [],
+  );
 }
 
 function executeCreateMissingJoinRecordsAfterCreateHook(

@@ -34,6 +34,11 @@ import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
+import {
+  executePublicActionRequest,
+  PublicActionError,
+  selectPublicActionRoute,
+} from "./public-actions.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
   private readonly bindings: Env;
@@ -146,6 +151,28 @@ export class FormlessAuthority extends DurableObject<Env> {
         path: route.path,
         searchParams: url.searchParams,
       });
+      const publicActionRoute = selectPublicActionRoute({
+        method: request.method,
+        path: route.path,
+      });
+
+      if (publicActionRoute) {
+        const body = await readJson(request);
+        ensureStorageTables(this.ctx.storage);
+        const { schema } = initializeStorageFromSource(this.ctx.storage, source);
+        const result = await executePublicActionRequest({
+          body,
+          env: this.bindings,
+          identity: route.identity,
+          request,
+          route: publicActionRoute,
+          schema,
+          storage: this.ctx.storage,
+          writes,
+        });
+
+        return jsonResponse(result.body, result.status, result.headers);
+      }
 
       if (operation) {
         const authorization = await authorizeAuthorityOperation(request, operation, this.bindings);
@@ -175,6 +202,10 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       return jsonResponse({ error: "Not found." }, 404);
     } catch (error) {
+      if (error instanceof PublicActionError) {
+        return jsonResponse({ error: error.message }, error.status);
+      }
+
       if (error instanceof BadRequestError) {
         return jsonResponse({ error: error.message }, 400);
       }
