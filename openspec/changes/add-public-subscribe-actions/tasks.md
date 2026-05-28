@@ -1,0 +1,48 @@
+## 1. Schema And Shared Models
+
+- [ ] 1.1 Add shared schema types for action access policy, public input contracts, public action eligibility, and challenge policy.
+- [ ] 1.2 Extend schema parsing to preserve valid action access policies and reject unsupported actor modes, challenge kinds, origin rules, and public input fields.
+- [ ] 1.3 Add subscribe action kind metadata with public execution eligibility while keeping existing generated/admin action behavior stable.
+- [ ] 1.4 Add shared tests for valid anonymous subscribe action policy, invalid policy rejection, missing public input rejection, and ineligible public action kind rejection.
+
+## 2. Public Action Runtime
+
+- [ ] 2.1 Add public action request and execution envelope types for actor, proof, source, input, idempotency, effects, and audit facts.
+- [ ] 2.2 Add target-scoped public action route selection for schema-key and installed-app API prefixes.
+- [ ] 2.3 Implement public action request parsing with public-safe validation errors and undeclared-field rejection.
+- [ ] 2.4 Add a Turnstile verification boundary that keeps secrets server-side and fails closed when verification or configuration fails.
+- [ ] 2.5 Add public action idempotency so replayed accepted requests return the existing outcome without duplicate records.
+- [ ] 2.6 Add worker tests proving generic `/mutations` and `/actions` remain protected while public action routes can execute only eligible actions.
+- [ ] 2.7 Add mapped public Site host tests for public action routing without exposing admin shell or schema-key admin APIs.
+
+## 3. Contact Subscription Model
+
+- [ ] 3.1 Add contact, email address, audience, and subscription entities to the first owning schema with flat reference relationships and minimal fields.
+- [ ] 3.2 Add unique constraints for normalized email address and email-address audience subscription membership.
+- [ ] 3.3 Seed or lazily create the default audience for Site subscribe forms.
+- [ ] 3.4 Implement subscribe action execution to normalize email, upsert contact/email/subscription records, resubscribe unsubscribed records, and preserve source context.
+- [ ] 3.5 Add generated admin views for email addresses, audiences, and subscription status inspection.
+- [ ] 3.6 Add tests for new email subscribe, duplicate subscribe, resubscribe, source context, and raw network data not being required.
+
+## 4. Site Subscribe Form
+
+- [ ] 4.1 Add `subscribeForm` to the Site block type enum, union variant, create/edit/root item views, and branch child policy.
+- [ ] 4.2 Add Site public tree projection for subscribe form action facts, target route, and warning behavior when the action is missing or not public.
+- [ ] 4.3 Add public renderer support for email input, submit state, Turnstile widget site key, success state, and failure state.
+- [ ] 4.4 Add client-side submit handling that posts email, source block id, idempotency key, and Turnstile token to the target public action route.
+- [ ] 4.5 Add renderer and Site tree tests proving secrets and subscriber data are not exposed in public output.
+- [ ] 4.6 Add generated Site authoring tests proving subscribe forms can be created under page and group branches.
+
+## 5. Configuration And Deployment Boundary
+
+- [ ] 5.1 Add runtime configuration for Turnstile site key and secret with server-only secret handling.
+- [ ] 5.2 Add clear behavior for missing Turnstile config in local/test and production-like runtimes.
+- [ ] 5.3 Keep automatic Cloudflare Turnstile widget provisioning out of this change unless existing deploy configuration already provides the required account/token boundary.
+- [ ] 5.4 Document promotion notes for public action routes, action access policy, contact subscription records, and Turnstile configuration.
+
+## 6. Verification
+
+- [ ] 6.1 Run `devstate check` and read `./.devstate/status.md`; fix new red status before finishing.
+- [ ] 6.2 Run browser smoke with `bun browser ...` for the public subscribe form on a Site page.
+- [ ] 6.3 Record whether existing red devstate service failures were present before this change.
+- [ ] 6.4 Automatic finalization promotes shipped facts into shipped specs before the branch is marked ready for review; do not archive the change in the worker.
