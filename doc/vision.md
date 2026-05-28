@@ -7,7 +7,7 @@ Purpose: big-picture product vision for Formless V1.
 This is not shipped behavior. Shipped behavior lives in `openspec/specs/*/spec.md`.
 
 This is not a backlog. Backlog and ideas live in `doc/roadmap.md`. Work starts
-when a GitHub PRD issue or OpenSpec change owns the chunk.
+when a committed OpenSpec change owns the work.
 
 ## North Star
 

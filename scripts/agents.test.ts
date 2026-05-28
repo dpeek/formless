@@ -6,6 +6,8 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   agentStatePaths,
   branchNameForChange,
+  buildLocalOpenSpecFinalizationPrompt,
+  buildLocalOpenSpecImplementationPrompt,
   createChangeLease,
   discoverClaimableOpenSpecChanges,
   ensureAgentStateDirs,
@@ -64,7 +66,7 @@ describe("local agent worker state", () => {
       const second = createChangeLease(paths.root, {
         changeId: "add-thing",
         now: () => new Date("2026-05-28T00:01:00.000Z"),
-        owner: "ralph",
+        owner: "olga",
       });
 
       expect(first.claimed).toBe(true);
@@ -78,8 +80,8 @@ describe("local agent worker state", () => {
       expect(second.lease?.owner).toBe("igor");
       expect(readChangeLease(paths.root, "add-thing")?.owner).toBe("igor");
       expect(findWorkerActiveLease(paths.root, "igor")?.changeId).toBe("add-thing");
-      expect(findWorkerActiveLease(paths.root, "ralph")).toBeNull();
-      expect(releaseChangeLease(paths.root, "add-thing", "ralph")).toBe(false);
+      expect(findWorkerActiveLease(paths.root, "olga")).toBeNull();
+      expect(releaseChangeLease(paths.root, "add-thing", "olga")).toBe(false);
       expect(releaseChangeLease(paths.root, "add-thing", "igor")).toBe(true);
       expect(readChangeLease(paths.root, "add-thing")).toBeNull();
     } finally {
@@ -252,5 +254,32 @@ describe("local agent worker dry-run", () => {
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
+  });
+});
+
+describe("local OpenSpec implementation prompt", () => {
+  it("uses one tasks.md heading section as the implementation unit", () => {
+    const prompt = buildLocalOpenSpecImplementationPrompt("add-thing", "igor");
+
+    expect(prompt).toContain(
+      "Implement one ready `##` task section from OpenSpec change `add-thing`.",
+    );
+    expect(prompt).toContain("Start with the `##` section containing the first unchecked task.");
+    expect(prompt).toContain("until the next `##` heading or end of file.");
+    expect(prompt).toContain("Do not cross into another `##` section.");
+    expect(prompt).toContain("stop with `<blocked/>` and record split guidance");
+    expect(prompt).toContain("Commit the `##` section with a concise message.");
+  });
+});
+
+describe("local OpenSpec finalization prompt", () => {
+  it("keeps review-ready branches promoted but unarchived", () => {
+    const prompt = buildLocalOpenSpecFinalizationPrompt("add-thing", "igor");
+
+    expect(prompt).toContain("Finalize before marking the branch ready for review.");
+    expect(prompt).toContain("reconcile implementation and promoted spec diffs");
+    expect(prompt).toContain("Promote shipped facts into relevant `openspec/specs/*/spec.md`.");
+    expect(prompt).toContain("Do not archive the OpenSpec change.");
+    expect(prompt).not.toContain("openspec archive");
   });
 });

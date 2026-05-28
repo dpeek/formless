@@ -1042,7 +1042,7 @@ async function runClaimedChange(input: {
   }
 
   if (mode === "implement" && signal === "plan-done") {
-    writeLine(input.stdout, `[agents] ${input.change.changeId} ready for finalization`);
+    writeLine(input.stdout, `[agents] ${input.change.changeId} starting automatic finalization`);
     return runClaimedChange(input);
   }
 

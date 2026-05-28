@@ -8,7 +8,7 @@ type SmokeOptions = {
   url?: string;
 };
 
-const defaultSession = "issue21-object-list-smoke";
+const defaultSession = "object-list-smoke";
 
 function usage(): string {
   return [

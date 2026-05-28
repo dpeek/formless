@@ -104,18 +104,28 @@ The system SHALL allow only one active worker lease for a change branch.
 - **WHEN** a change contains multiple ready tasks
 - **THEN** only the lease owner can write to `changes/<change-id>` for that change
 
-### Requirement: Ralph-compatible implementation loop
+### Requirement: Local OpenSpec implementation loop
 
-The system SHALL run each claimed change through a Ralph-compatible loop that ships one ready task at a time and preserves existing quality gates.
+The system SHALL run each claimed change through a local OpenSpec loop that ships one ready `##` task section at a time and preserves existing quality gates.
 
-#### Scenario: Worker ships one task
+#### Scenario: Worker ships one task section
 
 - **WHEN** a claimed change has a ready task
-- **THEN** the worker implements one task, runs `devstate check`, reads `.devstate/status.md`, commits the task, and updates the change artifacts with evidence
+- **THEN** the worker implements the `##` section containing the first unchecked task, runs `devstate check`, reads `.devstate/status.md`, commits the section, and updates the change artifacts with evidence
+
+#### Scenario: Worker stays inside task section
+
+- **WHEN** the selected `##` section is being implemented
+- **THEN** the worker does not implement tasks from another `##` section
+
+#### Scenario: Worker blocks on oversized section
+
+- **WHEN** the selected `##` section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary
+- **THEN** the worker records blocker evidence and split guidance
 
 #### Scenario: Worker smokes app behavior
 
-- **WHEN** a task changes app behavior
+- **WHEN** a task section changes app behavior
 - **THEN** the worker runs the configured browser smoke command and records the evidence
 
 ### Requirement: Finalization before review
@@ -125,7 +135,17 @@ The system SHALL finalize a completed change branch before marking it ready for 
 #### Scenario: Worker finalizes completed change
 
 - **WHEN** all required tasks are shipped or intentionally closed
-- **THEN** the worker rebases on local `main`, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits finalization, and marks the branch ready for review
+- **THEN** the worker rebases on local `main`, reconciles updated change artifacts, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits finalization, and marks the branch ready for review
+
+#### Scenario: Review-ready branch includes promoted specs
+
+- **WHEN** a worker marks `changes/add-thing` ready for review
+- **THEN** the branch includes any promoted `openspec/specs/*/spec.md` changes required by the shipped behavior
+
+#### Scenario: Worker leaves archiving to a separate process
+
+- **WHEN** a worker finalizes a completed change
+- **THEN** the worker does not archive the OpenSpec change
 
 ### Requirement: Idle branch maintenance
 
@@ -149,3 +169,17 @@ The system SHALL leave review-ready change branches for a human to inspect and m
 
 - **WHEN** a worker marks `changes/add-thing` ready for review
 - **THEN** the worker does not merge `changes/add-thing` into `main`
+
+### Requirement: Main-authored feedback
+
+The system SHALL use rebases on local `main` to carry human-authored change feedback into active change branches.
+
+#### Scenario: Worker receives changed docs from main
+
+- **WHEN** local `main` changes the OpenSpec artifacts for a claimed change
+- **THEN** the worker rebases the change branch, reads the updated artifacts, and updates implementation and promoted specs to match
+
+#### Scenario: Worker cannot reconcile feedback
+
+- **WHEN** updated change artifacts conflict with shipped behavior and the resolution is unclear
+- **THEN** the worker records blocker evidence and leaves the branch unmerged

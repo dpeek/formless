@@ -13,8 +13,8 @@ Data stays flat. Compose in query, view, projection, action layer.
 ## Read Levels
 
 - Always: this file.
-- Workstream: assigned GitHub PRD issue, or legacy local PRD only when assigned.
-- Task loop: `doc/agents/ralph-implement.md` or `doc/agents/ralph-finalize.md` when Ralph injects it.
+- Workstream: assigned committed OpenSpec change under `openspec/changes/<change-id>/`.
+- Task loop: `doc/agents/local-openspec-implement.md` or `doc/agents/local-openspec-finalize.md` when `bun agents` injects it.
 - Package scope: nearest package `AGENTS.md`, for example `lib/ui/AGENTS.md`.
 - Capability scope: relevant `openspec/specs/*/spec.md`.
 - Skill config: relevant file in `doc/agents/`.
@@ -22,11 +22,9 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 ## Agent Docs
 
-- `doc/agents/issue-tracker.md`: GitHub issue workflow.
 - `doc/agents/local-agent-workers.md`: local OpenSpec pull worker workflow.
-- `doc/agents/triage-labels.md`: triage labels.
-- `doc/agents/ralph-implement.md`: one-chunk loop prompt body.
-- `doc/agents/ralph-finalize.md`: PRD finalization prompt body.
+- `doc/agents/local-openspec-implement.md`: one-section implementation prompt body.
+- `doc/agents/local-openspec-finalize.md`: automatic finalization prompt body.
 
 ## Capability Specs
 
@@ -53,9 +51,9 @@ Data stays flat. Compose in query, view, projection, action layer.
 - `src/test/`: shared test fixtures.
 - `schema/apps/`: bundled app schemas and seed records.
 - `lib/ui/`: shared browser UI package.
-- `scripts/`: repo scripts, Ralph loop, package build, seed pull.
+- `scripts/`: repo scripts, local agents, package build, seed pull.
 - `openspec/specs/`: shipped capability specs.
-- `doc/agents/`: agent workflow config and Ralph prompt bodies.
+- `doc/agents/`: local agent workflow config and prompt bodies.
 
 ## Core Terms
 
@@ -106,39 +104,35 @@ Data stays flat. Compose in query, view, projection, action layer.
 
 1. Run `devstate start`.
 2. Read `./.devstate/status.md`; fix red status first.
-3. Read workstream issue or assigned legacy PRD.
+3. Read assigned OpenSpec change artifacts.
 4. Read nearest package `AGENTS.md` only when editing inside that package.
 5. Read relevant `openspec/specs/*/spec.md`.
-6. Ship exactly one ready chunk unless user explicitly asks for docs/planning only.
-7. Update only owning workstream body with status, decisions, blockers, evidence, promotion notes.
+6. Ship exactly one ready `##` section from `openspec/changes/<change-id>/tasks.md` unless user explicitly asks for docs/planning only.
+7. Update only owning OpenSpec change artifacts with status, decisions, blockers, evidence, promotion notes.
 8. Run `devstate check`.
 9. Read `./.devstate/status.md`; fix issues.
 10. If app behavior changed, smoke with `bun browser ...`.
-11. End with changed files, checks, PRD status.
+11. End with changed files, checks, OpenSpec change status.
 
 ## Workstream
 
-- New PRDs live in GitHub Issues for `dpeek/formless`.
-- GitHub PRD issue body is canonical.
-- Do not create new local PRD files.
-- Do not add one progress comment per chunk.
-- Chunk statuses: `ready`, `doing`, `shipped`, `blocked`, `closed`.
-- Mark one chunk `doing` at a time for a workstream.
-- Normal PRD agent adds promotion notes; finalization promotes them.
+- Workstreams live in committed OpenSpec changes under `openspec/changes/<change-id>/`.
+- Do not use external systems as queue, lock, or status store.
+- Do not create alternate planning docs.
+- Task statuses are task checkboxes plus recorded evidence in the owning change artifacts.
+- Mark or ship one `##` section at a time for a workstream.
+- Local OpenSpec implementation unit is one ready `##` section in `openspec/changes/<change-id>/tasks.md`.
+- Local OpenSpec workers auto-finalize before review and include promoted specs on the review branch.
 
-## Finalization
+## Local OpenSpec Finalization
 
-When user asks to finalize after review:
+For `bun agents watch <worker-name>`:
 
-- Use `bun ralph finalize --issue <issue>` or `bun ralph finalise --issue <issue>`.
-- Verify required chunks are `shipped` or intentionally `closed`.
-- Rebase on local `main`: `git rebase main`.
-- Resolve clear conflicts; stop when unsure.
-- Promote PRD promotion notes into relevant `openspec/specs/*/spec.md`.
-- Update owning PRD issue body or legacy PRD file.
-- Run `devstate check`; read status; fix issues.
-- Run `devstate stop`.
-- Commit with `Fixes #<issue>` for GitHub PRDs.
+- Finalize automatically when required tasks are shipped or intentionally closed.
+- Rebase on local `main` and reconcile updated change artifacts before marking ready.
+- Promote shipped facts into relevant `openspec/specs/*/spec.md` on the branch.
+- Leave a clean review-ready `changes/<change-id>` branch.
+- Do not archive the OpenSpec change; archiving is a separate process after review and merge.
 - Do not merge unless user asks.
 
 ## Rules

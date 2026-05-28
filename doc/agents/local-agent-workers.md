@@ -13,7 +13,7 @@ Local agent workers pull ready OpenSpec changes from local Git state.
 - Queue source: committed `openspec/changes/<change-id>/` directories on local `main`.
 - Claimable changes must have committed apply artifacts: `proposal.md`, `design.md`, `tasks.md`, and at least one `specs/**/*.md`.
 - Uncommitted OpenSpec files in any worktree are ignored.
-- GitHub Issues are not the queue, lock, or status store for local workers.
+- External systems are not the queue, lock, or status store for local workers.
 
 ## State
 
@@ -52,11 +52,22 @@ The state root is shared by worktrees from the same clone and is not tracked.
 
 ## Work Loop
 
-- The worker runs a Ralph-compatible local OpenSpec prompt.
-- One implementation session ships one ready task.
-- The task session runs `devstate check`, reads `.devstate/status.md`, commits the task, and records evidence in the owning change artifacts.
+- The worker runs a local OpenSpec prompt.
+- One implementation session ships one ready `##` section from `openspec/changes/<change-id>/tasks.md`.
+- The section includes that `##` heading and its task checkboxes until the next `##` heading or end of file.
+- A section session does not cross into another `##` section.
+- If the selected section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, the worker records blocker evidence and split guidance.
+- The section session runs `devstate check`, reads `.devstate/status.md`, commits the section, and records evidence in the owning change artifacts.
 - When all required tasks are shipped or closed, the worker runs finalization before review.
-- Finalization rebases on local `main`, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits, and marks the branch ready for review.
+- Finalization rebases on local `main`, reconciles changed OpenSpec artifacts from `main`, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits, and marks the branch ready for review.
+- Review-ready means the branch is a clean merge candidate with promoted specs included.
+- Workers do not archive OpenSpec changes. Archiving is a separate process after review and merge.
+
+## Feedback Loop
+
+- Humans may provide implementation feedback by editing the committed change artifacts on local `main`.
+- The worker rebases the change branch on local `main`, reads the updated change artifacts, and updates implementation and promoted spec diffs to match.
+- If feedback conflicts with shipped behavior and the resolution is unclear, the worker records blocker evidence instead of guessing.
 
 ## Idle Maintenance
 

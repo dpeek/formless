@@ -6,8 +6,8 @@ Purpose: backlog and ideas for possible next work.
 
 This is not shipped behavior. Shipped behavior lives in `openspec/specs/*/spec.md`.
 
-This is not a commitment. Work starts when a GitHub PRD issue or OpenSpec
-change owns the chunk.
+This is not a commitment. Work starts when a committed OpenSpec change owns
+the work.
 
 ## Current Bias
 
@@ -23,14 +23,14 @@ Why:
 - Formless needs more proof beyond Task, Estii, and Site.
 - Complex app work stress-tests schema, relationships, generated UI, actions, and read models together.
 
-Good next chunks:
+Good next OpenSpec changes:
 
 - Add one richer source app that is not Site-shaped.
 - Exercise multi-screen workflows with related records.
 - Use the existing action kind module seams when adding future schema-declared actions.
 - Improve reference workflows and scoped creation.
 - Expand schema-declared actions for non-Site use cases.
-- Expand query/read-model capability only when a real app chunk needs it.
+- Expand query/read-model capability only when a real app change needs it.
 - Reuse collection result model slices when adding boards, dashboards, charts, or richer result presentations after one concrete app needs them.
 
 Avoid:
@@ -45,7 +45,7 @@ Why:
 - Site is the most complete product path today.
 - Site polish can make authoring and publishing smoother without changing the core model.
 
-Good next chunks:
+Good next OpenSpec changes:
 
 - First-run onboarding for standalone Site projects.
 - Starter content and reset flows that are easier to trust.
@@ -68,7 +68,7 @@ Why:
 - Generated field authoring now centralizes render-ready editor facts, inline field commit helpers,
   and create-field authoring facts.
 
-Good next chunks:
+Good next OpenSpec changes:
 
 - Draft edit sessions with save/cancel.
 - Cross-field validation display.
@@ -91,7 +91,7 @@ Why:
 - Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, core-media-only archive restore, claimable instance workspaces, profile-based custom domains, brokered domain provider apply, provider redirects, explicit provider delete, and domain provider cleanup actions now exist.
 - Shared runtime topology now centralizes runtime profile and route policy facts before auth, permissions, agent routes, or job routes attach to them.
 
-Good next chunks:
+Good next OpenSpec changes:
 
 - Browser management UI for portable app and instance archives.
 - Safer archive review and replacement UX.
@@ -118,7 +118,48 @@ Avoid:
 - Bidirectional sync before local and remote instance identity exists.
 - New Site-specific owned media paths outside core media.
 - Schema composition or true cross-app references before multiple non-media workflows need them.
-- Custom HLS, DASH, captions, transcripts, analytics, or live streaming before a video PRD needs them.
+- Custom HLS, DASH, captions, transcripts, analytics, or live streaming before a video OpenSpec change needs them.
+
+## Direction: Public Actions And Contacts
+
+Why:
+
+- Public subscribe forms are the first concrete need for anonymous writes from
+  deployed Sites.
+- Public, authenticated, admin, system, and agent actions should share one
+  action execution model instead of one-off endpoints.
+- Contacts, email addresses, subscriptions, users, groups, and organizations
+  will become one of the core unified data problems for Formless.
+
+Good next OpenSpec changes:
+
+- Prove `anonymous + Turnstile` public action execution through Site subscribe
+  forms.
+- Reuse public action policy for lead forms, feedback forms, invite requests,
+  waitlists, comments, and other anonymous public inputs.
+- Add authenticated action execution after passkey/session auth exists.
+- Model user accounts as auth identities that can link to contacts instead of
+  replacing contacts.
+- Model organization and group membership as flat join records connected to
+  contacts or user accounts.
+- Promote contact subscription data into a shared CRM/contact capability only
+  after cross-app references or an installed Contacts app needs it.
+- Add topics, segments, unsubscribe, suppression, and preference-center records
+  before outbound broadcasts.
+- Add Cloudflare Email Service sending through queued broadcast jobs after the
+  contact and subscription model can represent consent and suppression.
+- Add Turnstile provisioning through deployment/runtime configuration after the
+  Cloudflare account/token boundary is clear.
+
+Avoid:
+
+- Hard-wiring Turnstile into Site block types instead of action policy.
+- Treating `subscriber` as a durable core entity separate from contacts and
+  email addresses.
+- Sending broadcasts before unsubscribe, suppression, and delivery status are
+  modeled.
+- Building a cross-app contact store before one real workflow needs references
+  across app storage identities.
 
 ## Direction: Extensibility
 
@@ -127,7 +168,7 @@ Why:
 - Some app needs will not fit generated lists, tables, trees, and forms.
 - Extensibility should preserve schema-as-data rather than bypass it.
 
-Good next chunks:
+Good next OpenSpec changes:
 
 - Plugin view registry.
 - Custom result presentations backed by schema-declared views.
