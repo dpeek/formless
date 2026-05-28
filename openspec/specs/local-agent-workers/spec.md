@@ -135,12 +135,18 @@ The system SHALL finalize a completed change branch before marking it ready for 
 #### Scenario: Worker finalizes completed change
 
 - **WHEN** all required tasks are shipped or intentionally closed
-- **THEN** the worker rebases on local `main`, reconciles updated change artifacts, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits finalization, and marks the branch ready for review
+- **THEN** the worker rebases on local `main`, reconciles updated change artifacts, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits finalization, detaches the worker worktree at the final branch tip, and marks the branch ready for review
 
 #### Scenario: Review-ready branch includes promoted specs
 
 - **WHEN** a worker marks `changes/add-thing` ready for review
 - **THEN** the branch includes any promoted `openspec/specs/*/spec.md` changes required by the shipped behavior
+
+#### Scenario: Review-ready branch is not checked out by worker
+
+- **WHEN** a worker marks `changes/add-thing` ready for review
+- **THEN** the worker worktree is detached at the final branch tip
+- **AND** `changes/add-thing` is free to check out from another worktree
 
 #### Scenario: Worker leaves archiving to a separate process
 

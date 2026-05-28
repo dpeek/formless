@@ -581,6 +581,16 @@ export function listLocalChangeBranches(cwd: string, runCommand = defaultCommand
     .sort();
 }
 
+export function detachWorktreeAtBranchTip(
+  cwd: string,
+  branch: string,
+  runCommand = defaultCommandRunner,
+): string {
+  const commit = runOrThrow(cwd, "git", ["rev-parse", "--verify", branch], runCommand).trim();
+  runOrThrow(cwd, "git", ["checkout", "--detach", commit], runCommand);
+  return commit;
+}
+
 function readPromptTemplate(name: "local-openspec-finalize" | "local-openspec-implement"): string {
   return readFileSync(path.join(promptDir, `${name}.md`), "utf8").trim();
 }
@@ -1047,9 +1057,43 @@ async function runClaimedChange(input: {
   }
 
   if (mode === "finalize" && signal === "plan-done") {
+    let detachedCommit: string;
+    try {
+      detachedCommit = detachWorktreeAtBranchTip(
+        input.branchPlan.worktreeDir,
+        input.branchPlan.branch,
+        input.runCommand,
+      );
+    } catch (error) {
+      const blockedEvidence: AgentEvidence = {
+        at: nowIso(input.now),
+        message: `failed to detach worker worktree from ${input.branchPlan.branch}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+      writeWorkerStatus(
+        input.paths.root,
+        makeWorkerStatus({
+          branch: input.branchPlan.branch,
+          currentChange: input.change.changeId,
+          latestEvidence: blockedEvidence,
+          now: input.now,
+          owner: input.options.workerName,
+          state: "blocked",
+        }),
+      );
+      updateChangeLease(
+        input.paths.root,
+        input.change.changeId,
+        { latestEvidence: blockedEvidence, state: "blocked" },
+        input.now,
+      );
+      return 1;
+    }
+
     const readyEvidence: AgentEvidence = {
       at: nowIso(input.now),
-      message: `branch ${input.branchPlan.branch} ready for review`,
+      message: `branch ${input.branchPlan.branch} ready for review; worker detached at ${detachedCommit}`,
     };
     writeWorkerStatus(
       input.paths.root,

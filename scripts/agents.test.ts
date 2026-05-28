@@ -9,6 +9,7 @@ import {
   buildLocalOpenSpecFinalizationPrompt,
   buildLocalOpenSpecImplementationPrompt,
   createChangeLease,
+  detachWorktreeAtBranchTip,
   discoverClaimableOpenSpecChanges,
   ensureAgentStateDirs,
   findWorkerActiveLease,
@@ -199,6 +200,39 @@ describe("local agent worker discovery", () => {
   });
 });
 
+describe("local agent worker review branches", () => {
+  it("detaches the worker worktree at the review-ready branch tip", () => {
+    const calls: Array<{ args: string[]; command: string; cwd: string }> = [];
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      calls.push({ args, command, cwd });
+      if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
+        return { code: 0, stderr: "", stdout: "abc123\n" };
+      }
+      if (command === "git" && args.join(" ") === "checkout --detach abc123") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      return { code: 1, stderr: `unexpected command: ${command} ${args.join(" ")}`, stdout: "" };
+    };
+
+    expect(
+      detachWorktreeAtBranchTip("/repo/tmp/worktree/igor", "changes/add-thing", runCommand),
+    ).toBe("abc123");
+    expect(calls).toEqual([
+      {
+        args: ["rev-parse", "--verify", "changes/add-thing"],
+        command: "git",
+        cwd: "/repo/tmp/worktree/igor",
+      },
+      {
+        args: ["checkout", "--detach", "abc123"],
+        command: "git",
+        cwd: "/repo/tmp/worktree/igor",
+      },
+    ]);
+  });
+});
+
 describe("local agent worker dry-run", () => {
   it("shows igor claim, branch selection, status, and command output", async () => {
     const root = tempDir();
@@ -280,6 +314,9 @@ describe("local OpenSpec finalization prompt", () => {
     expect(prompt).toContain("reconcile implementation and promoted spec diffs");
     expect(prompt).toContain("Promote shipped facts into relevant `openspec/specs/*/spec.md`.");
     expect(prompt).toContain("Do not archive the OpenSpec change.");
+    expect(prompt).toContain(
+      "Detach the worker worktree at the final `changes/add-thing` branch tip before marking ready.",
+    );
     expect(prompt).not.toContain("openspec archive");
   });
 });

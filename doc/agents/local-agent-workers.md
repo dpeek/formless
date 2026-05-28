@@ -59,8 +59,9 @@ The state root is shared by worktrees from the same clone and is not tracked.
 - If the selected section is too large, internally inconsistent, or crosses an unclear architecture, security, storage, public API, or design boundary, the worker records blocker evidence and split guidance.
 - The section session runs `devstate check`, reads `.devstate/status.md`, commits the section, and records evidence in the owning change artifacts.
 - When all required tasks are shipped or closed, the worker runs finalization before review.
-- Finalization rebases on local `main`, reconciles changed OpenSpec artifacts from `main`, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits, and marks the branch ready for review.
+- Finalization rebases on local `main`, reconciles changed OpenSpec artifacts from `main`, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits, detaches the worker worktree at the final branch tip, and marks the branch ready for review.
 - Review-ready means the branch is a clean merge candidate with promoted specs included.
+- Review-ready branches must not remain checked out by worker worktrees.
 - Workers do not archive OpenSpec changes. Archiving is a separate process after review and merge.
 
 ## Feedback Loop
@@ -78,4 +79,5 @@ The state root is shared by worktrees from the same clone and is not tracked.
 ## Human Boundary
 
 - Workers leave review-ready `changes/<change-id>` branches.
+- Workers detach from review-ready branches after finalization.
 - Workers do not merge into `main`.

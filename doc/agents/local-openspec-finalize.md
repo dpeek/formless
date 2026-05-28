@@ -31,8 +31,9 @@ Use the `openspec-apply-change` skill when checking task and context state. The 
 9. Run `devstate check`; read `./.devstate/status.md`; fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually.
 10. Run `devstate stop`.
 11. Commit finalization changes with a concise message. Do not amend existing commits.
-12. Do not merge into `main`.
-13. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.
+12. Detach the worker worktree at the final `changes/{{change_id}}` branch tip before marking ready.
+13. Do not merge into `main`.
+14. Final response must include changed files, checks, OpenSpec change status, and exactly one signal: `<plan-done/>` or `<blocked/>`.
 
 ## Signals
 

@@ -132,6 +132,7 @@ For `bun agents watch <worker-name>`:
 - Rebase on local `main` and reconcile updated change artifacts before marking ready.
 - Promote shipped facts into relevant `openspec/specs/*/spec.md` on the branch.
 - Leave a clean review-ready `changes/<change-id>` branch.
+- Detach the worker worktree from `changes/<change-id>` at the final branch tip before marking ready.
 - Do not archive the OpenSpec change; archiving is a separate process after review and merge.
 - Do not merge unless user asks.
 
