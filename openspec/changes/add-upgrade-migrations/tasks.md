@@ -1,10 +1,16 @@
 ## 1. Upgrade Contracts And Registry
 
-- [ ] 1.1 Run `devstate start` and read `./.devstate/status.md`; fix red status before implementation.
-- [ ] 1.2 Add shared upgrade migration contract types for migration ids, owners, families, checksums, safety classes, package app revisions, schema hashes, and apply evidence.
-- [ ] 1.3 Add deterministic schema hash helpers for bundled source schemas and fixed hash fixtures for Site, Tasks, and Estii.
-- [ ] 1.4 Add migration registry validation for duplicate ids, bad checksums, invalid safety classes, and invalid package revision ranges.
-- [ ] 1.5 Add tests for registry ordering, duplicate rejection, checksum preservation, safety classification, and package revision validation.
+- [x] 1.1 Run `devstate start` and read `./.devstate/status.md`; fix red status before implementation.
+- [x] 1.2 Add shared upgrade migration contract types for migration ids, owners, families, checksums, safety classes, package app revisions, schema hashes, and apply evidence.
+- [x] 1.3 Add deterministic schema hash helpers for bundled source schemas and fixed hash fixtures for Site, Tasks, and Estii.
+- [x] 1.4 Add migration registry validation for duplicate ids, bad checksums, invalid safety classes, and invalid package revision ranges.
+- [x] 1.5 Add tests for registry ordering, duplicate rejection, checksum preservation, safety classification, and package revision validation.
+
+Evidence:
+
+- `grug` 2026-05-28: added `src/shared/upgrade-migrations.ts` and `src/shared/upgrade-migrations.test.ts` for shared contracts, canonical source schema hashing, registry validation, and focused tests.
+- `devstate start` initially reported a red test service because local `tmp/test` was missing; created the ignored temp parent and restarted devstate. `.devstate/status.md` then reported checks ok and services running.
+- `devstate check` after implementation and again after `git rebase main`: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes shared contracts only and no app behavior changed.
 
 ## 2. Runtime Metadata And Package App Facts
 
