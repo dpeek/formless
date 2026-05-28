@@ -6115,12 +6115,13 @@ describe("schema relationships", () => {
 describe("schema entity actions", () => {
   it("exposes module-owned capabilities for every action kind", () => {
     const capabilitiesByKind = {
-      "clear-completed": { createAfterCreateHook: false },
-      "create-missing-join-records": { createAfterCreateHook: true },
-      "create-selected-join-record": { createAfterCreateHook: false },
-      "remove-selected-join-records": { createAfterCreateHook: false },
-      "create-tree-child": { createAfterCreateHook: false },
-      "remove-tree-placement": { createAfterCreateHook: false },
+      "clear-completed": { createAfterCreateHook: false, publicExecution: false },
+      "create-missing-join-records": { createAfterCreateHook: true, publicExecution: false },
+      "create-selected-join-record": { createAfterCreateHook: false, publicExecution: false },
+      "remove-selected-join-records": { createAfterCreateHook: false, publicExecution: false },
+      "create-tree-child": { createAfterCreateHook: false, publicExecution: false },
+      "remove-tree-placement": { createAfterCreateHook: false, publicExecution: false },
+      subscribe: { createAfterCreateHook: false, publicExecution: true },
     } satisfies Record<EntityActionKind, EntityActionCapabilities>;
 
     for (const [kind, capabilities] of Object.entries(capabilitiesByKind)) {
@@ -6136,6 +6137,140 @@ describe("schema entity actions", () => {
       kind: "clear-completed",
       target: { query: "taskCompleted" },
     });
+  });
+
+  it("accepts anonymous subscribe action access and public input", () => {
+    const schema = parseAppSchema(
+      baseSchema({
+        entities: {
+          ...defaultEntities(),
+          subscriber: subscribeEntity(),
+        },
+      }),
+    );
+
+    expect(schema.entities.subscriber?.actions?.subscribe).toEqual({
+      label: "Subscribe",
+      kind: "subscribe",
+      access: {
+        actor: "anonymous",
+        challenge: { kind: "turnstile" },
+        origin: { kind: "same-origin" },
+      },
+      publicInput: {
+        fields: {
+          email: { type: "text", required: true, label: "Email" },
+        },
+      },
+    });
+  });
+
+  it("rejects invalid public action policies and public input fields", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            subscriber: subscribeEntity({
+              subscribe: subscribeAction({
+                access: { ...anonymousPublicAccess(), actor: "authenticated" },
+              }),
+            }),
+          },
+        }),
+      ),
+    ).toThrow('access actor must be "anonymous"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            subscriber: subscribeEntity({
+              subscribe: subscribeAction({
+                access: {
+                  ...anonymousPublicAccess(),
+                  challenge: { kind: "none" },
+                },
+              }),
+            }),
+          },
+        }),
+      ),
+    ).toThrow('challenge kind must be "turnstile"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            subscriber: subscribeEntity({
+              subscribe: subscribeAction({
+                access: {
+                  ...anonymousPublicAccess(),
+                  origin: { kind: "any" },
+                },
+              }),
+            }),
+          },
+        }),
+      ),
+    ).toThrow('origin kind must be "same-origin"');
+
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            subscriber: subscribeEntity({
+              subscribe: subscribeAction({
+                publicInput: {
+                  fields: {
+                    email: { type: "reference", required: true, to: "subscriber" },
+                  },
+                },
+              }),
+            }),
+          },
+        }),
+      ),
+    ).toThrow('publicInput fields.email has unsupported type "reference"');
+  });
+
+  it("rejects anonymous actions without public input", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            ...defaultEntities(),
+            subscriber: subscribeEntity({
+              subscribe: subscribeAction({ publicInput: undefined }),
+            }),
+          },
+        }),
+      ),
+    ).toThrow("with anonymous access must declare publicInput");
+  });
+
+  it("rejects public access on action kinds without public execution", () => {
+    expect(() =>
+      parseAppSchema(
+        baseSchema({
+          entities: {
+            task: {
+              ...defaultEntities().task,
+              actions: {
+                clearCompletedTasks: {
+                  ...defaultEntities().task.actions.clearCompletedTasks,
+                  access: anonymousPublicAccess(),
+                  publicInput: publicEmailInput(),
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow('kind "clear-completed" is not eligible for public execution');
   });
 
   it("rejects invalid action names, labels, kinds, and unsupported keys", () => {
@@ -6627,6 +6762,47 @@ function defaultEntities() {
           target: { query: "taskCompleted" },
         },
       },
+    },
+  };
+}
+
+function subscribeEntity(actions: Record<string, unknown> = { subscribe: subscribeAction() }) {
+  return {
+    label: "Subscriber",
+    fields: {
+      email: { type: "text", required: true, label: "Email" },
+    },
+    mutations: {
+      create: { enabled: false },
+      patch: { enabled: false },
+      delete: { enabled: false },
+    },
+    actions,
+  };
+}
+
+function subscribeAction(overrides: Record<string, unknown> = {}) {
+  return {
+    label: "Subscribe",
+    kind: "subscribe",
+    access: anonymousPublicAccess(),
+    publicInput: publicEmailInput(),
+    ...overrides,
+  };
+}
+
+function anonymousPublicAccess() {
+  return {
+    actor: "anonymous",
+    challenge: { kind: "turnstile" },
+    origin: { kind: "same-origin" },
+  };
+}
+
+function publicEmailInput() {
+  return {
+    fields: {
+      email: { type: "text", required: true, label: "Email" },
     },
   };
 }

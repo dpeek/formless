@@ -76,6 +76,64 @@ export type FieldSchema =
   | EnumFieldSchema
   | ReferenceFieldSchema;
 
+export type ActionAccessActorMode = "anonymous";
+
+export type ActionChallengePolicySchema = {
+  kind: "turnstile";
+};
+
+export type ActionOriginPolicySchema = {
+  kind: "same-origin";
+};
+
+export type ActionAccessPolicySchema = {
+  actor: ActionAccessActorMode;
+  challenge: ActionChallengePolicySchema;
+  origin: ActionOriginPolicySchema;
+};
+
+export type PublicActionTextInputFieldSchema = {
+  type: "text";
+  required: boolean;
+  label?: string;
+};
+
+export type PublicActionBooleanInputFieldSchema = {
+  type: "boolean";
+  required: boolean;
+  label?: string;
+};
+
+export type PublicActionDateInputFieldSchema = {
+  type: "date";
+  required: boolean;
+  label?: string;
+};
+
+export type PublicActionNumberInputFieldSchema = {
+  type: "number";
+  required: boolean;
+  label?: string;
+};
+
+export type PublicActionEnumInputFieldSchema = {
+  type: "enum";
+  required: boolean;
+  label?: string;
+  values: Record<string, EnumValueSchema>;
+};
+
+export type PublicActionInputFieldSchema =
+  | PublicActionTextInputFieldSchema
+  | PublicActionBooleanInputFieldSchema
+  | PublicActionDateInputFieldSchema
+  | PublicActionNumberInputFieldSchema
+  | PublicActionEnumInputFieldSchema;
+
+export type PublicActionInputContractSchema = {
+  fields: Record<string, PublicActionInputFieldSchema>;
+};
+
 export type FieldCommitPolicy = "immediate" | "field-commit";
 
 export type FieldEditor =
@@ -660,44 +718,49 @@ export type EntityActionJoinSchema = {
 
 export type EntityActionCapabilities = {
   createAfterCreateHook: boolean;
+  publicExecution: boolean;
 };
 
-export type ClearCompletedEntityActionSchema = {
+export type EntityActionBaseSchema = {
   label: string;
+  access?: ActionAccessPolicySchema;
+  publicInput?: PublicActionInputContractSchema;
+};
+
+export type ClearCompletedEntityActionSchema = EntityActionBaseSchema & {
   kind: "clear-completed";
   target: EntityActionTargetSchema;
 };
 
-export type CreateMissingJoinRecordsEntityActionSchema = {
-  label: string;
+export type CreateMissingJoinRecordsEntityActionSchema = EntityActionBaseSchema & {
   kind: "create-missing-join-records";
   join: EntityActionJoinSchema;
 };
 
-export type CreateSelectedJoinRecordEntityActionSchema = {
-  label: string;
+export type CreateSelectedJoinRecordEntityActionSchema = EntityActionBaseSchema & {
   kind: "create-selected-join-record";
   relationship: string;
 };
 
-export type RemoveSelectedJoinRecordsEntityActionSchema = {
-  label: string;
+export type RemoveSelectedJoinRecordsEntityActionSchema = EntityActionBaseSchema & {
   kind: "remove-selected-join-records";
   relationship: string;
 };
 
-export type CreateTreeChildEntityActionSchema = {
-  label: string;
+export type CreateTreeChildEntityActionSchema = EntityActionBaseSchema & {
   kind: "create-tree-child";
   relationship: string;
   childField: string;
   orderField?: string;
 };
 
-export type RemoveTreePlacementEntityActionSchema = {
-  label: string;
+export type RemoveTreePlacementEntityActionSchema = EntityActionBaseSchema & {
   kind: "remove-tree-placement";
   relationship: string;
+};
+
+export type SubscribeEntityActionSchema = EntityActionBaseSchema & {
+  kind: "subscribe";
 };
 
 export type EntityActionSchemaByKind = {
@@ -707,6 +770,7 @@ export type EntityActionSchemaByKind = {
   "remove-selected-join-records": RemoveSelectedJoinRecordsEntityActionSchema;
   "create-tree-child": CreateTreeChildEntityActionSchema;
   "remove-tree-placement": RemoveTreePlacementEntityActionSchema;
+  subscribe: SubscribeEntityActionSchema;
 };
 
 export type EntityActionKind = keyof EntityActionSchemaByKind;

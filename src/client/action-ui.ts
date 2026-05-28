@@ -59,6 +59,10 @@ const entityActionUiModules = {
     kind: "remove-tree-placement",
     selectUi: selectDefaultEntityActionUi,
   },
+  subscribe: {
+    kind: "subscribe",
+    selectUi: selectDefaultEntityActionUi,
+  },
 } satisfies EntityActionUiModuleMap;
 
 export function selectEntityActionUi<TAction extends EntityActionSchema>(

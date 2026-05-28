@@ -1,9 +1,16 @@
 ## 1. Schema And Shared Models
 
-- [ ] 1.1 Add shared schema types for action access policy, public input contracts, public action eligibility, and challenge policy.
-- [ ] 1.2 Extend schema parsing to preserve valid action access policies and reject unsupported actor modes, challenge kinds, origin rules, and public input fields.
-- [ ] 1.3 Add subscribe action kind metadata with public execution eligibility while keeping existing generated/admin action behavior stable.
-- [ ] 1.4 Add shared tests for valid anonymous subscribe action policy, invalid policy rejection, missing public input rejection, and ineligible public action kind rejection.
+- [x] 1.1 Add shared schema types for action access policy, public input contracts, public action eligibility, and challenge policy.
+- [x] 1.2 Extend schema parsing to preserve valid action access policies and reject unsupported actor modes, challenge kinds, origin rules, and public input fields.
+- [x] 1.3 Add subscribe action kind metadata with public execution eligibility while keeping existing generated/admin action behavior stable.
+- [x] 1.4 Add shared tests for valid anonymous subscribe action policy, invalid policy rejection, missing public input rejection, and ineligible public action kind rejection.
+
+Evidence:
+
+- Files changed: `src/shared/schema-types.ts`, `src/shared/schema-actions.ts`, `src/shared/schema.test.ts`, `src/client/action-ui.ts`, `src/worker/actions.ts`.
+- Decision: action policy schema keys are `access` and `publicInput`; first supported public policy is `actor: "anonymous"`, `challenge.kind: "turnstile"`, and `origin.kind: "same-origin"`.
+- Checks: `devstate check` passed; `./.devstate/status.md` read at `2026-05-28T05:58:46.511Z` with checks ok, web ready, and test watcher pass.
+- Smoke: not run; this section changes shared schema parsing/action metadata only and does not add a public subscribe form route.
 
 ## 2. Public Action Runtime
 

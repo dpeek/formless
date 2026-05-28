@@ -8,6 +8,9 @@ import {
   parseRequiredNonEmptyString,
 } from "./schema-parse-helpers.ts";
 import type {
+  ActionAccessPolicySchema,
+  ActionChallengePolicySchema,
+  ActionOriginPolicySchema,
   ClearCompletedEntityActionSchema,
   CollectionQuerySchema,
   CreateMissingJoinRecordsEntityActionSchema,
@@ -21,9 +24,13 @@ import type {
   EntityActionSchema,
   EntityActionTargetSchema,
   EntitySchema,
+  PublicActionEnumInputFieldSchema,
+  PublicActionInputContractSchema,
+  PublicActionInputFieldSchema,
   RelationshipSchema,
   RemoveSelectedJoinRecordsEntityActionSchema,
   RemoveTreePlacementEntityActionSchema,
+  SubscribeEntityActionSchema,
 } from "./schema-types.ts";
 
 type EntityActionParseContext = {
@@ -47,35 +54,42 @@ type EntityActionKindModuleMap = {
 const entityActionKindModules = {
   "clear-completed": {
     kind: "clear-completed",
-    capabilities: { createAfterCreateHook: false },
+    capabilities: { createAfterCreateHook: false, publicExecution: false },
     parse: parseClearCompletedEntityAction,
   },
   "create-missing-join-records": {
     kind: "create-missing-join-records",
-    capabilities: { createAfterCreateHook: true },
+    capabilities: { createAfterCreateHook: true, publicExecution: false },
     parse: parseCreateMissingJoinRecordsEntityAction,
   },
   "create-selected-join-record": {
     kind: "create-selected-join-record",
-    capabilities: { createAfterCreateHook: false },
+    capabilities: { createAfterCreateHook: false, publicExecution: false },
     parse: parseCreateSelectedJoinRecordEntityAction,
   },
   "remove-selected-join-records": {
     kind: "remove-selected-join-records",
-    capabilities: { createAfterCreateHook: false },
+    capabilities: { createAfterCreateHook: false, publicExecution: false },
     parse: parseRemoveSelectedJoinRecordsEntityAction,
   },
   "create-tree-child": {
     kind: "create-tree-child",
-    capabilities: { createAfterCreateHook: false },
+    capabilities: { createAfterCreateHook: false, publicExecution: false },
     parse: parseCreateTreeChildEntityAction,
   },
   "remove-tree-placement": {
     kind: "remove-tree-placement",
-    capabilities: { createAfterCreateHook: false },
+    capabilities: { createAfterCreateHook: false, publicExecution: false },
     parse: parseRemoveTreePlacementEntityAction,
   },
+  subscribe: {
+    kind: "subscribe",
+    capabilities: { createAfterCreateHook: false, publicExecution: true },
+    parse: parseSubscribeEntityAction,
+  },
 } satisfies EntityActionKindModuleMap;
+
+const publicActionPolicyKeys = ["access", "publicInput"];
 
 export function getEntityActionKindCapabilities(kind: EntityActionKind): EntityActionCapabilities {
   return entityActionKindModules[kind].capabilities;
@@ -184,7 +198,7 @@ function parseClearCompletedEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind"],
-    ["target"],
+    ["target", ...publicActionPolicyKeys],
   );
 
   if (entity.fields.done?.type !== "boolean") {
@@ -212,6 +226,11 @@ function parseClearCompletedEntityAction(
     label: value.label as string,
     kind: "clear-completed",
     target,
+    ...parseEntityActionPublicOptions(
+      context,
+      value,
+      getEntityActionKindCapabilities("clear-completed"),
+    ),
   };
 }
 
@@ -221,7 +240,12 @@ function parseCreateMissingJoinRecordsEntityAction(
 ): CreateMissingJoinRecordsEntityActionSchema {
   const { actionName, entity, entityName, queries } = context;
 
-  assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, ["label", "kind", "join"]);
+  assertExactKeys(
+    `Entity action "${entityName}.${actionName}"`,
+    value,
+    ["label", "kind", "join"],
+    [...publicActionPolicyKeys],
+  );
 
   const join = parseEntityActionJoin(entityName, actionName, value.join, entity, queries);
   validateCreateMissingJoinRecordDefaults(entityName, actionName, entity, join);
@@ -230,6 +254,11 @@ function parseCreateMissingJoinRecordsEntityAction(
     label: value.label as string,
     kind: "create-missing-join-records",
     join,
+    ...parseEntityActionPublicOptions(
+      context,
+      value,
+      getEntityActionKindCapabilities("create-missing-join-records"),
+    ),
   };
 }
 
@@ -239,11 +268,12 @@ function parseCreateSelectedJoinRecordEntityAction(
 ): CreateSelectedJoinRecordEntityActionSchema {
   const { actionName, entity, entityName, relationships } = context;
 
-  assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
-    "label",
-    "kind",
-    "relationship",
-  ]);
+  assertExactKeys(
+    `Entity action "${entityName}.${actionName}"`,
+    value,
+    ["label", "kind", "relationship"],
+    [...publicActionPolicyKeys],
+  );
 
   const relationshipName = parseRequiredNonEmptyString(
     `Entity action "${entityName}.${actionName}" relationship`,
@@ -261,6 +291,11 @@ function parseCreateSelectedJoinRecordEntityAction(
     label: value.label as string,
     kind: "create-selected-join-record",
     relationship: relationshipName,
+    ...parseEntityActionPublicOptions(
+      context,
+      value,
+      getEntityActionKindCapabilities("create-selected-join-record"),
+    ),
   };
 }
 
@@ -270,11 +305,12 @@ function parseRemoveSelectedJoinRecordsEntityAction(
 ): RemoveSelectedJoinRecordsEntityActionSchema {
   const { actionName, entityName, relationships } = context;
 
-  assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
-    "label",
-    "kind",
-    "relationship",
-  ]);
+  assertExactKeys(
+    `Entity action "${entityName}.${actionName}"`,
+    value,
+    ["label", "kind", "relationship"],
+    [...publicActionPolicyKeys],
+  );
 
   const relationshipName = parseRequiredNonEmptyString(
     `Entity action "${entityName}.${actionName}" relationship`,
@@ -286,6 +322,11 @@ function parseRemoveSelectedJoinRecordsEntityAction(
     label: value.label as string,
     kind: "remove-selected-join-records",
     relationship: relationshipName,
+    ...parseEntityActionPublicOptions(
+      context,
+      value,
+      getEntityActionKindCapabilities("remove-selected-join-records"),
+    ),
   };
 }
 
@@ -299,7 +340,7 @@ function parseCreateTreeChildEntityAction(
     `Entity action "${entityName}.${actionName}"`,
     value,
     ["label", "kind", "relationship", "childField"],
-    ["orderField"],
+    ["orderField", ...publicActionPolicyKeys],
   );
 
   const relationshipName = parseRequiredNonEmptyString(
@@ -360,6 +401,11 @@ function parseCreateTreeChildEntityAction(
     relationship: relationshipName,
     childField: childFieldName,
     ...(orderFieldName === undefined ? {} : { orderField: orderFieldName }),
+    ...parseEntityActionPublicOptions(
+      context,
+      value,
+      getEntityActionKindCapabilities("create-tree-child"),
+    ),
   };
 }
 
@@ -369,11 +415,12 @@ function parseRemoveTreePlacementEntityAction(
 ): RemoveTreePlacementEntityActionSchema {
   const { actionName, entityName, relationships } = context;
 
-  assertExactKeys(`Entity action "${entityName}.${actionName}"`, value, [
-    "label",
-    "kind",
-    "relationship",
-  ]);
+  assertExactKeys(
+    `Entity action "${entityName}.${actionName}"`,
+    value,
+    ["label", "kind", "relationship"],
+    [...publicActionPolicyKeys],
+  );
 
   const relationshipName = parseRequiredNonEmptyString(
     `Entity action "${entityName}.${actionName}" relationship`,
@@ -385,7 +432,264 @@ function parseRemoveTreePlacementEntityAction(
     label: value.label as string,
     kind: "remove-tree-placement",
     relationship: relationshipName,
+    ...parseEntityActionPublicOptions(
+      context,
+      value,
+      getEntityActionKindCapabilities("remove-tree-placement"),
+    ),
   };
+}
+
+function parseSubscribeEntityAction(
+  context: EntityActionParseContext,
+  value: Record<string, unknown>,
+): SubscribeEntityActionSchema {
+  const { actionName, entityName } = context;
+
+  assertExactKeys(
+    `Entity action "${entityName}.${actionName}"`,
+    value,
+    ["label", "kind"],
+    [...publicActionPolicyKeys],
+  );
+
+  return {
+    label: value.label as string,
+    kind: "subscribe",
+    ...parseEntityActionPublicOptions(context, value, getEntityActionKindCapabilities("subscribe")),
+  };
+}
+
+function parseEntityActionPublicOptions(
+  context: EntityActionParseContext,
+  value: Record<string, unknown>,
+  capabilities: EntityActionCapabilities,
+): Pick<EntityActionSchema, "access" | "publicInput"> {
+  const actionContext = `Entity action "${context.entityName}.${context.actionName}"`;
+  const access = parseOptionalActionAccessPolicy(`${actionContext} access`, value.access);
+  const publicInput = parseOptionalPublicActionInputContract(
+    `${actionContext} publicInput`,
+    value.publicInput,
+  );
+
+  if (publicInput !== undefined && access === undefined) {
+    throw new Error(`${actionContext} publicInput requires access.`);
+  }
+
+  if (access !== undefined) {
+    if (!capabilities.publicExecution) {
+      throw new Error(
+        `${actionContext} kind "${String(value.kind)}" is not eligible for public execution.`,
+      );
+    }
+
+    if (publicInput === undefined) {
+      throw new Error(`${actionContext} with anonymous access must declare publicInput.`);
+    }
+  }
+
+  return {
+    ...(access === undefined ? {} : { access }),
+    ...(publicInput === undefined ? {} : { publicInput }),
+  };
+}
+
+function parseOptionalActionAccessPolicy(
+  context: string,
+  value: unknown,
+): ActionAccessPolicySchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["actor", "challenge", "origin"]);
+
+  if (value.actor !== "anonymous") {
+    throw new Error(`${context} actor must be "anonymous".`);
+  }
+
+  return {
+    actor: "anonymous",
+    challenge: parseActionChallengePolicy(`${context} challenge`, value.challenge),
+    origin: parseActionOriginPolicy(`${context} origin`, value.origin),
+  };
+}
+
+function parseActionChallengePolicy(context: string, value: unknown): ActionChallengePolicySchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["kind"]);
+
+  if (value.kind !== "turnstile") {
+    throw new Error(`${context} kind must be "turnstile".`);
+  }
+
+  return { kind: "turnstile" };
+}
+
+function parseActionOriginPolicy(context: string, value: unknown): ActionOriginPolicySchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["kind"]);
+
+  if (value.kind !== "same-origin") {
+    throw new Error(`${context} kind must be "same-origin".`);
+  }
+
+  return { kind: "same-origin" };
+}
+
+function parseOptionalPublicActionInputContract(
+  context: string,
+  value: unknown,
+): PublicActionInputContractSchema | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  assertExactKeys(context, value, ["fields"]);
+
+  return {
+    fields: parsePublicActionInputFields(`${context} fields`, value.fields),
+  };
+}
+
+function parsePublicActionInputFields(
+  context: string,
+  value: unknown,
+): Record<string, PublicActionInputFieldSchema> {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error(`${context} must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([fieldName, field]) => {
+      if (fieldName.trim() === "") {
+        throw new Error(`${context} names must be non-empty.`);
+      }
+
+      return [fieldName, parsePublicActionInputField(`${context}.${fieldName}`, field)];
+    }),
+  );
+}
+
+function parsePublicActionInputField(
+  context: string,
+  value: unknown,
+): PublicActionInputFieldSchema {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  if (typeof value.required !== "boolean") {
+    throw new Error(`${context} must declare whether it is required.`);
+  }
+
+  const label = parsePublicActionInputFieldLabel(`${context} label`, value.label);
+
+  if (value.type === "text") {
+    assertExactKeys(context, value, ["type", "required"], ["label"]);
+    return { type: "text", required: value.required, ...(label === undefined ? {} : { label }) };
+  }
+
+  if (value.type === "boolean") {
+    assertExactKeys(context, value, ["type", "required"], ["label"]);
+    return {
+      type: "boolean",
+      required: value.required,
+      ...(label === undefined ? {} : { label }),
+    };
+  }
+
+  if (value.type === "date") {
+    assertExactKeys(context, value, ["type", "required"], ["label"]);
+    return { type: "date", required: value.required, ...(label === undefined ? {} : { label }) };
+  }
+
+  if (value.type === "number") {
+    assertExactKeys(context, value, ["type", "required"], ["label"]);
+    return {
+      type: "number",
+      required: value.required,
+      ...(label === undefined ? {} : { label }),
+    };
+  }
+
+  if (value.type === "enum") {
+    assertExactKeys(context, value, ["type", "required", "values"], ["label"]);
+    return {
+      type: "enum",
+      required: value.required,
+      values: parsePublicActionEnumInputValues(`${context} values`, value.values),
+      ...(label === undefined ? {} : { label }),
+    };
+  }
+
+  throw new Error(`${context} has unsupported type "${String(value.type)}".`);
+}
+
+function parsePublicActionInputFieldLabel(context: string, value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${context} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function parsePublicActionEnumInputValues(
+  context: string,
+  value: unknown,
+): PublicActionEnumInputFieldSchema["values"] {
+  if (!isRecord(value)) {
+    throw new Error(`${context} must be an object.`);
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error(`${context} must not be empty.`);
+  }
+
+  return Object.fromEntries(
+    entries.map(([enumValue, enumValueSchema]) => {
+      if (enumValue.trim() === "") {
+        throw new Error(`${context} keys must be non-empty.`);
+      }
+
+      if (!isRecord(enumValueSchema)) {
+        throw new Error(`${context}.${enumValue} must be an object.`);
+      }
+
+      assertExactKeys(`${context}.${enumValue}`, enumValueSchema, ["label"]);
+
+      const label = enumValueSchema.label;
+      if (typeof label !== "string" || label.trim() === "") {
+        throw new Error(`${context}.${enumValue} label must be a non-empty string.`);
+      }
+
+      return [enumValue, { label }];
+    }),
+  );
 }
 
 function parseEntityActionJoin(

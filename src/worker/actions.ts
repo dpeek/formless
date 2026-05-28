@@ -123,6 +123,13 @@ const entityActionKindRuntimeModules = {
     execute: executeRemoveTreePlacementAction,
     executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
   },
+  subscribe: {
+    kind: "subscribe",
+    capabilities: getEntityActionKindCapabilities("subscribe"),
+    validateInput: validateNoActionInput,
+    execute: executeSubscribeAction,
+    executeCreateAfterCreateHook: rejectCreateAfterCreateHook,
+  },
 } satisfies EntityActionKindRuntimeModuleMap;
 
 export function executeEntityAction(
@@ -354,6 +361,12 @@ function executeRemoveTreePlacementAction(
   );
 
   return executeActionEffect(context.storage, context.request, [record]);
+}
+
+function executeSubscribeAction(
+  _context: EntityActionExecutionContext<Extract<EntityActionSchema, { kind: "subscribe" }>>,
+): never {
+  throw new BadRequestError('Action kind "subscribe" must use public action execution.');
 }
 
 function executeCreateMissingJoinRecordsAfterCreateHook(
