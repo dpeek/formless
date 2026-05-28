@@ -48,8 +48,42 @@
 
 ## 7. Promotion Notes
 
-- [ ] 7.1 Record promotion notes for deployment runtime primitives, domain-provider compatibility, CLI status behavior, and Alchemy ownership boundary in this change.
-- [ ] 7.2 Do not promote global docs until the implementation has been reviewed and a finalization/doc-steward pass is requested.
+- [x] 7.1 Record promotion notes for deployment runtime primitives, domain-provider compatibility, CLI status behavior, and Alchemy ownership boundary in this change.
+- [x] 7.2 Do not promote global docs until the implementation has been reviewed and a finalization/doc-steward pass is requested.
+
+Promotion notes:
+
+- Deployment runtime primitives: promote the change spec
+  `openspec/changes/add-deployment-primitives/specs/deployment-runtime/spec.md`
+  as the new global `deployment-runtime` capability. Source evidence:
+  `src/shared/deployment-runtime.ts`, `src/shared/deployment-runtime.test.ts`,
+  `src/worker/deployment-runtime-state.ts`,
+  `src/worker/deployment-runtime-state.test.ts`,
+  `src/worker/deployment-runtime-api.ts`, and
+  `src/worker/deployment-runtime-api.test.ts`.
+- Domain-provider compatibility: merge the custom-domain delta into
+  `openspec/specs/custom-domains/spec.md` after review. Source evidence:
+  `src/worker/deployment-runtime-projection.ts`,
+  `src/worker/domain-provider-api.ts`, and
+  `src/worker/domain-provider-api.test.ts`.
+- CLI status behavior: merge the Site CLI delta into
+  `openspec/specs/site-cli-publish/spec.md` after review. Source evidence:
+  `src/site/instance-target-client.ts`, `src/site/domain-provider-runner.ts`,
+  `src/site/domain-provider-runner.test.ts`, `src/site/cli.ts`, and
+  `src/site/cli.test.ts`.
+- Alchemy ownership boundary: promote only the reviewed facts that Formless
+  stores desired-state versions, attempts, leases, drift reports, display
+  status, evidence summaries, provider ids needed for audit or cleanup, and
+  Alchemy app/stage/scope pointers; Alchemy remains the owner of provider
+  reads, diffs, applies, destroys, and provider resource-state persistence.
+  Source evidence: `openspec/changes/add-deployment-primitives/design.md`,
+  `src/shared/deployment-runtime.ts`, `src/worker/deployment-runtime-api.test.ts`,
+  and `src/site/domain-provider-runner.test.ts`.
+- Global docs/specs: no files under `openspec/specs/` are promoted in this
+  implementation section; promotion is reserved for reviewed finalization or a
+  requested doc-steward pass.
+- 7 check: `devstate check` passed; evidence in `.devstate/status.md`.
+- 7 smoke: Not run; change artifact-only section with no visible app behavior.
 
 ## Evidence
 
