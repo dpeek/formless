@@ -33,12 +33,22 @@ Evidence:
 
 ## 3. WebAuthn Ceremony APIs
 
-- [ ] 3.1 Add registration options and registration verify handlers under `/api/formless/passkeys/register/*`.
-- [ ] 3.2 Require valid setup capability before first-owner registration options are created.
-- [ ] 3.3 Verify registration responses against the stored challenge, canonical origin, relying-party id, and setup capability.
-- [ ] 3.4 Add login options and login verify handlers under `/api/formless/passkeys/login/*`.
-- [ ] 3.5 Verify login assertions against the stored challenge, canonical origin, relying-party id, owner id, credential public key, and authenticator counter.
-- [ ] 3.6 Add worker API tests for successful registration, invalid registration, successful login, invalid login, challenge replay, wrong origin, wrong RP id, and wrong credential id.
+- [x] 3.1 Add registration options and registration verify handlers under `/api/formless/passkeys/register/*`.
+- [x] 3.2 Require valid setup capability before first-owner registration options are created.
+- [x] 3.3 Verify registration responses against the stored challenge, canonical origin, relying-party id, and setup capability.
+- [x] 3.4 Add login options and login verify handlers under `/api/formless/passkeys/login/*`.
+- [x] 3.5 Verify login assertions against the stored challenge, canonical origin, relying-party id, owner id, credential public key, and authenticator counter.
+- [x] 3.6 Add worker API tests for successful registration, invalid registration, successful login, invalid login, challenge replay, wrong origin, wrong RP id, and wrong credential id.
+
+Evidence:
+
+- Files changed: `src/worker/owner-passkeys.ts`, `src/worker/owner-passkeys.test.ts`, `src/worker/index.ts`, `src/worker/authority.ts`.
+- Checks: `devstate check` passed; `./.devstate/status.md` shows checks ok and services running at 2026-05-28T07:06:45.587Z.
+- API decision: passkey ceremony paths forward to the instance Authority; missing auth config fails closed, registration options require a valid setup capability, registration/login verify consume stored one-time challenges before WebAuthn verification, and login verify issues the existing owner session cookie after credential counter/fact updates.
+- Registration decision: registration verify completes the owner and first credential from the verified registration response; default app install initialization and setup-route/session integration remain in section 4.
+- Worker API tests: `src/worker/owner-passkeys.test.ts` uses a signed virtual WebAuthn authenticator and covers successful registration, invalid registration, successful login, invalid login, challenge replay, wrong origin, wrong RP id, and wrong credential id.
+- Browser smoke: `bun browser --session ooga-passkey-smoke --ignore-https-errors open https://add-owner-passkey-auth.formless.local` and `bun browser --session ooga-passkey-smoke --ignore-https-errors snapshot -i` loaded the instance shell; full first-owner passkey setup/login browser smoke remains section 7 after browser routes and mapped-host behavior ship.
+- Promotion note: finalization should promote passkey ceremony endpoints, one-time challenge verification, login credential verification, and owner session issuance facts.
 
 ## 4. Owner Setup And Session Integration
 

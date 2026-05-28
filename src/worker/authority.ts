@@ -32,6 +32,7 @@ import {
   launchFixtureStorageSourceForIdentity,
 } from "./launch-fixtures.ts";
 import { handleOwnerSetupDurableObjectRequest } from "./owner-setup.ts";
+import { handleOwnerPasskeyDurableObjectRequest } from "./owner-passkeys.ts";
 import { handleInstanceDomainProviderDurableObjectRequest } from "./domain-provider-api.ts";
 import { handleInstanceDomainMappingsDurableObjectRequest } from "./instance-domain-mappings.ts";
 import { handleInstanceDeploymentRuntimeDurableObjectRequest } from "./deployment-runtime-api.ts";
@@ -79,6 +80,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (instanceUpgradeStatusResponse) {
       return instanceUpgradeStatusResponse;
+    }
+
+    const ownerPasskeyResponse = await handleOwnerPasskeyDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (ownerPasskeyResponse) {
+      return ownerPasskeyResponse;
     }
 
     const instanceDomainMappingsResponse = await handleInstanceDomainMappingsDurableObjectRequest(

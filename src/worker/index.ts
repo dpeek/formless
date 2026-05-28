@@ -22,6 +22,7 @@ import {
 import { mappedAppHostFromDomainMapping } from "./mapped-app-host.ts";
 import { mappedSiteHostFromDomainMapping } from "./mapped-site-host.ts";
 import { handleOwnerSetupApiRequest } from "./owner-setup.ts";
+import { handleOwnerPasskeyApiRequest } from "./owner-passkeys.ts";
 import { handlePublishedSiteIndexingRequest } from "./public-indexing.ts";
 import {
   areSchemaKeyApiRoutesEnabledForRequest,
@@ -132,6 +133,12 @@ export default {
 
     if (ownerSetupResponse) {
       return ownerSetupResponse;
+    }
+
+    const ownerPasskeyResponse = await handleOwnerPasskeyApiRequest(request, env);
+
+    if (ownerPasskeyResponse) {
+      return ownerPasskeyResponse;
     }
 
     const archiveResponse = await handleInstanceArchiveApiRequest(request, env);
