@@ -3587,7 +3587,7 @@ describe("Formless Site CLI", () => {
 });
 
 async function makeTempDir(): Promise<string> {
-  const tempDir = await mkdtemp(path.resolve(".site-cli-test-"));
+  const tempDir = await mkdtemp(path.resolve("tmp/test/site-cli-test-"));
 
   tempDirs.push(tempDir);
   return tempDir;

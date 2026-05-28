@@ -15,9 +15,8 @@ change owns the chunk.
 - Treat installed app identity as the product app shape.
 - Keep Site polish small unless it unlocks real publishing use.
 - Keep data flat; compose in view/query layer.
-- Promote shipped facts to OpenSpec specs after a workstream lands.
 
-## Direction: Complex App Support
+## Complex Apps
 
 Why:
 
@@ -39,7 +38,7 @@ Avoid:
 - General platform abstraction without a source app forcing it.
 - Deep computed graph work before simpler read-model gaps are exhausted.
 
-## Direction: Site Polish
+## Site
 
 Why:
 
@@ -83,7 +82,7 @@ Avoid:
 
 - One-off UI fixes that cannot be expressed through schema or shared generated primitives.
 
-## Direction: Runtime Productization
+## Runtime
 
 Why:
 
@@ -140,20 +139,12 @@ Avoid:
 
 - Arbitrary custom React escape hatches as the first extensibility story.
 
-## Direction: Docs And Examples
+## Deployment
 
-Why:
+- migrate-domain-runner-to-deployments: CLI run-apply uses generic attempt APIs directly.
+- add-wildcard-ingress: Add Ingress + runtime HostRoute coverage rules.
+- retire-direct-domain-fallback: Remove duplicate direct Cloudflare apply path after the runner path is proven.
 
-- Project memory is useful only if agents and humans can find the right facts.
-- Examples are the clearest way to explain the runtime.
+## Media
 
-Good next chunks:
-
-- Keep `openspec/specs/` as the shipped behavior source.
-- Retire legacy PRDs after facts move into specs.
-- Add example-led docs from real source apps.
-- Keep `doc/roadmap.md` clear when old PRD candidates have since shipped.
-
-Avoid:
-
-- Strategy prose in capability specs.
+- media-video-support: add support for uploading and serving video using cloudflare's video APIs and player
