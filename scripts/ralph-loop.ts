@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = process.cwd();
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const ralphPromptDir = path.resolve(scriptDir, "..", "doc", "agents");
 const githubRepo = "dpeek/formless";
 const ralphRunningLabel = "ralph-running";
 const excludedPickLabels = new Set([
@@ -106,7 +108,7 @@ export function usage(): string {
     "       bun ralph finalise --issue <number> [options]",
     "",
     "Runs Codex CLI repeatedly, one PRD chunk per invocation, until implementation is ready for finalization or blocked.",
-    "Use finalize/finalise after review to promote docs and create the closing PRD commit.",
+    "Use finalize/finalise after review to promote specs and create the closing PRD commit.",
     "",
     "Options:",
     "  --issue <number>      Use a GitHub PRD issue as the assigned PRD.",
@@ -123,7 +125,6 @@ export function usage(): string {
     "  -h, --help             Show this help.",
     "",
     "Example:",
-    "  bun ralph ./prd/08-entity-action-module.md --worktree --max 6",
     "  bun ralph --issue 2 --worktree",
     "  bun ralph --pick --worktree",
     "  bun ralph finalize --issue 24 --worktree",
@@ -885,6 +886,23 @@ function workflowStartInstruction(action: "command" | "loop", allowDirtyStart: b
   return `Confirm the ${action} started you from a clean worktree. Stop with \`<blocked/>\` if it did not.`;
 }
 
+function readRalphPromptTemplate(name: "ralph-finalize" | "ralph-implement"): string {
+  return readFileSync(path.join(ralphPromptDir, `${name}.md`), "utf8").trim();
+}
+
+function renderRalphPromptTemplate(
+  template: string,
+  values: Record<"assigned_display" | "assignment" | "update_target" | "workflow_start", string>,
+): string {
+  let rendered = template;
+
+  for (const [key, value] of Object.entries(values)) {
+    rendered = rendered.replaceAll(`{{${key}}}`, value);
+  }
+
+  return rendered;
+}
+
 export function buildPrompt(
   source: PrdSource,
   workspace: Workspace,
@@ -907,31 +925,12 @@ export function buildPrompt(
           `Update only ${source.updateTarget} with status, decisions, blockers, evidence, and promotion notes.`,
         ];
 
-  return [
-    `Implement the next chunk of ${assignedDisplay}.`,
-    "",
-    "You are one PRD-chunk agent inside a ralph loop. Ship exactly one ready chunk, then stop.",
-    "",
-    ...assignment,
-    "",
-    "Workflow:",
-    `0. ${workflowStartInstruction("loop", allowDirtyStart)}`,
-    "1. Run `devstate start`.",
-    "2. Read `doc/README.md`, `CONTEXT.md`, `doc/current.md`, `doc/roadmap.md`, relevant `doc/topics/*.md`, and the assigned PRD context.",
-    "3. Select the next ready chunk from the assigned PRD. Do not take chunks marked doing by another active agent.",
-    "4. Implement only that chunk. Preserve user changes. Keep data model flat; compose in view/query layer.",
-    `5. Update only ${source.updateTarget} with status, decisions, blockers, evidence, and promotion notes.`,
-    "6. Run `devstate check`, read `./.devstate/status.md`, and fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually; devstate owns those outputs.",
-    "7. If app behavior changed, smoke it with `bun browser ...` (`agent-browser`). Do not block on Codex IAB Browser Use in CLI loops.",
-    "8. Rebase the current branch on local `main` before the final commit. Use `git rebase main`; do not use `origin/main` unless the user explicitly asks. Preserve your iteration changes with non-interactive git commands, and stop with `<blocked/>` on conflicts.",
-    "9. Commit the chunk with a concise message. Do not amend existing commits. Do not include `Fixes #...`; PRD finalization creates the closing commit.",
-    "10. Final response must include changed files, checks, PRD status, and exactly one signal: `<task-done/>`, `<plan-done/>`, or `<blocked/>`.",
-    "",
-    "Loop contract:",
-    "- Output `<task-done/>` when one chunk shipped and chunks remain.",
-    "- Output `<plan-done/>` when implementation chunks are complete and the PRD is ready for finalization.",
-    "- Output `<blocked/>` when blocked; include the blocker evidence and likely next focus.",
-  ].join("\n");
+  return renderRalphPromptTemplate(readRalphPromptTemplate("ralph-implement"), {
+    assigned_display: assignedDisplay,
+    assignment: assignment.join("\n"),
+    update_target: source.updateTarget,
+    workflow_start: workflowStartInstruction("loop", allowDirtyStart),
+  });
 }
 
 export function buildFinalizationPrompt(
@@ -957,31 +956,12 @@ export function buildFinalizationPrompt(
           `Update only ${source.updateTarget} with finalization status, evidence, and any remaining promotion notes.`,
         ];
 
-  return [
-    `Finalize ${assignedDisplay}.`,
-    "",
-    "You are a PRD finalization agent inside Ralph. This is an after-review cleanup pass, not a normal implementation chunk.",
-    "",
-    ...assignment,
-    "",
-    "Workflow:",
-    `0. ${workflowStartInstruction("command", allowDirtyStart)}`,
-    "1. Run `devstate start`.",
-    "2. Read `doc/README.md`, `CONTEXT.md`, `doc/current.md`, `doc/roadmap.md`, relevant `doc/topics/*.md`, and the assigned PRD context.",
-    "3. Verify all required chunks are `shipped` or intentionally `closed`, and promotion notes are ready. Stop with `<blocked/>` if the PRD is not ready for finalization.",
-    "4. Rebase the current branch on local `main` before the docs/final commit. Use `git rebase main`; do not use `origin/main` unless the user explicitly asks. Preserve reviewed work with non-interactive git commands. Resolve rebase conflicts when the resolution is clear; stop with `<blocked/>` only when unsure how to resolve them.",
-    "5. Promote PRD promotion notes into `doc/current.md`, `doc/roadmap.md`, and relevant `doc/topics/*.md`. Keep topic docs short, concrete, and source-faithful.",
-    `6. Update ${source.updateTarget} so status and finalization are complete, latest evidence is recorded, and consumed promotion notes are marked or removed.`,
-    "7. Run `devstate check`, read `./.devstate/status.md`, and fix issues. Do not run `vp test`, `vp check`, `bun test`, or `bun check` manually; devstate owns those outputs.",
-    "8. Run `devstate stop`.",
-    "9. Commit the finalization changes with a concise message. Do not amend existing commits.",
-    "10. Do not merge unless the user explicitly asked for a merge.",
-    "11. Final response must include changed files, checks, PRD status, and exactly one signal: `<plan-done/>` or `<blocked/>`.",
-    "",
-    "Finalization contract:",
-    "- Output `<plan-done/>` when PRD finalization is complete.",
-    "- Output `<blocked/>` when blocked; include the blocker evidence and likely next focus.",
-  ].join("\n");
+  return renderRalphPromptTemplate(readRalphPromptTemplate("ralph-finalize"), {
+    assigned_display: assignedDisplay,
+    assignment: assignment.join("\n"),
+    update_target: source.updateTarget,
+    workflow_start: workflowStartInstruction("command", allowDirtyStart),
+  });
 }
 
 function shellQuote(value: string): string {

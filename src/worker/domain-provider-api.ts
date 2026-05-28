@@ -2647,14 +2647,14 @@ function providerTableDefinition(
   storage: DurableObjectStorage,
   table: "instance_domain_provider_applied_resources" | "instance_domain_provider_audit_events",
 ): string | undefined {
-  for (const row of storage.sql.exec<{ sql: string | null }>(
-    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
-    table,
-  )) {
-    return row.sql ?? undefined;
-  }
-
-  return undefined;
+  return (
+    storage.sql
+      .exec<{ sql: string | null }>(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        table,
+      )
+      .toArray()[0]?.sql ?? undefined
+  );
 }
 
 function applyBlockedResponse(

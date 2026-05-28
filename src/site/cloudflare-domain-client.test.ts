@@ -233,6 +233,13 @@ describe("Cloudflare domain API client", () => {
                   name: "dpeek.com",
                   type: "TXT",
                 },
+                {
+                  content: "100::",
+                  id: "dns-placeholder-1",
+                  name: "dpeek.com",
+                  proxied: true,
+                  type: "AAAA",
+                },
               ]
             : [],
         listWorkerRoutes: async () => [],
@@ -248,6 +255,7 @@ describe("Cloudflare domain API client", () => {
       dnsRecords: [
         { type: "MX", content: "mx01.mail.icloud.com" },
         { type: "TXT", content: '"apple-domain=sZpGHsJrm1GKJi0w"' },
+        { type: "AAAA", content: "100::", proxied: true },
       ],
       status: "warning",
     });

@@ -1047,14 +1047,14 @@ function migrateLegacyAuditEventsTable(storage: DurableObjectStorage) {
 }
 
 function tableExists(storage: DurableObjectStorage, table: DomainMappingTableName): boolean {
-  for (const _row of storage.sql.exec<{ name: string }>(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-    table,
-  )) {
-    return true;
-  }
-
-  return false;
+  return (
+    storage.sql
+      .exec<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        table,
+      )
+      .toArray().length > 0
+  );
 }
 
 function tableHasColumn(
@@ -1062,25 +1062,22 @@ function tableHasColumn(
   table: DomainMappingTableName,
   columnName: string,
 ): boolean {
-  for (const row of storage.sql.exec<{ name: string }>(`PRAGMA table_info(${table})`)) {
-    if (row.name === columnName) {
-      return true;
-    }
-  }
-
-  return false;
+  return storage.sql
+    .exec<{ name: string }>(`PRAGMA table_info(${table})`)
+    .toArray()
+    .some((row) => row.name === columnName);
 }
 
 function tableDefinition(
   storage: DurableObjectStorage,
   table: DomainMappingTableName,
 ): string | undefined {
-  for (const row of storage.sql.exec<{ sql: string | null }>(
-    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
-    table,
-  )) {
-    return row.sql ?? undefined;
-  }
-
-  return undefined;
+  return (
+    storage.sql
+      .exec<{ sql: string | null }>(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+        table,
+      )
+      .toArray()[0]?.sql ?? undefined
+  );
 }

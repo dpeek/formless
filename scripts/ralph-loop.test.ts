@@ -12,7 +12,7 @@ describe("Ralph CLI", () => {
   it("documents the finalization command", () => {
     expect(usage()).toContain("bun ralph finalize --issue <number> [options]");
     expect(usage()).toContain("bun ralph finalise --issue <number> [options]");
-    expect(usage()).toContain("promote docs and create the closing PRD commit");
+    expect(usage()).toContain("promote specs and create the closing PRD commit");
     expect(usage()).toContain("New worktree base ref. Default: local main.");
   });
 
@@ -91,6 +91,8 @@ describe("Ralph CLI", () => {
 
     expect(prompt).toContain("Dirty start was explicitly allowed by Ralph.");
     expect(prompt).toContain("do not stop solely because the worktree started dirty");
+    expect(prompt).toContain("Read `AGENTS.md`");
+    expect(prompt).toContain("relevant `openspec/specs/*/spec.md`");
     expect(prompt).not.toContain("Confirm the loop started you from a clean worktree.");
   });
 
@@ -120,6 +122,9 @@ describe("Ralph CLI", () => {
     expect(prompt).toContain("do not stop solely because the worktree started dirty");
     expect(prompt).toContain("Resolve rebase conflicts when the resolution is clear");
     expect(prompt).toContain("stop with `<blocked/>` only when unsure");
+    expect(prompt).toContain(
+      "Promote PRD promotion notes into relevant `openspec/specs/*/spec.md`",
+    );
     expect(prompt).not.toContain("Confirm the command started you from a clean worktree.");
     expect(prompt).not.toContain("stop with `<blocked/>` on conflicts.");
   });

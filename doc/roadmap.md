@@ -2,12 +2,12 @@
 
 Last updated: 2026-05-28
 
-Purpose: possible directions for what to work on next.
+Purpose: backlog and ideas for possible next work.
 
-This is not shipped behavior. Shipped behavior lives in `doc/current.md` and
-`doc/topics/*.md`.
+This is not shipped behavior. Shipped behavior lives in `openspec/specs/*/spec.md`.
 
-This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
+This is not a commitment. Work starts when a GitHub PRD issue or OpenSpec
+change owns the chunk.
 
 ## Current Bias
 
@@ -15,7 +15,7 @@ This is not a backlog. Work starts when a GitHub PRD issue owns the chunk.
 - Treat installed app identity as the product app shape.
 - Keep Site polish small unless it unlocks real publishing use.
 - Keep data flat; compose in view/query layer.
-- Promote shipped facts to topic docs after a workstream lands.
+- Promote shipped facts to OpenSpec specs after a workstream lands.
 
 ## Direction: Complex App Support
 
@@ -89,7 +89,6 @@ Why:
 
 - Current runtime pieces work locally and in Workers.
 - Productization decides whether Formless can support real users and deployments.
-- The Formless instance direction names the deployment model before onboarding PRDs. See `doc/directions/formless-instance.md`.
 - Product instance profile, default installed Site, generic bundled app installs, launch fixtures, portable archives, core-media-only archive restore, claimable instance workspaces, profile-based custom domains, brokered domain provider apply, provider redirects, explicit provider delete, and domain provider cleanup actions now exist.
 - Shared runtime topology now centralizes runtime profile and route policy facts before auth, permissions, agent routes, or job routes attach to them.
 
@@ -99,6 +98,10 @@ Good next chunks:
 - Safer archive review and replacement UX.
 - Browser management UI for core media assets.
 - Video media assets on the core image asset spine.
+- Keep media asset metadata separate from app-owned usage metadata such as Site alt text, caption, crop, focal point, slot, or poster override.
+- Keep one core `mediaAsset` shape with media kind, status, provider, storage/provider id, dimensions, duration, and optional poster until separate lifecycles force split entities.
+- Resolve video playback through Media module playback facts and an app-facing `MediaPlayer`; the first video adapter can use Cloudflare Stream behind that boundary.
+- Add provider adapters behind the Media module instead of exposing provider-specific URLs directly to Site or other app records.
 - Browser provider configuration and least-privilege credential setup.
 - Direct Cloudflare domain CLI fallback retirement after remote runner use is proven.
 - Wildcard domains when a concrete deployment needs them.
@@ -115,6 +118,8 @@ Avoid:
 - Account or marketplace work before one deployment story is clear.
 - Bidirectional sync before local and remote instance identity exists.
 - New Site-specific owned media paths outside core media.
+- Schema composition or true cross-app references before multiple non-media workflows need them.
+- Custom HLS, DASH, captions, transcripts, analytics, or live streaming before a video PRD needs them.
 
 ## Direction: Extensibility
 
@@ -144,14 +149,11 @@ Why:
 
 Good next chunks:
 
-- Keep `doc/README.md` as the read map.
-- Keep `doc/current.md` as the shipped behavior index.
-- Keep topic docs source-faithful and short.
-- Retire legacy PRDs after facts move into topic docs.
+- Keep `openspec/specs/` as the shipped behavior source.
+- Retire legacy PRDs after facts move into specs.
 - Add example-led docs from real source apps.
-- Keep direction docs clear when old PRD candidates have since shipped.
+- Keep `doc/roadmap.md` clear when old PRD candidates have since shipped.
 
 Avoid:
 
-- Strategy prose in topic docs.
-- New local PRD files.
+- Strategy prose in capability specs.

@@ -223,7 +223,7 @@ export async function planCloudflareDomainProviderResourcePreflight(input: {
         name: resource.fromHost,
         zoneId: resource.zone.id,
       });
-      const conflicting = existing.filter((record) => !isExpectedRedirectPlaceholder(record));
+      const conflicting = existing.filter((record) => !isExpectedOriginlessPlaceholder(record));
 
       if (conflicting.length > 0) {
         blockers.push({
@@ -490,8 +490,10 @@ function buildHostPlan(input: {
     });
   }
 
-  const blockingDnsRecords = input.dnsRecords.filter((record) =>
-    workerCustomDomainDnsConflictTypes.has(record.type.toUpperCase()),
+  const blockingDnsRecords = input.dnsRecords.filter(
+    (record) =>
+      workerCustomDomainDnsConflictTypes.has(record.type.toUpperCase()) &&
+      !isExpectedOriginlessPlaceholder(record),
   );
 
   if (blockingDnsRecords.length > 0) {
@@ -864,7 +866,7 @@ function parseCloudflareRedirectRule(value: unknown): CloudflareRedirectRule {
   };
 }
 
-function isExpectedRedirectPlaceholder(record: CloudflareDnsRecord): boolean {
+function isExpectedOriginlessPlaceholder(record: CloudflareDnsRecord): boolean {
   return (
     record.type === CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS.type &&
     record.content === CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS.content &&
