@@ -8,6 +8,7 @@ import {
   findBundledAppPackage,
   listAppInstalls,
   type AppInstall,
+  type AppInstallId,
   type AppInstallRoute,
 } from "../shared/app-installs.ts";
 import { nowIsoString } from "../shared/clock.ts";
@@ -15,11 +16,13 @@ import {
   INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX,
   INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
   INSTANCE_CONTROL_PLANE_STORAGE_IDENTITY,
+  instanceControlPlaneAppRouteId,
   instanceControlPlaneAppInstallRecord,
   instanceControlPlaneRecordsForAppInstall,
   instanceControlPlaneSchema,
   type InstanceControlPlaneAppRouteKind,
   type InstanceControlPlaneAppRouteValues,
+  type InstanceControlPlaneRedirectStatusCode,
 } from "../shared/instance-control-plane.ts";
 import type {
   DeploymentAttempt,
@@ -29,6 +32,11 @@ import type {
   DeploymentResourceEvidenceSummary,
   DeploymentTarget,
 } from "../shared/deployment-runtime.ts";
+import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-provider-api.ts";
+import type {
+  InstanceDomainMapping,
+  InstanceDomainMappingProfile,
+} from "../shared/instance-domain-mappings.ts";
 import {
   parseCreateAppInstallRequest,
   type ActionResponse,
@@ -65,6 +73,7 @@ import {
 const actorKinds = ["admin", "cliDeployer", "owner", "runner"] as const;
 const createAppInstallControlPlaneAction = "createAppInstall";
 export const INTERNAL_BACKFILL_APP_INSTALLS_PATH = "/_internal/backfill-app-installs";
+export const INTERNAL_SYNC_DOMAIN_INTENT_PATH = "/_internal/sync-domain-intent";
 export const INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH = "/_internal/sync-deployment-projection";
 export const INTERNAL_RECORD_DEPLOYMENT_ATTEMPT_PATH = "/_internal/record-deployment-attempt";
 export const INTERNAL_RECORD_DEPLOYMENT_EVIDENCE_PATH = "/_internal/record-deployment-evidence";
@@ -128,6 +137,10 @@ export async function handleInstanceControlPlaneDurableObjectRequest(
   try {
     if (route.path === INTERNAL_BACKFILL_APP_INSTALLS_PATH) {
       return await handleInternalBackfillAppInstalls(request, storage);
+    }
+
+    if (route.path === INTERNAL_SYNC_DOMAIN_INTENT_PATH) {
+      return await handleInternalSyncDomainIntent(request, storage);
     }
 
     if (route.path === INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH) {
@@ -270,6 +283,26 @@ async function handleInternalSyncDeploymentProjection(
   const parsed = parseInternalDeploymentProjectionRequest(await readJson(request));
 
   syncDeploymentProjectionRecords(storage, parsed);
+
+  return jsonResponse({
+    records: activeControlPlaneRecords(storage),
+  });
+}
+
+async function handleInternalSyncDomainIntent(
+  request: Request,
+  storage: DurableObjectStorage,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  ensureStorageTables(storage);
+  initializeStorageFromSource(storage, instanceControlPlaneSource);
+
+  const parsed = parseInternalDomainIntentSyncRequest(await readJson(request));
+
+  syncDomainIntentRecords(storage, parsed);
 
   return jsonResponse({
     records: activeControlPlaneRecords(storage),
@@ -636,6 +669,57 @@ function syncDeploymentProjectionRecords(
   }
 }
 
+function syncDomainIntentRecords(
+  storage: DurableObjectStorage,
+  input: {
+    mappings?: InstanceDomainMapping[];
+    now: string;
+    redirectIntents?: InstanceDomainProviderRedirectIntent[];
+  },
+) {
+  if (input.mappings !== undefined) {
+    const nextDomainMappingIds = new Set<string>();
+
+    for (const mapping of input.mappings) {
+      const recordId = domainMappingRecordId(mapping);
+
+      upsertControlPlaneRecord(storage, {
+        action: "syncDomainMapping",
+        entity: "domainMapping",
+        id: recordId,
+        values: domainMappingRecordValues(storage, mapping),
+      });
+      nextDomainMappingIds.add(recordId);
+    }
+
+    disableMissingControlPlaneIntentRecords(storage, "domainMapping", nextDomainMappingIds, {
+      action: "disableDomainMappingIntent",
+      now: input.now,
+    });
+  }
+
+  if (input.redirectIntents !== undefined) {
+    const nextRedirectIntentIds = new Set<string>();
+
+    for (const intent of input.redirectIntents) {
+      const recordId = redirectIntentRecordId(intent.fromHost);
+
+      upsertControlPlaneRecord(storage, {
+        action: "syncRedirectIntent",
+        entity: "redirectIntent",
+        id: recordId,
+        values: redirectIntentRecordValues(intent),
+      });
+      nextRedirectIntentIds.add(recordId);
+    }
+
+    disableMissingControlPlaneIntentRecords(storage, "redirectIntent", nextRedirectIntentIds, {
+      action: "disableRedirectIntent",
+      now: input.now,
+    });
+  }
+}
+
 function upsertDeploymentTargetRecord(
   storage: DurableObjectStorage,
   target: DeploymentTarget,
@@ -840,6 +924,75 @@ function deploymentDesiredResourceValues(input: {
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
   };
+}
+
+function domainMappingRecordValues(
+  storage: DurableObjectStorage,
+  mapping: InstanceDomainMapping,
+): RecordValues {
+  const targetInstallId = mapping.targetInstallId ?? mapping.installId;
+  const appInstall =
+    targetInstallId && activeControlPlaneRecordExists(storage, "appInstall", targetInstallId)
+      ? targetInstallId
+      : undefined;
+  const routeId =
+    targetInstallId === undefined
+      ? undefined
+      : domainMappingAppRouteIdForProfile(mapping.profile, targetInstallId);
+  const appRoute =
+    routeId && activeControlPlaneRecordExists(storage, "appRoute", routeId) ? routeId : undefined;
+
+  return {
+    host: mapping.host,
+    profile: mapping.profile,
+    ...(appInstall === undefined ? {} : { appInstall }),
+    ...(appRoute === undefined ? {} : { appRoute }),
+    enabled: mapping.enabled,
+    createdAt: mapping.createdAt,
+    updatedAt: mapping.updatedAt,
+  };
+}
+
+function redirectIntentRecordValues(intent: InstanceDomainProviderRedirectIntent): RecordValues {
+  return {
+    fromHost: intent.fromHost,
+    ...(intent.toHost === undefined ? {} : { toHost: intent.toHost }),
+    ...(intent.toUrl === undefined ? {} : { toUrl: intent.toUrl }),
+    statusCode: String(intent.statusCode) as InstanceControlPlaneRedirectStatusCode,
+    preservePath: intent.preservePath,
+    preserveQueryString: intent.preserveQueryString,
+    enabled: intent.enabled,
+    createdAt: intent.createdAt,
+    updatedAt: intent.updatedAt,
+  };
+}
+
+function disableMissingControlPlaneIntentRecords(
+  storage: DurableObjectStorage,
+  entity: "domainMapping" | "redirectIntent",
+  nextRecordIds: Set<string>,
+  input: { action: string; now: string },
+) {
+  for (const record of activeControlPlaneRecords(storage)) {
+    if (
+      record.entity !== entity ||
+      nextRecordIds.has(record.id) ||
+      record.values.enabled === false
+    ) {
+      continue;
+    }
+
+    upsertControlPlaneRecord(storage, {
+      action: input.action,
+      entity,
+      id: record.id,
+      values: {
+        ...record.values,
+        enabled: false,
+        updatedAt: input.now,
+      },
+    });
+  }
 }
 
 function activeControlPlaneRecords(storage: DurableObjectStorage): StoredRecord[] {
@@ -1158,6 +1311,32 @@ function parseInternalBackfillAppInstalls(value: unknown): AppInstall[] {
   return value.installs.map(parseInternalBackfillAppInstall);
 }
 
+function parseInternalDomainIntentSyncRequest(value: unknown): {
+  mappings?: InstanceDomainMapping[];
+  now: string;
+  redirectIntents?: InstanceDomainProviderRedirectIntent[];
+} {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Domain intent sync request must be an object.");
+  }
+
+  if (value.mappings === undefined && value.redirectIntents === undefined) {
+    throw new BadRequestError("Domain intent sync request must include mappings or redirects.");
+  }
+
+  const now = typeof value.now === "string" && value.now.trim() !== "" ? value.now : nowIsoString();
+
+  return {
+    ...(value.mappings === undefined
+      ? {}
+      : { mappings: parseInternalDomainMappings(value.mappings) }),
+    now,
+    ...(value.redirectIntents === undefined
+      ? {}
+      : { redirectIntents: parseInternalRedirectIntents(value.redirectIntents) }),
+  };
+}
+
 function parseInternalBackfillAppInstall(value: unknown): AppInstall {
   if (!isRecord(value)) {
     throw new BadRequestError("Backfill app install must be an object.");
@@ -1188,9 +1367,80 @@ function parseInternalBackfillAppInstall(value: unknown): AppInstall {
   };
 }
 
+function parseInternalDomainMappings(value: unknown): InstanceDomainMapping[] {
+  if (!Array.isArray(value)) {
+    throw new BadRequestError("Domain intent sync mappings must be an array.");
+  }
+
+  return value.map(parseInternalDomainMapping);
+}
+
+function parseInternalDomainMapping(value: unknown): InstanceDomainMapping {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Domain intent sync mapping must be an object.");
+  }
+
+  const targetInstallId =
+    optionalStringRecordValue(value.targetInstallId) ?? optionalStringRecordValue(value.installId);
+  const profile = parseDomainMappingProfile(value.profile);
+
+  return {
+    host: parseRequiredString("mapping.host", value.host),
+    profile,
+    ...(profile === "publicSite" ? { surface: "site" as const } : {}),
+    ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
+    enabled: booleanRecordValue(value.enabled, "mapping.enabled"),
+    createdAt: parseRequiredString("mapping.createdAt", value.createdAt),
+    updatedAt: parseRequiredString("mapping.updatedAt", value.updatedAt),
+  };
+}
+
+function parseInternalRedirectIntents(value: unknown): InstanceDomainProviderRedirectIntent[] {
+  if (!Array.isArray(value)) {
+    throw new BadRequestError("Domain intent sync redirect intents must be an array.");
+  }
+
+  return value.map(parseInternalRedirectIntent);
+}
+
+function parseInternalRedirectIntent(value: unknown): InstanceDomainProviderRedirectIntent {
+  if (!isRecord(value)) {
+    throw new BadRequestError("Domain intent sync redirect intent must be an object.");
+  }
+
+  return {
+    fromHost: parseRequiredString("redirect.fromHost", value.fromHost),
+    ...(typeof value.toHost === "string" && value.toHost.trim() !== ""
+      ? { toHost: value.toHost }
+      : {}),
+    ...(typeof value.toUrl === "string" && value.toUrl.trim() !== "" ? { toUrl: value.toUrl } : {}),
+    statusCode: parseRedirectStatusCode(value.statusCode),
+    preservePath: booleanRecordValue(value.preservePath, "redirect.preservePath"),
+    preserveQueryString: booleanRecordValue(
+      value.preserveQueryString,
+      "redirect.preserveQueryString",
+    ),
+    enabled: booleanRecordValue(value.enabled, "redirect.enabled"),
+    createdAt: parseRequiredString("redirect.createdAt", value.createdAt),
+    updatedAt: parseRequiredString("redirect.updatedAt", value.updatedAt),
+  };
+}
+
 function parseRequiredString(field: string, value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new BadRequestError(`Field "${field}" must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function optionalStringRecordValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+function booleanRecordValue(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new BadRequestError(`Field "${field}" must be a boolean.`);
   }
 
   return value;
@@ -1234,6 +1484,56 @@ function parseRoutePrefixString(field: string, value: unknown): `/${string}/` {
   }
 
   return route as `/${string}/`;
+}
+
+function parseDomainMappingProfile(value: unknown): InstanceDomainMappingProfile {
+  if (value === "app" || value === "instance" || value === "publicSite") {
+    return value;
+  }
+
+  throw new BadRequestError('Field "mapping.profile" must be "app", "instance", or "publicSite".');
+}
+
+function parseRedirectStatusCode(
+  value: unknown,
+): InstanceDomainProviderRedirectIntent["statusCode"] {
+  if (value === 301 || value === 302 || value === 303 || value === 307 || value === 308) {
+    return value;
+  }
+
+  throw new BadRequestError('Field "redirect.statusCode" must be 301, 302, 303, 307, or 308.');
+}
+
+function domainMappingRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
+  return `domain-mapping:${mapping.profile}:${mapping.host}`;
+}
+
+function redirectIntentRecordId(fromHost: string) {
+  return `redirect-intent:${fromHost}`;
+}
+
+function domainMappingAppRouteIdForProfile(
+  profile: InstanceDomainMappingProfile,
+  installId: AppInstallId,
+): string | undefined {
+  switch (profile) {
+    case "app":
+      return instanceControlPlaneAppRouteId(installId, "admin");
+    case "publicSite":
+      return instanceControlPlaneAppRouteId(installId, "publicSite");
+    case "instance":
+      return undefined;
+  }
+}
+
+function activeControlPlaneRecordExists(
+  storage: DurableObjectStorage,
+  entity: string,
+  id: string,
+): boolean {
+  const record = getStoredRecord(storage, id);
+
+  return record?.entity === entity && !record.deletedAt;
 }
 
 function deploymentDesiredResourceRecordId(targetId: string, logicalId: string) {

@@ -2,6 +2,8 @@ import {
   parseCreateInstanceDomainMappingRequest,
   parseDeleteInstanceDomainMappingRequest,
   parseRecordInstanceDomainMappingApplyEvidenceRequest,
+  listInstanceDomainMappings,
+  normalizeInstanceDomainHost,
   resolveInstanceDomainMappingProfile,
   type DeleteInstanceDomainMappingResponse,
   type ForgetInstanceDomainMappingResponse,
@@ -20,11 +22,12 @@ import {
   readInstanceDomainMappingAppliedStates,
   readInstanceDomainMappingAuditEvents,
   readInstanceDomainMappingDesiredCleanupEvents,
-  readEnabledInstanceDomainMappingForHost,
   readInstanceDomainMappings,
   recordInstanceDomainMappingApplyEvidence,
 } from "./instance-domain-mappings-state.ts";
 import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
+import { syncDomainIntentToControlPlane } from "./deployment-control-plane-client.ts";
+import type { StoredRecord } from "../shared/protocol.ts";
 
 export const INSTANCE_DOMAIN_MAPPINGS_API_PATH = "/api/formless/domain-mappings";
 const INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH = `${INSTANCE_DOMAIN_MAPPINGS_API_PATH}/lookup`;
@@ -114,7 +117,7 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
     }
 
     if (url.pathname === INSTANCE_DOMAIN_MAPPINGS_LOOKUP_API_PATH) {
-      return handleLookupRequest(request, storage, url);
+      return await handleLookupRequest(request, storage, env, url);
     }
 
     if (url.pathname !== INSTANCE_DOMAIN_MAPPINGS_API_PATH) {
@@ -122,7 +125,7 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
     }
 
     if (request.method === "GET") {
-      return jsonResponse(domainMappingsResponse(storage));
+      return jsonResponse(await domainMappingsResponse(storage, env, request.url));
     }
 
     if (request.method === "POST") {
@@ -156,10 +159,12 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
         );
       }
 
+      const mappings = await readControlPlaneSyncedDomainMappings(storage, env, request.url);
+
       return jsonResponse(
         {
-          mapping: result.mapping,
-          mappings: result.mappings,
+          mapping: findDomainMapping(mappings, result.mapping) ?? result.mapping,
+          mappings,
         },
         201,
       );
@@ -199,9 +204,10 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
         );
       }
 
+      const mappings = await readControlPlaneSyncedDomainMappings(storage, env, request.url);
       const response: DeleteInstanceDomainMappingResponse = {
-        mapping: result.mapping,
-        mappings: result.mappings,
+        mapping: findDomainMapping(mappings, result.mapping) ?? result.mapping,
+        mappings,
       };
 
       return jsonResponse(response);
@@ -216,7 +222,7 @@ export async function handleInstanceDomainMappingsDurableObjectRequest(
 async function handleForgetRequest(
   request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  env: InstanceDomainMappingsApiEnv,
   url: URL,
 ): Promise<Response> {
   if (request.method !== "DELETE") {
@@ -260,7 +266,7 @@ async function handleForgetRequest(
     desiredCleanupEvent: result.desiredCleanupEvent,
     desiredCleanupEvents: result.desiredCleanupEvents,
     mapping: result.mapping,
-    mappings: result.mappings,
+    mappings: await readControlPlaneSyncedDomainMappings(storage, env, request.url),
   };
 
   return jsonResponse(response);
@@ -312,7 +318,12 @@ async function handleApplyEvidenceRequest(
   return jsonResponse(response);
 }
 
-function handleLookupRequest(request: Request, storage: DurableObjectStorage, url: URL): Response {
+async function handleLookupRequest(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: InstanceDomainMappingsApiEnv,
+  url: URL,
+): Promise<Response> {
   if (request.method !== "GET") {
     return methodNotAllowedResponse("GET");
   }
@@ -341,9 +352,10 @@ function handleLookupRequest(request: Request, storage: DurableObjectStorage, ur
     );
   }
 
+  const mappings = await readControlPlaneSyncedDomainMappings(storage, env, request.url);
   const response: InstanceDomainMappingLookupResponse = {
     mapping:
-      readEnabledInstanceDomainMappingForHost(storage, {
+      findEnabledDomainMapping(mappings, {
         host,
         profile: profileResult.profile,
       }) ?? null,
@@ -359,13 +371,99 @@ function isInstanceDomainMappingsApiPath(pathname: string) {
   );
 }
 
-function domainMappingsResponse(storage: DurableObjectStorage): InstanceDomainMappingsResponse {
+async function domainMappingsResponse(
+  storage: DurableObjectStorage,
+  env: InstanceDomainMappingsApiEnv,
+  requestUrl: string,
+): Promise<InstanceDomainMappingsResponse> {
   return {
     appliedStates: readInstanceDomainMappingAppliedStates(storage),
     auditEvents: readInstanceDomainMappingAuditEvents(storage),
     desiredCleanupEvents: readInstanceDomainMappingDesiredCleanupEvents(storage),
-    mappings: readInstanceDomainMappings(storage),
+    mappings: await readControlPlaneSyncedDomainMappings(storage, env, requestUrl),
   };
+}
+
+async function readControlPlaneSyncedDomainMappings(
+  storage: DurableObjectStorage,
+  env: InstanceDomainMappingsApiEnv,
+  requestUrl: string,
+): Promise<InstanceDomainMapping[]> {
+  await readBackfilledControlPlaneAppInstalls(storage, env, requestUrl);
+  const legacyMappings = readInstanceDomainMappings(storage);
+  const records = await syncDomainIntentToControlPlane({
+    env,
+    mappings: legacyMappings,
+    now: nowIsoString(),
+    requestUrl,
+  });
+
+  if (records === undefined) {
+    return legacyMappings;
+  }
+
+  return domainMappingsFromControlPlaneRecords(records, legacyMappings);
+}
+
+function domainMappingsFromControlPlaneRecords(
+  records: readonly StoredRecord[],
+  sourceMappings: readonly InstanceDomainMapping[],
+): InstanceDomainMapping[] {
+  const expectedIds = new Set(sourceMappings.map(domainMappingRecordId));
+
+  return listInstanceDomainMappings(
+    records
+      .filter(
+        (record) =>
+          !record.deletedAt && record.entity === "domainMapping" && expectedIds.has(record.id),
+      )
+      .map(domainMappingFromControlPlaneRecord),
+  );
+}
+
+function domainMappingFromControlPlaneRecord(record: StoredRecord): InstanceDomainMapping {
+  const profile = String(record.values.profile) as InstanceDomainMapping["profile"];
+  const targetInstallId =
+    typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
+
+  return {
+    host: String(record.values.host),
+    profile,
+    ...(profile === "publicSite" ? { surface: "site" as const } : {}),
+    ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
+    enabled: record.values.enabled === true,
+    createdAt: String(record.values.createdAt),
+    updatedAt: String(record.values.updatedAt),
+  };
+}
+
+function findEnabledDomainMapping(
+  mappings: readonly InstanceDomainMapping[],
+  input: Pick<InstanceDomainMapping, "host" | "profile">,
+): InstanceDomainMapping | undefined {
+  const hostResult = normalizeInstanceDomainHost(input.host);
+
+  if (!hostResult.ok) {
+    throw new Error(hostResult.error.message);
+  }
+
+  return mappings.find(
+    (mapping) =>
+      mapping.enabled && mapping.host === hostResult.host && mapping.profile === input.profile,
+  );
+}
+
+function findDomainMapping(
+  mappings: readonly InstanceDomainMapping[],
+  input: Pick<InstanceDomainMapping, "host" | "profile">,
+): InstanceDomainMapping | undefined {
+  return mappings.find(
+    (mapping) => mapping.host === input.host && mapping.profile === input.profile,
+  );
+}
+
+function domainMappingRecordId(mapping: Pick<InstanceDomainMapping, "host" | "profile">) {
+  return `domain-mapping:${mapping.profile}:${mapping.host}`;
 }
 
 function domainMappingFailureStatus(code: string) {

@@ -48,6 +48,7 @@ import type {
   DeploymentDesiredStateVersionRef,
   DeploymentLeaseToken,
   DeploymentResourceEvidenceSummary,
+  DeploymentTarget,
 } from "../shared/deployment-runtime.ts";
 import { planDomainProviderResources } from "../shared/domain-provider-planner.ts";
 import type {
@@ -64,7 +65,9 @@ import type {
 } from "../shared/domain-provider-protocol.ts";
 import { CLOUDFLARE_ORIGINLESS_REDIRECT_PLACEHOLDER_DNS } from "../shared/domain-provider-protocol.ts";
 import {
+  listInstanceDomainMappings,
   normalizeInstanceDomainHost,
+  type InstanceDomainMapping,
   type InstanceDomainMappingAppliedState,
 } from "../shared/instance-domain-mappings.ts";
 import { nowIsoString } from "../shared/clock.ts";
@@ -83,7 +86,14 @@ import {
   writeDeploymentAttemptFailure,
   writeDeploymentAttemptSuccess,
 } from "./deployment-runtime-state.ts";
+import {
+  recordDeploymentAttemptInControlPlane,
+  recordDeploymentEvidenceInControlPlane,
+  syncDomainIntentToControlPlane,
+} from "./deployment-control-plane-client.ts";
 import { buildPrimaryInstanceDeploymentDesiredStateProjection } from "./deployment-runtime-projection.ts";
+import { readBackfilledControlPlaneAppInstalls } from "./instance-app-installs.ts";
+import type { StoredRecord } from "../shared/protocol.ts";
 import {
   domainProviderRedirectIntentFromRow as redirectIntentFromRow,
   ensureDomainProviderRedirectIntentsTable,
@@ -95,6 +105,11 @@ import {
 export { readDomainProviderRedirectIntents } from "./domain-provider-redirect-intents-state.ts";
 
 const APPLY_LOCK_ID = "domain-provider-apply";
+const primaryInstanceDeploymentTarget = {
+  kind: "instance",
+  label: "Primary instance target",
+  targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
+} satisfies DeploymentTarget;
 const applyLockTableSql = `
   CREATE TABLE IF NOT EXISTS instance_domain_provider_apply_lock (
     lock_id TEXT PRIMARY KEY CHECK (lock_id = '${APPLY_LOCK_ID}'),
@@ -206,7 +221,9 @@ type InstanceDomainProviderApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_DOMAIN_PROVIDER_ZONES?: string;
 };
 
-type DurableObjectDomainProviderEnv = Omit<InstanceDomainProviderApiEnv, "FORMLESS_AUTHORITY">;
+type DurableObjectDomainProviderEnv = Omit<InstanceDomainProviderApiEnv, "FORMLESS_AUTHORITY"> & {
+  FORMLESS_AUTHORITY?: DurableObjectNamespace;
+};
 
 type DomainProviderApplyLockResult =
   | { acquired: true }
@@ -358,7 +375,9 @@ export async function handleInstanceDomainProviderDurableObjectRequest(
       return jsonResponse({ error: options.error }, 400);
     }
 
-    return jsonResponse(domainProviderPlanResponse(storage, env, options.options));
+    return jsonResponse(
+      await domainProviderPlanResponse(storage, env, options.options, request.url),
+    );
   }
 
   if (url.pathname === INSTANCE_DOMAIN_PROVIDER_REDIRECTS_FORGET_API_PATH) {
@@ -427,7 +446,7 @@ async function handleRedirectIntentsRequest(
   url: URL,
 ): Promise<Response> {
   if (request.method === "GET") {
-    return jsonResponse(domainProviderRedirectsResponse(storage));
+    return jsonResponse(await domainProviderRedirectsResponse(storage, env, request.url));
   }
 
   if (request.method === "POST") {
@@ -452,10 +471,12 @@ async function handleRedirectIntentsRequest(
       now: nowIsoString(),
     });
 
+    const redirectIntents = await readControlPlaneSyncedRedirectIntents(storage, env, request.url);
+
     return jsonResponse(
       {
         redirectIntent: result,
-        redirectIntents: readDomainProviderRedirectIntents(storage),
+        redirectIntents,
       } satisfies CreateInstanceDomainProviderRedirectIntentResponse,
       201,
     );
@@ -489,9 +510,11 @@ async function handleRedirectIntentsRequest(
       return jsonResponse({ error: result.error }, 404);
     }
 
+    const redirectIntents = await readControlPlaneSyncedRedirectIntents(storage, env, request.url);
+
     return jsonResponse({
       redirectIntent: result.redirectIntent,
-      redirectIntents: readDomainProviderRedirectIntents(storage),
+      redirectIntents,
     } satisfies DeleteInstanceDomainProviderRedirectIntentResponse);
   }
 
@@ -539,7 +562,7 @@ async function handleForgetRedirectIntentRequest(
     redirectIntent: result.redirectIntent,
     redirectIntentCleanupEvent: result.redirectIntentCleanupEvent,
     redirectIntentCleanupEvents: result.redirectIntentCleanupEvents,
-    redirectIntents: result.redirectIntents,
+    redirectIntents: await readControlPlaneSyncedRedirectIntents(storage, env, request.url),
   } satisfies ForgetInstanceDomainProviderRedirectIntentResponse);
 }
 
@@ -564,7 +587,12 @@ async function applyWithAuthorization(
     return jsonResponse({ error: applyRequest.error }, 400);
   }
 
-  const response = domainProviderPlanResponse(storage, env, applyRequest.options);
+  const response = await domainProviderPlanResponse(
+    storage,
+    env,
+    applyRequest.options,
+    request.url,
+  );
 
   if (!response.config.jobReady) {
     return applyBlockedResponse(
@@ -601,6 +629,7 @@ async function applyWithAuthorization(
     env,
     jobId,
     now,
+    requestUrl: request.url,
     runnerId: applyRequest.request.runnerId,
   });
 
@@ -630,14 +659,16 @@ async function applyWithAuthorization(
     });
   } catch (error) {
     releaseDomainProviderApplyLock(storage);
-    failDomainProviderDeploymentAttempt(storage, {
+    await failDomainProviderDeploymentAttempt(storage, {
       actor: deploymentAttempt.actor,
       attemptId: deploymentAttempt.attempt.attemptId,
       code: "domain-provider-apply-job-write-failed",
       desiredState: deploymentAttempt.desiredState,
       displayMessage: "Domain provider apply job could not be recorded.",
+      env,
       leaseToken: deploymentAttempt.leaseToken,
       now,
+      requestUrl: request.url,
       runnerId: applyRequest.request.runnerId,
     });
     throw error;
@@ -661,6 +692,7 @@ async function startDomainProviderApplyDeploymentAttempt(
     env: DurableObjectDomainProviderEnv;
     jobId: string;
     now: string;
+    requestUrl: string;
     runnerId?: string;
   },
 ): Promise<DomainProviderDeploymentAttemptStartResult> {
@@ -670,6 +702,7 @@ async function startDomainProviderApplyDeploymentAttempt(
     idempotencyKey: `domain-provider-apply:${input.jobId}`,
     mode: "apply",
     now: input.now,
+    requestUrl: input.requestUrl,
   });
 }
 
@@ -679,6 +712,7 @@ async function startDomainProviderDeleteDeploymentAttempt(
     env: DurableObjectDomainProviderEnv;
     jobId: string;
     now: string;
+    requestUrl: string;
     runnerId?: string;
   },
 ): Promise<DomainProviderDeploymentAttemptStartResult> {
@@ -688,6 +722,7 @@ async function startDomainProviderDeleteDeploymentAttempt(
     idempotencyKey: `domain-provider-delete:${input.jobId}`,
     mode: "destroy",
     now: input.now,
+    requestUrl: input.requestUrl,
   });
 }
 
@@ -699,17 +734,14 @@ async function startDomainProviderDeploymentAttempt(
     idempotencyKey: string;
     mode: "apply" | "destroy";
     now: string;
+    requestUrl: string;
   },
 ): Promise<DomainProviderDeploymentAttemptStartResult> {
   const projection = await buildPrimaryInstanceDeploymentDesiredStateProjection(storage, {
     env: input.env,
     now: input.now,
-    requestUrl: "https://formless.local/api/formless/deployments/desired-state",
-    target: {
-      kind: "instance",
-      label: "Primary instance target",
-      targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
-    },
+    requestUrl: input.requestUrl,
+    target: primaryInstanceDeploymentTarget,
     targetId: INSTANCE_DEPLOYMENT_PRIMARY_TARGET_ID,
   });
   const desiredState = await materializeDeploymentDesiredStateVersion(storage, {
@@ -749,6 +781,13 @@ async function startDomainProviderDeploymentAttempt(
     };
   }
 
+  await recordDeploymentAttemptInControlPlane({
+    attempt: started.attempt,
+    env: input.env,
+    requestUrl: input.requestUrl,
+    target: primaryInstanceDeploymentTarget,
+  });
+
   return {
     actor: input.actor,
     attempt: started.attempt,
@@ -776,7 +815,7 @@ function domainProviderDeleteDeploymentActor(runnerId: string | undefined): Depl
   };
 }
 
-function failDomainProviderDeploymentAttempt(
+async function failDomainProviderDeploymentAttempt(
   storage: DurableObjectStorage,
   input: {
     actor: DeploymentActor;
@@ -784,12 +823,14 @@ function failDomainProviderDeploymentAttempt(
     code: string;
     desiredState: DeploymentDesiredStateVersionRef;
     displayMessage: string;
+    env: DurableObjectDomainProviderEnv;
     leaseToken: DeploymentLeaseToken;
     now: string;
+    requestUrl: string;
     runnerId?: string;
   },
 ) {
-  writeDeploymentAttemptFailure(storage, {
+  const result = writeDeploymentAttemptFailure(storage, {
     actor: input.actor,
     attemptId: input.attemptId,
     desiredState: input.desiredState,
@@ -801,6 +842,15 @@ function failDomainProviderDeploymentAttempt(
       displayMessage: input.displayMessage,
     },
   });
+
+  if (result.ok) {
+    await recordDeploymentAttemptInControlPlane({
+      attempt: result.attempt,
+      env: input.env,
+      requestUrl: input.requestUrl,
+      target: primaryInstanceDeploymentTarget,
+    });
+  }
 }
 
 async function deleteWithAuthorization(
@@ -865,6 +915,7 @@ async function deleteWithAuthorization(
     env,
     jobId,
     now,
+    requestUrl: request.url,
     runnerId: deleteRequest.request.runnerId,
   });
 
@@ -896,14 +947,16 @@ async function deleteWithAuthorization(
     });
   } catch (error) {
     releaseDomainProviderApplyLock(storage);
-    failDomainProviderDeploymentAttempt(storage, {
+    await failDomainProviderDeploymentAttempt(storage, {
       actor: deploymentAttempt.actor,
       attemptId: deploymentAttempt.attempt.attemptId,
       code: "domain-provider-delete-job-write-failed",
       desiredState: deploymentAttempt.desiredState,
       displayMessage: "Domain provider cleanup job could not be recorded.",
+      env,
       leaseToken: deploymentAttempt.leaseToken,
       now,
+      requestUrl: request.url,
       runnerId: deleteRequest.request.runnerId,
     });
     throw error;
@@ -1005,9 +1058,11 @@ async function handleApplyJobResultRequest(
     return jsonResponse({ error: result.error }, 400);
   }
 
-  const completed = completeApplyJob(storage, {
+  const completed = await completeApplyJob(storage, {
+    env,
     jobId,
     now: nowIsoString(),
+    requestUrl: request.url,
     result: result.request,
   });
 
@@ -1062,9 +1117,11 @@ async function handleDeleteJobResultRequest(
     return jsonResponse({ error: result.error }, 400);
   }
 
-  const completed = completeDeleteJob(storage, {
+  const completed = await completeDeleteJob(storage, {
+    env,
     jobId,
     now: nowIsoString(),
+    requestUrl: request.url,
     result: result.request,
   });
 
@@ -1075,16 +1132,18 @@ async function handleDeleteJobResultRequest(
   return jsonResponse({ job: completed.job } satisfies InstanceDomainProviderDeleteJobResponse);
 }
 
-function domainProviderPlanResponse(
+async function domainProviderPlanResponse(
   storage: DurableObjectStorage,
   env: DurableObjectDomainProviderEnv,
   options: DomainProviderPlanOptions = {},
-): InstanceDomainProviderPlanResponse {
+  requestUrl: string,
+): Promise<InstanceDomainProviderPlanResponse> {
   const config = domainProviderConfigStatus(env);
-  const redirectIntents = readDomainProviderRedirectIntents(storage);
+  const intent = await readControlPlaneSyncedDomainProviderIntent(storage, env, requestUrl);
+  const redirectIntents = intent.redirectIntents;
   const plan = planDomainProviderResources({
     instanceId: config.instanceId ?? "unconfigured-instance",
-    mappings: readInstanceDomainMappings(storage)
+    mappings: intent.mappings
       .filter((mapping) => options.host === undefined || mapping.host === options.host)
       .map((mapping) => ({
         enabled: mapping.enabled,
@@ -1446,15 +1505,127 @@ function invalidZoneConfigIssue(): { ok: false; issue: DomainProviderConfigIssue
   };
 }
 
-function domainProviderRedirectsResponse(
+async function domainProviderRedirectsResponse(
   storage: DurableObjectStorage,
-): InstanceDomainProviderRedirectsResponse {
+  env: DurableObjectDomainProviderEnv,
+  requestUrl: string,
+): Promise<InstanceDomainProviderRedirectsResponse> {
   return {
     appliedResources: readAppliedProviderResources(storage),
     auditEvents: readProviderAuditEvents(storage),
     redirectIntentCleanupEvents: readRedirectIntentCleanupEvents(storage),
-    redirectIntents: readDomainProviderRedirectIntents(storage),
+    redirectIntents: await readControlPlaneSyncedRedirectIntents(storage, env, requestUrl),
   };
+}
+
+async function readControlPlaneSyncedDomainProviderIntent(
+  storage: DurableObjectStorage,
+  env: DurableObjectDomainProviderEnv,
+  requestUrl: string,
+): Promise<{
+  mappings: InstanceDomainMapping[];
+  redirectIntents: InstanceDomainProviderRedirectIntent[];
+}> {
+  if (env.FORMLESS_AUTHORITY) {
+    await readBackfilledControlPlaneAppInstalls(
+      storage,
+      {
+        ...env,
+        FORMLESS_AUTHORITY: env.FORMLESS_AUTHORITY,
+      },
+      requestUrl,
+    );
+  }
+
+  const legacyMappings = readInstanceDomainMappings(storage);
+  const legacyRedirectIntents = readDomainProviderRedirectIntents(storage);
+  const records = await syncDomainIntentToControlPlane({
+    env,
+    mappings: legacyMappings,
+    now: nowIsoString(),
+    redirectIntents: legacyRedirectIntents,
+    requestUrl,
+  });
+
+  if (records === undefined) {
+    return {
+      mappings: legacyMappings,
+      redirectIntents: legacyRedirectIntents,
+    };
+  }
+
+  return {
+    mappings: domainMappingsFromControlPlaneRecords(records, legacyMappings),
+    redirectIntents: redirectIntentsFromControlPlaneRecords(records, legacyRedirectIntents),
+  };
+}
+
+async function readControlPlaneSyncedRedirectIntents(
+  storage: DurableObjectStorage,
+  env: DurableObjectDomainProviderEnv,
+  requestUrl: string,
+): Promise<InstanceDomainProviderRedirectIntent[]> {
+  return (await readControlPlaneSyncedDomainProviderIntent(storage, env, requestUrl))
+    .redirectIntents;
+}
+
+function domainMappingsFromControlPlaneRecords(
+  records: readonly StoredRecord[],
+  sourceMappings: readonly InstanceDomainMapping[],
+): InstanceDomainMapping[] {
+  const expectedIds = new Set(
+    sourceMappings.map((mapping) => `domain-mapping:${mapping.profile}:${mapping.host}`),
+  );
+
+  return listInstanceDomainMappings(
+    records
+      .filter(
+        (record) =>
+          !record.deletedAt && record.entity === "domainMapping" && expectedIds.has(record.id),
+      )
+      .map((record) => {
+        const profile = String(record.values.profile) as InstanceDomainMapping["profile"];
+        const targetInstallId =
+          typeof record.values.appInstall === "string" ? record.values.appInstall : undefined;
+
+        return {
+          host: String(record.values.host),
+          profile,
+          ...(profile === "publicSite" ? { surface: "site" as const } : {}),
+          ...(targetInstallId === undefined ? {} : { installId: targetInstallId, targetInstallId }),
+          enabled: record.values.enabled === true,
+          createdAt: String(record.values.createdAt),
+          updatedAt: String(record.values.updatedAt),
+        };
+      }),
+  );
+}
+
+function redirectIntentsFromControlPlaneRecords(
+  records: readonly StoredRecord[],
+  sourceRedirectIntents: readonly InstanceDomainProviderRedirectIntent[],
+): InstanceDomainProviderRedirectIntent[] {
+  const expectedIds = new Set(
+    sourceRedirectIntents.map((intent) => `redirect-intent:${intent.fromHost}`),
+  );
+
+  return records
+    .filter(
+      (record) =>
+        !record.deletedAt && record.entity === "redirectIntent" && expectedIds.has(record.id),
+    )
+    .map((record) => ({
+      fromHost: String(record.values.fromHost),
+      ...(typeof record.values.toHost === "string" ? { toHost: record.values.toHost } : {}),
+      ...(typeof record.values.toUrl === "string" ? { toUrl: record.values.toUrl } : {}),
+      statusCode: Number(record.values.statusCode) as DomainProviderRedirectStatusCode,
+      preservePath: record.values.preservePath === true,
+      preserveQueryString: record.values.preserveQueryString === true,
+      enabled: record.values.enabled === true,
+      createdAt: String(record.values.createdAt),
+      updatedAt: String(record.values.updatedAt),
+    }))
+    .sort((left, right) => left.fromHost.localeCompare(right.fromHost));
 }
 
 function writeRedirectIntent(
@@ -1891,16 +2062,18 @@ function writeDeleteJob(
   return job;
 }
 
-function completeApplyJob(
+async function completeApplyJob(
   storage: DurableObjectStorage,
   input: {
+    env: DurableObjectDomainProviderEnv;
     jobId: string;
     now: string;
+    requestUrl: string;
     result: InstanceDomainProviderApplyJobResultRequest;
   },
-):
-  | { ok: true; job: InstanceDomainProviderApplyJob }
-  | { ok: false; error: string; status: number } {
+): Promise<
+  { ok: true; job: InstanceDomainProviderApplyJob } | { ok: false; error: string; status: number }
+> {
   const job = readApplyJob(storage, input.jobId);
 
   if (!job) {
@@ -1920,10 +2093,12 @@ function completeApplyJob(
   }
 
   if (input.result.status === "failed") {
-    const deploymentWriteback = writeDomainProviderApplyDeploymentFailure(storage, {
+    const deploymentWriteback = await writeDomainProviderApplyDeploymentFailure(storage, {
+      env: input.env,
       error: input.result.error,
       job,
       now: input.now,
+      requestUrl: input.requestUrl,
       runnerId: input.result.runnerId,
     });
 
@@ -1981,9 +2156,11 @@ function completeApplyJob(
     });
   }
 
-  const deploymentWriteback = writeDomainProviderApplyDeploymentSuccess(storage, {
+  const deploymentWriteback = await writeDomainProviderApplyDeploymentSuccess(storage, {
+    env: input.env,
     job,
     now: input.now,
+    requestUrl: input.requestUrl,
     resources: input.result.resources,
     runnerId: input.result.runnerId,
   });
@@ -2001,16 +2178,18 @@ function completeApplyJob(
   });
 }
 
-function completeDeleteJob(
+async function completeDeleteJob(
   storage: DurableObjectStorage,
   input: {
+    env: DurableObjectDomainProviderEnv;
     jobId: string;
     now: string;
+    requestUrl: string;
     result: InstanceDomainProviderDeleteJobResultRequest;
   },
-):
-  | { ok: true; job: InstanceDomainProviderDeleteJob }
-  | { ok: false; error: string; status: number } {
+): Promise<
+  { ok: true; job: InstanceDomainProviderDeleteJob } | { ok: false; error: string; status: number }
+> {
   const job = readDeleteJob(storage, input.jobId);
 
   if (!job) {
@@ -2034,10 +2213,12 @@ function completeDeleteJob(
   }
 
   if (input.result.status === "failed") {
-    const deploymentWriteback = writeDomainProviderDeleteDeploymentFailure(storage, {
+    const deploymentWriteback = await writeDomainProviderDeleteDeploymentFailure(storage, {
+      env: input.env,
       error: input.result.error,
       job,
       now: input.now,
+      requestUrl: input.requestUrl,
       runnerId: input.result.runnerId,
     });
 
@@ -2090,9 +2271,11 @@ function completeDeleteJob(
     });
   }
 
-  const deploymentWriteback = writeDomainProviderDeleteDeploymentSuccess(storage, {
+  const deploymentWriteback = await writeDomainProviderDeleteDeploymentSuccess(storage, {
+    env: input.env,
     job,
     now: input.now,
+    requestUrl: input.requestUrl,
     resources: input.result.resources,
     runnerId: input.result.runnerId,
   });
@@ -2110,15 +2293,17 @@ function completeDeleteJob(
   });
 }
 
-function writeDomainProviderApplyDeploymentFailure(
+async function writeDomainProviderApplyDeploymentFailure(
   storage: DurableObjectStorage,
   input: {
+    env: DurableObjectDomainProviderEnv;
     error: string;
     job: InstanceDomainProviderApplyJob;
     now: string;
+    requestUrl: string;
     runnerId?: string;
   },
-): { ok: true } | { ok: false; error: string; status: number } {
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const deployment = readApplyJobDeploymentLink(storage, input.job.jobId);
 
   if (!deployment) {
@@ -2138,18 +2323,29 @@ function writeDomainProviderApplyDeploymentFailure(
     },
   });
 
+  if (result.ok) {
+    await recordDeploymentAttemptInControlPlane({
+      attempt: result.attempt,
+      env: input.env,
+      requestUrl: input.requestUrl,
+      target: primaryInstanceDeploymentTarget,
+    });
+  }
+
   return deploymentWritebackResult(result);
 }
 
-function writeDomainProviderApplyDeploymentSuccess(
+async function writeDomainProviderApplyDeploymentSuccess(
   storage: DurableObjectStorage,
   input: {
+    env: DurableObjectDomainProviderEnv;
     job: InstanceDomainProviderApplyJob;
     now: string;
+    requestUrl: string;
     resources: readonly InstanceDomainProviderApplyJobResourceEvidence[];
     runnerId?: string;
   },
-): { ok: true } | { ok: false; error: string; status: number } {
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const deployment = readApplyJobDeploymentLink(storage, input.job.jobId);
 
   if (!deployment) {
@@ -2168,18 +2364,39 @@ function writeDomainProviderApplyDeploymentSuccess(
     runnerId: input.runnerId ?? input.job.runnerId,
   });
 
+  if (result.ok) {
+    await recordDeploymentAttemptInControlPlane({
+      attempt: result.attempt,
+      env: input.env,
+      requestUrl: input.requestUrl,
+      target: primaryInstanceDeploymentTarget,
+    });
+    await recordDeploymentEvidenceInControlPlane({
+      attempt: result.attempt,
+      env: input.env,
+      evidence: input.resources.map((resource) =>
+        deploymentEvidenceSummaryFromApplyEvidence(resource, deployment.desiredState.targetId),
+      ),
+      now: input.now,
+      requestUrl: input.requestUrl,
+      target: primaryInstanceDeploymentTarget,
+    });
+  }
+
   return deploymentWritebackResult(result);
 }
 
-function writeDomainProviderDeleteDeploymentFailure(
+async function writeDomainProviderDeleteDeploymentFailure(
   storage: DurableObjectStorage,
   input: {
+    env: DurableObjectDomainProviderEnv;
     error: string;
     job: InstanceDomainProviderDeleteJob;
     now: string;
+    requestUrl: string;
     runnerId?: string;
   },
-): { ok: true } | { ok: false; error: string; status: number } {
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const deployment = readDeleteJobDeploymentLink(storage, input.job.jobId);
 
   if (!deployment) {
@@ -2199,18 +2416,29 @@ function writeDomainProviderDeleteDeploymentFailure(
     },
   });
 
+  if (result.ok) {
+    await recordDeploymentAttemptInControlPlane({
+      attempt: result.attempt,
+      env: input.env,
+      requestUrl: input.requestUrl,
+      target: primaryInstanceDeploymentTarget,
+    });
+  }
+
   return deploymentWritebackResult(result);
 }
 
-function writeDomainProviderDeleteDeploymentSuccess(
+async function writeDomainProviderDeleteDeploymentSuccess(
   storage: DurableObjectStorage,
   input: {
+    env: DurableObjectDomainProviderEnv;
     job: InstanceDomainProviderDeleteJob;
     now: string;
+    requestUrl: string;
     resources: readonly InstanceDomainProviderDeleteJobResourceEvidence[];
     runnerId?: string;
   },
-): { ok: true } | { ok: false; error: string; status: number } {
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const deployment = readDeleteJobDeploymentLink(storage, input.job.jobId);
 
   if (!deployment) {
@@ -2245,6 +2473,23 @@ function writeDomainProviderDeleteDeploymentSuccess(
     now: input.now,
     runnerId: input.runnerId ?? input.job.runnerId,
   });
+
+  if (result.ok) {
+    await recordDeploymentAttemptInControlPlane({
+      attempt: result.attempt,
+      env: input.env,
+      requestUrl: input.requestUrl,
+      target: primaryInstanceDeploymentTarget,
+    });
+    await recordDeploymentEvidenceInControlPlane({
+      attempt: result.attempt,
+      env: input.env,
+      evidence,
+      now: input.now,
+      requestUrl: input.requestUrl,
+      target: primaryInstanceDeploymentTarget,
+    });
+  }
 
   return deploymentWritebackResult(result);
 }

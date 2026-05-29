@@ -9,11 +9,14 @@ import type {
   DeploymentResourceEvidenceSummary,
   DeploymentTarget,
 } from "../shared/deployment-runtime.ts";
+import type { InstanceDomainProviderRedirectIntent } from "../shared/domain-provider-api.ts";
+import type { InstanceDomainMapping } from "../shared/instance-domain-mappings.ts";
 import type { StoredRecord } from "../shared/protocol.ts";
 import {
   INTERNAL_RECORD_DEPLOYMENT_ATTEMPT_PATH,
   INTERNAL_RECORD_DEPLOYMENT_DRIFT_PATH,
   INTERNAL_RECORD_DEPLOYMENT_EVIDENCE_PATH,
+  INTERNAL_SYNC_DOMAIN_INTENT_PATH,
   INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH,
 } from "./instance-control-plane.ts";
 
@@ -37,6 +40,23 @@ export async function syncDeploymentProjectionToControlPlane(input: {
       target: input.target,
     },
     path: INTERNAL_SYNC_DEPLOYMENT_PROJECTION_PATH,
+  });
+}
+
+export async function syncDomainIntentToControlPlane(input: {
+  env: DeploymentControlPlaneClientEnv;
+  mappings?: InstanceDomainMapping[];
+  now: string;
+  redirectIntents?: InstanceDomainProviderRedirectIntent[];
+  requestUrl: string;
+}): Promise<StoredRecord[] | undefined> {
+  return postInternalControlPlaneRecords(input.env, input.requestUrl, {
+    body: {
+      ...(input.mappings === undefined ? {} : { mappings: input.mappings }),
+      now: input.now,
+      ...(input.redirectIntents === undefined ? {} : { redirectIntents: input.redirectIntents }),
+    },
+    path: INTERNAL_SYNC_DOMAIN_INTENT_PATH,
   });
 }
 

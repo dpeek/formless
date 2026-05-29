@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
-import type { CreateAppInstallResponse } from "../shared/protocol.ts";
+import type { BootstrapResponse, CreateAppInstallResponse } from "../shared/protocol.ts";
 import type {
   ForgetInstanceDomainMappingResponse,
   InstanceDomainMapping,
@@ -63,6 +63,7 @@ describe("instance domain mapping API routes", () => {
         "www.example.com:443",
       )}&surface=site`,
     );
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
 
     expect(before.body.mappings).toEqual([]);
     expect(created.response.status).toBe(201);
@@ -76,6 +77,21 @@ describe("instance domain mapping API routes", () => {
     });
     expect(after.body.mappings).toEqual(created.body.mappings);
     expect(lookup.body.mapping).toEqual(created.body.mapping);
+    expect(controlPlane.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "domainMapping",
+          id: "domain-mapping:publicSite:www.example.com",
+          values: expect.objectContaining({
+            appInstall: "personal",
+            appRoute: "app-route:personal:publicSite",
+            enabled: true,
+            host: "www.example.com",
+            profile: "publicSite",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("keeps disabled desired mappings out of enabled host lookup", async () => {
@@ -174,6 +190,22 @@ describe("instance domain mapping API routes", () => {
       targetInstallId: "tasks",
       installId: "tasks",
     });
+    const controlPlane = await getJson<BootstrapResponse>("/api/formless/control-plane/bootstrap");
+    expect(controlPlane.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "domainMapping",
+          id: "domain-mapping:app:tasks.example.com",
+          values: expect.objectContaining({
+            appInstall: "tasks",
+            appRoute: "app-route:tasks:admin",
+            enabled: true,
+            host: "tasks.example.com",
+            profile: "app",
+          }),
+        }),
+      ]),
+    );
     expect(instanceWithTarget.response.status).toBe(400);
     expect(instanceWithTarget.body).toMatchObject({
       code: "invalid-install-id",

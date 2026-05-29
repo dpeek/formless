@@ -246,6 +246,10 @@ export function executeAuthorityOperation(
         throw new BadRequestError("Site page trees are only available for the site schema.");
       }
 
+      if (input.identity.kind === "instanceControlPlane") {
+        throw new BadRequestError("Site page trees are only available for app storage.");
+      }
+
       const slug = parseSiteTreeSlug(operation.metadata.path);
       const { schema } = initializeStorageFromSource(input.storage, input.source);
       const projection = buildSitePageTree(schema, getBootstrapRecords(input.storage), slug, {

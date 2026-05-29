@@ -21,8 +21,10 @@ import {
   INSTANCE_DEPLOYMENT_STATUS_API_PATH,
   type InstanceDeploymentStatusResponse,
 } from "../shared/deployment-runtime.ts";
+import { INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX } from "../shared/instance-control-plane.ts";
 import type { CreateInstanceDomainMappingResponse } from "../shared/instance-domain-mappings.ts";
 import type { InstanceDomainMappingsResponse } from "../shared/instance-domain-mappings.ts";
+import type { BootstrapResponse } from "../shared/protocol.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
@@ -684,6 +686,26 @@ describe("instance domain provider API routes", () => {
       "cloudflare-dns-records",
       "cloudflare-redirect-rule",
     ]);
+    const controlPlaneIntent = await getJson<BootstrapResponse>(
+      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap`,
+    );
+
+    expect(controlPlaneIntent.body.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: "redirectIntent",
+          id: "redirect-intent:www.example.com",
+          values: expect.objectContaining({
+            enabled: true,
+            fromHost: "www.example.com",
+            preservePath: true,
+            preserveQueryString: true,
+            statusCode: "301",
+            toHost: "example.com",
+          }),
+        }),
+      ]),
+    );
 
     const apply = await postAdminJson<InstanceDomainProviderApplyResponse>(
       INSTANCE_DOMAIN_PROVIDER_APPLY_API_PATH,
@@ -807,6 +829,27 @@ describe("instance domain provider API routes", () => {
 
     expect(afterProviderDelete.body.appliedResources).toEqual([]);
     expect(afterProviderDelete.body.auditEvents.map((event) => event.action)).toEqual([
+      "created",
+      "created",
+      "deleted",
+      "deleted",
+    ]);
+
+    const controlPlaneHistory = await getJson<BootstrapResponse>(
+      `${INSTANCE_CONTROL_PLANE_API_ROUTE_PREFIX}/bootstrap?actorKind=runner`,
+    );
+    const attemptRecords = controlPlaneHistory.body.records.filter(
+      (record) => record.entity === "deployAttempt",
+    );
+    const evidenceRecords = controlPlaneHistory.body.records.filter(
+      (record) => record.entity === "deployEvidenceSummary",
+    );
+
+    expect(attemptRecords.map((record) => record.values.status)).toEqual([
+      "succeeded",
+      "succeeded",
+    ]);
+    expect(evidenceRecords.map((record) => record.values.action)).toEqual([
       "created",
       "created",
       "deleted",

@@ -88,12 +88,21 @@ Evidence:
 
 ## 6. Custom-Domain Migration And Compatibility
 
-- [ ] 6.1 Backfill existing domain mapping and redirect intent tables into control-plane records that reference app installs or app routes where applicable.
-- [ ] 6.2 Backfill compatible deployment attempt, evidence summary, cleanup, and drift facts into display-safe control-plane records.
-- [ ] 6.3 Delegate existing custom-domain mapping and redirect APIs to schema-owned records while preserving response shapes.
-- [ ] 6.4 Delegate domain provider apply, delete, cleanup, forget, and manual cleanup workflows to schema records/actions where available.
-- [ ] 6.5 Keep legacy table reads available long enough to verify old and new state during migration.
-- [ ] 6.6 Add compatibility tests for domain routes, app/public Site targets, provider evidence, cleanup behavior, and existing API responses.
+- [x] 6.1 Backfill existing domain mapping and redirect intent tables into control-plane records that reference app installs or app routes where applicable.
+- [x] 6.2 Backfill compatible deployment attempt, evidence summary, cleanup, and drift facts into display-safe control-plane records.
+- [x] 6.3 Delegate existing custom-domain mapping and redirect APIs to schema-owned records while preserving response shapes.
+- [x] 6.4 Delegate domain provider apply, delete, cleanup, forget, and manual cleanup workflows to schema records/actions where available.
+- [x] 6.5 Keep legacy table reads available long enough to verify old and new state during migration.
+- [x] 6.6 Add compatibility tests for domain routes, app/public Site targets, provider evidence, cleanup behavior, and existing API responses.
+
+Evidence:
+
+- Files changed: `src/worker/deployment-control-plane-client.ts`, `src/worker/instance-control-plane.ts`, `src/worker/instance-domain-mappings.ts`, `src/worker/domain-provider-api.ts`, `src/worker/instance-domain-mappings.test.ts`, `src/worker/domain-provider-api.test.ts`, `src/worker/authority-operations.ts`, `bun.lock`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` before implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-05-29T01:47:04.649Z. `devstate check` first caught one type error in `src/worker/instance-domain-mappings.ts`; after fixing the forget handler env type, `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-29T01:55:48.213Z. Post-rebase `devstate check` caught one `src/worker/authority-operations.ts` identity narrowing type error; after adding the Site tree app-storage guard, final `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-29T04:55:53.443Z. `openspec validate schema-owned-control-plane --strict` passed.
+- Smoke: not run; section 6 changes worker API/control-plane sync behavior without generated instance UI changes.
+- Decisions: custom-domain mapping and redirect legacy rows now sync into `domainMapping` and `redirectIntent` control-plane records on compatible API reads and writes, while responses preserve existing API shapes. Provider apply/delete attempts and display-safe evidence summaries are mirrored into control-plane deployment records; raw provider truth and cleanup audit tables stay outside control-plane records. During migration, legacy tables remain the source list and control-plane reads are filtered back to those source ids so stale control-plane intent cannot reappear in compatibility responses.
+- Rebase note: `changes/schema-owned-control-plane` is rebased on local `main` at `d8f48c9`. Conflicts in `src/shared/schema-actions.ts` and `src/shared/schema-types.ts` were resolved by preserving public subscribe action input support and schema action actor exposure metadata; the section 6 stash reapplied cleanly.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
 
 ## 7. Generated UI, CLI, And Archives
 
