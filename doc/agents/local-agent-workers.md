@@ -40,6 +40,7 @@ The state root is shared by worktrees from the same clone and is not tracked.
 - The lease record stores change id, owner, branch, state, heartbeat time, and latest evidence.
 - Only the lease owner writes to `changes/<change-id>`.
 - Branch existence is not ownership.
+- A review-ready branch keeps a `ready-for-review` lease so workers do not reclaim the committed change from local `main`; use `bun agents release <change-id>` only when intentionally reopening worker ownership.
 
 ## Branches
 
@@ -62,6 +63,7 @@ The state root is shared by worktrees from the same clone and is not tracked.
 - Finalization rebases on local `main`, reconciles changed OpenSpec artifacts from `main`, promotes shipped facts into `openspec/specs/*/spec.md`, runs `devstate check`, commits, detaches the worker worktree at the final branch tip, and marks the branch ready for review.
 - Review-ready means the branch is a clean merge candidate with promoted specs included.
 - Review-ready branches must not remain checked out by worker worktrees.
+- Review-ready branches retain their lease until manual release or repository cleanup removes the local worker state.
 - Workers do not archive OpenSpec changes. Archiving is a separate process after review and merge.
 
 ## Feedback Loop

@@ -231,6 +231,134 @@ describe("local agent worker review branches", () => {
       },
     ]);
   });
+
+  it("keeps finalized changes leased so watch does not finalize them again", async () => {
+    const root = tempDir();
+    const gitCommonDir = path.join(root, ".git");
+    const commandCalls: Array<{ args: string[]; command: string; cwd: string }> = [];
+    let sessionCalls = 0;
+    let stdout = "";
+    let stderr = "";
+    const runCommand: CommandRunner = (cwd, command, args) => {
+      commandCalls.push({ args, command, cwd });
+      if (
+        command === "git" &&
+        args.join(" ") === "rev-parse --path-format=absolute --git-common-dir"
+      ) {
+        return { code: 0, stderr: "", stdout: `${gitCommonDir}\n` };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "ls-tree -r --name-only main -- openspec/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: readyChangeFiles("add-thing") };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "show-ref --verify --quiet refs/heads/changes/add-thing"
+      ) {
+        return { code: 1, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args[0] === "worktree" &&
+        args[1] === "add" &&
+        args[2] === "-b" &&
+        args[3] === "changes/add-thing"
+      ) {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "openspec" &&
+        args.join(" ") === "instructions apply --change add-thing --json"
+      ) {
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({ progress: { remaining: 0 }, state: "all_done" }),
+        };
+      }
+
+      if (command === "git" && args.join(" ") === "rev-parse --verify changes/add-thing") {
+        return { code: 0, stderr: "", stdout: "abc123\n" };
+      }
+
+      if (command === "git" && args.join(" ") === "checkout --detach abc123") {
+        return { code: 0, stderr: "", stdout: "" };
+      }
+
+      if (
+        command === "git" &&
+        args.join(" ") === "for-each-ref --format=%(refname:short) refs/heads/changes"
+      ) {
+        return { code: 0, stderr: "", stdout: "changes/add-thing\n" };
+      }
+
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+    const streams = {
+      stderr: {
+        write: (chunk: string | Uint8Array) => ((stderr += String(chunk)), true),
+      } as Pick<NodeJS.WriteStream, "write">,
+      stdout: {
+        write: (chunk: string | Uint8Array) => ((stdout += String(chunk)), true),
+      } as Pick<NodeJS.WriteStream, "write">,
+    };
+
+    try {
+      const firstCode = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:00:00.000Z"),
+        runCommand,
+        runSession: async (input) => {
+          sessionCalls += 1;
+          expect(input.mode).toBe("finalize");
+          expect(input.changeId).toBe("add-thing");
+          return "plan-done";
+        },
+        ...streams,
+      });
+      const paths = agentStatePaths(gitCommonDir);
+
+      expect(firstCode).toBe(0);
+      expect(readChangeLease(paths.root, "add-thing")).toMatchObject({
+        changeId: "add-thing",
+        owner: "igor",
+        state: "ready-for-review",
+      });
+      expect(readWorkerStatus(paths.root, "igor")).toMatchObject({
+        currentChange: "add-thing",
+        state: "ready-for-review",
+      });
+
+      const secondCode = await runAgentsCli(["watch", "igor", "--once"], {
+        cwd: root,
+        now: () => new Date("2026-05-28T00:01:00.000Z"),
+        runCommand,
+        runSession: async () => {
+          sessionCalls += 1;
+          return "plan-done";
+        },
+        ...streams,
+      });
+
+      expect(secondCode).toBe(0);
+      expect(sessionCalls).toBe(1);
+      expect(stdout).toContain("[agents] idle: change branches are leased");
+      expect(stderr).toBe("");
+      expect(commandCalls).toContainEqual({
+        args: ["checkout", "--detach", "abc123"],
+        command: "git",
+        cwd: path.join(root, "tmp", "worktree", "igor"),
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("local agent worker dry-run", () => {

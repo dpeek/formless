@@ -111,6 +111,7 @@ type WorkerDeps = Partial<WorkerIo> & {
   cwd?: string;
   now?: () => Date;
   runCommand?: CommandRunner;
+  runSession?: CodexSessionRunner;
 };
 
 type ApplyInstructions = {
@@ -121,6 +122,17 @@ type ApplyInstructions = {
 };
 
 type WorkerSessionMode = "finalize" | "implement";
+
+type CodexSessionRunner = (input: {
+  changeId: string;
+  dangerous: boolean;
+  mode: WorkerSessionMode;
+  paths: AgentStatePaths;
+  workerName: string;
+  worktreeDir: string;
+  now: () => Date;
+  stdout: Pick<NodeJS.WriteStream, "write">;
+}) => Promise<"blocked" | "none" | "plan-done" | "task-done">;
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const promptDir = path.resolve(scriptDir, "..", "doc", "agents");
@@ -982,6 +994,7 @@ async function runClaimedChange(input: {
   options: WatchOptions;
   paths: AgentStatePaths;
   runCommand: CommandRunner;
+  runSession: CodexSessionRunner;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
   const mode = changeNeedsFinalization(
@@ -1015,7 +1028,7 @@ async function runClaimedChange(input: {
     input.now,
   );
 
-  const signal = await runCodexSession({
+  const signal = await input.runSession({
     changeId: input.change.changeId,
     dangerous: input.options.dangerous,
     mode,
@@ -1112,7 +1125,6 @@ async function runClaimedChange(input: {
       { latestEvidence: readyEvidence, state: "ready-for-review" },
       input.now,
     );
-    releaseChangeLease(input.paths.root, input.change.changeId, input.options.workerName);
   }
 
   return 0;
@@ -1212,6 +1224,7 @@ async function runWatchOnce(input: {
   now: () => Date;
   options: WatchOptions;
   runCommand: CommandRunner;
+  runSession: CodexSessionRunner;
   stderr: Pick<NodeJS.WriteStream, "write">;
   stdout: Pick<NodeJS.WriteStream, "write">;
 }): Promise<number> {
@@ -1238,6 +1251,7 @@ async function runWatchOnce(input: {
         options: input.options,
         paths,
         runCommand: input.runCommand,
+        runSession: input.runSession,
         stdout: input.stdout,
       });
     }
@@ -1352,6 +1366,7 @@ async function runWatchOnce(input: {
     options: input.options,
     paths,
     runCommand: input.runCommand,
+    runSession: input.runSession,
     stdout: input.stdout,
   });
 }
@@ -1367,6 +1382,7 @@ async function runWatch(options: WatchOptions, deps: Required<WorkerDeps>): Prom
       now: deps.now,
       options,
       runCommand: deps.runCommand,
+      runSession: deps.runSession,
       stderr: deps.stderr,
       stdout: deps.stdout,
     });
@@ -1419,6 +1435,7 @@ export async function runAgentsCli(args: string[], deps: WorkerDeps = {}): Promi
     cwd: deps.cwd ?? process.cwd(),
     now: deps.now ?? (() => new Date()),
     runCommand: deps.runCommand ?? defaultCommandRunner,
+    runSession: deps.runSession ?? runCodexSession,
     stderr: deps.stderr ?? process.stderr,
     stdout: deps.stdout ?? process.stdout,
   };
