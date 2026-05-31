@@ -49,6 +49,24 @@ The system SHALL project live Site block and block placement records into a nest
 - THEN live dated post or project items are attached under query output
 - AND items are ordered by descending date
 
+### Requirement: Subscribe Form Public Tree Projection
+
+The system SHALL project subscribe form blocks into public Site trees without exposing private challenge or runtime secrets.
+
+#### Scenario: Project subscribe form action facts
+
+- GIVEN the public Site tree includes a `subscribeForm` block
+- WHEN the block references a publicly executable action
+- THEN the projected block includes the public action name and target public action route
+- AND the projected block does not include Turnstile secrets or subscriber data
+
+#### Scenario: Warn for missing public action
+
+- GIVEN a `subscribeForm` block references an action that is missing or not publicly executable
+- WHEN the public tree is projected
+- THEN the public tree includes a warning
+- AND public rendering does not expose a working form for that block
+
 ### Requirement: Site Authoring
 
 The system SHALL expose Site authoring through generated admin screens that edit Site settings and tree-structured block composition without exposing raw implementation-only fields as primary controls.
@@ -75,6 +93,24 @@ The system SHALL expose Site authoring through generated admin screens that edit
 - THEN roots are grouped for Pages, Posts, Projects, Header, and Footer
 - AND raw Blocks and Placements remain non-primary admin or setup views
 
+### Requirement: Subscribe Form Block
+
+The system SHALL support a Site `subscribeForm` block that binds public page content to a schema-declared public subscribe action.
+
+#### Scenario: Author subscribe form block
+
+- GIVEN a Site author creates a `subscribeForm` block
+- WHEN the block is stored
+- THEN the block stores normal flat block fields for label, body, action name, and button label
+- AND the block can be placed under public page and group composition branches
+
+#### Scenario: Subscribe form variant is parsed
+
+- GIVEN the Site source schema declares the `subscribeForm` block type
+- WHEN the schema is parsed
+- THEN `subscribeForm` is a valid block type and union variant
+- AND generated Site authoring exposes the fields needed to configure the form
+
 ### Requirement: Public Routes
 
 The system SHALL resolve public Site routes from live routable block hrefs and render public documents outside generated admin chrome.
@@ -99,6 +135,24 @@ The system SHALL resolve public Site routes from live routable block hrefs and r
 - WHEN public routes are resolved
 - THEN `/projects` is a normal page route
 - AND no project detail route is generated
+
+### Requirement: Subscribe Form Rendering
+
+The system SHALL render subscribe form blocks as public forms on preview, installed, and mapped public Site routes.
+
+#### Scenario: Render Turnstile-protected subscribe form
+
+- GIVEN a public Site page renders a valid `subscribeForm` block whose action requires Turnstile
+- WHEN the public renderer renders the block
+- THEN the page renders an email input, submit control, and Turnstile widget using the public site key
+- AND form submission posts to the target public action route with the email input, source block id, idempotency key, and Turnstile token
+
+#### Scenario: Render successful subscribe outcome
+
+- GIVEN a public subscribe form submission succeeds
+- WHEN the public page handles the outcome
+- THEN the page shows the configured success state
+- AND the visitor is not shown admin-only subscriber records
 
 ### Requirement: Links And Frames
 

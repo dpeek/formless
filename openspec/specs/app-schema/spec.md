@@ -179,3 +179,57 @@ The system SHALL declare generic mutations and schema action kinds as data-owned
 - THEN shared action kind capability facts drive runtime eligibility and UI
   input facts
 - AND action writes remain schema-declared commands over flat records
+
+### Requirement: Action Access Policy Schema
+
+The system SHALL parse action access policy from app schema data.
+
+#### Scenario: Parse anonymous action access
+
+- GIVEN an app schema declares an action with anonymous public access
+- WHEN the schema is parsed
+- THEN the parsed action preserves the action access policy for runtime execution
+- AND generated admin action behavior remains separate from public execution policy
+
+#### Scenario: Reject unsupported public action policy
+
+- GIVEN an app schema declares a public action policy with an unsupported actor mode, challenge, or origin rule
+- WHEN the schema is parsed
+- THEN parsing fails
+- AND the invalid app schema is not used for generated UI or writes
+
+### Requirement: Public Action Input Contract
+
+The system SHALL let app schemas declare the public input accepted by public actions.
+
+#### Scenario: Parse public input fields
+
+- GIVEN an app schema declares public input fields for an action
+- WHEN the schema is parsed
+- THEN field names, scalar types, required flags, and labels are validated
+- AND the parsed action exposes that input contract to the public action executor
+
+#### Scenario: Require public input for anonymous action
+
+- GIVEN an app schema declares anonymous public access for an action
+- WHEN the schema is parsed
+- THEN parsing requires an explicit public input contract
+- AND anonymous callers cannot submit undeclared record values directly
+
+### Requirement: Public Action Kind Eligibility
+
+The system MUST only expose action kinds that are safe for public execution through public action policy.
+
+#### Scenario: Reject ineligible action kind
+
+- GIVEN an action kind has no public execution module
+- WHEN the schema declares anonymous public access for that action
+- THEN parsing rejects the public access policy
+- AND the action can still exist for generated admin use when its non-public schema is valid
+
+#### Scenario: Subscribe action kind is eligible
+
+- GIVEN an app schema declares the subscribe action kind with anonymous public access and valid public input
+- WHEN the schema is parsed
+- THEN parsing accepts the action
+- AND the runtime can dispatch it through the public action executor
