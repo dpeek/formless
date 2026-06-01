@@ -440,7 +440,7 @@ export function executeAuthorityOperation(
       const packageFacts = parsePackageAppMigrationApplyRequest(input.body, input.app.key);
       const migrations = selectPackageAppMigrations({
         currentPackageRevision: packageFacts.currentPackageRevision,
-        packageAppKey: input.app.key,
+        packageAppKey: packageFacts.packageAppKey,
         safety: packageFacts.safety,
         targetPackageRevision: packageFacts.targetPackageRevision,
       });
@@ -451,7 +451,7 @@ export function executeAuthorityOperation(
             currentPackageRevision: packageFacts.currentPackageRevision,
             currentSourceSchemaHash: packageFacts.currentSourceSchemaHash,
             migrations,
-            packageAppKey: input.app.key,
+            packageAppKey: packageFacts.packageAppKey,
             targetPackageRevision: packageFacts.targetPackageRevision,
             targetSourceSchemaHash: packageFacts.targetSourceSchemaHash,
           }),
@@ -591,7 +591,7 @@ function parseOptionalSourceSchemaHashHeader(headers: Headers | undefined) {
 
 function browserReplicaUpgradeHeaders(
   storage: DurableObjectStorage,
-  identity: AppStorageIdentity,
+  identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity,
 ): HeadersInit {
   const facts = browserReplicaUpgradeFacts(storage, identity);
   const headers: Record<string, string> = {
@@ -612,9 +612,18 @@ function browserReplicaUpgradeHeaders(
 
 function browserReplicaUpgradeFacts(
   storage: DurableObjectStorage,
-  identity: AppStorageIdentity,
+  identity: AppStorageIdentity | InstanceControlPlaneStorageIdentity,
 ): BrowserReplicaUpgradeFacts {
   const storedSchema = readCurrentStoredSchema(storage);
+
+  if (identity.kind === "instanceControlPlane") {
+    return {
+      runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+      schemaUpdatedAt: storedSchema?.updatedAt ?? null,
+      packageApp: null,
+    };
+  }
+
   const packageApp = findBundledAppPackage(identity.packageAppKey);
   const packageState = readPackageAppMigrationState(storage, identity.packageAppKey);
 
@@ -666,6 +675,7 @@ function parsePackageAppMigrationApplyRequest(value: unknown, packageAppKey: str
   const body = isRecord(value) ? value : {};
 
   return {
+    packageAppKey: packageApp.packageAppKey,
     currentPackageRevision: parseOptionalPackageRevision(
       body.currentPackageRevision,
       packageApp.packageRevision,

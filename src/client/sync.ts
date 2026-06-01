@@ -561,7 +561,10 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 async function addBrowserReplicaWriteHeaders(headers: Headers, target: ClientAppTarget) {
   const identity = appStorageIdentityForClientTarget(target);
   const schemaUpdatedAt = await readSchemaUpdatedAt(identity);
-  const packageFacts = packageAppFactsForKey(identity.packageAppKey);
+  const packageFacts =
+    identity.kind === "instanceControlPlane"
+      ? undefined
+      : packageAppFactsForKey(identity.packageAppKey);
 
   headers.set(FORMLESS_CLIENT_RUNTIME_PROTOCOL_HEADER, String(FORMLESS_RUNTIME_PROTOCOL_VERSION));
 

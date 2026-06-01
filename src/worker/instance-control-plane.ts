@@ -5,6 +5,7 @@ import {
 import {
   appInstallRegistryError,
   createAppInstall,
+  findAppInstall,
   findBundledAppPackage,
   listAppInstalls,
   type AppInstall,

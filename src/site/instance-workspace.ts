@@ -14,7 +14,11 @@ import {
   type PortableArchive,
 } from "../shared/archive.ts";
 import { normalizePortableArchive } from "../shared/archive-normalizers.ts";
-import type { AppInstall, PackageAppKey } from "../shared/app-installs.ts";
+import {
+  packageAppFactsForKey,
+  type AppInstall,
+  type PackageAppKey,
+} from "../shared/app-installs.ts";
 import {
   normalizeInstanceDomainHost,
   type InstanceDomainMapping,
@@ -1579,7 +1583,7 @@ function comparableControlPlaneIntentRecords(
         stableValue({
           entity: record.entity,
           id: record.id,
-          values: comparableControlPlaneValues(record.values),
+          values: comparableControlPlaneValues(record),
         }),
       ),
     );
@@ -1588,12 +1592,23 @@ function comparableControlPlaneIntentRecords(
   return records;
 }
 
-function comparableControlPlaneValues(values: RecordValues): RecordValues {
-  return Object.fromEntries(
-    Object.entries(values).filter(
+function comparableControlPlaneValues(record: StoredRecord): RecordValues {
+  const values = Object.fromEntries(
+    Object.entries(record.values).filter(
       ([fieldName]) => fieldName !== "createdAt" && fieldName !== "updatedAt",
     ),
   ) as RecordValues;
+
+  if (record.entity === "appInstall" && typeof values.packageAppKey === "string") {
+    const packageFacts = packageAppFactsForKey(values.packageAppKey);
+
+    if (packageFacts) {
+      values.packageRevision ??= packageFacts.packageRevision;
+      values.sourceSchemaHash ??= packageFacts.sourceSchemaHash;
+    }
+  }
+
+  return values;
 }
 
 function controlPlaneRecordKey(record: Pick<StoredRecord, "entity" | "id">) {
@@ -1924,11 +1939,18 @@ function workspaceAppInstallFromDeclaration(
   exportedAt: string,
 ): AppInstall {
   const packageAppKey = (archive?.app.packageAppKey ?? app.packageAppKey) as PackageAppKey;
+  const packageFacts = archive?.app ?? packageAppFactsForKey(packageAppKey);
   const publicPath = app.routes?.public ?? `/sites/${app.installId}`;
+
+  if (!packageFacts) {
+    throw new Error(`Workspace app "${app.installId}" package "${packageAppKey}" is unsupported.`);
+  }
 
   return {
     installId: app.installId,
     packageAppKey,
+    packageRevision: packageFacts.packageRevision,
+    sourceSchemaHash: packageFacts.sourceSchemaHash,
     label: archive?.app.label ?? app.label,
     status: archive?.app.status ?? "installed",
     createdAt: archive?.app.createdAt ?? exportedAt,

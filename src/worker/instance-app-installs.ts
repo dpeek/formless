@@ -119,7 +119,9 @@ export async function handleInstanceAppInstallsDurableObjectRequest(
       const updatedInstall = findAppInstall(installs, install.installId);
 
       if (!updatedInstall) {
-        throw new Error(`Migrated install "${install.installId}" was not returned by control-plane.`);
+        throw new Error(
+          `Migrated install "${install.installId}" was not returned by control-plane.`,
+        );
       }
 
       return jsonResponse({

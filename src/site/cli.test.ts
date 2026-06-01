@@ -2694,7 +2694,7 @@ describe("Formless Site CLI", () => {
     expect(logs).toHaveLength(1);
     const lines = logs[0]?.split("\n") ?? [];
 
-    expect(lines.slice(0, 16)).toEqual([
+    expect(lines.slice(0, 17)).toEqual([
       "Instance workspace push dry run.",
       `Workspace: ${path.relative(tempDir, workspaceRoot)}.`,
       "Target: remote (https://personal.dpeek.workers.dev).",

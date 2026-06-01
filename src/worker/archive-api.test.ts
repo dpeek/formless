@@ -499,6 +499,8 @@ function controlPlaneArchiveRecords(): StoredRecord[] {
   const install: AppInstall = {
     installId: "personal",
     packageAppKey: "site",
+    packageRevision: 1,
+    sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
     label: "Archived Personal",
     status: "installed",
     createdAt: now,
