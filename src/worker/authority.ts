@@ -41,6 +41,10 @@ import {
   selectPublicActionRoute,
 } from "./public-actions.ts";
 import { turnstileSiteKeyFromEnv } from "../shared/turnstile-config.ts";
+import {
+  handleAppStorageUpgradeStatusDurableObjectRequest,
+  handleInstanceUpgradeStatusDurableObjectRequest,
+} from "./upgrade-status-api.ts";
 
 export class FormlessAuthority extends DurableObject<Env> {
   private readonly bindings: Env;
@@ -65,6 +69,16 @@ export class FormlessAuthority extends DurableObject<Env> {
 
     if (ownerSetupResponse) {
       return ownerSetupResponse;
+    }
+
+    const instanceUpgradeStatusResponse = await handleInstanceUpgradeStatusDurableObjectRequest(
+      request,
+      this.ctx.storage,
+      this.bindings,
+    );
+
+    if (instanceUpgradeStatusResponse) {
+      return instanceUpgradeStatusResponse;
     }
 
     const instanceDomainMappingsResponse = await handleInstanceDomainMappingsDurableObjectRequest(
@@ -156,6 +170,19 @@ export class FormlessAuthority extends DurableObject<Env> {
 
       if (archiveAppDataRestoreResponse) {
         return archiveAppDataRestoreResponse;
+      }
+
+      const appStorageUpgradeStatusResponse =
+        await handleAppStorageUpgradeStatusDurableObjectRequest({
+          env: this.bindings,
+          identity: route.identity,
+          path: route.path,
+          request,
+          storage: this.ctx.storage,
+        });
+
+      if (appStorageUpgradeStatusResponse) {
+        return appStorageUpgradeStatusResponse;
       }
 
       const operation = selectAuthorityOperation({

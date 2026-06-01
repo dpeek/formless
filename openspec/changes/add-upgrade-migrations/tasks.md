@@ -114,10 +114,17 @@ Evidence:
 
 ## 9. Runtime Upgrade Apply Evidence API
 
-- [ ] 9.1 Add a narrow secured runtime or Authority API that exposes SQL migration applied-state evidence per storage identity.
-- [ ] 9.2 Expose package app migration applied-state evidence through the same upgrade status or apply boundary.
-- [ ] 9.3 Keep the API unavailable to public app and browser-generated write routes.
-- [ ] 9.4 Add worker tests for authorization, storage identity scoping, applied-state evidence, and no direct CLI Durable Object SQLite access.
+- [x] 9.1 Add a narrow secured runtime or Authority API that exposes SQL migration applied-state evidence per storage identity.
+- [x] 9.2 Expose package app migration applied-state evidence through the same upgrade status or apply boundary.
+- [x] 9.3 Keep the API unavailable to public app and browser-generated write routes.
+- [x] 9.4 Add worker tests for authorization, storage identity scoping, applied-state evidence, and no direct CLI Durable Object SQLite access.
+
+Evidence:
+
+- `grug` 2026-06-01: added `src/shared/upgrade-status.ts` response contracts and `/api/formless/upgrade/status` plus app-storage `/upgrade/status` handlers in `src/worker/upgrade-status-api.ts`, routed through the instance and app Authority Durable Objects.
+- The runtime status API requires instance write authorization, returns no-store JSON evidence, reads SQL applied-state rows per reported storage identity, and includes package app migration applied rows plus package state for app storage identities. Installed app evidence is collected through Authority fetches rather than direct CLI Durable Object SQLite access.
+- Added `src/worker/upgrade-status-api.test.ts` coverage for authorization, storage identity scoping, SQL/package evidence, method rejection, and public app route exclusion.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes secured worker API evidence only and no visible browser app workflow changed.
 
 ## 10. CLI Auto-safe Apply
 

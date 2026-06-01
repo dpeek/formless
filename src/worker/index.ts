@@ -33,6 +33,7 @@ import {
 } from "./routing.ts";
 import { handleSiteIconRequest } from "./site-icons.ts";
 import { handlePublishedSiteDocumentRequest } from "./site-ssr.tsx";
+import { handleInstanceUpgradeStatusApiRequest } from "./upgrade-status-api.ts";
 import type { TurnstileRuntimeEnv } from "../shared/turnstile-config.ts";
 
 export { FormlessAuthority } from "./authority.ts";
@@ -137,6 +138,12 @@ export default {
 
     if (archiveResponse) {
       return archiveResponse;
+    }
+
+    const instanceUpgradeStatusResponse = await handleInstanceUpgradeStatusApiRequest(request, env);
+
+    if (instanceUpgradeStatusResponse) {
+      return instanceUpgradeStatusResponse;
     }
 
     const instanceAppInstallsResponse = await handleInstanceAppInstallsApiRequest(request, env);

@@ -1,0 +1,169 @@
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import type { CreateAppInstallResponse } from "../shared/protocol.ts";
+import {
+  APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX,
+  INSTANCE_UPGRADE_STATUS_API_PATH,
+  type InstanceUpgradeStatusResponse,
+} from "../shared/upgrade-status.ts";
+import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
+import { createWorkerHarness } from "./miniflare-test.ts";
+
+type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
+
+const adminToken = "test-admin-token";
+
+let harness: Harness;
+
+beforeEach(async () => {
+  harness = await createWorkerHarness(
+    "src/worker/index.ts",
+    {
+      FORMLESS_AUTHORITY: { className: "FormlessAuthority", useSQLite: true },
+    },
+    {
+      bindings: { FORMLESS_ADMIN_TOKEN: adminToken },
+    },
+  );
+});
+
+afterEach(async () => {
+  await harness.dispose();
+});
+
+describe("runtime upgrade status API", () => {
+  it("requires instance write authorization for status reads", async () => {
+    const instanceStatus = await harness.fetch(INSTANCE_UPGRADE_STATUS_API_PATH);
+    const appStatus = await harness.fetch(
+      `/api/app-installs/tasks/tasks${APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX}`,
+    );
+
+    expect(instanceStatus.status).toBe(401);
+    expect(instanceStatus.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+    expect(await instanceStatus.json()).toEqual({
+      error: "Owner session or admin authorization is required for this write endpoint.",
+    });
+    expect(appStatus.status).toBe(401);
+    expect(appStatus.headers.get("WWW-Authenticate")).toBe('Bearer realm="formless-admin"');
+  });
+
+  it("reports SQL and package app migration evidence scoped by storage identity", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      installId: "tasks",
+      label: "Tasks",
+      packageAppKey: "tasks",
+    });
+    await postAdminJson("/api/formless/app-installs/tasks/tasks/package-migrations/apply", {});
+
+    const status = await getAdminJson<InstanceUpgradeStatusResponse>(
+      INSTANCE_UPGRADE_STATUS_API_PATH,
+    );
+    const instance = status.body.storageIdentities.find(
+      (storage) => storage.identity.kind === "instance",
+    );
+    const tasks = status.body.storageIdentities.find(
+      (storage) => storage.identity.kind === "appInstall" && storage.identity.installId === "tasks",
+    );
+
+    expect(status.response.headers.get("Cache-Control")).toBe("no-store");
+    expect(status.body.storageIdentities).toHaveLength(2);
+    expect(instance).toEqual(
+      expect.objectContaining({
+        identity: {
+          authorityName: "__formless_instance__",
+          kind: "instance",
+        },
+      }),
+    );
+    expect(instance?.sqlMigrations).toContainEqual(
+      expect.objectContaining({
+        migrationId: "2026-05-28-instance-app-installs-package-facts",
+        storageFamily: "instance-app-installs",
+      }),
+    );
+    expect(tasks).toEqual(
+      expect.objectContaining({
+        identity: expect.objectContaining({
+          authorityName: "app:tasks",
+          installId: "tasks",
+          kind: "appInstall",
+          packageAppKey: "tasks",
+        }),
+        packageAppMigrations: {
+          applied: [],
+          state: expect.objectContaining({
+            packageAppKey: "tasks",
+            packageRevision: 1,
+            sourceSchemaHash: bundledSourceSchemaHashFixtures.tasks,
+          }),
+        },
+      }),
+    );
+    expect(
+      status.body.storageIdentities.some(
+        (storage) =>
+          storage.identity.kind === "appInstall" && storage.identity.installId === "estii",
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps status evidence out of public app and browser write routes", async () => {
+    await postAdminJson<CreateAppInstallResponse>("/api/formless/app-installs", {
+      installId: "site",
+      label: "Site",
+      packageAppKey: "site",
+    });
+
+    const appStatusWrite = await harness.fetch(
+      `/api/app-installs/site/site${APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX}`,
+      {
+        headers: adminHeaders(),
+        method: "POST",
+      },
+    );
+    const publicRoute = await harness.fetch(
+      `/api/app-installs/site/site/public${APP_STORAGE_UPGRADE_STATUS_API_PATH_SUFFIX}`,
+      {
+        headers: adminHeaders(),
+      },
+    );
+
+    expect(appStatusWrite.status).toBe(405);
+    expect(appStatusWrite.headers.get("Allow")).toBe("GET");
+    expect(publicRoute.status).toBe(404);
+  });
+});
+
+async function getAdminJson<T>(path: string) {
+  const response = await harness.fetch(path, {
+    headers: adminHeaders(),
+  });
+
+  expect(response.status).toBe(200);
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
+async function postAdminJson<T = unknown>(path: string, body: unknown) {
+  const response = await harness.fetch(path, {
+    body: JSON.stringify(body),
+    headers: adminHeaders(),
+    method: "POST",
+  });
+
+  expect([200, 201]).toContain(response.status);
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
+function adminHeaders() {
+  return {
+    Authorization: `Bearer ${adminToken}`,
+    "Content-Type": "application/json",
+  };
+}

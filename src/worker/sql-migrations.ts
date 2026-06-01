@@ -97,6 +97,21 @@ export function readAppliedSqlMigrations(
     .map(appliedSqlMigrationFromRow);
 }
 
+export function readAllAppliedSqlMigrations(storage: DurableObjectStorage): AppliedSqlMigration[] {
+  ensureAppliedSqlMigrationsTable(storage);
+
+  return storage.sql
+    .exec<AppliedSqlMigrationRow>(
+      `
+        SELECT storage_family, migration_id, checksum, package_version, applied_at
+        FROM ${appliedSqlMigrationsTableName}
+        ORDER BY storage_family ASC, applied_at ASC, migration_id ASC
+      `,
+    )
+    .toArray()
+    .map(appliedSqlMigrationFromRow);
+}
+
 export function recordAppliedSqlMigration(
   storage: DurableObjectStorage,
   migration: AppliedSqlMigration,
