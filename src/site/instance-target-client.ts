@@ -82,6 +82,7 @@ import {
   type PackageAppRevision,
   type SourceSchemaHash,
 } from "../shared/upgrade-migrations.ts";
+import type { PortableArchiveInputStatus } from "./archive-input-status.ts";
 import { normalizeFormlessInstanceWorkspaceTargetUrl } from "./instance-workspace-config.ts";
 
 const OWNER_SETUP_STATUS_API_PATH = "/api/formless/setup";
@@ -96,6 +97,7 @@ export type FormlessInstanceTargetStatus = {
   deployment?: InstanceDeploymentStatusResponse;
   ownerSetup: OwnerSetupStatusResponse;
   targetUrl: string;
+  upgradeStatus: FormlessInstanceTargetUpgradeStatus;
 };
 
 export type FormlessInstanceControlPlaneRecords = {
@@ -129,6 +131,48 @@ export type FormlessInstanceTargetDeployMetadata = {
   version: string | null;
 };
 
+export type FormlessInstanceTargetUpgradeStatus = {
+  archiveInput: PortableArchiveInputStatus;
+  deployedMetadata: FormlessInstanceTargetDeployMetadata;
+  deployment?: InstanceDeploymentStatusResponse;
+  installedApps: FormlessInstanceTargetInstalledAppUpgradeFacts[];
+  localPackages: FormlessInstanceTargetLocalPackageUpgradeFacts[];
+  verificationFailures: FormlessInstanceTargetUpgradeVerificationFailure[];
+};
+
+export type FormlessInstanceTargetLocalPackageUpgradeFacts = {
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
+};
+
+export type FormlessInstanceTargetInstalledAppUpgradeFacts = {
+  installId: string;
+  packageAppKey: PackageAppKey;
+  packageRevision: PackageAppRevision;
+  sourceSchemaHash: SourceSchemaHash;
+};
+
+export type FormlessInstanceTargetUpgradeVerificationFailureCode =
+  | "deploy-metadata-cacheable"
+  | "deploy-metadata-package-app-facts-missing"
+  | "deploy-metadata-package-app-missing"
+  | "deploy-metadata-package-apps-missing"
+  | "deploy-metadata-package-version-missing"
+  | "deploy-metadata-runtime-protocol-version-missing"
+  | "deploy-metadata-storage-migration-set-missing"
+  | "deployment-status-unavailable"
+  | "installed-app-package-facts-missing"
+  | "local-package-facts-missing";
+
+export type FormlessInstanceTargetUpgradeVerificationFailure = {
+  code: FormlessInstanceTargetUpgradeVerificationFailureCode;
+  installId?: string;
+  message: string;
+  packageAppKey?: PackageAppKey;
+  source: "deployed-metadata" | "deployment-status" | "installed-app" | "local-package";
+};
+
 export type FormlessInstanceTargetClientDependencies = {
   fetch: typeof fetch;
 };
@@ -145,44 +189,312 @@ export class FormlessInstanceTargetRequestError extends Error {
   }
 }
 
+type FormlessInstanceDeployMetadataReadResult = {
+  deployMetadata: FormlessInstanceTargetDeployMetadata;
+  factPresence: FormlessInstanceDeployMetadataFactPresence;
+};
+
+type FormlessInstanceDeployMetadataFactPresence = {
+  packageApps: boolean;
+  packageVersion: boolean;
+  runtimeProtocolVersion: boolean;
+  storageMigrationSet: boolean;
+  packageAppFacts: FormlessInstancePackageAppFactPresence[];
+};
+
+type FormlessInstancePackageAppFactPresence = {
+  packageAppKey: PackageAppKey;
+  packageRevision: boolean;
+  sourceSchemaHash: boolean;
+};
+
+type FormlessInstanceAppRegistryReadResult = {
+  appRegistry: AppInstallsResponse;
+  factPresence: FormlessInstanceAppRegistryFactPresence;
+};
+
+type FormlessInstanceAppRegistryFactPresence = {
+  installs: FormlessInstanceAppInstallFactPresence[];
+};
+
+type FormlessInstanceAppInstallFactPresence = {
+  installId: string;
+  packageAppKey: PackageAppKey;
+  packageRevision: boolean;
+  sourceSchemaHash: boolean;
+};
+
 export async function readFormlessInstanceTargetStatus(
-  input: { includeDeploymentStatus?: boolean; targetUrl: string },
+  input: {
+    archiveInput?: PortableArchiveInputStatus;
+    includeDeploymentStatus?: boolean;
+    targetUrl: string;
+  },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceTargetStatus> {
   const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
-  const [deployMetadata, ownerSetup, appRegistry, deployment] = await Promise.all([
-    readFormlessInstanceDeployMetadata({ targetUrl }, dependencies),
+  const [deployMetadataResult, ownerSetup, appRegistryResult, deployment] = await Promise.all([
+    readFormlessInstanceDeployMetadataResult({ targetUrl }, dependencies),
     readFormlessInstanceOwnerSetupStatus({ targetUrl }, dependencies),
-    readFormlessInstanceAppRegistry({ targetUrl }, dependencies),
+    readFormlessInstanceAppRegistryResult({ targetUrl }, dependencies),
     input.includeDeploymentStatus
       ? readOptionalFormlessInstanceDeploymentStatus({ targetUrl }, dependencies)
       : undefined,
   ]);
+  const upgradeStatus = targetUpgradeStatus({
+    appRegistry: appRegistryResult.appRegistry,
+    appRegistryFactPresence: appRegistryResult.factPresence,
+    archiveInput: input.archiveInput ?? { present: false },
+    deployMetadata: deployMetadataResult.deployMetadata,
+    deployMetadataFactPresence: deployMetadataResult.factPresence,
+    deploymentStatusRequested: input.includeDeploymentStatus === true,
+    ...(deployment === undefined ? {} : { deployment }),
+  });
 
   return {
-    appRegistry,
-    deployMetadata,
+    appRegistry: appRegistryResult.appRegistry,
+    deployMetadata: deployMetadataResult.deployMetadata,
     ...(deployment === undefined ? {} : { deployment }),
     ownerSetup,
     targetUrl,
+    upgradeStatus,
   };
+}
+
+function targetUpgradeStatus(input: {
+  appRegistry: AppInstallsResponse;
+  appRegistryFactPresence: FormlessInstanceAppRegistryFactPresence;
+  archiveInput: PortableArchiveInputStatus;
+  deployMetadata: FormlessInstanceTargetDeployMetadata;
+  deployMetadataFactPresence: FormlessInstanceDeployMetadataFactPresence;
+  deployment?: InstanceDeploymentStatusResponse;
+  deploymentStatusRequested: boolean;
+}): FormlessInstanceTargetUpgradeStatus {
+  const localPackages = listBundledAppPackages().map(packageUpgradeFacts);
+  const installedApps = input.appRegistry.installs.map(installedAppUpgradeFacts);
+  const verificationFailures = upgradeVerificationFailures({
+    appRegistryFactPresence: input.appRegistryFactPresence,
+    deployMetadata: input.deployMetadata,
+    deployMetadataFactPresence: input.deployMetadataFactPresence,
+    deploymentStatusRequested: input.deploymentStatusRequested,
+    localPackages,
+    ...(input.deployment === undefined ? {} : { deployment: input.deployment }),
+  });
+
+  return {
+    archiveInput: input.archiveInput,
+    deployedMetadata: input.deployMetadata,
+    ...(input.deployment === undefined ? {} : { deployment: input.deployment }),
+    installedApps,
+    localPackages,
+    verificationFailures,
+  };
+}
+
+function packageUpgradeFacts(
+  appPackage: BundledAppPackage,
+): FormlessInstanceTargetLocalPackageUpgradeFacts {
+  return {
+    packageAppKey: appPackage.packageAppKey,
+    packageRevision: appPackage.packageRevision,
+    sourceSchemaHash: appPackage.sourceSchemaHash,
+  };
+}
+
+function installedAppUpgradeFacts(
+  install: AppInstall,
+): FormlessInstanceTargetInstalledAppUpgradeFacts {
+  return {
+    installId: install.installId,
+    packageAppKey: install.packageAppKey,
+    packageRevision: install.packageRevision,
+    sourceSchemaHash: install.sourceSchemaHash,
+  };
+}
+
+function upgradeVerificationFailures(input: {
+  appRegistryFactPresence: FormlessInstanceAppRegistryFactPresence;
+  deployMetadata: FormlessInstanceTargetDeployMetadata;
+  deployMetadataFactPresence: FormlessInstanceDeployMetadataFactPresence;
+  deployment?: InstanceDeploymentStatusResponse;
+  deploymentStatusRequested: boolean;
+  localPackages: FormlessInstanceTargetLocalPackageUpgradeFacts[];
+}): FormlessInstanceTargetUpgradeVerificationFailure[] {
+  const failures: FormlessInstanceTargetUpgradeVerificationFailure[] = [];
+
+  if (input.localPackages.length === 0) {
+    failures.push({
+      code: "local-package-facts-missing",
+      message: "Local package metadata is missing bundled package facts.",
+      source: "local-package",
+    });
+  }
+
+  if (!cacheControlIncludesNoStore(input.deployMetadata.cacheControl)) {
+    failures.push({
+      code: "deploy-metadata-cacheable",
+      message: "Deployed metadata must be served with Cache-Control: no-store.",
+      source: "deployed-metadata",
+    });
+  }
+
+  if (
+    !input.deployMetadataFactPresence.packageVersion ||
+    input.deployMetadata.packageVersion === null
+  ) {
+    failures.push({
+      code: "deploy-metadata-package-version-missing",
+      message: "Deployed metadata is missing packageVersion.",
+      source: "deployed-metadata",
+    });
+  }
+
+  if (!input.deployMetadataFactPresence.runtimeProtocolVersion) {
+    failures.push({
+      code: "deploy-metadata-runtime-protocol-version-missing",
+      message: "Deployed metadata is missing runtimeProtocolVersion.",
+      source: "deployed-metadata",
+    });
+  }
+
+  if (!input.deployMetadataFactPresence.storageMigrationSet) {
+    failures.push({
+      code: "deploy-metadata-storage-migration-set-missing",
+      message: "Deployed metadata is missing storageMigrationSet.",
+      source: "deployed-metadata",
+    });
+  }
+
+  if (!input.deployMetadataFactPresence.packageApps) {
+    failures.push({
+      code: "deploy-metadata-package-apps-missing",
+      message: "Deployed metadata is missing packageApps.",
+      source: "deployed-metadata",
+    });
+  } else {
+    const deployedPackageKeys = new Set(
+      input.deployMetadata.packageApps.map((appPackage) => appPackage.packageAppKey),
+    );
+
+    for (const localPackage of input.localPackages) {
+      if (!deployedPackageKeys.has(localPackage.packageAppKey)) {
+        failures.push({
+          code: "deploy-metadata-package-app-missing",
+          message: `Deployed metadata is missing package app "${localPackage.packageAppKey}".`,
+          packageAppKey: localPackage.packageAppKey,
+          source: "deployed-metadata",
+        });
+      }
+    }
+
+    for (const presence of input.deployMetadataFactPresence.packageAppFacts) {
+      if (!presence.packageRevision || !presence.sourceSchemaHash) {
+        failures.push({
+          code: "deploy-metadata-package-app-facts-missing",
+          message: `Deployed metadata package app "${presence.packageAppKey}" is missing package revision or source schema hash facts.`,
+          packageAppKey: presence.packageAppKey,
+          source: "deployed-metadata",
+        });
+      }
+    }
+  }
+
+  for (const presence of input.appRegistryFactPresence.installs) {
+    if (!presence.packageRevision || !presence.sourceSchemaHash) {
+      failures.push({
+        code: "installed-app-package-facts-missing",
+        installId: presence.installId,
+        message: `Installed app "${presence.installId}" is missing package revision or source schema hash facts.`,
+        packageAppKey: presence.packageAppKey,
+        source: "installed-app",
+      });
+    }
+  }
+
+  if (input.deploymentStatusRequested && input.deployment === undefined) {
+    failures.push({
+      code: "deployment-status-unavailable",
+      message: "Deployment status is unavailable for this target.",
+      source: "deployment-status",
+    });
+  }
+
+  return failures;
+}
+
+function deployMetadataFactPresence(
+  value: unknown,
+  metadata: FormlessInstanceTargetDeployMetadata,
+): FormlessInstanceDeployMetadataFactPresence {
+  const object = isRecord(value) ? value : {};
+  const rawPackageApps = Array.isArray(object.packageApps) ? object.packageApps : [];
+
+  return {
+    packageApps: Array.isArray(object.packageApps),
+    packageVersion: "packageVersion" in object,
+    runtimeProtocolVersion: "runtimeProtocolVersion" in object,
+    storageMigrationSet: "storageMigrationSet" in object,
+    packageAppFacts: metadata.packageApps.map((appPackage, index) => {
+      const rawPackageApp = rawPackageApps[index];
+      const rawPackageAppObject = isRecord(rawPackageApp) ? rawPackageApp : {};
+
+      return {
+        packageAppKey: appPackage.packageAppKey,
+        packageRevision: "packageRevision" in rawPackageAppObject,
+        sourceSchemaHash: "sourceSchemaHash" in rawPackageAppObject,
+      };
+    }),
+  };
+}
+
+function appRegistryFactPresence(
+  value: unknown,
+  appRegistry: AppInstallsResponse,
+): FormlessInstanceAppRegistryFactPresence {
+  const object = isRecord(value) ? value : {};
+  const rawInstalls = Array.isArray(object.installs) ? object.installs : [];
+
+  return {
+    installs: appRegistry.installs.map((install, index) => {
+      const rawInstall = rawInstalls[index];
+      const rawInstallObject = isRecord(rawInstall) ? rawInstall : {};
+
+      return {
+        installId: install.installId,
+        packageAppKey: install.packageAppKey,
+        packageRevision: "packageRevision" in rawInstallObject,
+        sourceSchemaHash: "sourceSchemaHash" in rawInstallObject,
+      };
+    }),
+  };
+}
+
+function cacheControlIncludesNoStore(value: string): boolean {
+  return value
+    .split(",")
+    .map((directive) => directive.trim().toLowerCase())
+    .includes("no-store");
 }
 
 export async function readFormlessInstanceDeployMetadata(
   input: { targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<FormlessInstanceTargetDeployMetadata> {
+  return (await readFormlessInstanceDeployMetadataResult(input, dependencies)).deployMetadata;
+}
+
+async function readFormlessInstanceDeployMetadataResult(
+  input: { targetUrl: string },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<FormlessInstanceDeployMetadataReadResult> {
   const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
   const metadataUrl = apiUrl(targetUrl, FORMLESS_DEPLOY_METADATA_PATH);
   const response = await dependencies.fetch(metadataUrl, {
     headers: { accept: "application/json" },
   });
-  const metadata = parseDeployMetadata(
-    await readJsonResponse(response, `GET ${metadataUrl}`),
-    metadataUrl,
-  );
-
-  return {
+  const value = await readJsonResponse(response, `GET ${metadataUrl}`);
+  const metadata = parseDeployMetadata(value, metadataUrl);
+  const deployMetadata = {
     cacheControl: response.headers.get("Cache-Control") ?? "",
     metadataUrl,
     packageApps: metadata.packageApps,
@@ -190,6 +502,11 @@ export async function readFormlessInstanceDeployMetadata(
     runtimeProtocolVersion: metadata.runtimeProtocolVersion,
     storageMigrationSet: metadata.storageMigrationSet,
     version: metadata.version,
+  };
+
+  return {
+    deployMetadata,
+    factPresence: deployMetadataFactPresence(value, deployMetadata),
   };
 }
 
@@ -210,13 +527,24 @@ export async function readFormlessInstanceAppRegistry(
   input: { targetUrl: string },
   dependencies: FormlessInstanceTargetClientDependencies,
 ): Promise<AppInstallsResponse> {
+  return (await readFormlessInstanceAppRegistryResult(input, dependencies)).appRegistry;
+}
+
+async function readFormlessInstanceAppRegistryResult(
+  input: { targetUrl: string },
+  dependencies: FormlessInstanceTargetClientDependencies,
+): Promise<FormlessInstanceAppRegistryReadResult> {
   const targetUrl = normalizeFormlessInstanceWorkspaceTargetUrl(input.targetUrl);
   const registryUrl = apiUrl(targetUrl, APP_INSTALLS_API_PATH);
+  const value = await fetchJson(dependencies.fetch, registryUrl, {
+    headers: { accept: "application/json" },
+  });
+  const appRegistry = parseAppRegistry(value, registryUrl);
 
-  return parseAppRegistry(
-    await fetchJson(dependencies.fetch, registryUrl, { headers: { accept: "application/json" } }),
-    registryUrl,
-  );
+  return {
+    appRegistry,
+    factPresence: appRegistryFactPresence(value, appRegistry),
+  };
 }
 
 export async function readFormlessInstanceDomainMappings(

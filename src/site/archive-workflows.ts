@@ -40,10 +40,19 @@ import {
   type SiteProjectAppArchiveEntry,
   type SiteProjectAppArchiveMediaFile,
 } from "./project-archive.ts";
+import {
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
+  readPortableArchiveInputStatus,
+  type PortableArchiveInputStatus,
+} from "./archive-input-status.ts";
 import { readOptionalFormlessInstanceControlPlaneRecords } from "./instance-target-client.ts";
 import { isLegacySiteMediaHref, unsupportedLegacySiteMediaMessage } from "./source-media.ts";
 
-export const PORTABLE_ARCHIVE_MANIFEST_FILE = "archive.json";
+export {
+  PORTABLE_ARCHIVE_MANIFEST_FILE,
+  readPortableArchiveInputStatus,
+  type PortableArchiveInputStatus,
+} from "./archive-input-status.ts";
 
 const INSTANCE_ARCHIVE_RESTORE_API_PATH = "/api/formless/archive/restore";
 
@@ -89,6 +98,7 @@ export type ArchiveRestoreSummary = {
 };
 
 export type RestorePortableArchiveResult = {
+  archiveInput: PortableArchiveInputStatus;
   archivePath: string;
   remote: ArchiveRestoreRemoteResult;
 };
@@ -260,6 +270,10 @@ export async function restorePortableArchive(
   },
   dependencies: ArchiveWorkflowDependencies,
 ): Promise<RestorePortableArchiveResult> {
+  const archiveInput = await readPortableArchiveInputStatus({
+    archiveDir: input.archiveDir,
+    cwd: dependencies.cwd,
+  });
   const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
   const archive = withRestorePolicy(diskArchive.archive, restorePolicy(input));
   const remote = await postRemoteArchiveRestore(
@@ -273,6 +287,7 @@ export async function restorePortableArchive(
   );
 
   return {
+    archiveInput,
     archivePath: diskArchive.archivePath,
     remote,
   };
@@ -289,6 +304,10 @@ export async function restoreAppArchive(
   },
   dependencies: ArchiveWorkflowDependencies,
 ): Promise<RestorePortableArchiveResult> {
+  const archiveInput = await readPortableArchiveInputStatus({
+    archiveDir: input.archiveDir,
+    cwd: dependencies.cwd,
+  });
   const diskArchive = await readPortableArchiveDirectory(input.archiveDir, dependencies);
 
   if (diskArchive.archive.kind !== APP_ARCHIVE_KIND) {
@@ -310,6 +329,7 @@ export async function restoreAppArchive(
   );
 
   return {
+    archiveInput,
     archivePath: diskArchive.archivePath,
     remote,
   };

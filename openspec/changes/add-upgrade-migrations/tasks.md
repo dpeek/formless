@@ -61,10 +61,17 @@ Evidence:
 
 ## 5. Target Upgrade Status Reads
 
-- [ ] 5.1 Extend target status reads to collect deployed upgrade metadata, local package metadata, app install package facts, and deployment status.
-- [ ] 5.2 Include archive input presence and envelope version as read-only facts where an existing CLI flow already has an archive path; do not normalize or mutate archives in this section.
-- [ ] 5.3 Return explicit metadata verification failures when deployed metadata, local package facts, installed app facts, or deployment status cannot support an upgrade plan.
-- [ ] 5.4 Add CLI tests proving target status reads surface upgrade facts and do not directly access Durable Object SQLite.
+- [x] 5.1 Extend target status reads to collect deployed upgrade metadata, local package metadata, app install package facts, and deployment status.
+- [x] 5.2 Include archive input presence and envelope version as read-only facts where an existing CLI flow already has an archive path; do not normalize or mutate archives in this section.
+- [x] 5.3 Return explicit metadata verification failures when deployed metadata, local package facts, installed app facts, or deployment status cannot support an upgrade plan.
+- [x] 5.4 Add CLI tests proving target status reads surface upgrade facts and do not directly access Durable Object SQLite.
+
+Evidence:
+
+- `grug` 2026-06-01: extended `src/site/instance-target-client.ts` target status reads with `upgradeStatus` containing deployed upgrade metadata, local package revision/hash facts, installed app package facts, optional deployment status, archive input facts, and explicit verification failures for missing no-store metadata, package version, runtime protocol, storage migration set, package app facts, installed app facts, or deployment status.
+- Added `src/site/archive-input-status.ts` and wired restore flows in `src/site/archive-workflows.ts` to read archive manifest presence, kind, and envelope version without calling archive normalization or mutating archives.
+- Added `src/site/instance-target-client.test.ts` coverage proving target status reads use only HTTP endpoints and surface upgrade facts/failures; added `src/site/archive-input-status.test.ts` coverage proving unsupported archive envelope versions can be read as status facts without normalization.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass. No `bun browser` smoke run because this section changes CLI target-status and archive-status reads only, with no visible browser app behavior change.
 
 ## 6. Upgrade Plan Model And Formatting
 

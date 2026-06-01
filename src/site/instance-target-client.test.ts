@@ -4,12 +4,14 @@ import {
   FORMLESS_RUNTIME_PROTOCOL_VERSION,
   FORMLESS_STORAGE_MIGRATION_SET_ID,
 } from "../shared/deploy-metadata.ts";
+import { listBundledAppPackages } from "../shared/app-installs.ts";
 import { bundledSourceSchemaHashFixtures } from "../shared/upgrade-migrations.ts";
 import {
   readFormlessInstanceAppRegistry,
   readFormlessInstanceControlPlaneRecords,
   readFormlessInstanceDeploymentCommandContext,
   readFormlessInstanceDeployMetadata,
+  readFormlessInstanceTargetStatus,
 } from "./instance-target-client.ts";
 
 type CapturedTargetRequest = {
@@ -112,6 +114,189 @@ describe("Formless instance target client", () => {
         packageRevision: 1,
         sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
       }),
+    ]);
+  });
+
+  it("surfaces target upgrade facts through HTTP reads without Durable Object SQLite access", async () => {
+    const requests: string[] = [];
+    const result = await readFormlessInstanceTargetStatus(
+      {
+        archiveInput: {
+          archivePath: "/workspace/archive/archive.json",
+          kind: "formless.instanceArchive",
+          present: true,
+          readable: true,
+          version: 1,
+        },
+        includeDeploymentStatus: true,
+        targetUrl: "https://instance.example",
+      },
+      {
+        fetch: async (url) => {
+          const requestUrl =
+            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+          const pathname = new URL(requestUrl).pathname;
+
+          requests.push(`GET ${requestUrl}`);
+
+          if (pathname === "/api/formless/deploy") {
+            return Response.json(
+              {
+                packageApps: listBundledAppPackages().map((appPackage) => ({
+                  packageAppKey: appPackage.packageAppKey,
+                  packageRevision: appPackage.packageRevision,
+                  sourceSchemaHash: appPackage.sourceSchemaHash,
+                })),
+                packageVersion: "0.1.8",
+                runtimeProtocolVersion: FORMLESS_RUNTIME_PROTOCOL_VERSION,
+                storageMigrationSet: FORMLESS_STORAGE_MIGRATION_SET_ID,
+                version: "0.1.8",
+              },
+              { headers: { "Cache-Control": "no-store" } },
+            );
+          }
+
+          if (pathname === "/api/formless/setup") {
+            return Response.json({ setupComplete: true });
+          }
+
+          if (pathname === "/api/formless/app-installs") {
+            return Response.json({
+              packages: listBundledAppPackages(),
+              installs: [
+                {
+                  adminRoute: "/apps/site",
+                  createdAt: "2026-05-28T00:00:00.000Z",
+                  installId: "site",
+                  label: "Site",
+                  packageAppKey: "site",
+                  packageRevision: 1,
+                  publicRoute: "/sites/site",
+                  publicRoutePrefix: "/sites/site/",
+                  schemaRoute: "/apps/site/schema",
+                  sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+                  status: "installed",
+                  updatedAt: "2026-05-28T00:00:00.000Z",
+                },
+              ],
+            });
+          }
+
+          if (pathname === "/api/formless/deployments/status") {
+            return Response.json({
+              status: {
+                attemptId: "attempt.11111111-1111-4111-8111-111111111111",
+                checkedAt: "2026-05-28T00:00:00.000Z",
+                deployedAt: "2026-05-28T00:00:00.000Z",
+                latestDesiredState: {
+                  hash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  revision: 2,
+                  targetId: "instance.primary",
+                  versionId: "desired-state.instance.primary.2",
+                },
+                state: "deployed",
+                targetId: "instance.primary",
+              },
+              target: {
+                kind: "instance",
+                label: "Primary instance target",
+                targetId: "instance.primary",
+              },
+            });
+          }
+
+          return Response.json({ error: "not found" }, { status: 404 });
+        },
+      },
+    );
+
+    expect(requests).toEqual([
+      "GET https://instance.example/api/formless/deploy",
+      "GET https://instance.example/api/formless/setup",
+      "GET https://instance.example/api/formless/app-installs",
+      "GET https://instance.example/api/formless/deployments/status",
+    ]);
+    expect(result.upgradeStatus.verificationFailures).toEqual([]);
+    expect(result.upgradeStatus.archiveInput).toEqual({
+      archivePath: "/workspace/archive/archive.json",
+      kind: "formless.instanceArchive",
+      present: true,
+      readable: true,
+      version: 1,
+    });
+    expect(result.upgradeStatus.localPackages).toEqual(
+      listBundledAppPackages().map((appPackage) => ({
+        packageAppKey: appPackage.packageAppKey,
+        packageRevision: appPackage.packageRevision,
+        sourceSchemaHash: appPackage.sourceSchemaHash,
+      })),
+    );
+    expect(result.upgradeStatus.installedApps).toEqual([
+      {
+        installId: "site",
+        packageAppKey: "site",
+        packageRevision: 1,
+        sourceSchemaHash: bundledSourceSchemaHashFixtures.site,
+      },
+    ]);
+    expect(result.upgradeStatus.deployedMetadata.packageVersion).toBe("0.1.8");
+    expect(result.upgradeStatus.deployment?.status.state).toBe("deployed");
+  });
+
+  it("returns explicit upgrade verification failures for legacy target metadata", async () => {
+    const result = await readFormlessInstanceTargetStatus(
+      { includeDeploymentStatus: true, targetUrl: "https://instance.example" },
+      {
+        fetch: async (url) => {
+          const requestUrl =
+            typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+          const pathname = new URL(requestUrl).pathname;
+
+          if (pathname === "/api/formless/deploy") {
+            return Response.json({ version: "0.1.7" });
+          }
+
+          if (pathname === "/api/formless/setup") {
+            return Response.json({ setupComplete: true });
+          }
+
+          if (pathname === "/api/formless/app-installs") {
+            return Response.json({
+              packages: listBundledAppPackages(),
+              installs: [
+                {
+                  adminRoute: "/apps/site",
+                  createdAt: "2026-05-28T00:00:00.000Z",
+                  installId: "site",
+                  label: "Site",
+                  packageAppKey: "site",
+                  publicRoute: "/sites/site",
+                  publicRoutePrefix: "/sites/site/",
+                  schemaRoute: "/apps/site/schema",
+                  status: "installed",
+                  updatedAt: "2026-05-28T00:00:00.000Z",
+                },
+              ],
+            });
+          }
+
+          if (pathname === "/api/formless/deployments/status") {
+            return Response.json({ error: "not found" }, { status: 404 });
+          }
+
+          return Response.json({ error: "not found" }, { status: 404 });
+        },
+      },
+    );
+
+    expect(result.upgradeStatus.verificationFailures.map((failure) => failure.code)).toEqual([
+      "deploy-metadata-cacheable",
+      "deploy-metadata-package-version-missing",
+      "deploy-metadata-runtime-protocol-version-missing",
+      "deploy-metadata-storage-migration-set-missing",
+      "deploy-metadata-package-apps-missing",
+      "installed-app-package-facts-missing",
+      "deployment-status-unavailable",
     ]);
   });
 });
