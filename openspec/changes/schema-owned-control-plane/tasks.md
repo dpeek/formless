@@ -13,7 +13,7 @@ Evidence:
 - Files changed: `src/shared/instance-control-plane.ts`, `src/shared/instance-control-plane.test.ts`, `lib/deploy/AGENTS.md`, `lib/deploy/package.json`, `lib/deploy/tsconfig.json`, `lib/deploy/src/types.ts`, `lib/deploy/src/index.ts`, `lib/deploy/src/client.ts`, `lib/deploy/src/react.tsx`, `lib/deploy/src/worker.ts`, `lib/deploy/src/index.test.ts`, `openspec/changes/schema-owned-control-plane/proposal.md`, `openspec/changes/schema-owned-control-plane/design.md`, `openspec/changes/schema-owned-control-plane/specs/instance-control-plane/spec.md`, `openspec/changes/schema-owned-control-plane/specs/package-slices/spec.md`, `openspec/changes/schema-owned-control-plane/specs/deployment-runtime/spec.md`.
 - Checks: `devstate start` ran before implementation; initial status had checks pass and a watch-test service timeout. `devstate check` after implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:05:51.625Z.
 - Smoke: not run; section 1 adds contracts, schema data, package helpers, and tests without wiring generated instance UI behavior.
-- Promotion notes: added a change-local `deployment-runtime` delta because the promoted capability exists; final promoted spec updates remain in section 8.
+- Promotion notes: added a change-local `deployment-runtime` delta because the promoted capability exists; final promoted spec updates remain in section 12.
 
 ## 2. Schema Runtime Capabilities
 
@@ -32,7 +32,7 @@ Evidence:
 - Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:08:16.855Z. `devstate check` after implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:22:08.009Z.
 - Smoke: `bun browser --ignore-https-errors open https://schema-owned-control-plane.formless.local` loaded the local instance shell; `bun browser snapshot -i --max-output 6000` returned App management, Installed apps, and Custom domains controls.
 - Decisions: runtime-owned metadata parses under `runtime.owner = "runtime"` with `builder.editable = false`; control-plane entity metadata owns immutable fields, route validation, secret reference fields, and action-created or append-only history. Actor-scoped action exposure defaults legacy actions to browser owner access when no exposure is declared and filters actor response change payload values when response fields are declared.
-- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 3. Authority Control-Plane Storage
 
@@ -50,7 +50,7 @@ Evidence:
 - Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:24:55.179Z. `devstate check` initially caught type/lint issues in the new control-plane handler and validator; post-rebase `devstate check` caught two new test issues in `src/worker/instance-control-plane.test.ts`. After fixes, the final `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:36:17.841Z.
 - Smoke: not run; section 3 adds instance protocol and storage behavior without generated instance UI changes.
 - Decisions: `/api/formless/control-plane/*` targets the dedicated `instance:control-plane` Authority storage identity and bootstraps from `instanceControlPlaneSchema`. The first custom control-plane action is `POST /api/formless/control-plane/actions/createAppInstall`; it writes fixed-id `appInstall` and default `appRoute` records with action write-log idempotency, then initializes install-scoped app storage before route records become usable. Generic control-plane writes stay owner/admin-only for now; actor-scoped schema actions read the actor from `X-Formless-Control-Plane-Actor`, `X-Formless-Actor-Kind`, or `actorKind`.
-- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 4. App Install And Route Compatibility
 
@@ -67,7 +67,7 @@ Evidence:
 - Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:38:45.987Z. `devstate check` first caught route type fallout from control-plane route widening, then the custom-domain compatibility watch caught target install validation still reading only the legacy table. After narrowing compatibility casts, routing domain mapping validation through the backfilled control-plane install list, and restarting stale watch services, final `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:56:23.181Z.
 - Smoke: `bun browser --ignore-https-errors open https://schema-owned-control-plane.formless.local` loaded the local instance shell; `bun browser snapshot -i --max-output 6000` returned App management, Installed apps, Install, and Custom domains controls.
 - Decisions: `/api/formless/app-installs` now backfills legacy `app_installs` rows through an internal control-plane-only route, reads installed install responses from control-plane `appInstall` and `appRoute` records, and forwards create requests to the control-plane `createAppInstall` action with per-request action ids to preserve duplicate validation. Runtime route selection and domain mapping target validation use enabled control-plane route/install metadata when present and fall back to legacy install-id-derived routes for existing callers.
-- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 5. Deployment Runtime Projection
 
@@ -84,7 +84,7 @@ Evidence:
 - Checks: `devstate start` ran before implementation with checks ok and services running in `./.devstate/status.md` at 2026-05-28T06:59:33.542Z. `devstate check` first caught two parser narrowing type errors in `src/worker/instance-control-plane.ts`; after fixing them, `devstate check` passed with checks ok and services running in `./.devstate/status.md` at 2026-05-28T07:14:36.049Z.
 - Smoke: not run; section 5 changes deployment runtime API and control-plane record writeback behavior without changing visible generated instance UI.
 - Decisions: desired-state reads still compute the legacy route/domain projection, sync its display-safe resources into `deployTarget` and `deployDesiredResource` control-plane records, then materialize desired state from those control-plane records so version ids, hashes, source fingerprints, resource graph shape, and no-secret response behavior stay stable during migration. Deployment start, heartbeat, plan, success, failure, and drift endpoints now mirror display-safe attempt, evidence, and drift records into the control-plane storage identity; raw lease tokens remain only in deployment runtime lease tables and provider truth remains rejected from evidence payloads.
-- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 6. Custom-Domain Migration And Compatibility
 
@@ -102,31 +102,51 @@ Evidence:
 - Smoke: not run; section 6 changes worker API/control-plane sync behavior without generated instance UI changes.
 - Decisions: custom-domain mapping and redirect legacy rows now sync into `domainMapping` and `redirectIntent` control-plane records on compatible API reads and writes, while responses preserve existing API shapes. Provider apply/delete attempts and display-safe evidence summaries are mirrored into control-plane deployment records; raw provider truth and cleanup audit tables stay outside control-plane records. During migration, legacy tables remain the source list and control-plane reads are filtered back to those source ids so stale control-plane intent cannot reappear in compatibility responses.
 - Rebase note: `changes/schema-owned-control-plane` is rebased on local `main` at `d8f48c9`. Conflicts in `src/shared/schema-actions.ts` and `src/shared/schema-types.ts` were resolved by preserving public subscribe action input support and schema action actor exposure metadata; the section 6 stash reapplied cleanly.
-- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 8.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
-## 7. Generated UI, CLI, And Archives
+## 7. Generated UI Target Plumbing
 
-- [ ] 7.1 Render app install management in the instance shell from control-plane schema screens, views, read models, and actions.
-- [ ] 7.2 Provide install creation and edit UI with package selection, route-safe install id entry, label editing, immutable identity fields, status display, and route summaries.
-- [ ] 7.3 Render app route management with install grouping, route kind, path or prefix, enabled state, surface, package capability, conflict feedback, and read-only derived fields.
-- [ ] 7.4 Render deployment management from control-plane records and hide CLI deployer and runner actions from browser generated UI.
-- [ ] 7.5 Update CLI target helpers to query app install, app route, domain, and deployment records and invoke actor-scoped deployment actions.
-- [ ] 7.6 Keep existing domain remote-plan, run-apply, run-delete, forget, manual cleanup, direct fallback, app install, archive, and deploy command/API surfaces stable.
-- [ ] 7.7 Update instance workspace pull, check, push, and archive flows to represent app install, route, domain, and deployment intent as schema-owned records without secrets.
-- [ ] 7.8 Add UI, CLI, workspace, and archive tests for install editor behavior, route editor validation, no-secret responses, action exposure, drift reporting, and command compatibility.
+- [ ] 7.1 Generalize browser client targets and generated app context so the instance shell can load the runtime-owned `instance:control-plane` schema target without requiring a bundled `SchemaKey`.
+- [ ] 7.2 Render app install management from control-plane schema screens, views, read models, and owner/admin actions in the instance shell.
+- [ ] 7.3 Provide install creation and edit UI with package selection, route-safe install id entry, label editing, immutable identity fields, status display, and generated route summaries.
+- [ ] 7.4 Render app route management with install grouping, route kind, path or prefix, enabled state, surface, package capability, conflict feedback, and read-only derived fields.
+- [ ] 7.5 Add generated UI tests for install editor behavior, route editor validation, hidden non-browser actions, and no-secret browser responses.
+- [ ] 7.6 Smoke visible instance management UI behavior with `bun browser ...`.
 
-Blocker:
+## 8. Deployment Action Protocol
 
-- Section 7 is not ready as one local implementation unit. It crosses generated UI target plumbing, schema action/API contract shape, Site CLI deployment protocol, workspace/archive manifest format, and command compatibility tests.
-- Evidence: `src/app/routes/instance-shell.tsx` still renders the instance shell from compatibility clients such as `/api/formless/app-installs`, `/api/formless/domain-mappings`, and `/api/formless/deployments/status`; `src/client/app-target.ts` only accepts `SchemaKey | AppStorageIdentity`, while `AppStorageIdentity` does not include `instanceControlPlaneStorageIdentity`; `src/app/routes/home.tsx` and generated app context still require bundled `SchemaKey` definitions rather than a runtime-owned control-plane schema target; `src/shared/instance-control-plane.ts` defines control-plane screens and views but not schema-declared deployment lifecycle actions; `src/site/instance-target-client.ts` invokes deployment compatibility endpoints, not schema action routes; `src/site/instance-workspace-config.ts` persists bespoke `apps[].routes` and `domains` manifest state instead of a control-plane record envelope.
-- Split guidance: first ship a generated UI target slice that generalizes browser client targets for `instance:control-plane` and renders app install/app route screens from the control-plane schema with browser-hidden runner actions; then ship a deployment action protocol slice that either defines schema-declared deployment lifecycle actions or records compatibility endpoint delegation as the public contract; then ship a workspace/archive slice that defines the reviewable control-plane record envelope and drift comparison; finish with a compatibility test slice covering UI, CLI commands, workspaces, archives, no-secret responses, and action exposure.
-- Checks: `devstate start` ran before assessment with checks ok and services starting in `./.devstate/status.md` at 2026-06-01T00:42:53.449Z. `devstate check` after recording the blocker passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T00:46:27.661Z.
-- Smoke: not run; no app behavior changed because section 7 is blocked before implementation.
+- [ ] 8.1 Define and record whether deployment lifecycle commands use schema-declared actions or compatibility endpoint delegation for this migration slice.
+- [ ] 8.2 Add or adapt actor-scoped deployment protocol helpers so CLI deployer and runner actors can query allowed control-plane records and bind commands to exact desired-state versions.
+- [ ] 8.3 Update CLI target helpers to query app install, app route, domain, and deployment records through the control-plane protocol where available.
+- [ ] 8.4 Keep existing domain remote-plan, run-apply, run-delete, forget, manual cleanup, direct fallback, app install, and deploy command/API surfaces stable.
+- [ ] 8.5 Add CLI and protocol tests for actor exposure, action invocation or delegation, no-secret responses, and existing command compatibility.
 
-## 8. Verification And Promotion
+## 9. Deployment Management UI
 
-- [ ] 8.1 Run `devstate start` before implementation work and fix any red status in `./.devstate/status.md`.
-- [ ] 8.2 Run `devstate check` after each shipped implementation section and use `./.devstate/status.md` as evidence.
-- [ ] 8.3 Smoke visible instance management UI behavior with `bun browser ...` when generated instance UI changes.
-- [ ] 8.4 Record implementation decisions, blockers, evidence, and promotion notes in the owning change artifacts.
-- [ ] 8.5 Promote shipped facts into `openspec/specs/` for instance control plane, installed apps, runtime topology, app schema, authority storage, generated UI, Site CLI, custom domains, package slices, and portable archives.
+- [ ] 9.1 Render deployment targets, desired resources, attempts, evidence summaries, and drift summaries from control-plane records in the instance shell.
+- [ ] 9.2 Hide CLI deployer and runner actions from browser generated UI while preserving owner/admin browser actions.
+- [ ] 9.3 Keep custom-domain desired state, provider applied evidence, and provider drift visually separate.
+- [ ] 9.4 Add generated UI tests for deployment history read-only behavior, action visibility, no-secret responses, and drift reporting.
+- [ ] 9.5 Smoke visible deployment management UI behavior with `bun browser ...`.
+
+## 10. Workspace And Archive Control Plane
+
+- [ ] 10.1 Define the reviewable instance workspace and archive envelope for schema-owned app install, route, domain, and deployment intent records.
+- [ ] 10.2 Update instance workspace pull, check, push, and archive flows to represent app install, route, domain, and deployment intent as schema-owned records without secrets.
+- [ ] 10.3 Compare workspace drift against remote control-plane records while keeping provider drift summaries separate from desired intent drift.
+- [ ] 10.4 Keep installed app snapshots scoped by app install identity and outside control-plane records.
+- [ ] 10.5 Add workspace and archive tests for record shape, secret exclusion, drift comparison, and command compatibility.
+
+## 11. Compatibility Sweep
+
+- [ ] 11.1 Verify existing app install, custom-domain, deployment-runtime, archive, and CLI command/API surfaces remain stable after the UI, protocol, and workspace slices.
+- [ ] 11.2 Add or update integration coverage for install editor behavior, route editor validation, command compatibility, archive shape, no-secret responses, action exposure, and drift reporting gaps not covered by sections 7-10.
+- [ ] 11.3 Record cross-slice evidence, decisions, blockers, and promotion notes in the owning change artifacts.
+
+## 12. Verification And Promotion
+
+- [ ] 12.1 Run `devstate start` before implementation work and fix any red status in `./.devstate/status.md`.
+- [ ] 12.2 Run `devstate check` after each shipped implementation section and use `./.devstate/status.md` as evidence.
+- [ ] 12.3 Smoke visible instance management UI behavior with `bun browser ...` when generated instance UI changes.
+- [ ] 12.4 Record implementation decisions, blockers, evidence, and promotion notes in the owning change artifacts.
+- [ ] 12.5 Promote shipped facts into `openspec/specs/` for instance control plane, installed apps, runtime topology, app schema, authority storage, generated UI, Site CLI, custom domains, package slices, and portable archives.
