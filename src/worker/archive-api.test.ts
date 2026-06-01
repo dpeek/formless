@@ -7,10 +7,16 @@ import {
   type AppArchive,
   type InstanceArchive,
 } from "../shared/archive.ts";
+import type { AppInstall } from "../shared/app-installs.ts";
+import {
+  INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+  instanceControlPlaneRecordsForAppInstall,
+} from "../shared/instance-control-plane.ts";
 import type {
   ActionResponse,
   AppInstallsResponse,
   BootstrapResponse,
+  RecordValues,
   SitePageTreeResponse,
   StoredRecord,
 } from "../shared/protocol.ts";
@@ -290,6 +296,61 @@ describe("instance archive restore API", () => {
     expect(estii.body.records).toEqual(estiiRecords());
   });
 
+  it("restores schema-owned control-plane records through the archive API", async () => {
+    const restored = await postArchiveRestore(controlPlaneInstanceArchive({ dryRun: false }));
+    const installs = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const installedApp = await getJson<BootstrapResponse>(
+      "/api/app-installs/site/personal/bootstrap",
+    );
+    const controlPlane = await getJson<BootstrapResponse>(
+      "/api/formless/control-plane/bootstrap?actorKind=owner",
+    );
+    const serializedControlPlane = JSON.stringify(controlPlane.body);
+
+    expect(restored.response.status).toBe(200);
+    expect(restored.body).toMatchObject({
+      ok: true,
+      report: {
+        applied: true,
+        summary: {
+          appCount: 1,
+          createdInstalls: ["personal"],
+        },
+      },
+    });
+    expect(installs.response.status).toBe(200);
+    expect(installs.body.installs).toEqual([
+      expect.objectContaining({
+        adminRoute: "/apps/personal-dashboard",
+        installId: "personal",
+        label: "Archived Personal",
+        packageAppKey: "site",
+        publicRoute: "/sites/personal",
+        schemaRoute: "/apps/personal/schema",
+      }),
+    ]);
+    expect(
+      installs.body.installs[0]?.routes?.map((route) => [route.routeKind, route.path]),
+    ).toEqual([
+      ["admin", "/apps/personal-dashboard"],
+      ["schema", "/apps/personal/schema"],
+      ["publicSite", "/sites/personal"],
+    ]);
+    expect(installedApp.body.records).toContainEqual(siteRecord());
+    expect(controlPlane.body.records.map((record) => `${record.entity}:${record.id}`)).toEqual(
+      expect.arrayContaining([
+        "appInstall:personal",
+        "domainMapping:domain-mapping:publicSite:archive.example.com",
+        "deployDesiredResource:deploy-resource:instance.primary:custom-domain:archive.example.com",
+        "deployDriftReport:deploy-drift:instance.primary",
+      ]),
+    );
+    expect(serializedControlPlane).not.toContain("site-main");
+    expect(serializedControlPlane).not.toContain("CF_API_TOKEN");
+    expect(serializedControlPlane).not.toContain("ALCHEMY_PASSWORD");
+    expect(serializedControlPlane).not.toContain("raw-lease-token");
+  });
+
   it("restores core Site media before public tree reads reference it", async () => {
     const applied = await postArchiveRestore(appArchiveWithMedia({ dryRun: false }), [mediaFile()]);
     const tree = await getJson<SitePageTreeResponse>("/api/app-installs/site/personal/tree/home");
@@ -408,6 +469,160 @@ function mixedInstanceArchive(input: { dryRun: boolean }): InstanceArchive {
     capabilities: ["installed-app-registry", "app-store-snapshots", "core-media-assets"],
     restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
     apps: [appArchive(input), tasksAppArchive(input), estiiAppArchive(input)],
+  };
+}
+
+function controlPlaneInstanceArchive(input: { dryRun: boolean }): InstanceArchive {
+  return {
+    kind: INSTANCE_ARCHIVE_KIND,
+    version: ARCHIVE_VERSION,
+    exportedAt: "2026-05-12T00:00:00.000Z",
+    capabilities: [
+      "installed-app-registry",
+      "schema-owned-control-plane",
+      "source-records",
+      "core-media-assets",
+    ],
+    restorePolicy: { dryRun: input.dryRun, installCollisions: "reject" },
+    apps: [appArchive(input)],
+    controlPlane: {
+      schemaKey: INSTANCE_CONTROL_PLANE_SCHEMA_KEY,
+      schemaUpdatedAt: "2026-05-12T00:00:00.000Z",
+      records: controlPlaneArchiveRecords(),
+    },
+  };
+}
+
+function controlPlaneArchiveRecords(): StoredRecord[] {
+  const now = "2026-05-12T00:00:00.000Z";
+  const install: AppInstall = {
+    installId: "personal",
+    packageAppKey: "site",
+    label: "Archived Personal",
+    status: "installed",
+    createdAt: now,
+    updatedAt: now,
+    adminRoute: "/apps/personal",
+    schemaRoute: "/apps/personal/schema",
+    publicRoute: "/sites/personal",
+    publicRoutePrefix: "/sites/personal/",
+  };
+  const records = instanceControlPlaneRecordsForAppInstall({ install, now }).map(
+    storedControlPlaneRecord,
+  );
+  const adminRoute = records.find((record) => record.id === "app-route:personal:admin");
+
+  if (!adminRoute) {
+    throw new Error("Expected default admin app route.");
+  }
+
+  adminRoute.values = {
+    ...adminRoute.values,
+    path: "/apps/personal-dashboard",
+    updatedAt: now,
+  };
+
+  return [
+    ...records,
+    {
+      id: "instance.primary",
+      entity: "deployTarget",
+      createdAt: now,
+      values: {
+        targetId: "instance.primary",
+        targetKind: "instance",
+        label: "Primary instance target",
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      id: "provider-config:cloudflare:primary",
+      entity: "providerConfigRef",
+      createdAt: now,
+      values: {
+        providerFamily: "cloudflare",
+        configRef: "cloudflare-primary",
+        label: "Cloudflare",
+        accountId: "account-123",
+        workerName: "personal-worker",
+        secretRef: "secret:cloudflare:primary",
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      id: "domain-mapping:publicSite:archive.example.com",
+      entity: "domainMapping",
+      createdAt: now,
+      values: {
+        host: "archive.example.com",
+        profile: "publicSite",
+        appInstall: "personal",
+        appRoute: "app-route:personal:publicSite",
+        providerConfigRef: "provider-config:cloudflare:primary",
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      id: "deploy-resource:instance.primary:custom-domain:archive.example.com",
+      entity: "deployDesiredResource",
+      createdAt: now,
+      values: {
+        deployTarget: "instance.primary",
+        domainMapping: "domain-mapping:publicSite:archive.example.com",
+        logicalId: "custom-domain:archive.example.com",
+        kind: "cloudflare-worker-custom-domain",
+        providerFamily: "cloudflare",
+        inputsJson: JSON.stringify({
+          host: "archive.example.com",
+          profile: "publicSite",
+          targetInstallId: "personal",
+        }),
+        enabled: true,
+        sourceFingerprint: "control-plane:archive",
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      id: "deploy-drift:instance.primary",
+      entity: "deployDriftReport",
+      createdAt: now,
+      values: {
+        deployTarget: "instance.primary",
+        versionId: "desired.v1",
+        desiredStateHash: `sha256:${"a".repeat(64)}`,
+        revision: 1,
+        status: "drifted",
+        actorKind: "runner",
+        actorId: "runner:primary",
+        affectedLogicalIdsJson: JSON.stringify(["custom-domain:archive.example.com"]),
+        createCount: 0,
+        updateCount: 1,
+        deleteCount: 0,
+        reportedAt: now,
+      },
+    },
+  ];
+}
+
+function storedControlPlaneRecord(record: {
+  createdAt: string;
+  deletedAt?: string;
+  entity: string;
+  id: string;
+  values: RecordValues;
+}): StoredRecord {
+  return {
+    id: record.id,
+    entity: record.entity,
+    values: record.values,
+    createdAt: record.createdAt,
+    ...(record.deletedAt === undefined ? {} : { deletedAt: record.deletedAt }),
   };
 }
 

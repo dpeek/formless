@@ -6,6 +6,7 @@ import {
 } from "../shared/instance-control-plane.ts";
 import type {
   ActionResponse,
+  AppInstallsResponse,
   BootstrapResponse,
   MutationResponse,
   StoreSnapshot,
@@ -148,6 +149,56 @@ describe("instance control-plane API routes", () => {
       "appRoute",
     ]);
     expect(JSON.stringify(sync.body)).not.toContain(appMutation.body.record.id);
+  });
+
+  it("rejects invalid route edits through real control-plane records", async () => {
+    await postAdminJson<ActionResponse>(`${controlPlaneApi}/actions/createAppInstall`, {
+      actionId: "action-create-route-validation",
+      input: {
+        packageAppKey: "site",
+        installId: "personal",
+        label: "Personal Site",
+      },
+    });
+    const before = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    const reservedPath = await postAdminJson<FailureResponse>(`${controlPlaneApi}/mutations`, {
+      mutationId: "mutation-route-reserved-path",
+      entity: "appRoute",
+      op: "patch",
+      recordId: "app-route:personal:admin",
+      values: {
+        path: "/api/jobs",
+        updatedAt: "2026-05-28T00:00:00.000Z",
+      },
+    });
+    const duplicateEnabledPath = await postAdminJson<FailureResponse>(
+      `${controlPlaneApi}/mutations`,
+      {
+        mutationId: "mutation-route-duplicate-path",
+        entity: "appRoute",
+        op: "patch",
+        recordId: "app-route:personal:schema",
+        values: {
+          path: "/apps/personal",
+          updatedAt: "2026-05-28T00:00:01.000Z",
+        },
+      },
+    );
+    const after = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+
+    expect(before.body.installs[0]).toMatchObject({
+      adminRoute: "/apps/personal",
+      installId: "personal",
+      schemaRoute: "/apps/personal/schema",
+    });
+    expect(reservedPath.response.status).toBe(400);
+    expect(reservedPath.body.error).toBe('Field "path" must be a route-safe path.');
+    expect(duplicateEnabledPath.response.status).toBe(400);
+    expect(duplicateEnabledPath.body.error).toBe(
+      'Enabled route path "/apps/personal" is already in use.',
+    );
+    expect(after.body.installs).toEqual(before.body.installs);
   });
 
   it("enforces owner/admin writes and rejects runner-only access to install creation", async () => {

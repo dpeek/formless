@@ -172,9 +172,19 @@ Evidence:
 
 ## 11. Compatibility Sweep
 
-- [ ] 11.1 Verify existing app install, custom-domain, deployment-runtime, archive, and CLI command/API surfaces remain stable after the UI, protocol, and workspace slices.
-- [ ] 11.2 Add or update integration coverage for install editor behavior, route editor validation, command compatibility, archive shape, no-secret responses, action exposure, and drift reporting gaps not covered by sections 7-10.
-- [ ] 11.3 Record cross-slice evidence, decisions, blockers, and promotion notes in the owning change artifacts.
+- [x] 11.1 Verify existing app install, custom-domain, deployment-runtime, archive, and CLI command/API surfaces remain stable after the UI, protocol, and workspace slices.
+- [x] 11.2 Add or update integration coverage for install editor behavior, route editor validation, command compatibility, archive shape, no-secret responses, action exposure, and drift reporting gaps not covered by sections 7-10.
+- [x] 11.3 Record cross-slice evidence, decisions, blockers, and promotion notes in the owning change artifacts.
+
+Evidence:
+
+- Files changed: `src/worker/instance-control-plane.test.ts`, `src/worker/archive-api.test.ts`, `openspec/changes/schema-owned-control-plane/tasks.md`.
+- Checks: `devstate start` before implementation passed with checks ok and services running in `./.devstate/status.md` at 2026-06-01T02:14:45.829Z. `devstate check` after implementation and evidence update passed with checks ok and services running in `./.devstate/status.md`.
+- Smoke: not run; section 11 adds compatibility and integration coverage without visible generated instance UI behavior changes.
+- Compatibility evidence: `src/worker/instance-control-plane.test.ts` now rejects reserved and duplicate `appRoute` path edits through the real `instance:control-plane` API and proves the compatible `/api/formless/app-installs` response is unchanged. `src/worker/archive-api.test.ts` now restores an instance archive with `schema-owned-control-plane` records through `/api/formless/archive/restore`, proves app install responses derive from restored route records, proves installed app data remains under install-scoped app storage, and proves control-plane bootstrap excludes installed app records and secret/provider token strings.
+- Decisions: no runtime behavior changed in this section. Existing section 7-10 coverage remains the command compatibility, no-secret deployment response, actor exposure, archive/workspace, and provider drift separation evidence.
+- Blockers: none.
+- Promotion notes: shipped facts remain change-local; final promoted spec updates remain in section 12.
 
 ## 12. Verification And Promotion
 
