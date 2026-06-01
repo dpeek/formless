@@ -192,8 +192,17 @@ Evidence:
 
 ## 14. Verification And Promotion
 
-- [ ] 14.1 Run `devstate check` after each shipped implementation section and read `./.devstate/status.md` as evidence.
-- [ ] 14.2 Smoke visible app or CLI behavior with `bun browser ...` only when app behavior changes.
-- [ ] 14.3 Record implementation decisions, blockers, evidence, and promotion notes in this change's artifacts.
-- [ ] 14.4 Promote shipped requirements into `openspec/specs/upgrade-migrations/spec.md` and update modified capability specs after implementation.
-- [ ] 14.5 Confirm OpenSpec status is complete and leave the change review-ready without archiving or merging.
+- [x] 14.1 Run `devstate check` after each shipped implementation section and read `./.devstate/status.md` as evidence.
+- [x] 14.2 Smoke visible app or CLI behavior with `bun browser ...` only when app behavior changes.
+- [x] 14.3 Record implementation decisions, blockers, evidence, and promotion notes in this change's artifacts.
+- [x] 14.4 Promote shipped requirements into `openspec/specs/upgrade-migrations/spec.md` and update modified capability specs after implementation.
+- [x] 14.5 Confirm OpenSpec status is complete and leave the change review-ready without archiving or merging.
+
+Evidence:
+
+- `grug` 2026-06-01: promoted shipped upgrade requirements into new canonical `openspec/specs/upgrade-migrations/spec.md`.
+- Updated modified capability specs with shipped requirements: `openspec/specs/app-schema/spec.md`, `openspec/specs/authority-storage/spec.md`, `openspec/specs/deployment-runtime/spec.md`, `openspec/specs/installed-apps/spec.md`, `openspec/specs/portable-archives/spec.md`, `openspec/specs/site-cli-publish/spec.md`, and `openspec/specs/sync-replica/spec.md`.
+- `openspec validate add-upgrade-migrations --strict`: valid. `openspec validate upgrade-migrations --strict`: valid. `openspec status --change "add-upgrade-migrations" --json`: `isComplete: true`.
+- `devstate check` 2026-06-01: `.devstate/status.md` reported checks ok, web service ready, and test service pass.
+- No `bun browser` smoke run because this section changed OpenSpec specs and task evidence only; no visible app or CLI behavior changed.
+- No blockers. Branch left on `changes/add-upgrade-migrations` for review; no archive or merge performed.
