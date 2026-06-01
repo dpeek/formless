@@ -16,17 +16,21 @@ import {
 } from "./instance-setup-state.ts";
 import {
   createOwnerSessionCookie,
+  clearOwnerSessionCookie,
   ownerSessionSigningSecret,
   validateOwnerSessionCookie,
 } from "./owner-session.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import { ensureDefaultAppInstalls } from "./default-app-installs.ts";
+import { readInstanceAuthConfig } from "./instance-auth-state.ts";
+import { completeOwnerPasskeyRegistration } from "./owner-passkeys.ts";
 
 export const OWNER_SETUP_API_PATH = "/api/formless/setup";
 export const OWNER_SESSION_API_PATH = "/api/formless/session";
 
 const ownerSetupCapabilityPath = `${OWNER_SETUP_API_PATH}/capability`;
 const ownerSetupCompletePath = `${OWNER_SETUP_API_PATH}/complete`;
+const ownerSessionLogoutPath = `${OWNER_SESSION_API_PATH}/logout`;
 
 type OwnerSetupApiEnv = AuthorityAdminGuardEnv & {
   FORMLESS_AUTHORITY: DurableObjectNamespace;
@@ -63,6 +67,10 @@ export async function handleOwnerSetupDurableObjectRequest(
   }
 
   try {
+    if (pathname === ownerSessionLogoutPath) {
+      return handleOwnerLogoutRequest(request);
+    }
+
     if (pathname === OWNER_SESSION_API_PATH) {
       return await handleOwnerSessionRequest(request, storage, env);
     }
@@ -86,7 +94,11 @@ export async function handleOwnerSetupDurableObjectRequest(
 }
 
 function isOwnerApiPath(pathname: string) {
-  return isOwnerSetupApiPath(pathname) || pathname === OWNER_SESSION_API_PATH;
+  return (
+    isOwnerSetupApiPath(pathname) ||
+    pathname === OWNER_SESSION_API_PATH ||
+    pathname === ownerSessionLogoutPath
+  );
 }
 
 function isOwnerSetupApiPath(pathname: string) {
@@ -138,9 +150,9 @@ async function handleOwnerSessionStatusRequest(
 }
 
 async function handleOwnerLoginRequest(
-  request: Request,
+  _request: Request,
   storage: DurableObjectStorage,
-  env: AuthorityAdminGuardEnv,
+  _env: AuthorityAdminGuardEnv,
 ): Promise<Response> {
   const state = readInstanceSetupState(storage);
 
@@ -151,34 +163,24 @@ async function handleOwnerLoginRequest(
     );
   }
 
-  const authorization = authorizeOwnerLogin(request, env);
-
-  if (!authorization.authorized) {
-    return jsonResponse(
-      { authenticated: false, error: authorization.error },
-      authorization.status,
-      authorization.headers,
-    );
-  }
-
-  const session = await createOwnerSessionCookie({
-    env,
-    owner: state.owner,
-    request,
-  });
-  const headers = new Headers();
-
-  headers.set("Set-Cookie", session.cookie);
-
   return jsonResponse(
     {
-      authenticated: true,
-      owner: state.owner,
-      session: { expiresAt: session.session.expiresAt },
+      authenticated: false,
+      error: "Passkey login is required.",
     },
-    200,
-    headers,
+    401,
+    { "WWW-Authenticate": 'Bearer realm="formless-passkey"' },
   );
+}
+
+function handleOwnerLogoutRequest(request: Request): Response {
+  if (request.method !== "POST") {
+    return methodNotAllowedResponse("POST");
+  }
+
+  return jsonResponse({ authenticated: false }, 200, {
+    "Set-Cookie": clearOwnerSessionCookie(request),
+  });
 }
 
 function handleOwnerSetupStatusRequest(request: Request, storage: DurableObjectStorage): Response {
@@ -228,7 +230,17 @@ async function handleOwnerSetupCompleteRequest(
     return methodNotAllowedResponse("POST");
   }
 
-  const body = parseOwnerSetupCompleteRequest(await readJson(request));
+  const bodyValue = await readJson(request);
+
+  if (isRecord(bodyValue) && "response" in bodyValue) {
+    return completeOwnerPasskeyRegistration(request, storage, env, bodyValue);
+  }
+
+  if (readInstanceAuthConfig(storage)) {
+    return jsonResponse({ error: "Owner setup requires a passkey registration response." }, 400);
+  }
+
+  const body = parseOwnerSetupCompleteRequest(bodyValue);
   const completedAt = nowIsoString();
   const result = completeFirstOwnerSetup(storage, {
     tokenHash: await hashOwnerSetupToken(body.setupToken),
@@ -384,42 +396,6 @@ function methodNotAllowedResponse(allow: string): Response {
   return jsonResponse({ error: "Method not allowed." }, 405, { Allow: allow });
 }
 
-function authorizeOwnerLogin(
-  request: Request,
-  env: AuthorityAdminGuardEnv,
-):
-  | { authorized: true }
-  | {
-      authorized: false;
-      error: string;
-      headers: HeadersInit;
-      status: number;
-    } {
-  const adminToken = normalizedSecret(env.FORMLESS_ADMIN_TOKEN);
-
-  if (!adminToken) {
-    return {
-      authorized: false,
-      error: "Owner login requires a configured admin token.",
-      headers: {},
-      status: 409,
-    };
-  }
-
-  if (requestAdminToken(request) === adminToken) {
-    return { authorized: true };
-  }
-
-  return {
-    authorized: false,
-    error: "Owner login requires the admin token.",
-    headers: {
-      "WWW-Authenticate": 'Bearer realm="formless-admin"',
-    },
-    status: 401,
-  };
-}
-
 function jsonResponse(body: unknown, status = 200, headers: HeadersInit = {}): Response {
   const responseHeaders = new Headers(headers);
 
@@ -447,22 +423,4 @@ function parseTrimmedNonEmptyString(context: string, value: unknown): string {
   }
 
   return value.trim();
-}
-
-function requestAdminToken(request: Request) {
-  const authorization = request.headers.get("Authorization");
-
-  if (!authorization) {
-    return undefined;
-  }
-
-  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
-
-  return match?.[1];
-}
-
-function normalizedSecret(value: string | undefined): string | undefined {
-  const secret = value?.trim();
-
-  return secret === "" ? undefined : secret;
 }

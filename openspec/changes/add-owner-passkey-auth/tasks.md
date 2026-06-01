@@ -52,13 +52,25 @@ Evidence:
 
 ## 4. Owner Setup And Session Integration
 
-- [ ] 4.1 Update first-owner setup so owner identity, first passkey credential, setup capability consumption, default app install initialization, and session issuance complete as one successful flow.
-- [ ] 4.2 Reject setup completion when the passkey registration response is missing or invalid without storing owner state or consuming the setup capability.
-- [ ] 4.3 Keep owner session cookie creation and validation compatible with the existing write guard.
-- [ ] 4.4 Add logout handling that clears the owner session cookie.
-- [ ] 4.5 Preserve admin bearer authorization for setup-capability creation and protected write APIs.
-- [ ] 4.6 Remove browser admin-token login as the normal owner login path after passkey setup is complete.
-- [ ] 4.7 Add owner setup/session tests for atomic setup, session status, logout, admin bearer writes, and token-only browser login rejection.
+- [x] 4.1 Update first-owner setup so owner identity, first passkey credential, setup capability consumption, default app install initialization, and session issuance complete as one successful flow.
+- [x] 4.2 Reject setup completion when the passkey registration response is missing or invalid without storing owner state or consuming the setup capability.
+- [x] 4.3 Keep owner session cookie creation and validation compatible with the existing write guard.
+- [x] 4.4 Add logout handling that clears the owner session cookie.
+- [x] 4.5 Preserve admin bearer authorization for setup-capability creation and protected write APIs.
+- [x] 4.6 Remove browser admin-token login as the normal owner login path after passkey setup is complete.
+- [x] 4.7 Add owner setup/session tests for atomic setup, session status, logout, admin bearer writes, and token-only browser login rejection.
+
+Evidence:
+
+- Files changed: `src/worker/instance-setup-state.ts`, `src/worker/instance-auth-state.ts`, `src/worker/instance-app-installs-state.ts`, `src/worker/default-app-installs.ts`, `src/worker/owner-passkeys.ts`, `src/worker/owner-passkeys.test.ts`, `src/worker/owner-session.ts`, `src/worker/owner-setup.ts`, `src/worker/owner-setup.test.ts`.
+- Checks: `devstate check` passed; `./.devstate/status.md` shows checks ok and services running at 2026-06-01T01:39:34.135Z.
+- Setup decision: passkey registration verification now completes owner setup, first credential storage, setup capability consumption, default app install initialization, and session cookie issuance in one storage transaction before returning the setup response.
+- Failure decision: configured passkey setup completion rejects missing registration responses before consuming setup state; duplicate credential storage rolls back owner/capability writes and leaves the setup capability usable.
+- Session decision: `/api/formless/session/logout` clears the owner session cookie; `POST /api/formless/session` no longer mints browser owner sessions from an admin bearer token and returns passkey-required failure without `Set-Cookie`.
+- Authorization decision: admin bearer authorization remains accepted for setup-capability creation and protected instance writes; owner session cookies from passkey setup remain accepted by the existing write guard.
+- Worker API tests: `src/worker/owner-passkeys.test.ts` covers passkey setup/session issuance, missing registration response, duplicate credential rollback, session status, logout, owner-session writes, admin bearer writes, and token-only login rejection; `src/worker/owner-setup.test.ts` covers token-only session rejection and logout method handling.
+- Browser smoke: `bun browser --session igor-owner-passkey-section4 --ignore-https-errors open https://add-owner-passkey-auth.formless.local/setup`, `bun browser --session igor-owner-passkey-section4 snapshot -i`, `bun browser --session igor-owner-passkey-section4 open https://add-owner-passkey-auth.formless.local/login`, and `bun browser --session igor-owner-passkey-section4 snapshot -i` loaded `/setup` and `/login`; `/setup` reported missing setup token and `/login` reported setup incomplete. Full passkey browser ceremony smoke remains section 7 after browser routes ship.
+- Promotion note: finalization should promote atomic first-owner passkey setup, passkey-backed setup session issuance, logout cookie clearing, admin bearer preservation, and token-only browser login rejection.
 
 ## 5. Browser Routes
 

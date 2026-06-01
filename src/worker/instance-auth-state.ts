@@ -438,20 +438,28 @@ export function createPasskeyCredential(
 ): CreatePasskeyCredentialResult {
   ensureInstanceAuthTables(storage);
 
-  return storage.transactionSync(() => {
-    const normalizedCredential = normalizeCreatePasskeyCredentialInput(input);
-    const existing = readPasskeyCredentialById(storage, normalizedCredential.credentialId);
+  return storage.transactionSync(() => createPasskeyCredentialInCurrentTransaction(storage, input));
+}
 
-    if (existing) {
-      return {
-        ok: false,
-        credential: existing,
-        reason: "duplicate-credential-id",
-      };
-    }
+export function createPasskeyCredentialInCurrentTransaction(
+  storage: DurableObjectStorage,
+  input: CreatePasskeyCredentialInput,
+): CreatePasskeyCredentialResult {
+  ensureInstanceAuthTables(storage);
 
-    storage.sql.exec(
-      `
+  const normalizedCredential = normalizeCreatePasskeyCredentialInput(input);
+  const existing = readPasskeyCredentialById(storage, normalizedCredential.credentialId);
+
+  if (existing) {
+    return {
+      ok: false,
+      credential: existing,
+      reason: "duplicate-credential-id",
+    };
+  }
+
+  storage.sql.exec(
+    `
         INSERT INTO instance_auth_passkey_credentials (
           credential_id,
           owner_id,
@@ -469,19 +477,18 @@ export function createPasskeyCredential(
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)
       `,
-      normalizedCredential.credentialId,
-      normalizedCredential.ownerId,
-      normalizedCredential.publicKeyBase64Url,
-      normalizedCredential.counter,
-      JSON.stringify(normalizedCredential.transports),
-      normalizedCredential.credentialDeviceType,
-      storageBoolean(normalizedCredential.credentialBackedUp),
-      normalizedCredential.createdAt,
-      normalizedCredential.updatedAt,
-    );
+    normalizedCredential.credentialId,
+    normalizedCredential.ownerId,
+    normalizedCredential.publicKeyBase64Url,
+    normalizedCredential.counter,
+    JSON.stringify(normalizedCredential.transports),
+    normalizedCredential.credentialDeviceType,
+    storageBoolean(normalizedCredential.credentialBackedUp),
+    normalizedCredential.createdAt,
+    normalizedCredential.updatedAt,
+  );
 
-    return { ok: true, credential: normalizedCredential };
-  });
+  return { ok: true, credential: normalizedCredential };
 }
 
 export function readPasskeyCredential(

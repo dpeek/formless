@@ -155,6 +155,23 @@ export async function validateOwnerSessionCookie(
   };
 }
 
+export function clearOwnerSessionCookie(request: Request): string {
+  const parts = [
+    `${OWNER_SESSION_COOKIE_NAME}=`,
+    "Path=/",
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+    "HttpOnly",
+    "SameSite=Lax",
+  ];
+
+  if (new URL(request.url).protocol === "https:") {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
+}
+
 export function ownerSessionSigningSecret(env: OwnerSessionEnv): string | undefined {
   return (
     normalizedSecret(env.FORMLESS_OWNER_SESSION_SECRET) ??

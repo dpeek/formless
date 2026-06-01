@@ -84,35 +84,45 @@ export function createInstanceAppInstall(
 ): CreateAppInstallResult {
   ensureInstanceAppInstallTables(storage);
 
-  return storage.transactionSync(() => {
-    const result = createAppInstall({
-      existingInstalls: readAppInstalls(storage),
-      installId: input.installId,
-      label: input.label,
-      now: input.now,
-      packageAppKey: input.packageAppKey,
-      validateInitialSource: ({ initialization }) => {
-        const source = findWorkerSchemaAppDefinition(initialization.sourceSchemaKey);
-        const seed = findWorkerSchemaAppDefinition(initialization.seedRecordsKey);
+  return storage.transactionSync(() =>
+    createInstanceAppInstallInCurrentTransaction(storage, input),
+  );
+}
 
-        if (!source || !seed) {
-          return appInstallRegistryError(
-            "source-validation-failed",
-            "source",
-            `Package app "${initialization.packageAppKey}" source is unavailable.`,
-          );
-        }
+export function createInstanceAppInstallInCurrentTransaction(
+  storage: DurableObjectStorage,
+  input: CreateAppInstallRequest & { now: string },
+): CreateAppInstallResult {
+  ensureInstanceAppInstallTables(storage);
 
-        return undefined;
-      },
-    });
+  const result = createAppInstall({
+    existingInstalls: readAppInstalls(storage),
+    installId: input.installId,
+    label: input.label,
+    now: input.now,
+    packageAppKey: input.packageAppKey,
+    validateInitialSource: ({ initialization }) => {
+      const source = findWorkerSchemaAppDefinition(initialization.sourceSchemaKey);
+      const seed = findWorkerSchemaAppDefinition(initialization.seedRecordsKey);
 
-    if (!result.ok) {
-      return result;
-    }
+      if (!source || !seed) {
+        return appInstallRegistryError(
+          "source-validation-failed",
+          "source",
+          `Package app "${initialization.packageAppKey}" source is unavailable.`,
+        );
+      }
 
-    storage.sql.exec(
-      `
+      return undefined;
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  storage.sql.exec(
+    `
         INSERT INTO app_installs (
           install_id,
           package_app_key,
@@ -125,21 +135,20 @@ export function createInstanceAppInstall(
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
-      result.install.installId,
-      result.install.packageAppKey,
-      result.install.packageRevision,
-      result.install.sourceSchemaHash,
-      result.install.label,
-      result.install.status,
-      result.install.createdAt,
-      result.install.updatedAt,
-    );
+    result.install.installId,
+    result.install.packageAppKey,
+    result.install.packageRevision,
+    result.install.sourceSchemaHash,
+    result.install.label,
+    result.install.status,
+    result.install.createdAt,
+    result.install.updatedAt,
+  );
 
-    return {
-      ...result,
-      installs: readInstanceAppInstalls(storage),
-    };
-  });
+  return {
+    ...result,
+    installs: readInstanceAppInstalls(storage),
+  };
 }
 
 export function restoreInstanceAppInstall(

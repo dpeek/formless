@@ -17,9 +17,10 @@ import {
 } from "../shared/instance-auth.ts";
 import { nowIsoString } from "../shared/clock.ts";
 import { type AuthorityAdminGuardEnv } from "./authority-admin-guard.ts";
+import { ensureDefaultAppInstallsInCurrentTransaction } from "./default-app-installs.ts";
 import { FORMLESS_INSTANCE_AUTHORITY_NAME } from "./formless-instance.ts";
 import {
-  completeFirstOwnerSetup,
+  completeFirstOwnerSetupInCurrentTransaction,
   hashOwnerSetupToken,
   readInstanceSetupState,
   type CompleteFirstOwnerSetupResult,
@@ -27,7 +28,7 @@ import {
 import {
   consumePasskeyChallenge,
   createPasskeyChallenge,
-  createPasskeyCredential,
+  createPasskeyCredentialInCurrentTransaction,
   passkeyCredentialToWebAuthnCredential,
   readInstanceAuthConfig,
   readPasskeyCredential,
@@ -35,7 +36,7 @@ import {
   updatePasskeyCredentialVerification,
   type StoredInstanceAuthConfig,
 } from "./instance-auth-state.ts";
-import { createOwnerSessionCookie } from "./owner-session.ts";
+import { createOwnerSessionCookie, ownerSessionSigningSecret } from "./owner-session.ts";
 
 export const OWNER_PASSKEY_API_PATH = "/api/formless/passkeys";
 
@@ -90,7 +91,7 @@ export async function handleOwnerPasskeyDurableObjectRequest(
     }
 
     if (pathname === registerVerifyPath) {
-      return await handleRegistrationVerifyRequest(request, storage);
+      return await handleRegistrationVerifyRequest(request, storage, env);
     }
 
     if (pathname === loginOptionsPath) {
@@ -163,13 +164,29 @@ async function handleRegistrationOptionsRequest(
 async function handleRegistrationVerifyRequest(
   request: Request,
   storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
 ): Promise<Response> {
   if (request.method !== "POST") {
     return methodNotAllowedResponse("POST");
   }
 
-  const body = parseOwnerPasskeyRegistrationVerifyRequest(await readJson(request));
+  return completeOwnerPasskeyRegistration(request, storage, env, await readJson(request));
+}
+
+export async function completeOwnerPasskeyRegistration(
+  request: Request,
+  storage: DurableObjectStorage,
+  env: AuthorityAdminGuardEnv,
+  value: unknown,
+): Promise<Response> {
+  const body = parseOwnerPasskeyRegistrationVerifyRequest(value);
   const config = requireInstanceAuthConfig(storage);
+  const signingSecret = ownerSessionSigningSecret(env);
+
+  if (!signingSecret) {
+    return jsonResponse({ error: "Owner session signing secret is not configured." }, 500);
+  }
+
   const setupTokenHash = await hashOwnerSetupToken(body.setupToken);
   const setup = validateSetupCapability(storage, request, {
     now: nowIsoString(),
@@ -218,49 +235,87 @@ async function handleRegistrationVerifyRequest(
     return jsonResponse({ error: "Passkey registration verification failed." }, 401);
   }
 
-  const existingCredential = readPasskeyCredential(
-    storage,
-    verified.registrationInfo.credential.id,
-  );
+  const credentialId = verified.registrationInfo.credential.id;
+  const existingCredential = readPasskeyCredential(storage, credentialId);
 
   if (existingCredential) {
     return jsonResponse({ error: "Passkey credential already exists." }, 409);
   }
 
   const completedAt = nowIsoString();
-  const completed = completeFirstOwnerSetup(storage, {
-    tokenHash: setupTokenHash,
-    instanceId: requestInstanceId(request),
-    now: completedAt,
-    owner: body.owner,
-  });
+  let completed: CompleteFirstOwnerSetupResult;
+
+  try {
+    completed = storage.transactionSync(() => {
+      const ownerSetup = completeFirstOwnerSetupInCurrentTransaction(storage, {
+        tokenHash: setupTokenHash,
+        instanceId: requestInstanceId(request),
+        now: completedAt,
+        owner: body.owner,
+      });
+
+      if (!ownerSetup.ok) {
+        return ownerSetup;
+      }
+
+      const credential = createPasskeyCredentialInCurrentTransaction(storage, {
+        credentialId,
+        ownerId: ownerSetup.owner.id,
+        publicKey: new Uint8Array(verified.registrationInfo.credential.publicKey),
+        counter: verified.registrationInfo.credential.counter,
+        transports: verified.registrationInfo.credential.transports,
+        credentialDeviceType: verified.registrationInfo.credentialDeviceType,
+        credentialBackedUp: verified.registrationInfo.credentialBackedUp,
+        createdAt: completedAt,
+        updatedAt: completedAt,
+      });
+
+      if (!credential.ok) {
+        throw new DuplicatePasskeyCredentialError();
+      }
+
+      ensureDefaultAppInstallsInCurrentTransaction(storage, {
+        now: completedAt,
+        policy: "starter-site-if-empty",
+      });
+
+      return ownerSetup;
+    });
+  } catch (error) {
+    if (error instanceof DuplicatePasskeyCredentialError) {
+      return jsonResponse({ error: "Passkey credential already exists." }, 409);
+    }
+
+    throw error;
+  }
 
   if (!completed.ok) {
     return setupFailureResponse(completed);
   }
 
-  const credential = createPasskeyCredential(storage, {
-    credentialId: verified.registrationInfo.credential.id,
-    ownerId: completed.owner.id,
-    publicKey: new Uint8Array(verified.registrationInfo.credential.publicKey),
-    counter: verified.registrationInfo.credential.counter,
-    transports: verified.registrationInfo.credential.transports,
-    credentialDeviceType: verified.registrationInfo.credentialDeviceType,
-    credentialBackedUp: verified.registrationInfo.credentialBackedUp,
-    createdAt: completedAt,
-    updatedAt: completedAt,
+  const session = await createOwnerSessionCookie({
+    env,
+    owner: completed.owner,
+    request,
   });
+  const headers = new Headers();
 
-  if (!credential.ok) {
-    return jsonResponse({ error: "Passkey credential already exists." }, 409);
-  }
+  headers.set("Set-Cookie", session.cookie);
 
   const response: OwnerPasskeyRegistrationVerifyResponse = {
     owner: completed.owner,
+    session: { expiresAt: session.session.expiresAt },
     setupComplete: true,
   };
 
-  return jsonResponse(response);
+  return jsonResponse(response, 200, headers);
+}
+
+class DuplicatePasskeyCredentialError extends Error {
+  constructor() {
+    super("Passkey credential already exists.");
+    this.name = "DuplicatePasskeyCredentialError";
+  }
 }
 
 async function handleLoginOptionsRequest(

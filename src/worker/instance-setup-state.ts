@@ -154,61 +154,68 @@ export function completeFirstOwnerSetup(
 ): CompleteFirstOwnerSetupResult {
   ensureInstanceSetupTables(storage);
 
-  return storage.transactionSync(() => {
-    const existingOwner = readInstanceOwner(storage);
+  return storage.transactionSync(() => completeFirstOwnerSetupInCurrentTransaction(storage, input));
+}
 
-    if (existingOwner) {
-      return {
-        ok: false,
-        owner: existingOwner,
-        reason: "already-complete",
-      };
-    }
+export function completeFirstOwnerSetupInCurrentTransaction(
+  storage: DurableObjectStorage,
+  input: CompleteFirstOwnerSetupInput,
+): CompleteFirstOwnerSetupResult {
+  ensureInstanceSetupTables(storage);
 
-    const capability = readOwnerSetupCapability(storage);
+  const existingOwner = readInstanceOwner(storage);
 
-    if (!capability) {
-      return { ok: false, reason: "missing-capability" };
-    }
+  if (existingOwner) {
+    return {
+      ok: false,
+      owner: existingOwner,
+      reason: "already-complete",
+    };
+  }
 
-    const instanceId = parseNonEmptyString("Owner setup instance id", input.instanceId);
-    if (capability.instanceId !== instanceId) {
-      return { ok: false, reason: "wrong-instance" };
-    }
+  const capability = readOwnerSetupCapability(storage);
 
-    const now = input.now ?? nowIsoString();
-    if (capability.expiresAt !== undefined && capability.expiresAt <= now) {
-      return { ok: false, reason: "expired-token" };
-    }
+  if (!capability) {
+    return { ok: false, reason: "missing-capability" };
+  }
 
-    const tokenHash = parseNonEmptyString("Owner setup token hash", input.tokenHash);
-    if (capability.tokenHash !== tokenHash) {
-      return { ok: false, reason: "invalid-token" };
-    }
+  const instanceId = parseNonEmptyString("Owner setup instance id", input.instanceId);
+  if (capability.instanceId !== instanceId) {
+    return { ok: false, reason: "wrong-instance" };
+  }
 
-    const owner = normalizeOwner(input.owner, {
-      createdAt: now,
-      ownerId: input.ownerId,
-    });
+  const now = input.now ?? nowIsoString();
+  if (capability.expiresAt !== undefined && capability.expiresAt <= now) {
+    return { ok: false, reason: "expired-token" };
+  }
 
-    storage.sql.exec(
-      `
+  const tokenHash = parseNonEmptyString("Owner setup token hash", input.tokenHash);
+  if (capability.tokenHash !== tokenHash) {
+    return { ok: false, reason: "invalid-token" };
+  }
+
+  const owner = normalizeOwner(input.owner, {
+    createdAt: now,
+    ownerId: input.ownerId,
+  });
+
+  storage.sql.exec(
+    `
         INSERT INTO instance_owners (id, name, email, created_at)
         VALUES (?, ?, ?, ?)
       `,
-      owner.id,
-      owner.name,
-      owner.email ?? null,
-      owner.createdAt,
-    );
-    storage.sql.exec("DELETE FROM owner_setup_capability WHERE id = 1");
+    owner.id,
+    owner.name,
+    owner.email ?? null,
+    owner.createdAt,
+  );
+  storage.sql.exec("DELETE FROM owner_setup_capability WHERE id = 1");
 
-    return {
-      ok: true,
-      owner,
-      setupComplete: true,
-    };
-  });
+  return {
+    ok: true,
+    owner,
+    setupComplete: true,
+  };
 }
 
 function readOwnerSetupCapability(

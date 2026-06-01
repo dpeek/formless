@@ -11,15 +11,19 @@ import type {
 } from "@simplewebauthn/server";
 
 import type {
+  OwnerLogoutResponse,
   OwnerPasskeyLoginOptionsResponse,
   OwnerPasskeyLoginVerifyResponse,
   OwnerPasskeyRegistrationOptionsResponse,
   OwnerPasskeyRegistrationVerifyResponse,
+  OwnerSessionStatusResponse,
 } from "../shared/instance-auth.ts";
+import type { AppInstallsResponse, CreateAppInstallResponse } from "../shared/protocol.ts";
 import { OWNER_SESSION_COOKIE_NAME } from "./owner-session.ts";
 import { createWorkerHarness } from "./miniflare-test.ts";
 
 type Harness = Awaited<ReturnType<typeof createWorkerHarness>>;
+type HarnessFetchInit = NonNullable<Parameters<Harness["fetch"]>[1]>;
 
 const adminToken = "test-admin-token";
 const setupToken = "abcDEF0123456789_-abcDEF0123456789_-";
@@ -160,6 +164,7 @@ describe("owner passkey API routes", () => {
     );
 
     expect(verified.response.status).toBe(200);
+    expect(verified.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
     expect(verified.body).toEqual({
       setupComplete: true,
       owner: {
@@ -168,6 +173,171 @@ describe("owner passkey API routes", () => {
         email: "ada@example.com",
         createdAt: expect.any(String),
       },
+      session: { expiresAt: expect.any(String) },
+    });
+  });
+
+  it("rejects setup completion without a passkey response without consuming setup state", async () => {
+    await configureAuth();
+    await createSetupCapability();
+
+    const authenticator = new VirtualPasskey(credentialId);
+    const options = await registrationOptions();
+    const missingResponse = await postJson("/api/formless/setup/complete", {
+      setupToken,
+      owner: { name: "Ada Owner" },
+    });
+    const statusAfterMissing = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
+    const verified = await postJson<OwnerPasskeyRegistrationVerifyResponse>(
+      "/api/formless/setup/complete",
+      {
+        setupToken,
+        owner: { name: "Ada Owner", email: "ada@example.com" },
+        response: authenticator.registrationResponse(options.body.options, {
+          origin: canonicalOrigin,
+          rpId: relyingPartyId,
+        }),
+      },
+    );
+
+    expect(missingResponse.response.status).toBe(400);
+    expect(missingResponse.body).toEqual({
+      error: "Owner setup requires a passkey registration response.",
+    });
+    expect(statusAfterMissing.body).toEqual({ authenticated: false, setupComplete: false });
+    expect(verified.response.status).toBe(200);
+    expect(verified.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(verified.body).toEqual({
+      setupComplete: true,
+      owner: {
+        id: expect.any(String),
+        name: "Ada Owner",
+        email: "ada@example.com",
+        createdAt: expect.any(String),
+      },
+      session: { expiresAt: expect.any(String) },
+    });
+  });
+
+  it("does not store owner state or consume setup capability when credential storage fails", async () => {
+    await configureAuth();
+    await createSetupCapability();
+    await createStoredCredential(credentialId);
+
+    const duplicateAuthenticator = new VirtualPasskey(credentialId);
+    const duplicateOptions = await registrationOptions();
+    const duplicate = await postJson("/api/formless/passkeys/register/verify", {
+      setupToken,
+      owner: { name: "Ada Owner" },
+      response: duplicateAuthenticator.registrationResponse(duplicateOptions.body.options, {
+        origin: canonicalOrigin,
+        rpId: relyingPartyId,
+      }),
+    });
+    const statusAfterDuplicate = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
+
+    expect(duplicate.response.status).toBe(409);
+    expect(duplicate.body).toEqual({ error: "Passkey credential already exists." });
+    expect(statusAfterDuplicate.body).toEqual({ authenticated: false, setupComplete: false });
+
+    const replacementAuthenticator = new VirtualPasskey("Y3JlZGVudGlhbC1yZXBsYWNlbWVudA");
+    const replacementOptions = await registrationOptions();
+    const verified = await postJson<OwnerPasskeyRegistrationVerifyResponse>(
+      "/api/formless/passkeys/register/verify",
+      {
+        setupToken,
+        owner: { name: "Ada Owner" },
+        response: replacementAuthenticator.registrationResponse(replacementOptions.body.options, {
+          origin: canonicalOrigin,
+          rpId: relyingPartyId,
+        }),
+      },
+    );
+
+    expect(verified.response.status).toBe(200);
+    expect(verified.body).toMatchObject({
+      setupComplete: true,
+      owner: { name: "Ada Owner" },
+      session: { expiresAt: expect.any(String) },
+    });
+  });
+
+  it("integrates first passkey setup with sessions, logout, and write authorization", async () => {
+    const registered = await registerOwnerPasskey(new VirtualPasskey(credentialId));
+    const sessionCookie = cookiePair(registered.response.headers.get("Set-Cookie"));
+    const statusWithCookie = await getJson<OwnerSessionStatusResponse>("/api/formless/session", {
+      headers: { Cookie: sessionCookie },
+    });
+    const appInstalls = await getJson<AppInstallsResponse>("/api/formless/app-installs");
+    const ownerWrite = await postJson<CreateAppInstallResponse>(
+      "/api/formless/app-installs",
+      {
+        packageAppKey: "tasks",
+        installId: "tasks-owner",
+        label: "Tasks Owner",
+      },
+      { headers: { Cookie: sessionCookie } },
+    );
+    const adminWrite = await postJson<CreateAppInstallResponse>(
+      "/api/formless/app-installs",
+      {
+        packageAppKey: "estii",
+        installId: "estii-admin",
+        label: "Estii Admin",
+      },
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+    );
+    const tokenOnlyLogin = await harness.fetch("/api/formless/session", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      method: "POST",
+    });
+    const logout = await postJson<OwnerLogoutResponse>(
+      "/api/formless/session/logout",
+      {},
+      { headers: { Cookie: sessionCookie } },
+    );
+    const statusAfterLogout = await getJson<OwnerSessionStatusResponse>("/api/formless/session");
+
+    expect(statusWithCookie.body).toEqual({
+      authenticated: true,
+      owner: registered.body.owner,
+      session: registered.body.session,
+      setupComplete: true,
+    });
+    expect(appInstalls.body.installs).toEqual([
+      expect.objectContaining({
+        adminRoute: "/apps/site",
+        installId: "site",
+        label: "Site",
+        packageAppKey: "site",
+        publicRoute: "/sites/site",
+        status: "installed",
+      }),
+    ]);
+    expect(ownerWrite.response.status).toBe(201);
+    expect(ownerWrite.body.install).toMatchObject({
+      installId: "tasks-owner",
+      packageAppKey: "tasks",
+    });
+    expect(adminWrite.response.status).toBe(201);
+    expect(adminWrite.body.install).toMatchObject({
+      installId: "estii-admin",
+      packageAppKey: "estii",
+    });
+    expect(tokenOnlyLogin.status).toBe(401);
+    expect(tokenOnlyLogin.headers.get("Set-Cookie")).toBeNull();
+    expect(await tokenOnlyLogin.json()).toEqual({
+      authenticated: false,
+      error: "Passkey login is required.",
+    });
+    expect(logout.response.status).toBe(200);
+    expect(logout.response.headers.get("Set-Cookie")).toContain(`${OWNER_SESSION_COOKIE_NAME}=`);
+    expect(logout.response.headers.get("Set-Cookie")).toContain("Max-Age=0");
+    expect(logout.body).toEqual({ authenticated: false });
+    expect(statusAfterLogout.body).toEqual({
+      authenticated: false,
+      owner: registered.body.owner,
+      setupComplete: true,
     });
   });
 
@@ -303,6 +473,23 @@ async function createSetupCapability() {
   expect(response.response.status).toBe(200);
 }
 
+async function createStoredCredential(credentialIdValue: string) {
+  const response = await postJson("/harness/credential", {
+    credentialId: credentialIdValue,
+  });
+
+  expect(response.response.status).toBe(200);
+}
+
+async function getJson<T = unknown>(path: string, init: HarnessFetchInit = {}) {
+  const response = await harness.fetch(path, init);
+
+  return {
+    body: (await response.json()) as T,
+    response,
+  };
+}
+
 async function registrationOptions() {
   const response = await postJson<OwnerPasskeyRegistrationOptionsResponse>(
     "/api/formless/passkeys/register/options",
@@ -354,10 +541,16 @@ async function verifyLogin(response: AuthenticationResponseJSON) {
   );
 }
 
-async function postJson<T = unknown>(path: string, body: unknown) {
+async function postJson<T = unknown>(path: string, body: unknown, init: HarnessFetchInit = {}) {
+  const headers = {
+    ...(init.headers as Record<string, string> | undefined),
+    "Content-Type": "application/json",
+  };
+
   const response = await harness.fetch(path, {
+    ...init,
     body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    headers,
     method: "POST",
   });
 
@@ -365,6 +558,14 @@ async function postJson<T = unknown>(path: string, body: unknown) {
     body: (await response.json()) as T,
     response,
   };
+}
+
+function cookiePair(cookie: string | null) {
+  if (!cookie) {
+    throw new Error("Missing Set-Cookie header.");
+  }
+
+  return cookie.split(";")[0] ?? cookie;
 }
 
 class VirtualPasskey {
@@ -606,9 +807,11 @@ async function writeOwnerPasskeyHarness() {
       import { DurableObject } from "cloudflare:workers";
 
       import { nowIsoString } from "${process.cwd()}/src/shared/clock.ts";
+      import { handleInstanceAppInstallsDurableObjectRequest } from "${process.cwd()}/src/worker/instance-app-installs.ts";
       import { handleOwnerPasskeyDurableObjectRequest } from "${process.cwd()}/src/worker/owner-passkeys.ts";
+      import { handleOwnerSetupDurableObjectRequest } from "${process.cwd()}/src/worker/owner-setup.ts";
       import { hashOwnerSetupToken, writeOwnerSetupCapability } from "${process.cwd()}/src/worker/instance-setup-state.ts";
-      import { writeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-state.ts";
+      import { createPasskeyCredential, writeInstanceAuthConfig } from "${process.cwd()}/src/worker/instance-auth-state.ts";
 
       export class OwnerPasskeyApiHarness extends DurableObject {
         constructor(ctx, env) {
@@ -637,13 +840,50 @@ async function writeOwnerPasskeyHarness() {
             return Response.json(capability);
           }
 
+          if (request.method === "POST" && url.pathname === "/harness/credential") {
+            const body = await request.json();
+            const credential = createPasskeyCredential(this.ctx.storage, {
+              credentialId: body.credentialId,
+              ownerId: "existing-owner",
+              publicKey: new Uint8Array([1, 2, 3, 4]),
+              counter: 0,
+              transports: ["internal"],
+              credentialDeviceType: "singleDevice",
+              credentialBackedUp: false,
+              createdAt: nowIsoString(),
+              updatedAt: nowIsoString(),
+            });
+
+            return Response.json(credential);
+          }
+
+          const ownerSetupResponse = await handleOwnerSetupDurableObjectRequest(
+            request,
+            this.ctx.storage,
+            this.bindings,
+          );
+
+          if (ownerSetupResponse) {
+            return ownerSetupResponse;
+          }
+
           const passkeyResponse = await handleOwnerPasskeyDurableObjectRequest(
             request,
             this.ctx.storage,
             this.bindings,
           );
 
-          return passkeyResponse ?? Response.json({ error: "Not found." }, { status: 404 });
+          if (passkeyResponse) {
+            return passkeyResponse;
+          }
+
+          const appInstallsResponse = await handleInstanceAppInstallsDurableObjectRequest(
+            request,
+            this.ctx.storage,
+            this.bindings,
+          );
+
+          return appInstallsResponse ?? Response.json({ error: "Not found." }, { status: 404 });
         }
       }
 
